@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+*.log
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+.env
+
+.DS_Store
+concat.py
+bundle.all
+
+# OPFS / run artefacts written by the engine at runtime
+runs/

@@ -1,0 +1,23 @@
+services:
+  canvas:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - NODE_ENV=development
+
+  adapter:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./adapter:/app
+    ports:
+      - "8000:8000"
+    command: sh -c "pip install -r requirements.txt && python main.py"
+    environment:
+      - PYTHONUNBUFFERED=1
