@@ -1,0 +1,59 @@
+# Changelog
+
+All notable changes to the Its Harness Flow Spec schema are documented here.
+
+Format: [Semantic Versioning](https://semver.org). Schema changes in minor versions are always additive (new optional fields). Breaking changes require a major version bump and a migration note.
+
+---
+
+## [0.2.0] — 2025-05-14
+
+### Added
+
+**`agents[]` registry** — Top-level array of named agent personas (`AgentDef`). Each entry declares `id`, `role`, `backstory`, `goal`, `tools`, `memory_config`, `max_iter`, `allow_delegation`. Referenced by `agent_role` and `agent_debate` nodes.
+
+**`agent_role` node** — Executes an agent persona as a typed task. Key fields: `agent_ref`, `task_description`, `expected_output`, `output_field`.
+- `memory_access: 'isolated' | 'shared'` (default `isolated`) — controls whether the agent shares a named memory store with the parent flow. Harness validation error: `parallel_fork` branches with `memory_access: 'shared'` are disallowed.
+- `memory_store_id: string` — required when `memory_access` is `'shared'`; must reference a key in `memory_stores`.
+- `tool_approval: 'auto' | 'human'` (default `auto`) — when `'human'`, the adapter synthesises an approval gate before each tool call, reusing the shared HITL checkpoint/resume mechanism.
+
+**`agent_debate` node** — Multi-agent conversation loop. Fields: `agents[]`, `max_rounds`, `termination_condition`, `speaker_selection` (`auto | round_robin | custom`), `speaker_selection_fn_ref`, `allow_repeat_speaker`, `output_field`. Native in MS Agent Framework `GroupChat`/`AgentGroupChat`; synthesised in LangGraph, CrewAI, Mastra.
+
+**`context_from` on `DirectEdge`** — Optional `context_from: string[]` field on direct edges. Node IDs whose outputs are injected as context into the target task. Maps to CrewAI `Task.context=`; other adapters inject as additional state fields or system prompt sections.
+
+**`flow_config.process_type`** — `'sequential' | 'hierarchical' | 'consensual'`. Maps to CrewAI `Crew(process=...)`. Other adapters ignore.
+
+**`flow_config.manager_agent_ref`** — Required when `process_type` is `'hierarchical'`. References an entry in `agents[]`.
+
+**`flow_config.a2a_config`** — Declares the flow as an A2A-compatible agent. Fields: `enabled`, `agent_name`, `agent_description`, `version`, `capabilities`, `authentication`, `input_schema_ref`, `output_schema_ref`, `skills[]`. Adapter generates `/.well-known/agent.json` and `/tasks/send` endpoint.
+
+**`RuntimeHints.compatible`** — New `compatible: AdapterName[]` array alongside existing `preferred_adapter`.
+
+**`MemoryStoreDef.namespace`** — Optional partition key for vector stores (Q33). Must reference an environment variable if it contains sensitive routing information.
+
+**`MemoryWriteNode.tier`** — Optional `'short' | 'long' | 'entity' | 'user'` tier hint for CrewAI's 4-tier memory model. Other adapters map to nearest equivalent.
+
+**`RuntimeSupportOverride`** — Updated adapter enum: `semantic_kernel` renamed to `microsoft_agent_framework`; `crewai` added.
+
+### Changed
+
+**`ToolDef.mcp_server_url`** — Description updated: must always reference an environment variable, never a hardcoded URL (Q12).
+
+### Adapters
+
+Four runtimes targeted: `langgraph`, `crewai`, `mastra`, `microsoft_agent_framework`.
+
+---
+
+## [0.1.0] — Initial design
+
+First version of the spec schema. Established:
+- 12 node types: `input`, `output`, `llm_call`, `tool_invoke`, `condition`, `parallel_fork`, `parallel_join`, `hitl_breakpoint`, `memory_read`, `memory_write`, `subgraph`, `transform`
+- `DirectEdge` and `ConditionalEdge`
+- `StateSchema` with `reducer` annotations per field
+- `MemoryStoreDef`, `ToolDef`, `ModelDefaults`
+- `FlowConfig`: `checkpoint`, `streaming`, `telemetry`
+- `RuntimeHints` with `preferred_adapter`
+- `RuntimeSupportOverride` per node
+- `position: {x, y}` on all nodes (canvas-only; adapters must ignore)
+- Adapters: `langgraph`, `mastra`, `microsoft_agent_framework` (then called `semantic_kernel`)

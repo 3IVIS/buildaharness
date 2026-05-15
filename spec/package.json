@@ -1,0 +1,38 @@
+{
+  "name": "@itsharness/flow-spec",
+  "version": "0.2.0",
+  "description": "Runtime-agnostic AI agent workflow specification \u2014 Zod schema and JSON Schema",
+  "main": "schema.ts",
+  "types": "schema.ts",
+  "files": [
+    "schema.ts",
+    "schema.json",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "validate:example": "node -e \"const {FlowSpec}=require('./schema');const f=require(process.argv[1]);const r=FlowSpec.safeParse(f);if(!r.success){console.error(r.error.issues);process.exit(1)}else{console.log('valid')}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "zod": ">=3.22.0"
+  },
+  "keywords": [
+    "ai-agents",
+    "langgraph",
+    "crewai",
+    "mastra",
+    "microsoft-agent-framework",
+    "workflow",
+    "spec",
+    "schema"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3IVIS/itsharness"
+  },
+  "bugs": {
+    "url": "https://github.com/3IVIS/itsharness/issues"
+  },
+  "homepage": "https://itsharness.com"
+}

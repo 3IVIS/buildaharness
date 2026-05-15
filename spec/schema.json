@@ -1,0 +1,1736 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.itsharness.com/v0.2/flow",
+  "title": "Its Harness flow spec v0.2.0",
+  "description": "Runtime-agnostic workflow specification for LangGraph, CrewAI, Mastra, and Microsoft Agent Framework adapters. v0.2.0 adds: agents[] registry, agent_role and agent_debate node types, context_from on edges, a2a_config and process_type in flow_config, and CrewAI memory tiers. Phase 0 Q&A decisions: AgentRoleNode.config adds memory_access/memory_store_id [Q28] and tool_approval [Q29]; MemoryStoreDef adds namespace [Q33]; ToolDef.mcp_server_url must reference env var [Q12].",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "id",
+    "nodes",
+    "edges"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "type": "string",
+      "const": "0.2.0",
+      "description": "Spec schema version (semver). Adapters declare compatible ranges. Never remove or rename fields in minor versions."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "description": "Unique flow identifier in kebab-case. Used as the flow registry key and as the default filename stem."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name shown on the canvas title bar."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional prose description of what this flow does. Used in generated README and RFC docs."
+    },
+    "runtime_hints": {
+      "$ref": "#/$defs/RuntimeHints"
+    },
+    "state_schema": {
+      "$ref": "#/$defs/StateSchema",
+      "description": "Shared state schema for the entire flow. All nodes read and write against this schema. Required for LangGraph adapter; used as a type reference in Mastra and SK adapters."
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AgentDef"
+      },
+      "description": "Named agent persona definitions. Referenced by agent_role nodes via agent_ref. CrewAI native; LG/MA/MS adapters synthesise from these definitions."
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/Node"
+      },
+      "description": "All nodes in the flow. Must contain at least one input node and one output node."
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      },
+      "description": "All directed edges between nodes. Every non-terminal node must have at least one outgoing edge."
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ToolDef"
+      },
+      "description": "Named tool definitions. Keys are the tool identifiers referenced in tool_invoke and agent nodes."
+    },
+    "memory_stores": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/MemoryStoreDef"
+      },
+      "description": "Named memory store declarations. Keys are the store_id values used in memory_read, memory_write, rag_retrieval, and embed nodes."
+    },
+    "model_defaults": {
+      "$ref": "#/$defs/ModelDefaults",
+      "description": "Flow-level model defaults. Individual llm_call nodes may override any of these."
+    },
+    "flow_config": {
+      "$ref": "#/$defs/FlowConfig",
+      "description": "Flow-level infrastructure config: checkpointing, streaming, and telemetry."
+    }
+  },
+  "$defs": {
+    "RuntimeHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Non-binding hints about the target runtime. Harness uses preferred_adapter to set the default adapter selector. Adapters ignore fields they do not understand.",
+      "properties": {
+        "preferred_adapter": {
+          "type": "string",
+          "enum": [
+            "langgraph",
+            "crewai",
+            "mastra",
+            "microsoft_agent_framework"
+          ],
+          "description": "Adapter to use by default when generating code from this spec."
+        },
+        "compatible": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "langgraph",
+              "crewai",
+              "mastra",
+              "microsoft_agent_framework"
+            ]
+          },
+          "description": "List of adapters this flow is compatible with. Harness warns when an incompatible adapter is selected."
+        },
+        "python_version": {
+          "type": "string",
+          "description": "Python version constraint for LangGraph, CrewAI, and MS AF Python adapters, e.g. '>=3.11'."
+        },
+        "node_version": {
+          "type": "string",
+          "description": "Node.js version constraint for Mastra adapter, e.g. '>=20'."
+        },
+        "langgraph_version": {
+          "type": "string"
+        },
+        "crewai_version": {
+          "type": "string"
+        },
+        "mastra_version": {
+          "type": "string"
+        },
+        "ms_agent_framework_version": {
+          "type": "string"
+        }
+      }
+    },
+    "StateSchema": {
+      "type": "object",
+      "required": [
+        "type",
+        "properties"
+      ],
+      "additionalProperties": false,
+      "description": "JSON Schema-compatible state declaration extended with reducer hints per field. LangGraph adapter translates reducer hints into Annotated[T, fn] types. Mastra and SK adapters use this as a type reference.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/StateField"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Fields that must be present in the initial state when the flow is invoked."
+        }
+      }
+    },
+    "StateField": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "A single field in the flow state schema. Extends standard JSON Schema type definition with reducer and description.",
+      "properties": {
+        "type": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "string",
+                "number",
+                "integer",
+                "boolean",
+                "array",
+                "object",
+                "null"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean",
+                  "array",
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          ],
+          "description": "JSON Schema primitive type(s) for this field."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this state field. Used in generated type comments."
+        },
+        "items": {
+          "description": "Schema for array item type when type is 'array'. Accepts a JSON Schema object."
+        },
+        "properties": {
+          "type": "object",
+          "description": "Nested property definitions when type is 'object'."
+        },
+        "default": {
+          "description": "Default value for this field. Used by adapters to initialise state."
+        },
+        "reducer": {
+          "type": "string",
+          "enum": [
+            "replace",
+            "append",
+            "merge",
+            "custom"
+          ],
+          "default": "replace",
+          "description": "Merge strategy when multiple updates target this field in the same step. replace: last-write-wins (default). append: concatenate lists. merge: deep object merge. custom: uses reducer_fn_ref."
+        },
+        "reducer_fn_ref": {
+          "type": "string",
+          "description": "npm package ref (@scope/pkg/fn) or local path (./reducers/fn.ts) to a custom reducer function. Required when reducer is 'custom'."
+        }
+      }
+    },
+    "Position": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false,
+      "description": "Canvas layout coordinates. Non-semantic \u2014 adapters MUST ignore this field when generating runtime code.",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "RuntimeSupportOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-node override of runtime support level. Harness uses this to show compatibility warnings. When absent, the node type's default support matrix applies.",
+      "properties": {
+        "langgraph": {
+          "type": "string",
+          "enum": [
+            "full",
+            "partial",
+            "missing"
+          ]
+        },
+        "crewai": {
+          "type": "string",
+          "enum": [
+            "full",
+            "partial",
+            "missing"
+          ]
+        },
+        "mastra": {
+          "type": "string",
+          "enum": [
+            "full",
+            "partial",
+            "missing"
+          ]
+        },
+        "microsoft_agent_framework": {
+          "type": "string",
+          "enum": [
+            "full",
+            "partial",
+            "missing"
+          ]
+        }
+      }
+    },
+    "OutputValidator": {
+      "type": "object",
+      "required": [
+        "fn_ref"
+      ],
+      "additionalProperties": false,
+      "description": "Post-execution output validation config. Runs after the node completes, before state is updated. LangGraph adapter injects a hidden __validator node; Mastra uses Processors; SK uses post-filter hooks.",
+      "properties": {
+        "fn_ref": {
+          "type": "string",
+          "description": "npm package ref or local path to the validator function. Receives node output, returns {valid: boolean, reason?: string}."
+        },
+        "on_fail": {
+          "type": "string",
+          "enum": [
+            "raise",
+            "retry",
+            "skip"
+          ],
+          "default": "raise",
+          "description": "Behaviour on validation failure. raise: halt flow with error. retry: re-run node (Mastra native; LG/SK inject loop). skip: pass through without validation."
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 1,
+          "description": "Maximum retry attempts when on_fail is 'retry'."
+        },
+        "retry_prompt": {
+          "type": "string",
+          "description": "Feedback appended to the prompt on retry, explaining why the previous output failed. Only applies to llm_call nodes."
+        }
+      }
+    },
+    "StructuredOutput": {
+      "type": "object",
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false,
+      "description": "Forces the LLM to return typed, validated JSON instead of free text. LangGraph: .with_structured_output(). Mastra: structuredOutput option on createStep(agent). SK: typed KernelFunction return / response_format.",
+      "properties": {
+        "schema": {
+          "type": "object",
+          "description": "Inline JSON Schema object defining the required output shape. Use $defs in the flow spec for reusable types (v1 feature)."
+        }
+      }
+    },
+    "Condition": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "A branch condition. expr uses JSONPath (no-code, canvas expression builder). fn_ref uses a code reference (opens code panel).",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "expr",
+            "fn_ref"
+          ],
+          "description": "expr: JSONPath expression evaluated against current state. fn_ref: reference to a function that receives state and returns boolean."
+        },
+        "expr": {
+          "type": "string",
+          "description": "JSONPath expression, e.g. '$.state.score > 0.8'. Required when type is 'expr'."
+        },
+        "fn_ref": {
+          "type": "string",
+          "description": "npm package ref or local path to an async condition function. Required when type is 'fn_ref'."
+        }
+      }
+    },
+    "InputMapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Maps state keys to node input parameters. Values are JSONPath expressions evaluated against current flow state, e.g. { 'query': '$.state.user_input' }."
+    },
+    "OutputMapping": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Maps node output fields to state keys. Keys are output field names from the node; values are the target state keys to write into."
+    },
+    "Node": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/InputNode"
+        },
+        {
+          "$ref": "#/$defs/OutputNode"
+        },
+        {
+          "$ref": "#/$defs/LlmCallNode"
+        },
+        {
+          "$ref": "#/$defs/ToolInvokeNode"
+        },
+        {
+          "$ref": "#/$defs/ConditionNode"
+        },
+        {
+          "$ref": "#/$defs/ParallelForkNode"
+        },
+        {
+          "$ref": "#/$defs/ParallelJoinNode"
+        },
+        {
+          "$ref": "#/$defs/HitlBreakpointNode"
+        },
+        {
+          "$ref": "#/$defs/MemoryReadNode"
+        },
+        {
+          "$ref": "#/$defs/MemoryWriteNode"
+        },
+        {
+          "$ref": "#/$defs/SubgraphNode"
+        },
+        {
+          "$ref": "#/$defs/TransformNode"
+        },
+        {
+          "$ref": "#/$defs/AgentRoleNode"
+        },
+        {
+          "$ref": "#/$defs/AgentDebateNode"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "NodeBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-_]*$",
+          "description": "Unique node identifier within this flow. Used as the variable/function name in generated code."
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label shown on the canvas node chip. Defaults to id if absent."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional note about this node's purpose. Rendered as a code comment in generated output."
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "runtime_support": {
+          "$ref": "#/$defs/RuntimeSupportOverride"
+        }
+      }
+    },
+    "InputNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "output_schema"
+      ],
+      "additionalProperties": false,
+      "description": "Flow entry point. Declares the schema of data callers must provide when invoking the flow. LG: START node + StateGraph inputSchema. MA: workflow inputSchema. SK: initial KernelProcessEvent.Data.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "input"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "output_schema": {
+          "type": "object",
+          "description": "JSON Schema object defining the required input shape when the flow is invoked."
+        }
+      }
+    },
+    "OutputNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Flow exit point. A flow may have multiple output nodes for different exit paths (e.g. success, error). LG: END constant. MA: workflow outputSchema. SK: terminal event emission.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "output"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "exit_code": {
+          "type": "string",
+          "default": "success",
+          "description": "Named exit path identifier. Used when a flow has multiple output nodes. e.g. 'success', 'error', 'escalate'."
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema object defining the shape of the final flow output at this exit point."
+        }
+      }
+    },
+    "LlmCallNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "prompt_template"
+      ],
+      "additionalProperties": false,
+      "description": "Invokes a language model. Supports prompt templates with {{variable}} interpolation against current state, structured output mode, and per-node model overrides.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "llm_call"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "model": {
+          "type": "string",
+          "description": "Model identifier in 'provider/model-name' format, e.g. 'openai/gpt-4o'. Overrides model_defaults.model for this node."
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "System prompt string. Supports {{variable}} interpolation against current state."
+        },
+        "prompt_template": {
+          "type": "string",
+          "description": "User prompt template. Supports {{variable}} interpolation. Required."
+        },
+        "model_params": {
+          "$ref": "#/$defs/ModelParams",
+          "description": "Per-call model parameter overrides. Merged with model_defaults.model_params."
+        },
+        "structured_output": {
+          "$ref": "#/$defs/StructuredOutput",
+          "description": "When set, forces the model to return typed JSON matching the declared schema."
+        },
+        "output_key": {
+          "type": "string",
+          "description": "State key to write the model response into. Defaults to 'messages' when absent (appends to message list)."
+        },
+        "output_validator": {
+          "$ref": "#/$defs/OutputValidator"
+        }
+      }
+    },
+    "ToolInvokeNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "tool_id"
+      ],
+      "additionalProperties": false,
+      "description": "Executes a named tool from the flow's tools registry. Maps state to tool input and tool output back to state via JSONPath expressions.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "tool_invoke"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "tool_id": {
+          "type": "string",
+          "description": "Key of the tool in the flow's top-level tools object."
+        },
+        "input_map": {
+          "$ref": "#/$defs/InputMapping",
+          "description": "Maps flow state paths to tool input parameters. Key: tool input param name. Value: JSONPath expression."
+        },
+        "output_map": {
+          "$ref": "#/$defs/OutputMapping",
+          "description": "Maps tool output fields to flow state keys."
+        },
+        "output_validator": {
+          "$ref": "#/$defs/OutputValidator"
+        }
+      }
+    },
+    "ConditionNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "branches",
+        "default_target"
+      ],
+      "additionalProperties": false,
+      "description": "Routes execution to one of several downstream nodes. Rendered as a diamond on canvas. LG: add_conditional_edges(). MA: .branch(). SK: emit different named events per branch.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "condition"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "branches": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "condition",
+              "target"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "$ref": "#/$defs/Condition"
+              },
+              "target": {
+                "type": "string",
+                "description": "ID of the destination node when this branch condition matches."
+              }
+            }
+          },
+          "description": "Ordered list of condition-target pairs. First matching condition wins."
+        },
+        "default_target": {
+          "type": "string",
+          "description": "Node ID to route to when no branch condition matches. Required \u2014 prevents dead-ends."
+        }
+      }
+    },
+    "ParallelForkNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "targets"
+      ],
+      "additionalProperties": false,
+      "description": "Splits execution into multiple concurrent branches. LG: Send() per target. MA: .parallel(). SK: Task.WhenAll / asyncio.gather. Always paired with a parallel_join node downstream.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "parallel_fork"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "targets": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string"
+          },
+          "description": "IDs of nodes to execute concurrently."
+        },
+        "input_map": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/InputMapping"
+          },
+          "description": "Optional per-branch input mappings. Keys are target node IDs. When absent, each branch receives the full current state."
+        }
+      }
+    },
+    "ParallelJoinNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Waits for parallel branches to complete and merges their outputs into shared state. Always paired with a parallel_fork node upstream.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "parallel_join"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "wait_for": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "all",
+                "any"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Wait for exactly N branches to complete."
+            }
+          ],
+          "default": "all",
+          "description": "How many upstream branches must complete before the join fires. 'all': every branch. 'any': first branch. N: exactly N branches."
+        },
+        "join_reducer": {
+          "type": "string",
+          "enum": [
+            "merge",
+            "append",
+            "fn_ref"
+          ],
+          "default": "merge",
+          "description": "Strategy for combining branch outputs. merge: deep object merge. append: concatenate arrays. fn_ref: custom reducer function."
+        },
+        "join_fn_ref": {
+          "type": "string",
+          "description": "npm ref or local path to custom reducer. Required when join_reducer is 'fn_ref'."
+        },
+        "output_key": {
+          "type": "string",
+          "description": "State key to write the merged output into. When absent, merged result is spread directly into top-level state."
+        }
+      }
+    },
+    "HitlBreakpointNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Pauses flow execution pending human input. Harness shows a runtime capability warning for MA (no state editing) and SK (experimental). Requires a checkpointer/storage backend.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "hitl_breakpoint"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "prompt": {
+          "type": "string",
+          "description": "Message displayed to the human reviewer explaining what input or decision is needed."
+        },
+        "resume_schema": {
+          "type": "object",
+          "description": "JSON Schema defining the shape of data the human must provide when resuming the flow."
+        },
+        "output_key": {
+          "type": "string",
+          "description": "State key to write the human-provided resume data into."
+        },
+        "timeout_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Seconds to wait before triggering on_timeout behaviour. null means no timeout."
+        },
+        "on_timeout": {
+          "type": "string",
+          "enum": [
+            "raise",
+            "skip"
+          ],
+          "default": "raise",
+          "description": "Behaviour when timeout_seconds is exceeded. raise: halt flow with error. skip: continue without human input."
+        }
+      }
+    },
+    "MemoryReadNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "store_id",
+        "output_key"
+      ],
+      "additionalProperties": false,
+      "description": "Reads from a named memory store and writes the result into flow state. Supports key-value lookup and semantic similarity search.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "memory_read"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "store_id": {
+          "type": "string",
+          "description": "Key of the memory store in the flow's top-level memory_stores object."
+        },
+        "retrieval_mode": {
+          "type": "string",
+          "enum": [
+            "key_value",
+            "semantic"
+          ],
+          "default": "key_value",
+          "description": "key_value: exact key lookup (all runtimes). semantic: vector similarity search (MA/SK native; LG via adapter plugin)."
+        },
+        "key_expr": {
+          "type": "string",
+          "description": "JSONPath expression evaluating to the lookup key. Required when retrieval_mode is 'key_value'."
+        },
+        "query_expr": {
+          "type": "string",
+          "description": "JSONPath expression evaluating to the search query string. Required when retrieval_mode is 'semantic'."
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5,
+          "description": "Number of results to return. Applies to semantic mode only."
+        },
+        "min_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum similarity score threshold for semantic results. Results below this threshold are excluded."
+        },
+        "output_key": {
+          "type": "string",
+          "description": "State key to write the retrieved value or results array into."
+        }
+      }
+    },
+    "MemoryWriteNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "store_id",
+        "key_expr",
+        "value_expr"
+      ],
+      "additionalProperties": false,
+      "description": "Writes a value from flow state into a named memory store.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "memory_write"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "store_id": {
+          "type": "string",
+          "description": "Key of the memory store in the flow's top-level memory_stores object."
+        },
+        "key_expr": {
+          "type": "string",
+          "description": "JSONPath expression evaluating to the store key to write."
+        },
+        "value_expr": {
+          "type": "string",
+          "description": "JSONPath expression evaluating to the value to write."
+        },
+        "write_mode": {
+          "type": "string",
+          "enum": [
+            "upsert",
+            "overwrite"
+          ],
+          "default": "upsert",
+          "description": "upsert: create if absent, update if present. overwrite: always replace existing value."
+        },
+        "tier": {
+          "type": "string",
+          "enum": [
+            "short",
+            "long",
+            "entity",
+            "user"
+          ],
+          "default": "short",
+          "description": "CrewAI memory tier. short: ChromaDB within-task. long: SQLite cross-task. entity: named entity facts. user: cross-crew user preferences. LG/MA/MS adapters map to their nearest equivalent memory backend."
+        }
+      }
+    },
+    "SubgraphNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "flow_ref"
+      ],
+      "additionalProperties": false,
+      "description": "Embeds another registered flow as a single node. The referenced flow runs to completion before the parent flow continues. LG: add_node(name, compiled_subgraph). MA: createStep(innerWorkflow). SK: AddStepFromProcess().",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "subgraph"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "flow_ref": {
+          "type": "string",
+          "description": "ID of the referenced flow in the spec registry. Must resolve to a valid flow spec."
+        },
+        "input_map": {
+          "$ref": "#/$defs/InputMapping",
+          "description": "Maps parent flow state to the sub-flow's input schema."
+        },
+        "output_map": {
+          "$ref": "#/$defs/OutputMapping",
+          "description": "Maps sub-flow output fields back into the parent flow's state."
+        }
+      }
+    },
+    "TransformNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "mode"
+      ],
+      "additionalProperties": false,
+      "description": "Reshapes state data between nodes without calling an LLM or external service. MA: .map(fn). LG/SK: adapter inlines simple transforms into the preceding node function to keep generated code readable.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "transform"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "mode": {
+          "type": "string",
+          "enum": [
+            "mapping",
+            "fn_ref"
+          ],
+          "description": "mapping: declarative JSONPath key remapping (no-code, canvas form). fn_ref: custom function reference (code panel)."
+        },
+        "mapping": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "JSONPath expression to read from current state."
+              },
+              "to": {
+                "type": "string",
+                "description": "State key to write the value into."
+              }
+            }
+          },
+          "description": "Required when mode is 'mapping'. Array of from/to key remapping rules."
+        },
+        "fn_ref": {
+          "type": "string",
+          "description": "Required when mode is 'fn_ref'. npm ref or local path to transform function. Receives current state, returns partial state update."
+        }
+      }
+    },
+    "Edge": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DirectEdge"
+        },
+        {
+          "$ref": "#/$defs/ConditionalEdge"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "DirectEdge": {
+      "type": "object",
+      "required": [
+        "type",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "description": "A fixed transition from one node to another. SK adapter: translates to emitEvent(label)/onEvent(label) pair. context_from injects upstream node outputs as context into the target node (CrewAI: Task.context; LG: injected into state.context; MA: step input mapping).",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "direct"
+        },
+        "id": {
+          "type": "string",
+          "description": "Optional edge identifier. Used as SK event name."
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "context_from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of node IDs whose outputs are injected as context into the target node. CrewAI adapter: Task.context=[upstream_tasks]. LG adapter: injected into state under 'context' key. MA adapter: mapped to step input parameters."
+        }
+      }
+    },
+    "ConditionalEdge": {
+      "type": "object",
+      "required": [
+        "type",
+        "from",
+        "branches",
+        "default_target"
+      ],
+      "additionalProperties": false,
+      "description": "An edge that routes to different targets based on conditions. Note: prefer using a condition node for complex routing. ConditionalEdge is a shorthand for simple two-branch cases.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "conditional"
+        },
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source node ID."
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "condition",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "condition": {
+                "$ref": "#/$defs/Condition"
+              },
+              "to": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "default_target": {
+          "type": "string",
+          "description": "Target node ID when no branch condition matches. Required."
+        }
+      }
+    },
+    "ToolDef": {
+      "type": "object",
+      "required": [
+        "tool_ref"
+      ],
+      "additionalProperties": false,
+      "description": "A named tool available to the flow. Referenced by tool_id in tool_invoke nodes and by items in agent node tools arrays.",
+      "properties": {
+        "tool_ref": {
+          "type": "string",
+          "description": "npm package reference '@scope/pkg/tool-name' or local path './tools/name.ts'. Implementation must export a function matching the input/output schemas."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "npm",
+            "local",
+            "mcp"
+          ],
+          "default": "npm",
+          "description": "Where the tool implementation lives. npm: resolved from node_modules. local: resolved relative to spec file. mcp: fetched from MCP server at mcp_server_url."
+        },
+        "mcp_server_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "MCP server URL. Required when source is 'mcp'. Must always reference an environment variable \u2014 never hardcoded in the spec. MA: native. LG: langchain-mcp-adapters. MS: custom KernelFunction wrapper. CR: BaseTool bridge adapter (RFC open). [Q12]"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what the tool does. Used in LLM tool-call prompts if the tool_ref does not declare its own description."
+        },
+        "input_schema": {
+          "type": "object",
+          "description": "JSON Schema for tool input. When absent, adapter reads schema from the tool implementation's export."
+        },
+        "output_schema": {
+          "type": "object",
+          "description": "JSON Schema for tool output. When absent, adapter reads schema from the tool implementation's export."
+        }
+      }
+    },
+    "MemoryStoreDef": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Declares a named memory store. All memory_read, memory_write, rag_retrieval, and embed nodes reference stores by this key.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "key_value",
+            "vector",
+            "hybrid"
+          ],
+          "description": "key_value: structured KV store (all runtimes). vector: embedding index for semantic search (MA/SK native; LG via adapter). hybrid: supports both modes."
+        },
+        "description": {
+          "type": "string"
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "in_memory",
+            "postgres",
+            "sqlite",
+            "redis",
+            "upstash",
+            "qdrant",
+            "pinecone",
+            "azure_ai_search"
+          ],
+          "default": "in_memory",
+          "description": "Storage backend. in_memory: ephemeral, dev/test only. Others: persistent. Adapter maps to the runtime's native storage plugin."
+        },
+        "connection_env": {
+          "type": "string",
+          "description": "Name of the environment variable holding the connection string or API key. e.g. 'POSTGRES_URL'. Never hardcode credentials in the spec."
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Embedding model for vector stores, e.g. 'openai/text-embedding-3-small'. Overrides model_defaults.embedding_model for this store."
+        },
+        "dimensions": {
+          "type": "integer",
+          "description": "Embedding vector dimensions. Must match the embedding model's output dimensions."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "thread",
+            "resource",
+            "global"
+          ],
+          "default": "thread",
+          "description": "Isolation scope. thread: isolated per run_id. resource: shared across runs for the same user/resource. global: shared across all runs."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Optional partition key for vector stores. One store entry per namespace. If the namespace value contains sensitive routing information (e.g. a tenant ID), store it in an environment variable and reference the variable name here \u2014 never hardcode the value. [Q33]"
+        }
+      }
+    },
+    "ModelDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Flow-level defaults for all LLM calls. Individual llm_call and agent nodes may override any field.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Default model in 'provider/model-name' format, e.g. 'openai/gpt-4o'."
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Default embedding model, e.g. 'openai/text-embedding-3-small'. Used by memory_read (semantic), rag_retrieval, and embed nodes."
+        },
+        "model_params": {
+          "$ref": "#/$defs/ModelParams"
+        }
+      }
+    },
+    "ModelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "LLM invocation parameters. All fields are optional overrides.",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "frequency_penalty": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2
+        },
+        "presence_penalty": {
+          "type": "number",
+          "minimum": -2,
+          "maximum": 2
+        },
+        "stop": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "FlowConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Flow-level infrastructure configuration. All sections are optional.",
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/CheckpointConfig"
+        },
+        "streaming": {
+          "$ref": "#/$defs/StreamingConfig"
+        },
+        "telemetry": {
+          "$ref": "#/$defs/TelemetryConfig"
+        },
+        "process_type": {
+          "type": "string",
+          "enum": [
+            "sequential",
+            "hierarchical",
+            "consensual"
+          ],
+          "default": "sequential",
+          "description": "CrewAI: maps to Crew(process=Process.sequential/hierarchical/consensual). Other adapters ignore this field. hierarchical requires a manager_agent_ref in the flow config."
+        },
+        "manager_agent_ref": {
+          "type": "string",
+          "description": "ID of the agent from agents[] who acts as manager in hierarchical process. Required when process_type is 'hierarchical'. CrewAI only."
+        },
+        "a2a_config": {
+          "$ref": "#/$defs/A2AConfig"
+        }
+      }
+    },
+    "CheckpointConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "State persistence configuration. Required for hitl_breakpoint nodes and cross-session memory. LG: checkpointer. MA: storage backend. SK: Dapr/Orleans or custom IKernelProcessStorage plugin.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "When false, no checkpoint is configured. Flow state is ephemeral."
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "in_memory",
+            "sqlite",
+            "postgres",
+            "redis",
+            "dapr",
+            "orleans"
+          ],
+          "default": "in_memory",
+          "description": "Checkpoint storage backend. in_memory: dev/test only, not persistent across restarts. dapr/orleans: SK cloud deployment only."
+        },
+        "connection_env": {
+          "type": "string",
+          "description": "Environment variable name holding the connection string. e.g. 'CHECKPOINT_DB_URL'."
+        },
+        "namespace": {
+          "type": "string",
+          "description": "Namespace prefix for checkpoint keys. Prevents collisions in shared databases. e.g. 'tenant-acme'."
+        }
+      }
+    },
+    "StreamingConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Streaming output configuration. LG: stream() with mode. MA: run.watch() / run.stream(). SK: token-level streaming only \u2014 adapter implements a custom event emitter for 'updates' mode.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "updates",
+            "tokens",
+            "debug"
+          ],
+          "default": "updates",
+          "description": "updates: emit a structured event after each node completes (all runtimes). tokens: token-by-token LLM streaming (all runtimes). debug: emit checkpoint and task events (LG only; others log to telemetry)."
+        }
+      }
+    },
+    "AgentDef": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "Named agent persona definition. Lives in the top-level agents[] array. Referenced by agent_role nodes via agent_ref. CrewAI: maps directly to Agent(). LG: adapter synthesises a sub-graph with role/backstory/goal in system_prompt. MA: maps to new Agent(). MS: maps to ChatCompletionAgent / AssistantAgent.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique agent identifier within this flow. Referenced by agent_ref on agent_role and agent_debate nodes."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable display name."
+        },
+        "role": {
+          "type": "string",
+          "description": "Job title / role label. CrewAI: Agent.role. LG: injected into system_prompt. MA/MS: used as agent name/instructions prefix."
+        },
+        "backstory": {
+          "type": "string",
+          "description": "Context and expertise background. CrewAI: Agent.backstory. Other adapters: injected into system_prompt."
+        },
+        "goal": {
+          "type": "string",
+          "description": "What this agent optimises for. CrewAI: Agent.goal. Other adapters: injected into system_prompt."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model override for this agent in 'provider/model-name' format. Defaults to model_defaults.model."
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tool IDs from the top-level tools registry available to this agent."
+        },
+        "memory_config": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Memory tier configuration. CrewAI native 4-tier model. Other adapters map to nearest equivalent.",
+          "properties": {
+            "short_term": {
+              "type": "boolean",
+              "default": false,
+              "description": "Within-task working memory. CR: ChromaDB. LG: InMemoryStore. MA: workingMemory. MS: ChatHistory."
+            },
+            "long_term": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cross-task persistence. CR: SQLite. LG: Postgres store. MA: semanticRecall. MS: SemanticTextMemory."
+            },
+            "entity": {
+              "type": "boolean",
+              "default": false,
+              "description": "Structured facts about named entities. CR native. Others: adapter approximation."
+            },
+            "user": {
+              "type": "boolean",
+              "default": false,
+              "description": "Cross-crew user preferences. CR native. Others: adapter approximation using global-scope memory store."
+            }
+          }
+        },
+        "max_iter": {
+          "type": "integer",
+          "default": 10,
+          "description": "Maximum tool-call iterations per task. CrewAI: Agent.max_iter. Other adapters: maps to max_iterations on the generated agent loop."
+        },
+        "allow_delegation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this agent can delegate tasks to other agents. CrewAI native. Other adapters ignore."
+        }
+      }
+    },
+    "AgentRoleNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "additionalProperties": false,
+      "description": "Executes a named agent persona from the agents[] registry. LG: adapter expands to ReAct sub-graph with role/backstory/goal in system_prompt. CR: native Task with assigned Agent. MA: createStep(agent). MS: ChatCompletionAgent invocation.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "agent_role"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "config": {
+          "type": "object",
+          "required": [
+            "agent_ref",
+            "task_description"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "agent_ref": {
+              "type": "string",
+              "description": "ID of the agent in the top-level agents[] array."
+            },
+            "task_description": {
+              "type": "string",
+              "description": "What this agent should do. Supports {{variable}} interpolation against current state. CrewAI: Task.description. Others: injected into llm_call prompt."
+            },
+            "expected_output": {
+              "type": "string",
+              "description": "Description of what a good result looks like. CrewAI: Task.expected_output. Others: appended to prompt as output instructions."
+            },
+            "async_execution": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether this agent_role node may run concurrently with sibling nodes. CrewAI: Task.async_execution. Others: informs parallel_fork placement."
+            },
+            "output_field": {
+              "type": "string",
+              "description": "State key to write the agent's output into. If absent, defaults to node ID."
+            },
+            "structured_output": {
+              "$ref": "#/$defs/StructuredOutput"
+            },
+            "memory_access": {
+              "type": "string",
+              "enum": [
+                "isolated",
+                "shared"
+              ],
+              "default": "isolated",
+              "description": "isolated (default): agent memory is private; only the structured result written to output_field crosses into parent flow state. shared: agent reads/writes a named store also accessible to the parent flow. Harness validation error: async_execution:true + memory_access:'shared' is disallowed \u2014 parallel agents must be isolated. [Q28]"
+            },
+            "memory_store_id": {
+              "type": "string",
+              "description": "Required when memory_access is 'shared'. Must reference a key in the flow's top-level memory_stores object. [Q28]"
+            },
+            "tool_approval": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "human"
+              ],
+              "default": "auto",
+              "description": "auto (default): agent executes all tool calls without pausing. human: adapter synthesises an approval gate before each tool call, reusing the shared HITL checkpoint/resume mechanism (same plumbing as hitl_breakpoint). Manual wiring is not possible for runtime-determined tool calls. [Q29]"
+            }
+          }
+        }
+      }
+    },
+    "AgentDebateNode": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/NodeBase"
+        }
+      ],
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "config"
+      ],
+      "additionalProperties": false,
+      "description": "Multi-agent conversational loop. Agents take turns until a termination condition fires. MS native (AutoGen GroupChat / SK AgentGroupChat). LG/CR/MA adapters synthesise. Harness shows prominent warning badge for non-MS adapters.",
+      "properties": {
+        "id": {},
+        "type": {
+          "type": "string",
+          "const": "agent_debate"
+        },
+        "label": {},
+        "description": {},
+        "position": {},
+        "runtime_support": {},
+        "config": {
+          "type": "object",
+          "required": [
+            "agents"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "agents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2,
+              "description": "IDs of agents from the top-level agents[] array participating in the debate."
+            },
+            "max_rounds": {
+              "type": "integer",
+              "default": 10,
+              "description": "Maximum conversation turns before forceful termination."
+            },
+            "termination_condition": {
+              "$ref": "#/$defs/Condition",
+              "description": "Condition evaluated after each turn. When true, the debate ends. Supports expr (JSONPath) and fn_ref."
+            },
+            "speaker_selection": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "round_robin",
+                "custom"
+              ],
+              "default": "auto",
+              "description": "How the next speaker is chosen. auto: LLM decides. round_robin: cycle through agents list. custom: fn_ref provided. MS: maps to SelectionStrategy. LG/MA/CR: adapter generates routing logic."
+            },
+            "speaker_selection_fn_ref": {
+              "type": "string",
+              "description": "npm ref or local path to custom speaker selection function. Required when speaker_selection is 'custom'."
+            },
+            "allow_repeat_speaker": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether the same agent can speak twice in a row. MS: AgentGroupChat setting. Others: adapter enforces."
+            },
+            "output_field": {
+              "type": "string",
+              "description": "State key to write the final conversation output into."
+            }
+          }
+        }
+      }
+    },
+    "A2AConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Configuration for exposing this flow as an A2A-compatible agent endpoint. When enabled, the adapter generates an HTTP wrapper serving an AgentCard at /.well-known/agent.json and a /tasks/send endpoint. All four runtime adapters must implement this as a wrapper layer \u2014 no runtime natively speaks A2A yet.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "agent_name": {
+          "type": "string",
+          "description": "Name declared in the AgentCard."
+        },
+        "agent_description": {
+          "type": "string",
+          "description": "Description declared in the AgentCard."
+        },
+        "version": {
+          "type": "string",
+          "default": "1.0.0"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "streaming",
+              "pushNotifications",
+              "stateTransitionHistory"
+            ]
+          },
+          "description": "A2A capability flags declared in AgentCard. streaming: SSE event stream. pushNotifications: webhook callbacks. stateTransitionHistory: expose run state transitions."
+        },
+        "authentication": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "oauth2",
+            "none"
+          ],
+          "default": "api_key",
+          "description": "Authentication scheme declared in AgentCard. Adapter generates corresponding middleware. Credentials always from env vars \u2014 never hardcoded."
+        },
+        "input_schema_ref": {
+          "type": "string",
+          "description": "ID of the input node whose output_schema defines the A2A Task input Part schema."
+        },
+        "output_schema_ref": {
+          "type": "string",
+          "description": "ID of the output node whose input_schema defines the A2A Artifact Part schema."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Skills declared in AgentCard. Each skill represents a capability the agent can perform."
+        }
+      }
+    },
+    "TelemetryConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Observability and tracing configuration. LG: LangSmith via LANGCHAIN_TRACING_V2. MA: Langfuse via LangfuseIntegration. MS: Azure Monitor via OpenTelemetry. All providers: traces appear in their respective dashboards without adapter code changes.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "langsmith",
+            "langfuse",
+            "otel",
+            "azure_monitor"
+          ],
+          "description": "Telemetry provider. langsmith: LangSmith (LG native; others via opentelemetry-langchain). langfuse: Langfuse (all runtimes). otel: generic OpenTelemetry endpoint. azure_monitor: Azure Application Insights (MS native)."
+        },
+        "project": {
+          "type": "string",
+          "description": "Project or dataset name in the telemetry provider. LangSmith: LANGCHAIN_PROJECT. Langfuse: project name."
+        },
+        "endpoint_env": {
+          "type": "string",
+          "description": "Environment variable name holding the telemetry endpoint URL or API key. e.g. 'LANGSMITH_API_KEY', 'LANGFUSE_HOST'. Never hardcode credentials."
+        },
+        "trace_all_nodes": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, every node execution is traced as a child span. When false, only llm_call and tool_invoke nodes emit spans."
+        }
+      }
+    }
+  }
+}
