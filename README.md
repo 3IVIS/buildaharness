@@ -12,7 +12,7 @@ flow.json  →  [ langgraph adapter ]               →  Python / LangGraph
 ```
 
 > **Status:** Phase 0 — spec design complete. Canvas build and adapters begin Phase 1.  
-> **RFC:** [GitHub Discussion →](#) ← _replace with Discussion URL after posting_  
+> **RFC:** [GitHub Discussion →](https://github.com/3IVIS/itsharness/discussions/1)
 > **Spec version:** 0.2.0
 
 ---
@@ -152,7 +152,7 @@ The major design decisions made in Phase 0 are documented in the [RFC Discussion
 
 ## Contributing
 
-**The best place to contribute right now is the [RFC Discussion](#).**
+**The best place to contribute right now is the [RFC Discussion](https://github.com/3IVIS/itsharness/discussions/1).**
 
 This is Phase 0 — the last good moment to influence the schema before adapter build starts. Phase 1 begins in ~3 weeks; after that, schema changes become breaking changes.
 
