@@ -294,7 +294,7 @@ Once the LangGraph adapter ships, Phase 2 unlocks simultaneously:
 
 ## Contributing
 
-**The best place to contribute right now is the RFC Discussion** [link](https://github.com/3IVIS/itsharness/discussions/1)
+**The best place to contribute right now is the RFC Discussion** (link TBD — will be posted when the GitHub Discussion goes live).
 
 Phase 0 is complete and the spec is locked for Phase 1. The RFC is the last good moment to push back on design decisions before adapter build starts. After Phase 1 begins, schema changes become breaking changes.
 

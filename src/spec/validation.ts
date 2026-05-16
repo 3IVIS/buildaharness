@@ -49,18 +49,21 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
   for (const node of spec.nodes) {
     if (node.type === 'condition') {
       for (const branch of node.branches) {
-        if (!nodeIds.has(branch.target)) {
+        // Skip empty-string targets — user is still filling in the form
+        if (branch.target && !nodeIds.has(branch.target)) {
           errors.push({ nodeId: node.id, field: 'branches.target', message: `Branch target "${branch.target}" is not a valid node ID` })
         }
       }
-      if (!nodeIds.has(node.default_target)) {
+      // Only validate non-empty default_target (empty = user hasn't set it yet)
+      if (node.default_target && !nodeIds.has(node.default_target)) {
         errors.push({ nodeId: node.id, field: 'default_target', message: `Default target "${node.default_target}" is not a valid node ID` })
       }
     }
 
     if (node.type === 'parallel_fork') {
       for (const t of node.targets) {
-        if (!nodeIds.has(t)) {
+        // Skip empty-string targets — user is still filling in the form
+        if (t && !nodeIds.has(t)) {
           errors.push({ nodeId: node.id, field: 'targets', message: `Fork target "${t}" is not a valid node ID` })
         }
       }
@@ -82,6 +85,12 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
       if (toolIds.size > 0 && !toolIds.has(node.tool_id)) {
         errors.push({ nodeId: node.id, field: 'tool_id', message: `Tool "${node.tool_id}" not found in tools registry` })
       }
+    }
+
+    // Validate fail_branch.target references a real node (applies to llm_call, tool_invoke)
+    const fb = (node as Record<string, unknown>).fail_branch as { target?: string } | undefined
+    if (fb?.target && !nodeIds.has(fb.target)) {
+      errors.push({ nodeId: node.id, field: 'fail_branch.target', message: `fail_branch target "${fb.target}" is not a valid node ID` })
     }
 
     if (node.type === 'agent_role') {

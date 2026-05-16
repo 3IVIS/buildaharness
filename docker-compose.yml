@@ -10,6 +10,9 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     environment:
       - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - adapter
 
   adapter:
     image: python:3.12-slim
@@ -21,3 +24,46 @@ services:
     command: sh -c "pip install -r requirements.txt && python main.py"
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://itsharness:itsharness@postgres:5432/itsharness
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - LITELLM_URL=http://litellm:4000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=itsharness
+      - POSTGRES_PASSWORD=itsharness
+      - POSTGRES_DB=itsharness
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itsharness"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./adapter/litellm_config.yaml:/app/config.yaml
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-itsharness-dev}
+      - DATABASE_URL=postgresql://itsharness:itsharness@postgres:5432/itsharness
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

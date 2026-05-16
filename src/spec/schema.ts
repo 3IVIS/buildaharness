@@ -109,6 +109,22 @@ export const OutputValidator = z.object({
 })
 export type OutputValidator = z.infer<typeof OutputValidator>
 
+
+// Error handling branch — routes a node's failure to a designated target node
+// with optional retry config. Canvas renders this as a red dashed edge.
+export const RetryConfig = z.object({
+  max_attempts: z.number().int().min(1).max(10).default(3),
+  backoff:      z.enum(['fixed', 'exponential']).default('exponential'),
+  delay_ms:     z.number().int().min(0).default(1000),
+})
+export type RetryConfig = z.infer<typeof RetryConfig>
+
+export const FailBranch = z.object({
+  target: NodeId,       // node id to route to on error (validated as kebab-case)
+  retry:  RetryConfig.optional(),
+})
+export type FailBranch = z.infer<typeof FailBranch>
+
 export const StructuredOutput = z.object({ schema: z.record(z.unknown()) })
 export type StructuredOutput = z.infer<typeof StructuredOutput>
 
@@ -170,6 +186,7 @@ export const LlmCallNode = NodeBase.extend({
   structured_output: StructuredOutput.optional(),
   output_key:        z.string().optional(),
   output_validator:  OutputValidator.optional(),
+  fail_branch:       FailBranch.optional(),
 })
 export type LlmCallNode = z.infer<typeof LlmCallNode>
 
@@ -179,6 +196,7 @@ export const ToolInvokeNode = NodeBase.extend({
   input_map:        InputMapping.optional(),
   output_map:       OutputMapping.optional(),
   output_validator: OutputValidator.optional(),
+  fail_branch:      FailBranch.optional(),
 })
 export type ToolInvokeNode = z.infer<typeof ToolInvokeNode>
 
@@ -330,7 +348,12 @@ export const DirectEdge = z.object({
   to:           z.string(),
   label:        z.string().optional(),
   context_from: z.array(z.string()).optional(),
-})
+  // Canvas-only: visual_type carries the rendering hint (parallel/hitl/fail)
+  // through the Zod parse round-trip without being part of the canonical schema.
+  // passthrough() preserves unknown keys so exportSpec → parseFlowSpec → loadFlow
+  // can restore the correct edge renderer. The canonical spec/schema.ts does NOT
+  // use passthrough() — the npm package stays clean.
+}).passthrough()
 export type DirectEdge = z.infer<typeof DirectEdge>
 
 export const ConditionalEdge = z.object({
@@ -447,7 +470,7 @@ export const FlowSpec = z.object({
   runtime_hints:  RuntimeHints.optional(),
   state_schema:   StateSchema.optional(),
   agents:         z.array(AgentDef).optional(),
-  nodes:          z.array(Node).min(2),
+  nodes:          z.array(Node).min(1),
   edges:          z.array(Edge),
   tools:          z.record(ToolDef).optional(),
   memory_stores:  z.record(MemoryStoreDef).optional(),

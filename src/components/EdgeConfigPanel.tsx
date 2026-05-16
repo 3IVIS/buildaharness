@@ -26,7 +26,7 @@ export function EdgeConfigPanel() {
     <div className="config-panel">
       <div className="config-panel__header">
         <div>
-          <div className="config-panel__type">direct edge</div>
+          <div className="config-panel__type">{edge.type} edge</div>
           <div className="config-panel__name">
             {String(sourceNode?.data?.label ?? edge.source)}
             <span style={{ color: 'var(--text-tertiary)', margin: '0 4px' }}>→</span>
@@ -49,7 +49,10 @@ export function EdgeConfigPanel() {
           Nodes whose output is passed as context to the target (CrewAI Task.context model).
         </div>
 
-        {nodeIds.filter((id) => id !== edge.target).map((nodeId) => {
+        {nodeIds
+          .filter((id) => id !== edge.target && id !== edge.source)
+          .filter((id) => nodes.find((n) => n.id === id)?.type !== 'annotation')
+          .map((nodeId) => {
           const n       = nodes.find((node) => node.id === nodeId)
           const nLabel  = n?.data?.label as string | undefined
           const checked = contextFrom.includes(nodeId)

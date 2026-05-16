@@ -1,26 +1,28 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { StickyNote } from 'lucide-react'
 import type { NodeType } from '../spec/schema'
 import { EXAMPLE_FLOWS } from '../spec/examples'
 import { useCanvasStore, type SettingsTab } from '../store'
 import { useLibraryStore, relativeTime } from '../store/library'
+import { NODE_ICONS, NODE_HEX } from '../canvas/nodes/BaseNode'
 
-interface PaletteEntry { type: NodeType; color: string; group: string }
+interface PaletteEntry { type: NodeType; group: string }
 
 const PALETTE: PaletteEntry[] = [
-  { type: 'input',           color: 'var(--c-input)',  group: 'I/O' },
-  { type: 'output',          color: 'var(--c-output)', group: 'I/O' },
-  { type: 'llm_call',        color: 'var(--c-llm)',    group: 'Core' },
-  { type: 'tool_invoke',     color: 'var(--c-tool)',   group: 'Core' },
-  { type: 'transform',       color: 'var(--c-xform)',  group: 'Core' },
-  { type: 'condition',       color: 'var(--c-cond)',   group: 'Control' },
-  { type: 'parallel_fork',   color: 'var(--c-fork)',   group: 'Control' },
-  { type: 'parallel_join',   color: 'var(--c-join)',   group: 'Control' },
-  { type: 'hitl_breakpoint', color: 'var(--c-hitl)',   group: 'Control' },
-  { type: 'subgraph',        color: 'var(--c-sub)',    group: 'Control' },
-  { type: 'memory_read',     color: 'var(--c-memr)',   group: 'Memory' },
-  { type: 'memory_write',    color: 'var(--c-memw)',   group: 'Memory' },
-  { type: 'agent_role',      color: 'var(--c-agent)',  group: 'Agents' },
-  { type: 'agent_debate',    color: 'var(--c-debate)', group: 'Agents' },
+  { type: 'input',           group: 'I/O'     },
+  { type: 'output',          group: 'I/O'     },
+  { type: 'llm_call',        group: 'Core'    },
+  { type: 'tool_invoke',     group: 'Core'    },
+  { type: 'transform',       group: 'Core'    },
+  { type: 'condition',       group: 'Control' },
+  { type: 'parallel_fork',   group: 'Control' },
+  { type: 'parallel_join',   group: 'Control' },
+  { type: 'hitl_breakpoint', group: 'Control' },
+  { type: 'subgraph',        group: 'Control' },
+  { type: 'memory_read',     group: 'Memory'  },
+  { type: 'memory_write',    group: 'Memory'  },
+  { type: 'agent_role',      group: 'Agents'  },
+  { type: 'agent_debate',    group: 'Agents'  },
 ]
 
 const GROUPS = ['I/O', 'Core', 'Control', 'Memory', 'Agents']
@@ -39,9 +41,10 @@ const REGISTRY_SHORTCUTS: RegistryShortcut[] = [
 ]
 
 export function Sidebar() {
-  const { loadFlow, openSettings, memoryStores, tools, agents, stateSchema } = useCanvasStore()
+  const { loadFlow, openSettings, memoryStores, tools, agents, stateSchema, addAnnotation } = useCanvasStore()
   const { entries, getFlow, deleteFlow } = useLibraryStore()
   const [showExamples, setShowExamples] = useState(true)
+  const [query, setQuery]               = useState('')
 
   const stateCounts: Record<SettingsTab, number> = {
     meta:   0,
@@ -52,37 +55,95 @@ export function Sidebar() {
     config: 0,
   }
 
+  // Filter palette by search query
+  const q = query.trim().toLowerCase()
+  const filtered = useMemo(() =>
+    q ? PALETTE.filter((p) => p.type.includes(q) || p.group.toLowerCase().includes(q)) : null,
+  [q])
+
+  // Groups to render — collapsed when searching (show flat list instead)
+  const renderedGroups = filtered ? null : GROUPS
+
   return (
     <div className="sidebar">
       <div className="sidebar__scroll">
-        {/* Node palette */}
-        {GROUPS.map((group) => (
+
+        {/* Search */}
+        <div style={{ padding: '10px 10px 6px', position: 'relative' }}>
+          <input
+            className="sidebar-search"
+            placeholder="Search nodes…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            spellCheck={false}
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              style={{ position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)',
+                       background: 'none', border: 'none', color: 'var(--text-tertiary)',
+                       cursor: 'pointer', fontSize: 14, padding: 0 }}
+            >×</button>
+          )}
+        </div>
+
+        {/* Flat search results */}
+        {filtered && (
+          <div className="sidebar__section">
+            {filtered.length === 0
+              ? <div style={{ fontSize: 11, color: 'var(--text-tertiary)', padding: '4px 4px' }}>No results</div>
+              : filtered.map(({ type }) => (
+                  <PaletteItem key={type} type={type} />
+                ))
+            }
+          </div>
+        )}
+
+        {/* Grouped palette */}
+        {!filtered && renderedGroups!.map((group) => (
           <div key={group} className="sidebar__section">
             <div className="sidebar__label">{group}</div>
-            {PALETTE.filter((p) => p.group === group).map(({ type, color }) => (
-              <div key={type} className="palette-item" draggable onDragStart={(e) => onDragStart(e, type)} title={`Drag to add ${type}`}>
-                <div className="palette-item__dot" style={{ background: color }} />
-                <span className="palette-item__name">{type}</span>
-              </div>
+            {PALETTE.filter((p) => p.group === group).map(({ type }) => (
+              <PaletteItem key={type} type={type} />
             ))}
           </div>
         ))}
 
-        {/* Registry shortcuts */}
-        <div className="sidebar__section">
-          <div className="sidebar__label">Registries</div>
-          {REGISTRY_SHORTCUTS.map(({ label, tab }) => (
-            <div key={tab} className="flow-item" onClick={() => openSettings(tab)} title={`Edit ${label}`}>
-              <span className="flow-item__num" style={{ color: stateCounts[tab] > 0 ? '#3b82f6' : undefined, fontVariantNumeric: 'tabular-nums' }}>
-                {stateCounts[tab] > 0 ? stateCounts[tab] : '—'}
+        {/* Canvas tools */}
+        {!filtered && (
+          <div className="sidebar__section">
+            <div className="sidebar__label">Canvas</div>
+            <div
+              className="palette-item"
+              onClick={() => addAnnotation({ x: 200, y: 200 })}
+              title="Add a sticky note to the canvas"
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="palette-item__icon" style={{ color: '#ca8a04' }}>
+                <StickyNote size={13} strokeWidth={1.75} />
               </span>
-              <span className="flow-item__name">{label}</span>
+              <span className="palette-item__name">annotation</span>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Registry shortcuts */}
+        {!filtered && (
+          <div className="sidebar__section">
+            <div className="sidebar__label">Registries</div>
+            {REGISTRY_SHORTCUTS.map(({ label, tab }) => (
+              <div key={tab} className="flow-item" onClick={() => openSettings(tab)} title={`Edit ${label}`}>
+                <span className="flow-item__num" style={{ color: stateCounts[tab] > 0 ? '#3b82f6' : undefined }}>
+                  {stateCounts[tab] > 0 ? stateCounts[tab] : '—'}
+                </span>
+                <span className="flow-item__name">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* My flows */}
-        {entries.length > 0 && (
+        {!filtered && entries.length > 0 && (
           <div className="sidebar__section">
             <div className="sidebar__label">My flows ({entries.length})</div>
             {entries.slice(0, 8).map((entry) => (
@@ -92,12 +153,13 @@ export function Sidebar() {
                   const spec = getFlow(entry.id)
                   if (spec) loadFlow(spec)
                 }}>
-                  <div className="flow-item__name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingLeft: 0 }}>{entry.name}</div>
-                  <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', paddingLeft: 0 }}>{relativeTime(entry.savedAt)}</div>
+                  <div className="flow-item__name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{relativeTime(entry.savedAt)}</div>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteFlow(entry.id) }}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px 4px', opacity: 0, fontSize: 10 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)',
+                           cursor: 'pointer', padding: '2px 4px', opacity: 0, fontSize: 10 }}
                   className="flow-item__delete"
                   title="Remove from library"
                 >✕</button>
@@ -107,20 +169,40 @@ export function Sidebar() {
         )}
 
         {/* Example flows */}
-        <div className="sidebar__section">
-          <div className="sidebar__label" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-            onClick={() => setShowExamples(!showExamples)}>
-            Examples
-            <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{showExamples ? '▲' : '▼'}</span>
-          </div>
-          {showExamples && EXAMPLE_FLOWS.map((flow, i) => (
-            <div key={flow.spec.id} className="flow-item" onClick={() => loadFlow(flow.spec)} title={flow.spec.description}>
-              <span className="flow-item__num">0{i + 1}</span>
-              <span className="flow-item__name">{flow.label}</span>
+        {!filtered && (
+          <div className="sidebar__section">
+            <div className="sidebar__label" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              onClick={() => setShowExamples(!showExamples)}>
+              Examples
+              <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{showExamples ? '▲' : '▼'}</span>
             </div>
-          ))}
-        </div>
+            {showExamples && EXAMPLE_FLOWS.map((flow, i) => (
+              <div key={flow.spec.id} className="flow-item" onClick={() => loadFlow(flow.spec)} title={flow.spec.description}>
+                <span className="flow-item__num">0{i + 1}</span>
+                <span className="flow-item__name">{flow.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+function PaletteItem({ type }: { type: NodeType }) {
+  const Icon  = NODE_ICONS[type]
+  const color = NODE_HEX[type]
+  return (
+    <div
+      className="palette-item"
+      draggable
+      onDragStart={(e) => onDragStart(e, type)}
+      title={`Drag to add ${type}`}
+    >
+      <span className="palette-item__icon" style={{ color }}>
+        <Icon size={13} strokeWidth={1.75} />
+      </span>
+      <span className="palette-item__name">{type}</span>
     </div>
   )
 }

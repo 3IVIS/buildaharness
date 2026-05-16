@@ -1,6 +1,7 @@
 import { X, AlertCircle, CheckCircle } from 'lucide-react'
 import { useCanvasStore, type NodeData } from '../store'
 import type { NodeType } from '../spec/schema'
+import { NODE_ICONS, NODE_HEX, NODE_TYPE_LABELS } from '../canvas/nodes/BaseNode'
 
 // ─── Field helpers ───────────────────────────────────────────────────────────
 
@@ -91,6 +92,85 @@ function OutputPanel({ data, update }: { data: NodeData; update: (d: Partial<Nod
   )
 }
 
+
+// ─── Fail branch config section (shared by LlmCall, ToolInvoke) ──────────────
+
+function FailBranchSection({ data, update }: { data: NodeData; update: (d: Partial<NodeData>) => void }) {
+  type FB = { target?: string; retry?: { max_attempts?: number; backoff?: string; delay_ms?: number } }
+  const fb = (data.fail_branch as FB | undefined) ?? {}
+  const retry = fb.retry ?? {}
+
+  function setFb(patch: Partial<FB>) {
+    update({ fail_branch: { ...fb, ...patch } })
+  }
+  function setRetry(patch: Partial<typeof retry>) {
+    setFb({ retry: { ...retry, ...patch } })
+  }
+  function clearFb() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    update({ fail_branch: undefined as any })
+  }
+
+  return (
+    <>
+      <div className="section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Error handling</span>
+        {fb.target && (
+          <button
+            onClick={clearFb}
+            style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)',
+                     fontSize: 10, cursor: 'pointer', padding: '0 2px' }}
+            title="Remove fail branch"
+          >clear</button>
+        )}
+      </div>
+
+      <Field label="On-fail target" hint="node ID to route to on error — canvas draws a red dashed edge">
+        <TextInput
+          value={fb.target ?? ''}
+          onChange={(v) => setFb({ target: v || undefined })}
+          mono
+          placeholder="error-handler-node"
+        />
+      </Field>
+
+      {fb.target && (
+        <>
+          <div className="section-head" style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 6 }}>Retry</div>
+          <Field label="Max attempts">
+            <input
+              type="number" min={1} max={10}
+              value={retry.max_attempts ?? 3}
+              onChange={(e) => setRetry({ max_attempts: Number(e.target.value) })}
+              className="cfg-input"
+              style={{ width: 64 }}
+            />
+          </Field>
+          <Field label="Backoff">
+            <select
+              className="cfg-input"
+              value={retry.backoff ?? 'exponential'}
+              onChange={(e) => setRetry({ backoff: e.target.value })}
+            >
+              <option value="exponential">exponential</option>
+              <option value="fixed">fixed</option>
+            </select>
+          </Field>
+          <Field label="Delay (ms)">
+            <input
+              type="number" min={0} step={100}
+              value={retry.delay_ms ?? 1000}
+              onChange={(e) => setRetry({ delay_ms: Number(e.target.value) })}
+              className="cfg-input"
+              style={{ width: 80 }}
+            />
+          </Field>
+        </>
+      )}
+    </>
+  )
+}
+
 function LlmCallPanel({ data, update }: { data: NodeData; update: (d: Partial<NodeData>) => void }) {
   const params = (data.model_params as Record<string, number>) ?? {}
   return (
@@ -114,6 +194,7 @@ function LlmCallPanel({ data, update }: { data: NodeData; update: (d: Partial<No
       <Field label="Output key" hint="state key to write answer to">
         <TextInput value={(data.output_key as string) ?? ''} onChange={(v) => update({ output_key: v })} mono placeholder="answer" />
       </Field>
+      <FailBranchSection data={data} update={update} />
     </>
   )
 }
@@ -127,6 +208,7 @@ function ToolInvokePanel({ data, update }: { data: NodeData; update: (d: Partial
       <Field label="Tool ID" hint="must reference tools registry">
         <TextInput value={(data.tool_id as string) ?? ''} onChange={(v) => update({ tool_id: v })} mono placeholder="web_search" />
       </Field>
+      <FailBranchSection data={data} update={update} />
     </>
   )
 }
@@ -468,6 +550,8 @@ export function ConfigPanel() {
 
   const nodeType  = selectedNode.type as NodeType
   const PanelComp = PANEL_MAP[nodeType]
+  const Icon      = NODE_ICONS[nodeType]
+  const hex       = NODE_HEX[nodeType] ?? '#6b7280'
 
   const nodeErrors = [
     ...(crossRefErrors.filter((e) => e.nodeId === selectedNode.id)),
@@ -476,17 +560,28 @@ export function ConfigPanel() {
   return (
     <div className="config-panel">
       <div className="config-panel__header">
-        <div>
-          <div className="config-panel__type">{nodeType}</div>
+        <div className="config-panel__icon" style={{ background: `${hex}18`, color: hex }}>
+          {Icon && <Icon size={14} strokeWidth={1.75} />}
+        </div>
+        <div className="config-panel__meta">
+          <div className="config-panel__type">{NODE_TYPE_LABELS[nodeType] ?? nodeType}</div>
           <div className="config-panel__name">{(selectedNode.data.label as string) || selectedNode.id}</div>
         </div>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-          <button className="btn btn--icon" title="Delete node" onClick={() => deleteNode(selectedNode.id)}
-            style={{ color: '#ef4444' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/><path d="M10,11v6M14,11v6"/><path d="M9,6V4h6v2"/></svg>
+        <div className="config-panel__actions">
+          <button
+            className="config-panel__close"
+            title="Delete node"
+            onClick={() => deleteNode(selectedNode.id)}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#ef4444' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14H6L5,6"/>
+              <path d="M10,11v6M14,11v6"/><path d="M9,6V4h6v2"/>
+            </svg>
           </button>
-          <button className="btn btn--icon config-panel__close" title="Close" onClick={closePanel}>
-            <X size={14} />
+          <button className="config-panel__close" title="Close panel" onClick={closePanel}>
+            <X size={13} />
           </button>
         </div>
       </div>

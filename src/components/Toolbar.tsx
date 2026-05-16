@@ -1,9 +1,23 @@
 import { useRef, useState } from 'react'
-import { CheckCircle, AlertCircle, Settings, Undo2, Redo2, LayoutDashboard, Save, FolderOpen } from 'lucide-react'
+import {
+  CheckCircle, AlertCircle, Settings, Undo2, Redo2,
+  LayoutDashboard, Save, FolderOpen, GitCompare, Share2,
+} from 'lucide-react'
 import { useCanvasStore } from '../store'
 import { useLibraryStore } from '../store/library'
-import { ImportDialog } from './ImportDialog'
+import { ImportDialog }    from './ImportDialog'
 import { FlowLibraryPanel } from './FlowLibraryPanel'
+import { FlowDiffModal }   from './FlowDiffModal'
+import { generateAgentCard, downloadAgentCard, A2A_ENABLED } from '../services/a2a'
+import type { AdapterName } from '../spec/schema'
+
+const RUNTIME_OPTIONS: { value: AdapterName | ''; label: string }[] = [
+  { value: '',                        label: 'All runtimes' },
+  { value: 'langgraph',               label: 'LangGraph'    },
+  { value: 'crewai',                  label: 'CrewAI'       },
+  { value: 'mastra',                  label: 'Mastra'       },
+  { value: 'microsoft_agent_framework', label: 'MS Agent Framework' },
+]
 
 export function Toolbar() {
   const {
@@ -12,20 +26,26 @@ export function Toolbar() {
     openSettings, toggleProblems,
     undo, redo, canUndo, canRedo,
     autoLayout,
+    flowConfig,
   } = useCanvasStore()
 
-  const { saveFlow, lastSavedSpecJson, entries } = useLibraryStore()
+  const { saveFlow, entries } = useLibraryStore()
 
   const [showImport,  setShowImport]  = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
+  const [showDiff,    setShowDiff]    = useState(false)
+  const [copied,      setCopied]      = useState(false)
 
   const errorCount = (zodErrors?.issues.length ?? 0) + crossRefErrors.length
 
-  // Dirty = lastModifiedAt is newer than when we last saved to library
   const lastSavedEntry = entries.find((e) => e.id === flowMeta.id)
   const isDirty = !lastSavedEntry || lastSavedEntry.savedAt < lastModifiedAt
 
+  // Show A2A button if feature is enabled and the flow has a2a_config.enabled
+  const a2aEnabled = A2A_ENABLED && (flowConfig?.a2a_config?.enabled === true)
+
   function handleExport() {
+    validate()  // surface cross-ref errors before export so user sees any issues
     const spec = exportSpec(); if (!spec) return
     const url = URL.createObjectURL(new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = `${spec.id}.json`; a.click()
@@ -33,6 +53,7 @@ export function Toolbar() {
   }
 
   function handleSaveToLibrary() {
+    validate()  // surface cross-ref errors before saving
     const spec = exportSpec(); if (!spec) return
     saveFlow(spec)
   }
@@ -40,7 +61,31 @@ export function Toolbar() {
   function handleCopy() {
     const spec = exportSpec(); if (!spec) return
     navigator.clipboard.writeText(JSON.stringify(spec, null, 2))
-      .then(() => alert('Spec copied to clipboard'))
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+
+  function handleA2ACard() {
+    const card = generateAgentCard({
+      flowId:          flowMeta.id,
+      flowName:        flowMeta.name,
+      flowDescription: flowMeta.description,
+      flowConfig,
+    })
+    if (!card) {
+      alert('A2A is not enabled for this flow.\nSet flow_config.a2a_config.enabled = true in Flow Settings → Config.')
+      return
+    }
+    downloadAgentCard(card, 'agent.json')
+  }
+
+  function handleRuntimeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const val = e.target.value as AdapterName | ''
+    setFlowMeta({
+      runtimeHints: {
+        ...flowMeta.runtimeHints,
+        preferred_adapter: val || undefined,
+      },
+    })
   }
 
   return (
@@ -49,12 +94,17 @@ export function Toolbar() {
         <span className="toolbar__logo">itsharness</span>
         <div className="toolbar__divider" />
 
-        <input className="toolbar__flow-name" value={flowMeta.name}
+        <input
+          className="toolbar__flow-name"
+          value={flowMeta.name}
           onChange={(e) => setFlowMeta({ name: e.target.value })}
-          placeholder="Flow name" spellCheck={false} />
+          placeholder="Flow name"
+          spellCheck={false}
+        />
 
-        {/* Dirty indicator dot */}
-        {isDirty && <div title="Unsaved changes" style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0, marginLeft: -2 }} />}
+        {isDirty && (
+          <div title="Unsaved changes" style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0, marginLeft: -2 }} />
+        )}
 
         <div className="toolbar__divider" />
 
@@ -80,7 +130,40 @@ export function Toolbar() {
             : <><CheckCircle size={13} style={{ color: '#22c55e' }} />valid</>}
         </button>
 
+        <div className="toolbar__divider" />
+
+        {/* Runtime selector */}
+        <select
+          className="runtime-select"
+          value={flowMeta.runtimeHints?.preferred_adapter ?? ''}
+          onChange={handleRuntimeChange}
+          title="Target runtime — pins compat highlighting and routes export"
+        >
+          {RUNTIME_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+
         <div className="toolbar__spacer" />
+
+        {/* Diff — only shown when there are saved versions to compare */}
+        {entries.length >= 1 && (
+          <button className="btn btn--icon" onClick={() => setShowDiff(true)} title="Compare versions">
+            <GitCompare size={13} />
+          </button>
+        )}
+
+        {/* A2A AgentCard — only shown when enabled */}
+        {A2A_ENABLED && (
+          <button
+            className="btn btn--icon"
+            onClick={handleA2ACard}
+            title={a2aEnabled ? 'Download A2A AgentCard' : 'A2A not configured for this flow'}
+            style={{ opacity: a2aEnabled ? 1 : 0.4 }}
+          >
+            <Share2 size={13} />
+          </button>
+        )}
 
         {/* Settings */}
         <button className="btn btn--icon" onClick={() => openSettings()} title="Flow settings">
@@ -103,14 +186,22 @@ export function Toolbar() {
           {isDirty ? 'Save' : 'Saved'}
         </button>
 
-        <button className="btn" onClick={newFlow} title="New flow">New</button>
+        <button
+          className="btn"
+          onClick={() => {
+            if (isDirty && !window.confirm('Discard unsaved changes and start a new flow?')) return
+            newFlow()
+          }}
+          title="New flow"
+        >New</button>
         <button className="btn" onClick={() => setShowImport(true)} title="Load flow from JSON">Import</button>
-        <button className="btn" onClick={handleCopy} title="Copy spec JSON">Copy spec</button>
+        <button className="btn" onClick={handleCopy} title="Copy spec JSON" style={{ color: copied ? 'var(--green)' : undefined }}>{copied ? 'Copied!' : 'Copy spec'}</button>
         <button className="btn btn--primary" onClick={handleExport} title="Download spec JSON">Export JSON</button>
       </div>
 
-      {showImport  && <ImportDialog  onClose={() => setShowImport(false)}  onLoad={(spec) => { loadFlow(spec); setShowImport(false) }} />}
+      {showImport  && <ImportDialog onClose={() => setShowImport(false)} onLoad={(spec) => { loadFlow(spec); setShowImport(false) }} />}
       {showLibrary && <FlowLibraryPanel onClose={() => setShowLibrary(false)} />}
+      {showDiff    && <FlowDiffModal onClose={() => setShowDiff(false)} />}
     </>
   )
 }

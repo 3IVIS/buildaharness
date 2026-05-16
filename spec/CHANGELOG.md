@@ -6,6 +6,14 @@ Format: [Semantic Versioning](https://semver.org). Schema changes in minor versi
 
 ---
 
+## [Unreleased]
+
+### Added
+- `FailBranch` and `RetryConfig` schema types for error-handling branches on `llm_call` and `tool_invoke` nodes
+- `fail_branch` optional field on `LlmCallNode` and `ToolInvokeNode`
+- Canvas renders `fail_branch` as a red dashed `FailEdge` with "on fail" label
+- CrewAI and Mastra adapters emit retry logic when `fail_branch` is configured
+
 ## [0.2.0] — 2025-05-14
 
 ### Added

@@ -138,6 +138,22 @@ export const OutputValidator = z
 
 export type OutputValidator = z.infer<typeof OutputValidator>
 
+
+// Error handling branch — routes a node's failure to a designated target node
+// with optional retry config. Canvas renders this as a red dashed edge.
+export const RetryConfig = z.object({
+  max_attempts: z.number().int().min(1).max(10).default(3),
+  backoff:      z.enum(['fixed', 'exponential']).default('exponential'),
+  delay_ms:     z.number().int().min(0).default(1000),
+})
+export type RetryConfig = z.infer<typeof RetryConfig>
+
+export const FailBranch = z.object({
+  target: NodeId,       // node id to route to on error (validated as kebab-case)
+  retry:  RetryConfig.optional(),
+})
+export type FailBranch = z.infer<typeof FailBranch>
+
 export const StructuredOutput = z
   .object({ schema: z.record(z.unknown()) })
   .describe('Force typed JSON response from LLM. LG: .with_structured_output(). MA: structuredOutput option. SK: typed return.')
@@ -217,6 +233,7 @@ export const LlmCallNode = NodeBase.extend({
   structured_output: StructuredOutput.optional(),
   output_key:       z.string().optional(),
   output_validator: OutputValidator.optional(),
+  fail_branch:      FailBranch.optional(),
 })
 
 export type LlmCallNode = z.infer<typeof LlmCallNode>

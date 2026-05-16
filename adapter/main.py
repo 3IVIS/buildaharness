@@ -1,14 +1,48 @@
 """
-itsharness — LangGraph adapter (stub)
-Phase 1: returns empty code. Real codegen after RFC closes.
-"""
+itsharness — adapter server  v0.3.0
+Multi-runtime dispatcher + backend: Postgres, auth, flow versioning, execution.
 
-import json
-from fastapi import FastAPI, HTTPException
+Endpoints
+  GET  /health                → adapter status
+  GET  /runtimes              → list supported runtimes
+  POST /compile               → codegen (no auth required)
+  POST /compile?runtime=X     → explicit runtime override
+
+  POST /auth/register         → create account, returns JWT
+  POST /auth/login            → login, returns JWT
+  GET  /auth/me               → current user info
+
+  GET  /flows                 → list user's flows
+  POST /flows                 → save / upsert flow (auto-versions)
+  GET  /flows/{id}            → current spec
+  DELETE /flows/{id}          → delete flow
+  GET  /flows/{id}/versions   → version history
+  POST /flows/{id}/versions/{ver_id}/restore → restore version
+
+  POST /run                   → execute flow (async job)
+  GET  /run/{job_id}          → job status + result
+"""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-app = FastAPI(title="itsharness-adapter", version="0.1.0")
+from db          import init_db
+from auth        import router as auth_router
+from flows_api   import router as flows_router
+from run_api     import router as run_router
+from crewai_adapter import compile_crewai
+from mastra_adapter import compile_mastra
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="itsharness-adapter", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,10 +51,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+app.include_router(flows_router)
+app.include_router(run_router)
+
+
+SUPPORTED_RUNTIMES = {
+    "langgraph": {"status": "stub",  "note": "Real codegen after RFC closes."},
+    "crewai":    {"status": "full",  "note": "RFC_PENDING: context_from + memory tier."},
+    "mastra":    {"status": "full",  "note": "TypeScript output."},
+}
+
 
 class CompileRequest(BaseModel):
     spec: dict
-
 
 class CompileResponse(BaseModel):
     runtime:  str
@@ -30,64 +74,75 @@ class CompileResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "adapter": "langgraph", "phase": "1-stub"}
+    return {"status": "ok", "adapter": "itsharness", "version": "0.3.0"}
+
+
+@app.get("/runtimes")
+def runtimes():
+    return {"runtimes": SUPPORTED_RUNTIMES}
 
 
 @app.post("/compile", response_model=CompileResponse)
-def compile_flow(req: CompileRequest) -> CompileResponse:
-    """
-    Reads a FlowSpec JSON and emits LangGraph Python code.
-    
-    Phase 1 stub: validates the spec is present and returns a placeholder.
-    Real codegen is gated on RFC close — field names (output_key, query_expr,
-    context_from semantics) are the open questions most likely to change.
-    """
+def compile_flow(
+    req:     CompileRequest,
+    runtime: str | None = Query(default=None),
+) -> CompileResponse:
     spec = req.spec
-
     if "nodes" not in spec:
         raise HTTPException(status_code=400, detail="spec.nodes is required")
 
-    node_ids = [n["id"] for n in spec["nodes"]]
+    if not runtime:
+        runtime = spec.get("runtime_hints", {}).get("preferred_adapter", "langgraph")
+    runtime = runtime.lower()
+
+    if runtime not in SUPPORTED_RUNTIMES:
+        raise HTTPException(status_code=400,
+                            detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
+
+    if runtime == "crewai":
+        try:
+            code, warnings = compile_crewai(spec)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"CrewAI codegen failed: {exc}") from exc
+        return CompileResponse(runtime="crewai", code=code, warnings=warnings)
+
+    if runtime == "mastra":
+        try:
+            code, warnings = compile_mastra(spec)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Mastra codegen failed: {exc}") from exc
+        return CompileResponse(runtime="mastra", code=code, warnings=warnings)
+
+    # LangGraph stub
+    node_ids   = [n["id"] for n in spec["nodes"]]
     edge_count = len(spec.get("edges", []))
-
     warnings: list[str] = []
-    
-    # Warn on node types not yet supported in this adapter version
-    unsupported = {"agent_role", "agent_debate"}
     for node in spec["nodes"]:
-        if node["type"] in unsupported:
-            warnings.append(
-                f"Node '{node['id']}' (type={node['type']}) synthesis not yet implemented — "
-                f"codegen for this type is scheduled for Phase 1 completion after RFC."
-            )
+        if node["type"] in {"agent_role", "agent_debate"}:
+            warnings.append(f"Node '{node['id']}' (type={node['type']}) codegen is RFC-gated.")
+    warnings.append("langgraph codegen is RFC-gated — use ?runtime=crewai or ?runtime=mastra.")
 
-    stub_code = f'''\
+    stub = f'''"""
+LangGraph code generated by itsharness-adapter v0.3.0-stub
+Flow  : {spec.get("name", spec.get("id", "unknown"))}
+Nodes : {len(node_ids)} | Edges: {edge_count}
+
+NOTE: Real LangGraph codegen is RFC-gated.
+      Use ?runtime=crewai or ?runtime=mastra for working output today.
 """
-LangGraph code generated by itsharness-adapter v0.1.0-stub
-Flow: {spec.get("name", spec.get("id", "unknown"))}
-Nodes: {len(node_ids)} | Edges: {edge_count}
-
-NOTE: This is a Phase 1 stub. Real codegen will be implemented
-after the RFC comment period closes and spec field names are locked.
-"""
-
 from langgraph.graph import StateGraph, START, END
 from typing import TypedDict
 
-# --- State ---
 class FlowState(TypedDict):
     pass  # TODO: generate from spec.state_schema
 
-# --- Graph ---
 graph = StateGraph(FlowState)
-
 # TODO: nodes -> graph.add_node()
 # TODO: edges -> graph.add_edge() / graph.add_conditional_edges()
-
 compiled = graph.compile()
-'''
+'''.lstrip()
 
-    return CompileResponse(runtime="langgraph", code=stub_code, warnings=warnings)
+    return CompileResponse(runtime="langgraph", code=stub, warnings=warnings)
 
 
 if __name__ == "__main__":

@@ -1,34 +1,205 @@
-import { useCallback } from 'react'
+import { useCallback, useState, useEffect, useMemo } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap, BackgroundVariant,
   type Node, type NodeMouseHandler, type EdgeMouseHandler,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
 import { useCanvasStore } from '../store'
 import { nodeTypes } from './nodes'
 import { edgeTypes } from './edges'
+import { NODE_HEX } from './nodes/BaseNode'
+import { RegionLayer } from './regions/RegionLayer'
+import type { NodeType } from '../spec/schema'
+
+type FocusDepth = 1 | 2 | 'all'
+
+// ── Focus mode ────────────────────────────────────────────────────────────
+// Shift+click → BFS to `depth` from the clicked node. Nodes inside the
+// neighborhood render at full opacity; nodes outside fade. Edges that
+// CROSS the boundary (one endpoint inside, one outside) stay visible at
+// ~35% so the user can see where the focused subgraph connects.
+
+function useFocusMode(nodes: Node[], edges: { source: string; target: string }[]) {
+  const [focusId, setFocusId]   = useState<string | null>(null)
+  const [depth, setDepth]       = useState<FocusDepth>(1)
+
+  function toggle(id: string) {
+    setFocusId((prev) => (prev === id ? null : id))
+  }
+  function clear() { setFocusId(null) }
+
+  const focusedIds: Set<string> = useMemo(() => {
+    const result = new Set<string>()
+    if (!focusId) return result
+    result.add(focusId)
+    if (depth === 'all') {
+      // Connected component (undirected reachability)
+      const adj = new Map<string, Set<string>>()
+      for (const e of edges) {
+        if (!adj.has(e.source)) adj.set(e.source, new Set())
+        if (!adj.has(e.target)) adj.set(e.target, new Set())
+        adj.get(e.source)!.add(e.target)
+        adj.get(e.target)!.add(e.source)
+      }
+      const stack = [focusId]
+      while (stack.length) {
+        const id = stack.pop()!
+        for (const n of adj.get(id) ?? []) {
+          if (!result.has(n)) { result.add(n); stack.push(n) }
+        }
+      }
+    } else {
+      // BFS up to `depth` hops
+      let frontier = new Set([focusId])
+      for (let d = 0; d < depth; d++) {
+        const next = new Set<string>()
+        for (const e of edges) {
+          if (frontier.has(e.source) && !result.has(e.target)) next.add(e.target)
+          if (frontier.has(e.target) && !result.has(e.source)) next.add(e.source)
+        }
+        for (const id of next) result.add(id)
+        frontier = next
+      }
+    }
+    return result
+  }, [focusId, depth, edges])  // nodes deliberately omitted — BFS only reads edges
+
+  return { focusId, focusedIds, depth, setDepth, toggle, clear }
+}
+
+// Desaturate a hex toward neutral gray for the minimap — full saturation at
+// thumbnail scale reads as confetti, not as a navigational aid.
+function desaturateForMinimap(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const luma = (r + g + b) / 3
+  const blend = 0.55  // 0 = full gray, 1 = full color
+  const mx = (c: number) => Math.round(c * blend + luma * (1 - blend))
+  const h  = (n: number) => n.toString(16).padStart(2, '0')
+  return `#${h(mx(r))}${h(mx(g))}${h(mx(b))}`
+}
 
 export function Canvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, selectNode, selectEdge, addNode } = useCanvasStore()
+  const {
+    nodes, edges, onNodesChange, onEdgesChange, onConnect,
+    selectNode, selectEdge, addNode, addAnnotation,
+  } = useCanvasStore()
 
-  const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }, [])
+  const { focusId, focusedIds, depth, setDepth, toggle, clear } = useFocusMode(
+    (nodes as Node[]).filter((n) => n.type !== 'annotation'), edges,
+  )
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+  }, [])
+
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('application/itsharness-node')
     if (!type) return
     const canvas = e.currentTarget.getBoundingClientRect()
-    addNode(type as never, { x: e.clientX - canvas.left - 100, y: e.clientY - canvas.top - 24 })
+    addNode(type as NodeType, { x: e.clientX - canvas.left - 100, y: e.clientY - canvas.top - 24 })
   }, [addNode])
 
-  const onNodeClick: NodeMouseHandler = useCallback((_e, node) => selectNode(node.id), [selectNode])
+  const onNodeClick: NodeMouseHandler = useCallback((e, node) => {
+    if (e.shiftKey) {
+      e.stopPropagation()
+      toggle(node.id)
+    } else {
+      selectNode(node.id)
+    }
+  }, [selectNode, toggle])
+
   const onEdgeClick: EdgeMouseHandler = useCallback((_e, edge) => selectEdge(edge.id), [selectEdge])
-  const onPaneClick = useCallback(() => { selectNode(null); selectEdge(null) }, [selectNode, selectEdge])
+
+  const onPaneClick = useCallback(() => {
+    selectNode(null)
+    selectEdge(null)
+    clear()
+  }, [selectNode, selectEdge, clear])
+
+  // Keyboard handlers — N to add annotation, Escape to exit focus mode
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+
+      // Escape clears focus mode first — before App.tsx gets to close a panel
+      if (e.key === 'Escape' && focusId) {
+        e.stopPropagation()
+        clear()
+        return
+      }
+
+      if (e.key === 'n' && !e.metaKey && !e.ctrlKey && !inInput) {
+        addAnnotation({ x: 300 + Math.random() * 100, y: 200 + Math.random() * 100 })
+      }
+    }
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
+  }, [addAnnotation, focusId, clear])
+
+  // Apply focus-mode opacity to nodes
+  // When not in focus mode, pass the nodes array directly — no new objects,
+  // no spurious ReactFlow re-renders from a changed reference.
+  const displayNodes = focusId
+    ? (nodes as Node[]).map((n) => ({
+        ...n,
+        style: {
+          ...n.style,
+          opacity: focusedIds.has(n.id) ? 1 : 0.18,
+          transition: 'opacity 0.2s',
+        },
+      }))
+    : (nodes as Node[])
+
+  // In focus mode:
+  //  - edges fully inside the neighborhood   → full opacity
+  //  - edges that CROSS the boundary         → 0.35 (visible context)
+  //  - edges fully outside                   → 0.08
+  const displayEdges = focusId
+    ? edges.map((e) => {
+        const inSrc = focusedIds.has(e.source)
+        const inTgt = focusedIds.has(e.target)
+        const op = inSrc && inTgt ? 1 : (inSrc || inTgt) ? 0.35 : 0.08
+        return {
+          ...e,
+          style: {
+            ...e.style,
+            opacity: op,
+            transition: 'opacity 0.2s',
+          },
+        }
+      })
+    : edges
 
   return (
     <div className="canvas-area" onDragOver={onDragOver} onDrop={onDrop}>
+      {focusId && (
+        <div className="focus-toolbar">
+          <span className="focus-toolbar__label">focus · depth</span>
+          {([1, 2, 'all'] as FocusDepth[]).map((d) => (
+            <button
+              key={String(d)}
+              onClick={() => setDepth(d)}
+              className={`focus-toolbar__btn${depth === d ? ' is-active' : ''}`}
+            >
+              {d === 'all' ? 'all' : String(d)}
+            </button>
+          ))}
+          <span className="focus-toolbar__sep" />
+          <button
+            onClick={clear}
+            className="focus-toolbar__btn focus-toolbar__close"
+            title="Exit focus (Esc, or click canvas)"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <ReactFlow
-        nodes={nodes as Node[]}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
@@ -41,19 +212,22 @@ export function Canvas() {
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.2}
         maxZoom={2}
-        defaultEdgeOptions={{ type: 'direct', markerEnd: { type: 'arrowclosed', width: 12, height: 12, color: '#52526a' } }}
+        defaultEdgeOptions={{
+          type: 'direct',
+          markerEnd: { type: 'arrowclosed', width: 12, height: 12, color: '#52526a' },
+        }}
       >
+        {/* Regions render BELOW nodes inside the viewport */}
+        <RegionLayer />
+
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
         <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={(n) => ({
-            input: '#3b82f6', output: '#6b7280', llm_call: '#8b5cf6',
-            tool_invoke: '#14b8a6', condition: '#f59e0b',
-            parallel_fork: '#22c55e', parallel_join: '#16a34a',
-            hitl_breakpoint: '#f97316', memory_read: '#06b6d4',
-            memory_write: '#0891b2', subgraph: '#64748b',
-            transform: '#a855f7', agent_role: '#ec4899', agent_debate: '#d946ef',
-          })[n.type ?? ''] ?? '#52526a'}
+          nodeColor={(n) => {
+            // annotation and any unknown types fall back to neutral grey
+            const hex = NODE_HEX[n.type as NodeType]
+            return desaturateForMinimap(hex ?? '#52526a')
+          }}
           maskColor="rgba(12,12,14,0.7)"
         />
       </ReactFlow>

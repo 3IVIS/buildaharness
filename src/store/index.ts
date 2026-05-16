@@ -49,6 +49,14 @@ export interface PersistedState {
 
 // ─── Full store shape (persisted + transient) ─────────────────────────────────
 
+// Per-node execution telemetry — populated by Phase 2 Langfuse span wiring.
+// Kept separate from spec data so it never contaminates exports.
+export interface NodeExecStat {
+  status:  'pending' | 'running' | 'done' | 'error'
+  tokens?: number   // total tokens (prompt + completion)
+  ms?:     number   // wall-clock latency in milliseconds
+}
+
 interface CanvasStore extends PersistedState {
   // Transient UI state — not persisted
   selectedNodeId:  string | null
@@ -64,6 +72,9 @@ interface CanvasStore extends PersistedState {
   future:          Snapshot[]
   canUndo:         boolean
   canRedo:         boolean
+  // Phase 2: populated via websocket + Langfuse spans once execution lands.
+  execStats:       Record<string, NodeExecStat>
+  activeJobId:     string | null
 
   // ReactFlow handlers
   onNodesChange: (c: NodeChange[]) => void
@@ -71,11 +82,13 @@ interface CanvasStore extends PersistedState {
   onConnect:     (c: Connection) => void
 
   // Node ops
-  addNode:        (type: NodeType, pos: { x: number; y: number }) => void
-  updateNodeData: (id: string, data: Partial<NodeData>) => void
-  deleteNode:     (id: string) => void
-  selectNode:     (id: string | null) => void
-  closePanel:     () => void
+  addNode:            (type: NodeType, pos: { x: number; y: number }) => void
+  addAnnotation:      (pos: { x: number; y: number }) => void
+  insertNodeOnEdge:   (edgeId: string, type: NodeType) => void
+  updateNodeData:     (id: string, data: Partial<NodeData>) => void
+  deleteNode:         (id: string) => void
+  selectNode:         (id: string | null) => void
+  closePanel:         () => void
 
   // Edge ops
   updateEdgeData: (id: string, data: Partial<Record<string, unknown>>) => void
@@ -86,7 +99,10 @@ interface CanvasStore extends PersistedState {
   openSettings:   (tab?: SettingsTab) => void
   closeSettings:  () => void
   setSettingsTab: (tab: SettingsTab) => void
-  toggleProblems: () => void
+  toggleProblems:    () => void
+  setNodeExecStat:   (nodeId: string, stat: NodeExecStat) => void
+  clearExecStats:    () => void
+  setActiveJob:      (jobId: string | null) => void
 
   // Flow ops
   loadFlow:   (spec: FlowSpec) => void
@@ -141,13 +157,13 @@ const NODE_DEFAULTS: Partial<Record<NodeType, NodeData>> = {
 function computeLayout(nodes: CanvasNode[], edges: XYEdge[]): CanvasNode[] {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 80, marginx: 40, marginy: 40 })
-  nodes.forEach((n) => g.setNode(n.id, { width: 220, height: 80 }))
+  g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100, marginx: 60, marginy: 60 })
+  nodes.forEach((n) => g.setNode(n.id, { width: 248, height: 86 }))
   edges.forEach((e) => { try { g.setEdge(e.source, e.target) } catch {} })
   dagre.layout(g)
   return nodes.map((n) => {
     const p = g.node(n.id)
-    return p ? { ...n, position: { x: p.x - 110, y: p.y - 40 } } : n
+    return p ? { ...n, position: { x: p.x - 124, y: p.y - 43 } } : n
   })
 }
 
@@ -171,7 +187,8 @@ export const useCanvasStore = create<CanvasStore>()(
       selectedEdgeId: null, isEdgePanelOpen: false,
       isSettingsOpen: false, settingsTab: 'meta' as SettingsTab,
       isProblemsOpen: false,
-      zodErrors: null, crossRefErrors: [],
+      execStats: {},
+      activeJobId: null, zodErrors: null, crossRefErrors: [],
       past: [], future: [], canUndo: false, canRedo: false,
 
       // ── Internal helpers ──────────────────────────────────────────────────
@@ -196,10 +213,23 @@ export const useCanvasStore = create<CanvasStore>()(
       },
       onConnect: (conn) => {
         get()._pushHistory()
-        set((s) => ({
-          edges: addEdge({ ...conn, type: 'direct', data: { label: '', context_from: [] } }, s.edges),
-          lastModifiedAt: Date.now(),
-        }))
+        set((s) => {
+          // Auto-derive visual edge type from the source node's type.
+          // (Edge `data` shape is unchanged — only the renderer differs.)
+          const src = s.nodes.find((n) => n.id === conn.source)
+          const edgeType =
+            src?.type === 'condition'       ? 'conditional' :
+            src?.type === 'parallel_fork'   ? 'parallel'    :
+            src?.type === 'hitl_breakpoint' ? 'hitl'        :
+                                              'direct'
+          return {
+            edges: addEdge(
+              { ...conn, type: edgeType, data: { label: '', context_from: [] } },
+              s.edges,
+            ),
+            lastModifiedAt: Date.now(),
+          }
+        })
       },
 
       // ── Node ops ──────────────────────────────────────────────────────────
@@ -211,19 +241,68 @@ export const useCanvasStore = create<CanvasStore>()(
           lastModifiedAt: Date.now(),
         }))
       },
+
+      addAnnotation: (position) => {
+        get()._pushHistory()
+        const id = `annotation-${++_nodeCounter}`
+        set((s) => ({
+          nodes: [...s.nodes, { id, type: 'annotation', position, data: { text: '', colorKey: 'yellow' } }],
+          lastModifiedAt: Date.now(),
+        }))
+      },
+
+      // Split an existing edge by inserting a new node at its midpoint.
+      // Removes the original edge, adds the node, and wires source→node→target.
+      insertNodeOnEdge: (edgeId, type) => {
+        get()._pushHistory()
+        set((s) => {
+          const edge = s.edges.find((e) => e.id === edgeId)
+          if (!edge) return {}
+          const nodeId = newNodeId(type)
+          // Place the new node midway between source and target nodes
+          const src = s.nodes.find((n) => n.id === edge.source)
+          const tgt = s.nodes.find((n) => n.id === edge.target)
+          const position = src && tgt
+            ? { x: (src.position.x + tgt.position.x) / 2, y: (src.position.y + tgt.position.y) / 2 }
+            : { x: 300, y: 200 }
+          const newNode = { id: nodeId, type, position, data: { ...(NODE_DEFAULTS[type] ?? { label: type }) } }
+          const typeFor = (sourceId: string): string => {
+            const n = s.nodes.find((x) => x.id === sourceId)
+            return n?.type === 'condition'       ? 'conditional'
+                 : n?.type === 'parallel_fork'   ? 'parallel'
+                 : n?.type === 'hitl_breakpoint' ? 'hitl'
+                 : 'direct'
+          }
+          const edgeA = { id: `e-${edge.source}-${nodeId}`, source: edge.source, target: nodeId, type: typeFor(edge.source), data: { label: '', context_from: [] } }
+          // edgeB is always 'direct' — the new node is not yet in s.nodes so typeFor
+          // can't look it up, and inserted nodes are never structural sources (fork/condition/hitl).
+          const edgeB = { id: `e-${nodeId}-${edge.target}`, source: nodeId, target: edge.target, type: 'direct', data: { label: '', context_from: [] } }
+          return {
+            nodes: [...s.nodes, newNode],
+            edges: [...s.edges.filter((e) => e.id !== edgeId), edgeA, edgeB],
+            selectedNodeId: nodeId, isPanelOpen: true,
+            lastModifiedAt: Date.now(),
+          }
+        })
+      },
       updateNodeData: (id, data) => set((s) => ({
         nodes: s.nodes.map((n) => n.id === id ? { ...n, data: { ...n.data, ...data } } : n),
         lastModifiedAt: Date.now(),
       })),
       deleteNode: (id) => {
         get()._pushHistory()
-        set((s) => ({
-          nodes:          s.nodes.filter((n) => n.id !== id),
-          edges:          s.edges.filter((e) => e.source !== id && e.target !== id),
-          selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
-          isPanelOpen:    s.selectedNodeId === id ? false : s.isPanelOpen,
-          lastModifiedAt: Date.now(),
-        }))
+        set((s) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [id]: _removed, ...remainingStats } = s.execStats
+          return {
+            nodes:          s.nodes.filter((n) => n.id !== id),
+            edges:          s.edges.filter((e) => e.source !== id && e.target !== id),
+            selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+            isPanelOpen:    s.selectedNodeId === id ? false : s.isPanelOpen,
+            execStats:      remainingStats,
+            lastModifiedAt: Date.now(),
+          }
+        })
       },
       selectNode:     (id) => set({ selectedNodeId: id, isPanelOpen: id !== null, selectedEdgeId: null, isEdgePanelOpen: false }),
       closePanel:     ()   => set({ selectedNodeId: null, isPanelOpen: false }),
@@ -240,7 +319,11 @@ export const useCanvasStore = create<CanvasStore>()(
       openSettings:   (tab = 'meta') => set({ isSettingsOpen: true,  settingsTab: tab }),
       closeSettings:  ()             => set({ isSettingsOpen: false }),
       setSettingsTab: (tab)          => set({ settingsTab: tab }),
-      toggleProblems: ()             => set((s) => ({ isProblemsOpen: !s.isProblemsOpen })),
+      toggleProblems:  ()             => set((s) => ({ isProblemsOpen: !s.isProblemsOpen })),
+      // Phase 2 hook — called by websocket listener once execution is wired
+      setNodeExecStat: (nodeId, stat) => set((s) => ({ execStats: { ...s.execStats, [nodeId]: stat } })),
+      clearExecStats:  ()             => set({ execStats: {} }),
+      setActiveJob:    (jobId)        => set({ activeJobId: jobId }),
 
       // ── Registry setters ──────────────────────────────────────────────────
       setFlowMeta:      (meta)   => set((s) => ({ flowMeta: { ...s.flowMeta, ...meta }, lastModifiedAt: Date.now() })),
@@ -257,20 +340,29 @@ export const useCanvasStore = create<CanvasStore>()(
         const prev   = s.past[s.past.length - 1]
         const past   = s.past.slice(0, -1)
         const future = [{ nodes: s.nodes, edges: s.edges }, ...s.future].slice(0, MAX_HISTORY)
-        return { ...prev, past, future, canUndo: past.length > 0, canRedo: true, lastModifiedAt: Date.now() }
+        // Clear execStats on undo — stale stats from a run may reference node IDs
+        // that no longer exist after the history is rewound.
+        return { ...prev, past, future, canUndo: past.length > 0, canRedo: true, execStats: {}, lastModifiedAt: Date.now() }
       }),
       redo: () => set((s) => {
         if (!s.future.length) return {}
         const next   = s.future[0]
         const future = s.future.slice(1)
         const past   = [...s.past, { nodes: s.nodes, edges: s.edges }].slice(-MAX_HISTORY)
-        return { ...next, past, future, canUndo: true, canRedo: future.length > 0, lastModifiedAt: Date.now() }
+        return { ...next, past, future, canUndo: true, canRedo: future.length > 0, execStats: {}, lastModifiedAt: Date.now() }
       }),
 
       // ── Auto-layout ───────────────────────────────────────────────────────
       autoLayout: () => {
         get()._pushHistory()
-        set((s) => ({ nodes: computeLayout(s.nodes, s.edges), lastModifiedAt: Date.now() }))
+        set((s) => {
+          // Exclude annotation nodes — dagre would reposition them, losing manual placement.
+          // Annotations are re-merged back at their original positions after layout.
+          const annotations = s.nodes.filter((n) => n.type === 'annotation')
+          const flowNodes   = s.nodes.filter((n) => n.type !== 'annotation')
+          const laidOut     = computeLayout(flowNodes, s.edges)
+          return { nodes: [...laidOut, ...annotations], lastModifiedAt: Date.now() }
+        })
       },
 
       // ── Load flow ─────────────────────────────────────────────────────────
@@ -284,11 +376,20 @@ export const useCanvasStore = create<CanvasStore>()(
             data: { label, description, runtime_support, ...rest },
           }
         })
-        const edges: XYEdge[] = spec.edges.map((e, i) =>
-          e.type === 'direct'
-            ? { id: e.id ?? `e-${i}`, source: e.from, target: e.to, type: 'direct', data: { label: e.label ?? '', context_from: e.context_from ?? [] } }
-            : { id: e.id ?? `e-${i}`, source: e.from, target: e.branches[0]?.to ?? '', type: 'conditional', data: { branches: e.branches, default_target: e.default_target } }
-        )
+        const edges: XYEdge[] = spec.edges.map((e, i) => {
+          if (e.type === 'conditional') {
+            return { id: e.id ?? `e-${i}`, source: e.from, target: e.branches[0]?.to ?? '', type: 'conditional', data: { branches: e.branches, default_target: e.default_target } }
+          }
+          // Restore visual type from data.visual_type (stored there to survive Zod parsing).
+          // Falls back to 'direct' for flows saved before this fix.
+          const edgeData = (e as Record<string, unknown>).data as Record<string, unknown> | undefined
+          const visualType = (edgeData?.visual_type as string | undefined) ?? 'direct'
+          return {
+            id: e.id ?? `e-${i}`, source: e.from, target: e.to,
+            type: visualType,
+            data: { label: e.label ?? '', context_from: e.context_from ?? [] },
+          }
+        })
         set({
           nodes, edges,
           flowMeta: { id: spec.id, name: spec.name ?? spec.id, description: spec.description ?? '', runtimeHints: { preferred_adapter: spec.runtime_hints?.preferred_adapter, compatible: spec.runtime_hints?.compatible } },
@@ -314,13 +415,24 @@ export const useCanvasStore = create<CanvasStore>()(
           tools:          Object.keys(s.tools).length ? s.tools : undefined,
           model_defaults: Object.keys(s.modelDefaults).length ? s.modelDefaults : undefined,
           flow_config:    Object.keys(s.flowConfig).length ? s.flowConfig : undefined,
-          nodes: s.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, ...n.data })),
+          nodes: s.nodes.filter((n) => n.type !== 'annotation').map((n) => ({ id: n.id, type: n.type, position: n.position, ...n.data })),
           edges: s.edges.map((e) => {
-            if (e.type === 'direct') {
-              const d = (e.data ?? {}) as Record<string, unknown>
-              return { type: 'direct', id: e.id, from: e.source, to: e.target, label: d.label || undefined, context_from: (d.context_from as string[] | undefined)?.length ? d.context_from : undefined }
+            const d = (e.data ?? {}) as Record<string, unknown>
+            // parallel, hitl, fail are visual variants of direct/conditional at the
+            // spec level. Zod strips unknown top-level fields from DirectEdge, so we
+            // persist the visual type inside edge.data.visual_type (not schema-validated)
+            // and restore it in loadFlow.
+            if (e.type === 'conditional') {
+              return { type: 'conditional', id: e.id, from: e.source, ...d }
             }
-            return { type: 'conditional', id: e.id, from: e.source, ...(e.data ?? {}) }
+            // direct, parallel, hitl, fail all serialise as DirectEdge
+            return {
+              type: 'direct', id: e.id, from: e.source, to: e.target,
+              label: d.label as string | undefined || undefined,
+              context_from: (d.context_from as string[] | undefined)?.length ? d.context_from : undefined,
+              // visual_type stored in data so Zod doesn't strip it during parseFlowSpec
+              data: e.type !== 'direct' ? { ...d, visual_type: e.type } : undefined,
+            }
           }),
         }
         const result = parseFlowSpec(raw)
@@ -332,7 +444,12 @@ export const useCanvasStore = create<CanvasStore>()(
       // ── Validate ──────────────────────────────────────────────────────────
       validate: () => {
         const spec = get().exportSpec()
-        if (!spec) return false
+        if (!spec) {
+          // exportSpec failed Zod validation — clear stale cross-ref errors so
+          // the UI doesn't show two conflicting error sources simultaneously.
+          set({ crossRefErrors: [] })
+          return false
+        }
         const errors = validateCrossRefs(spec)
         set({ crossRefErrors: errors })
         return errors.length === 0

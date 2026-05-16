@@ -568,6 +568,9 @@
         },
         "output_validator": {
           "$ref": "#/$defs/OutputValidator"
+        },
+        "fail_branch": {
+          "$ref": "#/$defs/FailBranch"
         }
       }
     },
@@ -609,6 +612,9 @@
         },
         "output_validator": {
           "$ref": "#/$defs/OutputValidator"
+        },
+        "fail_branch": {
+          "$ref": "#/$defs/FailBranch"
         }
       }
     },
@@ -1731,6 +1737,47 @@
           "description": "When true, every node execution is traced as a child span. When false, only llm_call and tool_invoke nodes emit spans."
         }
       }
+    },
+    "RetryConfig": {
+      "type": "object",
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "backoff": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "exponential"
+          ],
+          "default": "exponential"
+        },
+        "delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailBranch": {
+      "type": "object",
+      "required": [
+        "target"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "node id to route to on error"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryConfig"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

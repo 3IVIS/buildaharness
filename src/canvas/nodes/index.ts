@@ -5,6 +5,7 @@ import {
   HitlBreakpointNode, MemoryReadNode, MemoryWriteNode,
   SubgraphNode, TransformNode, AgentRoleNode, AgentDebateNode,
 } from './NodeComponents'
+import { AnnotationNode } from './AnnotationNode'
 
 export const nodeTypes: NodeTypes = {
   input:            InputNode,
@@ -21,4 +22,5 @@ export const nodeTypes: NodeTypes = {
   transform:        TransformNode,
   agent_role:       AgentRoleNode,
   agent_debate:     AgentDebateNode,
+  annotation:       AnnotationNode,
 }
