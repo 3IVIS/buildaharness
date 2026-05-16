@@ -1,4 +1,4 @@
-# itsharness
+# Its Harness
 
 **A complete harness for building, running, and observing AI agent workflows.**
 
