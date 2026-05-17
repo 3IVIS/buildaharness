@@ -1,15 +1,14 @@
-# Its Harness
+# itsharness
 
 **A complete harness for building, running, and observing AI agent workflows.**
 
 Design flows on a visual canvas → export a runtime-agnostic spec → compile to your framework → run, trace, and debug — all from one tool.
 
 ```
-flow.json  →  [ langgraph adapter ]                →  Python / LangGraph
-           →  [ crewai adapter ]                   →  Python / CrewAI
-           →  [ mastra adapter ]                   →  TypeScript / Mastra
-           →  [ microsoft_agent_framework adapter ] →  C# + Python / MS Agent Framework
-           →  [ A2A protocol ]                     →  any A2A-compatible runtime
+flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
+           →  [ crewai adapter ]     →  Python / CrewAI
+           →  [ mastra adapter ]     →  TypeScript / Mastra
+           →  [ A2A protocol ]       →  any A2A-compatible runtime
 ```
 
 ---
@@ -19,12 +18,77 @@ flow.json  →  [ langgraph adapter ]                →  Python / LangGraph
 Most agent tooling is either high-level (too much magic, hard to debug) or low-level (too much boilerplate, slow to iterate). itsharness sits in the middle:
 
 - **Draw** — 14 node types on a visual canvas. Every spec field is directly editable.
-- **Own the spec** — the canvas emits a versioned, runtime-agnostic JSON spec you control and can version alongside your code.
-- **Compile** — one API call transforms the spec into runnable code for whichever framework you use.
-- **Run and observe** — execution overlays, token streaming, Langfuse telemetry, HITL pause/resume.
-- **Compose** — deployed flows expose themselves as REST, MCP tools, and A2A agents simultaneously. External A2A agents (Google ADK, OpenAI Agents SDK, Claude Agent SDK) are invocable as canvas nodes without writing new adapters.
+- **Own the spec** — the canvas emits a versioned, runtime-agnostic JSON spec you control.
+- **Compile** — one API call transforms the spec into runnable code for your framework.
+- **Run and observe** — live node overlays, per-node token counts, Langfuse trace links, HITL pause/resume.
 
 **The spec is the contract. The canvas is the editor. The adapters are the compilers.**
+
+---
+
+## Quick start
+
+### 1. Configure secrets
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set **every** value — the adapter will refuse to start if any are missing or still at placeholder values. Required secrets:
+
+| Variable | How to generate |
+|---|---|
+| `JWT_SECRET` | `openssl rand -base64 32` |
+| `POSTGRES_PASSWORD` | `openssl rand -base64 24` |
+| `LITELLM_MASTER_KEY` | `openssl rand -base64 32` |
+| `LANGFUSE_NEXTAUTH_SECRET` | `openssl rand -base64 32` |
+| `LANGFUSE_SALT` | `openssl rand -base64 32` |
+| `LANGFUSE_ENCRYPTION_KEY` | `openssl rand -hex 32` (must be exactly 64 hex chars) |
+| `CLICKHOUSE_PASSWORD` | any strong password |
+| `LANGFUSE_ADMIN_EMAIL` | your email address |
+| `LANGFUSE_ADMIN_PASSWORD` | your chosen password |
+
+Also add your LLM API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
+
+> **Placeholder detection** — the adapter checks all secret values for known placeholder substrings (e.g. `REPLACE_ME`, `REPLACE_WITH_REAL_SECRET`) and exits with a clear error message if any are found. This includes prefixed values like `pk-lf-REPLACE_ME`. Replace every placeholder before starting the stack.
+
+### 2. Start everything
+
+```bash
+docker compose up
+```
+
+| Service | URL |
+|---|---|
+| Canvas | http://localhost:3000 |
+| Adapter API | http://localhost:8000/health |
+| Langfuse UI | http://localhost:3001 |
+
+Log in to Langfuse with the `LANGFUSE_ADMIN_EMAIL` and `LANGFUSE_ADMIN_PASSWORD` you set in `.env`.
+
+### Without Docker
+
+Always use a virtual environment to keep itsharness's dependencies isolated from anything else on your machine (the `setup-env.sh` script creates one automatically at `adapter/.venv`):
+
+```bash
+# First-time setup — creates adapter/.venv, installs deps, writes .env + .env.local
+./setup-env.sh
+
+# Activate the venv in your current shell session
+source adapter/.venv/bin/activate
+
+# Canvas
+npm install && npm run dev        # → http://localhost:3000
+
+# Tests
+npm test                          # Vitest — validates all 5 reference flows
+pytest adapter/tests/ -v          # Adapter — auth, flows, compile, spec validation
+
+# Adapter (requires Postgres + env vars set in shell or .env)
+cd adapter && python main.py
+```
+
+> If you install Python packages without the venv, pip may report conflicts with other tools on your machine (e.g. Snowflake, AWS CLI). Those warnings are harmless to itsharness but pollute your global environment. The venv prevents this entirely.
 
 ---
 
@@ -37,57 +101,74 @@ itsharness/
 │   ├── schema.ts                  Canonical Zod schema (source of truth)
 │   ├── schema.json                Derived JSON Schema (use for non-TS validation)
 │   ├── CHANGELOG.md               Version history
-│   └── package.json               {"name": "@itsharness/flow-spec", "version": "0.2.0"}
+│   └── package.json
 │
-├── flows/                       ← Reference example flows (JSON)
-│   ├── 01-rag-agent-flow.json
-│   ├── 02-content-moderation-hitl-flow.json
-│   ├── 03-parallel-risk-assessment-flow.json
-│   ├── 04-research-crew-flow.json
-│   └── 05-debate-agent-a2a-flow.json
+├── flows/                       ← 5 reference example flows (JSON)
+│
+├── docs/
+│   └── adr/
+│       └── 001-codegen-field-semantics.md  ADR-001: output_key, *_expr, context_from
 │
 ├── src/                         ← Canvas app (React + TypeScript + XYFlow)
 │   ├── spec/
-│   │   ├── schema.ts              Canvas copy — kept in sync with spec/schema.ts
-│   │   ├── validation.ts          Cross-ref rules (edge targets, store IDs, agent refs)
-│   │   ├── examples.ts            5 example flows as TS constants (for sidebar)
-│   │   └── schema.test.ts         Vitest suite — validates all 5 flows
+│   │   ├── schema.ts              Canvas copy of spec/schema.ts (no .refine())
+│   │   ├── validation.ts          Cross-ref rules + ADR-001 authoring warnings
+│   │   ├── examples.ts            5 example flows as TS constants
+│   │   └── schema.test.ts         Vitest suite
 │   ├── store/
-│   │   ├── index.ts               Zustand canvas store (persisted)
-│   │   └── library.ts             Flow library store (persisted)
+│   │   └── index.ts               Zustand store (nodes, edges, execStats, hitlState, traceUrl)
 │   ├── canvas/
-│   │   ├── Canvas.tsx             ReactFlow wrapper
-│   │   ├── nodes/                 14 node visual components + registry
-│   │   └── edges/                 DirectEdge, ConditionalEdge
-│   └── components/
-│       ├── Toolbar.tsx            Top bar — undo/redo, auto-layout, validate, export
-│       ├── Sidebar.tsx            Node palette + registry shortcuts + My Flows
-│       ├── ConfigPanel.tsx        Per-node config panels (all 14 types)
-│       ├── EdgeConfigPanel.tsx    Edge label + context_from editor
-│       ├── FlowSettingsModal.tsx  6-tab flow-level settings
-│       ├── FlowLibraryPanel.tsx   Library management
-│       ├── ImportDialog.tsx       File import with inline validation errors
-│       └── ProblemsPanel.tsx      Validation error list
+│   │   └── nodes/                 14 node components — exec overlay, HITL amber ring
+│   ├── components/
+│   │   ├── ConfigPanel.tsx        Per-node config (all 14 types)
+│   │   ├── HitlResumePanel.tsx    HITL pause/resume side panel
+│   │   └── ...
+│   └── services/
+│       ├── api.ts                 Typed API client (auth, flows, run, resume)
+│       ├── runPoller.ts           Polls /run/{jobId} → live overlay + trace wiring
+│       └── langfuse.ts            Canvas event instrumentation
 │
-├── adapter/                     ← LangGraph Python sidecar (FastAPI)
-│   ├── main.py                    /health + /compile stub (codegen after RFC)
-│   └── requirements.txt
+├── adapter/                     ← FastAPI backend
+│   ├── main.py                    /health, /runtimes, /compile; startup secret validation
+│   ├── run_api.py                 /run, /run/{id}/resume — async execution + Langfuse traces
+│   ├── flows_api.py               /flows CRUD + versioning
+│   ├── auth.py                    /auth — JWT register/login/me
+│   ├── validate.py                validate_spec() — structural checks + fn_ref allowlist
+│   ├── db.py                      SQLAlchemy async models (users, flows, flow_versions)
+│   ├── rate_limit.py              Shared slowapi limiter (proxy-aware)
+│   ├── langgraph_adapter.py       LangGraph codegen — all 14 nodes
+│   ├── crewai_adapter.py          CrewAI codegen — all 14 nodes
+│   ├── mastra_adapter.py          Mastra TypeScript codegen
+│   ├── litellm_config.yaml        LiteLLM proxy config + Langfuse callback
+│   ├── requirements.txt
+│   ├── requirements-test.txt        pytest + httpx + anyio (not installed in prod Docker image)
+│   └── tests/                   ← Adapter test suite (pytest + httpx)
+│       ├── conftest.py            Fixtures: in-memory SQLite, TestClient, auth helpers
+│       ├── test_auth.py           Register, login, me, password policy
+│       ├── test_flows.py          CRUD, versioning, user isolation
+│       └── test_spec_and_compile.py  validate_spec, fn_ref allowlist (compile + run), headers
 │
-├── docker-compose.yml           ← One command: canvas + adapter
-├── CONTRIBUTING.md              ← Contribution process
-└── LICENSE                      ← Apache 2.0
+├── infra/
+│   └── postgres-init.sql          Creates 'langfuse' and 'litellm' databases on first boot
+│
+├── scripts/
+│   └── check-schema-sync.mjs      Verifies canvas schema exports match canonical spec
+│
+├── docker-compose.yml             All 8 services — canvas, adapter, postgres, litellm,
+│                                  clickhouse, redis, langfuse, langfuse-worker
+├── .env.example                   All required env vars with generation hints
+├── pytest.ini                     Pytest config (asyncio_mode=auto)
+├── CONTRIBUTING.md
+└── LICENSE                        Apache 2.0
 ```
 
-> **`spec/schema.ts` vs `src/spec/schema.ts`**
-> `spec/schema.ts` is the canonical schema published as `@itsharness/flow-spec`. The canvas uses its own copy at `src/spec/schema.ts` — functionally identical but without `.refine()` on individual node types (Zod's `z.discriminatedUnion()` requires bare `ZodObject` members). When the spec changes, update both and run `npm test` to confirm all 5 example flows still validate.
+> **`spec/schema.ts` vs `src/spec/schema.ts`** — `spec/schema.ts` is the canonical schema published as `@itsharness/flow-spec`. The canvas copy omits `.refine()` on individual node types (required by Zod's `z.discriminatedUnion()`). When the spec changes, update both and run `npm test`. CI enforces sync with `node scripts/check-schema-sync.mjs`.
 
 ---
 
 ## The spec — `@itsharness/flow-spec`
 
-The spec is a runtime-agnostic JSON format. You describe a workflow once; adapters translate it to runnable code for whichever framework you target.
-
-**Current version:** `0.2.0` · **RFC:** open — see [CONTRIBUTING.md](./CONTRIBUTING.md)
+**Current version:** `0.2.0` · **RFC:** closed — see [`docs/adr/`](./docs/adr/)
 
 ### The 14 node types
 
@@ -95,7 +176,7 @@ The spec is a runtime-agnostic JSON format. You describe a workflow once; adapte
 |---|---|---|
 | `input` | Flow entry point; declares output schema | All |
 | `output` | Flow exit point; optional exit code | All |
-| `llm_call` | Single LLM invocation — structured output, validator, streaming | All |
+| `llm_call` | Single LLM invocation — structured output, validator, fail_branch | All |
 | `tool_invoke` | Calls a named tool from the flow's `tools` registry | All |
 | `condition` | Branching — JSONPath expression or `fn_ref` | All |
 | `parallel_fork` | Fan-out to N concurrent branches | All |
@@ -103,32 +184,32 @@ The spec is a runtime-agnostic JSON format. You describe a workflow once; adapte
 | `hitl_breakpoint` | Suspend execution; wait for a typed human resume payload | All (adapter variation) |
 | `memory_read` | Read from a named store — key-value or semantic (vector) | All |
 | `memory_write` | Write to a named store — upsert or overwrite | All |
-| `subgraph` | Embed another flow as a node | LG/MA: full · CR/MS: partial |
+| `subgraph` | Embed another flow as a node | LG/MA: full · CR: partial |
 | `transform` | State transformation — `mapping` (no-code) or `fn_ref` | All |
-| `agent_role` | Execute an agent persona from the `agents[]` registry | CR: native · LG/MA/MS: synthesised |
-| `agent_debate` | Multi-agent conversation loop with termination condition | MS: native GroupChat · others: synthesised |
+| `agent_role` | Execute an agent persona from the `agents[]` registry | CR: native · LG/MA: synthesised |
+| `agent_debate` | Multi-agent conversation loop with termination condition | Others: synthesised |
 
-### Validating a flow
+### Key field semantics (ADR-001)
 
-```bash
-# JSON Schema (any language)
-npx ajv-cli validate -s spec/schema.json -d flows/01-rag-agent-flow.json
+These four decisions are codified in [`docs/adr/001-codegen-field-semantics.md`](./docs/adr/001-codegen-field-semantics.md).
 
-# Python
-python3 -c "
-import json, jsonschema
-schema = json.load(open('spec/schema.json'))
-flow   = json.load(open('flows/01-rag-agent-flow.json'))
-jsonschema.validate(flow, schema)
-print('valid')
-"
+| Field | Semantics |
+|---|---|
+| `output_key` | Direct state-dict write: node returns `{output_key: result}`. If absent on `llm_call`, result is discarded (canvas warns). |
+| `query_expr` / `key_expr` / `value_expr` | Bare JSONPath selectors (`$.state.field`), resolved by `_resolve(state, expr)` in all adapters. Not mustache templates. |
+| `context_from` | CrewAI → `Task.context=[...]`. LangGraph → comment annotation (shared state is already implicit). Mastra → step input mapping. |
+| `memory_write.tier` | CrewAI → `XXXMemory()` instances added to `Crew()` constructor. Other adapters → comment-only hint. |
 
-# TypeScript (Zod)
-import { parseFlowSpec } from './spec/schema'
-import flow from './flows/01-rag-agent-flow.json'
-const result = parseFlowSpec(flow)
-if (!result.success) console.error(result.error.issues)
-```
+### `fn_ref` format and security
+
+Node types that accept `fn_ref` (`transform`, `parallel_join`, `condition`, `agent_debate`) and local `tool_invoke` references inject those values into `importlib.import_module()` in generated code. All `fn_ref` values are validated against a strict allowlist at **every entry point** — `/compile`, `/flows`, and `/run` — before reaching any codegen or `exec()` call:
+
+- **Format:** `module.path:function_name` — dotted Python identifier path, colon, identifier
+- **npm format:** `@scope/package/export` — for npm package references (no colon)
+- **Local format:** `./path/to/file:fn` — at most one colon
+- **Rejected:** path traversal (`../`), shell special characters (`;`, `|`, `&`, `` ` ``, `$`, spaces), multiple colons, parentheses
+
+Any non-conforming `fn_ref` returns a 400 error before any code is generated or executed.
 
 ### A minimal flow
 
@@ -158,97 +239,251 @@ if (!result.success) console.error(result.error.issues)
 
 ### Example flows
 
-Five reference flows — each valid against `spec/schema.json`, each targeting a different adapter:
-
 | Flow | Adapter | Exercises |
 |---|---|---|
-| [01 — RAG Agent](./flows/01-rag-agent-flow.json) | LangGraph | `memory_read` semantic, `transform` fn_ref, vector + kv stores, streaming |
-| [02 — Content Moderation + HITL](./flows/02-content-moderation-hitl-flow.json) | Mastra | `llm_call` structured output, `condition`, `hitl_breakpoint` + resume schema |
+| [01 — RAG Agent](./flows/01-rag-agent-flow.json) | LangGraph | `memory_read` semantic, `transform` fn_ref, vector + kv stores |
+| [02 — Content Moderation + HITL](./flows/02-content-moderation-hitl-flow.json) | Mastra | `llm_call` structured output, `condition`, `hitl_breakpoint` |
 | [03 — Parallel Risk Assessment](./flows/03-parallel-risk-assessment-flow.json) | CrewAI | `parallel_fork/join`, `agent_role` ×3, `memory_access: "isolated"` |
 | [04 — Research Crew](./flows/04-research-crew-flow.json) | CrewAI | `context_from` on edges, `memory_access: "shared"`, `tool_approval: "human"` |
 | [05 — Debate Agent + A2A](./flows/05-debate-agent-a2a-flow.json) | MS Agent Framework | `agent_debate`, `runtime_support` overrides, full `a2a_config` |
 
 ---
 
-## The canvas — Phase 1
+## The canvas
 
-A visual editor for the spec. Draw a flow, configure every field, validate, and export — the canvas emits clean spec JSON at all times.
-
-### Running locally
-
-```bash
-npm install
-npm run dev        # → http://localhost:3000
-npm test           # 17 tests — all 5 example flows + cross-ref error cases
-```
-
-With Docker (canvas + Python adapter sidecar together):
-
-```bash
-docker compose up
-# canvas  → http://localhost:3000
-# adapter → http://localhost:8000/health
-```
-
-### What's built
-
-**Canvas**
+**Authoring**
 - All 14 node types with per-type config panels — every spec field editable
-- Drag-to-add from the node palette; drag-to-connect between handles
-- Click any edge to edit `label` and `context_from` (CrewAI Task.context)
-- Auto-layout (dagre LR), undo/redo (50 steps), keyboard shortcuts (`Delete`, `Escape`, `Ctrl+Z`)
-- Runtime compatibility badges per node (LG / CR / MA / MS)
+- Drag-to-add from node palette, drag-to-connect between handles
+- Click any edge to edit `label` and `context_from`
+- Auto-layout (dagre LR), undo/redo (50 steps), keyboard shortcuts
+- Runtime compatibility badges per node (LG / CR / MA)
+- Cmd+K command palette, annotation sticky notes, edge midpoint insert, flow version diff
 
-**Flow settings** (⚙ button)
-- 6-tab modal: flow identity, state schema editor, memory stores registry, tools registry, agents registry, flow_config (checkpoint / streaming / telemetry / A2A)
-
-**Spec validation**
-- Zod validation on every canvas change — errors shown inline
-- Cross-ref validation: edge targets, store IDs, agent refs
-- Problems panel listing all errors with clickable links to offending nodes
-- Import dialog with per-error display and "load anyway" path for warnings-only
+**Validation**
+- Zod + cross-ref validation on every export — errors shown inline
+- ADR-001 authoring warnings: `llm_call` without `output_key`, `context_from` to node with no `output_key`
+- Problems panel with clickable links to offending nodes
 
 **Persistence**
-- Auto-save to `localStorage:itsharness:current` on every change — survives page refresh
-- Flow library (`localStorage:itsharness:library`): save, load, rename, delete named snapshots
-- Dirty indicator — amber dot when unsaved library changes exist
+- Every save → version row in Postgres; restore from library panel
+- Auto-save to localStorage for pre-auth sessions
 
-**Export**
-- Export spec JSON (download as `{id}.json`)
-- Copy spec to clipboard
-- `POST http://localhost:8000/compile` — spec JSON → compiled code (stub in Phase 1)
+**Execution overlay**
+- Per-node status: pending (dimmed) → running (blue pulse) → paused (amber pulse) → done (green) → error (red)
+- Per-node timing (ms) and token count badge
+- "View trace →" link after run completes, opening the Langfuse trace in a new tab
+
+**HITL pause/resume**
+- Paused node gets amber ring; "Flow paused" toast appears
+- Side panel shows the node's prompt and editable resume fields
+- Resume button → `POST /run/{job_id}/resume` → graph continues from checkpoint
+- Multiple sequential HITL nodes work; each interrupt cycles through the same mechanism
 
 ---
 
-## The adapter — Phase 1 stub
+## The adapters
 
-The FastAPI sidecar at `adapter/main.py` accepts a `FlowSpec` JSON and will return compiled Python. In Phase 1 it returns a stub:
+### Authenticate first
+
+All adapter endpoints require a JWT. Obtain one by registering an account:
 
 ```bash
-curl -s http://localhost:8000/health
-# {"status":"ok","adapter":"langgraph","phase":"1-stub"}
-
-curl -s -X POST http://localhost:8000/compile \
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d @flows/01-rag-agent-flow.json | jq .runtime
-# "langgraph"
+  -d '{"email": "you@example.com", "password": "YourPassword1"}' | jq -r .token)
 ```
 
-Real codegen is gated on the RFC closing. The spec's field names — `output_key`, `query_expr`, `context_from` semantics, `resume_schema` — are the open questions most likely to attract feedback, and they're the ones the adapter hardcodes. Waiting avoids rewriting 300+ lines after feedback.
+Or log in if already registered:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "password": "YourPassword1"}' | jq -r .token)
+```
+
+Passwords must be at least 8 characters and contain at least one letter and one digit.
+
+### Compile a flow
+
+Requests wrap the spec in `{"spec": { ...flow JSON... }}`.
+
+```bash
+# LangGraph
+curl -s -X POST "http://localhost:8000/compile?runtime=langgraph" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"spec\": $(cat flows/01-rag-agent-flow.json)}" | jq -r .code
+
+# CrewAI
+curl -s -X POST "http://localhost:8000/compile?runtime=crewai" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"spec\": $(cat flows/03-parallel-risk-assessment-flow.json)}" | jq -r .code
+
+# Mastra
+curl -s -X POST "http://localhost:8000/compile?runtime=mastra" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"spec\": $(cat flows/02-content-moderation-hitl-flow.json)}" | jq -r .code
+```
+
+The `runtime` param is optional — if omitted the adapter uses `runtime_hints.preferred_adapter` from the spec, defaulting to `langgraph`.
+
+### Adapter coverage
+
+| Runtime | Status | Notes |
+|---|---|---|
+| **LangGraph** · Python · MIT | ✅ Full | All 14 nodes · `@observe` trace + child spans per node · HITL via `interrupt()` |
+| **CrewAI** · Python · MIT | ✅ Full | All 14 nodes · `context_from→Task.context` · tier-aware `Crew()` memory |
+| **Mastra** · TypeScript · Apache 2 | ✅ Codegen | All 14 nodes · `suspend()/resume()` for HITL · execution requires a Node.js runtime |
+| **MS Agent Framework** | ⬜ Planned | `agent_debate→GroupChat`, `nodes→KernelProcessStep` — spec enum present, no adapter yet |
+
+### Execute a flow
+
+```bash
+# Start a job
+JOB=$(curl -s -X POST "http://localhost:8000/run?runtime=langgraph" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"spec\": $(cat flows/01-rag-agent-flow.json)}" | jq -r .job_id)
+
+# Poll status
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/run/$JOB" | jq '{status, trace_url}'
+
+# Resume a paused HITL flow
+curl -s -X POST "http://localhost:8000/run/$JOB/resume" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"payload": {"decision": "approved", "notes": "LGTM"}}'
+```
+
+Execution is async — poll `GET /run/{job_id}` for status. The job store is in-memory and single-process; do not set `WEB_CONCURRENCY > 1` (the adapter exits with an error if you do). Persistent job storage is planned for Phase 3.
 
 ---
 
-## Adapter order and rationale
+## Observability
 
-| # | Runtime | Phase | Key spec mappings |
-|---|---|---|---|
-| 1 | LangGraph · Python · MIT | Phase 1 | `node→fn`, `edge→add_edge`, `condition→add_conditional_edges+router`, `hitl→interrupt()+update_state()`, `parallel→Send()`, `agent_role→named subgraph`, `agent_debate→conditional loop` |
-| 2 | CrewAI · Python · MIT | Phase 3 | `agents[]→Agent(role,backstory,goal)`, `agent_role node→Task(agent=...)`, `context_from edge→Task.context=[]`, `process_type→Crew(process=)`, `agent_debate→consensual process`, `parallel→async_execution=True` |
-| 3 | Mastra · TypeScript · Apache 2 | Phase 3 | `nodes→createStep()`, `edges→.then()/.branch()/.parallel()`, `agent_role→createAgent()`, `hitl→suspend()/resume()`, `state_schema→Zod schema`, `context_from→step input mapping` |
-| 4 | Microsoft Agent Framework · C# + Python · MIT | Phase 4 | `agent_debate→GroupChat+GroupChatManager`, `agent_role→AssistantAgent`, `nodes→KernelProcessStep`, `edges→KernelProcessEvent`, `hitl→human_input_mode=ALWAYS`, `context_from→step input injection` |
-| ~ | A2A Protocol | Phase 2 | Not codegen — invocation + exposure layer. `a2a_config→AgentCard`, `hitl→task state input-required`, `streaming→TaskArtifactUpdateEvent`. Replaces custom adapters for Google ADK, OpenAI Agents SDK, Claude Agent SDK, and any future A2A-compatible runtime. |
+### Stack
 
-**On A2A scope:** You write custom adapters for 4 runtimes (LangGraph, CrewAI, Mastra, MS Agent Framework) — the ones where users want to *author* flows visually and export runnable code. For every other runtime, A2A gives invocation-level interoperability without a custom adapter. This bounds adapter build work to 4 runtimes, permanently.
+```
+ClickHouse 24.3    → trace + analytics storage
+Redis 7            → Langfuse ingestion queue
+Langfuse 3 web     → UI + API  (http://localhost:3001)
+Langfuse 3 worker  → async trace persistence to ClickHouse
+```
+
+All started automatically with `docker compose up`.
+
+### What's traced
+
+| Source | Langfuse content |
+|---|---|
+| **Job runners** | One trace per run (`crewai-flow-run` / `langgraph-flow-run`) via `@observe` decorator |
+| **Node execution** | Child OTel span per node — name, timing, output keys (LangGraph) |
+| **CrewAI tasks** | Per-task token usage in node events + Langfuse span |
+| **LiteLLM** | Every LLM call — model, tokens, cost, latency — via automatic Langfuse callback |
+| **Canvas** | Session events (flow opened, compiled, run started/done) linked to the active execution trace |
+
+### Enable canvas tracing
+
+Add to `.env.local` (Vite reads this automatically in dev mode):
+
+```bash
+VITE_LANGFUSE_ENABLED=true
+VITE_LANGFUSE_PUBLIC_KEY=<same as LANGFUSE_PUBLIC_KEY in .env>
+VITE_LANGFUSE_HOST=http://localhost:3001
+```
+
+---
+
+## API reference
+
+All endpoints except `/health` and `/runtimes` require `Authorization: Bearer <token>`. Request bodies that include a spec use `{"spec": { ...flow JSON... }}`.
+
+```
+POST /auth/register               Create account → JWT  (201)
+POST /auth/login                  Login → JWT
+GET  /auth/me                     Current user
+
+GET  /flows?limit=50&offset=0     List user's flows (paginated, max 200 per page)
+POST /flows                       Save / upsert flow (auto-versions, validates spec)
+GET  /flows/{id}                  Current spec
+DELETE /flows/{id}                Delete flow + all versions
+GET  /flows/{id}/versions         Version history — newest first, paginated
+GET  /flows/{id}/versions/{v}     Specific version spec
+POST /flows/{id}/versions/{v}/restore  Restore version (creates a new version entry)
+
+GET  /health                      Adapter status + version (no auth)
+GET  /runtimes                    Available runtimes + support matrix (no auth)
+POST /compile?runtime=X           Spec → compiled code  (30 req/min)
+
+POST /run?runtime=X               Execute flow async → {job_id}  (20 req/min)
+GET  /run/{job_id}                Job status, node_events, trace_id, trace_url
+POST /run/{job_id}/resume         Resume a paused HITL flow
+```
+
+### Rate limits
+
+| Endpoint | Limit |
+|---|---|
+| `POST /auth/register` | 5 / minute |
+| `POST /auth/login` | 10 / minute |
+| `POST /compile` | 30 / minute |
+| `POST /run` | 20 / minute |
+
+Limits are keyed by client IP. Set `TRUST_PROXY=true` (the default) when running behind nginx or a cloud load balancer so the adapter reads `X-Real-IP` / `X-Forwarded-For`. Set `TRUST_PROXY=false` when the adapter is exposed directly to the internet.
+
+---
+
+## Security model
+
+### Authentication
+- JWTs signed with `HS256`. Every protected endpoint requires a valid, non-expired token.
+- Tokens have a configurable TTL (`JWT_TTL_DAYS`, default 30 days). There is currently no server-side revocation; log-out is client-side only. This is planned for Phase 3 alongside team RBAC.
+- Login always runs bcrypt regardless of whether the email exists, preventing timing-based user enumeration.
+
+### `fn_ref` validation
+Generated code is executed with `exec()`. Rather than attempting full sandboxing, `fn_ref` values are validated at **all three** entry points (`/compile`, `/flows`, `/run`) against a strict allowlist regex before reaching any codegen or `exec()` call. Path traversal (`../`), shell special characters, and multiple colons are all rejected with a 400 error.
+
+### Request limits
+- Request body size is capped at `MAX_BODY_BYTES` (default 1 MB) to prevent large-spec denial-of-service.
+- Rate limits on auth, compile, and run endpoints via slowapi.
+
+### Secret validation
+The adapter inspects all required secrets at startup and exits immediately if any are missing or contain known placeholder substrings (e.g. `REPLACE_ME`, `REPLACE_WITH_REAL_SECRET`). Substring matching is used rather than exact matching, so prefixed placeholders like `pk-lf-REPLACE_ME` are caught too. A warning is also emitted for optional Langfuse keys that contain placeholder values.
+
+### Response headers
+Every response includes `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`.
+
+### Container hardening
+Both `Dockerfile.adapter` and `Dockerfile.canvas` run as non-root users, reducing the blast radius of any exec-level vulnerability.
+
+---
+
+## Environment variable reference
+
+| Variable | Required | Description |
+|---|---|---|
+| `JWT_SECRET` | ✅ | JWT signing key — `openssl rand -base64 32` |
+| `POSTGRES_PASSWORD` | ✅ | Postgres password — `openssl rand -base64 24` |
+| `LITELLM_MASTER_KEY` | ✅ | LiteLLM proxy master key |
+| `LANGFUSE_ADMIN_EMAIL` | ✅ | Langfuse admin email (set before first boot) |
+| `LANGFUSE_ADMIN_PASSWORD` | ✅ | Langfuse admin password |
+| `LANGFUSE_NEXTAUTH_SECRET` | ✅ | `openssl rand -base64 32` |
+| `LANGFUSE_SALT` | ✅ | `openssl rand -base64 32` |
+| `LANGFUSE_ENCRYPTION_KEY` | ✅ | 64 hex chars — `openssl rand -hex 32` |
+| `CLICKHOUSE_PASSWORD` | ✅ | ClickHouse password |
+| `OPENAI_API_KEY` | recommended | Required for LLM nodes using OpenAI models |
+| `ANTHROPIC_API_KEY` | optional | For Anthropic models via LiteLLM |
+| `LANGFUSE_PUBLIC_KEY` | optional | Enables Langfuse tracing — must match key provisioned in Langfuse. Adapter warns at startup if set to a placeholder value. |
+| `LANGFUSE_SECRET_KEY` | optional | Required when `LANGFUSE_PUBLIC_KEY` is set. Same placeholder check applies. |
+| `CORS_ORIGINS` | optional | Comma-separated allowed origins (default: `http://localhost:3000,http://canvas:3000`) |
+| `JWT_TTL_DAYS` | optional | Token lifetime in days (default: `30`) |
+| `MAX_BODY_BYTES` | optional | Max request body size (default: `1048576` — 1 MB) |
+| `JOB_TTL_HOURS` | optional | Hours before completed jobs are evicted from memory (default: `4`) |
+| `TRUST_PROXY` | optional | `true` (default) trusts `X-Real-IP`/`X-Forwarded-For`; set `false` if adapter is internet-facing |
+| `WEB_CONCURRENCY` | optional | Must be `1` — job store is in-memory (adapter exits if > 1) |
 
 ---
 
@@ -256,49 +491,31 @@ Real codegen is gated on the RFC closing. The spec's field names — `output_key
 
 | Phase | Scope | Status |
 |---|---|---|
-| **0 — Spec design** | Primitive extraction · concept map · node taxonomy · spec schema v0.2 · 5 example flows · RFC | ✅ Complete |
-| **1 — Canvas + LangGraph adapter** | XYFlow canvas · 14 node components · spec validation · persistence · library · LangGraph adapter (Python sidecar) | 🟡 Canvas complete · adapter awaiting RFC |
-| **2 — Observability + HITL + deploy + A2A** | Langfuse integration · live execution overlay · HITL pause/resume UI · LiteLLM gateway · flow versioning · A2A protocol layer · REST + MCP + A2A deployment · basic auth | ⬜ Planned — needs adapter |
-| **3 — Teams + CrewAI + Mastra** | CrewAI adapter · `agent_role` + `agent_debate` canvas nodes · Mastra adapter · runtime selector · team RBAC · flow version diff · eval integration · prompt versioning · component marketplace | ⬜ Planned |
-| **4 — Enterprise + collab + MS** | Real-time collaborative canvas (Yjs) · Microsoft Agent Framework adapter · SSO / enterprise auth · visual CI/CD pipeline · on-prem Helm chart · embeddable `@itsharness/canvas` npm package · advanced A2A orchestration | ⬜ Planned |
-
-### Phase 2 detail (next after adapter)
-
-Once the LangGraph adapter ships, Phase 2 unlocks simultaneously:
-
-- **Langfuse integration** — every execution auto-traced. Canvas shows live node status (pending → running → done/error) via websocket. Click any completed node to inspect inputs, outputs, token cost, latency.
-- **HITL pause/resume UI** — canvas highlights paused node in amber. Side panel shows state at breakpoint; user edits and clicks resume → calls `update_state()` + resume. Full time-travel via LangGraph checkpoints.
-- **LiteLLM gateway** — LLM call nodes route through LiteLLM. Model selector covers 100+ providers. Cost-per-call in execution overlay. Virtual keys prevent hardcoded API keys in flows.
-- **A2A protocol layer** — auto-generates `AgentCard` from `a2a_config`, exposes flows as A2A endpoints, enables invoking external A2A agents as canvas nodes without custom adapters.
-- **One-click deploy** — flow → REST endpoint + MCP tool + A2A agent. Built on LangGraph Server (OSS) + FastAPI.
+| **0 — Spec design** | Primitive extraction · node taxonomy · spec schema v0.2 · 5 reference flows · RFC closed (ADR-001) | ✅ Complete |
+| **1 — Canvas + adapters** | XYFlow canvas · 14 nodes · Zod validation · LangGraph + CrewAI + Mastra adapters · auth · versioning · live overlay | ✅ Complete |
+| **2 — Observability + HITL** | HITL pause/resume UI · Langfuse self-host (ClickHouse + Redis) · OTel traces + node spans · token counts · LiteLLM cost tracking | ✅ Complete |
+| **3 — Teams + eval** | Team RBAC · JWT revocation · eval integration (DeepEval + Ragas) · prompt versioning · component marketplace · A2A endpoint scaffolding · Postgres-backed job store · Alembic migrations | ⬜ Planned |
+| **4 — Enterprise + collab + MS** | Real-time collaborative canvas (Yjs) · MS Agent Framework adapter · SSO · on-prem Helm chart · `@itsharness/canvas` npm package | ⬜ Planned |
 
 ---
 
 ## Key design decisions
 
-**TypeScript on XYFlow, not Python on LangFlow.** LangFlow's canvas wires components; a harness needs to author state machines. Python backend creates a language split at the wrong layer. XYFlow costs ~4–6 extra weeks but delivers the correct canvas model, a single-language stack, runtime-agnostic design, and a future embeddable `@itsharness/canvas` npm package.
+**TypeScript on XYFlow, not Python on LangFlow.** LangFlow's canvas wires components; a harness needs to author state machines. XYFlow delivers the correct canvas model with a single-language stack and a future embeddable package.
 
-**Neutral spec IR as the anchor, not the runtime.** The canvas emits a neutral JSON spec. Adapters translate it. Swapping a runtime means updating one adapter file. Canvas, versioning, RBAC, eval, and collaboration are completely decoupled from any runtime choice.
+**Neutral spec IR as the anchor.** The canvas emits a neutral JSON spec. Adapters translate it. Swapping runtimes means updating one adapter file. Canvas, versioning, RBAC, eval, and collaboration are fully decoupled from runtime choice.
 
-**Langfuse (MIT, self-hosted) over LangSmith.** LangSmith is proprietary SaaS with LangChain-first trace semantics. Langfuse is MIT, self-hostable, OTel-compatible, and natively understands LangGraph traces. Zero marginal cost at scale. Used as the observability backbone across all four runtimes.
+**Langfuse (MIT, self-hosted) over LangSmith.** LangSmith is proprietary SaaS. Langfuse is MIT, self-hostable, OTel-compatible. The Langfuse Python SDK v4 uses OTel as its native transport, making per-node child spans straightforward via `contextvars.copy_context().run()` into the thread pool.
 
-**Microsoft Agent Framework over Semantic Kernel.** Microsoft merged AutoGen + Semantic Kernel into a single SDK that reached v1.0 GA in April 2026. One adapter covers both SK and AutoGen users.
+**ADR-001 as the spec-to-adapter contract.** Four field semantics were left open during spec design. Closing them via ADR rather than schema change means zero breaking changes and a permanent reference for future adapter authors.
 
-**CrewAI at Adapter #2.** 44,600+ GitHub stars, ~60% Fortune 500 adoption, the largest unaddressed audience. Most users prototype in CrewAI then want better tooling — itsharness is exactly that migration path.
-
-**A2A in Phase 2, before any non-core adapter.** Adding A2A transforms itsharness from "a visual tool for 4 runtimes" to "the orchestrator of orchestrators." Google ADK, OpenAI Agents SDK, Claude Agent SDK all become invocable without custom adapters. ~3 weeks of work, effectively unlimited runtime coverage via protocol.
-
-**Real-time collaboration deferred to Phase 4.** Yjs collaborative canvas is 4–6 weeks alone — the most complex single feature in the roadmap. Deferring it until Phase 4 validates the product with real users before spending that budget.
+**`fn_ref` allowlist over sandboxing.** Generated code is exec'd directly. Rather than attempting full sandboxing (complex, escape-prone), `fn_ref` values are validated against a strict allowlist regex at every entry point (`/compile`, `/flows`, `/run`) before reaching any codegen or exec() call.
 
 ---
 
 ## Contributing
 
-**The best place to contribute right now is the RFC Discussion** (link TBD — will be posted when the GitHub Discussion goes live).
-
-Phase 0 is complete and the spec is locked for Phase 1. The RFC is the last good moment to push back on design decisions before adapter build starts. After Phase 1 begins, schema changes become breaking changes.
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full process — issue labels, schema change requirements, example flow conventions, and the regeneration process for `spec/schema.json`.
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 

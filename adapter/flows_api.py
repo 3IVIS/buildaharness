@@ -12,13 +12,16 @@ POST   /flows/{id}/versions/{ver_id}/restore     → restore as new current
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import Flow, FlowVersion, User, get_session, next_version_num
 from auth import current_user
+# Fix circular import: was `from main import _validate_spec` which caused
+# flows_api -> main -> flows_api ImportError at startup.
+from validate import validate_spec as _validate_spec
 
 router  = APIRouter(prefix="/flows", tags=["flows"])
 AuthDep = Annotated[User,         Depends(current_user)]
@@ -59,9 +62,19 @@ async def _get_flow(flow_id: str, user: User, db: AsyncSession) -> Flow:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[FlowSummary])
-async def list_flows(user: AuthDep, db: DbDep):
+async def list_flows(
+    user:   AuthDep,
+    db:     DbDep,
+    limit:  int = Query(default=50, ge=1, le=200, description="Max flows to return"),
+    offset: int = Query(default=0,  ge=0,          description="Pagination offset"),
+):
+    """Fix #20: paginated list — default 50, max 200 per page."""
     rows = (await db.execute(
-        select(Flow).where(Flow.user_id == user.id).order_by(Flow.updated_at.desc())
+        select(Flow)
+        .where(Flow.user_id == user.id)
+        .order_by(Flow.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
     )).scalars().all()
     return [FlowSummary(id=f.id, name=f.name,
                         updated_at=f.updated_at, created_at=f.created_at) for f in rows]
@@ -74,6 +87,11 @@ async def save_flow(req: SaveFlowRequest, user: AuthDep, db: DbDep):
     name    = spec.get("name") or flow_id or "Untitled"
     if not flow_id:
         raise HTTPException(status_code=400, detail="spec.id is required")
+
+    # Fix #7: validate structure before writing to Postgres.  Previously any JSON
+    # dict with an 'id' key was accepted and stored; corrupt/malicious specs were
+    # only caught later at compile or run time, producing confusing errors.
+    _validate_spec(spec)
 
     flow = await db.get(Flow, flow_id)
     if flow:
@@ -108,12 +126,21 @@ async def delete_flow(flow_id: str, user: AuthDep, db: DbDep):
 
 
 @router.get("/{flow_id}/versions", response_model=list[VersionSummary])
-async def list_versions(flow_id: str, user: AuthDep, db: DbDep):
+async def list_versions(
+    flow_id: str,
+    user:    AuthDep,
+    db:      DbDep,
+    limit:   int = Query(default=50, ge=1, le=200, description="Max versions to return"),
+    offset:  int = Query(default=0,  ge=0,          description="Pagination offset"),
+):
+    """Fix #18: paginated version list — default 50, max 200 per page."""
     await _get_flow(flow_id, user, db)
     rows = (await db.execute(
         select(FlowVersion)
         .where(FlowVersion.flow_id == flow_id)
         .order_by(FlowVersion.version_num.desc())
+        .limit(limit)
+        .offset(offset)
     )).scalars().all()
     return [VersionSummary(id=str(v.id), version_num=v.version_num,
                            label=v.label, created_at=v.created_at) for v in rows]
@@ -141,11 +168,16 @@ async def restore_version(flow_id: str, version_id: str, user: AuthDep, db: DbDe
     if not ver:
         raise HTTPException(status_code=404, detail="Version not found")
 
-    flow.current_spec = ver.spec
+    restored_spec = ver.spec
+    flow.current_spec = restored_spec
+    # Also restore the flow name from the spec so the library panel shows the
+    # correct name after restore (previously flow.name kept the most recent name,
+    # which could differ from the restored version's name).
+    flow.name         = restored_spec.get("name") or flow.name
     flow.updated_at   = datetime.now(timezone.utc)
 
     ver_num = await next_version_num(flow_id, db)
-    db.add(FlowVersion(flow_id=flow_id, user_id=user.id, spec=ver.spec,
+    db.add(FlowVersion(flow_id=flow_id, user_id=user.id, spec=restored_spec,
                        version_num=ver_num, label=f"Restored from v{ver.version_num}"))
     await db.commit()
     return SaveFlowResponse(id=flow_id, version_num=ver_num)

@@ -1,5 +1,5 @@
 """
-itsharness — CrewAI adapter  v0.1.0
+itsharness — CrewAI adapter  v0.2.0
 Generates runnable CrewAI Python code from a FlowSpec JSON.
 
 Coverage:
@@ -10,7 +10,7 @@ Coverage:
   ✓ transform           → Task with mapping description
   ✓ hitl_breakpoint     → Task(human_input=True)
   ✓ memory_read         → Task with retrieval description
-  ✓ memory_write        → Task with write description
+  ✓ memory_write        → Task with write description (ADR-001 RFC-2 resolved)
   ✓ parallel_fork       → downstream Tasks gain async_execution=True
   ✓ parallel_join       → aggregation Task
   ✓ condition           → synthesised branch-decision Task + warning
@@ -18,10 +18,8 @@ Coverage:
   ✓ subgraph            → nested Crew stub + warning
   ✓ process_type        → Crew(process=Process.sequential/hierarchical)
   ✓ flow_config.checkpoint → Crew(memory=True)
-
-RFC_PENDING (isolated, marked in output):
-  [RFC-1]  context_from semantics — Task.context= lines emitted but commented out.
-  [RFC-2]  memory_write.tier     — tier comment emitted, no mapping applied.
+  ✓ context_from        → Task.context=[...] (ADR-001 RFC-1 resolved)
+  ✓ memory_write.tier   → XXXMemory() in Crew constructor (ADR-001 RFC-2 resolved)
 """
 
 from __future__ import annotations
@@ -29,8 +27,16 @@ import textwrap
 from collections import defaultdict, deque
 from typing import Any
 
-ADAPTER_VERSION = "0.1.0"
+ADAPTER_VERSION = "0.2.0"
 CREWAI_MIN      = ">=0.80.0"
+
+# ADR-001 RFC-2: memory_write.tier → CrewAI memory class map
+_TIER_CLASS: dict[str, str] = {
+    "short":  "ShortTermMemory",
+    "long":   "LongTermMemory",
+    "entity": "EntityMemory",
+    "user":   "UserMemory",
+}
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
@@ -116,14 +122,10 @@ def gen_header(spec: dict) -> str:
         Flow   : {name}  ({fid})
         Nodes  : {nc}  |  Edges: {ec}
         Requires: crewai{CREWAI_MIN}
-
-        RFC_PENDING markers
-          [RFC-1]  context_from  — Task.context= lines are commented out.
-                   Uncomment once semantics are decided in the RFC.
-          [RFC-2]  memory_write.tier — tier comment only; no mapping applied yet.
         \"\"\"
 
         from crewai import Agent, Task, Crew, Process
+        from crewai.memory import ShortTermMemory, LongTermMemory, EntityMemory, UserMemory
         from crewai.tools import BaseTool
         import os
     """)
@@ -247,11 +249,10 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 lines.append(f"    async_execution=True,  # parallel_fork branch")
             if extra_lines:
                 lines.extend(f"    {l}" for l in extra_lines)
-            # RFC_PENDING[RFC-1]: context_from
+            # ADR-001 RFC-1: context_from → Task.context=[task_a, task_b]
             if ctx:
                 ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in ctx)
-                lines.append(f"    # RFC_PENDING[RFC-1]: context=[{ctx_vars}]")
-                lines.append(f"    # Uncomment once context_from semantics are decided.")
+                lines.append(f"    context=[{ctx_vars}],")
             lines.append(")")
             lines.append("")
 
@@ -386,12 +387,8 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 f"Write to memory store '{store_id}': key={key_expr}, value={val_expr}.",
                 "Memory write confirmed.",
                 "_executor",
-                [f"# RFC_PENDING[RFC-2]: tier={repr(tier)} — CrewAI tier mapping TBD"],
+                [f"# memory tier: '{tier}' → {_TIER_CLASS.get(tier, 'ShortTermMemory')} configured at Crew level (ADR-001 RFC-2)"],
             )
-            if tier and tier != "short":
-                warnings.append(
-                    f"memory_write '{nid}': tier='{tier}' → CrewAI tier mapping RFC_PENDING[RFC-2]"
-                )
             continue
 
         # ── transform ────────────────────────────────────────────────────────
@@ -506,6 +503,18 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     if checkpoint.get("enabled"):
         backend = checkpoint.get("backend", "memory")
         lines.append(f"    memory=True,  # checkpoint.backend={backend}")
+
+    # ADR-001 RFC-2: add XXXMemory() instances for each tier used by memory_write nodes
+    used_tiers = {
+        n.get("tier", "short")
+        for n in spec.get("nodes", [])
+        if n["type"] == "memory_write"
+    }
+    for tier in sorted(used_tiers):
+        cls = _TIER_CLASS.get(tier)
+        if cls:
+            lines.append(f"    {tier}_term_memory={cls}(),  # from memory_write tier='{tier}' (ADR-001)")
+
     if telemetry.get("enabled"):
         provider = telemetry.get("provider", "")
         lines.append(f"    # telemetry.provider={provider} — configure via env vars")

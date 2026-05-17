@@ -8,7 +8,17 @@ Format: [Semantic Versioning](https://semver.org). Schema changes in minor versi
 
 ## [Unreleased]
 
-### Added
+### Adapter contracts (ADR-001 — no schema version bump)
+
+Codegen semantics formalised for four fields that were previously open RFC questions.
+See [`docs/adr/001-codegen-field-semantics.md`](../docs/adr/001-codegen-field-semantics.md) for full rationale and implementation checklist.
+
+- **`output_key`** — Direct state-dict write: node function returns `{output_key: result}`. If absent on `llm_call` or `hitl_breakpoint`, returns `{}`. Canvas warns when `llm_call` has neither `output_key` nor `structured_output`.
+- **`query_expr` / `key_expr` / `value_expr`** — Bare JSONPath selectors (`$.state.key`), not mustache templates. Adapters implement a shared `resolve_expr(expr, state)` helper.
+- **`context_from`** — CrewAI: maps to `Task.context=[...]` (RFC-1 stubs in `crewai_adapter.py` now uncommented). LangGraph: dependency declaration only — generates a comment block since LG already shares full state. Mastra: step input mapping (already implemented).
+- **`memory_write.tier`** — CrewAI Crew-level construction hint: adapter scans all `memory_write` nodes for distinct tiers and adds the corresponding `XXXMemory()` instances to the `Crew()` constructor (RFC-2 resolved). Task-level tier targeting is not supported by the CrewAI API. Other adapters treat `tier` as a comment-only hint.
+
+### Added (spec)
 - `FailBranch` and `RetryConfig` schema types for error-handling branches on `llm_call` and `tool_invoke` nodes
 - `fail_branch` optional field on `LlmCallNode` and `ToolInvokeNode`
 - Canvas renders `fail_branch` as a red dashed `FailEdge` with "on fail" label

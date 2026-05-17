@@ -9,7 +9,8 @@ import { ImportDialog }    from './ImportDialog'
 import { FlowLibraryPanel } from './FlowLibraryPanel'
 import { FlowDiffModal }   from './FlowDiffModal'
 import { generateAgentCard, downloadAgentCard, A2A_ENABLED } from '../services/a2a'
-import type { AdapterName } from '../spec/schema'
+import { validateCrossRefs } from '../spec/validation'
+import type { AdapterName, ValidationError } from '../spec/schema'
 
 const RUNTIME_OPTIONS: { value: AdapterName | ''; label: string }[] = [
   { value: '',                        label: 'All runtimes' },
@@ -27,7 +28,13 @@ export function Toolbar() {
     undo, redo, canUndo, canRedo,
     autoLayout,
     flowConfig,
+    setCrossRefErrors,
   } = useCanvasStore()
+
+  // Helper: push cross-ref errors into the store without calling exportSpec() again.
+  function setErrors(errors: ValidationError[]) {
+    setCrossRefErrors(errors)
+  }
 
   const { saveFlow, entries } = useLibraryStore()
 
@@ -45,16 +52,21 @@ export function Toolbar() {
   const a2aEnabled = A2A_ENABLED && (flowConfig?.a2a_config?.enabled === true)
 
   function handleExport() {
-    validate()  // surface cross-ref errors before export so user sees any issues
-    const spec = exportSpec(); if (!spec) return
+    const spec = exportSpec()
+    if (!spec) { validate(); return }   // exportSpec sets zodErrors; validate shows them
+    // Run cross-ref validation on the already-built spec — don't call exportSpec() again.
+    const errors = validateCrossRefs(spec)
+    setErrors(errors)
     const url = URL.createObjectURL(new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = `${spec.id}.json`; a.click()
     URL.revokeObjectURL(url)
   }
 
   function handleSaveToLibrary() {
-    validate()  // surface cross-ref errors before saving
-    const spec = exportSpec(); if (!spec) return
+    const spec = exportSpec()
+    if (!spec) { validate(); return }
+    const errors = validateCrossRefs(spec)
+    setErrors(errors)
     saveFlow(spec)
   }
 

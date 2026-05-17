@@ -1,0 +1,82 @@
+name: Publish @itsharness/flow-spec
+
+# Triggers on any tag matching v* pushed to the repo:
+#   git tag v0.3.0 && git push origin v0.3.0
+# The tag is expected to match the version in spec/package.json.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: Build, validate, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance attestation
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Node ────────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@itsharness'
+
+      # ── Install root deps (Fix #50: uses package-lock.json for reproducibility)
+      - name: Install root deps
+        run: npm ci
+
+      # ── Install spec deps (Fix #5: spec/package-lock.json committed; npm ci is reproducible)
+      - name: Install spec deps
+        working-directory: spec
+        run: npm ci
+
+      # ── Build compiled output (needed by typecheck and gen:json-schema) ───
+      - name: Build spec package
+        working-directory: spec
+        run: npm run build
+
+      # ── Type-check the spec schema ───────────────────────────────────────
+      - name: Type-check spec
+        working-directory: spec
+        run: npx tsc --noEmit --strict
+
+      # ── Fix #35: verify src/spec/schema.ts exports the same public types ──
+      # Runs a script that compares exported type names between the two copies.
+      - name: Check canvas schema is in sync with canonical spec
+        run: node scripts/check-schema-sync.mjs
+
+      # ── Fix #41: verify schema.json matches spec/schema.ts ───────────────
+      - name: Verify schema.json is up to date
+        working-directory: spec
+        run: node scripts/gen-json-schema.mjs --check
+
+      # ── Validate all 5 reference flows against the schema ────────────────
+      - name: Validate reference flows
+        run: npm test -- --reporter=verbose
+        # Runs src/spec/schema.test.ts via vitest; all 5 flows must pass.
+
+      # ── Verify tag matches package.json version ──────────────────────────
+      - name: Check version matches tag
+        working-directory: spec
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"   # strip leading "v"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  spec/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      # ── Publish ─────────────────────────────────────────────────────────
+      - name: Publish to npm
+        working-directory: spec
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

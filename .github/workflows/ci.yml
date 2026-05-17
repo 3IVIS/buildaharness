@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend — typecheck, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # Fix #52: run ESLint on every push
+      - name: Lint
+        run: npm run lint
+
+      # Fix #34: TypeScript strict checks (noUnusedLocals/Parameters now enabled)
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test (schema + validation)
+        run: npm test -- --reporter=verbose
+
+      # Fix #35: ensure canvas schema stays in sync with canonical spec
+      - name: Check schema sync
+        run: node scripts/check-schema-sync.mjs
+
+  adapter:
+    name: Adapter — lint (ruff), typecheck (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'                        # cache pip downloads between runs
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+
+      - name: Install adapter + dev deps
+        run: pip install -r adapter/requirements.txt -r adapter/requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check adapter/
+
+      - name: Format check (ruff)
+        run: ruff format --check adapter/
+
+      # Fix #6: the job was named "typecheck" but never ran a type checker.
+      # mypy catches async typing issues, FastAPI dependency injection errors,
+      # and SQLAlchemy model mismatches that ruff cannot detect.
+      - name: Type-check (mypy)
+        run: mypy adapter/ --ignore-missing-imports --python-version 3.12
+
+      # Fix #15: the adapter had zero automated test coverage.
+      # Run the new test suite (auth, flows CRUD, spec validation, compile).
+      - name: Test (adapter)
+        run: pytest adapter/tests/ -v
+        env:
+          JWT_SECRET: test-secret-for-ci-only
+          DATABASE_URL: sqlite+aiosqlite:///:memory:

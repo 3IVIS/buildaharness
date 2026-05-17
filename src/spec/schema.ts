@@ -27,11 +27,24 @@ import { z } from 'zod'
 // Primitives
 // ---------------------------------------------------------------------------
 
+// Fix #37: spec_version is a hard literal. When bumping:
+//   1. Change this literal to the new version string.
+//   2. Update src/spec/schema.ts to match.
+//   3. Add a migration in store/index.ts migrate() and in parseFlowSpecLenient below.
+//   4. Update STORAGE_VERSION constant in store/index.ts.
+//   5. Regenerate spec/schema.json via: cd spec && npm run gen:json-schema
+//   6. Update spec/CHANGELOG.md.
 export const SpecVersion = z.literal('0.2.0')
+
+/** The spec version string as a plain constant (avoids repeated z.literal('0.2.0') references). */
+export const CURRENT_SPEC_VERSION = '0.2.0' as const
 
 export const FlowId = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Flow ID must be kebab-case')
+  // Fix #36: FlowId uses hyphens only (no underscores) — deliberate, flows are
+  // URL path segments. NodeId allows underscores because node type names like
+  // parallel_fork use them. Keep this asymmetry intentional and documented.
+  .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Flow ID must be kebab-case (min 2 chars, hyphens only)')
 
 export const NodeId = z
   .string()
@@ -46,6 +59,10 @@ export type Position = z.infer<typeof Position>
 // Runtime
 // ---------------------------------------------------------------------------
 
+// Fix #56: microsoft_agent_framework is in the spec enum for forward-compatibility
+// but has NO adapter implementation yet (no codegen, no runtime runner).
+// It is intentionally excluded from SUPPORTED_RUNTIMES in the adapter and
+// the node support matrix reflects 'missing' for all node types until implemented.
 export const AdapterName = z.enum(['langgraph', 'crewai', 'mastra', 'microsoft_agent_framework'])
 export type AdapterName = z.infer<typeof AdapterName>
 
@@ -336,6 +353,8 @@ export const Node = z.discriminatedUnion('type', [
 ])
 export type Node = z.infer<typeof Node>
 export type NodeType = Node['type']
+// Fix #25: AnyNode is imported by validation.ts — export it as an alias for Node.
+export type AnyNode = Node
 
 // ---------------------------------------------------------------------------
 // Edges
@@ -348,11 +367,19 @@ export const DirectEdge = z.object({
   to:           z.string(),
   label:        z.string().optional(),
   context_from: z.array(z.string()).optional(),
-  // Canvas-only: visual_type carries the rendering hint (parallel/hitl/fail)
-  // through the Zod parse round-trip without being part of the canonical schema.
-  // passthrough() preserves unknown keys so exportSpec → parseFlowSpec → loadFlow
-  // can restore the correct edge renderer. The canonical spec/schema.ts does NOT
-  // use passthrough() — the npm package stays clean.
+  // Fix #38 — passthrough() rationale and tradeoffs:
+  //
+  // The canvas must survive an exportSpec → parseFlowSpec → loadFlow round-trip
+  // while preserving the visual_type hint (parallel / hitl / fail) that is not
+  // part of the canonical DirectEdge schema.  .passthrough() retains unknown keys
+  // so visual_type survives Zod parsing without being in the canonical spec.
+  //
+  // Accepted tradeoff: arbitrary unknown keys in edge.data are not rejected.
+  // Mitigation: the data field itself is a plain object (not part of the schema
+  // contract), so pollution is bounded to edge.data and cannot corrupt typed fields.
+  //
+  // The canonical spec/schema.ts does NOT use passthrough() — the npm package
+  // rejects unknown top-level edge keys to stay clean for external consumers.
 }).passthrough()
 export type DirectEdge = z.infer<typeof DirectEdge>
 
@@ -491,6 +518,26 @@ export function assertFlowSpec(raw: unknown): FlowSpec {
   return FlowSpec.parse(raw)
 }
 
+/**
+ * Fix #37: lenient parser that migrates specs from older versions before
+ * validating them.  Use this in loadFlow / import paths so saved flows
+ * from older spec versions don't break on open.
+ *
+ * Version migration map:
+ *   0.1.0 → 0.2.0: spec_version field added; inject it if missing.
+ */
+export function parseFlowSpecLenient(raw: unknown): ReturnType<typeof FlowSpec.safeParse> {
+  if (raw !== null && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    // Migrate 0.1.0 → 0.2.0: inject missing spec_version
+    if (!obj['spec_version']) {
+      obj['spec_version'] = CURRENT_SPEC_VERSION
+    }
+    // Future migrations go here as else-if chains.
+  }
+  return FlowSpec.safeParse(raw)
+}
+
 // ---------------------------------------------------------------------------
 // Canvas-only: adapter display labels
 // ---------------------------------------------------------------------------
@@ -507,19 +554,22 @@ export const ADAPTER_LABELS: Record<AdapterName, string> = {
 // Override per-node via the node's runtime_support field.
 // ---------------------------------------------------------------------------
 
+// Fix #56: microsoft_agent_framework has no adapter implementation.
+// All node types marked 'missing' until the adapter is built.
+// The enum value is kept for forward-compatibility with saved specs.
 export const NODE_SUPPORT_MATRIX: Record<NodeType, Record<AdapterName, SupportLevel>> = {
-  input:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  output:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  llm_call:         { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  tool_invoke:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  condition:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  parallel_fork:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  parallel_join:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  hitl_breakpoint:  { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'partial' },
-  memory_read:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  memory_write:     { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  subgraph:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'partial' },
-  transform:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'full' },
-  agent_role:       { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'partial' },
-  agent_debate:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'full' },
+  input:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  output:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  llm_call:         { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  tool_invoke:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  condition:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_fork:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_join:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  hitl_breakpoint:  { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_read:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_write:     { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  subgraph:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  transform:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  agent_role:       { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  agent_debate:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
 }

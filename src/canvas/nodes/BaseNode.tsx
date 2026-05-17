@@ -120,6 +120,7 @@ export function BaseNode({
         hasWarning ? 'cf-node--warn'   : '',
         execStat?.status === 'pending' ? 'cf-node--exec-pending' : '',
         execStat?.status === 'running' ? 'cf-node--exec-running' : '',
+        execStat?.status === 'paused'  ? 'cf-node--exec-paused'  : '',
         execStat?.status === 'done'    ? 'cf-node--exec-done'    : '',
         execStat?.status === 'error'   ? 'cf-node--exec-error'   : '',
       ].filter(Boolean).join(' ')}

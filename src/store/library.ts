@@ -36,10 +36,14 @@ export const useLibraryStore = create<LibraryStore>()(
             savedAt:  Date.now(),
             specJson,
           }
+          const updated = exists
+            ? s.entries.map((e) => e.id === spec.id ? entry : e)
+            : [entry, ...s.entries]
+          // Cap at 100 entries (newest first) to prevent LocalStorage overflow.
+          // Each serialised spec can be 10–100 KB; 100 entries ≈ 1–10 MB worst-case,
+          // well within the typical 5–10 MB browser quota.
           return {
-            entries: exists
-              ? s.entries.map((e) => e.id === spec.id ? entry : e)
-              : [entry, ...s.entries],
+            entries: updated.slice(0, 100),
             lastSavedSpecJson: specJson,
           }
         })

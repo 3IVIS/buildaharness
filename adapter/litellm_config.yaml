@@ -19,5 +19,8 @@ general_settings:
   database_url: os.environ/DATABASE_URL
 
 litellm_settings:
-  success_callback: []
-  failure_callback: []
+  # Langfuse callback — logs every LLM call (cost, tokens, latency) to Langfuse.
+  # LiteLLM reads LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_HOST
+  # from the environment automatically when langfuse is listed here.
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]

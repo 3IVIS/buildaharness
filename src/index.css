@@ -476,6 +476,11 @@ html, body, #root {
   box-shadow: 0 0 0 2px rgba(96,165,250,0.2), var(--shadow-node);
   animation: execRingPulse 1.4s ease-in-out infinite;
 }
+.cf-node--exec-paused {
+  border-color: rgba(251,146,60,0.85) !important;
+  box-shadow: 0 0 0 2px rgba(251,146,60,0.25), var(--shadow-node);
+  animation: execHitlPulse 2s ease-in-out infinite;
+}
 .cf-node--exec-done {
   border-color: rgba(74,222,128,0.6) !important;
   box-shadow: 0 0 0 2px rgba(74,222,128,0.15), var(--shadow-node);
@@ -487,6 +492,207 @@ html, body, #root {
 @keyframes execRingPulse {
   0%, 100% { box-shadow: 0 0 0 2px rgba(96,165,250,0.15), var(--shadow-node); }
   50%       { box-shadow: 0 0 0 4px rgba(96,165,250,0.30), var(--shadow-node); }
+}
+@keyframes execHitlPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(251,146,60,0.15), var(--shadow-node); }
+  50%       { box-shadow: 0 0 0 5px rgba(251,146,60,0.35), var(--shadow-node); }
+}
+
+/* ── HITL Resume Panel ────────────────────────────────────────────────────── */
+
+.hitl-panel {
+  width: 300px;
+  min-width: 300px;
+  max-width: 300px;
+  background: var(--bg-panel);
+  border-left: 0.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.hitl-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 14px 12px;
+  border-bottom: 0.5px solid var(--border);
+  background: rgba(251,146,60,0.07);
+}
+
+.hitl-panel__icon {
+  color: var(--c-hitl);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.hitl-panel__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-hitl);
+  letter-spacing: 0.01em;
+}
+
+.hitl-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hitl-panel__node-ref {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.hitl-panel__node-label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.hitl-panel__node-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-input);
+  border: 0.5px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.hitl-panel__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.hitl-panel__prompt-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.hitl-panel__prompt {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.55;
+  margin: 0;
+  padding: 9px 10px;
+  background: var(--bg-input);
+  border: 0.5px solid var(--border);
+  border-radius: 5px;
+  white-space: pre-wrap;
+}
+
+.hitl-panel__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hitl-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hitl-panel__field-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.hitl-panel__field-input {
+  background: var(--bg-input);
+  border: 0.5px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 6px 9px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.hitl-panel__field-input:focus {
+  border-color: var(--c-hitl);
+}
+
+.hitl-panel__no-fields {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+  font-style: italic;
+}
+
+.hitl-panel__error {
+  font-size: 11px;
+  color: #ef4444;
+  background: rgba(239,68,68,0.08);
+  border: 0.5px solid rgba(239,68,68,0.3);
+  border-radius: 5px;
+  padding: 7px 9px;
+}
+
+.hitl-panel__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 0.5px solid var(--border);
+}
+
+.hitl-panel__btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 7px 11px;
+  transition: opacity 0.15s;
+}
+
+.hitl-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hitl-panel__btn--cancel {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 0.5px solid var(--border);
+}
+
+.hitl-panel__btn--cancel:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.hitl-panel__btn--resume {
+  flex: 1;
+  justify-content: center;
+  background: rgba(251,146,60,0.15);
+  color: var(--c-hitl);
+  border: 0.5px solid rgba(251,146,60,0.4);
+}
+
+.hitl-panel__btn--resume:hover:not(:disabled) {
+  background: rgba(251,146,60,0.22);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 /* Header — tinted background using node color */

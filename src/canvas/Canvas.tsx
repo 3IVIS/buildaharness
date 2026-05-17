@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useMemo } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap, BackgroundVariant,
+  useReactFlow,
   type Node, type NodeMouseHandler, type EdgeMouseHandler,
 } from '@xyflow/react'
 import { useCanvasStore } from '../store'
@@ -89,18 +90,6 @@ export function Canvas() {
     (nodes as Node[]).filter((n) => n.type !== 'annotation'), edges,
   )
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); e.dataTransfer.dropEffect = 'move'
-  }, [])
-
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    const type = e.dataTransfer.getData('application/itsharness-node')
-    if (!type) return
-    const canvas = e.currentTarget.getBoundingClientRect()
-    addNode(type as NodeType, { x: e.clientX - canvas.left - 100, y: e.clientY - canvas.top - 24 })
-  }, [addNode])
-
   const onNodeClick: NodeMouseHandler = useCallback((e, node) => {
     if (e.shiftKey) {
       e.stopPropagation()
@@ -140,8 +129,6 @@ export function Canvas() {
   }, [addAnnotation, focusId, clear])
 
   // Apply focus-mode opacity to nodes
-  // When not in focus mode, pass the nodes array directly — no new objects,
-  // no spurious ReactFlow re-renders from a changed reference.
   const displayNodes = focusId
     ? (nodes as Node[]).map((n) => ({
         ...n,
@@ -153,10 +140,6 @@ export function Canvas() {
       }))
     : (nodes as Node[])
 
-  // In focus mode:
-  //  - edges fully inside the neighborhood   → full opacity
-  //  - edges that CROSS the boundary         → 0.35 (visible context)
-  //  - edges fully outside                   → 0.08
   const displayEdges = focusId
     ? edges.map((e) => {
         const inSrc = focusedIds.has(e.source)
@@ -174,7 +157,7 @@ export function Canvas() {
     : edges
 
   return (
-    <div className="canvas-area" onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="canvas-area">
       {focusId && (
         <div className="focus-toolbar">
           <span className="focus-toolbar__label">focus · depth</span>
@@ -217,6 +200,11 @@ export function Canvas() {
           markerEnd: { type: 'arrowclosed', width: 12, height: 12, color: '#52526a' },
         }}
       >
+        {/* DnDHandler must be inside <ReactFlow> so useReactFlow() has provider context.
+            Fix: previously onDrop used raw clientX/Y which broke under zoom/pan.
+            screenToFlowPosition() accounts for viewport transform correctly. */}
+        <DnDHandler addNode={addNode} />
+
         {/* Regions render BELOW nodes inside the viewport */}
         <RegionLayer />
 
@@ -224,7 +212,6 @@ export function Canvas() {
         <Controls showInteractive={false} />
         <MiniMap
           nodeColor={(n) => {
-            // annotation and any unknown types fall back to neutral grey
             const hex = NODE_HEX[n.type as NodeType]
             return desaturateForMinimap(hex ?? '#52526a')
           }}
@@ -232,5 +219,37 @@ export function Canvas() {
         />
       </ReactFlow>
     </div>
+  )
+}
+
+// ── DnDHandler — lives INSIDE <ReactFlow> so useReactFlow() is in scope ──────
+// Fix: Canvas previously calculated drop position with raw clientX/Y coordinates,
+// which gave wrong results when the user had zoomed or panned the canvas.
+// useReactFlow().screenToFlowPosition() applies the viewport transform correctly.
+function DnDHandler({ addNode }: { addNode: (type: NodeType, pos: { x: number; y: number }) => void }) {
+  const { screenToFlowPosition } = useReactFlow()
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const type = e.dataTransfer.getData('application/itsharness-node')
+    if (!type) return
+    // screenToFlowPosition converts screen px → flow coordinate space,
+    // correctly handling zoom level and pan offset.
+    const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    addNode(type as NodeType, position)
+  }, [addNode, screenToFlowPosition])
+
+  // Render an invisible overlay div that catches drag events across the full viewport
+  return (
+    <div
+      style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'all' }}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    />
   )
 }

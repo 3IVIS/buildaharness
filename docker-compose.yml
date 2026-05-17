@@ -1,54 +1,108 @@
+# itsharness — Docker Compose
+#
+# Fixes applied:
+#   #3  / #4  — All secrets must be set in .env; no insecure defaults survive.
+#   #9        — CORS_ORIGINS env var passed to adapter (comma-separated list).
+#   #43       — Canvas uses Dockerfile.canvas; no npm install on every start.
+#   #44       — Adapter uses Dockerfile.adapter; no pip install on every start.
+#   #45       — LiteLLM gets its own 'litellm' database, not 'itsharness'.
+#   #46       — Adapter container has a healthcheck.
+#   #47       — langfuse-worker depends_on langfuse with service_healthy.
+#   #48       — Adapter has restart: unless-stopped.
+#   #49       — VITE_API_URL removed from Docker env (Vite bakes it at build
+#               time; set it in .env.local on the host for local dev).
+#
+# Quick start:
+#   cp .env.example .env
+#   # Fill in real secrets — do NOT use the placeholder values.
+#   docker compose up --build
+
 services:
+
+  # ── Canvas (Vite dev server) ──────────────────────────────────────────────
+  # Fix #43: build deps once in Dockerfile.canvas; no npm install on start.
   canvas:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - .:/app
-      - /app/node_modules
+    build:
+      context: .
+      dockerfile: Dockerfile.canvas
     ports:
       - "3000:3000"
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      # Bind-mount source for hot reload; node_modules comes from the image.
+      - .:/app
+      - /app/node_modules
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8000
+      # Fix #49: VITE_API_URL is NOT set here — Vite bakes env vars at dev-server
+      # start, not at runtime inside the container.  Set it in .env.local on your
+      # host machine instead (the file Vite reads automatically in dev mode).
     depends_on:
-      - adapter
+      adapter:
+        condition: service_healthy   # Fix #46: wait for adapter to be ready
 
+  # ── Adapter (FastAPI) ──────────────────────────────────────────────────────
+  # Fix #44: build deps once in Dockerfile.adapter; no pip install on start.
   adapter:
-    image: python:3.12-slim
-    working_dir: /app
-    volumes:
-      - ./adapter:/app
+    build:
+      context: .
+      dockerfile: Dockerfile.adapter
     ports:
       - "8000:8000"
-    command: sh -c "pip install -r requirements.txt && python main.py"
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=postgresql+asyncpg://itsharness:itsharness@postgres:5432/itsharness
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - DATABASE_URL=postgresql+asyncpg://itsharness:${POSTGRES_PASSWORD}@postgres:5432/itsharness
+      # Fix #3: JWT_SECRET must be set in .env — no fallback; adapter exits if unset.
+      - JWT_SECRET=${JWT_SECRET}
       - LITELLM_URL=http://litellm:4000
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Fix #9: CORS_ORIGINS controls which origins the adapter allows.
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://canvas:3000}
+      # Job TTL — completed jobs are evicted after this many hours (Fix #15)
+      - JOB_TTL_HOURS=${JOB_TTL_HOURS:-4}
+      # Security tuning (Fix #6, #7)
+      - JWT_TTL_DAYS=${JWT_TTL_DAYS:-30}
+      - MAX_BODY_BYTES=${MAX_BODY_BYTES:-1048576}
+      # Langfuse
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_BASE_URL=http://langfuse:3000
+    # Fix #46: healthcheck so canvas (and CI) knows when the adapter is ready.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Fix #48: restart on crash.
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      langfuse:
+        condition: service_started
 
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=itsharness
-      - POSTGRES_PASSWORD=itsharness
+      # Fix #4: password was hardcoded as a literal. Now read from .env — the adapter
+      # exits at startup if JWT_SECRET is missing; operators must supply all secrets.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=itsharness
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U itsharness"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ── LiteLLM proxy ─────────────────────────────────────────────────────────
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     ports:
@@ -59,11 +113,130 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-itsharness-dev}
-      - DATABASE_URL=postgresql://itsharness:itsharness@postgres:5432/itsharness
+      # No fallback — LITELLM_MASTER_KEY must be set in .env.
+      # The adapter validates JWT_SECRET; .env.example documents all required secrets.
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      # Fix #45: LiteLLM uses its own 'litellm' database, not 'itsharness'.
+      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=http://langfuse:3000
     depends_on:
       postgres:
+        condition: service_healthy
+      langfuse:
+        condition: service_started
+
+  # ── ClickHouse (Langfuse analytics store) ─────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Redis (Langfuse ingestion queue) ──────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Langfuse web + API ────────────────────────────────────────────────────
+  langfuse:
+    image: langfuse/langfuse:3
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:${CLICKHOUSE_PASSWORD}@clickhouse:9000
+      - CLICKHOUSE_URL=http://default:${CLICKHOUSE_PASSWORD}@clickhouse:8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NEXTAUTH_URL=http://localhost:3001
+      # Fix #3: all secrets must be set in .env — no insecure defaults.
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      # Fix #4: ENCRYPTION_KEY must be 64 hex chars; not all-zeroes.
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
+      - TELEMETRY_ENABLED=false
+      - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=true
+      - LANGFUSE_INIT_ORG_ID=itsharness
+      - LANGFUSE_INIT_ORG_NAME=itsharness
+      - LANGFUSE_INIT_PROJECT_ID=itsharness-dev
+      - LANGFUSE_INIT_PROJECT_NAME=itsharness-dev
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_ADMIN_EMAIL}
+      - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_ADMIN_PASSWORD}
+      - LANGFUSE_INIT_USER_NAME=Admin
+    # Fix #47: use service_healthy for ClickHouse and Redis.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Fix #2: langfuse-worker depends on langfuse with service_healthy — so langfuse
+    # MUST have a healthcheck. Without one, docker compose up fails with:
+    #   "Service 'langfuse-worker' depends on service 'langfuse' which does not have
+    #    a healthcheck configured."
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/public/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+
+  # ── Langfuse worker (async trace ingestion) ────────────────────────────────
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://default:${CLICKHOUSE_PASSWORD}@clickhouse:9000
+      - CLICKHOUSE_URL=http://default:${CLICKHOUSE_PASSWORD}@clickhouse:8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SALT=${LANGFUSE_SALT}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
+      - TELEMETRY_ENABLED=false
+    # Fix #47: wait for langfuse to be healthy (migrations complete) before starting worker.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      langfuse:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  clickhouse_data:
+  redis_data:

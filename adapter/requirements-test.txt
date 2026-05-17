@@ -1,0 +1,8 @@
+# Test dependencies — install alongside requirements.txt when running the test suite:
+#   pip install -r requirements.txt -r requirements-test.txt
+#
+# Kept separate so the production Docker image stays lean.
+pytest>=8.0.0
+pytest-asyncio>=0.23.0          # asyncio_mode=auto in pytest.ini
+httpx>=0.27.0                   # AsyncClient used by all adapter tests
+anyio>=4.0.0                    # async test runner backend

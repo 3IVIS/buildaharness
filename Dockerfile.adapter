@@ -1,0 +1,28 @@
+# Fix #44: install pip deps at image-build time, not on every container start.
+# Usage: docker build -f Dockerfile.adapter -t itsharness-adapter ./adapter
+#        docker compose up  (uses this image via docker-compose.yml build: context)
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install deps first (cached layer — only invalidated when requirements.txt changes)
+COPY adapter/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source after deps so code changes don't bust the pip cache layer
+COPY adapter/ .
+
+EXPOSE 8000
+
+# Fix #1 (partial mitigation): run as non-root to reduce blast radius of exec() abuse.
+RUN useradd -m appuser
+USER appuser
+
+# Healthcheck so `docker run` and orchestrators other than Compose know when the
+# adapter is ready. Compose overrides this with its own healthcheck block, but
+# standalone `docker run` deployments benefit from having it baked in.
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=20s \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

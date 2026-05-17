@@ -1,0 +1,42 @@
+# Fix #16: .dockerignore prevents secrets and build artifacts from being sent
+# to the Docker build context (COPY . . in Dockerfile.canvas / Dockerfile.adapter).
+
+# Secrets — never bake into an image layer
+.env
+.env.local
+.env.*.local
+
+# JS dependencies — image provides its own
+node_modules/
+spec/node_modules/
+
+# Build output
+dist/
+spec/dist/
+
+# Python cache
+__pycache__/
+adapter/__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker volumes (shouldn't be present, but guard anyway)
+postgres_data/
+clickhouse_data/
+redis_data/
+
+# Test / coverage output
+coverage/
+.pytest_cache/

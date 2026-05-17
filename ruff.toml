@@ -1,0 +1,29 @@
+# Fix #4: standalone ruff.toml uses flat keys, NOT [tool.ruff] table syntax.
+# [tool.ruff] is only correct inside pyproject.toml.
+# With the old [tool.ruff] structure, ruff parsed it as an unknown [tool] section
+# and silently ignored every setting.
+
+target-version = "py312"
+line-length = 100
+src = ["adapter"]
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes
+  "I",    # isort
+  "B",    # flake8-bugbear
+  "UP",   # pyupgrade
+  "S",    # flake8-bandit (security)
+  "RUF",  # ruff-specific rules
+]
+ignore = [
+  "S101",  # assert — used in tests
+  "S102",  # exec — intentional in codegen runners (exec'd code is fn_ref-validated upstream)
+  "S603",  # subprocess — intentional in build scripts
+  "B008",  # function calls in default args — FastAPI Depends() pattern
+]
+
+[lint.per-file-ignores]
+# No per-file ignores needed — S102 is suppressed globally above with a justification comment.

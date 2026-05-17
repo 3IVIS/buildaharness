@@ -134,7 +134,10 @@ def find_condition_branches(nodes: list[dict], edges: list[dict]) -> dict[str, l
             if default:
                 items.append({"expr": None, "target": default})  # None = catch-all
             cond_map[n["id"]] = items
-        return cond_map
+    # Fix: `return cond_map` was indented inside the for loop, causing the
+    # function to return after processing only the first node. Flows with
+    # multiple condition nodes would silently miss all but the first.
+    _ = node_map  # retained to avoid unused-variable lint error
     return cond_map
 
 

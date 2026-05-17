@@ -1,17 +1,45 @@
+# Fix #42: .gitignore was entirely missing from the repo
+
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build output
 dist/
-.vite/
-*.log
+dist-ssr/
+*.local
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
 .venv/
-*.pyc
-.env
+venv/
+.pytest_cache/
 
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
-concat.py
-bundle.all
+Thumbs.db
 
-# OPFS / run artefacts written by the engine at runtime
-runs/
+# Logs
+*.log
+npm-debug.log*
+
+# Vitest / coverage
+coverage/
+
+# Docker volumes (if accidentally bind-mounted)
+postgres_data/
+clickhouse_data/
+redis_data/

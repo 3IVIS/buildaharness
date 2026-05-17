@@ -1,12 +1,19 @@
 /**
  * Typed API client for the itsharness adapter backend.
  * Reads VITE_API_URL (defaults to http://localhost:8000).
+ *
+ * Fix #9:  api.ts is compiled as ESM by Vite; require() is not available in the
+ *          browser. We import getAuthToken directly — no circular dependency because
+ *          auth.ts only imports `api` for its login/register calls, and getAuthToken
+ *          reads Zustand's in-memory store (not imported from api.ts).
+ * Fix #11: token lives in exactly one place (Zustand store), read via getAuthToken().
  */
+import { getAuthToken } from '../store/auth'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000'
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('itsharness:token')
+  const token = getAuthToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -55,9 +62,15 @@ export interface SaveFlowResponse {
   version_num: number
 }
 
+export interface HitlState {
+  node_id:              string
+  prompt:               string
+  resume_schema_fields: string[]
+}
+
 export interface RunJobResponse {
   job_id:      string
-  status:      'queued' | 'running' | 'done' | 'error'
+  status:      'queued' | 'running' | 'paused' | 'done' | 'error'
   runtime:     string
   started_at:  string
   ended_at:    string | null
@@ -65,10 +78,14 @@ export interface RunJobResponse {
   error:       string | null
   node_events: Array<{
     node_id: string
-    status:  'pending' | 'running' | 'done' | 'error'
+    status:  'pending' | 'running' | 'paused' | 'done' | 'error'
     ts:      string
     ms:      number | null
+    tokens:  number | null     // populated for LLM nodes where usage is available
   }>
+  hitl_state:  HitlState | null
+  trace_id:    string | null   // Langfuse trace ID for this run
+  trace_url:   string | null   // deep-link to Langfuse UI trace
 }
 
 // ── API surface ───────────────────────────────────────────────────────────────
@@ -116,5 +133,10 @@ export const api = {
       ),
 
     status: (jobId: string) => request<RunJobResponse>(`/run/${jobId}`),
+
+    resume: (jobId: string, payload: Record<string, unknown>) =>
+      request<{ job_id: string; status: string }>(`/run/${jobId}/resume`, {
+        method: 'POST', body: JSON.stringify({ payload }),
+      }),
   },
 }
