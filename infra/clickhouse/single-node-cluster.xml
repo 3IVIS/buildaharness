@@ -1,0 +1,65 @@
+<!-- ClickHouse single-node cluster configuration for itsharness dev/self-hosted.
+     
+     Problem: Langfuse 3's migration runner hardcodes:
+       CREATE TABLE ... ON CLUSTER default ... Engine=ReplicatedMergeTree
+     This requires ZooKeeper for replica coordination.
+     
+     Solution: Enable ClickHouse's built-in Keeper (ZooKeeper replacement, available
+     since ClickHouse 22.4) and define a "default" cluster that points at this single
+     node. ReplicatedMergeTree then works without an external ZooKeeper process.
+     
+     This config is mounted at /etc/clickhouse-server/config.d/ so it merges with
+     the default config rather than replacing it.
+-->
+<clickhouse>
+
+    <!-- ── Built-in Keeper (ZooKeeper replacement) ────────────────────────── -->
+    <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>localhost</hostname>
+                <port>9444</port>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+
+    <!-- Point ClickHouse at the local Keeper instance -->
+    <zookeeper>
+        <node>
+            <host>localhost</host>
+            <port>9181</port>
+        </node>
+    </zookeeper>
+
+    <!-- ── Single-node "default" cluster ─────────────────────────────────── -->
+    <!-- Defines the cluster name Langfuse uses in ON CLUSTER default.
+         A single shard with a single replica = this node itself. -->
+    <remote_servers>
+        <default>
+            <shard>
+                <replica>
+                    <host>localhost</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </default>
+    </remote_servers>
+
+    <!-- Macros used by ReplicatedMergeTree path templates -->
+    <macros>
+        <cluster>default</cluster>
+        <shard>1</shard>
+        <replica>1</replica>
+    </macros>
+
+</clickhouse>

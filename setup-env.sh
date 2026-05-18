@@ -149,7 +149,7 @@ if $DO_ENV; then
   LANGFUSE_NEXTAUTH_SECRET="$(rand_base64 32)"; success "LANGFUSE_NEXTAUTH_SECRET"
   LANGFUSE_SALT="$(rand_base64 32)";            success "LANGFUSE_SALT"
   LANGFUSE_ENCRYPTION_KEY="$(rand_hex 32)";     success "LANGFUSE_ENCRYPTION_KEY"
-  CLICKHOUSE_PASSWORD="$(rand_base64 24)";      success "CLICKHOUSE_PASSWORD"
+  CLICKHOUSE_PASSWORD="$(rand_hex 24)";         success "CLICKHOUSE_PASSWORD"  # hex avoids / and + breaking ClickHouse migration URLs
 
   # ── Write .env ─────────────────────────────────────────────────────────────
 

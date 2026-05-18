@@ -11,6 +11,13 @@
 #   #48       — Adapter has restart: unless-stopped.
 #   #49       — VITE_API_URL removed from Docker env (Vite bakes it at build
 #               time; set it in .env.local on the host for local dev).
+#   #50       — LANGFUSE_S3_EVENT_UPLOAD_BUCKET added to langfuse + langfuse-worker;
+#               Langfuse v3 requires this env var to be present (Zod validation)
+#               even when S3 is not used. LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
+#               prevents any actual S3 calls.
+#   #51       — Langfuse healthcheck uses 127.0.0.1 instead of localhost; Next.js
+#               binds to IPv4 only, so 'localhost' resolves to ::1 (IPv6) inside
+#               the container and gets ECONNREFUSED even though the server is up.
 #
 # Quick start:
 #   cp .env.example .env
@@ -138,13 +145,23 @@ services:
     ports:
       - "8123:8123"
       - "9000:9000"
+      - "9181:9181"   # ClickHouse Keeper (built-in ZooKeeper replacement)
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      # Single-node cluster config: enables built-in Keeper + defines "default"
+      # cluster so Langfuse's ReplicatedMergeTree migrations work without ZooKeeper.
+      - ./infra/clickhouse/single-node-cluster.xml:/etc/clickhouse-server/config.d/single-node-cluster.xml:ro
+      # Entrypoint wrapper: waits for Keeper to be ready before the container
+      # reports healthy, so Langfuse never races against an uninitialised Keeper.
+      - ./infra/clickhouse/wait-for-keeper.sh:/wait-for-keeper.sh:ro
+    command: ["/bin/sh", "/wait-for-keeper.sh"]
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      # Passes once ClickHouse is up AND the "default" cluster is visible,
+      # which means Keeper has finished initialising.
+      test: ["CMD-SHELL", "clickhouse-client --query \"SELECT count() FROM system.clusters WHERE cluster='default'\" | grep -q 1"]
       interval: 5s
       timeout: 10s
-      retries: 10
+      retries: 30
       start_period: 30s
 
   # ── Redis (Langfuse ingestion queue) ──────────────────────────────────────
@@ -191,6 +208,11 @@ services:
       - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_ADMIN_EMAIL}
       - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_ADMIN_PASSWORD}
       - LANGFUSE_INIT_USER_NAME=Admin
+      # Fix #50: Langfuse v3 requires LANGFUSE_S3_EVENT_UPLOAD_BUCKET to be present
+      # as a string (Zod validation), even when S3 is not used. Setting _ENABLED=false
+      # ensures no actual S3 calls are made.
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=placeholder
     # Fix #47: use service_healthy for ClickHouse and Redis.
     depends_on:
       postgres:
@@ -204,11 +226,14 @@ services:
     #   "Service 'langfuse-worker' depends on service 'langfuse' which does not have
     #    a healthcheck configured."
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/public/health || exit 1"]
+      # Fix #51: Next.js binds to the container's Docker network IP, not localhost/127.0.0.1.
+      # Use 'hostname -i' to resolve the actual bound IP dynamically.
+      # Also use wget since curl is not available in the langfuse image.
+      test: ["CMD-SHELL", "wget -qO- http://$(hostname -i):3000/api/public/health || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 8
-      start_period: 60s
+      retries: 12
+      start_period: 120s
 
   # ── Langfuse worker (async trace ingestion) ────────────────────────────────
   langfuse-worker:
@@ -225,6 +250,9 @@ services:
       - SALT=${LANGFUSE_SALT}
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - TELEMETRY_ENABLED=false
+      # Fix #50: same S3 vars required by langfuse-worker for the same reason.
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=placeholder
     # Fix #47: wait for langfuse to be healthy (migrations complete) before starting worker.
     depends_on:
       postgres:
