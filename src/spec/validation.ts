@@ -272,6 +272,24 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
   for (const node of spec.nodes) {
     if (node.type === 'llm_call') {
       const n = node as Record<string, unknown>
+      const hasInlinePrompt = Boolean(n['prompt_template'])
+      const hasPromptRef    = Boolean((n['prompt_ref'] as Record<string, unknown> | undefined)?.['name'])
+
+      if (hasInlinePrompt && hasPromptRef) {
+        errors.push({
+          nodeId:   node.id,
+          field:    'prompt_ref',
+          message:  '[Warning] Both prompt_template and prompt_ref are set — prompt_ref takes precedence at runtime. Remove prompt_template to avoid confusion.',
+          severity: 'warning',
+        })
+      } else if (!hasInlinePrompt && !hasPromptRef) {
+        errors.push({
+          nodeId:   node.id,
+          field:    'prompt_template',
+          message:  'llm_call requires either prompt_template (inline) or prompt_ref (Langfuse-managed) — neither is set.',
+        })
+      }
+
       if (!n['output_key'] && !n['structured_output']) {
         errors.push({
           nodeId:   node.id,

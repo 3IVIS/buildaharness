@@ -70,6 +70,9 @@ services:
       # Security tuning (Fix #6, #7)
       - JWT_TTL_DAYS=${JWT_TTL_DAYS:-30}
       - MAX_BODY_BYTES=${MAX_BODY_BYTES:-1048576}
+      # Redis — JWT revocation blocklist (shares the Redis 7 instance used by Langfuse)
+      # Database 1 is reserved for itsharness; database 0 is used by Langfuse's BullMQ queue.
+      - REDIS_URL=redis://redis:6379/1
       # Langfuse
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
@@ -85,6 +88,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       langfuse:
         condition: service_started

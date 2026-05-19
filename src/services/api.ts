@@ -1,12 +1,6 @@
 /**
  * Typed API client for the itsharness adapter backend.
  * Reads VITE_API_URL (defaults to http://localhost:8000).
- *
- * Fix #9:  api.ts is compiled as ESM by Vite; require() is not available in the
- *          browser. We import getAuthToken directly — no circular dependency because
- *          auth.ts only imports `api` for its login/register calls, and getAuthToken
- *          reads Zustand's in-memory store (not imported from api.ts).
- * Fix #11: token lives in exactly one place (Zustand store), read via getAuthToken().
  */
 import { getAuthToken } from '../store/auth'
 
@@ -81,11 +75,60 @@ export interface RunJobResponse {
     status:  'pending' | 'running' | 'paused' | 'done' | 'error'
     ts:      string
     ms:      number | null
-    tokens:  number | null     // populated for LLM nodes where usage is available
+    tokens:  number | null
   }>
   hitl_state:  HitlState | null
-  trace_id:    string | null   // Langfuse trace ID for this run
-  trace_url:   string | null   // deep-link to Langfuse UI trace
+  trace_id:    string | null
+  trace_url:   string | null
+}
+
+/** A single LLM-as-judge or user-feedback score from Langfuse. */
+export interface EvalScore {
+  id:             string
+  traceId:        string
+  name:           string
+  value:          number
+  observationId?: string | null
+  comment?:       string | null
+}
+
+/** A registered LLM-as-judge evaluator config from Langfuse. */
+export interface EvalTemplate {
+  id:   string
+  name: string
+}
+
+/** A prompt registered in Langfuse Prompt Management. */
+export interface PromptSummary {
+  name:    string
+  version: number
+  labels:  string[]
+}
+
+/** Full detail for a single Langfuse prompt (for the config panel preview). */
+export interface PromptDetail {
+  name:     string
+  version:  number
+  prompt:   string    // raw template text, truncated to 2000 chars
+  labels:   string[]
+  versions: number[]  // all available version numbers
+}
+
+/** Response from POST /deploy/a2a/{flow_id} */
+export interface A2ADeployResponse {
+  flow_id:      string
+  endpoint_url: string
+  agent_card:   Record<string, unknown>
+  deployed_at:  string
+}
+
+/** A2A Task object returned by /tasks/send and /tasks/{id} */
+export interface A2ATaskResponse {
+  id:      string
+  flow_id: string
+  status:  { state: 'submitted' | 'working' | 'completed' | 'failed' | 'input-required' }
+  result:  string | null
+  error:   string | null
 }
 
 // ── API surface ───────────────────────────────────────────────────────────────
@@ -106,7 +149,7 @@ export const api = {
   },
 
   flows: {
-    list: ()           => request<FlowSummary[]>('/flows'),
+    list: ()              => request<FlowSummary[]>('/flows'),
     save: (spec: unknown) => request<SaveFlowResponse>('/flows', {
       method: 'POST', body: JSON.stringify({ spec }),
     }),
@@ -138,5 +181,70 @@ export const api = {
       request<{ job_id: string; status: string }>(`/run/${jobId}/resume`, {
         method: 'POST', body: JSON.stringify({ payload }),
       }),
+  },
+
+  eval: {
+    /** Submit user thumbs-up (+1), thumbs-down (-1), or neutral (0) for a completed job. */
+    feedback: (jobId: string, value: 1 | -1 | 0, comment?: string) =>
+      request<void>('/eval/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ job_id: jobId, value, ...(comment ? { comment } : {}) }),
+      }),
+
+    /** List active LLM-as-judge evaluator configs registered in Langfuse. */
+    templates: () =>
+      request<{ data: EvalTemplate[] }>('/eval/templates'),
+
+    /** Fetch all scores attached to a Langfuse trace (for canvas quality badges). */
+    scores: (traceId: string) =>
+      request<{ data: EvalScore[] }>(`/eval/scores?trace_id=${encodeURIComponent(traceId)}`),
+  },
+
+  prompts: {
+    /** List all Langfuse-managed prompts.  Used to populate the PromptPicker dropdown. */
+    list: (limit = 50) =>
+      request<PromptSummary[]>(`/prompts?limit=${limit}`),
+
+    /** Fetch a specific prompt with version list + content preview. */
+    get: (name: string) =>
+      request<PromptDetail>(`/prompts/${encodeURIComponent(name)}`),
+  },
+
+  a2a: {
+    /** Deploy a flow as an A2A agent.  Upserts the deployment record and
+     *  returns the stable endpoint URL + AgentCard snapshot. */
+    deploy: (flowId: string) =>
+      request<A2ADeployResponse>(`/deploy/a2a/${encodeURIComponent(flowId)}`, {
+        method: 'POST',
+      }),
+
+    /** Remove the A2A deployment for a flow. Idempotent. */
+    undeploy: (flowId: string) =>
+      request<void>(`/deploy/a2a/${encodeURIComponent(flowId)}`, {
+        method: 'DELETE',
+      }),
+
+    /** Fetch the AgentCard for a deployed flow (public — no auth needed,
+     *  but we still pass auth so it works behind API gateways). */
+    agentCard: (flowId: string) =>
+      request<Record<string, unknown>>(
+        `/.well-known/agent/${encodeURIComponent(flowId)}.json`
+      ),
+
+    /** Send an A2A task to a flow. */
+    sendTask: (flowId: string, taskId: string, text: string) =>
+      request<A2ATaskResponse>(`/a2a/${encodeURIComponent(flowId)}/tasks/send`, {
+        method: 'POST',
+        body: JSON.stringify({
+          id: taskId,
+          message: { role: 'user', parts: [{ type: 'text', text }] },
+        }),
+      }),
+
+    /** Poll task status. */
+    getTask: (flowId: string, taskId: string) =>
+      request<A2ATaskResponse>(
+        `/a2a/${encodeURIComponent(flowId)}/tasks/${encodeURIComponent(taskId)}`
+      ),
   },
 }

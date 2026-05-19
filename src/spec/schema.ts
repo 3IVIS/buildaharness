@@ -194,11 +194,27 @@ export const OutputNode = NodeBase.extend({
 })
 export type OutputNode = z.infer<typeof OutputNode>
 
+/** Reference to a Langfuse-managed prompt.  When set, prompt_resolver.py
+ *  fetches and injects the text into prompt_template before codegen runs.
+ *  Stored in the spec JSONB — no Alembic migration needed. */
+export const PromptRef = z.object({
+  /** Langfuse prompt name (e.g. "rag-system-prompt") */
+  name:    z.string().min(1),
+  /** Pin to a specific version number.  Omit for latest. */
+  version: z.number().int().positive().optional(),
+  /** Langfuse label to resolve against (e.g. "production").  Defaults to "production". */
+  label:   z.string().optional(),
+})
+export type PromptRef = z.infer<typeof PromptRef>
+
 export const LlmCallNode = NodeBase.extend({
   type:              z.literal('llm_call'),
   model:             z.string().optional(),
   system_prompt:     z.string().optional(),
-  prompt_template:   z.string(),
+  // prompt_template is optional when prompt_ref is set; required otherwise.
+  // Cross-ref validation (validation.ts) enforces: must have one or the other.
+  prompt_template:   z.string().optional(),
+  prompt_ref:        PromptRef.optional(),
   model_params:      ModelParams.optional(),
   structured_output: StructuredOutput.optional(),
   output_key:        z.string().optional(),

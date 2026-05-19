@@ -132,9 +132,11 @@ itsharness/
 │   ├── main.py                    /health, /runtimes, /compile; startup secret validation
 │   ├── run_api.py                 /run, /run/{id}/resume — async execution + Langfuse traces
 │   ├── flows_api.py               /flows CRUD + versioning
-│   ├── auth.py                    /auth — JWT register/login/me
+│   ├── auth.py                    /auth — JWT register/login/me, logout + jti revocation
+│   ├── teams_api.py               /teams — Team RBAC (roles, members, flow sharing)
+│   ├── redis_client.py            Async Redis pool — JWT revocation blocklist
 │   ├── validate.py                validate_spec() — structural checks + fn_ref allowlist
-│   ├── db.py                      SQLAlchemy async models (users, flows, flow_versions)
+│   ├── db.py                      SQLAlchemy async models (users, flows, flow_versions, teams, team_memberships, flow_permissions)
 │   ├── rate_limit.py              Shared slowapi limiter (proxy-aware)
 │   ├── langgraph_adapter.py       LangGraph codegen — all 14 nodes
 │   ├── crewai_adapter.py          CrewAI codegen — all 14 nodes
@@ -404,6 +406,7 @@ All endpoints except `/health` and `/runtimes` require `Authorization: Bearer <t
 ```
 POST /auth/register               Create account → JWT  (201)
 POST /auth/login                  Login → JWT
+POST /auth/logout                 Revoke current JWT (jti blocklisted in Redis)  (204)
 GET  /auth/me                     Current user
 
 GET  /flows?limit=50&offset=0     List user's flows (paginated, max 200 per page)
@@ -440,7 +443,11 @@ Limits are keyed by client IP. Set `TRUST_PROXY=true` (the default) when running
 
 ### Authentication
 - JWTs signed with `HS256`. Every protected endpoint requires a valid, non-expired token.
-- Tokens have a configurable TTL (`JWT_TTL_DAYS`, default 30 days). There is currently no server-side revocation; log-out is client-side only. This is planned for Phase 3 alongside team RBAC.
+- JWTs signed with `HS256`. Every protected endpoint requires a valid, non-expired token.
+- Tokens carry a `jti` (JWT ID) claim and have a configurable TTL (`JWT_TTL_DAYS`, default 30 days).
+  `POST /auth/logout` immediately revokes a token by writing its jti to Redis with a TTL matching
+  the token's remaining lifetime — no background cleanup needed. Revoked tokens are rejected
+  on the next request even if they haven't expired yet.
 - Login always runs bcrypt regardless of whether the email exists, preventing timing-based user enumeration.
 
 ### `fn_ref` validation
@@ -522,3 +529,132 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ## License
 
 Apache 2.0 — see [LICENSE](./LICENSE).
+
+---
+
+## v0.5.1 — Online eval + Prompt versioning (session additions)
+
+### New files
+| Path | Description |
+|---|---|
+| `adapter/eval_api.py` | `POST /eval/score`, `POST /eval/feedback`, `GET /eval/templates`, `GET /eval/scores` + Langfuse evaluator seeder |
+| `adapter/prompts_api.py` | `GET /prompts`, `GET /prompts/{name}` — Langfuse Prompt Management proxy |
+| `adapter/prompt_resolver.py` | `resolve_prompts(spec)` — injects managed prompt text into `llm_call` nodes before codegen |
+| `adapter/tests/test_eval.py` | 18 tests for `/eval/*` endpoints |
+| `adapter/tests/test_prompts.py` | 14 tests for `/prompts/*` and `resolve_prompts()` |
+| `src/components/FeedbackBar.tsx` | Thumbs-up/down feedback widget in run-complete toast |
+
+### Modified files
+| Path | Change |
+|---|---|
+| `adapter/main.py` | Registers `eval_router`, `prompts_router`; calls `seed_eval_templates()` and `resolve_prompts()` in `/compile` |
+| `adapter/run_api.py` | Calls `resolve_prompts(spec)` in `run_flow` before dispatching background task |
+| `adapter/requirements.txt` | Added `httpx>=0.27.0` |
+| `src/spec/schema.ts` | Added `PromptRef` type; `prompt_template` now optional (was required); added `prompt_ref` field to `LlmCallNode` |
+| `spec/schema.ts` | Same changes to canonical npm-published schema |
+| `src/spec/validation.ts` | Added prompt source cross-ref check (neither/both error/warning) |
+| `src/services/api.ts` | Added `api.eval` and `api.prompts` namespaces |
+| `src/store/index.ts` | Added `score?` to `NodeExecStat`; added `lastCompletedJobId`, `feedbackSubmitted`, `evalScores` state + actions |
+| `src/services/runPoller.ts` | On job completion: sets `lastCompletedJobId`, fetches eval scores |
+| `src/canvas/nodes/BaseNode.tsx` | `ExecBadge` renders quality arc (●/◐/○) when `stat.score` is present |
+| `src/canvas/nodes/NodeComponents.tsx` | `LlmCallNode` renders ⚡ Langfuse pill badge when `prompt_ref` is set |
+| `src/components/ConfigPanel.tsx` | `LlmCallPanel` gains Inline/Langfuse toggle, `PromptPicker` dropdown, version pin, and preview pane |
+| `src/App.tsx` | Run-complete toast includes `<FeedbackBar />` |
+
+### New environment variables
+| Variable | Default | Purpose |
+|---|---|---|
+| `LANGFUSE_EVAL_ENABLED` | `false` | Set to `true` to register LLM-as-judge evaluator configs at boot |
+| `PROMPT_CACHE_TTL` | `60` | Seconds to cache resolved Langfuse prompt text in-process |
+
+### v0.5.2 — A2A endpoint scaffolding
+
+#### New files
+| Path | Description |
+|---|---|
+| `adapter/a2a_api.py` | A2A protocol — discovery, tasks, deploy/undeploy (6 routes) |
+| `adapter/migrations/versions/0003_a2a_deployments.py` | Alembic migration — `a2a_deployments` table |
+| `adapter/tests/test_a2a.py` | 22 tests — AgentCard generation, deploy lifecycle, task state machine, auth guards |
+| `src/components/A2ADeploymentPanel.tsx` | Deploy panel — endpoint URL, curl snippet, undeploy button |
+
+#### Modified files
+| Path | Change |
+|---|---|
+| `adapter/db.py` | Added `A2ADeployment` ORM model |
+| `adapter/main.py` | Registered `a2a_wk_router`, `a2a_tasks_router`, `a2a_deploy_router` |
+| `src/store/index.ts` | Added `A2ADeployment` interface, `a2aDeployment`, `a2aDeploying` state + actions |
+| `src/services/api.ts` | Added `api.a2a` namespace (`deploy`, `undeploy`, `agentCard`, `sendTask`, `getTask`) |
+| `src/components/Toolbar.tsx` | Deploy / Deployed button with loading spinner |
+| `src/components/FlowSettingsModal.tsx` | Added `A2AEndpointDisplay` (read-only live endpoint URL in Config tab) |
+| `src/App.tsx` | Renders `<A2ADeploymentPanel />` when `a2aDeployment` is set |
+
+#### New environment variable
+| Variable | Default | Description |
+|---|---|---|
+| `A2A_BASE_URL` | `http://localhost:8000` | Base URL used to construct `endpoint_url` and AgentCard discovery URLs. Set to your public adapter URL before deploying. |
+
+#### A2A endpoint reference
+```
+# Discovery (public — no auth)
+GET /.well-known/agent/{flow_id}.json
+GET /.well-known/agent.json
+
+# Task API (JWT required)
+POST /a2a/{flow_id}/tasks/send
+GET  /a2a/{flow_id}/tasks/{task_id}
+GET  /a2a/{flow_id}/tasks/{task_id}/events   ← SSE stream
+
+# Deployment management (JWT required)
+POST   /deploy/a2a/{flow_id}
+DELETE /deploy/a2a/{flow_id}
+```
+
+### Pass 1 fixes (review pass 1)
+- `a2a_api.py` — removed unused imports (`Annotated`, `Any`, `Query`)
+- `a2a_api.py` — `TaskSendRequest.id` now has `min_length=1` via `Field(...)` — prevents empty-string task IDs that would silently collide
+- `a2a_api.py` — `_get_flow_owned` replaced `db.get()` with `select(...).where(...)` for consistency and correct composite filtering
+- `a2a_api.py` — SSE `_generate` now sends an explicit `failed` terminal event when the job is evicted mid-stream, preventing client hangs
+- `prompt_resolver.py` — `_fetch_prompt_sync` guards against `None` and non-callable client objects with a descriptive `RuntimeError`
+- `prompts_api.py` — `_LANGFUSE_ENABLED` now reads directly from `os.getenv()` for consistency with `eval_api.py` and `prompt_resolver.py`
+- `A2ADeploymentPanel.tsx` — replaced unsafe `as any` cast with `as Record<string, unknown>`
+- `Toolbar.tsx` — `handleDeploy` now calls `validate()` once instead of `exportSpec()` + `validate()` (double-export eliminated)
+- `tests/test_a2a.py` — `test_task_send_409_duplicate_task_id` wrapped in `try/finally` to guarantee `_jobs` cleanup; added `test_task_send_422_empty_task_id` for the new `min_length` guard
+
+### Pass 2 fixes (review pass 2)
+- `src/components/ConfigPanel.tsx` — **critical UI bug**: `isLangfuse` was computed as `Boolean(promptRef?.name)` which evaluates to `false` when the name is an empty string (immediately after switching to Langfuse mode), causing the panel to revert to inline. Fixed to `promptRef !== undefined` — checks key presence, not name content
+- `adapter/a2a_api.py` — deploy upsert now verifies the existing deployment record belongs to the calling user before overwriting it, preventing a scenario where ownership could diverge between flow and deployment
+
+### Pass 3 fixes (review pass 3)
+- `adapter/a2a_api.py` — added `@limiter.limit("20/minute")` to `POST /a2a/{flow_id}/tasks/send` (matching `/run` rate limit); added `@limiter.limit("60/minute")` to both `/.well-known/agent*` public discovery routes to prevent unauthenticated DB hammering
+- `adapter/tests/test_a2a.py` — wrapped `test_task_send_returns_submitted_state` and `test_get_task_state_after_send` in `try/finally` to guarantee `_jobs` cleanup on assertion failure, preventing cross-test contamination
+
+### Pass 4 fixes (review pass 4)
+- `adapter/a2a_api.py` — removed dead code: `req.id or str(uuid.uuid4())` was unreachable after the Pass 1 `min_length=1` fix; simplified to `job_id = req.id`
+- `adapter/tests/test_a2a.py` — added `test_deploy_403_when_existing_deployment_owned_by_different_user` and `test_undeploy_403_wrong_owner` to cover the ownership-conflict 403/404 paths introduced in Pass 2 (26 tests total)
+
+### Pass 5 fixes (review pass 5)
+- `src/canvas/nodes/NodeComponents.tsx` — dead ternary removed from `LlmCallNode` preview: both branches were identical. Now correctly shows `⚡ {prompt_ref.name}` when a Langfuse-managed prompt is set, making it immediately readable on the canvas without opening the config panel
+- `src/components/ConfigPanel.tsx` — PromptPicker `onChange` now guards against `''` (placeholder selection) — selecting the placeholder no longer overwrites `prompt_ref.name` with an empty string that would immediately trigger the "neither set" validation error
+- `src/components/ConfigPanel.tsx` — version pin `parseInt` now guards against `NaN` and values `< 1` (non-numeric input or `0`), resetting to `undefined` (latest) instead of passing `NaN` to the API
+
+### Pass 6 fixes (review pass 6)
+- `adapter/tests/test_a2a.py` — **critical**: `test_deploy_403_when_existing_deployment_owned_by_different_user` was broken — `Flow.id` is a global PK so two users cannot own flows with the same ID via the HTTP API; `_save_flow` would have raised a 403 before ever reaching the deploy guard. Rewritten to seed the conflicting deployment row directly via SQLAlchemy `update()`, correctly exercising the guard
+- `adapter/main.py` — version string bumped from `v0.5.0` to `v0.5.2` in docstring, FastAPI app, and `/health` response
+
+### Pass 7 fixes (review pass 7)
+- `src/canvas/nodes/NodeComponents.tsx` — **double-display bug**: when a Langfuse-managed prompt is set, both the `preview` prop and the pill badge showed `⚡ {name}`. Fixed by reverting `preview` to show the resolved template text (or blank) when `promptRef.name` is set — the pill is now the sole identity indicator for managed prompts
+
+### Pass 8 fixes (review pass 8)
+- `src/components/Toolbar.tsx` — `handleDeploy` now opens the Problems panel when validation fails (`!validate()`), so the user immediately sees what needs fixing rather than having to click Validate separately
+- `adapter/main.py` — hoisted two inline `from fastapi.responses import JSONResponse` local imports (inside `limit_body_size` middleware branches) to a single module-level import
+
+### Pass 9 fixes (review pass 9)
+- `adapter/tests/test_eval.py` — removed unused `import asyncio` (imported but never referenced — would trigger ruff F401 warning)
+- `src/App.tsx` — Escape key now closes the `A2ADeploymentPanel` (was already handled for Config, Edge, and Settings panels; A2A panel was the only one missing)
+
+### Pass 10 fixes (review pass 10)
+- `src/components/FlowSettingsModal.tsx` — `A2AEndpointDisplay` moved outside the `a2a.enabled` conditional block; it now renders whenever a deployment exists, regardless of whether `a2a_config.enabled` is currently toggled on (user could toggle off after deploying without undeploying)
+- `adapter/tests/test_a2a.py` — added `test_task_events_requires_auth` and `test_task_events_404_unknown_task` to cover the SSE endpoint's auth guard and 404 path (28 tests total)
+
+### Pass 11 fixes (review pass 11)
+- `adapter/tests/test_a2a.py` — trailing whitespace in two docstrings cleaned up

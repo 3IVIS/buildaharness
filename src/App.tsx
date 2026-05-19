@@ -8,7 +8,9 @@ import { EdgeConfigPanel }   from './components/EdgeConfigPanel'
 import { FlowSettingsModal } from './components/FlowSettingsModal'
 import { ProblemsPanel }     from './components/ProblemsPanel'
 import { CommandPalette }    from './components/CommandPalette'
-import { HitlResumePanel }  from './components/HitlResumePanel'
+import { HitlResumePanel }    from './components/HitlResumePanel'
+import { A2ADeploymentPanel } from './components/A2ADeploymentPanel'
+import { FeedbackBar }       from './components/FeedbackBar'
 import { useCanvasStore }    from './store'
 import { useRunPoller }      from './services/runPoller'
 
@@ -68,9 +70,10 @@ export function App() {
     isPanelOpen, isEdgePanelOpen, isProblemsOpen,
     closePanel, closeEdgePanel, closeSettings, isSettingsOpen,
     selectedNodeId, deleteNode,
-    selectedEdgeId, deleteEdge,  // Fix #32
+    selectedEdgeId, deleteEdge,
     undo, redo, canUndo, canRedo,
-    activeJobId, hitlState, traceUrl,
+    activeJobId, hitlState, traceUrl, a2aDeployment,
+    setA2ADeployment,
   } = useCanvasStore()
 
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false)
@@ -89,15 +92,15 @@ export function App() {
       }
 
       if (e.key === 'Escape') {
-        if (isCmdPaletteOpen) { setIsCmdPaletteOpen(false); return }
-        if (isSettingsOpen)   { closeSettings(); return }
-        if (isPanelOpen)      { closePanel();    return }
-        if (isEdgePanelOpen)  { closeEdgePanel(); return }
+        if (isCmdPaletteOpen)  { setIsCmdPaletteOpen(false); return }
+        if (isSettingsOpen)    { closeSettings(); return }
+        if (isPanelOpen)       { closePanel();    return }
+        if (isEdgePanelOpen)   { closeEdgePanel(); return }
+        if (a2aDeployment)     { setA2ADeployment(null); return }
       }
 
       if (!inInput) {
         if (e.key === 'Delete' || e.key === 'Backspace') {
-          // Fix #32: delete selected node OR selected edge, whichever is active.
           if (selectedNodeId) deleteNode(selectedNodeId)
           else if (selectedEdgeId) deleteEdge(selectedEdgeId)
         }
@@ -113,14 +116,13 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     isCmdPaletteOpen, isPanelOpen, isEdgePanelOpen, isSettingsOpen,
-    selectedNodeId, selectedEdgeId,  // Fix #32
+    selectedNodeId, selectedEdgeId,
     closePanel, closeEdgePanel, closeSettings, deleteNode, deleteEdge,
     undo, redo, canUndo, canRedo,
+    a2aDeployment, setA2ADeployment,
   ])
 
   return (
-    // Fix #30: wrap the entire app in an ErrorBoundary so a render crash shows a
-    // recovery UI instead of a blank screen.
     <ErrorBoundary>
       <AuthGate>
       <div className="app">
@@ -128,7 +130,6 @@ export function App() {
         <div className="workspace">
           <Sidebar />
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-            {/* Fix #30: wrap Canvas separately so a node component crash doesn't take down the toolbar */}
             <ErrorBoundary>
               <Canvas />
             </ErrorBoundary>
@@ -137,10 +138,12 @@ export function App() {
           {isPanelOpen     && !hitlState && <ConfigPanel />}
           {isEdgePanelOpen && !hitlState && <EdgeConfigPanel />}
           {hitlState && <HitlResumePanel />}
+          {a2aDeployment && !hitlState && <A2ADeploymentPanel />}
         </div>
         <FlowSettingsModal />
         {isCmdPaletteOpen && <CommandPalette onClose={() => setIsCmdPaletteOpen(false)} />}
 
+        {/* ── Executing toast ─────────────────────────────────────────────── */}
         {activeJobId && !hitlState && (
           <div style={{
             position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
@@ -155,6 +158,8 @@ export function App() {
             Executing flow…
           </div>
         )}
+
+        {/* ── HITL paused toast ────────────────────────────────────────────── */}
         {hitlState && (
           <div style={{
             position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
@@ -167,6 +172,8 @@ export function App() {
             Flow paused — review panel open
           </div>
         )}
+
+        {/* ── Run complete toast (trace link + feedback bar) ───────────────── */}
         {traceUrl && !activeJobId && !hitlState && (
           <div style={{
             position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
@@ -184,6 +191,9 @@ export function App() {
             >
               View trace →
             </a>
+            {/* FeedbackBar: thumbs up/down for the completed job.
+                Renders only when lastCompletedJobId is set (by runPoller). */}
+            <FeedbackBar />
           </div>
         )}
       </div>

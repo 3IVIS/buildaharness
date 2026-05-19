@@ -27,14 +27,14 @@ export const NODE_HEX: Record<NodeType, string> = {
   tool_invoke:      '#14b8a6',
   condition:        '#f59e0b',
   parallel_fork:    '#22c55e',
-  parallel_join:    '#22c55e',  // ← was #16a34a — same hue as fork
+  parallel_join:    '#22c55e',
   hitl_breakpoint:  '#f97316',
   memory_read:      '#06b6d4',
-  memory_write:     '#06b6d4',  // ← was #0891b2 — same hue as read
+  memory_write:     '#06b6d4',
   subgraph:         '#64748b',
-  transform:        '#facc15',  // ← was #a855f7 — moved off llm violet
+  transform:        '#facc15',
   agent_role:       '#ec4899',
-  agent_debate:     '#ec4899',  // ← was #d946ef — same hue as role
+  agent_debate:     '#ec4899',
 }
 
 export const NODE_ICONS: Record<NodeType, LucideIcon> = {
@@ -44,8 +44,6 @@ export const NODE_ICONS: Record<NodeType, LucideIcon> = {
   subgraph: Layers, transform: Shuffle, agent_role: Bot, agent_debate: Users,
 }
 
-// Glyph modifier — small circle that sits on the bottom-right of the icon
-// to distinguish family members that share a hue.
 export const NODE_GLYPH_MOD: Partial<Record<NodeType, string>> = {
   memory_read:   '↑',
   memory_write:  '↓',
@@ -90,8 +88,6 @@ export function BaseNode({
   const preferredAdapter = useCanvasStore((s) => s.flowMeta.runtimeHints?.preferred_adapter)
   const execStat         = useCanvasStore((s) => s.execStats[id])
 
-  // Cross-ref errors for this node — surfaces validation INLINE on the canvas
-  // instead of forcing the user to consult the Problems panel.
   const nodeErrors = useCanvasStore((s) =>
     s.crossRefErrors.filter((e) => e.nodeId === id),
   )
@@ -136,7 +132,6 @@ export function BaseNode({
           style={{ background: hex, borderColor: hex }} />
       )}
 
-      {/* Header — no tinted background; icon + glyph + label + pinned-compat pill */}
       <div className="cf-node__header">
         <span className="cf-node__icon-stack">
           <span className="cf-node__icon" style={{ color: hex }}>
@@ -147,7 +142,6 @@ export function BaseNode({
 
         <span className="cf-node__label">{label}</span>
 
-        {/* Single pinned-compat pill by default; full row revealed on hover/select */}
         {preferredAdapter && (
           <span
             className={`compat-pin compat-pin--${pinnedLevel ?? 'missing'}`}
@@ -168,12 +162,8 @@ export function BaseNode({
         </div>
       )}
 
-      {/* Exec telemetry — promoted ABOVE the compat row so it's the most
-          eye-catching info during a live run. Renders only when populated. */}
       {execStat && <ExecBadge stat={execStat} />}
 
-      {/* Cross-ref error footer — same red palette as cf-node--absent.
-          Click on the node opens the panel where the broken field lives. */}
       {hasError && (
         <div className="cf-node__error">
           <AlertTriangle size={11} strokeWidth={2} />
@@ -184,9 +174,6 @@ export function BaseNode({
         </div>
       )}
 
-      {/* Full 4-runtime compat row — hidden by default, revealed on hover/select.
-          Power users who want the matrix can still see it; everyone else gets
-          a clean node body. */}
       <div className="cf-node__compat--full">
         {ADAPTERS.map((rt) => {
           const level    = getSupportLevel(type, rt, runtimeOverride)
@@ -209,7 +196,21 @@ export function BaseNode({
 }
 
 // ─── Exec badge ───────────────────────────────────────────────────────────────
-// Phase 2: populated with real data via websocket + Langfuse spans.
+
+/** Map a [0, 1] score to a status colour using the roadmap thresholds. */
+function scoreColor(score: number): string {
+  if (score > 0.8) return 'var(--rt-full)'   // green
+  if (score > 0.5) return 'var(--amber)'     // amber
+  return '#f87171'                           // red  (var(--red))
+}
+
+/** Map a score to a single Unicode circle glyph that communicates quality
+ *  without relying on colour alone (accessibility). */
+function scoreGlyph(score: number): string {
+  if (score > 0.8) return '●'   // full  — good
+  if (score > 0.5) return '◐'   // half  — warn
+  return '○'                    // empty — poor
+}
 
 function ExecBadge({ stat }: { stat: NodeExecStat }) {
   if (stat.status === 'pending') {
@@ -235,6 +236,24 @@ function ExecBadge({ stat }: { stat: NodeExecStat }) {
       <span className="exec-stat">{tokLabel}</span>
       <span className="exec-sep">·</span>
       <span className="exec-stat">{msLabel}</span>
+
+      {/* Quality arc — rendered only when an LLM-as-judge score is available.
+          Score is keyed by Langfuse observationId; wired to nodeId in a future
+          Phase 3 follow-up (node_id → observationId mapping).  Until then this
+          renders as a graceful no-op (score === undefined). */}
+      {stat.score != null && (
+        <>
+          <span className="exec-sep">·</span>
+          <span
+            className="exec-quality"
+            style={{ color: scoreColor(stat.score), fontSize: 10 }}
+            title={`Quality score: ${(stat.score * 100).toFixed(0)}%`}
+            aria-label={`Quality ${(stat.score * 100).toFixed(0)}%`}
+          >
+            {scoreGlyph(stat.score)}
+          </span>
+        </>
+      )}
     </div>
   )
 }

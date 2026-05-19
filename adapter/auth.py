@@ -11,19 +11,20 @@ Fixes applied:
 """
 import os
 import re
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import User, get_session
-from rate_limit import limiter   # Fix #3: shared limiter for auth brute-force protection
+from rate_limit import limiter  # Fix #3: shared limiter for auth brute-force protection
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,9 +65,10 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     token:      str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
     user_id:    str
     email:      str
+    jti:        str   # JWT ID — returned so clients can cache it for logout
 
 class UserResponse(BaseModel):
     user_id: str
@@ -83,12 +85,24 @@ def _verify(plain: str, hashed: str | bytes) -> bool:
     hashed_b = hashed if isinstance(hashed, bytes) else hashed.encode()
     return bcrypt.checkpw(plain_b, hashed_b)
 
-def _make_token(user_id: str, email: str) -> str:
-    return jwt.encode(
-        {"sub": user_id, "email": email,
-         "exp": datetime.now(timezone.utc) + timedelta(days=JWT_TTL_DAYS)},
+def _make_token(user_id: str, email: str) -> tuple[str, str]:
+    """Return (encoded_jwt, jti).
+
+    jti (JWT ID) is a random UUID embedded in the token payload.  It is stored
+    in Redis on logout so every subsequent request that presents this token can
+    be rejected even before the token's exp claim fires.
+    """
+    jti = str(uuid.uuid4())
+    token = jwt.encode(
+        {
+            "sub":   user_id,
+            "email": email,
+            "jti":   jti,
+            "exp":   datetime.now(UTC) + timedelta(days=JWT_TTL_DAYS),
+        },
         JWT_SECRET, algorithm=JWT_ALGORITHM,
     )
+    return token, jti
 
 def _validate_password(pw: str) -> None:
     """Fix #8: min 8 chars, at least one letter, at least one digit.
@@ -114,29 +128,39 @@ async def current_user(
     creds: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
     db:    Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+    )
     try:
         payload = jwt.decode(
             creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM],
-            options={"leeway": 30},  # 30-second leeway for clock skew tolerance
+            options={"leeway": 30},
         )
         user_id: str = payload.get("sub", "")
-        if not user_id:
+        jti: str     = payload.get("jti", "")
+        if not user_id or not jti:
             raise ValueError
     except (JWTError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise credentials_exception from None
+
+    # Check revocation — skip in TESTING mode (no Redis in CI).
+    if os.getenv("TESTING") != "true":
+        from redis_client import is_revoked
+        if await is_revoked(jti):
+            raise credentials_exception from None
 
     user = await db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise credentials_exception from None
     return user
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-@limiter.limit("5/minute")   # Fix #3: prevent registration spam
+@limiter.limit("5/minute")
 async def register(request: Request, req: RegisterRequest, db: AsyncSession = Depends(get_session)):
-    _validate_password(req.password)  # Fix #8
+    _validate_password(req.password)
 
     existing = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
     if existing:
@@ -147,26 +171,56 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
     await db.commit()
     await db.refresh(user)
 
-    return TokenResponse(token=_make_token(str(user.id), user.email),
-                         user_id=str(user.id), email=user.email)
+    token, jti = _make_token(str(user.id), user.email)
+    return TokenResponse(token=token, user_id=str(user.id), email=user.email, jti=jti)
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute")   # brute-force protection
+@limiter.limit("10/minute")
 async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_session)):
     user = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
 
-    # Fix #4: always run bcrypt regardless of whether the user exists.
-    # Without this, a missing user returns in microseconds (no bcrypt call) while a
-    # wrong-password attempt takes ~100 ms, leaking whether an email is registered.
+    # Fix #4: constant-time comparison to prevent user enumeration via timing.
     candidate_hash = user.password_hash if user else _DUMMY_HASH
     password_ok    = _verify(req.password, candidate_hash)
 
     if not user or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    return TokenResponse(token=_make_token(str(user.id), user.email),
-                         user_id=str(user.id), email=user.email)
+    token, jti = _make_token(str(user.id), user.email)
+    return TokenResponse(token=token, user_id=str(user.id), email=user.email, jti=jti)
+
+
+@router.post("/logout", status_code=204)
+@limiter.limit("60/minute")
+async def logout(
+    request: Request,
+    creds: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
+):
+    """Revoke the presented JWT by writing its jti to the Redis blocklist.
+
+    TTL is set to the token's remaining lifetime so Redis self-cleans.
+    Returns 204 regardless of prior revocation state to avoid leaking
+    information about token membership in the blocklist.
+    """
+    if os.getenv("TESTING") == "true":
+        return  # no-op in test suite — no Redis in CI
+
+    try:
+        payload = jwt.decode(
+            creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM],
+            options={"leeway": 30, "verify_exp": False},  # revoke even expired tokens
+        )
+        jti: str = payload.get("jti", "")
+        exp: int = payload.get("exp", 0)
+    except JWTError:
+        return  # malformed token — nothing to revoke; still 204
+
+    if jti:
+        from redis_client import revoke_token
+        remaining = max(0, exp - int(datetime.now(UTC).timestamp()))
+        if remaining > 0:
+            await revoke_token(jti, remaining)
 
 
 @router.get("/me", response_model=UserResponse)

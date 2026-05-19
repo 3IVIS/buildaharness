@@ -15,6 +15,9 @@ Fixes applied:
   #24 — POST /run default runtime changed to "langgraph" (matches canvas default).
   #25 — POST /run now calls validate_spec() before exec(), closing the fn_ref
         injection bypass that existed when hitting /run directly instead of /compile.
+  Prompt versioning — resolve_prompts() called after validate_spec() so that
+        llm_call nodes with prompt_ref get their prompt_template injected before
+        the background runner sees the spec.
 """
 import asyncio
 import contextvars
@@ -26,15 +29,15 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from rate_limit import limiter   # Fix #2: shared instance wired to app.state in main.py
+from rate_limit import limiter
 
 from db import User
 from auth import current_user
 from crewai_adapter import compile_crewai, safe_id
 from langgraph_adapter import compile_langgraph
-from validate import validate_spec as _validate_spec  # Fix #25: fn_ref check before exec()
+from prompt_resolver import resolve_prompts
+from validate import validate_spec as _validate_spec
 
-# Fix #23: import the real LangGraph interrupt type for isinstance checking.
 try:
     from langgraph.errors import GraphInterrupt as _GraphInterrupt
     _HAS_LANGGRAPH = True
@@ -76,10 +79,6 @@ def _lf_trace_info() -> tuple[str | None, str | None]:
 
 router  = APIRouter(prefix="/run", tags=["run"])
 
-# Fix #11: the in-memory _jobs dict is NOT shared across processes.  Running
-# uvicorn with --workers > 1 (or behind gunicorn with multiple workers) causes
-# GET /run/{job_id} or POST /run/{job_id}/resume to land on a different process
-# than the one that created the job, returning a spurious 404.
 _WEB_CONCURRENCY = int(os.getenv("WEB_CONCURRENCY", "1"))
 if _WEB_CONCURRENCY > 1:
     import sys as _sys
@@ -91,11 +90,7 @@ if _WEB_CONCURRENCY > 1:
     )
     _sys.exit(1)
 
-# Fix #15: jobs older than this are eligible for eviction from the in-memory store.
 JOB_TTL_HOURS = int(os.getenv("JOB_TTL_HOURS", "4"))
-
-# In-memory job store — Phase 2 moves this to Postgres.
-# Fix #2: each entry now includes user_id so ownership can be verified.
 _jobs: dict[str, dict[str, Any]] = {}
 
 JobStatus = Literal["queued", "running", "paused", "done", "error"]
@@ -136,13 +131,8 @@ class JobStatusResponse(BaseModel):
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-def _emit(
-    job_id:  str,
-    node_id: str,
-    status:  str,
-    ms:      int | None = None,
-    tokens:  int | None = None,
-) -> None:
+def _emit(job_id: str, node_id: str, status: str,
+          ms: int | None = None, tokens: int | None = None) -> None:
     _jobs[job_id]["node_events"].append(
         {"node_id": node_id, "status": status, "ts": _now_iso(), "ms": ms, "tokens": tokens}
     )
@@ -154,7 +144,6 @@ def _last_running_node(job_id: str) -> str | None:
     return None
 
 
-# Fix #15: evict completed/errored jobs older than JOB_TTL_HOURS to prevent unbounded growth.
 def _evict_stale_jobs() -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=JOB_TTL_HOURS)
     stale = [
@@ -167,13 +156,12 @@ def _evict_stale_jobs() -> None:
         del _jobs[jid]
 
 
-# Fix #2: helper that also enforces ownership.
 def _get_job_owned(job_id: str, user_id: str) -> dict[str, Any]:
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="Job not found")  # same message — no info leak
+        raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
@@ -190,11 +178,8 @@ def _extract_interrupt_info(exc: Exception) -> dict:
 
 
 def _is_interrupt(exc: Exception) -> bool:
-    # Fix #23: use isinstance check against the real LangGraph exception type
-    # instead of the fragile name heuristic that false-positives on KeyboardInterrupt.
     if _HAS_LANGGRAPH and _GraphInterrupt is not None:
         return isinstance(exc, _GraphInterrupt)
-    # Fallback when LangGraph is not installed (tests / non-LG paths).
     return "GraphInterrupt" in type(exc).__name__
 
 
@@ -219,13 +204,8 @@ def _mark_error_nodes(job_id: str) -> None:
 
 # ─── LangGraph shared streaming helper ────────────────────────────────────────
 
-def _stream_graph(
-    job_id:         str,
-    compiled_graph: Any,
-    inputs:         Any,
-    config:         dict,
-    trackable:      list[str],
-) -> dict:
+def _stream_graph(job_id: str, compiled_graph: Any, inputs: Any,
+                  config: dict, trackable: list[str]) -> dict:
     final_state:      dict = {}
     node_start_times: dict[str, datetime] = {}
 
@@ -244,11 +224,7 @@ def _stream_graph(
             try:
                 with _itsharness_tracer.start_as_current_span(
                     f"node.{node_id}",
-                    attributes={
-                        "node.id":       node_id,
-                        "flow.job_id":   job_id,
-                        "node.ms":       ms,
-                    },
+                    attributes={"node.id": node_id, "flow.job_id": job_id, "node.ms": ms},
                 ) as span:
                     span.set_attribute("node.output_keys",
                         str(list(state_update.keys()))[:200] if isinstance(state_update, dict) else "")
@@ -345,7 +321,6 @@ async def _run_crewai(job_id: str, spec: dict):
 
             task.callback = make_cb(nid, next_nid)
 
-        # Fix #16: get_running_loop() instead of deprecated get_event_loop()
         loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, crew.kickoff)
 
@@ -367,22 +342,13 @@ async def _run_crewai(job_id: str, spec: dict):
 # ─── LangGraph runner ─────────────────────────────────────────────────────────
 
 def _build_initial_state(spec: dict) -> dict:
-    """
-    Fix #22: correctly handle all JSON Schema primitive types including
-    null, union arrays, and unknown types (rather than silently defaulting to "").
-    """
     schema   = spec.get("state_schema") or {}
     props    = schema.get("properties") or {}
     required = schema.get("required") or []
 
     _type_defaults: dict[str, Any] = {
-        "string":  "",
-        "number":  0.0,
-        "integer": 0,
-        "boolean": False,
-        "array":   [],
-        "object":  {},
-        "null":    None,
+        "string":  "", "number": 0.0, "integer": 0,
+        "boolean": False, "array": [], "object": {}, "null": None,
     }
 
     result: dict[str, Any] = {}
@@ -390,16 +356,14 @@ def _build_initial_state(spec: dict) -> dict:
         field_schema = props.get(field) or {}
         field_type   = field_schema.get("type", "string")
 
-        # Handle union type arrays (e.g. ["string", "null"]) — pick first non-null type.
         if isinstance(field_type, list):
             non_null = [t for t in field_type if t != "null"]
             field_type = non_null[0] if non_null else "null"
 
-        # Use explicit default from schema if provided.
         if "default" in field_schema:
             result[field] = field_schema["default"]
         else:
-            result[field] = _type_defaults.get(field_type, None)  # None for unknown types
+            result[field] = _type_defaults.get(field_type, None)
 
     return result
 
@@ -435,7 +399,7 @@ async def _run_langgraph(job_id: str, spec: dict):
         initial_state = _build_initial_state(spec)
 
         ctx  = contextvars.copy_context()
-        loop = asyncio.get_running_loop()   # Fix #16
+        loop = asyncio.get_running_loop()
 
         try:
             final_state = await loop.run_in_executor(
@@ -494,7 +458,7 @@ async def _resume_langgraph(job_id: str, resume_payload: dict):
             raise RuntimeError("No compiled graph found for this job — cannot resume")
 
         ctx  = contextvars.copy_context()
-        loop = asyncio.get_running_loop()   # Fix #16
+        loop = asyncio.get_running_loop()
 
         try:
             final_state = await loop.run_in_executor(
@@ -520,7 +484,7 @@ async def _resume_langgraph(job_id: str, resume_payload: dict):
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @router.post("", status_code=202)
-@limiter.limit("20/minute")   # Fix #6: rate-limit flow execution
+@limiter.limit("20/minute")
 async def run_flow(
     request:    Request,
     req:        RunRequest,
@@ -529,16 +493,13 @@ async def run_flow(
     user:       User       = Depends(current_user),
 ):
     spec = req.spec
-
-    # Fix #25: validate the full spec — including fn_ref allowlist — before any
-    # codegen or exec() runs.  Previously only /compile called _validate_spec();
-    # a request posted directly to /run skipped fn_ref validation entirely,
-    # allowing path-traversal or shell-injection strings to reach exec().
-    # Note: _validate_spec also checks for nodes/edges/spec_version, making the
-    # old bare 'nodes not in spec' guard below redundant — it is removed here.
     _validate_spec(spec)
 
-    # Fix #24: default to "langgraph" to match the canvas preferred_adapter default.
+    # Resolve prompt_ref → inject prompt_template before the background runner
+    # sees the spec.  Must happen in the request handler (not the background task)
+    # so the resolved spec is what gets captured in the task closure.
+    spec = await resolve_prompts(spec)
+
     if not runtime:
         runtime = spec.get("runtime_hints", {}).get("preferred_adapter", "langgraph")
     runtime = runtime.lower()
@@ -549,14 +510,12 @@ async def run_flow(
             detail=f"Runtime '{runtime}' is not yet executable. Supported: crewai, langgraph",
         )
 
-    # Fix #15: opportunistic eviction before creating new entries.
     _evict_stale_jobs()
 
     job_id = str(uuid.uuid4())
-    # Fix #2: store user_id in job dict so ownership can be verified.
     _jobs[job_id] = dict(
         job_id=job_id,
-        user_id=str(user.id),   # Fix #2
+        user_id=str(user.id),
         status="queued",
         runtime=runtime,
         started_at=datetime.now(timezone.utc),
@@ -581,7 +540,6 @@ async def resume_flow(
     background: BackgroundTasks,
     user:       User = Depends(current_user),
 ):
-    # Fix #2: _get_job_owned enforces ownership.
     job = _get_job_owned(job_id, str(user.id))
     if job["status"] != "paused":
         raise HTTPException(status_code=409, detail=f"Job is '{job['status']}', not paused")
@@ -594,6 +552,5 @@ async def resume_flow(
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def job_status(job_id: str, user: User = Depends(current_user)):
-    # Fix #2: _get_job_owned enforces ownership.
     job = _get_job_owned(job_id, str(user.id))
     return {k: v for k, v in job.items() if k in JobStatusResponse.model_fields}

@@ -353,6 +353,31 @@ function AgentsTab() {
   )
 }
 
+// ─── A2A endpoint display (read-only, shown after deploy) ────────────────────
+
+function A2AEndpointDisplay() {
+  const { a2aDeployment } = useCanvasStore()
+  if (!a2aDeployment) return null
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 4 }}>
+        Live endpoint
+      </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'var(--bg-overlay)', border: '0.5px solid rgba(74,222,128,0.3)',
+        borderRadius: 5, padding: '5px 8px',
+        fontSize: 10, fontFamily: 'monospace', color: 'var(--rt-full)',
+        wordBreak: 'break-all',
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--rt-full)', flexShrink: 0 }} />
+        {a2aDeployment.endpoint_url}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab: Flow config ─────────────────────────────────────────────────────────
 
 function ConfigTab() {
@@ -481,6 +506,7 @@ function ConfigTab() {
           </div>
         </>
       )}
+      <A2AEndpointDisplay />
     </div>
   )
 }

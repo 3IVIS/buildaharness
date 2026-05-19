@@ -8,6 +8,12 @@
  *               to the execution trace
  *   trace_url → setTraceUrl() so App.tsx can render a "View trace" link
  *
+ * On job completion (done or error):
+ *   - Sets lastCompletedJobId so FeedbackBar can submit user thumbs signals.
+ *   - Fetches GET /eval/scores?trace_id=X (if trace_id is available) and stores
+ *     the result in evalScores for the per-node quality badge arcs on ExecBadge.
+ *     Errors are silently swallowed — quality badges are best-effort.
+ *
  * Terminal states:
  *   done   → clears activeJobId, stops polling, keeps traceUrl for the link
  *   error  → clears activeJobId, stops polling
@@ -29,13 +35,15 @@ import { api } from './api'
 import { setActiveExecutionTrace } from './langfuse'
 
 export function useRunPoller() {
-  const activeJobId     = useCanvasStore((s) => s.activeJobId)
-  const hitlState       = useCanvasStore((s) => s.hitlState)   // Fix: add to deps
-  const setNodeExecStat = useCanvasStore((s) => s.setNodeExecStat)
-  const clearExecStats  = useCanvasStore((s) => s.clearExecStats)
-  const setActiveJob    = useCanvasStore((s) => s.setActiveJob)
-  const setHitlState    = useCanvasStore((s) => s.setHitlState)
-  const setTraceUrl     = useCanvasStore((s) => s.setTraceUrl)
+  const activeJobId          = useCanvasStore((s) => s.activeJobId)
+  const hitlState            = useCanvasStore((s) => s.hitlState)   // Fix: add to deps
+  const setNodeExecStat      = useCanvasStore((s) => s.setNodeExecStat)
+  const clearExecStats       = useCanvasStore((s) => s.clearExecStats)
+  const setActiveJob         = useCanvasStore((s) => s.setActiveJob)
+  const setHitlState         = useCanvasStore((s) => s.setHitlState)
+  const setTraceUrl          = useCanvasStore((s) => s.setTraceUrl)
+  const setLastCompleted     = useCanvasStore((s) => s.setLastCompleted)
+  const setEvalScores        = useCanvasStore((s) => s.setEvalScores)
 
   // Track which trace we've already wired (avoid redundant calls)
   const wiredTraceId = useRef<string | null>(null)
@@ -82,6 +90,18 @@ export function useRunPoller() {
           setActiveJob(null)
           setHitlState(null)
           setActiveExecutionTrace(null)
+
+          // Record which job just finished so FeedbackBar can reference it.
+          setLastCompleted(activeJobId)
+
+          // Fetch eval scores from Langfuse and store them for quality badges.
+          // Best-effort: errors are swallowed — badges degrade to no-ops gracefully.
+          if (job.trace_id) {
+            api.eval.scores(job.trace_id)
+              .then((res) => setEvalScores(res.data ?? []))
+              .catch(() => { /* scores are optional — never block on this */ })
+          }
+
           // Keep traceUrl set so the "View trace" link persists after run
           return
         }
@@ -108,5 +128,5 @@ export function useRunPoller() {
     return () => clearInterval(interval)
   // Fix: hitlState added so clearing it (after resume) re-triggers the effect
   // and restarts polling. Without this the interval stays dead after HITL resume.
-  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl])
+  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl, setLastCompleted, setEvalScores])
 }

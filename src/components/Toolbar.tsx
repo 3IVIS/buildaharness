@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   CheckCircle, AlertCircle, Settings, Undo2, Redo2,
-  LayoutDashboard, Save, FolderOpen, GitCompare, Share2,
+  LayoutDashboard, Save, FolderOpen, GitCompare, Share2, Loader2, Rocket,
 } from 'lucide-react'
 import { useCanvasStore } from '../store'
 import { useLibraryStore } from '../store/library'
@@ -10,6 +10,7 @@ import { FlowLibraryPanel } from './FlowLibraryPanel'
 import { FlowDiffModal }   from './FlowDiffModal'
 import { generateAgentCard, downloadAgentCard, A2A_ENABLED } from '../services/a2a'
 import { validateCrossRefs } from '../spec/validation'
+import { api } from '../services/api'
 import type { AdapterName, ValidationError } from '../spec/schema'
 
 const RUNTIME_OPTIONS: { value: AdapterName | ''; label: string }[] = [
@@ -24,11 +25,13 @@ export function Toolbar() {
   const {
     flowMeta, setFlowMeta, exportSpec, validate, loadFlow, newFlow,
     zodErrors, crossRefErrors, lastModifiedAt,
-    openSettings, toggleProblems,
+    openSettings, toggleProblems, isProblemsOpen,
     undo, redo, canUndo, canRedo,
     autoLayout,
     flowConfig,
     setCrossRefErrors,
+    a2aDeployment, a2aDeploying,
+    setA2ADeployment, setA2ADeploying,
   } = useCanvasStore()
 
   // Helper: push cross-ref errors into the store without calling exportSpec() again.
@@ -88,6 +91,42 @@ export function Toolbar() {
       return
     }
     downloadAgentCard(card, 'agent.json')
+  }
+
+  async function handleDeploy() {
+    if (a2aDeploying) return
+
+    // validate() calls exportSpec() internally and populates zodErrors if there
+    // are Zod issues.  If validation fails, open the Problems panel so the user
+    // can see what needs fixing before deploying.
+    if (!validate()) {
+      if (!isProblemsOpen) toggleProblems()
+      return
+    }
+
+    const a2aCfg = flowConfig?.a2a_config
+    if (!a2aCfg?.enabled) {
+      alert(
+        'A2A is not enabled for this flow.\n' +
+        'Enable it in Flow Settings → Config → A2A exposure.'
+      )
+      return
+    }
+
+    setA2ADeploying(true)
+    try {
+      const result = await api.a2a.deploy(flowMeta.id)
+      setA2ADeployment({
+        flow_id:      result.flow_id,
+        endpoint_url: result.endpoint_url,
+        agent_card:   result.agent_card,
+        deployed_at:  result.deployed_at,
+      })
+    } catch (err) {
+      alert(`Deploy failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setA2ADeploying(false)
+    }
   }
 
   function handleRuntimeChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -165,16 +204,42 @@ export function Toolbar() {
           </button>
         )}
 
-        {/* A2A AgentCard — only shown when enabled */}
+        {/* A2A buttons — only shown when feature-flagged on */}
         {A2A_ENABLED && (
-          <button
-            className="btn btn--icon"
-            onClick={handleA2ACard}
-            title={a2aEnabled ? 'Download A2A AgentCard' : 'A2A not configured for this flow'}
-            style={{ opacity: a2aEnabled ? 1 : 0.4 }}
-          >
-            <Share2 size={13} />
-          </button>
+          <>
+            {/* Download AgentCard JSON */}
+            <button
+              className="btn btn--icon"
+              onClick={handleA2ACard}
+              title={a2aEnabled ? 'Download A2A AgentCard' : 'A2A not configured for this flow'}
+              style={{ opacity: a2aEnabled ? 1 : 0.4 }}
+            >
+              <Share2 size={13} />
+            </button>
+
+            {/* Deploy / re-deploy as A2A agent */}
+            <button
+              className="btn"
+              onClick={handleDeploy}
+              disabled={!a2aEnabled || a2aDeploying}
+              title={
+                !a2aEnabled    ? 'Enable A2A in Flow Settings → Config first' :
+                a2aDeployment  ? 'Re-deploy agent (update endpoint)' :
+                                 'Deploy flow as A2A agent'
+              }
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                opacity: a2aEnabled ? 1 : 0.4,
+                color: a2aDeployment ? 'var(--rt-full)' : undefined,
+              }}
+            >
+              {a2aDeploying
+                ? <Loader2 size={12} strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
+                : <Rocket size={12} strokeWidth={2} />
+              }
+              {a2aDeploying ? 'Deploying…' : a2aDeployment ? 'Deployed' : 'Deploy'}
+            </button>
+          </>
         )}
 
         {/* Settings */}

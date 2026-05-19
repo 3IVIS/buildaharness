@@ -1,7 +1,7 @@
 {
   "name": "itsharness",
   "version": "0.4.1",
-  "private": true,
+  "private": false,
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

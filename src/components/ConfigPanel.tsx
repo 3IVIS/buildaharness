@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react'
 import { X, AlertCircle, CheckCircle } from 'lucide-react'
 import { useCanvasStore, type NodeData } from '../store'
-import type { NodeType } from '../spec/schema'
+import type { NodeType, PromptRef } from '../spec/schema'
 import { NODE_ICONS, NODE_HEX, NODE_TYPE_LABELS } from '../canvas/nodes/BaseNode'
+import { api, type PromptSummary } from '../services/api'
 
 // ─── Field helpers ───────────────────────────────────────────────────────────
 
@@ -172,7 +174,69 @@ function FailBranchSection({ data, update }: { data: NodeData; update: (d: Parti
 }
 
 function LlmCallPanel({ data, update }: { data: NodeData; update: (d: Partial<NodeData>) => void }) {
-  const params = (data.model_params as Record<string, number>) ?? {}
+  const params    = (data.model_params as Record<string, number>) ?? {}
+  const promptRef = data.prompt_ref as PromptRef | undefined
+  // isLangfuse=true whenever prompt_ref key is present in node data (even with empty name).
+  // Checking promptRef?.name would be false for '' after mode-switch — use key presence instead.
+  const isLangfuse = promptRef !== undefined
+
+  // Load prompt list from Langfuse when the user switches to managed mode.
+  const [prompts,        setPrompts]        = useState<PromptSummary[]>([])
+  const [promptsLoading, setPromptsLoading] = useState(false)
+  const [promptsError,   setPromptsError]   = useState<string | null>(null)
+
+  // Preview text for the currently selected prompt (shown below the picker).
+  const [preview,        setPreview]        = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isLangfuse) return
+    setPromptsLoading(true)
+    setPromptsError(null)
+    api.prompts.list()
+      .then((list) => setPrompts(list))
+      .catch((err) => setPromptsError(String(err)))
+      .finally(() => setPromptsLoading(false))
+  }, [isLangfuse])
+
+  // Fetch preview whenever the selected prompt name changes.
+  useEffect(() => {
+    if (!isLangfuse || !promptRef?.name) { setPreview(null); return }
+    setPreviewLoading(true)
+    api.prompts.get(promptRef.name)
+      .then((detail) => setPreview(detail.prompt))
+      .catch(() => setPreview(null))
+      .finally(() => setPreviewLoading(false))
+  }, [isLangfuse, promptRef?.name])
+
+  function setPromptMode(mode: 'inline' | 'langfuse') {
+    if (mode === 'inline') {
+      update({ prompt_ref: undefined })
+    } else {
+      // Switch to Langfuse mode — clear prompt_template to avoid "both set" warning.
+      update({ prompt_ref: { name: '', version: undefined, label: undefined }, prompt_template: '' })
+    }
+  }
+
+  function updateRef(patch: Partial<PromptRef>) {
+    update({ prompt_ref: { ...(promptRef ?? { name: '' }), ...patch } })
+  }
+
+  // Shared toggle button style
+  const toggleBtn = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: '4px 8px',
+    fontSize: 11,
+    fontWeight: 500,
+    border: '0.5px solid',
+    borderRadius: 5,
+    cursor: 'pointer',
+    transition: 'background 0.12s, color 0.12s',
+    background: active ? 'rgba(167,139,250,0.15)' : 'transparent',
+    borderColor: active ? 'rgba(167,139,250,0.4)' : 'var(--border-mid)',
+    color:       active ? '#a78bfa' : 'var(--text-tertiary)',
+  })
+
   return (
     <>
       <Field label="Label">
@@ -181,16 +245,123 @@ function LlmCallPanel({ data, update }: { data: NodeData; update: (d: Partial<No
       <Field label="Model" hint="inherits model_defaults if empty">
         <TextInput value={(data.model as string) ?? ''} onChange={(v) => update({ model: v })} mono placeholder="gpt-4o" />
       </Field>
+
+      {/* ── Prompt source ───────────────────────────────────────────────── */}
       <div className="section-head">Prompts</div>
-      <Field label="System prompt">
-        <Textarea value={(data.system_prompt as string) ?? ''} onChange={(v) => update({ system_prompt: v })} placeholder="You are a helpful assistant…" rows={3} />
-      </Field>
-      <Field label="Prompt template" hint="use {{$.state.key}} for state refs">
-        <Textarea value={(data.prompt_template as string) ?? ''} onChange={(v) => update({ prompt_template: v })} placeholder="{{$.state.question}}" rows={4} />
-      </Field>
+
+      {/* Toggle: Inline | Langfuse */}
+      <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+        <button style={toggleBtn(!isLangfuse)} onClick={() => setPromptMode('inline')}>
+          Inline
+        </button>
+        <button style={toggleBtn(isLangfuse)} onClick={() => setPromptMode('langfuse')}>
+          ⚡ Langfuse
+        </button>
+      </div>
+
+      {isLangfuse ? (
+        /* ── Langfuse-managed prompt ──────────────────────────────────── */
+        <>
+          <Field label="Prompt name">
+            {promptsLoading
+              ? <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Loading prompts…</div>
+              : promptsError
+              ? <div style={{ fontSize: 11, color: 'var(--red)' }}>{promptsError}</div>
+              : (
+                <Select
+                  value={promptRef?.name ?? ''}
+                  onChange={(v) => {
+                    if (v === '') return  // placeholder selected — don't clear the name to ''
+                    updateRef({ name: v })
+                  }}
+                  options={[
+                    { value: '', label: '— select a prompt —' },
+                    ...prompts.map((p) => ({
+                      value: p.name,
+                      label: `${p.name}${p.labels.length ? ` [${p.labels[0]}]` : ''}`,
+                    })),
+                  ]}
+                />
+              )
+            }
+          </Field>
+
+          <Field label="Version" hint="leave empty for latest (production label)">
+            <input
+              type="number"
+              className="field__input field__input--mono"
+              min={1}
+              step={1}
+              value={promptRef?.version ?? ''}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10)
+                const v = e.target.value === '' ? undefined : (isNaN(parsed) || parsed < 1 ? undefined : parsed)
+                updateRef({ version: v })
+              }}
+              placeholder="latest"
+              style={{ width: 80 }}
+            />
+          </Field>
+
+          {/* Preview pane */}
+          {promptRef?.name && (
+            <div style={{
+              marginTop: 2, marginBottom: 8,
+              padding: '7px 9px',
+              background: 'var(--bg-overlay)',
+              border: '0.5px solid var(--border)',
+              borderRadius: 5,
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              lineHeight: 1.55,
+              maxHeight: 100,
+              overflowY: 'auto',
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}>
+              {previewLoading ? 'Loading preview…' : (preview ?? 'No preview available')}
+            </div>
+          )}
+
+          {prompts.length === 0 && !promptsLoading && !promptsError && (
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>
+              No prompts found in Langfuse. Create one at{' '}
+              <a href="/langfuse" target="_blank" rel="noopener noreferrer"
+                 style={{ color: '#a78bfa' }}>
+                Langfuse Prompt Management
+              </a>.
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── Inline prompts ─────────────────────────────────────────────── */
+        <>
+          <Field label="System prompt">
+            <Textarea
+              value={(data.system_prompt as string) ?? ''}
+              onChange={(v) => update({ system_prompt: v })}
+              placeholder="You are a helpful assistant…"
+              rows={3}
+            />
+          </Field>
+          <Field label="Prompt template" hint="use {{$.state.key}} for state refs">
+            <Textarea
+              value={(data.prompt_template as string) ?? ''}
+              onChange={(v) => update({ prompt_template: v })}
+              placeholder="{{$.state.question}}"
+              rows={4}
+            />
+          </Field>
+        </>
+      )}
+
+      {/* ── Model params ─────────────────────────────────────────────────── */}
       <div className="section-head">Model params</div>
-      <SliderField label="Temperature" value={params.temperature ?? 0.7} min={0} max={2} onChange={(v) => update({ model_params: { ...params, temperature: v } })} />
-      <SliderField label="Max tokens" value={params.max_tokens ?? 512} min={1} max={4096} step={1} onChange={(v) => update({ model_params: { ...params, max_tokens: v } })} />
+      <SliderField label="Temperature" value={params.temperature ?? 0.7} min={0} max={2}
+        onChange={(v) => update({ model_params: { ...params, temperature: v } })} />
+      <SliderField label="Max tokens" value={params.max_tokens ?? 512} min={1} max={4096} step={1}
+        onChange={(v) => update({ model_params: { ...params, max_tokens: v } })} />
       <Field label="Output key" hint="state key to write answer to">
         <TextInput value={(data.output_key as string) ?? ''} onChange={(v) => update({ output_key: v })} mono placeholder="answer" />
       </Field>

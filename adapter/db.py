@@ -2,20 +2,31 @@
 Database models and async engine — SQLAlchemy 2 + asyncpg.
 Tables: users, flows, flow_versions
 """
+import asyncio
+import enum
+import json as _json
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Column, Text, Integer, DateTime, ForeignKey, Index,
-    UniqueConstraint, func, select,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    func,
+    select,
 )
-from sqlalchemy.types import TypeDecorator, String, Text as SAText
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
-import json as _json
+from sqlalchemy.types import Text as SAText
+from sqlalchemy.types import TypeDecorator
 
 # Fix: PostgreSQL dialect types (UUID, JSONB) crash on SQLite used in the test suite.
 # Use TypeDecorator wrappers that fall back to TEXT on non-Postgres dialects.
@@ -103,7 +114,7 @@ class User(Base):
     id            = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
     email         = Column(Text, unique=True, nullable=False)
     password_hash = Column(Text, nullable=False)
-    created_at    = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at    = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     flows    = relationship("Flow",        back_populates="user", cascade="all, delete-orphan")
     versions = relationship("FlowVersion", back_populates="user")
@@ -118,14 +129,14 @@ class Flow(Base):
     user_id      = Column(_UUIDType, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name         = Column(Text, nullable=False)
     current_spec = Column(_JSONBType, nullable=False)
-    created_at   = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at   = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     # Fix #18: onupdate ensures the column is always refreshed on UPDATE statements,
     # not just on INSERT. save_flow still sets it explicitly for clarity, but any
     # future code path that modifies a Flow row will also get the correct timestamp.
     updated_at   = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     user     = relationship("User",        back_populates="flows")
@@ -144,7 +155,7 @@ class FlowVersion(Base):
     spec        = Column(_JSONBType, nullable=False)
     version_num = Column(Integer, nullable=False)
     label       = Column(Text, nullable=True)
-    created_at  = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at  = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     flow = relationship("Flow", back_populates="versions")
     user = relationship("User", back_populates="versions")
@@ -153,6 +164,99 @@ class FlowVersion(Base):
 async def get_session():
     async with SessionLocal() as session:
         yield session
+
+
+# ── Team RBAC models ──────────────────────────────────────────────────────────
+
+class TeamRole(enum.StrEnum):
+    admin  = "admin"
+    editor = "editor"
+    viewer = "viewer"
+
+
+class Team(Base):
+    """An organisation-level grouping that can own flows and share them with members."""
+    __tablename__ = "teams"
+
+    id         = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
+    name       = Column(Text, nullable=False)
+    created_by = Column(_UUIDType, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    memberships = relationship("TeamMembership", back_populates="team",
+                               cascade="all, delete-orphan")
+    flow_permissions = relationship("FlowPermission", back_populates="team",
+                                    cascade="all, delete-orphan")
+
+
+class TeamMembership(Base):
+    """User ↔ Team with a role."""
+    __tablename__  = "team_memberships"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_team_memberships_team_user"),
+        Index("ix_team_memberships_user_id", "user_id"),
+    )
+
+    id        = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
+    team_id   = Column(_UUIDType, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    user_id   = Column(_UUIDType, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # role: admin can manage members; editor can save flows; viewer is read-only.
+    role      = Column(Text, nullable=False, default=TeamRole.viewer.value)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    team = relationship("Team", back_populates="memberships")
+    user = relationship("User")
+
+
+class FlowPermission(Base):
+    """Grants a team access to a flow (read-only or read-write).
+
+    Absence of a row means the flow is private to its owner.
+    A row with permission='view' lets team members open and compile the flow.
+    A row with permission='edit' lets Editor+ members save new versions.
+    """
+    __tablename__  = "flow_permissions"
+    __table_args__ = (
+        UniqueConstraint("flow_id", "team_id", name="uq_flow_permissions_flow_team"),
+        Index("ix_flow_permissions_flow_id", "flow_id"),
+        Index("ix_flow_permissions_team_id", "team_id"),
+    )
+
+    id         = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
+    flow_id    = Column(Text, ForeignKey("flows.id", ondelete="CASCADE"), nullable=False)
+    team_id    = Column(_UUIDType, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    # permission: 'view' (read-only) or 'edit' (read-write for editors)
+    permission = Column(Text, nullable=False, default="view")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    flow = relationship("Flow")
+    team = relationship("Team", back_populates="flow_permissions")
+
+
+class A2ADeployment(Base):
+    """Persists a deployed A2A agent endpoint.
+
+    One row per flow (unique constraint on flow_id).  Re-deploying upserts
+    the row so external agents always discover a stable endpoint URL.
+    """
+    __tablename__ = "a2a_deployments"
+    __table_args__ = (
+        Index("ix_a2a_deployments_user_id", "user_id"),
+    )
+
+    id           = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
+    flow_id      = Column(Text, ForeignKey("flows.id", ondelete="CASCADE"),
+                          nullable=False, unique=True)
+    user_id      = Column(_UUIDType, ForeignKey("users.id", ondelete="CASCADE"),
+                          nullable=False)
+    endpoint_url = Column(Text, nullable=False)
+    # Snapshot of the AgentCard JSONB at deploy time — external agents get a
+    # stable card even if the flow spec changes after deployment.
+    agent_card   = Column(_JSONBType, nullable=False)
+    deployed_at  = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    flow = relationship("Flow")
+    user = relationship("User")
 
 
 async def next_version_num(flow_id: str, db: AsyncSession) -> int:
@@ -168,7 +272,7 @@ async def next_version_num(flow_id: str, db: AsyncSession) -> int:
         await db.execute(
             select(Flow).where(Flow.id == flow_id).with_for_update()
         )
-    except Exception:
+    except Exception:  # noqa: S110
         # SQLite / other dialects that don't support FOR UPDATE — safe to ignore
         # because the surrounding transaction still serialises writes.
         pass
@@ -180,18 +284,36 @@ async def next_version_num(flow_id: str, db: AsyncSession) -> int:
 
 
 async def init_db():
-    # Fix #10: create_all() creates tables that don't exist but does NOT alter tables
-    # that already exist.  Any schema change (new column, changed constraint) after
-    # initial deployment requires a migration.
-    #
-    # For production deployments, use Alembic:
-    #   pip install alembic
-    #   alembic init adapter/migrations
-    #   alembic revision --autogenerate -m "describe change"
-    #   alembic upgrade head
-    #
-    # create_all() is kept here for fresh environments and the test suite (SQLite).
-    # In a production cluster, replace this with: alembic upgrade head
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("[db] tables ready")
+    """Initialise the database schema.
+
+    Test suite (TESTING=true):
+        SQLite in-memory — Alembic cannot run migrations against SQLite because
+        the initial migration uses PostgreSQL-specific types (UUID, JSONB).
+        create_all() is fast and sufficient for isolated test runs.
+
+    Production (Postgres):
+        Alembic runs `upgrade head` so every schema change is version-controlled
+        and repeatable. The Dockerfile CMD runs `alembic upgrade head` before
+        starting uvicorn; this function is a defensive fallback for any code path
+        that calls init_db() directly (e.g. local `python main.py`).
+    """
+    if os.getenv("TESTING") == "true":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[db] tables ready (test mode — create_all)")
+        return
+
+    # Production: run Alembic in a thread so we don't block the event loop.
+    from pathlib import Path as _Path
+
+    from alembic import command as _alembic_cmd
+    from alembic.config import Config as _AlembicConfig
+
+    def _run_alembic() -> None:
+        cfg = _AlembicConfig(str(_Path(__file__).parent / "alembic.ini"))
+        cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+        _alembic_cmd.upgrade(cfg, "head")
+
+    await asyncio.to_thread(_run_alembic)
+    print("[db] Alembic migrations applied")
+

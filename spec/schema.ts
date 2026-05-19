@@ -224,11 +224,19 @@ export const OutputNode = NodeBase.extend({
 
 export type OutputNode = z.infer<typeof OutputNode>
 
+export const PromptRef = z.object({
+  name:    z.string().min(1),
+  version: z.number().int().positive().optional(),
+  label:   z.string().optional(),
+})
+export type PromptRef = z.infer<typeof PromptRef>
+
 export const LlmCallNode = NodeBase.extend({
   type:             z.literal('llm_call'),
   model:            z.string().optional(),
   system_prompt:    z.string().optional(),
-  prompt_template:  z.string(),
+  prompt_template:  z.string().optional(),
+  prompt_ref:       PromptRef.optional(),
   model_params:     ModelParams.optional(),
   structured_output: StructuredOutput.optional(),
   output_key:       z.string().optional(),

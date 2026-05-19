@@ -19,6 +19,14 @@ import type {
 } from '../spec/schema'
 import { parseFlowSpec } from '../spec/schema'
 import { validateCrossRefs, type ValidationError } from '../spec/validation'
+import type { EvalScore } from '../services/api'
+
+export interface A2ADeployment {
+  flow_id:      string
+  endpoint_url: string
+  agent_card:   Record<string, unknown>
+  deployed_at:  string
+}
 
 export type NodeData = Record<string, unknown>
 export interface CanvasNode extends XYNode { data: NodeData }
@@ -66,6 +74,15 @@ export interface NodeExecStat {
   status:  'pending' | 'running' | 'paused' | 'done' | 'error'
   tokens?: number
   ms?:     number
+  /**
+   * LLM-as-judge quality score in [0, 1] fetched from Langfuse after a run
+   * completes.  Renders as a coloured arc on the ExecBadge:
+   *   > 0.8  → green   (good)
+   *   0.5–0.8 → amber  (warn)
+   *   < 0.5  → red     (poor)
+   * Absent when Langfuse is not configured or the score is not yet available.
+   */
+  score?:  number
 }
 
 export interface HitlState {
@@ -97,6 +114,24 @@ interface CanvasStore extends PersistedState {
   hitlState:       HitlState | null
   traceUrl:        string | null
 
+  // ── Online eval / feedback state ─────────────────────────────────────────
+  /** job_id of the most recently completed (done or error) job. Used by
+   *  FeedbackBar to submit user thumbs signals.  Cleared when a new run starts. */
+  lastCompletedJobId: string | null
+  /** True once the user has submitted a thumbs signal for lastCompletedJobId. */
+  feedbackSubmitted:  boolean
+  /** Scores returned by GET /eval/scores for the last completed run.
+   *  Keyed by the Langfuse observationId so ExecBadge can look up a score
+   *  once the node_id → observationId mapping is wired (Phase 3 follow-up). */
+  evalScores:         EvalScore[]
+
+  // ── A2A deployment state ─────────────────────────────────────────────────
+  /** Populated by the Deploy button after POST /deploy/a2a/{flow_id} succeeds.
+   *  Cleared when the active flow changes (newFlow / loadFlow). */
+  a2aDeployment:      A2ADeployment | null
+  /** True while POST /deploy/a2a is in flight — disables the deploy button. */
+  a2aDeploying:       boolean
+
   // ReactFlow handlers
   onNodesChange: (c: NodeChange[]) => void
   onEdgesChange: (c: EdgeChange[]) => void
@@ -121,12 +156,21 @@ interface CanvasStore extends PersistedState {
   openSettings:   (tab?: SettingsTab) => void
   closeSettings:  () => void
   setSettingsTab: (tab: SettingsTab) => void
-  toggleProblems:    () => void
-  setNodeExecStat:   (nodeId: string, stat: NodeExecStat) => void
-  clearExecStats:    () => void
-  setActiveJob:      (jobId: string | null) => void
-  setHitlState:      (state: HitlState | null) => void
-  setTraceUrl:       (url: string | null) => void
+  toggleProblems:       () => void
+  setNodeExecStat:      (nodeId: string, stat: NodeExecStat) => void
+  clearExecStats:       () => void
+  setActiveJob:         (jobId: string | null) => void
+  setHitlState:         (state: HitlState | null) => void
+  setTraceUrl:          (url: string | null) => void
+  /** Called by runPoller when a job reaches 'done' or 'error'.
+   *  Stores the jobId for FeedbackBar and resets the per-run feedback state. */
+  setLastCompleted:     (jobId: string) => void
+  /** Called by FeedbackBar once the thumbs signal has been submitted. */
+  setFeedbackSubmitted: () => void
+  /** Called by runPoller with scores fetched from GET /eval/scores. */
+  setEvalScores:        (scores: EvalScore[]) => void
+  setA2ADeployment:     (d: A2ADeployment | null) => void
+  setA2ADeploying:      (v: boolean) => void
 
   // Flow ops
   loadFlow:   (spec: FlowSpec) => void
@@ -161,7 +205,6 @@ export function defaultMeta(): FlowMeta {
 }
 
 // Fix #26: ID generation now reads/writes the persisted _nodeCounter from the store.
-// Called via get()._nodeCounter inside set() — see addNode, addAnnotation.
 function newNodeId(type: NodeType | 'annotation', counter: number) {
   return `${(type as string).replace(/_/g, '-')}-${counter}`
 }
@@ -211,13 +254,10 @@ function _snapshot(s: PersistedState): Snapshot {
 }
 
 // Fix #15: debounce timer for updateNodeData history pushes.
-// Typing in a text field calls updateNodeData on every keystroke; pushing a
-// snapshot per keystroke fills the 50-entry undo history in seconds.
-// We wait 600 ms of inactivity before committing a snapshot.
 let _updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
-const MAX_HISTORY     = 50  // Fix: MAX_HISTORY was referenced but never defined — undo/redo crashed at runtime
+const MAX_HISTORY     = 50
 const STORAGE_KEY    = 'itsharness:current'
-const STORAGE_VERSION = 2   // bumped from 1 → 2 for Snapshot schema change
+const STORAGE_VERSION = 2
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
@@ -228,7 +268,7 @@ export const useCanvasStore = create<CanvasStore>()(
       nodes: [], edges: [],
       flowMeta: defaultMeta(), stateSchema: null,
       agents: [], memoryStores: {}, tools: {}, modelDefaults: {}, flowConfig: {},
-      _nodeCounter:   0,   // Fix #26
+      _nodeCounter:   0,
       lastModifiedAt: Date.now(),
 
       // ── Transient initial values ──────────────────────────────────────────
@@ -239,11 +279,17 @@ export const useCanvasStore = create<CanvasStore>()(
       execStats: {},
       activeJobId: null, hitlState: null, traceUrl: null, zodErrors: null, crossRefErrors: [],
       past: [], future: [], canUndo: false, canRedo: false,
+      // Online eval / feedback
+      lastCompletedJobId: null,
+      feedbackSubmitted:  false,
+      evalScores:         [],
+      // A2A deployment
+      a2aDeployment: null,
+      a2aDeploying:  false,
 
       // ── Internal helpers ──────────────────────────────────────────────────
       _touch: () => set({ lastModifiedAt: Date.now() }),
       _pushHistory: () => set((s) => ({
-        // Fix #28: use full snapshot
         past: [...s.past, _snapshot(s)].slice(-MAX_HISTORY),
         future: [], canUndo: true, canRedo: false,
         lastModifiedAt: Date.now(),
@@ -316,7 +362,6 @@ export const useCanvasStore = create<CanvasStore>()(
           const nodeId  = newNodeId(type, counter)
           const src = s.nodes.find((n) => n.id === edge.source)
           const tgt = s.nodes.find((n) => n.id === edge.target)
-          // Fix #31: account for node dimensions (248×86) when computing midpoint.
           const NODE_W = 248, NODE_H = 86
           const position = src && tgt
             ? {
@@ -344,9 +389,6 @@ export const useCanvasStore = create<CanvasStore>()(
         })
       },
 
-      // Fix #15: updateNodeData uses a debounced history push so that typing in a
-      // config panel field doesn't create one undo snapshot per character.
-      // The snapshot is committed 600 ms after the last consecutive keystroke.
       updateNodeData: (id, data) => {
         if (_updateDebounceTimer !== null) clearTimeout(_updateDebounceTimer)
         _updateDebounceTimer = setTimeout(() => {
@@ -378,9 +420,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
       // ── Edge ops ──────────────────────────────────────────────────────────
       updateEdgeData: (id, data) => {
-        // Push history so edge label / context_from edits are undoable.
-        // Use the same debounce pattern as updateNodeData so typing in the
-        // EdgeConfigPanel doesn't create one snapshot per character.
         if (_updateDebounceTimer !== null) clearTimeout(_updateDebounceTimer)
         _updateDebounceTimer = setTimeout(() => {
           get()._pushHistory()
@@ -393,7 +432,6 @@ export const useCanvasStore = create<CanvasStore>()(
       },
       selectEdge:    (id) => set({ selectedEdgeId: id, isEdgePanelOpen: id !== null, selectedNodeId: null, isPanelOpen: false }),
       closeEdgePanel: ()  => set({ selectedEdgeId: null, isEdgePanelOpen: false }),
-      // Fix #32: delete the currently selected edge
       deleteEdge: (id) => {
         get()._pushHistory()
         set((s) => ({
@@ -410,11 +448,22 @@ export const useCanvasStore = create<CanvasStore>()(
       setSettingsTab: (tab)          => set({ settingsTab: tab }),
       toggleProblems:  ()            => set((s) => ({ isProblemsOpen: !s.isProblemsOpen })),
       setNodeExecStat: (nodeId, stat) => set((s) => ({ execStats: { ...s.execStats, [nodeId]: stat } })),
-      clearExecStats:  ()            => set({ execStats: {} }),
+      clearExecStats:  ()            => set({
+        execStats: {},
+        // Reset per-run eval/feedback state when a new run starts.
+        lastCompletedJobId: null,
+        feedbackSubmitted:  false,
+        evalScores:         [],
+      }),
       setActiveJob:    (jobId)       => set({ activeJobId: jobId }),
       setHitlState:    (state)       => set({ hitlState: state }),
       setTraceUrl:     (url)         => set({ traceUrl: url }),
       setCrossRefErrors: (errors)    => set({ crossRefErrors: errors }),
+      setLastCompleted:     (jobId)  => set({ lastCompletedJobId: jobId, feedbackSubmitted: false }),
+      setFeedbackSubmitted: ()       => set({ feedbackSubmitted: true }),
+      setEvalScores:        (scores) => set({ evalScores: scores }),
+      setA2ADeployment:     (d)      => set({ a2aDeployment: d }),
+      setA2ADeploying:      (v)      => set({ a2aDeploying: v }),
 
       // ── Registry setters ──────────────────────────────────────────────────
       setFlowMeta:      (meta)   => set((s) => ({ flowMeta: { ...s.flowMeta, ...meta }, lastModifiedAt: Date.now() })),
@@ -432,7 +481,6 @@ export const useCanvasStore = create<CanvasStore>()(
         const past   = s.past.slice(0, -1)
         const future = [_snapshot(s), ...s.future].slice(0, MAX_HISTORY)
         return {
-          // Fix #28: restore full snapshot
           ...prev,
           past, future, canUndo: past.length > 0, canRedo: true,
           execStats: {}, traceUrl: null, lastModifiedAt: Date.now(),
@@ -444,7 +492,6 @@ export const useCanvasStore = create<CanvasStore>()(
         const future = s.future.slice(1)
         const past   = [...s.past, _snapshot(s)].slice(-MAX_HISTORY)
         return {
-          // Fix #28: restore full snapshot
           ...next,
           past, future, canUndo: true, canRedo: future.length > 0,
           execStats: {}, lastModifiedAt: Date.now(),
@@ -464,9 +511,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
       // ── Load flow ─────────────────────────────────────────────────────────
       loadFlow: (spec) => {
-        // Fix #3: cancel any pending debounced _pushHistory() from a previous
-        // editing session so it doesn't write a stale snapshot onto this flow's
-        // fresh undo stack 600 ms after the load.
         if (_updateDebounceTimer !== null) {
           clearTimeout(_updateDebounceTimer)
           _updateDebounceTimer = null
@@ -480,12 +524,6 @@ export const useCanvasStore = create<CanvasStore>()(
           }
         })
 
-        // Map spec edges → ReactFlow edges.
-        // ConditionalEdge: create one visual ReactFlow edge per branch + one for the
-        // default target (if it differs from all branch targets).  These edges carry
-        // minimal routing data; the canonical branch spec is already on the node itself
-        // (loaded above via ...rest → data.branches / data.default_target).
-        // exportSpec reads ConditionNode.data, not edge data, so no cargo data needed.
         const edges: XYEdge[] = spec.edges.flatMap((e, i) => {
           if (e.type === 'conditional') {
             const branchEdges: XYEdge[] = e.branches.map((branch, bi) => ({
@@ -495,7 +533,6 @@ export const useCanvasStore = create<CanvasStore>()(
               type:   'conditional',
               data:   { label: branch.label ?? '' },
             }))
-            // Add a visual edge to default_target if not already a branch target.
             const branchTargets = new Set(e.branches.map((b) => b.to))
             if (!branchTargets.has(e.default_target)) {
               branchEdges.push({
@@ -517,7 +554,6 @@ export const useCanvasStore = create<CanvasStore>()(
           }]
         })
 
-        // Fix #26: derive a safe counter from loaded node IDs to avoid collisions.
         const maxCounter = nodes.reduce((max, n) => {
           const m = n.id.match(/\d+$/)
           return m ? Math.max(max, parseInt(m[0], 10)) : max
@@ -531,8 +567,9 @@ export const useCanvasStore = create<CanvasStore>()(
           modelDefaults: spec.model_defaults ?? {}, flowConfig: spec.flow_config ?? {},
           selectedNodeId: null, isPanelOpen: false, selectedEdgeId: null, isEdgePanelOpen: false,
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
-          _nodeCounter: maxCounter,   // Fix #26
+          _nodeCounter: maxCounter,
           lastModifiedAt: Date.now(),
+          a2aDeployment: null, a2aDeploying: false,
         })
       },
 
@@ -540,23 +577,11 @@ export const useCanvasStore = create<CanvasStore>()(
       exportSpec: () => {
         const s = get()
 
-        // ── Fix #1: ConditionalEdge reconstruction ────────────────────────
-        // ReactFlow 'conditional' edges are visual routing only; they carry no
-        // canonical branch data for newly-authored flows (onConnect sets only
-        // { label:'', context_from:[] }).  The authoritative branch spec lives
-        // on the ConditionNode itself (data.branches / data.default_target),
-        // edited via ConfigPanel — exactly the same pattern as ParallelForkNode
-        // which writes targets directly into node data.
-        //
-        // Strategy: for each condition node, build ONE ConditionalEdge from
-        // node.data.  ReactFlow edges that depart from the same source are
-        // purely presentational and are not separately serialised.
         const conditionNodeIds = new Set(
           s.nodes.filter((n) => n.type === 'condition').map((n) => n.id)
         )
 
         const serialisedEdges = [
-          // One ConditionalEdge per condition node, sourced from node data.
           ...s.nodes
             .filter((n) => n.type === 'condition')
             .map((n) => {
@@ -565,27 +590,17 @@ export const useCanvasStore = create<CanvasStore>()(
               const nodeBranches = (d.branches as RawBranch[] | undefined) ?? []
               return {
                 type:           'conditional' as const,
-                // Derive a stable edge ID from the node ID.
                 id:             `ce-${n.id}`,
                 from:           n.id,
                 branches:       nodeBranches.map((b) => ({
                                   condition: b.condition,
-                                  to:        b.target,   // node schema uses 'target', edge schema uses 'to'
+                                  to:        b.target,
                                   label:     b.label,
                                 })),
                 default_target: (d.default_target as string) ?? '',
               }
             }),
 
-          // All non-conditional edges (condition-source edges are visual only).
-          // Fix #5: non-direct edge types (parallel, hitl) are serialised as type='direct'
-          // with the real type stored in data.visual_type.  This is intentional:
-          //   • The canonical FlowSpec schema has no parallel/hitl edge type — parallel
-          //     fan-out is expressed via ParallelForkNode.targets, HITL via the node itself.
-          //   • loadFlow reads data.visual_type back via `(edgeData?.visual_type) ?? 'direct'`
-          //     so the canvas visual style is preserved across save/load.
-          //   • The adapter ignores data.visual_type entirely — semantics come from nodes.
-          // Any new visual-only edge type must follow the same pattern.
           ...s.edges
             .filter((e) => !conditionNodeIds.has(e.source))
             .map((e) => {
@@ -645,8 +660,6 @@ export const useCanvasStore = create<CanvasStore>()(
 
       // ── New flow ──────────────────────────────────────────────────────────
       newFlow: () => {
-        // Fix #3: cancel pending debounced snapshot so it doesn't corrupt the
-        // new flow's undo stack with state from the previous flow.
         if (_updateDebounceTimer !== null) {
           clearTimeout(_updateDebounceTimer)
           _updateDebounceTimer = null
@@ -656,8 +669,9 @@ export const useCanvasStore = create<CanvasStore>()(
           agents: [], memoryStores: {}, tools: {}, modelDefaults: {}, flowConfig: {},
           selectedNodeId: null, isPanelOpen: false, selectedEdgeId: null, isEdgePanelOpen: false,
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
-          _nodeCounter: 0,   // Fix #26
+          _nodeCounter: 0,
           lastModifiedAt: Date.now(),
+          a2aDeployment: null, a2aDeploying: false,
         })
       },
     }),
@@ -678,7 +692,7 @@ export const useCanvasStore = create<CanvasStore>()(
         tools:          state.tools,
         modelDefaults:  state.modelDefaults,
         flowConfig:     state.flowConfig,
-        _nodeCounter:   state._nodeCounter,   // Fix #26
+        _nodeCounter:   state._nodeCounter,
         lastModifiedAt: state.lastModifiedAt,
       }),
 
@@ -688,7 +702,6 @@ export const useCanvasStore = create<CanvasStore>()(
             ...(persisted as object),
             lastModifiedAt: Date.now(),
             _nodeCounter:   0,
-            // Explicit defaults for all v0.4 fields — don't rely on Zustand merge behaviour
             stateSchema:   null,
             agents:        [],
             memoryStores:  {},
@@ -698,7 +711,6 @@ export const useCanvasStore = create<CanvasStore>()(
           }
         }
         if (version === 1) {
-          // v1 → v2: add _nodeCounter + ensure v0.4 fields exist
           return {
             ...(persisted as object),
             _nodeCounter:  0,
@@ -711,13 +723,8 @@ export const useCanvasStore = create<CanvasStore>()(
           }
         }
         if (version === 2) {
-          // Current version — no migration needed.
           return persisted
         }
-        // version > STORAGE_VERSION: this browser has data from a future app version
-        // (e.g. user ran a newer build then rolled back). The persisted state may have
-        // fields that no longer exist or renamed fields that will cause runtime errors.
-        // Safest option: reset to empty rather than silently corrupt state.
         console.warn(
           `[itsharness] stored state version ${version} is newer than app version ${STORAGE_VERSION}. ` +
           'Resetting canvas to avoid incompatible state.'

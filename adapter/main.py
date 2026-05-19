@@ -1,5 +1,5 @@
 """
-itsharness — adapter server  v0.4.0
+itsharness — adapter server  v0.5.2
 
 Endpoints
   GET  /health                → adapter status
@@ -9,6 +9,7 @@ Endpoints
 
   POST /auth/register         → create account, returns JWT
   POST /auth/login            → login, returns JWT
+  POST /auth/logout           → revoke current JWT (jti → Redis blocklist)
   GET  /auth/me               → current user info
 
   GET  /flows                 → list user's flows (paginated)
@@ -21,51 +22,59 @@ Endpoints
   POST /run                   → execute flow (async job)
   GET  /run/{job_id}          → job status + result
   POST /run/{job_id}/resume   → resume HITL-paused job
+
+  POST   /teams                              → create team
+  GET    /teams                              → list caller's teams
+  GET    /teams/{team_id}                    → team detail + members
+  PATCH  /teams/{team_id}                    → rename team (admin)
+  DELETE /teams/{team_id}                    → delete team (admin)
+  POST   /teams/{team_id}/members            → invite member (admin)
+  PATCH  /teams/{team_id}/members/{user_id}  → change role (admin)
+  DELETE /teams/{team_id}/members/{user_id}  → remove member (admin)
+  POST   /teams/{team_id}/flows/{flow_id}    → share flow with team (admin)
+  DELETE /teams/{team_id}/flows/{flow_id}    → unshare flow (admin)
+  GET    /teams/{team_id}/flows              → list flows shared with team
+
+  POST /eval/score            → write LLM-as-judge score to a Langfuse trace
+  POST /eval/feedback         → user thumbs-up/down signal (Annotation Queue)
+  GET  /eval/templates        → list active LLM-as-judge evaluator configs
+  GET  /eval/scores           → fetch scores for a trace (canvas quality badges)
+
+  GET  /prompts               → list Langfuse-managed prompts (for canvas picker)
+  GET  /prompts/{name}        → versions + preview for a specific prompt
+
+  GET  /.well-known/agent.json              → default AgentCard (public)
+  GET  /.well-known/agent/{flow_id}.json    → AgentCard for specific flow (public)
+  POST /a2a/{flow_id}/tasks/send            → create + start A2A task
+  GET  /a2a/{flow_id}/tasks/{task_id}       → A2A task status
+  GET  /a2a/{flow_id}/tasks/{task_id}/events → SSE stream of task events
+  POST   /deploy/a2a/{flow_id}              → deploy flow as A2A agent
+  DELETE /deploy/a2a/{flow_id}              → undeploy
 """
 import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-# ── Load .env before anything else reads os.environ ──────────────────────────
-# python-dotenv is a dev/local convenience — it loads the project-root .env so
-# you can run `python main.py` without manually exporting every secret first.
-# In Docker, env vars come from docker-compose.yml and dotenv is a no-op.
-# Override: set DOTENV_PATH to point at a different file, or DOTENV_LOAD=false
-# to skip loading entirely.
 if os.getenv("DOTENV_LOAD", "true").lower() not in ("false", "0", "no"):
     try:
         from dotenv import load_dotenv
-        # Walk up from adapter/ to find the project root .env
         _env_path = Path(__file__).parent.parent / ".env"
         if _env_path.exists():
-            load_dotenv(_env_path, override=False)  # override=False: shell vars win
+            load_dotenv(_env_path, override=False)
     except ImportError:
-        pass  # python-dotenv not installed — silently skip (Docker path)
+        pass
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-# ── Startup secret validation ─────────────────────────────────────────────────
-# Run BEFORE importing any local module that reads env vars at import time
-# (auth.py reads JWT_SECRET at module level). This ensures operators see the
-# clean FATAL message rather than a raw Python RuntimeError traceback.
-#
-# Fix #2: router imports moved to AFTER this block so auth.py's module-level
-# RuntimeError can never fire before our clean error message does.
-
 _REQUIRED_SECRETS: dict[str, str] = {
     "JWT_SECRET": "Generate with: openssl rand -base64 32",
 }
-# Fix #12: expanded to cover every placeholder string used in .env.example.
-# Fix #26: switched from exact-set membership to substring matching so that
-# prefixed placeholders like "pk-lf-REPLACE_ME" and "sk-lf-REPLACE_ME" are
-# caught too.  The old exact-match set let those values through the guard,
-# allowing the Langfuse stack to boot with a known default key that anyone
-# who has read the .env.example could use to authenticate.
 _INSECURE_SUBSTRINGS = (
     "REPLACE_WITH_REAL_SECRET",
     "REPLACE_WITH_REAL_PASSWORD",
@@ -76,7 +85,6 @@ _INSECURE_SUBSTRINGS = (
 
 
 def _is_insecure(value: str) -> bool:
-    """Return True if value is empty or contains any known placeholder substring."""
     if not value:
         return True
     return any(marker in value for marker in _INSECURE_SUBSTRINGS)
@@ -93,11 +101,6 @@ if _startup_errors:
           file=sys.stderr)
     sys.exit(1)
 
-# Warn (don't fail) for optional observability secrets.
-# Fix #26: also warn when the Langfuse keys are still at their .env.example
-# placeholder values ("pk-lf-REPLACE_ME" / "sk-lf-REPLACE_ME").  These are
-# valid non-empty strings so the old guard missed them, letting Langfuse boot
-# with a publicly-known default key.
 for _opt_var in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
     _opt_val = os.getenv(_opt_var, "")
     if not _opt_val:
@@ -111,38 +114,41 @@ for _opt_var in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
             file=sys.stderr,
         )
 
-# ── Router imports (after secret validation) ──────────────────────────────────
-# Fix #2: keeping imports here means auth.py's module-level JWT_SECRET check
-# only runs once the env has already been validated above.
-from rate_limit import limiter                   # noqa: E402
-from db         import init_db                   # noqa: E402
-from auth       import router as auth_router, current_user  # noqa: E402
-from db         import User                      # noqa: E402
-# validate.py holds validate_spec, used here (compile) and in flows_api + run_api.
-# Keeping it in its own module breaks the circular import that previously existed
-# between flows_api -> main -> flows_api.
-# Fix #25 (shadow): the local _validate_spec wrapper defined at the bottom of this
-# file was removed — it shadowed this import without adding any value.
-from validate   import validate_spec as _validate_spec  # noqa: E402
-from flows_api  import router as flows_router    # noqa: E402
-from run_api    import router as run_router      # noqa: E402
-from crewai_adapter    import compile_crewai     # noqa: E402
-from mastra_adapter    import compile_mastra     # noqa: E402
+from auth import current_user  # noqa: E402
+from auth import router as auth_router  # noqa: E402
+from crewai_adapter import compile_crewai  # noqa: E402
+from db import User, init_db  # noqa: E402
+from eval_api import router as eval_router  # noqa: E402
+from eval_api import seed_eval_templates  # noqa: E402
+from flows_api import router as flows_router  # noqa: E402
 from langgraph_adapter import compile_langgraph  # noqa: E402
+from mastra_adapter import compile_mastra  # noqa: E402
+from a2a_api import router_deploy as a2a_deploy_router   # noqa: E402
+from a2a_api import router_tasks  as a2a_tasks_router    # noqa: E402
+from a2a_api import router_well_known as a2a_wk_router   # noqa: E402
+from prompt_resolver import resolve_prompts  # noqa: E402
+from prompts_api import router as prompts_router  # noqa: E402
+from rate_limit import limiter  # noqa: E402
+from run_api import router as run_router  # noqa: E402
+from teams_api import router as teams_router  # noqa: E402
+from validate import validate_spec as _validate_spec  # noqa: E402
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await seed_eval_templates()
     yield
+    if os.getenv("TESTING") != "true":
+        from redis_client import close_pool
+        await close_pool()
 
 
-app = FastAPI(title="itsharness-adapter", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="itsharness-adapter", version="0.5.2", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 
-# ── Security response headers ─────────────────────────────────────────────────
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -150,41 +156,25 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"]         = "DENY"
     response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"]         = "0"
-    # Fix #9: Content-Security-Policy was missing. The adapter serves JSON only;
-    # 'none' for all directives is safe and explicitly disallows any rendering.
     response.headers["Content-Security-Policy"]  = "default-src 'none'; frame-ancestors 'none'"
     return response
 
 
-# ── Fix #6 (body size): reject oversized request bodies ──────────────────────
-# A multi-MB spec POSTed to /compile or /run triggers expensive codegen.
-# Reject anything over 1 MB before it reaches route handlers.
-MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(1 * 1024 * 1024)))  # default 1 MB
+MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(1 * 1024 * 1024)))
 
 @app.middleware("http")
 async def limit_body_size(request: Request, call_next):
     content_length = request.headers.get("content-length")
     if content_length and int(content_length) > MAX_BODY_BYTES:
-        from fastapi.responses import JSONResponse
-        return JSONResponse(
-            status_code=413,
-            content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"},
-        )
-    # Also handle chunked transfer encoding (no Content-Length header).
-    # Buffer the body so we can both size-check it and re-make it available to
-    # route handlers via a proper ASGI receive callable.
+        return JSONResponse(status_code=413,
+            content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"})
     if not content_length and request.method in ("POST", "PUT", "PATCH"):
         body_so_far = b""
         async for chunk in request.stream():
             body_so_far += chunk
             if len(body_so_far) > MAX_BODY_BYTES:
-                from fastapi.responses import JSONResponse
-                return JSONResponse(
-                    status_code=413,
-                    content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"},
-                )
-        # Re-inject the buffered body as a proper ASGI receive callable.
-        # ASGI receive must return dicts with {'type': 'http.request', 'body': bytes, 'more_body': bool}.
+                return JSONResponse(status_code=413,
+                    content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"})
         body_consumed = False
 
         async def _receive():
@@ -192,45 +182,32 @@ async def limit_body_size(request: Request, call_next):
             if not body_consumed:
                 body_consumed = True
                 return {"type": "http.request", "body": body_so_far, "more_body": False}
-            # Subsequent calls after body is consumed: signal disconnect.
             return {"type": "http.disconnect"}
 
         request = Request(request.scope, receive=_receive)
     return await call_next(request)
 
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 _cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://canvas:3000")
 _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins,
+                   allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(auth_router)
 app.include_router(flows_router)
 app.include_router(run_router)
+app.include_router(teams_router)
+app.include_router(eval_router)
+app.include_router(prompts_router)
+app.include_router(a2a_wk_router)
+app.include_router(a2a_tasks_router)
+app.include_router(a2a_deploy_router)
 
 
 SUPPORTED_RUNTIMES = {
-    "langgraph": {
-        "status":    "full",
-        "note":      "Python codegen + execution. All 14 node types.",
-        "executable": True,
-    },
-    "crewai": {
-        "status":    "full",
-        "note":      "Python codegen + execution. All RFC stubs resolved.",
-        "executable": True,
-    },
-    "mastra": {
-        "status":    "codegen-only",
-        "note":      "TypeScript codegen only. Execution requires a separate Node.js runtime.",
-        "executable": False,
-    },
+    "langgraph": {"status": "full",         "note": "Python codegen + execution. All 14 node types.",                       "executable": True},
+    "crewai":    {"status": "full",         "note": "Python codegen + execution. All RFC stubs resolved.",                  "executable": True},
+    "mastra":    {"status": "codegen-only", "note": "TypeScript codegen only. Execution requires a separate Node.js runtime.", "executable": False},
 }
 
 
@@ -245,12 +222,8 @@ class CompileResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {
-        "status":   "ok",
-        "adapter":  "itsharness",
-        "version":  "0.4.0",
-        "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000"),
-    }
+    return {"status": "ok", "adapter": "itsharness", "version": "0.5.2",
+            "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000")}
 
 
 @app.get("/runtimes")
@@ -268,6 +241,11 @@ async def compile_flow(
 ) -> CompileResponse:
     spec = req.spec
     _validate_spec(spec)
+
+    # Resolve prompt_ref → inject prompt_template for nodes using Langfuse-managed
+    # prompts.  Must run after validate_spec() and before adapter codegen so every
+    # adapter sees a fully-populated spec.  No-op in TESTING=true.
+    spec = await resolve_prompts(spec)
 
     if not runtime:
         runtime = spec.get("runtime_hints", {}).get("preferred_adapter", "langgraph")
@@ -298,14 +276,10 @@ async def compile_flow(
             raise HTTPException(status_code=422, detail=f"LangGraph codegen failed: {exc}") from exc
         return CompileResponse(runtime="langgraph", code=code, warnings=warnings)
 
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}",
-    )
+    raise HTTPException(status_code=400,
+                        detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
 
 
 if __name__ == "__main__":
     import uvicorn
-    # reload=True requires an import string, not the app object — uvicorn needs
-    # to re-import the module on file changes and cannot do that with an object ref.
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)  # noqa: S104

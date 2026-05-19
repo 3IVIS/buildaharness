@@ -32,10 +32,45 @@ export function OutputNode({ id, selected, data }: NodeProps & { data: NodeData 
 // ─── llm_call ──────────────────────────────────────────────────────────────
 
 export function LlmCallNode({ id, selected, data }: NodeProps & { data: NodeData }) {
-  const preview = trunc((data.prompt_template as string) || (data.system_prompt as string))
+  type PR = { name: string; version?: number; label?: string }
+  const promptRef = data.prompt_ref as PR | undefined
+  // When using a Langfuse-managed prompt the pill badge below carries the identity;
+  // show the resolved template text (if any) or nothing as the preview.
+  // When inline, show the prompt template or system prompt as usual.
+  const preview = promptRef?.name
+    ? trunc((data.prompt_template as string) || '')
+    : trunc((data.prompt_template as string) || (data.system_prompt as string))
+
+  // Small Langfuse pill badge — shown when the node uses a managed prompt.
+  const promptPill = promptRef?.name ? (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      marginTop: 3,
+      padding: '1px 6px',
+      borderRadius: 4,
+      fontSize: 10,
+      fontWeight: 500,
+      background: 'rgba(167,139,250,0.12)',
+      border: '0.5px solid rgba(167,139,250,0.3)',
+      color: '#a78bfa',
+      letterSpacing: '0.01em',
+      maxWidth: '100%',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    }}>
+      ⚡ {promptRef.name}
+      {promptRef.version != null && (
+        <span style={{ opacity: 0.7 }}> v{promptRef.version}</span>
+      )}
+    </div>
+  ) : null
+
   return (
     <BaseNode id={id} type="llm_call" selected={selected} data={data}
-      preview={preview || 'no prompt'} />
+      preview={preview || 'no prompt'}>
+      {promptPill}
+    </BaseNode>
   )
 }
 

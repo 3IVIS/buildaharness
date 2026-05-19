@@ -14,6 +14,7 @@ pydantic[email]>=2.11.0         # EmailStr validation for /auth/register
 sqlalchemy[asyncio]>=2.0.30
 asyncpg>=0.29.0                 # Postgres async driver (production)
 aiosqlite>=0.20.0               # SQLite async driver (test suite in-memory DB)
+alembic>=1.13.0                 # Schema migrations — replaces create_all() in production
 
 # ── Local dev ────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0            # loads .env automatically when running python main.py locally
@@ -22,6 +23,7 @@ python-dotenv>=1.0.0            # loads .env automatically when running python m
 python-jose[cryptography]==3.3.0
 bcrypt>=4.0.0                  # replaces passlib (abandoned, incompatible with bcrypt 4.x)
 email-validator>=2.1.1
+redis[asyncio]>=5.0.0          # JWT revocation blocklist (jti → Redis SETEX)
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 slowapi>=0.1.9
@@ -36,3 +38,4 @@ langfuse>=4.0.0
 openinference-instrumentation-crewai>=0.1.0
 opentelemetry-api>=1.24.0
 opentelemetry-sdk>=1.24.0
+httpx>=0.27.0                  # HTTP client for Langfuse API proxy (eval_api, prompts_api)

@@ -1,0 +1,162 @@
+"""
+Prompt versioning — Langfuse Prompt Management API proxy.
+
+GET /prompts            → list all prompt names (for the canvas PromptPicker dropdown)
+GET /prompts/{name}     → versions + full content for a specific prompt (for preview)
+
+Both endpoints proxy the Langfuse HTTP API and require auth.
+The Langfuse secret key is NEVER forwarded to the frontend — only the
+processed data (name, versions, truncated preview) crosses the API boundary.
+
+TESTING=true / Langfuse absent → stub responses, no network calls.
+"""
+import os
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from auth import current_user
+from db import User
+
+_LANGFUSE_BASE_URL   = os.getenv("LANGFUSE_BASE_URL",   "http://langfuse:3000")
+_LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+_LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+# Consistent with eval_api.py and prompt_resolver.py: read directly from env
+# so the value reflects what was set before the module was imported.
+_LANGFUSE_ENABLED    = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
+
+router = APIRouter(prefix="/prompts", tags=["prompts"])
+
+
+# ── Pydantic response schemas ─────────────────────────────────────────────────
+
+class PromptSummary(BaseModel):
+    name:    str
+    version: int
+    labels:  list[str] = []
+
+
+class PromptDetail(BaseModel):
+    name:     str
+    version:  int
+    prompt:   str          # raw template text (first 2000 chars for preview)
+    labels:   list[str] = []
+    versions: list[int] = []  # all available version numbers
+
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+
+def _lf_http() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=_LANGFUSE_BASE_URL,
+        auth=(_LANGFUSE_PUBLIC_KEY, _LANGFUSE_SECRET_KEY),
+        timeout=8.0,
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.get("", response_model=list[PromptSummary])
+async def list_prompts(
+    limit: int  = Query(default=50, ge=1, le=100),
+    user:  User = Depends(current_user),
+) -> list[PromptSummary]:
+    """Return all prompt names registered in Langfuse.
+
+    Used by the canvas PromptPicker dropdown to populate the prompt selector.
+    Returns an empty list when Langfuse is not configured — the canvas falls
+    back to inline mode gracefully.
+    """
+    if os.getenv("TESTING") == "true" or not _LANGFUSE_ENABLED:
+        return []
+
+    async with _lf_http() as http:
+        try:
+            resp = await http.get("/api/public/prompts", params={"limit": limit})
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=exc.response.status_code,
+                detail=f"Langfuse API error: {exc.response.text}",
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Langfuse unreachable: {exc}"
+            ) from exc
+
+    result: list[PromptSummary] = []
+    for item in data.get("data", []):
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        result.append(PromptSummary(
+            name=item["name"],
+            version=item.get("version", 1),
+            labels=item.get("labels", []),
+        ))
+    return result
+
+
+@router.get("/{name}", response_model=PromptDetail)
+async def get_prompt(
+    name: str,
+    user: User = Depends(current_user),
+) -> PromptDetail:
+    """Return the latest version and full content of a named prompt.
+
+    Used by the canvas config panel to preview prompt content before pinning
+    to a specific version.  The prompt text is truncated to 2000 chars for
+    the preview; the full text is resolved at runtime by prompt_resolver.py.
+    """
+    if os.getenv("TESTING") == "true" or not _LANGFUSE_ENABLED:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Prompt '{name}' not found (Langfuse not configured in this environment)",
+        )
+
+    async with _lf_http() as http:
+        try:
+            resp = await http.get(f"/api/public/prompts/{name}")
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise HTTPException(
+                    status_code=404, detail=f"Prompt '{name}' not found in Langfuse"
+                ) from exc
+            raise HTTPException(
+                status_code=exc.response.status_code,
+                detail=f"Langfuse API error: {exc.response.text}",
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Langfuse unreachable: {exc}"
+            ) from exc
+
+    # Extract prompt text — Langfuse returns either a string (text prompt)
+    # or a list of message dicts (chat prompt).  For preview, stringify both.
+    raw_prompt = data.get("prompt", "")
+    if isinstance(raw_prompt, list):
+        # Chat prompt: join role+content pairs for display
+        preview_text = "\n".join(
+            f"[{m.get('role', '?')}] {m.get('content', '')}"
+            for m in raw_prompt
+            if isinstance(m, dict)
+        )
+    else:
+        preview_text = str(raw_prompt)
+
+    # Collect all version numbers from the versions array if present
+    versions_list: list[int] = []
+    raw_versions = data.get("versions", [])
+    if isinstance(raw_versions, list):
+        versions_list = [v for v in raw_versions if isinstance(v, int)]
+
+    return PromptDetail(
+        name=data.get("name", name),
+        version=data.get("version", 1),
+        prompt=preview_text[:2000],   # cap at 2000 chars for panel preview
+        labels=data.get("labels", []),
+        versions=versions_list,
+    )
