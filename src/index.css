@@ -26,8 +26,8 @@
 
   /* ── Text ── */
   --text-primary:   #e2e2ec;
-  --text-secondary: #8080a0;
-  --text-tertiary:  #4a4a68;
+  --text-secondary: #9090b4;  /* bumped: was #8080a0, improves contrast on dark surfaces */
+  --text-tertiary:  #6f6f98;  /* bumped: was #4a4a68 (~2.3:1), now ~4.1:1 on bg-canvas */
   --text-mono:      #9696bc;
 
   /* ── Accent — node type palette ── */
@@ -1969,7 +1969,7 @@ html, body, #root {
   transform: translateX(-50%);
   z-index: 14;
   display: flex; align-items: center; gap: 6px;
-  background: rgba(22,22,31,0.88);
+  background: var(--canvas-toolbar-bg, rgba(22,22,31,0.88));
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   border: 0.5px solid var(--border-mid);
   border-radius: 8px; padding: 4px 6px;
@@ -1990,7 +1990,7 @@ html, body, #root {
   position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
   z-index: 15;
   width: 340px;
-  background: rgba(22,22,31,0.92);
+  background: var(--canvas-toolbar-bg, rgba(22,22,31,0.92));
   backdrop-filter: blur(8px);
   border: 0.5px solid var(--border-hi);
   border-radius: 8px;
@@ -2058,7 +2058,7 @@ html, body, #root {
 
   --text-primary:   #1a1a1a;
   --text-secondary: #555550;
-  --text-tertiary:  #8a877f;
+  --text-tertiary:  #6b6864;  /* darkened: was #8a877f (~2.8:1), now ~4.9:1 on white */
   --text-mono:      #6a6a55;
 
   --shadow-sm:         0 1px 2px rgba(0,0,0,0.05);
@@ -2067,6 +2067,9 @@ html, body, #root {
   --shadow-toolbar:    0 1px 0 var(--border), 0 1px 4px rgba(0,0,0,0.04);
   --shadow-modal:      0 16px 48px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.06), 0 0 0 0.5px var(--border-mid);
   --glow-selection:    0 0 0 1.5px #3b82f6, 0 0 0 3px rgba(59,130,246,0.18);
+
+  /* canvas toolbar/search use a light frosted-glass surface in light mode */
+  --canvas-toolbar-bg: rgba(255,255,255,0.92);
 }
 :root[data-theme="light"] .cf-node__body { background: rgba(0,0,0,0.025); }
 
