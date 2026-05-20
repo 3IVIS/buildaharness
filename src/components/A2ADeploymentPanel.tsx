@@ -69,13 +69,18 @@ export function A2ADeploymentPanel() {
   const deployedAt = new Date(deployed_at).toLocaleString()
 
   const panelStyle: React.CSSProperties = {
+    // §3 overlay treatment — floating, anchored to workspace right edge.
+    position: 'absolute',
+    top: 0, right: 0, bottom: 0,
+    zIndex: 11,
     width: 320,
-    flexShrink: 0,
-    borderLeft: '0.5px solid var(--border)',
-    background: 'var(--bg-panel)',
+    borderLeft: '0.5px solid var(--border-mid)',
+    boxShadow: '-8px 0 24px rgba(0,0,0,0.25), -1px 0 0 var(--border)',
+    background: 'var(--bg-base)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    animation: 'panelSlideIn 0.15s ease',
   }
 
   const headerStyle: React.CSSProperties = {

@@ -17,6 +17,11 @@ model_list:
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
+  # LiteLLM's internal callback health checker pings Langfuse every ~10s using
+  # Bearer auth, which Langfuse rejects (it expects Basic auth). This is benign
+  # but noisy. Raising the interval to 1 hour suppresses the log spam without
+  # affecting actual trace ingestion, which uses the correct Langfuse SDK auth.
+  health_check_interval: 3600
 
 litellm_settings:
   # Langfuse callback — logs every LLM call (cost, tokens, latency) to Langfuse.

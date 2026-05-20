@@ -105,7 +105,7 @@ services:
       - MAX_BODY_BYTES=${MAX_BODY_BYTES:-1048576}
       # Redis — JWT revocation blocklist (shares the Redis 7 instance used by Langfuse)
       # Database 1 is reserved for itsharness; database 0 is used by Langfuse's BullMQ queue.
-      - REDIS_URL=redis://redis:6379/1
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/1
       # Langfuse
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
@@ -125,7 +125,7 @@ services:
       redis:
         condition: service_healthy
       langfuse:
-        condition: service_started
+        condition: service_healthy
       mastra-runner:
         condition: service_healthy
 
@@ -172,7 +172,7 @@ services:
       postgres:
         condition: service_healthy
       langfuse:
-        condition: service_started
+        condition: service_healthy
 
   # ── ClickHouse (Langfuse analytics store) ─────────────────────────────────
   clickhouse:
@@ -207,12 +207,15 @@ services:
   # ── Redis (Langfuse ingestion queue) ──────────────────────────────────────
   redis:
     image: redis:7-alpine
+    # Require a password so Langfuse/worker AUTH calls succeed.
+    # REDIS_PASSWORD must be set in .env.
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -231,6 +234,7 @@ services:
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_AUTH=${REDIS_PASSWORD}
       - NEXTAUTH_URL=http://localhost:3001
       # Fix #3: all secrets must be set in .env — no insecure defaults.
       - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
@@ -287,6 +291,7 @@ services:
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_AUTH=${REDIS_PASSWORD}
       - SALT=${LANGFUSE_SALT}
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - TELEMETRY_ENABLED=false

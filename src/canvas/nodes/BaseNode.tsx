@@ -131,6 +131,16 @@ export function BaseNode({
         <Handle type="source" position={Position.Right}
           style={{ background: hex, borderColor: hex }} />
       )}
+      {/* §4 — handle labels (autohide; revealed on .cf-node:hover via CSS) */}
+      {hasTarget && <span className="cf-handle-label cf-handle-label--left">in</span>}
+      {hasSource && (
+        <span className="cf-handle-label cf-handle-label--right">
+          {type === 'condition'     ? 'branches'
+          : type === 'parallel_fork' ? 'targets'
+          : type === 'tool_invoke'   ? 'ok'
+          : 'out'}
+        </span>
+      )}
 
       <div className="cf-node__header">
         <span className="cf-node__icon-stack">
@@ -142,17 +152,8 @@ export function BaseNode({
 
         <span className="cf-node__label">{label}</span>
 
-        {preferredAdapter && (
-          <span
-            className={`compat-pin compat-pin--${pinnedLevel ?? 'missing'}`}
-            title={`${preferredAdapter}: ${pinnedLevel}`}
-          >
-            {(hasWarning || hasMissing) && (
-              <AlertTriangle size={9} strokeWidth={2} />
-            )}
-            {ADAPTER_LABELS[preferredAdapter]}
-          </span>
-        )}
+        {/* §15 — single-runtime compat-pin removed from the header;
+            the autohide 4-cell strip at the bottom is the canonical surface. */}
       </div>
 
       {(preview || children) && (

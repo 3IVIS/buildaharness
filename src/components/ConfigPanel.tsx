@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react'
-import { X, AlertCircle, CheckCircle } from 'lucide-react'
+import { X, AlertCircle, CheckCircle, Play } from 'lucide-react'
 import { useCanvasStore, type NodeData } from '../store'
 import type { NodeType, PromptRef } from '../spec/schema'
 import { NODE_ICONS, NODE_HEX, NODE_TYPE_LABELS } from '../canvas/nodes/BaseNode'
 import { api, type PromptSummary } from '../services/api'
+
+// Node types that "do work" — these get the per-step Run button (§3).
+const EXECUTABLE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
+  'llm_call', 'tool_invoke', 'transform',
+  'memory_read', 'memory_write',
+  'agent_role', 'agent_debate', 'hitl_breakpoint',
+])
 
 // ─── Field helpers ───────────────────────────────────────────────────────────
 
@@ -698,7 +705,12 @@ const PANEL_MAP: Partial<Record<NodeType, React.ComponentType<{ data: NodeData; 
 // ─── Main ConfigPanel component ───────────────────────────────────────────────
 
 export function ConfigPanel() {
-  const { nodes, selectedNodeId, zodErrors, crossRefErrors, updateNodeData, closePanel, deleteNode } = useCanvasStore()
+  const {
+    nodes, selectedNodeId, zodErrors, crossRefErrors, updateNodeData, closePanel, deleteNode,
+    // §3 per-step Run — opens the drawer + starts a targeted run
+    openRunDrawer, exportSpec, validate, setActiveJob, clearExecStats,
+    flowMeta, activeJobId,
+  } = useCanvasStore()
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId)
 
@@ -728,6 +740,41 @@ export function ConfigPanel() {
     ...(crossRefErrors.filter((e) => e.nodeId === selectedNode.id)),
   ]
 
+  // §3 — Per-step Run: starts a run scoped to this node and opens the drawer.
+  const canRunStep   = EXECUTABLE_TYPES.has(nodeType) && !activeJobId
+  const runStepTitle =
+    activeJobId    ? 'A run is already in flight'
+  : !EXECUTABLE_TYPES.has(nodeType) ? `${nodeType} is not directly executable`
+  : nodeErrors.length > 0 ? 'Fix node errors before running'
+  : 'Run this step in isolation (uses upstream values when available)'
+
+  async function handleRunStep() {
+    if (!selectedNode) return
+    const spec = exportSpec()
+    if (!spec) { validate(); return }
+    openRunDrawer()
+    try {
+      clearExecStats()
+      // Backend may accept a `target_node` hint via query param — adapter is
+      // free to ignore it. Until the adapter supports it, this still kicks
+      // off a full run, just with the drawer open so the user sees progress.
+      const runtime = flowMeta.runtimeHints?.preferred_adapter
+      const url     = `/run?target_node=${encodeURIComponent(selectedNode.id)}`
+                    + (runtime ? `&runtime=${encodeURIComponent(runtime)}` : '')
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(spec),
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json() as { job_id: string }
+      setActiveJob(data.job_id)
+    } catch (err) {
+      console.error('runStep failed', err)
+    }
+  }
+
   return (
     <div className="config-panel">
       <div className="config-panel__header">
@@ -739,6 +786,18 @@ export function ConfigPanel() {
           <div className="config-panel__name">{(selectedNode.data.label as string) || selectedNode.id}</div>
         </div>
         <div className="config-panel__actions">
+          {/* §3 · Per-step Run — secondary, green, mono. Disabled with reason via title. */}
+          {EXECUTABLE_TYPES.has(nodeType) && (
+            <button
+              className="config-panel__run-step"
+              title={runStepTitle}
+              disabled={!canRunStep || nodeErrors.length > 0}
+              onClick={handleRunStep}
+            >
+              <Play size={10} fill="currentColor" stroke="none" />
+              Run step
+            </button>
+          )}
           <button
             className="config-panel__close"
             title="Delete node"

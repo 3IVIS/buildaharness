@@ -56,7 +56,20 @@ Also add your LLM API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
 
 > **Placeholder detection** — the adapter checks all secret values for known placeholder substrings (e.g. `REPLACE_ME`, `REPLACE_WITH_REAL_SECRET`) and exits with a clear error at startup. Replace every placeholder before starting the stack.
 
-### 2. Start everything
+### 2. Generate the mastra-runner lockfile
+
+The `mastra-runner` service is a separate Node.js package and needs its own
+`package-lock.json` before Docker can build it. This is a one-time step:
+
+```bash
+cd mastra-runner && npm install && cd ..
+```
+
+> This only writes `mastra-runner/package-lock.json` to disk — it does not
+> install anything into your global environment. Commit the lockfile so
+> teammates don't need to repeat this step.
+
+### 3. Start everything
 
 ```bash
 docker compose up
@@ -67,6 +80,8 @@ docker compose up
 | Canvas | http://localhost:3000 |
 | Adapter API | http://localhost:8000/health |
 | Langfuse UI | http://localhost:3001 |
+
+Nine services start in total: canvas, mastra-runner, adapter, postgres, redis, clickhouse, litellm, langfuse, and langfuse-worker.
 
 Log in to Langfuse with the `LANGFUSE_ADMIN_EMAIL` and `LANGFUSE_ADMIN_PASSWORD` you set in `.env`.
 
@@ -145,7 +160,7 @@ itsharness/
 ├── mastra-runner/               ← Node.js sidecar for Mastra execution
 │
 ├── infra/postgres-init.sql      ← Creates langfuse + litellm databases on first boot
-├── docker-compose.yml           ← 8 services
+├── docker-compose.yml           ← 9 services
 ├── .env.example                 ← All env vars with generation hints
 └── CONTRIBUTING.md
 ```
@@ -156,7 +171,7 @@ itsharness/
 
 ## The spec — `@itsharness/flow-spec`
 
-**Current version:** `0.2.0` · **RFC:** closed — see [`docs/adr/`](./docs/adr/)
+**Current version:** `0.2.0` · **RFC:** closed — codegen field semantics formalised in [`docs/adr/001`](./docs/adr/001-codegen-field-semantics.md)
 
 ### The 14 node types
 
@@ -229,7 +244,7 @@ itsharness/
 | [02 — Content Moderation + HITL](./flows/02-content-moderation-hitl-flow.json) | Mastra | `llm_call` structured output, `condition`, `hitl_breakpoint` |
 | [03 — Parallel Risk Assessment](./flows/03-parallel-risk-assessment-flow.json) | CrewAI | `parallel_fork/join`, `agent_role` ×3, `memory_access: "isolated"` |
 | [04 — Research Crew](./flows/04-research-crew-flow.json) | CrewAI | `context_from` on edges, `tool_approval: "human"` |
-| [05 — Debate Agent + A2A](./flows/05-debate-agent-a2a-flow.json) | MS Agent Framework | `agent_debate`, `a2a_config` |
+| [05 — Debate Agent + A2A](./flows/05-debate-agent-a2a-flow.json) | MS Agent Framework *(Phase 4)* | `agent_debate`, `a2a_config` |
 
 ---
 
@@ -549,6 +564,7 @@ GET  /runtimes                    Available runtimes (no auth)
 | `ANTHROPIC_API_KEY` | optional | For Anthropic models via LiteLLM |
 | `LANGFUSE_PUBLIC_KEY` | optional | Enables Langfuse tracing |
 | `LANGFUSE_SECRET_KEY` | optional | Required when `LANGFUSE_PUBLIC_KEY` is set |
+| `REDIS_URL` | optional | Redis connection string (default: `redis://redis:6379/1`) |
 | `ADAPTER_BASE_URL` | optional | Public adapter URL used in generated endpoint URLs (default: `http://localhost:8000`) |
 | `A2A_BASE_URL` | optional | Override for A2A endpoint URLs; defaults to `ADAPTER_BASE_URL` |
 | `INVOKE_TIMEOUT_S` | optional | Synchronous invoke timeout in seconds (default: `120`) |

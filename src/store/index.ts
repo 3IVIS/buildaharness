@@ -58,7 +58,7 @@ interface FlowMeta {
   runtimeHints: { preferred_adapter?: AdapterName; compatible?: AdapterName[] }
 }
 
-export type SettingsTab = 'meta' | 'state' | 'memory' | 'tools' | 'agents' | 'config'
+export type SettingsTab = 'meta' | 'state' | 'memory' | 'tools' | 'agents' | 'config' | 'appearance'
 
 // ─── PersistedState — the slice written to localStorage ──────────────────────
 
@@ -110,7 +110,16 @@ interface CanvasStore extends PersistedState {
   isEdgePanelOpen: boolean
   isSettingsOpen:  boolean
   settingsTab:     SettingsTab
+  // §10 — Light/dark theme
+  theme:           'dark' | 'light'
+  setTheme:        (t: 'dark' | 'light') => void
+  // §11 — Library full-screen page
+  isLibraryOpen:   boolean
+  openLibrary:     () => void
+  closeLibrary:    () => void
   isProblemsOpen:  boolean
+  // §6 Run drawer — replaces toolbar Export-JSON-as-primary affordance
+  isRunDrawerOpen: boolean
   // Fix #29: zodErrors and crossRefErrors are set only by validate(), not by exportSpec()
   zodErrors:       z.ZodError | null
   crossRefErrors:  ValidationError[]
@@ -173,7 +182,14 @@ interface CanvasStore extends PersistedState {
   openSettings:   (tab?: SettingsTab) => void
   closeSettings:  () => void
   setSettingsTab: (tab: SettingsTab) => void
+  // §10 — theme toggle
+  setTheme:       (t: 'dark' | 'light') => void
+  // §11 — library page
+  openLibrary:    () => void
+  closeLibrary:   () => void
   toggleProblems:       () => void
+  openRunDrawer:        () => void
+  closeRunDrawer:       () => void
   setNodeExecStat:      (nodeId: string, stat: NodeExecStat) => void
   clearExecStats:       () => void
   setActiveJob:         (jobId: string | null) => void
@@ -294,7 +310,12 @@ export const useCanvasStore = create<CanvasStore>()(
       selectedNodeId: null, isPanelOpen: false,
       selectedEdgeId: null, isEdgePanelOpen: false,
       isSettingsOpen: false, settingsTab: 'meta' as SettingsTab,
+      // §10 — theme (read from localStorage; applied to <html> in main.tsx on boot)
+      theme: (localStorage.getItem('itsharness:theme') as 'dark' | 'light') ?? 'dark',
+      // §11 — library page
+      isLibraryOpen: false,
       isProblemsOpen: false,
+      isRunDrawerOpen: false,
       execStats: {},
       activeJobId: null, hitlState: null, traceUrl: null, zodErrors: null, crossRefErrors: [],
       past: [], future: [], canUndo: false, canRedo: false,
@@ -469,7 +490,20 @@ export const useCanvasStore = create<CanvasStore>()(
       openSettings:   (tab = 'meta') => set({ isSettingsOpen: true,  settingsTab: tab }),
       closeSettings:  ()             => set({ isSettingsOpen: false }),
       setSettingsTab: (tab)          => set({ settingsTab: tab }),
+
+      // §10 — theme
+      setTheme: (t) => {
+        localStorage.setItem('itsharness:theme', t)
+        document.documentElement.setAttribute('data-theme', t)
+        set({ theme: t })
+      },
+
+      // §11 — library page
+      openLibrary:  () => set({ isLibraryOpen: true }),
+      closeLibrary: () => set({ isLibraryOpen: false }),
       toggleProblems:  ()            => set((s) => ({ isProblemsOpen: !s.isProblemsOpen })),
+      openRunDrawer:   ()            => set({ isRunDrawerOpen: true }),
+      closeRunDrawer:  ()            => set({ isRunDrawerOpen: false }),
       setNodeExecStat: (nodeId, stat) => set((s) => ({ execStats: { ...s.execStats, [nodeId]: stat } })),
       clearExecStats:  ()            => set({
         execStats: {},
@@ -689,12 +723,19 @@ export const useCanvasStore = create<CanvasStore>()(
           clearTimeout(_updateDebounceTimer)
           _updateDebounceTimer = null
         }
+        // §8 — pre-place a single input node labeled "Start"
+        const startNode: CanvasNode = {
+          id:       'input-1',
+          type:     'input',
+          position: { x: 140, y: 200 },
+          data:     { label: 'Start', output_schema: {} },
+        }
         set({
-          nodes: [], edges: [], flowMeta: defaultMeta(), stateSchema: null,
+          nodes: [startNode], edges: [], flowMeta: defaultMeta(), stateSchema: null,
           agents: [], memoryStores: {}, tools: {}, modelDefaults: {}, flowConfig: {},
           selectedNodeId: null, isPanelOpen: false, selectedEdgeId: null, isEdgePanelOpen: false,
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
-          _nodeCounter: 0,
+          _nodeCounter: 1,
           lastModifiedAt: Date.now(),
           a2aDeployment: null, a2aDeploying: false, unifiedDeployment: null, unifiedDeploying: false,
         })

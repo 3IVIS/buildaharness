@@ -183,14 +183,16 @@ The canvas must never break spec export/import. `npm test` validates all 5 refer
 
 ### Adding a new node type
 
-Adding a node type touches six places:
+Adding a node type touches eight places:
 
 1. **`spec/schema.ts`** — Zod schema entry with `describe()` strings
 2. **`src/spec/schema.ts`** — canvas copy (omit `.refine()` calls)
 3. **`src/store/index.ts`** — `NODE_DEFAULTS` entry
-4. **`src/components/ConfigPanel.tsx`** — config panel registered in the `PANELS` map
-5. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
-6. **`src/spec/schema.ts`** — `NODE_SUPPORT_MATRIX` entry for all 4 runtimes
+4. **`src/canvas/nodes/NodeComponents.tsx`** — the React component itself, exported by name
+5. **`src/canvas/nodes/index.ts`** — add the component to the `nodeTypes` export map (this is what XYFlow uses to render the node)
+6. **`src/components/ConfigPanel.tsx`** — add a panel function and register it in the `PANEL_MAP` constant
+7. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
+8. **`src/spec/schema.ts`** — `NODE_SUPPORT_MATRIX` entry for all 4 runtimes
 
 ### Adding a marketplace component UI card field
 

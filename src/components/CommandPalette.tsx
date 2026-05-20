@@ -93,7 +93,10 @@ function SectionHeader({ label }: { label: string }) {
 interface Props { onClose: () => void }
 
 export function CommandPalette({ onClose }: Props) {
-  const { nodes, selectNode, addNode, openSettings, loadFlow } = useCanvasStore()
+  // §7 — `nodes` no longer needed; Cmd+F (CanvasToolbar) finds nodes. We
+  // keep `selectNode` only because the Result union still includes 'node'
+  // for type-safety; that branch is now unreachable in practice.
+  const { selectNode, addNode, openSettings, loadFlow } = useCanvasStore()
   const [query, setQuery] = useState('')
   const [idx, setIdx]     = useState(0)
   const inputRef          = useRef<HTMLInputElement>(null)
@@ -113,19 +116,8 @@ export function CommandPalette({ onClose }: Props) {
 
     const out: Result[] = []
 
-    // Canvas nodes — search by label, type, id
-    nodes
-      .filter(n => n.type !== 'annotation')
-      .forEach(n => {
-        const label = String(n.data?.label ?? n.type)
-        if (
-          n.id.toLowerCase().includes(q) ||
-          (n.type as string).includes(q) ||
-          label.toLowerCase().includes(q)
-        ) {
-          out.push({ kind: 'node', id: n.id, label, type: n.type as NodeType })
-        }
-      })
+    // §7 — Cmd+K no longer surfaces canvas nodes. Cmd+F (in-canvas search)
+    // owns that intent now. Result set is commands + settings + flow switching.
 
     // Settings tabs
     SETTINGS_ITEMS.forEach(s => {
@@ -152,7 +144,7 @@ export function CommandPalette({ onClose }: Props) {
     })
 
     return out
-  }, [q, nodes])
+  }, [q])
 
   // Clamp active index when results change
   useEffect(() => { setIdx(0) }, [results.length])
@@ -288,11 +280,13 @@ export function CommandPalette({ onClose }: Props) {
           <div className="cmd-empty">No results for "{query}"</div>
         )}
 
-        {/* Footer hints */}
+        {/* Footer hints — §7: highlight the ⌘K vs ⌘F split */}
         <div className="cmd-footer">
-          <span><kbd>↑↓</kbd> navigate</span>
-          <span><kbd>↵</kbd> select</span>
-          <span><kbd>esc</kbd> close</span>
+          <span><kbd>⌘K</kbd> commands</span>
+          <span><kbd>⌘F</kbd> find on canvas</span>
+          <span style={{ marginLeft: 'auto' }}>
+            <kbd>↵</kbd> select <kbd>esc</kbd> close
+          </span>
         </div>
       </div>
     </div>

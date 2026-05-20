@@ -113,7 +113,7 @@ if [[ -f .env ]]; then
   warn ".env already exists."
   printf "  Overwrite it? [y/N] "
   read -r overwrite
-  [[ "${overwrite,,}" == "y" ]] || DO_ENV=false
+  [[ "$(echo "$overwrite" | tr '[:upper:]' '[:lower:]')" == "y" ]] || DO_ENV=false
 fi
 
 if $DO_ENV; then
@@ -150,6 +150,7 @@ if $DO_ENV; then
   LANGFUSE_SALT="$(rand_base64 32)";            success "LANGFUSE_SALT"
   LANGFUSE_ENCRYPTION_KEY="$(rand_hex 32)";     success "LANGFUSE_ENCRYPTION_KEY"
   CLICKHOUSE_PASSWORD="$(rand_hex 24)";         success "CLICKHOUSE_PASSWORD"  # hex avoids / and + breaking ClickHouse migration URLs
+  REDIS_PASSWORD="$(rand_base64 24)";           success "REDIS_PASSWORD"
 
   # ── Write .env ─────────────────────────────────────────────────────────────
 
@@ -192,6 +193,9 @@ LANGFUSE_ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
 # ── ClickHouse ───────────────────────────────────────────────────────────────
 CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
 
+# ── Redis ────────────────────────────────────────────────────────────────────
+REDIS_PASSWORD=${REDIS_PASSWORD}
+
 # ── CORS ─────────────────────────────────────────────────────────────────────
 CORS_ORIGINS=http://localhost:3000,http://canvas:3000
 
@@ -217,6 +221,39 @@ EOF
   success ".env.local written"
 
 fi   # end DO_ENV
+
+# ── Patch .env — fill in any secrets missing from an existing file ────────────
+#
+# Runs whether or not the user chose to overwrite .env above.
+# Safe to re-run: only appends keys that are absent.
+# Covers secrets that were added to the project after the user's initial setup
+# (e.g. REDIS_PASSWORD was added in a later release).
+
+if [[ -f .env ]]; then
+  header "Checking .env for missing secrets"
+
+  _needs()  { ! grep -qE "^$1=" .env; }
+  _append() {
+    local key="$1" val="$2"
+    printf '\n# Added by setup-env.sh on %s\n%s=%s\n' \
+      "$(date -u '+%Y-%m-%d %H:%M UTC')" "$key" "$val" >> .env
+    success "Added missing $key"
+  }
+
+  _patched=0
+
+  # Auto-generated secrets — safe to generate fresh values for new installs.
+  _needs REDIS_PASSWORD           && { _append REDIS_PASSWORD           "$(rand_base64 24)"; _patched=1; }
+  _needs JWT_SECRET               && { _append JWT_SECRET               "$(rand_base64 32)"; _patched=1; }
+  _needs POSTGRES_PASSWORD        && { _append POSTGRES_PASSWORD        "$(rand_base64 24)"; _patched=1; }
+  _needs LITELLM_MASTER_KEY       && { _append LITELLM_MASTER_KEY       "$(rand_base64 32)"; _patched=1; }
+  _needs LANGFUSE_NEXTAUTH_SECRET && { _append LANGFUSE_NEXTAUTH_SECRET "$(rand_base64 32)"; _patched=1; }
+  _needs LANGFUSE_SALT            && { _append LANGFUSE_SALT            "$(rand_base64 32)"; _patched=1; }
+  _needs LANGFUSE_ENCRYPTION_KEY  && { _append LANGFUSE_ENCRYPTION_KEY  "$(rand_hex   32)"; _patched=1; }
+  _needs CLICKHOUSE_PASSWORD      && { _append CLICKHOUSE_PASSWORD      "$(rand_hex   24)"; _patched=1; }
+
+  [[ $_patched -eq 0 ]] && success ".env is up to date — no missing secrets"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 

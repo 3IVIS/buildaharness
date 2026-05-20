@@ -16,7 +16,10 @@ FROM node:20-slim AS builder
 WORKDIR /build
 
 # Install deps first for better layer caching.
-COPY package.json package-lock.json* ./
+# Note: package-lock.json is required (no glob). If this COPY fails, run
+#   cd mastra-runner && npm install
+# to generate the lockfile, then retry. See Quick Start in README.md.
+COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./

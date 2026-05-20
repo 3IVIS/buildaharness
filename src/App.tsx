@@ -1,19 +1,21 @@
 import { Component, useEffect, useState, type ReactNode } from 'react'
-import { AuthGate }          from './components/AuthGate'
-import { Toolbar }           from './components/Toolbar'
-import { Sidebar }           from './components/Sidebar'
-import { Canvas }            from './canvas/Canvas'
-import { ConfigPanel }       from './components/ConfigPanel'
-import { EdgeConfigPanel }   from './components/EdgeConfigPanel'
-import { FlowSettingsModal } from './components/FlowSettingsModal'
-import { ProblemsPanel }     from './components/ProblemsPanel'
-import { CommandPalette }    from './components/CommandPalette'
-import { HitlResumePanel }    from './components/HitlResumePanel'
-import { A2ADeploymentPanel } from './components/A2ADeploymentPanel'
-import { DeploymentPanel }    from './components/DeploymentPanel'
-import { FeedbackBar }       from './components/FeedbackBar'
-import { useCanvasStore }    from './store'
-import { useRunPoller }      from './services/runPoller'
+import { AuthGate }           from './components/AuthGate'
+import { Toolbar }            from './components/Toolbar'
+import { Sidebar }            from './components/Sidebar'
+import { Canvas }             from './canvas/Canvas'
+import { ConfigPanel }        from './components/ConfigPanel'
+import { EdgeConfigPanel }    from './components/EdgeConfigPanel'
+import { FlowSettingsDrawer } from './components/FlowSettingsDrawer'
+import { ProblemsPanel }      from './components/ProblemsPanel'
+import { CommandPalette }     from './components/CommandPalette'
+import { RunDrawer }           from './components/RunDrawer'
+import { A2ADeploymentPanel }  from './components/A2ADeploymentPanel'
+import { DeploymentPanel }     from './components/DeploymentPanel'
+import { FeedbackBar }        from './components/FeedbackBar'
+import { ErrorBanner }        from './components/ErrorBanner'
+import { FlowLibraryPanel }   from './components/FlowLibraryPanel'
+import { useCanvasStore }     from './store'
+import { useRunPoller }       from './services/runPoller'
 
 // ─── Fix #30: Error Boundary ─────────────────────────────────────────────────
 
@@ -76,11 +78,21 @@ export function App() {
     activeJobId, hitlState, traceUrl, a2aDeployment,
     setA2ADeployment,
     unifiedDeployment, setUnifiedDeployment,
+    // §6 — Run drawer
+    isRunDrawerOpen, openRunDrawer, closeRunDrawer,
+    // §11 — Library page
+    isLibraryOpen, closeLibrary,
   } = useCanvasStore()
 
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false)
 
   useRunPoller()
+
+  // §14 — when a run pauses on a hitl_breakpoint, open the Run drawer so the
+  // reviewer sees the inline resume form. The inspector stays as-is.
+  useEffect(() => {
+    if (hitlState && !isRunDrawerOpen) openRunDrawer()
+  }, [hitlState, isRunDrawerOpen, openRunDrawer])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -93,9 +105,19 @@ export function App() {
         return
       }
 
+      // §5 — ⌘F opens the in-canvas node search. Always preventDefault to
+      // suppress the browser find bar (we own this intent now).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('itsharness:open-canvas-search'))
+        return
+      }
+
       if (e.key === 'Escape') {
         if (isCmdPaletteOpen)  { setIsCmdPaletteOpen(false); return }
+        if (isRunDrawerOpen)   { closeRunDrawer(); return }
         if (isSettingsOpen)    { closeSettings(); return }
+        if (isLibraryOpen)     { closeLibrary(); return }
         if (isPanelOpen)       { closePanel();    return }
         if (isEdgePanelOpen)   { closeEdgePanel(); return }
         if (unifiedDeployment) { setUnifiedDeployment(null); return }
@@ -119,6 +141,8 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     isCmdPaletteOpen, isPanelOpen, isEdgePanelOpen, isSettingsOpen,
+    isRunDrawerOpen, closeRunDrawer,
+    isLibraryOpen, closeLibrary,
     selectedNodeId, selectedEdgeId,
     closePanel, closeEdgePanel, closeSettings, deleteNode, deleteEdge,
     undo, redo, canUndo, canRedo,
@@ -131,21 +155,26 @@ export function App() {
       <AuthGate>
       <div className="app">
         <Toolbar />
+        {/* §12 — Error banner: visible when spec has validation errors */}
+        <ErrorBanner />
         <div className="workspace">
           <Sidebar />
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
             <ErrorBoundary>
               <Canvas />
             </ErrorBoundary>
             {isProblemsOpen && <ProblemsPanel />}
+            {isPanelOpen     && <ConfigPanel />}
+            {isEdgePanelOpen && <EdgeConfigPanel />}
+            {unifiedDeployment && <DeploymentPanel />}
+            {a2aDeployment && !unifiedDeployment && <A2ADeploymentPanel />}
+            <RunDrawer />
+            {/* §11 — Settings drawer (replaces modal; canvas visible behind) */}
+            <FlowSettingsDrawer />
           </div>
-          {isPanelOpen     && !hitlState && <ConfigPanel />}
-          {isEdgePanelOpen && !hitlState && <EdgeConfigPanel />}
-          {hitlState && <HitlResumePanel />}
-          {unifiedDeployment && !hitlState && <DeploymentPanel />}
-          {a2aDeployment && !unifiedDeployment && !hitlState && <A2ADeploymentPanel />}
         </div>
-        <FlowSettingsModal />
+        {/* §11 — Library full-screen page: fixed so it covers toolbar + sidebar too */}
+        {isLibraryOpen && <FlowLibraryPanel onClose={closeLibrary} />}
         {isCmdPaletteOpen && <CommandPalette onClose={() => setIsCmdPaletteOpen(false)} />}
 
         {/* ── Executing toast ─────────────────────────────────────────────── */}
@@ -164,17 +193,22 @@ export function App() {
           </div>
         )}
 
-        {/* ── HITL paused toast ────────────────────────────────────────────── */}
+        {/* ── HITL paused toast — §14: drawer is the source of truth now ───── */}
         {hitlState && (
-          <div style={{
-            position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-            background: 'var(--bg-overlay)', border: '0.5px solid rgba(251,146,60,0.5)',
-            borderRadius: 8, padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 12, color: 'var(--c-hitl)', zIndex: 9999,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-          }}>
+          <div
+            style={{
+              position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--bg-overlay)', border: '0.5px solid rgba(251,146,60,0.5)',
+              borderRadius: 8, padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'var(--c-hitl)', zIndex: 9999,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              cursor: 'pointer',
+            }}
+            onClick={() => { if (!isRunDrawerOpen) openRunDrawer() }}
+            title="Open the Run drawer to resume"
+          >
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--c-hitl)', flexShrink: 0 }} />
-            Flow paused — review panel open
+            Flow paused — open Run to review
           </div>
         )}
 

@@ -9,6 +9,7 @@ import { nodeTypes } from './nodes'
 import { edgeTypes } from './edges'
 import { NODE_HEX } from './nodes/BaseNode'
 import { RegionLayer } from './regions/RegionLayer'
+import { CanvasToolbar } from '../components/CanvasToolbar'
 import type { NodeType } from '../spec/schema'
 
 type FocusDepth = 1 | 2 | 'all'
@@ -217,6 +218,8 @@ export function Canvas() {
           }}
           maskColor="rgba(12,12,14,0.7)"
         />
+        {/* §5 — bottom-center canvas controls + in-canvas ⌘F search */}
+        <CanvasToolbar />
       </ReactFlow>
     </div>
   )

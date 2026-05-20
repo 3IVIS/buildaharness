@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Plus, Trash2 } from 'lucide-react'
+import { X, Plus, Trash2, Moon, Sun } from 'lucide-react'
 import { useCanvasStore, type SettingsTab } from '../store'
 import type { AgentDef, MemoryStoreDef, ToolDef, StateField } from '../spec/schema'
 import type { AdapterName } from '../spec/schema'
@@ -513,46 +513,93 @@ function ConfigTab() {
 
 // ─── Modal shell ─────────────────────────────────────────────────────────────
 
+// §10 — Appearance tab: light/dark theme toggle
+function AppearanceTab() {
+  const { theme, setTheme } = useCanvasStore()
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 6 }}>
+          Color theme
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginBottom: 10 }}>
+          Applies immediately and is saved in your browser.
+        </div>
+        <div className="theme-tiles">
+          {(['dark', 'light'] as const).map((v) => (
+            <div
+              key={v}
+              className={`theme-tile ${theme === v ? 'theme-tile--active' : 'theme-tile--inactive'}`}
+              onClick={() => setTheme(v)}
+              role="radio"
+              aria-checked={theme === v}
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setTheme(v) }}
+            >
+              {v === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
+              <div>{v === 'dark' ? 'Dark' : 'Light'}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'meta',   label: 'Flow' },
-  { id: 'state',  label: 'State schema' },
-  { id: 'memory', label: 'Memory stores' },
-  { id: 'tools',  label: 'Tools' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'config', label: 'Config' },
+  { id: 'meta',       label: 'Flow' },
+  { id: 'state',      label: 'State schema' },
+  { id: 'memory',     label: 'Memory stores' },
+  { id: 'tools',      label: 'Tools' },
+  { id: 'agents',     label: 'Agents' },
+  { id: 'config',     label: 'Config' },
+  { id: 'appearance', label: 'Appearance' },
 ]
 
 const TAB_CONTENT: Record<SettingsTab, React.ComponentType> = {
-  meta:   MetaTab,
-  state:  StateTab,
-  memory: MemoryTab,
-  tools:  ToolsTab,
-  agents: AgentsTab,
-  config: ConfigTab,
+  meta:       MetaTab,
+  state:      StateTab,
+  memory:     MemoryTab,
+  tools:      ToolsTab,
+  agents:     AgentsTab,
+  config:     ConfigTab,
+  appearance: AppearanceTab,
 }
 
-export function FlowSettingsModal() {
+// §11 — Flow Settings as a right-side drawer (was a centered modal).
+// Width 480 px; canvas visible behind backdrop.
+export function FlowSettingsDrawer() {
   const { isSettingsOpen, settingsTab, setSettingsTab, closeSettings } = useCanvasStore()
   if (!isSettingsOpen) return null
 
   const ActiveTab = TAB_CONTENT[settingsTab]
 
   return (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) closeSettings() }}>
-      <div className="modal">
-        <div className="modal__header">
-          <span className="modal__title">Flow settings</span>
-          <button className="config-panel__close" onClick={closeSettings}><X size={14} /></button>
+    <>
+      <div className="drawer-backdrop" onClick={closeSettings} />
+      <aside className="settings-drawer" aria-label="Flow settings">
+        <div className="settings-drawer__head">
+          <div>Flow settings</div>
+          <button onClick={closeSettings} aria-label="Close settings"><X size={13} /></button>
         </div>
-        <div className="modal__tabs">
+        <div className="settings-drawer__tabs">
           {TABS.map((t) => (
-            <button key={t.id} className={`modal__tab${settingsTab === t.id ? ' active' : ''}`} onClick={() => setSettingsTab(t.id)}>{t.label}</button>
+            <button
+              key={t.id}
+              className={`settings-drawer__tab${settingsTab === t.id ? ' settings-drawer__tab--active' : ''}`}
+              onClick={() => setSettingsTab(t.id)}
+            >
+              {t.label}
+            </button>
           ))}
         </div>
-        <div className="modal__body">
+        <div className="settings-drawer__body">
           <ActiveTab />
         </div>
-      </div>
-    </div>
+      </aside>
+    </>
   )
 }
+
+// §11 — keep old name exported for any stale imports (redirects to the drawer)
+export { FlowSettingsDrawer as FlowSettingsModal }

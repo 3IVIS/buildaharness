@@ -1,4 +1,13 @@
 /**
+ * HitlResumePanel — DEPRECATED in v0.8 (§14 of UI redesign).
+ *
+ * The HITL resume UI now lives inside RunDrawer as an inline form on the
+ * paused step, so the inspector can stay open during a pause. This file is
+ * intentionally retained for one release as a fallback — wire it back into
+ * App.tsx if the inline form has regressions. Slated for deletion in v0.9.
+ *
+ * Original docstring:
+ *
  * HitlResumePanel — appears when a LangGraph flow is paused at interrupt().
  *
  * Shows:

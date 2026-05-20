@@ -12,20 +12,18 @@ function trunc(s: string | undefined, n = 38) {
 // ─── input ─────────────────────────────────────────────────────────────────
 
 export function InputNode({ id, selected, data }: NodeProps & { data: NodeData }) {
-  const schema = data.output_schema as Record<string, unknown> | undefined
-  const keys   = schema ? Object.keys(schema) : []
+  // §4 — spec: input → no summary
   return (
-    <BaseNode id={id} type="input" selected={selected} data={data} hasTarget={false}
-      preview={keys.length ? `outputs: ${keys.join(', ')}` : undefined} />
+    <BaseNode id={id} type="input" selected={selected} data={data} hasTarget={false} />
   )
 }
 
 // ─── output ────────────────────────────────────────────────────────────────
 
 export function OutputNode({ id, selected, data }: NodeProps & { data: NodeData }) {
+  // §4 — spec: output → no summary
   return (
-    <BaseNode id={id} type="output" selected={selected} data={data} hasSource={false}
-      preview={`exit: ${(data.exit_code as string) || 'success'}`} />
+    <BaseNode id={id} type="output" selected={selected} data={data} hasSource={false} />
   )
 }
 
@@ -34,12 +32,9 @@ export function OutputNode({ id, selected, data }: NodeProps & { data: NodeData 
 export function LlmCallNode({ id, selected, data }: NodeProps & { data: NodeData }) {
   type PR = { name: string; version?: number; label?: string }
   const promptRef = data.prompt_ref as PR | undefined
-  // When using a Langfuse-managed prompt the pill badge below carries the identity;
-  // show the resolved template text (if any) or nothing as the preview.
-  // When inline, show the prompt template or system prompt as usual.
-  const preview = promptRef?.name
-    ? trunc((data.prompt_template as string) || '')
-    : trunc((data.prompt_template as string) || (data.system_prompt as string))
+  // §4 — spec: llm_call → `model || 'default model'`
+  const params  = (data.model_params as { model?: string } | undefined) ?? {}
+  const preview = params.model || 'default model'
 
   // Small Langfuse pill badge — shown when the node uses a managed prompt.
   const promptPill = promptRef?.name ? (
@@ -68,7 +63,7 @@ export function LlmCallNode({ id, selected, data }: NodeProps & { data: NodeData
 
   return (
     <BaseNode id={id} type="llm_call" selected={selected} data={data}
-      preview={preview || 'no prompt'}>
+      preview={preview}>
       {promptPill}
     </BaseNode>
   )
@@ -108,21 +103,20 @@ export function ParallelForkNode({ id, selected, data }: NodeProps & { data: Nod
 // ─── parallel_join ─────────────────────────────────────────────────────────
 
 export function ParallelJoinNode({ id, selected, data }: NodeProps & { data: NodeData }) {
-  const waitFor = (data.wait_for as string) ?? 'all'
-  const reducer = (data.join_reducer as string) ?? 'merge'
+  // §4 — spec: parallel_join → no summary
   return (
-    <BaseNode id={id} type="parallel_join" selected={selected} data={data}
-      preview={`wait: ${waitFor} · reducer: ${reducer}`} />
+    <BaseNode id={id} type="parallel_join" selected={selected} data={data} />
   )
 }
 
 // ─── hitl_breakpoint ───────────────────────────────────────────────────────
 
 export function HitlBreakpointNode({ id, selected, data }: NodeProps & { data: NodeData }) {
-  const timeout = data.timeout_seconds as number | null | undefined
+  // §4 — spec: hitl_breakpoint → first ~40 chars of `prompt`
+  const prompt = (data.prompt as string) || ''
   return (
     <BaseNode id={id} type="hitl_breakpoint" selected={selected} data={data}
-      preview={timeout ? `timeout: ${timeout}s` : 'no timeout'} />
+      preview={trunc(prompt, 40) || '— no prompt —'} />
   )
 }
 
