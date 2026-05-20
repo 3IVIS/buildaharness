@@ -72,7 +72,7 @@ async def test_list_prompts_returns_empty_in_testing(client, auth_headers):
 @pytest.mark.asyncio
 async def test_list_prompts_requires_auth(client):
     r = await client.get("/prompts")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_get_prompt_returns_404_in_testing(client, auth_headers):
 @pytest.mark.asyncio
 async def test_get_prompt_requires_auth(client):
     r = await client.get("/prompts/any-prompt")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 # ── resolve_prompts() — unit tests ────────────────────────────────────────────

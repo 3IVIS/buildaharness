@@ -17,11 +17,13 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from auth import current_user
-from db import User
+from sqlalchemy.ext.asyncio import AsyncSession
+from db import User, get_session
+from org_context import OrgDep, Org, get_langfuse_keys
 
 # ── Langfuse client ───────────────────────────────────────────────────────────
 # get_client() returns the process-wide Langfuse singleton.  The client is only
@@ -39,9 +41,10 @@ except ImportError:
 
 # Import the in-memory job store to resolve trace_id from job_id for feedback.
 # No circular dependency: run_api never imports eval_api.
-from run_api import _jobs  # noqa: E402 (after stdlib/third-party)
+from run_api import _jobs_get  # noqa: E402 (after stdlib/third-party)
 
-_LANGFUSE_BASE_URL  = os.getenv("LANGFUSE_BASE_URL",  "http://langfuse:3000")
+_LANGFUSE_BASE_URL   = os.getenv("LANGFUSE_BASE_URL",   "http://langfuse:3000")
+# Global fallback keys — used when no per-org keys are configured on the Org row.
 _LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
 
@@ -66,14 +69,16 @@ class FeedbackRequest(BaseModel):
 
 # ── HTTP client for Langfuse REST API ─────────────────────────────────────────
 
-def _lf_http() -> httpx.AsyncClient:
+def _lf_http(org: Org | None = None) -> httpx.AsyncClient:
     """Authenticated async httpx client for the Langfuse HTTP API.
 
-    Uses Basic auth: public_key:secret_key as required by Langfuse.
+    Uses per-org keys when the org has them configured, otherwise falls
+    back to the global LANGFUSE_* env vars.
     """
+    pub, sec = get_langfuse_keys(org)
     return httpx.AsyncClient(
         base_url=_LANGFUSE_BASE_URL,
-        auth=(_LANGFUSE_PUBLIC_KEY, _LANGFUSE_SECRET_KEY),
+        auth=(pub, sec),
         timeout=10.0,
     )
 
@@ -81,9 +86,13 @@ def _lf_http() -> httpx.AsyncClient:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/score", status_code=204)
+@limiter.limit("30/minute")
 async def write_score(
+    request: Request,
     req:  ScoreRequest,
     user: User = Depends(current_user),
+    db:   AsyncSession = Depends(get_session),
+    org:  OrgDep = ...,
 ) -> None:
     """Write a programmatic score (e.g. from an LLM-as-judge background task) to
     a Langfuse trace or child observation.
@@ -110,13 +119,17 @@ async def write_score(
 
 
 @router.post("/feedback", status_code=204)
+@limiter.limit("30/minute")
 async def submit_feedback(
+    request: Request,
     req:  FeedbackRequest,
-    user: User = Depends(current_user),
+    user: User         = Depends(current_user),
+    db:   AsyncSession = Depends(get_session),
+    org:  OrgDep = ...,
 ) -> None:
     """Record a thumbs-up / thumbs-down signal for a completed run.
 
-    Resolves the job → trace_id mapping from the in-memory job store, then
+    Resolves the job → trace_id mapping from the Postgres job store, then
     writes a 'user_feedback' score to Langfuse.  The score name 'user_feedback'
     is the Langfuse convention that surfaces entries in the Annotation Queue UI
     automatically.
@@ -131,16 +144,14 @@ async def submit_feedback(
     if req.value not in (1, -1, 0):
         raise HTTPException(status_code=422, detail="value must be 1, -1, or 0")
 
-    job = _jobs.get(req.job_id)
+    job = await _jobs_get(req.job_id, db)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Enforce ownership with the same silent-404 pattern used by run_api — no
-    # information leak about whether the job exists for other users.
-    if job.get("user_id") != str(user.id):
+    if str(job.user_id) != str(user.id):
         raise HTTPException(status_code=404, detail="Job not found")
 
-    trace_id: str | None = job.get("trace_id")
+    trace_id: str | None = job.trace_id
     if not trace_id:
         # Job exists but has no Langfuse trace (Langfuse disabled or trace not
         # yet populated).  Return 204 — nothing to write, user's action recorded.
@@ -167,6 +178,7 @@ async def submit_feedback(
 @router.get("/templates")
 async def list_eval_templates(
     user: User = Depends(current_user),
+    org:  OrgDep = ...,
 ) -> dict:
     """Proxy Langfuse GET /api/evals/configs.
 
@@ -177,7 +189,7 @@ async def list_eval_templates(
     if os.getenv("TESTING") == "true" or not _LANGFUSE_ENABLED:
         return {"data": [], "meta": {"total": 0}}
 
-    async with _lf_http() as http:
+    async with _lf_http(org) as http:
         try:
             resp = await http.get("/api/evals/configs")
             resp.raise_for_status()
@@ -198,6 +210,7 @@ async def list_eval_templates(
 async def get_scores(
     trace_id: str = Query(..., description="Langfuse trace ID returned by GET /run/{job_id}"),
     user:     User = Depends(current_user),
+    org:      OrgDep = ...,
 ) -> dict:
     """Fetch all scores attached to a Langfuse trace.
 
@@ -211,7 +224,7 @@ async def get_scores(
     if os.getenv("TESTING") == "true" or not _LANGFUSE_ENABLED:
         return {"data": []}
 
-    async with _lf_http() as http:
+    async with _lf_http(org) as http:
         try:
             resp = await http.get("/api/scores", params={"traceId": trace_id})
             resp.raise_for_status()
@@ -291,7 +304,7 @@ async def seed_eval_templates() -> None:
     if os.getenv("LANGFUSE_EVAL_ENABLED", "false").lower() != "true":
         return
 
-    async with _lf_http() as http:
+    async with _lf_http(None) as http:  # seeder runs at startup — uses global keys
         for template in _EVAL_TEMPLATES:
             try:
                 resp = await http.post("/api/evals/configs", json=template)

@@ -13,9 +13,9 @@ Called from:
 
 Caching:
   In-process dict with configurable TTL (default 60 s, env: PROMPT_CACHE_TTL).
-  Cache key is "{name}:{version}:{label}" so different pins are cached
-  independently.  Single-process only (WEB_CONCURRENCY=1 is enforced); no Redis
-  needed until the Postgres job store ships.
+  Cache key is "{org_id}:{name}:{version}:{label}" (or "global:{...}" when no
+  org is provided) so different orgs and different version pins get independent
+  entries.  Single-process only; no Redis needed.
 
 Graceful degradation:
   If Langfuse is unreachable the node's existing prompt_template is left
@@ -110,26 +110,31 @@ def _fetch_prompt_sync(name: str, version: int | None, label: str | None) -> str
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def resolve_prompts(spec: dict) -> dict:
+async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
     """Inject Langfuse-managed prompt text into all llm_call nodes that have
     a prompt_ref field.
 
+    When *org* is provided and the org has per-org Langfuse keys configured,
+    those keys are used in preference to the global env vars.  This ensures
+    each tenant's prompts are fetched from their own Langfuse project.
+
     Returns the spec unchanged in TESTING mode, when Langfuse is not configured,
     or when no llm_call nodes have a prompt_ref.  Always returns a new dict
-    (deep copy) when any resolution is performed, so the caller's original spec
-    is never mutated.
-
-    Args:
-        spec: A validated FlowSpec dict.
-
-    Returns:
-        The (possibly modified) spec dict with prompt_template populated for
-        every llm_call node that had a prompt_ref.
+    (deep copy) when any resolution is performed.
     """
     # Fast exits — no Langfuse calls needed.
     if os.getenv("TESTING") == "true":
         return spec
-    if not _LANGFUSE_ENABLED:
+
+    # Determine effective Langfuse enablement — per-org keys take priority.
+    if org is not None:
+        from org_context import get_langfuse_keys as _get_lf_keys
+        _pub, _sec = _get_lf_keys(org)
+        _lf_active = bool(_pub)
+    else:
+        _lf_active = _LANGFUSE_ENABLED
+
+    if not _lf_active:
         return spec
 
     nodes = spec.get("nodes", [])
@@ -156,7 +161,10 @@ async def resolve_prompts(spec: dict) -> dict:
         version: int | None = ref.get("version")     # None → latest
         label:   str | None = ref.get("label")        # None → "production"
 
-        cache_key = f"{name}:{version or ''}:{label or ''}"
+        # Cache key includes org_id so two orgs with different Langfuse
+        # projects but the same prompt name/version get independent entries.
+        org_prefix = str(org.id) if org else "global"
+        cache_key = f"{org_prefix}:{name}:{version or ''}:{label or ''}"
         cached_text = _cache_get(cache_key)
 
         if cached_text is not None:

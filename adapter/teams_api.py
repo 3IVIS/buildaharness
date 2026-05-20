@@ -29,7 +29,8 @@ Role enforcement:
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from rate_limit import limiter
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -208,6 +209,7 @@ def _team_out(team: Team) -> TeamOut:
 # ── Team CRUD ─────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=TeamOut, status_code=201)
+@limiter.limit("20/minute")
 async def create_team(req: TeamCreate, user: AuthDep, db: DbDep):
     """Create a new team. The caller is automatically added as admin."""
     team = Team(name=req.name, created_by=user.id)
@@ -236,6 +238,7 @@ async def list_teams(user: AuthDep, db: DbDep):
 
 
 @router.get("/{team_id}", response_model=TeamOut)
+@limiter.limit("20/minute")
 async def get_team(team_id: str, user: AuthDep, db: DbDep):
     """Return team detail. Caller must be a member."""
     tid = _parse_team_uuid(team_id)
@@ -244,7 +247,10 @@ async def get_team(team_id: str, user: AuthDep, db: DbDep):
 
 
 @router.patch("/{team_id}", response_model=TeamOut)
-async def rename_team(team_id: str, req: TeamRename, user: AuthDep, db: DbDep):
+@limiter.limit("20/minute")
+async def rename_team(
+    request: Request,
+    team_id: str, req: TeamRename, user: AuthDep, db: DbDep):
     """Rename a team. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)
@@ -255,7 +261,10 @@ async def rename_team(team_id: str, req: TeamRename, user: AuthDep, db: DbDep):
 
 
 @router.delete("/{team_id}", status_code=204)
-async def delete_team(team_id: str, user: AuthDep, db: DbDep):
+@limiter.limit("20/minute")
+async def delete_team(
+    request: Request,
+    team_id: str, user: AuthDep, db: DbDep):
     """Delete a team and cascade to memberships/permissions. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)
@@ -269,7 +278,10 @@ async def delete_team(team_id: str, user: AuthDep, db: DbDep):
 # ── Member management ─────────────────────────────────────────────────────────
 
 @router.post("/{team_id}/members", response_model=MemberOut, status_code=201)
-async def invite_member(team_id: str, req: MemberInvite, user: AuthDep, db: DbDep):
+@limiter.limit("20/minute")
+async def invite_member(
+    request: Request,
+    team_id: str, req: MemberInvite, user: AuthDep, db: DbDep):
     """Add a user by email. Admin only.
 
     Idempotent: re-inviting an existing member updates their role and returns 200.
@@ -322,7 +334,9 @@ async def invite_member(team_id: str, req: MemberInvite, user: AuthDep, db: DbDe
 
 
 @router.patch("/{team_id}/members/{target_user_id}", response_model=MemberOut)
+@limiter.limit("20/minute")
 async def update_member_role(
+    request: Request,
     team_id:        str,
     target_user_id: str,
     req:            MemberRoleUpdate,
@@ -366,7 +380,9 @@ async def update_member_role(
 
 
 @router.delete("/{team_id}/members/{target_user_id}", status_code=204)
+@limiter.limit("20/minute")
 async def remove_member(
+    request: Request,
     team_id:        str,
     target_user_id: str,
     user:           AuthDep,
@@ -423,7 +439,9 @@ async def list_shared_flows(team_id: str, user: AuthDep, db: DbDep):
 
 
 @router.post("/{team_id}/flows/{flow_id}", response_model=FlowPermissionOut, status_code=201)
+@limiter.limit("20/minute")
 async def share_flow(
+    request: Request,
     team_id: str,
     flow_id: str,
     req:     FlowShareRequest,
@@ -460,7 +478,10 @@ async def share_flow(
 
 
 @router.delete("/{team_id}/flows/{flow_id}", status_code=204)
-async def unshare_flow(team_id: str, flow_id: str, user: AuthDep, db: DbDep):
+@limiter.limit("20/minute")
+async def unshare_flow(
+    request: Request,
+    team_id: str, flow_id: str, user: AuthDep, db: DbDep):
     """Revoke a team's access to a flow. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)

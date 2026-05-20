@@ -1,5 +1,5 @@
 """
-itsharness — adapter server  v0.5.2
+itsharness — adapter server  v0.7.0  (Phase 3 complete)
 
 Endpoints
   GET  /health                → adapter status
@@ -18,6 +18,8 @@ Endpoints
   DELETE /flows/{id}          → delete flow
   GET  /flows/{id}/versions   → version history (paginated)
   POST /flows/{id}/versions/{ver_id}/restore → restore version
+
+  POST /flows/{id}/invoke     → synchronous REST execution (deployed flows)
 
   POST /run                   → execute flow (async job)
   GET  /run/{job_id}          → job status + result
@@ -45,11 +47,20 @@ Endpoints
 
   GET  /.well-known/agent.json              → default AgentCard (public)
   GET  /.well-known/agent/{flow_id}.json    → AgentCard for specific flow (public)
+  GET  /.well-known/mcp/{flow_id}.json      → MCP tool manifest (public)
   POST /a2a/{flow_id}/tasks/send            → create + start A2A task
   GET  /a2a/{flow_id}/tasks/{task_id}       → A2A task status
   GET  /a2a/{flow_id}/tasks/{task_id}/events → SSE stream of task events
-  POST   /deploy/a2a/{flow_id}              → deploy flow as A2A agent
-  DELETE /deploy/a2a/{flow_id}              → undeploy
+  POST   /deploy/a2a/{flow_id}              → deploy flow as A2A agent only
+  DELETE /deploy/a2a/{flow_id}              → undeploy A2A only
+  POST   /deploy/{flow_id}                  → unified one-click deploy (REST+MCP+A2A)
+  DELETE /deploy/{flow_id}                  → unified undeploy
+  GET    /share/{flow_id}                   → shareable deployment metadata (public)
+
+  GET  /marketplace                         → list community components (public)
+  GET  /marketplace/{slug}                  → component detail (public)
+  POST /marketplace                         → publish a component (auth required)
+  POST /marketplace/{slug}/install          → install component, returns node_spec
 """
 import os
 import sys
@@ -118,6 +129,8 @@ from auth import current_user  # noqa: E402
 from auth import router as auth_router  # noqa: E402
 from crewai_adapter import compile_crewai  # noqa: E402
 from db import User, init_db  # noqa: E402
+from orgs_api import router as orgs_router  # noqa: E402
+from org_context import Org, current_org as _current_org_dep  # noqa: E402
 from eval_api import router as eval_router  # noqa: E402
 from eval_api import seed_eval_templates  # noqa: E402
 from flows_api import router as flows_router  # noqa: E402
@@ -126,6 +139,12 @@ from mastra_adapter import compile_mastra  # noqa: E402
 from a2a_api import router_deploy as a2a_deploy_router   # noqa: E402
 from a2a_api import router_tasks  as a2a_tasks_router    # noqa: E402
 from a2a_api import router_well_known as a2a_wk_router   # noqa: E402
+from deploy_api import router_deploy     as deploy_router         # noqa: E402
+from deploy_api import router_well_known as deploy_wk_router      # noqa: E402
+from deploy_api import router_share      as deploy_share_router   # noqa: E402
+from deploy_api import router_invoke     as deploy_invoke_router  # noqa: E402
+from marketplace_api import router as marketplace_router           # noqa: E402
+from marketplace_api import seed_marketplace                       # noqa: E402
 from prompt_resolver import resolve_prompts  # noqa: E402
 from prompts_api import router as prompts_router  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -138,13 +157,14 @@ from validate import validate_spec as _validate_spec  # noqa: E402
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_eval_templates()
+    await seed_marketplace()
     yield
     if os.getenv("TESTING") != "true":
         from redis_client import close_pool
         await close_pool()
 
 
-app = FastAPI(title="itsharness-adapter", version="0.5.2", lifespan=lifespan)
+app = FastAPI(title="itsharness-adapter", version="0.7.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
@@ -201,13 +221,21 @@ app.include_router(eval_router)
 app.include_router(prompts_router)
 app.include_router(a2a_wk_router)
 app.include_router(a2a_tasks_router)
+# A2A-only deploy must be mounted before the unified deploy router so
+# /deploy/a2a/{flow_id} is matched before /deploy/{flow_id}.
 app.include_router(a2a_deploy_router)
+app.include_router(deploy_router)
+app.include_router(deploy_wk_router)
+app.include_router(deploy_share_router)
+app.include_router(deploy_invoke_router)
+app.include_router(marketplace_router)
+app.include_router(orgs_router)
 
 
 SUPPORTED_RUNTIMES = {
     "langgraph": {"status": "full",         "note": "Python codegen + execution. All 14 node types.",                       "executable": True},
     "crewai":    {"status": "full",         "note": "Python codegen + execution. All RFC stubs resolved.",                  "executable": True},
-    "mastra":    {"status": "codegen-only", "note": "TypeScript codegen only. Execution requires a separate Node.js runtime.", "executable": False},
+    "mastra":    {"status": "full",         "note": "TypeScript codegen + execution via Node.js sidecar (mastra-runner).", "executable": True},
 }
 
 
@@ -222,7 +250,7 @@ class CompileResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "adapter": "itsharness", "version": "0.5.2",
+    return {"status": "ok", "adapter": "itsharness", "version": "0.7.0",
             "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000")}
 
 
@@ -238,6 +266,7 @@ async def compile_flow(
     req:     CompileRequest,
     runtime: str | None = Query(default=None),
     user:    User = Depends(current_user),
+    org:     "Org" = Depends(_current_org_dep),
 ) -> CompileResponse:
     spec = req.spec
     _validate_spec(spec)
@@ -245,7 +274,7 @@ async def compile_flow(
     # Resolve prompt_ref → inject prompt_template for nodes using Langfuse-managed
     # prompts.  Must run after validate_spec() and before adapter codegen so every
     # adapter sees a fully-populated spec.  No-op in TESTING=true.
-    spec = await resolve_prompts(spec)
+    spec = await resolve_prompts(spec, org)
 
     if not runtime:
         runtime = spec.get("runtime_hints", {}).get("preferred_adapter", "langgraph")

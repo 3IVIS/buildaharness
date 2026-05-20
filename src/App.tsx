@@ -10,6 +10,7 @@ import { ProblemsPanel }     from './components/ProblemsPanel'
 import { CommandPalette }    from './components/CommandPalette'
 import { HitlResumePanel }    from './components/HitlResumePanel'
 import { A2ADeploymentPanel } from './components/A2ADeploymentPanel'
+import { DeploymentPanel }    from './components/DeploymentPanel'
 import { FeedbackBar }       from './components/FeedbackBar'
 import { useCanvasStore }    from './store'
 import { useRunPoller }      from './services/runPoller'
@@ -74,6 +75,7 @@ export function App() {
     undo, redo, canUndo, canRedo,
     activeJobId, hitlState, traceUrl, a2aDeployment,
     setA2ADeployment,
+    unifiedDeployment, setUnifiedDeployment,
   } = useCanvasStore()
 
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false)
@@ -96,6 +98,7 @@ export function App() {
         if (isSettingsOpen)    { closeSettings(); return }
         if (isPanelOpen)       { closePanel();    return }
         if (isEdgePanelOpen)   { closeEdgePanel(); return }
+        if (unifiedDeployment) { setUnifiedDeployment(null); return }
         if (a2aDeployment)     { setA2ADeployment(null); return }
       }
 
@@ -119,6 +122,7 @@ export function App() {
     selectedNodeId, selectedEdgeId,
     closePanel, closeEdgePanel, closeSettings, deleteNode, deleteEdge,
     undo, redo, canUndo, canRedo,
+    unifiedDeployment, setUnifiedDeployment,
     a2aDeployment, setA2ADeployment,
   ])
 
@@ -138,7 +142,8 @@ export function App() {
           {isPanelOpen     && !hitlState && <ConfigPanel />}
           {isEdgePanelOpen && !hitlState && <EdgeConfigPanel />}
           {hitlState && <HitlResumePanel />}
-          {a2aDeployment && !hitlState && <A2ADeploymentPanel />}
+          {unifiedDeployment && !hitlState && <DeploymentPanel />}
+          {a2aDeployment && !unifiedDeployment && !hitlState && <A2ADeploymentPanel />}
         </div>
         <FlowSettingsModal />
         {isCmdPaletteOpen && <CommandPalette onClose={() => setIsCmdPaletteOpen(false)} />}

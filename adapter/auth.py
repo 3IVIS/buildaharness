@@ -26,6 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import User, get_session
 from rate_limit import limiter  # Fix #3: shared limiter for auth brute-force protection
 
+# org_context imports auth (for current_user), so we cannot import it at the
+# module level here without a circular dependency.  We import lazily inside
+# the register() route function instead, which is safe because Python caches
+# the module after the first import and subsequent calls are fast.
+# This comment documents the intentional lazy import pattern.
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # auth.py still reads JWT_SECRET directly so it has it available for token operations.
@@ -170,6 +176,11 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # Create the user's personal org (idempotent; also handles the lazy-create
+    # path for users who existed before migration 0005).
+    from org_context import ensure_personal_org
+    await ensure_personal_org(user, db)
 
     token, jti = _make_token(str(user.id), user.email)
     return TokenResponse(token=token, user_id=str(user.id), email=user.email, jti=jti)

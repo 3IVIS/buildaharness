@@ -17,10 +17,13 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("WEB_CONCURRENCY", "1")
 # Disable shared rate-limit buckets so the 5/min register cap never fires in CI.
 os.environ.setdefault("TESTING", "true")
+# Speed up Mastra polling in tests so background tasks resolve immediately.
+os.environ.setdefault("MASTRA_POLL_INTERVAL_S", "0")
 
 # Now safe to import
 from db import Base, get_session          # noqa: E402
 from main import app                      # noqa: E402
+import run_api as _run_api               # noqa: E402
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -46,6 +49,11 @@ async def client(db_engine):
             yield session
 
     app.dependency_overrides[get_session] = _override_session
+
+    # Wire the background-task session factory to the same per-test engine so
+    # that background runners (run_api._job_session) write to the same DB that
+    # the test client reads from.
+    _run_api.configure_bg_session(SessionLocal)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

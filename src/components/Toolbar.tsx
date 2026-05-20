@@ -30,8 +30,8 @@ export function Toolbar() {
     autoLayout,
     flowConfig,
     setCrossRefErrors,
-    a2aDeployment, a2aDeploying,
-    setA2ADeployment, setA2ADeploying,
+    unifiedDeployment, unifiedDeploying,
+    setUnifiedDeployment, setUnifiedDeploying,
   } = useCanvasStore()
 
   // Helper: push cross-ref errors into the store without calling exportSpec() again.
@@ -94,38 +94,32 @@ export function Toolbar() {
   }
 
   async function handleDeploy() {
-    if (a2aDeploying) return
+    if (unifiedDeploying) return
 
-    // validate() calls exportSpec() internally and populates zodErrors if there
-    // are Zod issues.  If validation fails, open the Problems panel so the user
-    // can see what needs fixing before deploying.
+    // validate() calls exportSpec() internally and populates zodErrors if
+    // there are Zod issues.  Open the Problems panel so the user can see
+    // what needs fixing before deploying.
     if (!validate()) {
       if (!isProblemsOpen) toggleProblems()
       return
     }
 
-    const a2aCfg = flowConfig?.a2a_config
-    if (!a2aCfg?.enabled) {
-      alert(
-        'A2A is not enabled for this flow.\n' +
-        'Enable it in Flow Settings → Config → A2A exposure.'
-      )
-      return
-    }
-
-    setA2ADeploying(true)
+    setUnifiedDeploying(true)
     try {
-      const result = await api.a2a.deploy(flowMeta.id)
-      setA2ADeployment({
-        flow_id:      result.flow_id,
-        endpoint_url: result.endpoint_url,
-        agent_card:   result.agent_card,
-        deployed_at:  result.deployed_at,
+      const result = await api.deploy.unified(flowMeta.id)
+      setUnifiedDeployment({
+        flow_id:       result.flow_id,
+        rest_url:      result.rest_url,
+        mcp_url:       result.mcp_url,
+        a2a_url:       result.a2a_url,
+        shareable_url: result.shareable_url,
+        mcp_manifest:  result.mcp_manifest,
+        deployed_at:   result.deployed_at,
       })
     } catch (err) {
       alert(`Deploy failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
-      setA2ADeploying(false)
+      setUnifiedDeploying(false)
     }
   }
 
@@ -217,27 +211,25 @@ export function Toolbar() {
               <Share2 size={13} />
             </button>
 
-            {/* Deploy / re-deploy as A2A agent */}
+            {/* One-click deploy: REST + MCP + A2A */}
             <button
               className="btn"
               onClick={handleDeploy}
-              disabled={!a2aEnabled || a2aDeploying}
+              disabled={unifiedDeploying}
               title={
-                !a2aEnabled    ? 'Enable A2A in Flow Settings → Config first' :
-                a2aDeployment  ? 'Re-deploy agent (update endpoint)' :
-                                 'Deploy flow as A2A agent'
+                unifiedDeployment ? 'Re-deploy (REST + MCP + A2A)' :
+                                    'Deploy flow as REST endpoint + MCP tool + A2A agent'
               }
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                opacity: a2aEnabled ? 1 : 0.4,
-                color: a2aDeployment ? 'var(--rt-full)' : undefined,
+                color: unifiedDeployment ? 'var(--rt-full)' : undefined,
               }}
             >
-              {a2aDeploying
+              {unifiedDeploying
                 ? <Loader2 size={12} strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
                 : <Rocket size={12} strokeWidth={2} />
               }
-              {a2aDeploying ? 'Deploying…' : a2aDeployment ? 'Deployed' : 'Deploy'}
+              {unifiedDeploying ? 'Deploying…' : unifiedDeployment ? 'Deployed ✓' : 'Deploy'}
             </button>
           </>
         )}

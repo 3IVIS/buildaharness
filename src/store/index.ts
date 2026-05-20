@@ -28,6 +28,16 @@ export interface A2ADeployment {
   deployed_at:  string
 }
 
+export interface UnifiedDeployment {
+  flow_id:       string
+  rest_url:      string
+  mcp_url:       string
+  a2a_url:       string | null
+  shareable_url: string
+  mcp_manifest:  Record<string, unknown>
+  deployed_at:   string
+}
+
 export type NodeData = Record<string, unknown>
 export interface CanvasNode extends XYNode { data: NodeData }
 
@@ -132,6 +142,13 @@ interface CanvasStore extends PersistedState {
   /** True while POST /deploy/a2a is in flight — disables the deploy button. */
   a2aDeploying:       boolean
 
+  // ── Unified deployment state ─────────────────────────────────────────────
+  /** Populated by the Deploy button after POST /deploy/{flow_id} succeeds.
+   *  Contains REST, MCP, A2A, and shareable URLs. Cleared on flow change. */
+  unifiedDeployment:  UnifiedDeployment | null
+  /** True while POST /deploy/{flow_id} is in flight. */
+  unifiedDeploying:   boolean
+
   // ReactFlow handlers
   onNodesChange: (c: NodeChange[]) => void
   onEdgesChange: (c: EdgeChange[]) => void
@@ -171,6 +188,8 @@ interface CanvasStore extends PersistedState {
   setEvalScores:        (scores: EvalScore[]) => void
   setA2ADeployment:     (d: A2ADeployment | null) => void
   setA2ADeploying:      (v: boolean) => void
+  setUnifiedDeployment: (d: UnifiedDeployment | null) => void
+  setUnifiedDeploying:  (v: boolean) => void
 
   // Flow ops
   loadFlow:   (spec: FlowSpec) => void
@@ -286,6 +305,10 @@ export const useCanvasStore = create<CanvasStore>()(
       // A2A deployment
       a2aDeployment: null,
       a2aDeploying:  false,
+
+      // Unified deployment
+      unifiedDeployment: null,
+      unifiedDeploying:  false,
 
       // ── Internal helpers ──────────────────────────────────────────────────
       _touch: () => set({ lastModifiedAt: Date.now() }),
@@ -464,6 +487,8 @@ export const useCanvasStore = create<CanvasStore>()(
       setEvalScores:        (scores) => set({ evalScores: scores }),
       setA2ADeployment:     (d)      => set({ a2aDeployment: d }),
       setA2ADeploying:      (v)      => set({ a2aDeploying: v }),
+      setUnifiedDeployment: (d)      => set({ unifiedDeployment: d }),
+      setUnifiedDeploying:  (v)      => set({ unifiedDeploying: v }),
 
       // ── Registry setters ──────────────────────────────────────────────────
       setFlowMeta:      (meta)   => set((s) => ({ flowMeta: { ...s.flowMeta, ...meta }, lastModifiedAt: Date.now() })),
@@ -569,7 +594,7 @@ export const useCanvasStore = create<CanvasStore>()(
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
           _nodeCounter: maxCounter,
           lastModifiedAt: Date.now(),
-          a2aDeployment: null, a2aDeploying: false,
+          a2aDeployment: null, a2aDeploying: false, unifiedDeployment: null, unifiedDeploying: false,
         })
       },
 
@@ -671,7 +696,7 @@ export const useCanvasStore = create<CanvasStore>()(
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
           _nodeCounter: 0,
           lastModifiedAt: Date.now(),
-          a2aDeployment: null, a2aDeploying: false,
+          a2aDeployment: null, a2aDeploying: false, unifiedDeployment: null, unifiedDeploying: false,
         })
       },
     }),

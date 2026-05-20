@@ -139,7 +139,7 @@ async def test_well_known_flow_404_before_deploy(client):
 @pytest.mark.asyncio
 async def test_deploy_requires_auth(client):
     r = await client.post("/deploy/a2a/any-flow")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
@@ -192,7 +192,7 @@ async def test_well_known_returns_agent_card_after_deploy(client, auth_headers):
 @pytest.mark.asyncio
 async def test_undeploy_requires_auth(client):
     r = await client.delete("/deploy/a2a/any-flow")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
@@ -281,7 +281,7 @@ async def test_task_send_requires_auth(client):
     r = await client.post("/a2a/any-flow/tasks/send", json={
         "id": "task-1", "message": {"role": "user", "parts": [{"text": "hi"}]},
     })
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
@@ -304,48 +304,38 @@ async def test_task_send_400_a2a_not_enabled(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_task_send_returns_submitted_state(client, auth_headers):
-    from run_api import _jobs
     await _save_flow(client, auth_headers, A2A_FLOW_SPEC)
-    try:
-        r = await client.post("/a2a/a2a-test-flow/tasks/send", json={
-            "id": "task-abc-123",
-            "message": {"role": "user", "parts": [{"type": "text", "text": "run please"}]},
-        }, headers=auth_headers)
-        assert r.status_code == 202, r.text
-        body = r.json()
-        assert body["id"] == "task-abc-123"
-        assert body["flow_id"] == "a2a-test-flow"
-        assert body["status"]["state"] == "submitted"
-    finally:
-        _jobs.pop("task-abc-123", None)
+    r = await client.post("/a2a/a2a-test-flow/tasks/send", json={
+        "id": "task-abc-123",
+        "message": {"role": "user", "parts": [{"type": "text", "text": "run please"}]},
+    }, headers=auth_headers)
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["id"] == "task-abc-123"
+    assert body["flow_id"] == "a2a-test-flow"
+    assert body["status"]["state"] == "submitted"
 
 
 @pytest.mark.asyncio
-async def test_task_send_409_duplicate_task_id(client, auth_headers):
+async def test_task_send_409_duplicate_task_id(client, auth_headers, db_engine):
     """Sending a task with an already-used ID returns 409 Conflict."""
-    from run_api import _jobs
-    from datetime import datetime, timezone
+    from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
+    from run_api import _jobs_create
 
-    # Seed an existing job with this ID.  The 409 check fires before ownership
-    # validation so user_id doesn't need to be a real UUID.
-    _jobs["dup-task-xyz"] = {
-        "job_id": "dup-task-xyz", "user_id": "some-other-user",
-        "status": "done", "runtime": "langgraph",
-        "started_at": datetime.now(timezone.utc), "ended_at": None,
-        "result": None, "error": None, "node_events": [],
-        "hitl_state": None, "trace_id": None, "trace_url": None,
-        "compiled_graph": None, "lg_config": None, "trackable": [],
-        "a2a_flow_id": "a2a-test-flow", "a2a_message": {},
-    }
-    try:
-        await _save_flow(client, auth_headers, A2A_FLOW_SPEC)
-        r = await client.post("/a2a/a2a-test-flow/tasks/send", json={
-            "id": "dup-task-xyz",
-            "message": {"role": "user", "parts": [{"text": "hi"}]},
-        }, headers=auth_headers)
-        assert r.status_code == 409, r.text
-    finally:
-        _jobs.pop("dup-task-xyz", None)
+    # Get the user_id of the authenticated user so the FK is satisfied.
+    me = await client.get("/auth/me", headers=auth_headers)
+    user_id = me.json()["user_id"]
+
+    SessionLocal = _asm(db_engine, expire_on_commit=False)
+    async with SessionLocal() as db:
+        await _jobs_create("dup-task-xyz", user_id, "langgraph", db)
+
+    await _save_flow(client, auth_headers, A2A_FLOW_SPEC)
+    r = await client.post("/a2a/a2a-test-flow/tasks/send", json={
+        "id": "dup-task-xyz",
+        "message": {"role": "user", "parts": [{"text": "hi"}]},
+    }, headers=auth_headers)
+    assert r.status_code == 409, r.text
 
 
 # ── GET /a2a/{flow_id}/tasks/{task_id} ────────────────────────────────────────
@@ -353,7 +343,7 @@ async def test_task_send_409_duplicate_task_id(client, auth_headers):
 @pytest.mark.asyncio
 async def test_get_task_requires_auth(client):
     r = await client.get("/a2a/any-flow/tasks/any-task")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
@@ -376,31 +366,27 @@ async def test_task_send_422_empty_task_id(client, auth_headers):
 
 @pytest.mark.asyncio
 async def test_get_task_state_after_send(client, auth_headers):
-    from run_api import _jobs
     await _save_flow(client, auth_headers, A2A_FLOW_SPEC)
-    try:
-        send = await client.post("/a2a/a2a-test-flow/tasks/send", json={
-            "id": "get-task-test",
-            "message": {"role": "user", "parts": [{"text": "query"}]},
-        }, headers=auth_headers)
-        assert send.status_code == 202
-        task_id = send.json()["id"]
+    send = await client.post("/a2a/a2a-test-flow/tasks/send", json={
+        "id": "get-task-test",
+        "message": {"role": "user", "parts": [{"text": "query"}]},
+    }, headers=auth_headers)
+    assert send.status_code == 202
+    task_id = send.json()["id"]
 
-        r = await client.get(f"/a2a/a2a-test-flow/tasks/{task_id}", headers=auth_headers)
-        assert r.status_code == 200, r.text
-        state = r.json()["status"]["state"]
-        assert state in ("submitted", "working", "completed", "failed")
-    finally:
-        _jobs.pop("get-task-test", None)
+    r = await client.get(f"/a2a/a2a-test-flow/tasks/{task_id}", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    state = r.json()["status"]["state"]
+    assert state in ("submitted", "working", "completed", "failed")
 
 
 # ── GET /a2a/{flow_id}/tasks/{task_id}/events (SSE) ───────────────────────────
 
 @pytest.mark.asyncio
 async def test_task_events_requires_auth(client):
-    """SSE endpoint returns 403 without credentials."""
+    """SSE endpoint returns 401 without credentials."""
     r = await client.get("/a2a/any-flow/tasks/any-task/events")
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio

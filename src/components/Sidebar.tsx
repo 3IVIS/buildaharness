@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
-import { StickyNote } from 'lucide-react'
+import { StickyNote, Store } from 'lucide-react'
 import type { NodeType } from '../spec/schema'
 import { EXAMPLE_FLOWS } from '../spec/examples'
 import { useCanvasStore, type SettingsTab } from '../store'
 import { useLibraryStore, relativeTime } from '../store/library'
 import { NODE_ICONS, NODE_HEX } from '../canvas/nodes/BaseNode'
+import { MarketplacePanel } from './MarketplacePanel'
+
+type SidebarTab = 'nodes' | 'marketplace'
 
 interface PaletteEntry { type: NodeType; group: string }
 
@@ -45,6 +48,7 @@ export function Sidebar() {
   const { entries, getFlow, deleteFlow } = useLibraryStore()
   const [showExamples, setShowExamples] = useState(true)
   const [query, setQuery]               = useState('')
+  const [tab, setTab]                   = useState<SidebarTab>('nodes')
 
   const stateCounts: Record<SettingsTab, number> = {
     meta:   0,
@@ -66,6 +70,52 @@ export function Sidebar() {
 
   return (
     <div className="sidebar">
+
+      {/* Tab bar */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '0.5px solid var(--border)',
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={() => setTab('nodes')}
+          style={{
+            flex: 1, padding: '7px 0', fontSize: 10, fontWeight: 600,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+            background: 'none', border: 'none', cursor: 'pointer',
+            borderBottom: tab === 'nodes' ? '1.5px solid #8b5cf6' : '1.5px solid transparent',
+            color: tab === 'nodes' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            transition: 'color 0.1s',
+          }}
+        >
+          Nodes
+        </button>
+        <button
+          onClick={() => setTab('marketplace')}
+          style={{
+            flex: 1, padding: '7px 0', fontSize: 10, fontWeight: 600,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+            background: 'none', border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+            borderBottom: tab === 'marketplace' ? '1.5px solid #8b5cf6' : '1.5px solid transparent',
+            color: tab === 'marketplace' ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            transition: 'color 0.1s',
+          }}
+        >
+          <Store size={10} strokeWidth={2} />
+          Community
+        </button>
+      </div>
+
+      {/* Marketplace tab */}
+      {tab === 'marketplace' && (
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <MarketplacePanel />
+        </div>
+      )}
+
+      {/* Nodes tab */}
+      {tab === 'nodes' && (
       <div className="sidebar__scroll">
 
         {/* Search */}
@@ -185,6 +235,7 @@ export function Sidebar() {
           </div>
         )}
       </div>
+      )} {/* end nodes tab */}
     </div>
   )
 }

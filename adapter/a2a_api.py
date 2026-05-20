@@ -21,7 +21,7 @@ The task state machine maps 1:1 onto the existing run job states:
   job error   → A2A failed
   job paused  → A2A input-required
 
-task_id == job_id (no separate persistence layer — wraps _jobs dict from run_api).
+task_id == job_id — maps directly onto the Job rows in run_api's Postgres store.
 """
 import asyncio
 import json as _json
@@ -40,12 +40,17 @@ from db import A2ADeployment, Flow, User, get_session
 from rate_limit import limiter
 from run_api import (
     _evict_stale_jobs,
-    _jobs,
+    _job_session,
+    _job_update,
+    _jobs_create,
+    _jobs_get,
     _run_crewai,
     _run_langgraph,
+    _run_mastra,
 )
 from validate import validate_spec as _validate_spec
 from prompt_resolver import resolve_prompts
+from org_context import Org, current_org as _current_org
 
 # ── A2A state mapping ─────────────────────────────────────────────────────────
 
@@ -59,7 +64,7 @@ _A2A_STATE: dict[str, str] = {
 
 # ── Base URL (used for endpoint_url construction) ─────────────────────────────
 
-A2A_BASE_URL = os.getenv("A2A_BASE_URL", os.getenv("ADAPTER_BASE_URL", "http://localhost:8000"))
+A2A_BASE_URL = os.getenv("A2A_BASE_URL", os.getenv("ADAPTER_BASE_URL", "http://localhost:8000")).rstrip("/")
 
 # ── Routers (three distinct URL namespaces) ───────────────────────────────────
 
@@ -180,9 +185,9 @@ async def _get_flow_owned(
     return flow
 
 
-def _task_response(job_id: str, flow_id: str) -> dict:
+async def _task_response(job_id: str, flow_id: str, db: AsyncSession) -> dict:
     """Build an A2A Task object from the current job state."""
-    job = _jobs.get(job_id)
+    job = await _jobs_get(job_id, db)
     if not job:
         return {
             "id":      job_id,
@@ -194,9 +199,9 @@ def _task_response(job_id: str, flow_id: str) -> dict:
     return {
         "id":      job_id,
         "flow_id": flow_id,
-        "status":  {"state": _A2A_STATE.get(job["status"], "working")},
-        "result":  job.get("result"),
-        "error":   job.get("error"),
+        "status":  {"state": _A2A_STATE.get(job.status, "working")},
+        "result":  job.result,
+        "error":   job.error,
     }
 
 
@@ -252,6 +257,7 @@ async def send_task(
     background: BackgroundTasks,
     user:       User          = Depends(current_user),
     db:         AsyncSession  = Depends(get_session),
+    org:        "Org"         = Depends(_current_org),
 ) -> dict:
     """Create and start an A2A task for a flow.
 
@@ -273,48 +279,52 @@ async def send_task(
         )
 
     _validate_spec(spec)
-    spec = await resolve_prompts(spec)
+    spec = await resolve_prompts(spec, org)
 
     # Determine runtime — default to langgraph (same logic as run_api)
     runtime = (spec.get("runtime_hints") or {}).get("preferred_adapter", "langgraph")
-    if runtime not in ("crewai", "langgraph"):
+    if runtime not in ("crewai", "langgraph", "mastra"):
         runtime = "langgraph"
 
-    _evict_stale_jobs()
+    await _evict_stale_jobs(db)
 
     # task_id == job_id for 1:1 mapping
     job_id = req.id  # min_length=1 ensures this is always a non-empty string
-    if job_id in _jobs:
+
+    existing = await _jobs_get(job_id, db)
+    if existing:
         raise HTTPException(
             status_code=409,
             detail=f"Task '{job_id}' already exists. Use a unique task ID.",
         )
 
-    _jobs[job_id] = dict(
-        job_id=job_id,
-        user_id=str(user.id),
-        status="queued",
-        runtime=runtime,
-        started_at=datetime.now(UTC),
-        ended_at=None, result=None, error=None,
-        node_events=[], hitl_state=None,
-        trace_id=None, trace_url=None,
-        compiled_graph=None, lg_config=None, trackable=[],
-        # A2A metadata stored alongside job for reference
-        a2a_flow_id=flow_id,
-        a2a_message=req.message.model_dump(),
+    org_id = str(org.id) if org else None
+    await _jobs_create(
+        job_id,
+        str(user.id),
+        runtime,
+        db,
+        org_id=org_id,
+        extra={
+            "a2a_flow_id": flow_id,
+            "a2a_message": _json.dumps(req.message.model_dump()),
+        },
     )
 
     if runtime == "langgraph":
-        background.add_task(_run_langgraph, job_id, spec)
+        background.add_task(_run_langgraph, job_id, spec, org_id)
+    elif runtime == "mastra":
+        background.add_task(_run_mastra, job_id, spec, org_id)
     else:
-        background.add_task(_run_crewai, job_id, spec)
+        background.add_task(_run_crewai, job_id, spec, org_id)
 
-    return _task_response(job_id, flow_id)
+    return await _task_response(job_id, flow_id, db)
 
 
 @router_tasks.get("/{flow_id}/tasks/{task_id}", response_model=TaskResponse)
+@limiter.limit("60/minute")
 async def get_task(
+    request: Request,
     flow_id: str,
     task_id: str,
     user:    User         = Depends(current_user),
@@ -329,19 +339,28 @@ async def get_task(
     # Verify flow ownership (prevents leaking task existence for other users)
     await _get_flow_owned(flow_id, user, db)
 
-    job = _jobs.get(task_id)
-    if not job or job.get("user_id") != str(user.id):
-        raise HTTPException(status_code=404, detail="Task not found")
-    if job.get("a2a_flow_id") and job["a2a_flow_id"] != flow_id:
+    job = await _jobs_get(task_id, db)
+    if not job or str(job.user_id) != str(user.id):
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return _task_response(task_id, flow_id)
+    # Guard: if the job has a2a_flow_id set, it must match the URL parameter.
+    a2a_fid = None
+    if job.node_events and isinstance(job.node_events, list):
+        pass  # node_events doesn't carry flow_id; check the extra field below
+    # a2a_flow_id is stored as a plain text extra column — check it if present
+    raw_fid = getattr(job, "a2a_flow_id", None)
+    if raw_fid and raw_fid != flow_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return await _task_response(task_id, flow_id, db)
 
 
 @router_tasks.get("/{flow_id}/tasks/{task_id}/events")
+@limiter.limit("20/minute")
 async def task_events_stream(
     flow_id: str,
     task_id: str,
+    request: Request,
     user:    User         = Depends(current_user),
     db:      AsyncSession = Depends(get_session),
 ):
@@ -358,17 +377,18 @@ async def task_events_stream(
     """
     await _get_flow_owned(flow_id, user, db)
 
-    job = _jobs.get(task_id)
-    if not job or job.get("user_id") != str(user.id):
+    # Initial ownership check — fail fast before opening the SSE stream.
+    initial_job = await _jobs_get(task_id, db)
+    if not initial_job or str(initial_job.user_id) != str(user.id):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def _generate():
         sent = 0
         while True:
-            j = _jobs.get(task_id)
+            async with _job_session() as _db:
+                j = await _jobs_get(task_id, _db)
+
             if not j:
-                # Job was evicted (TTL cleanup) while client was still streaming.
-                # Send an explicit failed terminal event so the client doesn't hang.
                 final = _json.dumps({
                     "type":   "TaskStatusUpdateEvent",
                     "id":     task_id,
@@ -379,31 +399,30 @@ async def task_events_stream(
                 yield f"data: {final}\n\n"
                 break
 
-            events = j.get("node_events", [])
+            events     = j.node_events or []
             new_events = events[sent:]
-            sent += len(new_events)
+            sent      += len(new_events)
 
             for ev in new_events:
                 payload = _json.dumps({
                     "type":       "TaskStatusUpdateEvent",
                     "id":         task_id,
-                    "status":     {"state": _A2A_STATE.get(j["status"], "working")},
+                    "status":     {"state": _A2A_STATE.get(j.status, "working")},
                     "nodeEvent":  ev,
                     "final":      False,
                 })
                 yield f"data: {payload}\n\n"
 
-            current_state = _A2A_STATE.get(j["status"], "working")
+            current_state = _A2A_STATE.get(j.status, "working")
 
-            if j["status"] in ("done", "error"):
-                # Send final event and close stream
+            if j.status in ("done", "error"):
                 final = _json.dumps({
                     "type":   "TaskStatusUpdateEvent",
                     "id":     task_id,
                     "status": {"state": current_state},
                     "final":  True,
-                    "result": j.get("result"),
-                    "error":  j.get("error"),
+                    "result": j.result,
+                    "error":  j.error,
                 })
                 yield f"data: {final}\n\n"
                 break
@@ -424,7 +443,9 @@ async def task_events_stream(
 # ── Deployment management routes ──────────────────────────────────────────────
 
 @router_deploy.post("/{flow_id}", response_model=DeployResponse, status_code=200)
+@limiter.limit("20/minute")
 async def deploy_flow(
+    request: Request,
     flow_id: str,
     user:    User         = Depends(current_user),
     db:      AsyncSession = Depends(get_session),
@@ -509,7 +530,9 @@ async def deploy_flow(
 
 
 @router_deploy.delete("/{flow_id}", status_code=204)
+@limiter.limit("20/minute")
 async def undeploy_flow(
+    request: Request,
     flow_id: str,
     user:    User         = Depends(current_user),
     db:      AsyncSession = Depends(get_session),

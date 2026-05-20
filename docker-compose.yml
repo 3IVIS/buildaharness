@@ -47,6 +47,33 @@ services:
       adapter:
         condition: service_healthy   # Fix #46: wait for adapter to be ready
 
+  # ── Mastra execution runner (Node.js sidecar) ─────────────────────────────
+  # Receives compiled Mastra TypeScript from the adapter, executes it via
+  # vm.Module, and streams node events back.  The adapter falls back to
+  # codegen-only mode when this service is unavailable.
+  mastra-runner:
+    build:
+      context: ./mastra-runner
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - MASTRA_RUNNER_PORT=8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Set a shared secret so only the adapter can call the runner.
+      - RUNNER_API_KEY=${MASTRA_RUNNER_API_KEY:-}
+      - JOB_TTL_HOURS=${JOB_TTL_HOURS:-4}
+      # Execution timeout per workflow run in ms (default 5 min).
+      - MASTRA_EXEC_TIMEOUT_MS=${MASTRA_EXEC_TIMEOUT_MS:-300000}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8001/health').then(r=>r.ok||process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   # ── Adapter (FastAPI) ──────────────────────────────────────────────────────
   # Fix #44: build deps once in Dockerfile.adapter; no pip install on start.
   adapter:
@@ -67,6 +94,12 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://canvas:3000}
       # Job TTL — completed jobs are evicted after this many hours (Fix #15)
       - JOB_TTL_HOURS=${JOB_TTL_HOURS:-4}
+      # Mastra execution runner — the adapter forwards Mastra jobs here.
+      # If unset or runner is unreachable, Mastra falls back to codegen-only.
+      - MASTRA_RUNNER_URL=${MASTRA_RUNNER_URL:-http://mastra-runner:8001}
+      - MASTRA_RUNNER_API_KEY=${MASTRA_RUNNER_API_KEY:-}
+      - MASTRA_POLL_INTERVAL_S=${MASTRA_POLL_INTERVAL_S:-0.8}
+      - MASTRA_RUNNER_TIMEOUT_S=${MASTRA_RUNNER_TIMEOUT_S:-3600}
       # Security tuning (Fix #6, #7)
       - JWT_TTL_DAYS=${JWT_TTL_DAYS:-30}
       - MAX_BODY_BYTES=${MAX_BODY_BYTES:-1048576}
@@ -93,6 +126,8 @@ services:
         condition: service_healthy
       langfuse:
         condition: service_started
+      mastra-runner:
+        condition: service_healthy
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:

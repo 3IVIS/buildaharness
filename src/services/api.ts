@@ -122,6 +122,67 @@ export interface A2ADeployResponse {
   deployed_at:  string
 }
 
+/** Response from POST /deploy/{flow_id} — unified one-click deploy */
+export interface UnifiedDeployResponse {
+  flow_id:       string
+  rest_url:      string
+  mcp_url:       string
+  a2a_url:       string | null
+  shareable_url: string
+  mcp_manifest:  Record<string, unknown>
+  deployed_at:   string
+}
+
+/** Public metadata returned by GET /share/{flow_id} */
+export interface ShareResponse {
+  flow_id:       string
+  flow_name:     string
+  rest_url:      string
+  mcp_url:       string
+  a2a_url:       string | null
+  shareable_url: string
+  deployed_at:   string
+}
+
+/** Response from POST /flows/{flow_id}/invoke */
+export interface InvokeResponse {
+  job_id:  string
+  output:  unknown
+  runtime: string
+}
+
+/** A community component from the marketplace */
+export interface MarketplaceComponent {
+  slug:          string
+  name:          string
+  description:   string
+  category:      'tool' | 'memory' | 'agent' | 'control'
+  icon_emoji:    string
+  npm_ref:       string
+  source:        string
+  tags:          string[]
+  verified:      boolean
+  author:        string
+  install_count: number
+}
+
+/** Full component detail including node_spec and tool_def */
+export interface MarketplaceComponentDetail extends MarketplaceComponent {
+  node_spec:  Record<string, unknown>
+  tool_def:   Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
+/** Response from POST /marketplace/{slug}/install */
+export interface MarketplaceInstallResponse {
+  slug:      string
+  name:      string
+  node_spec: Record<string, unknown>
+  tool_def:  Record<string, unknown> | null
+  tool_id:   string
+}
+
 /** A2A Task object returned by /tasks/send and /tasks/{id} */
 export interface A2ATaskResponse {
   id:      string
@@ -246,5 +307,68 @@ export const api = {
       request<A2ATaskResponse>(
         `/a2a/${encodeURIComponent(flowId)}/tasks/${encodeURIComponent(taskId)}`
       ),
+  },
+
+  deploy: {
+    /** One-click unified deploy: REST endpoint + MCP tool + A2A agent (when enabled).
+     *  Idempotent — re-deploying updates the snapshot to the current spec. */
+    unified: (flowId: string) =>
+      request<UnifiedDeployResponse>(`/deploy/${encodeURIComponent(flowId)}`, {
+        method: 'POST',
+      }),
+
+    /** Remove the unified deployment (and A2A deployment) for a flow. Idempotent. */
+    undeployAll: (flowId: string) =>
+      request<void>(`/deploy/${encodeURIComponent(flowId)}`, {
+        method: 'DELETE',
+      }),
+
+    /** Fetch public share metadata for a deployed flow (no auth required). */
+    share: (flowId: string) =>
+      request<ShareResponse>(`/share/${encodeURIComponent(flowId)}`),
+
+    /** Synchronously invoke a deployed flow and return the result.
+     *  Blocks until the flow completes or the server times out (default 120s). */
+    invoke: (flowId: string, input: Record<string, unknown> = {}) =>
+      request<InvokeResponse>(`/flows/${encodeURIComponent(flowId)}/invoke`, {
+        method: 'POST',
+        body: JSON.stringify({ input }),
+      }),
+  },
+
+  marketplace: {
+    /** List components; supports q, category, verified, limit, offset */
+    list: (params: { q?: string; category?: string; verified?: boolean; limit?: number; offset?: number } = {}) => {
+      const qs = new URLSearchParams()
+      if (params.q        !== undefined) qs.set('q',        params.q)
+      if (params.category !== undefined) qs.set('category', params.category)
+      if (params.verified !== undefined) qs.set('verified', String(params.verified))
+      if (params.limit    !== undefined) qs.set('limit',    String(params.limit))
+      if (params.offset   !== undefined) qs.set('offset',   String(params.offset))
+      const suffix = qs.toString() ? `?${qs}` : ''
+      return request<MarketplaceComponent[]>(`/marketplace${suffix}`)
+    },
+
+    /** Full component detail including node_spec and tool_def */
+    get: (slug: string) =>
+      request<MarketplaceComponentDetail>(`/marketplace/${encodeURIComponent(slug)}`),
+
+    /** Publish a new component (auth required) */
+    publish: (payload: {
+      slug: string; name: string; description: string; category: string
+      icon_emoji?: string; npm_ref: string; source?: string
+      node_spec?: Record<string, unknown>; tool_def?: Record<string, unknown> | null
+      tags?: string[]
+    }) =>
+      request<MarketplaceComponentDetail>('/marketplace', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+
+    /** Install — records the install and returns node_spec + tool_def ready to drop on canvas */
+    install: (slug: string) =>
+      request<MarketplaceInstallResponse>(`/marketplace/${encodeURIComponent(slug)}/install`, {
+        method: 'POST',
+      }),
   },
 }
