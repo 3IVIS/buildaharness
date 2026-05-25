@@ -1,0 +1,93 @@
+name: Publish @itsharness/canvas
+
+# Triggers on tags matching canvas-v* pushed to the repo.
+#
+#   git tag canvas-v0.1.0 && git push origin canvas-v0.1.0
+#
+# Separate tag prefix from the spec package so the two release cadences
+# are fully independent (canvas ships faster; spec has a stricter gate).
+
+on:
+  push:
+    tags:
+      - 'canvas-v*'
+
+jobs:
+  publish:
+    name: Build, typecheck, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance attestation
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Node ────────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@itsharness'
+
+      # ── Install root deps ────────────────────────────────────────────────────
+      - name: Install root deps
+        run: npm ci
+
+      # ── Install canvas package deps ──────────────────────────────────────────
+      - name: Install canvas package deps
+        working-directory: packages/canvas
+        run: npm ci
+
+      # ── Type-check ───────────────────────────────────────────────────────────
+      - name: Type-check
+        working-directory: packages/canvas
+        run: npm run typecheck
+
+      # ── Verify spec/schema is in sync with src/spec/schema ──────────────────
+      # Re-uses the existing check-schema-sync script that already guards the
+      # flow-spec publish. Canvas bundles its own copy; they must stay aligned.
+      - name: Check canvas schema sync
+        run: node scripts/check-schema-sync.mjs
+
+      # ── Unit tests ──────────────────────────────────────────────────────────
+      - name: Run canvas tests
+        working-directory: packages/canvas
+        run: npm test
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build lib
+        working-directory: packages/canvas
+        run: npm run build
+
+      # ── Verify expected dist artefacts exist ─────────────────────────────────
+      - name: Check dist artefacts
+        working-directory: packages/canvas
+        run: |
+          for f in dist/index.js dist/index.cjs dist/index.d.ts dist/styles.css; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          echo "✅  All dist artefacts present"
+
+      # ── Verify tag matches package.json version ──────────────────────────────
+      - name: Check version matches tag
+        working-directory: packages/canvas
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#canvas-v}"   # strip "canvas-v" prefix
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/canvas/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      # ── Publish ──────────────────────────────────────────────────────────────
+      - name: Publish to npm
+        working-directory: packages/canvas
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

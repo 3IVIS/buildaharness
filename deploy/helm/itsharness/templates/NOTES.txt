@@ -1,0 +1,73 @@
+🎉  itsharness has been deployed successfully!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.ingress.enabled }}
+
+  Canvas UI:   https://{{ .Values.ingress.canvas.host | default "canvas.example.com" }}
+  Adapter API: https://{{ .Values.ingress.adapter.host | default "adapter.example.com" }}
+  Langfuse:    https://{{ .Values.ingress.langfuse.host | default "langfuse.example.com" }}
+
+{{- else }}
+
+  Ingress is disabled. Access services via port-forward:
+
+  # Adapter API
+  kubectl port-forward svc/{{ include "itsharness.fullname" . }}-adapter 8000:8000 -n {{ .Release.Namespace }}
+
+  # Canvas UI
+  kubectl port-forward svc/{{ include "itsharness.fullname" . }}-canvas 3000:3000 -n {{ .Release.Namespace }}
+
+  # Langfuse
+  kubectl port-forward svc/{{ include "itsharness.fullname" . }}-langfuse 3001:3000 -n {{ .Release.Namespace }}
+
+  Then open:
+    Canvas:    http://localhost:3000
+    Adapter:   http://localhost:8000/docs
+    Langfuse:  http://localhost:3001
+
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ADAPTER API DOCS
+  http(s)://<adapter-host>/docs   — interactive OpenAPI UI
+  http(s)://<adapter-host>/runtimes — confirm all 4 runtimes are available
+
+HEALTH CHECKS
+  kubectl get pods -n {{ .Release.Namespace }}
+  kubectl logs -l app.kubernetes.io/component=adapter -n {{ .Release.Namespace }}
+
+SSO / OIDC
+{{- if .Values.oidc.enabled }}
+  ✓  SSO enabled — provider: {{ .Values.oidc.providerName }}
+     Issuer:       {{ .Values.oidc.issuerUrl }}
+     Callback URL: {{ .Values.oidc.redirectUri }}
+     Canvas login will show the "Sign in with {{ .Values.oidc.providerName }}" button.
+{{- else }}
+  SSO is disabled. To enable, set:
+    --set oidc.enabled=true \
+    --set oidc.issuerUrl=https://keycloak.example.com/realms/itsharness \
+    --set oidc.clientId=itsharness \
+    --set secrets.oidcClientSecret=<secret> \
+    --set oidc.redirectUri=https://<adapter-host>/auth/sso/callback \
+    --set oidc.adminGroups=itsharness-admins
+{{- end }}
+
+SCIM PROVISIONING
+  Endpoint: http(s)://<adapter-host>/scim/v2/Users
+  Bearer token: set via --set secrets.scimBearerToken=<token>
+  Supports: list users, get user, deactivate user (RFC 7644 + Okta-style)
+
+UPGRADE
+  helm upgrade itsharness ./itsharness \
+    --reuse-values \
+    --set adapter.image.tag=<new-tag> \
+    -n {{ .Release.Namespace }}
+
+UNINSTALL
+  helm uninstall itsharness -n {{ .Release.Namespace }}
+  # PVCs are NOT deleted automatically. Remove manually:
+  kubectl delete pvc -l app.kubernetes.io/instance=itsharness -n {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

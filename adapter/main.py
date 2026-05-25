@@ -136,6 +136,8 @@ from eval_api import seed_eval_templates  # noqa: E402
 from flows_api import router as flows_router  # noqa: E402
 from langgraph_adapter import compile_langgraph  # noqa: E402
 from mastra_adapter import compile_mastra  # noqa: E402
+from maf_adapter import compile_maf  # noqa: E402
+from sso_auth import router_sso, router_token, router_scim  # noqa: E402
 from a2a_api import router_deploy as a2a_deploy_router   # noqa: E402
 from a2a_api import router_tasks  as a2a_tasks_router    # noqa: E402
 from a2a_api import router_well_known as a2a_wk_router   # noqa: E402
@@ -214,6 +216,9 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins,
                    allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(auth_router)
+app.include_router(router_sso)    # GET /auth/sso/config, GET /auth/sso/login, GET /auth/sso/callback
+app.include_router(router_token)  # POST /auth/token/refresh
+app.include_router(router_scim)   # GET|PATCH /scim/v2/Users
 app.include_router(flows_router)
 app.include_router(run_router)
 app.include_router(teams_router)

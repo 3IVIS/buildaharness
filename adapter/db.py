@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -114,6 +115,11 @@ class User(Base):
     id            = Column(_UUIDType, primary_key=True, default=uuid.uuid4)
     email         = Column(Text, unique=True, nullable=False)
     password_hash = Column(Text, nullable=False)
+    # SSO / OIDC identity (NULL for local password accounts)
+    sso_sub       = Column(Text, nullable=True)   # OIDC sub claim
+    sso_provider  = Column(Text, nullable=True)   # e.g. "keycloak"
+    is_active     = Column(Boolean, nullable=False, default=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at    = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     flows    = relationship("Flow",        back_populates="user", cascade="all, delete-orphan")

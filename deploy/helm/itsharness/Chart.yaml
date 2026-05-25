@@ -1,0 +1,43 @@
+apiVersion: v2
+name: itsharness
+description: >
+  itsharness — visual AI agent canvas with multi-runtime flow execution.
+  Deploys the full stack: adapter (FastAPI), canvas (Vite), mastra-runner (Node.js),
+  PostgreSQL, Redis, ClickHouse, Langfuse, and LiteLLM.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - ai
+  - agents
+  - langraph
+  - semantic-kernel
+  - crewai
+  - mastra
+  - langfuse
+
+home: https://github.com/itsharness/itsharness
+sources:
+  - https://github.com/itsharness/itsharness
+
+maintainers:
+  - name: itsharness
+    email: platform@itsharness.dev
+
+dependencies:
+  # Bitnami sub-charts are used for PostgreSQL and Redis so operators
+  # can swap in external managed services (RDS, ElastiCache) by setting
+  # postgres.enabled=false / redis.enabled=false and supplying externalPostgres
+  # / externalRedis connection strings in values.yaml.
+  - name: postgresql
+    version: "15.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgres.enabled
+    alias: postgres
+
+  - name: redis
+    version: "19.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+    alias: redis

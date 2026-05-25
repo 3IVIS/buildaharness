@@ -49,6 +49,7 @@ from auth import current_user
 from org_context import OrgDep, Org, current_org as _current_org
 from crewai_adapter import compile_crewai, safe_id
 from langgraph_adapter import compile_langgraph
+from maf_adapter import compile_maf
 from prompt_resolver import resolve_prompts
 from validate import validate_spec as _validate_spec
 import httpx as _httpx
@@ -497,6 +498,200 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None) -> Non
                               ended_at=datetime.now(timezone.utc))
 
 
+# ─── MS Agent Framework runner ───────────────────────────────────────────────
+#
+# MAF execution is in-process (like LangGraph) rather than sidecar-based.
+# The generated Python code is exec()'d and _run_flow_async is called directly
+# in the event loop, with per-node callbacks that emit node events.
+#
+# HITL: hitl_breakpoint nodes raise _HitlPause which we catch here.
+#       Resume re-runs the whole flow with the HITL payload merged into inputs
+#       (correct for single-HITL flows; multi-HITL requires Dapr checkpointing).
+
+@_lf_observe(name="maf-flow-run", as_type="chain")
+async def _run_maf(job_id: str, spec: dict, org_id: str | None = None) -> None:
+    async with _job_session() as db:
+        await _job_update(job_id, db,
+                          status="running",
+                          started_at=datetime.now(timezone.utc))
+        trace_id, trace_url = _lf_trace_info()
+        if trace_id:
+            await _job_update(job_id, db, trace_id=trace_id, trace_url=trace_url)
+
+    try:
+        code, warnings = compile_maf(spec)
+        namespace: dict = {}
+        exec(compile(code, "<maf_generated>", "exec"), namespace)  # noqa: S102
+
+        run_flow_async = namespace.get("_run_flow_async")
+        if run_flow_async is None:
+            raise RuntimeError("Generated MAF code did not produce a '_run_flow_async' function")
+
+        skip      = {"input", "output", "annotation"}
+        trackable = [n["id"] for n in spec.get("nodes", []) if n.get("type") not in skip]
+
+        async with _job_session() as db:
+            for nid in trackable:
+                await _emit(job_id, nid, "pending", db)
+
+        node_start_times: dict[str, datetime] = {}
+
+        async def on_node_start(node_id: str) -> None:
+            node_start_times[node_id] = datetime.now(timezone.utc)
+            async with _job_session() as db:
+                await _emit(job_id, node_id, "running", db)
+
+        async def on_node_done(node_id: str, elapsed_ms: int, tokens: int | None) -> None:
+            async with _job_session() as db:
+                await _emit(job_id, node_id, "done", db, elapsed_ms, tokens)
+
+        initial_state = _build_initial_state(spec)
+
+        try:
+            final_state = await run_flow_async(
+                initial_state,
+                on_node_start=on_node_start,
+                on_node_done=on_node_done,
+            )
+        except Exception as exc:
+            # Check for _HitlPause raised by hitl_breakpoint nodes
+            pause_cls = namespace.get("_HitlPause")
+            if pause_cls and isinstance(exc, pause_cls):
+                async with _job_session() as db:
+                    await _emit(job_id, exc.node_id, "paused", db)
+                    await _job_update(job_id, db,
+                                      status="paused",
+                                      hitl_state={
+                                          "node_id":              exc.node_id,
+                                          "prompt":               exc.prompt,
+                                          "resume_schema_fields": exc.fields,
+                                      },
+                                      ended_at=None)
+                # Store the compiled namespace and spec so resume can re-run
+                _maf_runtime_state[job_id] = {
+                    "namespace": namespace,
+                    "spec":      spec,
+                }
+                return
+            raise
+
+        # Mark any nodes that didn't emit done (e.g. condition branches not taken)
+        async with _job_session() as db:
+            await _mark_stale_nodes_done(job_id, trackable, db)
+
+        import json as _json_mod
+        output = _json_mod.dumps(final_state, default=str, indent=2)
+        if warnings:
+            output = f"[warnings]\n{chr(10).join(warnings)}\n\n{output}"
+
+        async with _job_session() as db:
+            await _job_update(job_id, db,
+                              status="done",
+                              result=output,
+                              ended_at=datetime.now(timezone.utc))
+
+        _maf_runtime_state.pop(job_id, None)
+
+    except Exception as exc:
+        async with _job_session() as db:
+            await _mark_error_nodes(job_id, db)
+            await _job_update(job_id, db,
+                              status="error",
+                              error=str(exc),
+                              ended_at=datetime.now(timezone.utc))
+        _maf_runtime_state.pop(job_id, None)
+
+
+# In-memory map of paused MAF jobs: job_id → {namespace, spec}
+# Used to re-inject resume payload on HITL resume.
+_maf_runtime_state: dict[str, dict] = {}
+
+
+@_lf_observe(name="maf-flow-resume", as_type="chain")
+async def _resume_maf(job_id: str, resume_payload: dict, spec: dict,
+                       org_id: str | None = None) -> None:
+    """Resume a paused MAF job by re-running the flow with the HITL payload merged in."""
+    async with _job_session() as db:
+        await _job_update(job_id, db,
+                          status="running",
+                          ended_at=None)
+
+    try:
+        # Re-compile from the original spec (or use cached namespace if available)
+        rt_state = _maf_runtime_state.get(job_id)
+        if rt_state:
+            namespace = rt_state["namespace"]
+            run_flow_async = namespace.get("_run_flow_async")
+        else:
+            code, _ = compile_maf(spec or {})
+            namespace = {}
+            exec(compile(code, "<maf_generated_resume>", "exec"), namespace)  # noqa: S102
+            run_flow_async = namespace.get("_run_flow_async")
+
+        if run_flow_async is None:
+            raise RuntimeError("Could not find _run_flow_async for MAF resume")
+
+        skip      = {"input", "output", "annotation"}
+        trackable = [n["id"] for n in (spec or {}).get("nodes", []) if n.get("type") not in skip]
+
+        async def on_node_start(node_id: str) -> None:
+            async with _job_session() as db:
+                await _emit(job_id, node_id, "running", db)
+
+        async def on_node_done(node_id: str, elapsed_ms: int, tokens: int | None) -> None:
+            async with _job_session() as db:
+                await _emit(job_id, node_id, "done", db, elapsed_ms, tokens)
+
+        initial_state = _build_initial_state(spec or {})
+
+        try:
+            final_state = await run_flow_async(
+                initial_state,
+                on_node_start=on_node_start,
+                on_node_done=on_node_done,
+                _hitl_resume=resume_payload,
+            )
+        except Exception as exc:
+            pause_cls = namespace.get("_HitlPause")
+            if pause_cls and isinstance(exc, pause_cls):
+                # Chained HITL — pause again
+                async with _job_session() as db:
+                    await _emit(job_id, exc.node_id, "paused", db)
+                    await _job_update(job_id, db,
+                                      status="paused",
+                                      hitl_state={
+                                          "node_id":              exc.node_id,
+                                          "prompt":               exc.prompt,
+                                          "resume_schema_fields": exc.fields,
+                                      },
+                                      ended_at=None)
+                return
+            raise
+
+        async with _job_session() as db:
+            await _mark_stale_nodes_done(job_id, trackable, db)
+
+        import json as _json_mod
+        output = _json_mod.dumps(final_state, default=str, indent=2)
+
+        async with _job_session() as db:
+            await _job_update(job_id, db,
+                              status="done",
+                              result=output,
+                              ended_at=datetime.now(timezone.utc))
+
+        _maf_runtime_state.pop(job_id, None)
+
+    except Exception as exc:
+        async with _job_session() as db:
+            await _mark_error_nodes(job_id, db)
+            await _job_update(job_id, db,
+                              status="error",
+                              error=str(exc),
+                              ended_at=datetime.now(timezone.utc))
+        _maf_runtime_state.pop(job_id, None)
+
+
 # ─── Mastra runner client ─────────────────────────────────────────────────────
 #
 # The Mastra runner is a separate Node.js sidecar (mastra-runner/).  We forward
@@ -900,10 +1095,10 @@ async def run_flow(
         runtime = spec.get("runtime_hints", {}).get("preferred_adapter", "langgraph")
     runtime = runtime.lower()
 
-    if runtime not in {"crewai", "langgraph", "mastra"}:
+    if runtime not in {"crewai", "langgraph", "mastra", "microsoft_agent_framework"}:
         raise HTTPException(
             status_code=400,
-            detail=f"Runtime '{runtime}' is not yet executable. Supported: crewai, langgraph, mastra",
+            detail=f"Runtime '{runtime}' is not yet executable. Supported: crewai, langgraph, mastra, microsoft_agent_framework",
         )
 
     await _evict_stale_jobs(db)
@@ -916,6 +1111,8 @@ async def run_flow(
         background.add_task(_run_langgraph, job_id, spec, org_id)
     elif runtime == "mastra":
         background.add_task(_run_mastra, job_id, spec, org_id)
+    elif runtime == "microsoft_agent_framework":
+        background.add_task(_run_maf, job_id, spec, org_id)
     else:
         background.add_task(_run_crewai, job_id, spec, org_id)
 
@@ -935,11 +1132,15 @@ async def resume_flow(
     job = await _jobs_get_owned(job_id, str(user.id), db)
     if job.status != "paused":
         raise HTTPException(status_code=409, detail=f"Job is '{job.status}', not paused")
-    if job.runtime != "langgraph":
-        raise HTTPException(status_code=400, detail="Only LangGraph jobs support HITL resume")
+    if job.runtime not in ("langgraph", "microsoft_agent_framework"):
+        raise HTTPException(status_code=400, detail=f"Runtime '{job.runtime}' does not support HITL resume")
 
-    background.add_task(_resume_langgraph, job_id, req.payload, req.spec,
-                        str(job.org_id) if job.org_id else None)
+    if job.runtime == "microsoft_agent_framework":
+        background.add_task(_resume_maf, job_id, req.payload, req.spec,
+                            str(job.org_id) if job.org_id else None)
+    else:
+        background.add_task(_resume_langgraph, job_id, req.payload, req.spec,
+                            str(job.org_id) if job.org_id else None)
     return {"job_id": job_id, "status": "running"}
 
 

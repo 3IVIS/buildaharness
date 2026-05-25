@@ -2,13 +2,19 @@
   "name": "itsharness",
   "version": "0.4.1",
   "private": false,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:canvas": "npm run build --workspace=packages/canvas",
+    "test:canvas": "npm test --workspace=packages/canvas",
+    "typecheck:canvas": "npm run typecheck --workspace=packages/canvas"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
@@ -17,6 +23,9 @@
     "lucide-react": "^0.383.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "y-indexeddb": "^9.0.2",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30",
     "zod": "^3.23.8",
     "zustand": "^4.5.4"
   },

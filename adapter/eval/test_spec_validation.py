@@ -8,6 +8,7 @@ tests run.  They verify that all five reference flows:
   2. Compile to LangGraph Python without syntax errors.
   3. Compile to CrewAI Python without syntax errors.
   4. Compile to Mastra TypeScript without syntax errors.
+  5. Compile to MS Agent Framework Python without syntax errors (Phase 4).
 
 Run with: pytest eval/test_spec_validation.py --pythonpath adapter
 """
@@ -17,6 +18,7 @@ import ast
 from crewai_adapter import compile_crewai
 from langgraph_adapter import compile_langgraph
 from mastra_adapter import compile_mastra
+from maf_adapter import compile_maf
 from validate import validate_spec
 
 
@@ -56,3 +58,15 @@ class TestSpecValidation:
             # contains expected structural markers.
             assert "createStep" in code or "workflow" in code or "import" in code, \
                 f"Mastra output for {spec.get('id')} looks empty: {code[:200]}"
+
+    def test_all_flows_compile_maf(self, all_flow_specs):
+        """Phase 4: all 5 flows must compile to MS Agent Framework Python."""
+        for spec in all_flow_specs:
+            code, _warnings = compile_maf(spec)
+            # Generated Python must be syntactically valid.
+            ast.parse(code)
+            # Must export the flow runner.
+            assert "run_flow" in code, \
+                f"MAF output for {spec.get('id')} missing run_flow()"
+            assert "_run_flow_async" in code, \
+                f"MAF output for {spec.get('id')} missing _run_flow_async()"

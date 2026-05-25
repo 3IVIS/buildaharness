@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useMemo } from 'react'
 import {
-  ReactFlow, Background, MiniMap, BackgroundVariant,
+  ReactFlow, Background, Controls, MiniMap, BackgroundVariant,
   useReactFlow,
   type Node, type NodeMouseHandler, type EdgeMouseHandler,
 } from '@xyflow/react'
@@ -10,6 +10,8 @@ import { edgeTypes } from './edges'
 import { NODE_HEX } from './nodes/BaseNode'
 import { RegionLayer } from './regions/RegionLayer'
 import { CanvasToolbar } from '../components/CanvasToolbar'
+import { CollabStatus } from '../collab/CollabStatus'
+import { CollabCursors } from '../collab/CollabCursors'
 import type { NodeType } from '../spec/schema'
 
 type FocusDepth = 1 | 2 | 'all'
@@ -210,6 +212,7 @@ export function Canvas() {
         <RegionLayer />
 
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
+        <Controls showInteractive={false} />
         <MiniMap
           nodeColor={(n) => {
             const hex = NODE_HEX[n.type as NodeType]
@@ -219,6 +222,9 @@ export function Canvas() {
         />
         {/* §5 — bottom-center canvas controls + in-canvas ⌘F search */}
         <CanvasToolbar />
+        {/* §collab — real-time collaboration UI (no-ops when VITE_COLLAB_SERVER_URL is unset) */}
+        <CollabStatus />
+        <CollabCursors />
       </ReactFlow>
     </div>
   )

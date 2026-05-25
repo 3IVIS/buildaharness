@@ -56,6 +56,7 @@ from run_api import (
     _run_crewai,
     _run_langgraph,
     _run_mastra,
+    _run_maf,
 )
 from validate import validate_spec as _validate_spec
 from prompt_resolver import resolve_prompts
@@ -529,6 +530,7 @@ async def invoke_flow(
         "langgraph": _run_langgraph,
         "crewai":    _run_crewai,
         "mastra":    _run_mastra,
+        "microsoft_agent_framework": _run_maf,
     }[runtime]
 
     try:

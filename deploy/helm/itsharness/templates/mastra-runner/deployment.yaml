@@ -1,0 +1,99 @@
+{{- if .Values.mastraRunner.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itsharness.fullname" . }}-mastra-runner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mastra-runner
+spec:
+  # Single replica by default — vm.Module execution is stateful per-job.
+  # Scale horizontally only if you've implemented distributed job routing.
+  replicas: {{ .Values.mastraRunner.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "mastra-runner") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "mastra-runner") | nindent 8 }}
+      {{- with .Values.mastraRunner.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "itsharness.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.mastraRunner.podSecurityContext | nindent 8 }}
+      containers:
+        - name: mastra-runner
+          image: "{{ .Values.mastraRunner.image.repository }}:{{ include "itsharness.imageTag" (dict "image" .Values.mastraRunner.image "chart" .Chart) }}"
+          imagePullPolicy: {{ .Values.mastraRunner.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.mastraRunner.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8001
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.mastraRunner.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.mastraRunner.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.mastraRunner.resources | nindent 12 }}
+          env:
+            - name: MASTRA_RUNNER_PORT
+              value: "8001"
+            - name: MASTRA_EXEC_TIMEOUT_MS
+              value: {{ .Values.mastraRunner.execTimeoutMs | quote }}
+            - name: RUNNER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: mastra-runner-api-key
+                  optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: openai-api-key
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: anthropic-api-key
+                  optional: true
+      {{- with .Values.mastraRunner.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mastraRunner.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mastraRunner.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itsharness.fullname" . }}-mastra-runner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mastra-runner
+spec:
+  type: {{ .Values.mastraRunner.service.type }}
+  ports:
+    - port: {{ .Values.mastraRunner.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "itsharness.selectorLabels" (dict "root" . "component" "mastra-runner") | nindent 4 }}
+{{- end }}

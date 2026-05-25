@@ -35,15 +35,56 @@ jobs:
       - name: Check schema sync
         run: node scripts/check-schema-sync.mjs
 
+  canvas-package:
+    name: '@itsharness/canvas — typecheck, test, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Root npm ci also installs workspace packages/canvas deps via workspaces
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check canvas package
+        working-directory: packages/canvas
+        run: npm run typecheck
+
+      # Verify schema bundled in canvas package stays in sync with canonical spec
+      - name: Check canvas schema sync
+        run: node scripts/check-schema-sync.mjs
+
+      - name: Test canvas package
+        working-directory: packages/canvas
+        run: npm test
+
+      - name: Build canvas package (lib mode)
+        working-directory: packages/canvas
+        run: npm run build
+
+      - name: Verify dist artefacts
+        working-directory: packages/canvas
+        run: |
+          for f in dist/index.js dist/index.cjs dist/index.d.ts dist/styles.css; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          echo "✅  All dist artefacts present"
+
   adapter:
-    name: Adapter — lint (ruff), typecheck (mypy)
+    name: Adapter — lint (ruff), typecheck (mypy), test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'                        # cache pip downloads between runs
+          cache: 'pip'
           cache-dependency-path: |
             adapter/requirements.txt
             adapter/requirements-dev.txt
@@ -57,16 +98,22 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check adapter/
 
-      # Fix #6: the job was named "typecheck" but never ran a type checker.
       # mypy catches async typing issues, FastAPI dependency injection errors,
       # and SQLAlchemy model mismatches that ruff cannot detect.
       - name: Type-check (mypy)
         run: mypy adapter/ --ignore-missing-imports --python-version 3.12
 
-      # Fix #15: the adapter had zero automated test coverage.
-      # Run the new test suite (auth, flows CRUD, spec validation, compile).
       - name: Test (adapter)
         run: pytest adapter/tests/ -v
         env:
           JWT_SECRET: test-secret-for-ci-only
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING: "true"
+
+      # Phase 4: MS Agent Framework adapter tests.
+      - name: Test (MAF adapter)
+        run: pytest adapter/tests/test_maf_adapter.py -v
+        env:
+          JWT_SECRET: test-secret-for-ci-only
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING: "true"

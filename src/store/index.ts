@@ -53,7 +53,7 @@ interface Snapshot {
   flowConfig:   FlowConfig
 }
 
-interface FlowMeta {
+export interface FlowMeta {
   id: string; name: string; description: string
   runtimeHints: { preferred_adapter?: AdapterName; compatible?: AdapterName[] }
 }
@@ -76,6 +76,13 @@ export interface PersistedState {
   // duplicate node IDs. Previously lived as a module-level mutable.
   _nodeCounter:   number
   lastModifiedAt: number
+  /**
+   * Stable UUID used as the Yjs room identifier for real-time collaboration.
+   * Unlike flowMeta.id (which the user can rename), this never changes once
+   * a flow is created — so renaming a flow doesn't disconnect collaborators.
+   * Set to a new UUID by newFlow() and loadFlow(). Persisted to localStorage.
+   */
+  _collabRoomKey: string
 }
 
 // ─── Full store shape (persisted + transient) ─────────────────────────────────
@@ -102,7 +109,7 @@ export interface HitlState {
   resumeFields: string[]
 }
 
-interface CanvasStore extends PersistedState {
+export interface CanvasStore extends PersistedState {
   // Transient UI state — not persisted
   selectedNodeId:  string | null
   isPanelOpen:     boolean
@@ -112,11 +119,8 @@ interface CanvasStore extends PersistedState {
   settingsTab:     SettingsTab
   // §10 — Light/dark theme
   theme:           'dark' | 'light'
-  setTheme:        (t: 'dark' | 'light') => void
   // §11 — Library full-screen page
   isLibraryOpen:   boolean
-  openLibrary:     () => void
-  closeLibrary:    () => void
   isProblemsOpen:  boolean
   // §6 Run drawer — replaces toolbar Export-JSON-as-primary affordance
   isRunDrawerOpen: boolean
@@ -228,6 +232,20 @@ interface CanvasStore extends PersistedState {
   setFlowConfig:    (c: FlowConfig) => void
   _pushHistory:     () => void
   _touch:           () => void
+
+  // ── Real-time collaboration (Yjs) ─────────────────────────────────────────
+  /** When true, _pushHistory is a no-op — Y.UndoManager owns the undo stack. */
+  _collabActive:   boolean
+  /** Yjs clientID for collision-free node IDs in concurrent adds. Null in solo mode. */
+  _collabClientId: number | null
+  /** Live WebsocketProvider — set once collab setup completes, null in solo mode.
+   *  Stored here so Canvas components (CollabStatus, CollabCursors) can read it
+   *  without prop-threading through Canvas → every panel. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _collabWsProvider: any | null
+  /** Live Awareness instance — set alongside _collabWsProvider. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _collabAwareness: any | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -240,9 +258,21 @@ export function defaultMeta(): FlowMeta {
 }
 
 // Fix #26: ID generation now reads/writes the persisted _nodeCounter from the store.
-function newNodeId(type: NodeType | 'annotation', counter: number) {
-  return `${(type as string).replace(/_/g, '-')}-${counter}`
+
+/**
+ * Collab-safe node ID generator.
+ * In solo mode: "llm-call-3". In collab mode: "llm-call-3-2847391042"
+ * The Yjs clientID suffix prevents two clients from producing the same ID.
+ */
+function newNodeIdCollab(
+  type:     NodeType | 'annotation',
+  counter:  number,
+  clientId: number | null,
+): string {
+  const base = `${(type as string).replace(/_/g, '-')}-${counter}`
+  return clientId !== null ? `${base}-${clientId}` : base
 }
+
 
 const NODE_DEFAULTS: Partial<Record<NodeType, NodeData>> = {
   input:           { label: 'Input',           output_schema: {} },
@@ -292,7 +322,7 @@ function _snapshot(s: PersistedState): Snapshot {
 let _updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const MAX_HISTORY     = 50
 const STORAGE_KEY    = 'itsharness:current'
-const STORAGE_VERSION = 2
+const STORAGE_VERSION = 3
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
@@ -305,6 +335,7 @@ export const useCanvasStore = create<CanvasStore>()(
       agents: [], memoryStores: {}, tools: {}, modelDefaults: {}, flowConfig: {},
       _nodeCounter:   0,
       lastModifiedAt: Date.now(),
+      _collabRoomKey: crypto.randomUUID(),
 
       // ── Transient initial values ──────────────────────────────────────────
       selectedNodeId: null, isPanelOpen: false,
@@ -331,13 +362,23 @@ export const useCanvasStore = create<CanvasStore>()(
       unifiedDeployment: null,
       unifiedDeploying:  false,
 
+      // ── Collab ────────────────────────────────────────────────────────────
+      _collabActive:    false,
+      _collabClientId:  null,
+      _collabWsProvider: null,
+      _collabAwareness:  null,
+
       // ── Internal helpers ──────────────────────────────────────────────────
       _touch: () => set({ lastModifiedAt: Date.now() }),
-      _pushHistory: () => set((s) => ({
-        past: [...s.past, _snapshot(s)].slice(-MAX_HISTORY),
-        future: [], canUndo: true, canRedo: false,
-        lastModifiedAt: Date.now(),
-      })),
+      _pushHistory: () => {
+        // No-op when collab is active — Y.UndoManager owns the undo stack.
+        if (get()._collabActive) return
+        set((s) => ({
+          past: [...s.past, _snapshot(s)].slice(-MAX_HISTORY),
+          future: [], canUndo: true, canRedo: false,
+          lastModifiedAt: Date.now(),
+        }))
+      },
 
       // ── ReactFlow handlers ────────────────────────────────────────────────
       onNodesChange: (changes) => {
@@ -375,7 +416,7 @@ export const useCanvasStore = create<CanvasStore>()(
         get()._pushHistory()
         set((s) => {
           const counter = s._nodeCounter + 1
-          const id      = newNodeId(type, counter)
+          const id      = newNodeIdCollab(type, counter, s._collabClientId)
           return {
             nodes: [...s.nodes, { id, type, position, data: { ...(NODE_DEFAULTS[type] ?? { label: type }) } }],
             _nodeCounter:   counter,
@@ -388,7 +429,7 @@ export const useCanvasStore = create<CanvasStore>()(
         get()._pushHistory()
         set((s) => {
           const counter = s._nodeCounter + 1
-          const id      = `annotation-${counter}`
+          const id      = newNodeIdCollab('annotation', counter, s._collabClientId)
           return {
             nodes: [...s.nodes, { id, type: 'annotation', position, data: { text: '', colorKey: 'yellow' } }],
             _nodeCounter:   counter,
@@ -403,7 +444,7 @@ export const useCanvasStore = create<CanvasStore>()(
           const edge = s.edges.find((e) => e.id === edgeId)
           if (!edge) return {}
           const counter = s._nodeCounter + 1
-          const nodeId  = newNodeId(type, counter)
+          const nodeId  = newNodeIdCollab(type, counter, s._collabClientId)
           const src = s.nodes.find((n) => n.id === edge.source)
           const tgt = s.nodes.find((n) => n.id === edge.target)
           const NODE_W = 248, NODE_H = 86
@@ -628,6 +669,7 @@ export const useCanvasStore = create<CanvasStore>()(
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
           _nodeCounter: maxCounter,
           lastModifiedAt: Date.now(),
+          _collabRoomKey: crypto.randomUUID(),
           a2aDeployment: null, a2aDeploying: false, unifiedDeployment: null, unifiedDeploying: false,
         })
       },
@@ -737,6 +779,7 @@ export const useCanvasStore = create<CanvasStore>()(
           zodErrors: null, crossRefErrors: [], past: [], future: [], canUndo: false, canRedo: false,
           _nodeCounter: 1,
           lastModifiedAt: Date.now(),
+          _collabRoomKey: crypto.randomUUID(),
           a2aDeployment: null, a2aDeploying: false, unifiedDeployment: null, unifiedDeploying: false,
         })
       },
@@ -760,6 +803,7 @@ export const useCanvasStore = create<CanvasStore>()(
         flowConfig:     state.flowConfig,
         _nodeCounter:   state._nodeCounter,
         lastModifiedAt: state.lastModifiedAt,
+        _collabRoomKey: state._collabRoomKey,
       }),
 
       migrate: (persisted, version) => {
@@ -789,6 +833,15 @@ export const useCanvasStore = create<CanvasStore>()(
           }
         }
         if (version === 2) {
+          // v3 adds _collabRoomKey — generate one from the flow id so existing flows
+          // get a stable room key based on their id.
+          const p = persisted as PersistedState & { flowMeta?: { id?: string } }
+          return {
+            ...p,
+            _collabRoomKey: p._collabRoomKey ?? crypto.randomUUID(),
+          }
+        }
+        if (version === 3) {
           return persisted
         }
         console.warn(

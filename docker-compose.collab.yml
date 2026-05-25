@@ -1,0 +1,68 @@
+# docker-compose.collab.yml
+#
+# Adds the y-websocket real-time collaboration server to the stack.
+# Run alongside your main docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.collab.yml up
+#
+# Or merge the `services` and `volumes` blocks directly into docker-compose.yml.
+#
+# ── Room naming convention ────────────────────────────────────────────────────
+# Each flow gets its own Yjs document. The app uses a stable UUID (_collabRoomKey)
+# as the room name — not the user-editable Flow ID — so renaming a flow never
+# disconnects collaborators. The y-websocket server scopes by room name automatically.
+#
+# ── Auth ─────────────────────────────────────────────────────────────────────
+# Out of the box y-websocket has no auth. For production, choose one of:
+#
+#   (a) JWT in query string — pass ?token=<jwt> in serverUrl, validate in
+#       a custom y-websocket server (see scripts/collab-server.mjs).
+#
+#   (b) nginx/traefik reverse proxy — put the WS endpoint behind your existing
+#       ingress auth layer. The service stays on port 1234 internally.
+#
+#   (c) Network isolation — keep port 1234 off the public internet and route
+#       only through your API server, which proxies authenticated WS connections.
+#
+# ── Persistence ──────────────────────────────────────────────────────────────
+# LevelDB stores each room's Y.Doc on disk. Documents persist across server
+# restarts. The last-write-wins CRDT semantics mean there is no data loss even
+# if a client disconnects mid-edit — partial state is merged on reconnect.
+
+services:
+  collab:
+    image: node:20-alpine
+    working_dir: /app
+    # y-websocket@2 is the last version that ships the server binary.
+    # The client uses y-websocket@3 (client-only). Both speak the same sync
+    # protocol (lib0 encoding, 4 message types) and are wire-compatible.
+    command: >
+      sh -c "npm install --global y-websocket@2 2>/dev/null; y-websocket"
+    environment:
+      PORT: "1234"
+      # Enable LevelDB persistence. Documents survive container restarts.
+      PERSISTENCE: "leveldb"
+      LEVELDB_PERSISTENCE_DIR: "/data/yjs"
+      # Optional: set a log level (debug | info | warn | error)
+      # LOG_LEVEL: "info"
+    ports:
+      # Expose on localhost only in development.
+      # In production, remove the `127.0.0.1:` prefix or put nginx in front.
+      - "127.0.0.1:1234:1234"
+    volumes:
+      - collab_data:/data/yjs
+    restart: unless-stopped
+    healthcheck:
+      # y-websocket serves an HTTP upgrade on the same port. A plain HTTP GET
+      # from wget triggers a 400 "Not a WebSocket upgrade" response — that IS
+      # the signal the server is running. BusyBox wget treats any non-2xx as a
+      # failure (exit 1), so we append `|| true` to make the check pass on 400.
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:1234 || true"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  collab_data:
+    driver: local

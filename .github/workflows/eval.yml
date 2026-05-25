@@ -59,16 +59,28 @@ jobs:
       - name: Run spec validation (fast gate — no LLM)
         run: pytest eval/test_spec_validation.py -v --tb=short
 
+      # Phase 4: validate all 5 flows compile to MAF in addition to LG/CA/Mastra.
+      # Runs immediately after spec validation — no LLM needed.
+      - name: Run MAF compile gate (all 5 reference flows)
+        run: pytest eval/test_spec_validation.py::TestSpecValidation::test_all_flows_compile_maf -v --tb=short
+
       - name: Run RAG quality metrics
         run: pytest eval/test_rag_quality.py -v --tb=short
 
       - name: Run moderation quality metrics
         run: pytest eval/test_moderation_quality.py -v --tb=short
 
+      # Phase 4: debate flow quality metrics (flow 05 — the MAF showcase).
+      # Gated by EVAL_USE_REAL_LLM; cheap structural checks always run.
+      - name: Run debate quality metrics
+        run: pytest eval/test_debate_quality.py -v --tb=short
+
       - name: Upload eval results as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: eval-results-${{ github.run_id }}
-          path: adapter/.deepeval/
+          path: |
+            adapter/.deepeval/
+            adapter/.ragas/
           retention-days: 30

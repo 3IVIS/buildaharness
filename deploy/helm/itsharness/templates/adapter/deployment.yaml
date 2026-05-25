@@ -1,0 +1,204 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itsharness.fullname" . }}-adapter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adapter
+  {{- with .Values.global.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.adapter.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 8 }}
+      {{- with .Values.adapter.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "itsharness.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.adapter.podSecurityContext | nindent 8 }}
+      # Wait for Postgres and Redis to be ready before starting.
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.postgresHost" . }} {{ include "itsharness.postgresPort" . }}; do
+                echo "Waiting for PostgreSQL..."; sleep 2;
+              done
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.redisHost" . }} 6379; do
+                echo "Waiting for Redis..."; sleep 2;
+              done
+      containers:
+        - name: adapter
+          image: "{{ .Values.adapter.image.repository }}:{{ include "itsharness.imageTag" (dict "image" .Values.adapter.image "chart" .Chart) }}"
+          imagePullPolicy: {{ .Values.adapter.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.adapter.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.adapter.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.adapter.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.adapter.resources | nindent 12 }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            # ── Database ────────────────────────────────────────────────────
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: postgres-password
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://itsharness:$(POSTGRES_PASSWORD)@{{ include "itsharness.postgresHost" . }}:{{ include "itsharness.postgresPort" . }}/itsharness"
+            # ── Auth ────────────────────────────────────────────────────────
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: jwt-secret
+            - name: JWT_TTL_DAYS
+              value: {{ .Values.adapter.jwtTtlDays | quote }}
+            # ── Redis ────────────────────────────────────────────────────────
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: redis-password
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@{{ include "itsharness.redisHost" . }}:6379/{{ include "itsharness.redisDb" . }}"
+            # ── LLM keys ─────────────────────────────────────────────────────
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: openai-api-key
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: anthropic-api-key
+                  optional: true
+            # ── LiteLLM proxy ─────────────────────────────────────────────────
+            - name: LITELLM_URL
+              value: {{ include "itsharness.litellmInternalUrl" . | quote }}
+            # ── Langfuse ─────────────────────────────────────────────────────
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: langfuse-public-key
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: langfuse-secret-key
+            - name: LANGFUSE_BASE_URL
+              value: {{ include "itsharness.langfuseInternalUrl" . | quote }}
+            # ── Mastra runner ─────────────────────────────────────────────────
+            - name: MASTRA_RUNNER_URL
+              value: {{ include "itsharness.mastraRunnerUrl" . | quote }}
+            - name: MASTRA_RUNNER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: mastra-runner-api-key
+                  optional: true
+            - name: MASTRA_POLL_INTERVAL_S
+              value: {{ .Values.adapter.mastraPollIntervalS | quote }}
+            - name: MASTRA_RUNNER_TIMEOUT_S
+              value: {{ .Values.adapter.mastraRunnerTimeoutS | quote }}
+            # ── CORS / limits ─────────────────────────────────────────────────
+            - name: CORS_ORIGINS
+              value: {{ .Values.adapter.corsOrigins | quote }}
+            - name: MAX_BODY_BYTES
+              value: {{ .Values.adapter.maxBodyBytes | quote }}
+            - name: JOB_TTL_HOURS
+              value: {{ .Values.adapter.jobTtlHours | quote }}
+            {{- if .Values.adapter.baseUrl }}
+            - name: ADAPTER_BASE_URL
+              value: {{ .Values.adapter.baseUrl | quote }}
+            {{- end }}
+            - name: INVOKE_TIMEOUT_S
+              value: {{ .Values.adapter.invokeTimeoutS | quote }}
+            # ── SSO / OIDC ────────────────────────────────────────────────────
+            - name: OIDC_ENABLED
+              value: {{ .Values.oidc.enabled | quote }}
+            {{- if .Values.oidc.enabled }}
+            - name: OIDC_PROVIDER_NAME
+              value: {{ .Values.oidc.providerName | quote }}
+            - name: OIDC_ISSUER_URL
+              value: {{ .Values.oidc.issuerUrl | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: oidc-client-secret
+            - name: OIDC_REDIRECT_URI
+              value: {{ .Values.oidc.redirectUri | quote }}
+            - name: OIDC_SCOPES
+              value: {{ .Values.oidc.scopes | quote }}
+            - name: OIDC_GROUP_CLAIM
+              value: {{ .Values.oidc.groupClaim | quote }}
+            - name: OIDC_ADMIN_GROUPS
+              value: {{ .Values.oidc.adminGroups | quote }}
+            - name: OIDC_ORG_SLUG_CLAIM
+              value: {{ .Values.oidc.orgSlugClaim | quote }}
+            - name: OIDC_AUTO_PROVISION
+              value: {{ .Values.oidc.autoProvision | quote }}
+            {{- end }}
+            # ── SCIM ──────────────────────────────────────────────────────────
+            - name: SCIM_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: scim-bearer-token
+                  optional: true
+            # ── Extra env ─────────────────────────────────────────────────────
+            {{- with .Values.adapter.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      {{- with .Values.adapter.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adapter.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.adapter.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

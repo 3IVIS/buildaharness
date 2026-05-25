@@ -1,0 +1,120 @@
+{{- if .Values.ingress.enabled }}
+# ── Adapter API Ingress ────────────────────────────────────────────────────────
+{{- if .Values.ingress.adapter.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "itsharness.fullname" . }}-adapter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: adapter
+  annotations:
+    {{- if .Values.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    {{- end }}
+    # Allow 2 MB request bodies so large flow specs can be submitted.
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.adapterProxyBodySize | default "2m" | quote }}
+    # Increase timeout for long-running synchronous invokes.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.adapter.tls }}
+  tls:
+    {{- toYaml .Values.ingress.adapter.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.adapter.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "itsharness.fullname" . }}-adapter
+                port:
+                  name: http
+{{- end }}
+---
+# ── Canvas UI Ingress ──────────────────────────────────────────────────────────
+{{- if and .Values.canvas.enabled .Values.ingress.canvas.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "itsharness.fullname" . }}-canvas
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canvas
+  annotations:
+    {{- if .Values.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.canvas.tls }}
+  tls:
+    {{- toYaml .Values.ingress.canvas.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.canvas.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "itsharness.fullname" . }}-canvas
+                port:
+                  name: http
+{{- end }}
+---
+# ── Langfuse Ingress ──────────────────────────────────────────────────────────
+{{- if and .Values.langfuse.enabled .Values.ingress.langfuse.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "itsharness.fullname" . }}-langfuse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse
+  annotations:
+    {{- if .Values.ingress.className }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.langfuse.tls }}
+  tls:
+    {{- toYaml .Values.ingress.langfuse.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.langfuse.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "itsharness.fullname" . }}-langfuse
+                port:
+                  name: http
+{{- end }}
+{{- end }}

@@ -32,6 +32,7 @@ limits>=3.13.0
 # ── Agent runtimes ────────────────────────────────────────────────────────────
 crewai>=1.0.0                   # 1.x dropped many 0.x breaking changes
 langgraph>=0.2.0
+semantic-kernel>=1.0.0          # MAF v1.0 GA (Apr 2026) — merger of SK + AutoGen
 
 # ── Observability ─────────────────────────────────────────────────────────────
 langfuse>=4.0.0

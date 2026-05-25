@@ -1,0 +1,807 @@
+/* @itsharness/canvas — styles.css
+ * All canvas-specific styles extracted from the itsharness full-app stylesheet.
+ *
+ * Usage:  import '@itsharness/canvas/styles.css'
+ *
+ * Design tokens default to dark theme. Light theme tokens fire when the
+ * nearest ancestor has  data-theme="light"  — ItsHarnessCanvas sets this
+ * automatically from the `theme` prop, scoped to its own root div.
+ */
+
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Fira Code', monospace;
+
+  /* ── Surfaces — a clear 5-step elevation hierarchy ── */
+  --bg-canvas:   #09090d;   /* canvas background — deepest */
+  --bg-base:     #0f0f14;   /* app chrome: toolbar, sidebar, panels */
+  --bg-raised:   #16161f;   /* nodes, cards */
+  --bg-overlay:  #1d1d28;   /* inputs, secondary cards */
+  --bg-hover:    #232332;   /* hover state */
+  --bg-active:   #2a2a3d;   /* active/pressed state */
+  --bg-selected: #1a2035;   /* selected surface tint (blue-shifted) */
+
+  /* ── Borders — 3-step hierarchy ── */
+  --border:      #1f1f2e;   /* subtle structural dividers */
+  --border-mid:  #2d2d42;   /* default element borders */
+  --border-hi:   #484866;   /* hover/focus borders */
+  --green:        #4ade80;   /* success / valid green */
+  --blue:         #3b82f6;   /* unified selection + caret blue */
+  --hint:         #4a4a68;   /* tertiary text / separators */
+  --border-blue: rgba(59,130,246,0.5); /* selection border */
+
+  /* ── Text ── */
+  --text-primary:   #e2e2ec;
+  --text-secondary: #8080a0;
+  --text-tertiary:  #4a4a68;
+  --text-mono:      #9696bc;
+
+  /* ── Accent — node type palette ── */
+  --c-input:    #3b82f6;
+  --c-output:   #5a6172;
+  --c-llm:      #8b5cf6;
+  --c-tool:     #0ea5a0;
+  --c-cond:     #d97706;
+  --c-fork:     #16a34a;
+  --c-join:     #22c55e;   /* unified with parallel_fork */
+  --c-hitl:     #ea6c0a;
+  --c-fail:     #ef4444;   /* error-branch edges */
+  --c-memr:     #06b6d4;   /* unified with memory_write */
+  --c-memw:     #06b6d4;   /* unified with memory_read */
+  --c-sub:      #475569;
+  --c-xform:    #9333ea;
+  --c-agent:    #db2777;
+  --c-debate:   #c026d3;
+
+  /* ── Runtime badge palette ── */
+  --rt-full:    #4ade80;
+  --rt-partial: #fbbf24;
+  --rt-missing: #4a4a68;
+
+  /* ── Shadows ── */
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.35);
+  --shadow-node:    0 2px 8px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-node-hover: 0 4px 16px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4);
+  --shadow-panel:   0 0 0 0.5px var(--border-mid), 1px 0 0 0 var(--border);
+  --shadow-modal:   0 24px 64px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4), 0 0 0 0.5px var(--border-mid);
+  --shadow-toolbar: 0 1px 0 var(--border), 0 2px 8px rgba(0,0,0,0.3);
+
+  /* ── Selection glow ── */
+  --glow-selection: 0 0 0 1.5px #3b82f6, 0 0 0 4px rgba(59,130,246,0.15);
+
+  /* ── Radii ── */
+  --r-xs:  3px;
+  --r-sm:  5px;
+  --r-md:  7px;
+  --r-lg:  10px;
+  --r-xl:  13px;
+  --r-2xl: 16px;
+
+  /* ── Transitions ── */
+  --t-fast: 0.1s ease;
+  --t-mid:  0.15s ease;
+  --t-slow: 0.2s ease;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+html, body, #root {
+  height: 100%; width: 100%; overflow: hidden;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus ring — accessible but not distracting */
+:focus-visible {
+  outline: 2px solid rgba(59,130,246,0.6);
+  outline-offset: 2px;
+
+
+/* ─── XYFlow overrides ───────────────────────────────────────────────────── */
+.react-flow {
+  --xy-node-background-color:          transparent;
+  --xy-node-border:                    none;
+  --xy-node-border-radius:             0px;
+  --xy-node-boxshadow-hover:           none;
+  --xy-node-boxshadow-selected:        none;
+  --xy-controls-button-background-color:       var(--bg-raised);
+  --xy-controls-button-background-color-hover: var(--bg-hover);
+  --xy-controls-button-border-color:           var(--border-mid);
+  --xy-controls-button-color:                  var(--text-secondary);
+  --xy-controls-button-color-hover:            var(--text-primary);
+  --xy-controls-box-shadow:                    none;
+  --xy-attribution-background-color:           transparent;
+  --xy-edge-label-background-color:            var(--bg-raised);
+  --xy-edge-label-color:                       var(--text-secondary);
+}
+
+/* Hard-reset XYFlow built-in node wrappers (input/output/default/group clash) */
+.react-flow__node-input,
+.react-flow__node-output,
+.react-flow__node-default,
+.react-flow__node-group {
+  padding: 0; width: auto; border-radius: 0;
+  border: none; background-color: transparent;
+  text-align: left; font-size: inherit; color: inherit;
+}
+.react-flow__node-input.selectable:hover,
+.react-flow__node-output.selectable:hover,
+.react-flow__node-default.selectable:hover,
+.react-flow__node-group.selectable:hover,
+.react-flow__node-input.selectable.selected,
+.react-flow__node-output.selectable.selected,
+.react-flow__node-default.selectable.selected,
+.react-flow__node-group.selectable.selected { box-shadow: none; }
+
+.react-flow__background { background: var(--bg-canvas); }
+.react-flow__edge-path  { stroke: var(--border-mid); stroke-width: 1.5; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #3b82f6; }
+
+.react-flow__handle {
+  width: 10px !important; height: 10px !important;
+  border: 1.5px solid var(--border-hi) !important;
+  background: var(--bg-raised) !important;
+  border-radius: 50%;
+  transition: border-color var(--t-fast), background var(--t-fast),
+              transform var(--t-fast);
+}
+.react-flow__handle:hover {
+  border-color: #3b82f6 !important;
+  background: var(--bg-active) !important;
+  transform: scale(1.25);
+}
+
+.react-flow__controls {
+  background: var(--bg-raised);
+  border: 0.5px solid var(--border-mid);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+.react-flow__controls-button {
+  background: transparent; border: none;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-secondary);
+  width: 28px; height: 28px;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.react-flow__controls-button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.react-flow__controls-button:last-child { border-bottom: none; }
+.react-flow__controls-button svg { fill: currentColor; }
+
+.react-flow__minimap {
+  background: var(--bg-raised) !important;
+  border: 0.5px solid var(--border-mid) !important;
+  border-radius: var(--r-lg) !important;
+  box-shadow: var(--shadow-sm) !important;
+  overflow: hidden !important;
+}
+.react-flow__minimap-mask { fill: var(--bg-canvas); fill-opacity: 0.75; }
+.react-flow__minimap-node { fill: var(--bg-overlay); }
+.react-flow__attribution { display: none; }
+
+
+.canvas-area { flex: 1; position: relative; }
+
+/* ─── Nodes ──────────────────────────────────────────────────────────────── */
+.cf-node {
+  background: var(--bg-raised);
+  border: 0.5px solid var(--border-mid);
+  border-left-width: 3px;   /* color accent strip */
+  border-radius: var(--r-lg);
+  min-width: 196px;
+  max-width: 260px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  box-shadow: var(--shadow-node);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  overflow: hidden;
+}
+.cf-node:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-node-hover);
+}
+.cf-node.selected {
+  border-color: #3b82f6 !important;
+  box-shadow: var(--glow-selection);
+}
+
+/* Runtime warning overlays */
+.cf-node--absent {
+  border-color: rgba(239,68,68,0.55) !important;
+  box-shadow: 0 0 0 1.5px rgba(239,68,68,0.12), var(--shadow-node);
+}
+.cf-node--warn {
+  border-color: rgba(245,158,11,0.5) !important;
+  box-shadow: 0 0 0 1.5px rgba(245,158,11,0.1), var(--shadow-node);
+}
+
+/* ── Execution state rings ─────────────────────────────────────────────── */
+.cf-node--exec-pending {
+  opacity: 0.6;
+}
+.cf-node--exec-running {
+  border-color: rgba(96,165,250,0.7) !important;
+  box-shadow: 0 0 0 2px rgba(96,165,250,0.2), var(--shadow-node);
+  animation: execRingPulse 1.4s ease-in-out infinite;
+}
+.cf-node--exec-paused {
+  border-color: rgba(251,146,60,0.85) !important;
+  box-shadow: 0 0 0 2px rgba(251,146,60,0.25), var(--shadow-node);
+  animation: execHitlPulse 2s ease-in-out infinite;
+}
+.cf-node--exec-done {
+  border-color: rgba(74,222,128,0.6) !important;
+  box-shadow: 0 0 0 2px rgba(74,222,128,0.15), var(--shadow-node);
+}
+.cf-node--exec-error {
+  border-color: rgba(248,113,113,0.6) !important;
+  box-shadow: 0 0 0 2px rgba(248,113,113,0.15), var(--shadow-node);
+}
+@keyframes execRingPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(96,165,250,0.15), var(--shadow-node); }
+  50%       { box-shadow: 0 0 0 4px rgba(96,165,250,0.30), var(--shadow-node); }
+}
+@keyframes execHitlPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(251,146,60,0.15), var(--shadow-node); }
+  50%       { box-shadow: 0 0 0 5px rgba(251,146,60,0.35), var(--shadow-node); }
+}
+
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Header — tinted background using node color */
+.cf-node__header {
+
+.cf-node__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px 8px;
+}
+
+.cf-node__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.cf-node__label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.cf-node__type {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+
+/* Preview / children body */
+.cf-node__body {
+  padding: 5px 11px 7px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  border-top: 0.5px solid var(--border);
+  background: rgba(0,0,0,0.12);
+}
+
+.cf-node__preview {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Runtime compat row */
+/* Full 4-runtime compat row — hidden by default, revealed when the user
+   wants the matrix (hover or select). The header carries a single pinned
+   pill at all other times. */
+.cf-node__compat--full {
+  display: flex;
+  gap: 3px;
+  padding: 4px 11px 7px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  transition: max-height 0.18s ease, opacity 0.14s ease,
+              padding-top 0.18s, padding-bottom 0.18s;
+}
+.cf-node:hover .cf-node__compat--full,
+.cf-node.selected .cf-node__compat--full {
+  max-height: 24px;
+  opacity: 1;
+  padding-top: 4px;
+  padding-bottom: 7px;
+}
+
+.rt-badge {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  padding: 1.5px 4px;
+  border-radius: var(--r-xs);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: opacity var(--t-fast);
+}
+.rt-badge--full    { background: rgba(74,222,128,0.1);  color: var(--rt-full); }
+.rt-badge--partial { background: rgba(251,191,36,0.1);  color: var(--rt-partial); }
+.rt-badge--missing { background: rgba(74,74,104,0.15);  color: var(--rt-missing); }
+.rt-badge--pinned  { font-weight: 700; }
+
+/* ─── Config panel · §3 — floating overlay anchored to workspace right ───── */
+.config-panel {
+  /* Overlay (was: flex-sibling 308px column that reflowed the canvas). */
+
+.cf-node__exec-badge {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px 4px;
+  border-top: 0.5px solid var(--border);
+  background: var(--bg-raised);
+}
+.exec-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  transition: background 0.3s ease;
+  /* Pulse when running */
+}
+@keyframes execPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.75); }
+}
+.cf-node__exec-badge[data-status='running'] .exec-dot {
+  animation: execPulse 1s ease-in-out infinite;
+}
+.exec-stat {
+  font-size: 9.5px; color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+.exec-sep { font-size: 9.5px; color: var(--hint); }
+
+/* ── Compat pin · single-runtime indicator in the node header ─────────── */
+.compat-pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 1.5px 5px 1.5px 5px;
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.compat-pin--full {
+  background: rgba(74,222,128,0.10);
+  color: var(--rt-full);
+  border: 0.5px solid rgba(74,222,128,0.20);
+}
+.compat-pin--partial {
+  background: rgba(251,191,36,0.10);
+  color: var(--rt-partial);
+  border: 0.5px solid rgba(251,191,36,0.25);
+}
+.compat-pin--missing {
+  background: rgba(239,68,68,0.10);
+  color: #f87171;
+  border: 0.5px solid rgba(239,68,68,0.30);
+}
+
+/* ── Glyph modifier · differentiates read/write, fork/join, role/debate ── */
+
+.cf-node__icon-stack {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.cf-node__glyph-mod {
+  position: absolute;
+  bottom: -3px;
+  right: -4px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-hi);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Inline cross-ref error footer ────────────────────────────────────── */
+.cf-node--error {
+  border-color: rgba(239,68,68,0.55) !important;
+  box-shadow: 0 0 0 1.5px rgba(239,68,68,0.12), var(--shadow-node);
+}
+.cf-node__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 11px 7px;
+  border-top: 0.5px solid rgba(239,68,68,0.20);
+  background: rgba(239,68,68,0.06);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  color: #f87171;
+}
+.cf-node__error svg { margin-top: 1px; flex-shrink: 0; }
+.cf-node__error span:first-of-type {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-node__error-more {
+  background: rgba(239,68,68,0.18);
+  border-radius: 2px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+/* ── Region · dashed background for parallel and debate scopes ─────────── */
+
+.region {
+  border-radius: 14px;
+  pointer-events: none;
+}
+.region--parallel {
+  border: 1px dashed rgba(34,197,94,0.40);
+  background: rgba(34,197,94,0.04);
+}
+.region--debate {
+  border: 1px dashed rgba(217,70,239,0.40);
+  background: rgba(217,70,239,0.04);
+}
+.region__label {
+  position: absolute;
+  top: -7px;
+  left: 14px;
+  padding: 0 8px;
+  background: var(--bg-canvas);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.region--parallel .region__label { color: rgba(34,197,94,0.90); }
+.region--debate   .region__label { color: rgba(217,70,239,0.95); }
+
+/* ── Focus toolbar · depth selector + close ────────────────────────────── */
+.focus-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(22,22,31,0.85);
+  backdrop-filter: blur(6px);
+  border: 0.5px solid var(--border-mid);
+  border-radius: 8px;
+  padding: 4px 6px 4px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.focus-toolbar__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+.focus-toolbar__btn {
+  background: transparent;
+  border: 0.5px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  min-width: 24px;
+}
+.focus-toolbar__btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.focus-toolbar__btn.is-active {
+  background: var(--bg-active);
+  border-color: var(--border-mid);
+  color: var(--text-primary);
+}
+.focus-toolbar__close { color: var(--text-tertiary); }
+.focus-toolbar__close:hover { color: #ef4444; }
+.focus-toolbar__sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-mid);
+}
+
+
+.edge-insert-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-fast);
+}
+.edge-insert-btn:hover { background: rgba(59,130,246,0.06); }
+.edge-insert-btn__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-mid);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.edge-insert-btn:hover .edge-insert-btn__inner {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hi);
+}
+.edge-insert-menu {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 0.5px solid var(--border-mid);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  min-width: 148px;
+  z-index: 100;
+}
+.edge-insert-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.edge-insert-menu__item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Edge labels · anchored at 35%/70% of path so they don't pile up ──── */
+.edge-label {
+  background: var(--bg-raised);
+  border: 0.5px solid var(--border-mid);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+.edge-ctx-pill {
+  background: rgba(139,92,246,0.10);
+  border: 0.5px solid rgba(139,92,246,0.30);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: #a78bfa;
+  font-family: var(--font-mono);
+  cursor: help;
+}
+
+/* ── Parallel edge flow animation ────────────────────────────────────────── */
+@keyframes parallelFlow {
+  from { stroke-dashoffset: 18; }
+  to   { stroke-dashoffset: 0;  }
+}
+
+/* ── cfg-input · compact number/select inputs used in FailBranchSection ──── */
+.cfg-input {
+  background:    var(--bg-overlay);
+  border:        0.5px solid var(--border-mid);
+  border-radius: var(--r-sm);
+  color:         var(--text-primary);
+  font-family:   var(--font-mono);
+  font-size:     11.5px;
+  padding:       4px 7px;
+  outline:       none;
+  transition:    border-color var(--t-fast), background var(--t-fast);
+}
+.cfg-input:focus {
+  border-color: rgba(59,130,246,0.6);
+  background:   var(--bg-active);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * v0.8 Redesign — Pass A
+ * Run drawer (§6) · Inspector overlay extras (§3) · Toolbar overflow (§1)
+
+/* ── §4 · Handle labels (autohide; visible on .cf-node:hover) ────────────── */
+.cf-handle-label {
+  position: absolute;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-overlay);
+  border: 0.5px solid var(--border-mid);
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  pointer-events: none;
+  z-index: 5;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.cf-handle-label--left  { right: calc(100% + 10px); }
+.cf-handle-label--right { left:  calc(100% + 10px); }
+.cf-node:hover .cf-handle-label,
+.cf-node.selected .cf-handle-label { opacity: 1; }
+
+/* ── §15 · Runtime targeting chip + dropdown (replaces .runtime-select) ─── */
+.rt-chip-wrap { position: relative; }
+
+.canvas-toolbar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 14;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(22,22,31,0.88);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 0.5px solid var(--border-mid);
+  border-radius: 8px; padding: 4px 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.canvas-toolbar__btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px;
+  background: transparent; border: 0.5px solid transparent;
+  color: var(--text-secondary); cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.canvas-toolbar__btn:hover  { background: var(--bg-hover); color: var(--text-primary); }
+.canvas-toolbar__btn--active{ background: var(--bg-active); color: var(--text-primary); }
+.canvas-toolbar__sep { width: 1px; height: 18px; background: var(--border-mid); margin: 0 2px; }
+
+.canvas-search {
+  position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
+  z-index: 15;
+  width: 340px;
+  background: rgba(22,22,31,0.92);
+  backdrop-filter: blur(8px);
+  border: 0.5px solid var(--border-hi);
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.canvas-search input {
+  flex: 1; background: none; border: none; outline: none;
+  font-size: 13px; color: var(--text-primary); caret-color: var(--blue);
+  font-family: var(--font-sans);
+}
+.canvas-search input::placeholder { color: var(--text-tertiary); }
+.canvas-search__count {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-tertiary); white-space: nowrap;
+}
+.canvas-search__kbd {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-family: var(--font-mono); font-size: 9px; color: var(--text-tertiary);
+}
+.canvas-search__kbd kbd {
+  background: var(--bg-overlay); border: 0.5px solid var(--border-mid);
+  border-radius: 3px; padding: 1px 4px;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-secondary);
+}
+
+.cf-node--search-hit    {
+  /* Slight outline + glow on every match. Outline does not affect layout. */
+  outline: 2px solid #fbbf24;
+  outline-offset: 3px;
+  box-shadow: var(--shadow-node), 0 0 0 4px rgba(251,191,36,0.12);
+}
+.cf-node--search-active {
+  outline: 2.5px solid #f59e0b;
+  outline-offset: 3px;
+  box-shadow: var(--shadow-node-hover), 0 0 0 6px rgba(245,158,11,0.18);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PASS C — §10 Light theme, §11 Drawer/Library, §12 Error banner,
+             §8 New chooser, §13 State pill + accent button
+   ═══════════════════════════════════════════════════════════════ */
+
+/* §10 — Smooth theme swap */
+html, body, #root {
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+/* §10 — Light theme tokens */
+:root[data-theme="light"] {
+
+
+/* ── Light-theme tokens scoped to the canvas element ───────────────────── */
+/* Mirrors :root[data-theme="light"] but scoped to the canvas root div so  */
+/* the host app's theme is unaffected when theme="light" is passed as prop. */
+[data-itsharness-canvas][data-theme="light"] {
+  --bg-canvas:   #f7f7f5;
+  --bg-base:     #ffffff;
+  --bg-raised:   #fbfbf9;
+  --bg-overlay:  #f0eee9;
+  --bg-hover:    #ebe9e3;
+  --bg-active:   #e0ddd4;
+  --bg-selected: #e9efff;
+  --border:      #ebe9e3;
+  --border-mid:  #d8d4c9;
+  --border-hi:   #b8b3a3;
+  --hint:        #8a877f;
+  --text-primary:   #1a1a1a;
+  --text-secondary: #555550;
+  --text-tertiary:  #8a877f;
+  --shadow-node:       0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-node-hover: 0 2px 8px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06);
+  --glow-selection:    0 0 0 1.5px #3b82f6, 0 0 0 3px rgba(59,130,246,0.18);
+}
+[data-itsharness-canvas][data-theme="light"] .cf-node__body {
+  background: rgba(0,0,0,0.025);
+}
+[data-itsharness-canvas][data-theme="light"] .react-flow__background {
+  background: var(--bg-canvas);
+}

@@ -1,0 +1,101 @@
+{{- if .Values.canvas.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itsharness.fullname" . }}-canvas
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canvas
+spec:
+  replicas: {{ .Values.canvas.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "canvas") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "canvas") | nindent 8 }}
+      {{- with .Values.canvas.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "itsharness.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.canvas.podSecurityContext | nindent 8 }}
+      containers:
+        - name: canvas
+          image: "{{ .Values.canvas.image.repository }}:{{ include "itsharness.imageTag" (dict "image" .Values.canvas.image "chart" .Chart) }}"
+          imagePullPolicy: {{ .Values.canvas.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.canvas.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.canvas.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.canvas.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.canvas.resources | nindent 12 }}
+          env:
+            - name: NODE_ENV
+              value: production
+            # The canvas Vite build bakes VITE_API_URL at build time.
+            # At runtime, the canvas fetches the adapter via the Ingress.
+            # VITE_API_URL must be set as a build arg in the image build step.
+      {{- with .Values.canvas.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.canvas.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.canvas.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itsharness.fullname" . }}-canvas
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canvas
+spec:
+  type: {{ .Values.canvas.service.type }}
+  ports:
+    - port: {{ .Values.canvas.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "itsharness.selectorLabels" (dict "root" . "component" "canvas") | nindent 4 }}
+---
+{{- if .Values.canvas.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "itsharness.fullname" . }}-canvas
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canvas
+spec:
+  minAvailable: {{ .Values.canvas.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "canvas") | nindent 6 }}
+{{- end }}
+{{- end }}

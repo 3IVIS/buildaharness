@@ -1,0 +1,157 @@
+{{- if .Values.langfuse.enabled }}
+# ── Langfuse web server ────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itsharness.fullname" . }}-langfuse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse
+spec:
+  replicas: {{ .Values.langfuse.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "langfuse") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "langfuse") | nindent 8 }}
+      {{- with .Values.langfuse.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        # P3-2 fix: wait for all three Langfuse dependencies (matches Compose depends_on).
+        # Without these, Langfuse may crash-loop on first install before deps are ready.
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.postgresHost" . }} {{ include "itsharness.postgresPort" . }}; do
+                echo "Waiting for PostgreSQL..."; sleep 2;
+              done
+        - name: wait-for-redis
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.redisHost" . }} 6379; do
+                echo "Waiting for Redis..."; sleep 2;
+              done
+        - name: wait-for-clickhouse
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.clickhouseHost" . }} 8123; do
+                echo "Waiting for ClickHouse..."; sleep 3;
+              done
+      containers:
+        - name: langfuse
+          image: "{{ .Values.langfuse.image.repository }}:{{ .Values.langfuse.image.tag }}"
+          imagePullPolicy: {{ .Values.langfuse.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /api/public/health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /api/public/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.langfuse.resources | nindent 12 }}
+          env:
+            {{- include "itsharness.langfuseEnv" . | nindent 12 }}
+            - name: NEXTAUTH_URL
+              value: {{ .Values.langfuse.nextauthUrl | default (printf "http://%s-langfuse:3000" (include "itsharness.fullname" .)) | quote }}
+      {{- with .Values.langfuse.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.langfuse.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.langfuse.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# ── Langfuse worker ────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "itsharness.fullname" . }}-langfuse-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "langfuse-worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "langfuse-worker") | nindent 8 }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-for-langfuse
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "itsharness.fullname" . }}-langfuse 3000; do
+                echo "Waiting for Langfuse web..."; sleep 3;
+              done
+      containers:
+        - name: langfuse-worker
+          image: "{{ .Values.langfuse.workerImage.repository }}:{{ .Values.langfuse.workerImage.tag }}"
+          imagePullPolicy: {{ .Values.langfuse.workerImage.pullPolicy }}
+          resources:
+            {{- toYaml .Values.langfuse.workerResources | nindent 12 }}
+          env:
+            {{- include "itsharness.langfuseEnv" . | nindent 12 }}
+      {{- with .Values.langfuse.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# ── Langfuse service ───────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itsharness.fullname" . }}-langfuse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: langfuse
+spec:
+  type: {{ .Values.langfuse.service.type }}
+  ports:
+    - port: {{ .Values.langfuse.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "itsharness.selectorLabels" (dict "root" . "component" "langfuse") | nindent 4 }}
+{{- end }}

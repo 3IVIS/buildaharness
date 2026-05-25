@@ -1,0 +1,405 @@
+name: Deploy pipeline
+
+# ─── Triggers ─────────────────────────────────────────────────────────────────
+#
+# Automatic:
+#   - Push to `main`  →  build + test + push image + deploy to staging
+#   - Push of a `v*` tag →  same, but deploys to production instead
+#
+# Manual (workflow_dispatch):
+#   - Choose environment (staging / production) and optionally skip tests
+#   - "Promote staging image to production" mode: re-tags the staging image
+#     rather than rebuilding, so the exact artifact that passed staging CI
+#     is what lands in production (no rebuild drift).
+#
+# Pull-request:
+#   - Build + test only (no image push, no deploy) so the pipeline runs green
+#     before merge without touching any deployed environment.
+
+on:
+  push:
+    branches: [main]
+    tags:     ['v*']
+    paths:
+      - 'adapter/**'
+      - 'Dockerfile.adapter'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'adapter/**'
+      - 'Dockerfile.adapter'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        type: choice
+        options: [staging, production]
+        default: staging
+      skip_tests:
+        description: 'Skip adapter tests (use for hotfix rollbacks only)'
+        type: boolean
+        default: false
+      promote_staging:
+        description: 'Promote existing staging image to production instead of rebuilding'
+        type: boolean
+        default: false
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  packages: write    # GHCR push
+  id-token: write    # OIDC for cloud deployments
+
+# ─── Environment resolution ───────────────────────────────────────────────────
+# The effective environment is:
+#   - "production"  if triggered by a version tag OR dispatch with env=production
+#   - "staging"     in all other cases (push to main, PR, dispatch default)
+env:
+  REGISTRY:        ghcr.io
+  IMAGE_NAME:      ${{ github.repository }}/itsharness-adapter
+  # Resolve environment string used in later steps
+  DEPLOY_ENV: >-
+    ${{
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      && 'production'
+      || (github.event.inputs.environment || 'staging')
+    }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 1 — adapter-tests
+  # Run the full adapter test suite (unit + integration) and the eval spec-
+  # validation gate.  Skippable only via workflow_dispatch.skip_tests.
+  # ─────────────────────────────────────────────────────────────────────────────
+  adapter-tests:
+    name: Adapter tests + eval gate
+    if: ${{ github.event.inputs.skip_tests != 'true' && github.event.inputs.promote_staging != 'true' }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: adapter
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+            adapter/requirements-eval.txt
+
+      - name: Install deps
+        run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-eval.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Type-check (mypy)
+        run: mypy . --ignore-missing-imports --python-version 3.12
+
+      - name: Unit + integration tests
+        run: pytest tests/ -v --tb=short
+        env:
+          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING:      'true'
+
+      - name: MAF adapter tests
+        run: pytest tests/test_maf_adapter.py -v --tb=short
+        env:
+          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING:      'true'
+
+      # Fast gate — no LLM needed.  All 5 reference flows must compile to all
+      # 4 runtimes (LangGraph, CrewAI, Mastra, MAF) without syntax errors.
+      - name: Eval spec-validation gate (all 4 runtimes × 5 flows)
+        run: pytest eval/test_spec_validation.py -v --tb=short
+        env:
+          TESTING: 'true'
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2 — build-and-push
+  # Build the adapter Docker image and push to GHCR.
+  # Tags: sha-<commit>, <branch>-latest, and (on v* tags) the semver tag.
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & push adapter image
+    # Don't push on PRs — just build to verify the Dockerfile is intact.
+    # Also skip for promote_staging (no rebuild needed).
+    needs: [adapter-tests]
+    if: >-
+      always() &&
+      (needs.adapter-tests.result == 'success' || needs.adapter-tests.result == 'skipped') &&
+      github.event.inputs.promote_staging != 'true' &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    outputs:
+      image:  ${{ steps.meta.outputs.tags }}
+      digest: ${{ steps.push.outputs.digest }}
+      sha_tag: ${{ steps.sha-tag.outputs.sha_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:latest
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive canonical short SHA tag used by downstream deploy steps.
+      - name: Compute SHA tag
+        id: sha-tag
+        run: echo "sha_tag=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # docker/metadata-action computes all the right tags and OCI labels.
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch,suffix=-latest
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=staging-latest,enable=${{ env.DEPLOY_ENV == 'staging' }}
+            type=raw,value=production-latest,enable=${{ env.DEPLOY_ENV == 'production' }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context:     .
+          file:        Dockerfile.adapter
+          push:        true
+          tags:        ${{ steps.meta.outputs.tags }}
+          labels:      ${{ steps.meta.outputs.labels }}
+          # Build-time cache: layers cached in GHCR so cold builds are fast.
+          cache-from:  type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to:    type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # OCI provenance attestation — tied to OIDC identity.
+          provenance:  true
+          sbom:        true
+
+      # Write the image digest to the summary so it's easy to pin in Helm/k8s.
+      - name: Write image digest to summary
+        run: |
+          echo "### 🐳 Image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA tag | \`${{ steps.sha-tag.outputs.sha_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Digest  | \`${{ steps.push.outputs.digest }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Env     | \`${{ env.DEPLOY_ENV }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2b — promote-staging (alternative to build-and-push)
+  # Re-tag the staging-latest image as production-latest.  No rebuild.
+  # ─────────────────────────────────────────────────────────────────────────────
+  promote-staging:
+    name: Promote staging → production
+    if: github.event.inputs.promote_staging == 'true'
+    runs-on: ubuntu-latest
+
+    outputs:
+      sha_tag: ${{ steps.find-tag.outputs.sha_tag }}
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull staging-latest and re-tag as production-latest
+        id: find-tag
+        run: |
+          STAGING_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest"
+          docker pull "$STAGING_IMAGE"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$STAGING_IMAGE")
+          SHA_TAG=$(docker inspect --format='{{range .RepoTags}}{{.}} {{end}}' "$STAGING_IMAGE" \
+                    | tr ' ' '\n' | grep '^.*:sha-' | head -1 | sed 's/.*://')
+          docker tag "$STAGING_IMAGE" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:production-latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:production-latest"
+          echo "sha_tag=${SHA_TAG:-staging-promoted}" >> "$GITHUB_OUTPUT"
+          echo "### ⬆️  Promoted staging → production" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source digest: \`${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 3 — deploy-staging
+  # Update the staging environment with the new image by calling the itsharness
+  # deploy API.  Staging is always updated on pushes to main.
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy → staging
+    needs: [build-and-push]
+    if: >-
+      always() &&
+      needs.build-and-push.result == 'success' &&
+      env.DEPLOY_ENV == 'staging' &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name:    staging
+      url:     ${{ secrets.STAGING_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy all reference flows to staging
+        env:
+          DEPLOY_URL:  ${{ secrets.STAGING_URL }}
+          DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+          IMAGE_TAG:   ${{ needs.build-and-push.outputs.sha_tag }}
+        run: |
+          python .github/scripts/deploy_flows.py \
+            --env staging \
+            --api-url "$DEPLOY_URL" \
+            --token "$DEPLOY_TOKEN" \
+            --image-tag "$IMAGE_TAG" \
+            --flows flows/
+
+      - name: Smoke-test staging
+        env:
+          DEPLOY_URL:   ${{ secrets.STAGING_URL }}
+          DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+        run: |
+          python .github/scripts/smoke_test.py \
+            --api-url "$DEPLOY_URL" \
+            --token "$DEPLOY_TOKEN"
+
+      - name: Write staging deploy summary
+        run: |
+          echo "### 🚀 Deployed to staging" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${{ needs.build-and-push.outputs.sha_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "URL: ${{ secrets.STAGING_URL }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 4 — deploy-production
+  # Deploy to production.  Requires the build to have succeeded (or staging
+  # promotion), plus a manual approval gate via GitHub Environment protection.
+  # ─────────────────────────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy → production
+    needs: [build-and-push, promote-staging]
+    if: >-
+      always() &&
+      (needs.build-and-push.result == 'success' || needs.promote-staging.result == 'success') &&
+      env.DEPLOY_ENV == 'production'
+    runs-on: ubuntu-latest
+    # The "production" GitHub Environment has a required-reviewers protection rule
+    # so this job pauses for a human approval before running.
+    environment:
+      name:    production
+      url:     ${{ secrets.PRODUCTION_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          SHA="${{ needs.build-and-push.outputs.sha_tag || needs.promote-staging.outputs.sha_tag }}"
+          echo "sha_tag=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy all reference flows to production
+        env:
+          DEPLOY_URL:   ${{ secrets.PRODUCTION_URL }}
+          DEPLOY_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+          IMAGE_TAG:    ${{ steps.tag.outputs.sha_tag }}
+        run: |
+          python .github/scripts/deploy_flows.py \
+            --env production \
+            --api-url "$DEPLOY_URL" \
+            --token "$DEPLOY_TOKEN" \
+            --image-tag "$IMAGE_TAG" \
+            --flows flows/
+
+      - name: Smoke-test production
+        env:
+          DEPLOY_URL:   ${{ secrets.PRODUCTION_URL }}
+          DEPLOY_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+        run: |
+          python .github/scripts/smoke_test.py \
+            --api-url "$DEPLOY_URL" \
+            --token "$DEPLOY_TOKEN"
+
+      - name: Write production deploy summary
+        run: |
+          echo "### ✅ Deployed to production" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${{ steps.tag.outputs.sha_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "URL: ${{ secrets.PRODUCTION_URL }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 5 — post-deploy-eval
+  # After a successful production deploy, run the nightly-quality eval suite
+  # against the live endpoint so the canvas shows fresh quality badges.
+  # Uses real LLM (requires OPENAI_API_KEY secret).
+  # ─────────────────────────────────────────────────────────────────────────────
+  post-deploy-eval:
+    name: Post-deploy eval (production)
+    needs: [deploy-production]
+    if: needs.deploy-production.result == 'success'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: adapter
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-eval.txt
+
+      - name: Install eval deps
+        run: pip install -r requirements.txt -r requirements-eval.txt
+
+      - name: Run full eval suite against production
+        run: pytest eval/ -v --tb=short
+        env:
+          TESTING:            'false'
+          DATABASE_URL:       ${{ secrets.PRODUCTION_DATABASE_URL }}
+          JWT_SECRET:         ${{ secrets.PRODUCTION_JWT_SECRET }}
+          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
+          EVAL_USE_REAL_LLM:  'true'
+          EVAL_MODEL:         'gpt-4o-mini'
+          # Push scores to Langfuse production project
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST:       ${{ secrets.LANGFUSE_HOST }}
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-deploy-eval-${{ github.run_id }}
+          path: |
+            adapter/.deepeval/
+            adapter/.ragas/
+          retention-days: 90

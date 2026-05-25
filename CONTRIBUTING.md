@@ -1,42 +1,40 @@
 # Contributing to itsharness
 
-## Where things stand
+## Current state
 
-Phases 0–3 are complete (v0.7.0). The Phase 0 RFC is closed — all 37 questions were resolved across the build process, with the four core codegen field semantics formally recorded in ADR-001. All three adapter runtimes (LangGraph, CrewAI, Mastra) are fully operational including execution. The component marketplace, one-click deploy (REST + MCP + A2A), Team RBAC, multi-tenant namespacing, online/offline eval, and Langfuse self-host are all shipped.
+v0.8.0 — all four phases complete. 240 items shipped across 4 phases:
 
-Phase 4 is the next frontier: real-time collaborative canvas (Yjs), MS Agent Framework adapter, SSO via Keycloak, visual CI/CD pipeline, on-prem Helm chart, and an embeddable `@itsharness/canvas` npm package.
+- **Phase 0** — FlowSpec schema, 14 node types, 5 reference flows, RFC closed (ADR-001)
+- **Phase 1** — XYFlow canvas, LangGraph + CrewAI + Mastra adapters, auth, Langfuse, execution, HITL
+- **Phase 2** — Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
+- **Phase 3** — Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
+- **Phase 4** — MAF adapter, SSO/OIDC + SCIM, Visual CI/CD, Helm chart, Yjs real-time collab, `@itsharness/canvas`
 
-The most impactful contributions right now are adapter runtime feedback, Phase 4 groundwork (especially the MAF adapter and Yjs prototype), and community component publishing.
+All four adapter runtimes are fully executable. No open RFCs.
 
 ---
 
-## Architecture Decision Records (ADRs)
+## Architecture Decision Records
 
-Significant design decisions are recorded in `docs/adr/`. Each ADR has a status, what it closes, and a per-adapter implementation contract.
+Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with new evidence to challenge an accepted record — don't re-litigate in the original thread.
 
 | ADR | Title | Status |
 |---|---|---|
 | [ADR-001](docs/adr/001-codegen-field-semantics.md) | Codegen semantics: `output_key`, `*_expr`, `context_from`, `memory_write.tier` | Accepted |
 
-**ADR-001 scope** — covers the four spec fields whose adapter semantics were left open during the Phase 0 RFC: how `output_key` maps to state writes, that `*_expr` fields are bare JSONPath (not mustache), how `context_from` behaves per runtime, and how `memory_write.tier` maps to CrewAI's Crew-level memory construction. It does not cover all 37 RFC questions — the broader question set was resolved through implementation across Phases 1–3 and is tracked in the open questions tracker.
-
-Before opening an issue about how a spec field maps to generated code, check whether an ADR already covers it. To challenge an accepted ADR, open a new issue with `[adr]` prefix and new evidence — don't re-litigate in the original thread.
-
 ---
 
-## What we need right now
+## What we need
 
-**Runtime feedback** — if you use LangGraph, CrewAI, or Mastra seriously, tell us where the adapter generates wrong or unidiomatic code. Open an `[adapter]` issue with the spec JSON, generated output, and the correct output.
+**Adapter runtime feedback** — if you use LangGraph, CrewAI, Mastra, or MAF seriously, tell us where the adapter generates wrong or unidiomatic code. Open an `[adapter]` issue with the spec JSON, generated output, and the correct output.
 
-**MS Agent Framework adapter** — MAF v1.0 GA'd Apr 2026 (merger of Semantic Kernel + AutoGen). This is the highest-value Phase 4 contribution. The contract is the same as existing adapters: `compile_maf(spec: dict) -> tuple[str, list[str]]`. See `adapter/langgraph_adapter.py` for the pattern and ADR-001 for field semantics. Key mappings: `agent_debate → GroupChatManager`, `agent_role → AssistantAgent`, `tool_invoke → FunctionTool`. OTel traces should flow to Langfuse via OTLP.
+**New node types** — what flow pattern can't you express with the 14 existing types? Open a `[node-type]` issue with a concrete use case, proposed schema shape, and per-adapter mapping for all four runtimes.
 
-**Yjs real-time collab prototype** — multi-user canvas using Yjs CRDT + y-websocket + XYFlow. The main design question is conflict-free merge strategy for the flow spec graph (nodes and edges are CRDT-friendly; IDs need care). A prototype in a feature branch would be very welcome.
+**Community components** — publish tool wrappers to the marketplace via `POST /marketplace`. Especially needed: database connectors, cloud API wrappers, data transformation tools. See [Publishing a marketplace component](#publishing-a-marketplace-component).
 
-**Community components** — publish your own tool wrappers to the marketplace via `POST /marketplace`. Especially needed: database connectors, cloud API wrappers, and data transformation tools. See the marketplace API reference in the README.
+**Eval integration feedback** — the eval harness (DeepEval + Ragas) and Langfuse LLM-as-judge are shipped. Tell us what's missing: in-flow quality gates, specific metric implementations, CI regression thresholds.
 
-**Eval integration feedback** — the eval harness (DeepEval + Ragas) and online eval (Langfuse LLM-as-judge) are shipped. Tell us what's missing: in-flow quality gates? Specific metric implementations? CI regression thresholds?
-
-**Missing node types** — what flow pattern can't you express in the 14 node types? Open a `[node-type]` issue with a concrete use case, proposed schema shape, and per-adapter mapping.
+**`@itsharness/canvas` consumers** — if you embed the canvas package in your own tool, open a `[canvas-pkg]` issue for anything that doesn't fit the current props API.
 
 ---
 
@@ -48,57 +46,64 @@ Before opening an issue about how a spec field maps to generated code, check whe
 | `[node-type]` | New node type proposals or changes to existing types |
 | `[adapter]` | Questions, bugs, or improvements specific to one runtime |
 | `[adr]` | Proposing a new Architecture Decision Record |
-| `[breaking]` | Anything that would invalidate currently valid flows |
+| `[breaking]` | Anything that invalidates currently valid flows |
 | `[docs]` | README, CHANGELOG, ADR, or in-schema `describe()` improvements |
-| `[marketplace]` | Community component publishing, install behaviour, seeder |
+| `[marketplace]` | Component publishing, install behaviour, seeder |
 | `[deploy]` | REST/MCP/A2A deploy pipeline, shareable URLs, invoke endpoint |
-| `[eval]` | Eval harness, LLM-as-judge, Langfuse scoring integration |
+| `[eval]` | Eval harness, LLM-as-judge, Langfuse scoring |
 | `[observability]` | Tracing, token counts, Langfuse wiring |
-| `[phase4]` | Yjs collab, MAF adapter, SSO, Helm chart, embeddable canvas |
+| `[collab]` | Yjs real-time collaboration, presence, offline persistence |
+| `[canvas-pkg]` | `@itsharness/canvas` npm package — props API, embedding, theming |
 
 ---
 
 ## Making schema changes
 
-The Zod schema (`spec/schema.ts`) is the canonical source of truth. The JSON Schema (`spec/schema.json`) is derived from it. **Never edit `schema.json` directly.**
+`spec/schema.ts` is the canonical source of truth. `spec/schema.json` is derived — never edit it directly.
 
 Every schema PR must include:
 
-1. **`spec/schema.ts`** — the change, with a `describe()` string explaining field semantics and per-adapter behaviour
+1. **`spec/schema.ts`** — the change with a `describe()` string explaining field semantics
 2. **`src/spec/schema.ts`** — kept in sync (omit `.refine()` calls on discriminated union members)
-3. **`spec/schema.json`** — regenerated from the Zod schema
-4. **`spec/CHANGELOG.md`** — one entry under the appropriate version header
-5. **At least one example flow** in `flows/` demonstrating the change, validated against the new schema
+3. **`packages/canvas/src/spec/schema.ts`** — same sync, same rule
+4. **`spec/schema.json`** — regenerated
+5. **`spec/CHANGELOG.md`** — one entry under the appropriate version header
+6. **At least one example flow** in `flows/` demonstrating the change
 
-Spec version follows semver. In minor versions all changes must be additive (new optional fields only). Removing or renaming fields requires a major version bump and a migration note in `CHANGELOG.md`.
+Run `node scripts/check-schema-sync.mjs` to verify the three copies are aligned.
+
+Spec version follows semver. Minor versions are additive only (new optional fields). Removing or renaming fields requires a major bump and a migration note in `CHANGELOG.md`.
 
 ---
 
 ## Writing an adapter
 
-An adapter is a Python module with a single public function:
+An adapter is a Python module with one public function:
 
 ```python
 def compile_<runtime>(spec: dict) -> tuple[str, list[str]]:
     """
-    Compile a FlowSpec dict to runnable code.
     Returns (code: str, warnings: list[str]).
-    Warnings are surfaced to the user in the canvas compile panel.
+    Warnings are shown in the canvas compile panel.
     """
 ```
 
-Register it in `adapter/main.py` (`SUPPORTED_RUNTIMES` + the compile dispatch block) and in `adapter/run_api.py` if execution is also supported.
+Register it in `adapter/main.py` (`SUPPORTED_RUNTIMES` + compile dispatch) and in `adapter/run_api.py` if execution is also supported.
 
-If execution requires a sidecar process (like Mastra's Node.js runner), add it to `docker-compose.yml` and document the protocol in the sidecar's README.
+If execution requires a sidecar (like Mastra's Node.js runner), add it to `docker-compose.yml` and document the protocol.
 
-### ADR-001 field contracts (all adapters must respect these)
+### ADR-001 field contracts — all adapters must respect these
 
 | Field | Contract |
 |---|---|
-| `output_key` | Node function returns `{output_key: result}`. If absent on `llm_call`, return `{}` and log a warning. |
-| `query_expr` / `key_expr` / `value_expr` | Bare JSONPath (`$.state.field`). Implement a `_resolve(expr, state)` helper — see `langgraph_adapter.py`. |
-| `context_from` (on edges) | Map to the runtime's native context mechanism. Generate a descriptive comment block if no native equivalent exists. |
+| `output_key` | Node returns `{output_key: result}`. If absent on `llm_call`, return `{}` and log a warning. |
+| `query_expr` / `key_expr` / `value_expr` | Bare JSONPath (`$.state.field`). Implement `_resolve(expr, state)` — see `langgraph_adapter.py`. |
+| `context_from` on edges | Map to the runtime's native context mechanism. Generate a descriptive comment block if no native equivalent exists. |
 | `memory_write.tier` | Map to the runtime's memory tier API. Generate a comment if no native tier system exists. |
+
+### NODE_SUPPORT_MATRIX — mark compat for all four runtimes
+
+Every node type in `spec/schema.ts` carries runtime compatibility flags: `[LG]` LangGraph, `[CR]` CrewAI, `[MA]` Mastra, `[MS]` MS Agent Framework. Mark full / partial / missing for each. The canvas shows a warning badge when the selected runtime has partial support.
 
 ### Testing your adapter
 
@@ -111,20 +116,64 @@ from <runtime>_adapter import compile_<runtime>
 @pytest.mark.parametrize("flow_path", [
     "flows/01-rag-agent-flow.json",
     "flows/02-content-moderation-hitl-flow.json",
-    # ... all 5
+    "flows/03-parallel-risk-assessment-flow.json",
+    "flows/04-research-crew-flow.json",
+    "flows/05-debate-agent-a2a-flow.json",
 ])
 def test_all_flows_compile(flow_path):
     spec = json.loads(open(flow_path).read())
     code, warnings = compile_<runtime>(spec)
     assert code
-    compile(code, "<test>", "exec")  # valid Python; use tsc for TypeScript adapters
+    compile(code, "<test>", "exec")  # Python; use tsc for TypeScript adapters
 ```
 
 ---
 
-## Publishing a marketplace component
+## Adding a node type
 
-Components are pre-configured `tool_invoke` nodes published to the itsharness marketplace. Publishing requires authentication:
+Touches eight places:
+
+1. **`spec/schema.ts`** — Zod schema entry with `describe()` strings
+2. **`src/spec/schema.ts`** — canvas copy (omit `.refine()` calls)
+3. **`packages/canvas/src/spec/schema.ts`** — canvas package copy (same rule)
+4. **`src/store/index.ts`** — `NODE_DEFAULTS` entry
+5. **`src/canvas/nodes/NodeComponents.tsx`** — the React component, exported by name
+6. **`src/canvas/nodes/index.ts`** — add to the `nodeTypes` export map
+7. **`src/components/ConfigPanel.tsx`** — panel function + entry in `PANEL_MAP`
+8. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
+
+---
+
+## Canvas contributions
+
+```bash
+npm install
+npm run dev      # → http://localhost:3000
+npm test         # Vitest — must stay green
+
+# Canvas package (packages/canvas/)
+npm run build:canvas     # lib build → packages/canvas/dist/
+npm run test:canvas      # canvas-package tests
+npm run typecheck:canvas # TypeScript check
+```
+
+The canvas must never break spec round-trip. `npm test` validates all 5 reference flows through import → canvas state → export → Zod parse.
+
+### `@itsharness/canvas` package contributions
+
+The canvas package in `packages/canvas/` uses a **per-instance Zustand store** via `createStore()` — not a module-level singleton. This is intentional so the component is safe to mount multiple times on a page. Any contribution that introduces module-level mutable state will be rejected.
+
+Props changes require updating `packages/canvas/src/ItsHarnessCanvas.tsx`, `packages/canvas/README.md`, and this file's props table if it changes the public API.
+
+### Collab contributions
+
+Real-time collab lives in `src/collab/`. The Yjs document structure (`doc.ts`) and the bidirectional sync with Zustand (`syncToYjs.ts` / `syncFromYjs.ts`) are the core of the layer. Any change that causes the Yjs doc and the Zustand store to diverge will cause split-brain for collaborators — test this carefully.
+
+The y-websocket server is stateless with respect to the flow spec (it only relays CRDT ops). Do not add server-side state to the collab infrastructure.
+
+---
+
+## Publishing a marketplace component
 
 ```bash
 curl -s -X POST http://localhost:8000/marketplace \
@@ -149,11 +198,9 @@ curl -s -X POST http://localhost:8000/marketplace \
   }'
 ```
 
-**Slug rules** — kebab-case, `[a-z0-9][a-z0-9-]*[a-z0-9]`, max 80 chars, globally unique.
-
-**`node_spec.tool_id`** must equal `slug.replace("-", "_")` — this is what the canvas uses to key the tool in the flow's tools registry after install.
-
-User-published components start as unverified. The `@itsharness` verified badge is reserved for the six seed packages.
+**Slug rules** — kebab-case, `[a-z0-9][a-z0-9-]*[a-z0-9]`, max 80 chars, globally unique.  
+`node_spec.tool_id` must equal `slug.replace("-", "_")`.  
+User-published components start unverified. The `@itsharness` verified badge is reserved for the six seed packages.
 
 ---
 
@@ -163,69 +210,35 @@ Example flows live in `flows/`. A valid flow must:
 
 - Pass validation against `spec/schema.json`
 - Include `position` coordinates on all nodes
-- Have a `description` field explaining what it demonstrates
-- Exercise at least one feature not already covered by the existing five flows
-- Follow the naming convention: `NN-descriptive-name.json`
-
----
-
-## Canvas contributions
-
-The canvas is React + TypeScript + XYFlow. Run it with:
-
-```bash
-npm install
-npm run dev   # → http://localhost:3000
-npm test      # Vitest — must stay green
-```
-
-The canvas must never break spec export/import. `npm test` validates all 5 reference flows through the full round-trip (import → canvas state → export → Zod parse).
-
-### Adding a new node type
-
-Adding a node type touches eight places:
-
-1. **`spec/schema.ts`** — Zod schema entry with `describe()` strings
-2. **`src/spec/schema.ts`** — canvas copy (omit `.refine()` calls)
-3. **`src/store/index.ts`** — `NODE_DEFAULTS` entry
-4. **`src/canvas/nodes/NodeComponents.tsx`** — the React component itself, exported by name
-5. **`src/canvas/nodes/index.ts`** — add the component to the `nodeTypes` export map (this is what XYFlow uses to render the node)
-6. **`src/components/ConfigPanel.tsx`** — add a panel function and register it in the `PANEL_MAP` constant
-7. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
-8. **`src/spec/schema.ts`** — `NODE_SUPPORT_MATRIX` entry for all 4 runtimes
-
-### Adding a marketplace component UI card field
-
-The `ComponentCard` in `src/components/MarketplacePanel.tsx` renders the fields returned by `GET /marketplace`. If you add a new field to the `CommunityComponent` Pydantic model, add it to both the `MarketplaceComponent` TypeScript interface in `src/services/api.ts` and the card render in `MarketplacePanel.tsx`.
+- Have a `description` field
+- Exercise at least one feature not covered by the existing five flows
+- Follow naming: `NN-descriptive-name.json`
 
 ---
 
 ## Adapter test suite
 
-The adapter test suite lives in `adapter/tests/`. Tests use an in-memory SQLite database (no Postgres required in CI) via the `client` fixture in `conftest.py`.
-
 ```bash
-# Run the full suite
 pytest adapter/tests/ -v
-
-# Run a specific test file
-pytest adapter/tests/test_marketplace.py -v
-
-# Run a specific test
-pytest adapter/tests/test_deploy.py::test_unified_deploy_success -v
+pytest adapter/tests/test_maf_adapter.py -v    # MAF suite (742 tests)
+pytest adapter/tests/test_sso.py -v            # SSO/OIDC + SCIM suite
 ```
 
-New test files must follow the existing pattern: use the `client` and `auth_headers` fixtures from `conftest.py`, register a fresh user per test with a unique email address (function-scoped DB prevents cross-test state, but duplicate emails within a test module will fail), and mark all async tests with `@pytest.mark.asyncio`.
+Tests use an in-memory SQLite database via the `client` fixture in `conftest.py`. New test files must:
+
+- Use `client` and `auth_headers` fixtures from `conftest.py`
+- Register a fresh user per test with a unique email address
+- Mark all async tests with `@pytest.mark.asyncio`
 
 ---
 
 ## Database migrations
 
-Schema changes require an Alembic migration. The migration chain is currently `0001 → 0007`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
+The current migration chain is `0001 → 0008`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
 
 ```python
-revision: str = "0008"
-down_revision: str | None = "0007"
+revision: str = "0009"
+down_revision: str | None = "0008"
 
 def upgrade() -> None:
     op.create_table("my_table", ...)
@@ -234,9 +247,7 @@ def downgrade() -> None:
     op.drop_table("my_table")
 ```
 
-**Important:** use `postgresql.UUID` and `postgresql.JSONB` in migrations (Postgres-native types). For the SQLAlchemy ORM model in `db.py`, use the `_UUIDType` and `_JSONBType` wrappers — these fall back to `TEXT` on SQLite so the test suite keeps working without Postgres.
-
-After adding the ORM model in `db.py`, add it to `Base.metadata` by ensuring it's imported before `init_db()` runs. The `CommunityComponent`, `UnifiedDeployment`, `A2ADeployment`, and `Job` models are good references.
+Use `postgresql.UUID` and `postgresql.JSONB` in migrations. In `db.py` ORM models, use the `_UUIDType` and `_JSONBType` wrappers — these fall back to `TEXT` on SQLite so the CI test suite works without Postgres.
 
 ---
 

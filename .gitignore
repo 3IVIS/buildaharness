@@ -43,3 +43,10 @@ coverage/
 postgres_data/
 clickhouse_data/
 redis_data/
+
+# Canvas package build output (packages/canvas/dist is generated — do not commit)
+packages/canvas/dist/
+packages/canvas/node_modules/
+
+# Yjs collab offline persistence (IndexedDB snapshots are local, not shared)
+.yjs-*

@@ -1,0 +1,534 @@
+# itsharness Helm chart — default values
+#
+# Every field here corresponds directly to a docker-compose.yml env var or
+# service definition so operators familiar with the Compose stack can map
+# values 1:1.
+#
+# Secrets must NEVER be stored in this file in plaintext.
+# Use --set-string from CI, Vault Agent sidecar injection, or a Kubernetes
+# ExternalSecret (external-secrets.io) for all sensitive fields.
+#
+# Quick start:
+#   helm install itsharness ./itsharness \
+#     --set secrets.jwtSecret="$(openssl rand -base64 32)" \
+#     --set secrets.postgresPassword="$(openssl rand -base64 24)" \
+#     --set secrets.redisPassword="$(openssl rand -base64 24)" \
+#     --set secrets.litellmMasterKey="$(openssl rand -base64 24)" \
+#     --set secrets.langfuse.nextauthSecret="$(openssl rand -base64 32)" \
+#     --set secrets.langfuse.salt="$(openssl rand -base64 32)" \
+#     --set secrets.langfuse.encryptionKey="$(openssl rand -hex 32)" \
+#     --set secrets.langfuse.publicKey="pk-lf-$(openssl rand -hex 12)" \
+#     --set secrets.langfuse.secretKey="sk-lf-$(openssl rand -hex 12)" \
+#     --set llm.openaiApiKey="sk-..." \
+#     --namespace itsharness --create-namespace
+
+# ── Global ────────────────────────────────────────────────────────────────────
+global:
+  # Image pull secret name (optional — needed for private registries).
+  imagePullSecrets: []
+  # Annotations added to every resource.
+  commonAnnotations: {}
+  # Labels added to every resource.
+  commonLabels: {}
+  # Storage class used by all PVCs unless overridden per-component.
+  storageClass: ""
+
+# ── Image registry defaults ───────────────────────────────────────────────────
+imageRegistry: ghcr.io
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# All values here are written into a single Kubernetes Secret (itsharness-secrets).
+# In production, set these via --set or an external secret manager — never commit
+# real values to values.yaml.
+secrets:
+  # Name of an existing Secret to use instead of creating one.
+  # If set, all secrets.* fields below are ignored and the named secret must
+  # contain the same keys.
+  existingSecret: ""
+
+  # ── Core auth ───────────────────────────────────────────────────────────────
+  # Generate: openssl rand -base64 32
+  jwtSecret: ""
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  # Shared across adapter, Langfuse, and LiteLLM Postgres databases.
+  # Generate: openssl rand -base64 24
+  postgresPassword: ""
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  # Generate: openssl rand -base64 24
+  redisPassword: ""
+
+  # ── LiteLLM ─────────────────────────────────────────────────────────────────
+  # Generate: openssl rand -base64 24
+  litellmMasterKey: ""
+
+  # ── Langfuse ─────────────────────────────────────────────────────────────────
+  langfuse:
+    # Generate: openssl rand -base64 32
+    nextauthSecret: ""
+    # Generate: openssl rand -base64 32
+    salt: ""
+    # Generate: openssl rand -hex 32  (must be exactly 64 hex characters)
+    encryptionKey: ""
+    # Non-sensitive API key pair; can be any non-empty string.
+    publicKey: "pk-lf-changeme"
+    secretKey: "sk-lf-changeme"
+    # Langfuse admin account created on first boot.
+    adminEmail: "admin@example.com"
+    adminPassword: ""
+
+  # ── ClickHouse ────────────────────────────────────────────────────────────────
+  # alphanumeric/hex only — special chars break the clickhouse:// migration URL.
+  # Generate: openssl rand -hex 24
+  clickhousePassword: ""
+
+  # ── SCIM (enterprise user provisioning) ──────────────────────────────────────
+  # Set to a long random token; configure your IdP to send this in Authorization.
+  # Generate: openssl rand -base64 32
+  scimBearerToken: ""
+
+  # ── Mastra runner ─────────────────────────────────────────────────────────────
+  # Shared bearer token between adapter and mastra-runner.
+  # Generate: openssl rand -base64 24
+  mastraRunnerApiKey: ""
+
+# ── LLM API keys ──────────────────────────────────────────────────────────────
+llm:
+  openaiApiKey: ""
+  anthropicApiKey: ""
+
+# ── SSO / OIDC ────────────────────────────────────────────────────────────────
+# Set oidc.enabled=true and fill in all fields to enable enterprise SSO.
+# Keycloak is the reference provider; any standards-compliant OIDC provider works.
+oidc:
+  enabled: false
+  providerName: "SSO"
+  # Full issuer URL, e.g. https://keycloak.example.com/realms/itsharness
+  issuerUrl: ""
+  clientId: ""
+  # clientSecret is read from secrets.oidcClientSecret (see secrets section above).
+  # Add it there, not here.
+  redirectUri: ""
+  scopes: "openid email profile groups"
+  groupClaim: "groups"
+  # Comma-separated group names that map to org admin role.
+  adminGroups: ""
+  orgSlugClaim: "org"
+  autoProvision: true
+
+# ── Adapter (FastAPI) ─────────────────────────────────────────────────────────
+adapter:
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/itsharness/itsharness-adapter
+    tag: ""          # defaults to .Chart.AppVersion when empty
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  # PodDisruptionBudget — keeps at least 1 pod available during rolling updates.
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+  # Liveness / readiness probes (mirrors Dockerfile.adapter healthcheck).
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    failureThreshold: 5
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+
+  # Extra environment variables injected into the adapter container.
+  extraEnv: []
+  # - name: SOME_VAR
+  #   value: "some-value"
+
+  # Comma-separated list of allowed CORS origins.
+  corsOrigins: "http://localhost:3000"
+
+  # JWT token lifetime in days.
+  jwtTtlDays: 30
+  # Max request body size in bytes (1 MB default).
+  maxBodyBytes: 1048576
+  # Job TTL in hours.
+  jobTtlHours: 4
+  # Base URL used when constructing deployment URLs (REST, MCP, A2A).
+  # Should be the externally-reachable URL of the adapter Ingress.
+  baseUrl: ""
+  # Synchronous invoke timeout in seconds.
+  invokeTimeoutS: 120
+  # Mastra runner poll interval.
+  mastraPollIntervalS: "0.8"
+  # Mastra runner timeout.
+  mastraRunnerTimeoutS: "3600"
+
+  # Node selector, tolerations, affinity — standard Kubernetes scheduling.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]
+
+# ── Canvas (Vite) ─────────────────────────────────────────────────────────────
+canvas:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/itsharness/itsharness-canvas
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+# ── Mastra runner (Node.js sidecar) ───────────────────────────────────────────
+mastraRunner:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/itsharness/itsharness-mastra-runner
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 8001
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  execTimeoutMs: 300000
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8001
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    failureThreshold: 5
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8001
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: ["ALL"]
+
+# ── PostgreSQL (Bitnami sub-chart) ────────────────────────────────────────────
+# Set postgres.enabled=false and provide externalPostgres.* to use a managed
+# database (RDS, CloudSQL, Azure Database for PostgreSQL).
+postgres:
+  enabled: true
+  auth:
+    username: itsharness
+    database: itsharness
+    # Password is injected from the shared secrets Secret at deploy time.
+    # Do not set postgres.auth.password here.
+    existingSecret: itsharness-secrets
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: postgres-password
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    # Run the Langfuse and LiteLLM database init alongside itsharness DB.
+    initdb:
+      scripts:
+        00-extra-databases.sql: |
+          -- BUG-8 fix: CREATE DATABASE ... OWNER grants full schema permissions on
+          -- PostgreSQL 15+. GRANT ALL PRIVILEGES ON DATABASE alone does NOT grant
+          -- CREATE on the public schema in Postgres 15+ (regression from pg14).
+          CREATE DATABASE langfuse OWNER itsharness;
+          CREATE DATABASE litellm  OWNER itsharness;
+
+# External Postgres (used when postgres.enabled=false).
+externalPostgres:
+  host: ""
+  port: 5432
+  username: itsharness
+  database: itsharness
+  # Provide password via secrets.postgresPassword or secrets.existingSecret.
+
+# ── Redis (Bitnami sub-chart) ─────────────────────────────────────────────────
+# Set redis.enabled=false and provide externalRedis.* to use ElastiCache etc.
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: itsharness-secrets
+    existingSecretPasswordKey: redis-password
+  master:
+    persistence:
+      enabled: true
+      size: 4Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+# External Redis (used when redis.enabled=false).
+externalRedis:
+  host: ""
+  port: 6379
+  database: 1
+  # Provide password via secrets.redisPassword or secrets.existingSecret.
+
+# ── ClickHouse ────────────────────────────────────────────────────────────────
+clickhouse:
+  enabled: true
+
+  image:
+    repository: clickhouse/clickhouse-server
+    tag: "24.3"
+    pullPolicy: IfNotPresent
+
+  service:
+    httpPort: 8123
+    nativePort: 9000
+
+  persistence:
+    enabled: true
+    size: 50Gi
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ── Langfuse ─────────────────────────────────────────────────────────────────
+langfuse:
+  enabled: true
+
+  image:
+    repository: langfuse/langfuse
+    tag: "3"
+    pullPolicy: IfNotPresent
+
+  workerImage:
+    repository: langfuse/langfuse-worker
+    tag: "3"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  workerResources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # NEXTAUTH_URL must match the externally reachable URL of the Langfuse Ingress.
+  nextauthUrl: ""
+
+  # Langfuse project init (same as Compose LANGFUSE_INIT_* vars).
+  initOrgId: "itsharness"
+  initOrgName: "itsharness"
+  initProjectId: "itsharness"
+  initProjectName: "itsharness"
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+
+# ── LiteLLM proxy ─────────────────────────────────────────────────────────────
+litellm:
+  enabled: true
+
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: "main-latest"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # ConfigMap key for the litellm_config.yaml content.
+  # Set litellm.configYaml to override the bundled default.
+  configYaml: ""
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+
+  # adapterProxyBodySize: Nginx proxy-body-size for the adapter Ingress.
+  # P2-3 fix: must be >= adapter.maxBodyBytes (default 1 MB). Set to 2m to give
+  # the adapter's own 413 handler a chance to respond before Nginx rejects at the
+  # proxy layer. Increase if you raise adapter.maxBodyBytes beyond 1 MB.
+  adapterProxyBodySize: "2m"
+
+  # Adapter API
+  adapter:
+    host: adapter.example.com
+    tls: []
+    # - secretName: adapter-tls
+    #   hosts:
+    #     - adapter.example.com
+
+  # Canvas UI
+  canvas:
+    host: canvas.example.com
+    tls: []
+
+  # Langfuse UI
+  langfuse:
+    host: langfuse.example.com
+    tls: []
+
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

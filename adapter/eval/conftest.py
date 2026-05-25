@@ -136,13 +136,16 @@ RAG_EVAL_DATASET = [
     {
         "input": "What runtimes does itsharness support?",
         "context": (
-            "itsharness supports three runtimes: LangGraph (Python), CrewAI (Python), "
-            "and Mastra (TypeScript). A fourth runtime, MS Agent Framework, is planned "
-            "for Phase 4. The canvas compiles flows to any of these via adapter codegen."
+            "itsharness supports four runtimes: LangGraph (Python), CrewAI (Python), "
+            "Mastra (TypeScript), and MS Agent Framework (Python, semantic-kernel v1.x). "
+            "MAF shipped in Phase 4 and is the only runtime where agent_debate maps "
+            "natively to AgentGroupChat. The canvas compiles flows to any of these via "
+            "adapter codegen."
         ),
         "expected_output": (
-            "itsharness currently supports LangGraph, CrewAI, and Mastra. "
-            "MS Agent Framework support is planned for Phase 4."
+            "itsharness supports LangGraph, CrewAI, Mastra, and MS Agent Framework. "
+            "The MAF adapter ships in Phase 4 with native support for agent_debate "
+            "via AgentGroupChat."
         ),
     },
 ]

@@ -1,0 +1,205 @@
+{{- if .Values.clickhouse.enabled }}
+# ── ClickHouse single-node StatefulSet ────────────────────────────────────────
+# Mirrors the docker-compose clickhouse service exactly:
+#   - single-node cluster with built-in Keeper (no ZooKeeper)
+#   - waits for Keeper before reporting healthy (same wait-for-keeper.sh pattern)
+#   - exposes HTTP (8123) and native (9000) ports internally
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "itsharness.fullname" . }}-clickhouse-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+data:
+  # Single-node cluster config — same as infra/clickhouse/single-node-cluster.xml
+  # in the Compose stack.  Enables built-in Keeper and defines the "default" cluster
+  # so Langfuse's ReplicatedMergeTree migrations succeed.
+  single-node-cluster.xml: |
+    <clickhouse>
+      <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <coordination_settings>
+          <operation_timeout_ms>10000</operation_timeout_ms>
+          <session_timeout_ms>30000</session_timeout_ms>
+          <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+        <raft_configuration>
+          <server>
+            <id>1</id>
+            <hostname>localhost</hostname>
+            <port>9444</port>
+          </server>
+        </raft_configuration>
+      </keeper_server>
+      <zookeeper>
+        <node>
+          <host>localhost</host>
+          <port>9181</port>
+        </node>
+      </zookeeper>
+      <remote_servers>
+        <default>
+          <shard>
+            <replica>
+              <host>localhost</host>
+              <port>9000</port>
+            </replica>
+          </shard>
+        </default>
+      </remote_servers>
+      <macros>
+        <shard>1</shard>
+        <replica>replica-1</replica>
+      </macros>
+    </clickhouse>
+
+  # Init script: waits for Keeper before ClickHouse becomes healthy.
+  wait-for-keeper.sh: |
+    #!/bin/sh
+    set -e
+    # Start ClickHouse server in the background.
+    /entrypoint.sh &
+    CH_PID=$!
+    # P2-6 fix: trap SIGTERM/SIGINT and forward to ClickHouse so Kubernetes
+    # pod shutdown triggers a graceful ClickHouse stop instead of a forced kill.
+    trap "echo 'Forwarding shutdown signal to ClickHouse...'; kill -TERM $CH_PID 2>/dev/null" TERM INT
+    # Wait for Keeper port to open (up to 60 s).
+    MAX=60; I=0
+    while ! nc -z localhost 9181 2>/dev/null; do
+      if [ $I -ge $MAX ]; then
+        echo "Keeper did not start in ${MAX}s — aborting"
+        kill $CH_PID 2>/dev/null
+        exit 1
+      fi
+      sleep 1; I=$((I+1))
+    done
+    echo "Keeper ready after ${I}s"
+    wait $CH_PID
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "itsharness.fullname" . }}-clickhouse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ include "itsharness.fullname" . }}-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 8 }}
+    spec:
+      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          command: ["/bin/sh", "/etc/clickhouse-server/config.d/wait-for-keeper.sh"]
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+            - name: keeper
+              containerPort: 9181
+          env:
+            - name: CLICKHOUSE_DB
+              value: default
+            - name: CLICKHOUSE_USER
+              value: default
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "itsharness.secretName" . }}
+                  key: clickhouse-password
+          # P2-4 fix: use HTTP /ping endpoint for probes — no authentication required.
+          # clickhouse-client --query requires --password when CLICKHOUSE_PASSWORD is
+          # set; the HTTP /ping endpoint responds "Ok." without credentials.
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: config
+              mountPath: /etc/clickhouse-server/config.d
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "itsharness.fullname" . }}-clickhouse-config
+            defaultMode: 0755
+      {{- with .Values.clickhouse.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.clickhouse.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.clickhouse.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.global.storageClass }}
+        storageClassName: {{ .Values.global.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "itsharness.fullname" . }}-clickhouse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itsharness.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  clusterIP: None   # Headless — StatefulSet needs stable DNS
+  ports:
+    - name: http
+      port: {{ .Values.clickhouse.service.httpPort }}
+      targetPort: http
+    - name: native
+      port: {{ .Values.clickhouse.service.nativePort }}
+      targetPort: native
+    - name: keeper
+      port: 9181
+      targetPort: keeper
+  selector:
+    {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 4 }}
+{{- end }}

@@ -158,6 +158,9 @@ async def current_user(
     user = await db.get(User, user_id)
     if not user:
         raise credentials_exception from None
+    # SSO deactivation check (migration 0008).
+    if getattr(user, "is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
     return user
 
 
@@ -191,12 +194,29 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
 async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_session)):
     user = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
 
+    # BUG-3 fix: check is_active BEFORE bcrypt verify — bcrypt raises ValueError on
+    # the "DEACTIVATED" sentinel set by SCIM, which would produce a 500 instead of 403.
+    if user and getattr(user, "is_active", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
     # Fix #4: constant-time comparison to prevent user enumeration via timing.
+    # For SSO users (empty password_hash) this will always fail, which is correct.
     candidate_hash = user.password_hash if user else _DUMMY_HASH
+    # Guard: bcrypt rejects empty strings and non-hash sentinels. Map to dummy hash
+    # so the timing is preserved but no exception escapes.
+    if not candidate_hash or not candidate_hash.startswith("$2"):
+        candidate_hash = _DUMMY_HASH
     password_ok    = _verify(req.password, candidate_hash)
 
     if not user or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Update last_login_at (best-effort — column exists after migration 0008).
+    try:
+        user.last_login_at = datetime.now(UTC)
+        await db.commit()
+    except Exception:
+        await db.rollback()
 
     token, jti = _make_token(str(user.id), user.email)
     return TokenResponse(token=token, user_id=str(user.id), email=user.email, jti=jti)
