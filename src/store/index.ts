@@ -88,9 +88,11 @@ export interface PersistedState {
 // ─── Full store shape (persisted + transient) ─────────────────────────────────
 
 export interface NodeExecStat {
-  status:  'pending' | 'running' | 'paused' | 'done' | 'error'
-  tokens?: number
-  ms?:     number
+  status:        'pending' | 'running' | 'paused' | 'done' | 'error'
+  tokens?:       number
+  ms?:           number
+  /** Present only when status="error". The raw exception message from the adapter. */
+  errorMessage?: string
   /**
    * LLM-as-judge quality score in [0, 1] fetched from Langfuse after a run
    * completes.  Renders as a coloured arc on the ExecBadge:
@@ -136,6 +138,8 @@ export interface CanvasStore extends PersistedState {
   activeJobId:     string | null
   hitlState:       HitlState | null
   traceUrl:        string | null
+  /** Error string from the most recent failed job. Cleared when a new run starts. */
+  jobError:        string | null
 
   // ── Online eval / feedback state ─────────────────────────────────────────
   /** job_id of the most recently completed (done or error) job. Used by
@@ -199,6 +203,7 @@ export interface CanvasStore extends PersistedState {
   setActiveJob:         (jobId: string | null) => void
   setHitlState:         (state: HitlState | null) => void
   setTraceUrl:          (url: string | null) => void
+  setJobError:          (err: string | null) => void
   /** Called by runPoller when a job reaches 'done' or 'error'.
    *  Stores the jobId for FeedbackBar and resets the per-run feedback state. */
   setLastCompleted:     (jobId: string) => void
@@ -348,7 +353,7 @@ export const useCanvasStore = create<CanvasStore>()(
       isProblemsOpen: false,
       isRunDrawerOpen: false,
       execStats: {},
-      activeJobId: null, hitlState: null, traceUrl: null, zodErrors: null, crossRefErrors: [],
+      activeJobId: null, hitlState: null, traceUrl: null, jobError: null, zodErrors: null, crossRefErrors: [],
       past: [], future: [], canUndo: false, canRedo: false,
       // Online eval / feedback
       lastCompletedJobId: null,
@@ -556,6 +561,7 @@ export const useCanvasStore = create<CanvasStore>()(
       setActiveJob:    (jobId)       => set({ activeJobId: jobId }),
       setHitlState:    (state)       => set({ hitlState: state }),
       setTraceUrl:     (url)         => set({ traceUrl: url }),
+      setJobError:     (err)         => set({ jobError: err }),
       setCrossRefErrors: (errors)    => set({ crossRefErrors: errors }),
       setLastCompleted:     (jobId)  => set({ lastCompletedJobId: jobId, feedbackSubmitted: false }),
       setFeedbackSubmitted: ()       => set({ feedbackSubmitted: true }),
@@ -583,7 +589,7 @@ export const useCanvasStore = create<CanvasStore>()(
         return {
           ...prev,
           past, future, canUndo: past.length > 0, canRedo: true,
-          execStats: {}, traceUrl: null, lastModifiedAt: Date.now(),
+          execStats: {}, traceUrl: null, jobError: null, lastModifiedAt: Date.now(),
         }
       }),
       redo: () => set((s) => {

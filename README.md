@@ -89,6 +89,220 @@ pytest adapter/tests/test_maf_adapter.py -v   # MAF adapter suite (742 tests)
 
 ---
 
+## LLM provider setup
+
+itsharness routes all LLM calls through **LiteLLM** — a unified proxy that sits between the adapters and the actual model providers. You pick a model name in your flow spec; LiteLLM sends it to the right provider.
+
+```
+flow spec  →  adapter  →  LiteLLM proxy  →  OpenAI   (gpt-4o, gpt-4o-mini)
+                       ↗                 →  Anthropic (claude-sonnet, claude-haiku, claude-opus)
+                       ↗                 →  Ollama    (mistral, qwen3, qwen2.5-coder)
+```
+
+### Quick reference — model names
+
+| Model name in flow spec | Provider | Key required in `.env` |
+|---|---|---|
+| `gpt-4o` | OpenAI | `OPENAI_API_KEY` |
+| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` |
+| `claude-sonnet` | Anthropic | `ANTHROPIC_API_KEY` |
+| `claude-haiku` | Anthropic | `ANTHROPIC_API_KEY` |
+| `claude-opus` | Anthropic | `ANTHROPIC_API_KEY` |
+| `mistral` | Ollama (local) | none |
+| `qwen3` | Ollama (local) | none |
+| `qwen2.5-coder` | Ollama (local) | none |
+
+> All four adapters (LangGraph, CrewAI, Mastra, MS Agent Framework) use the same routing — the model name in your spec determines the provider automatically.
+
+---
+
+### Option A — OpenAI
+
+1. Add your key to `.env`:
+
+   ```env
+   OPENAI_API_KEY=sk-...
+   ```
+
+2. In your flow spec, set `model_defaults.model` or any `llm_call` node's `model` field:
+
+   ```json
+   { "model_defaults": { "model": "gpt-4o-mini" } }
+   ```
+
+3. Start the stack: `docker compose up`
+
+---
+
+### Option B — Anthropic (Claude)
+
+1. Add your key to `.env`:
+
+   ```env
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+2. In your flow spec, use a Claude model name:
+
+   ```json
+   { "model_defaults": { "model": "claude-sonnet" } }
+   ```
+
+3. Start the stack: `docker compose up`
+
+That's it. LiteLLM handles the Anthropic API — no other changes needed.
+
+---
+
+### Option C — Local Ollama (no API keys required)
+
+Run every adapter entirely offline against a local [Ollama](https://ollama.com) server. No OpenAI or Anthropic account needed.
+
+#### Step 1 — Install Ollama
+
+| Platform | Command |
+|---|---|
+| macOS | `brew install ollama` or download the [desktop app](https://ollama.com/download) |
+| Linux | `curl -fsSL https://ollama.com/install.sh \| sh` |
+| Windows | Download the [installer](https://ollama.com/download/windows) |
+
+#### Step 2 — Pull a model
+
+```bash
+ollama pull mistral:latest        # ~4 GB, fast — recommended for testing
+# or
+ollama pull qwen3:latest          # higher quality, larger
+# or
+ollama pull qwen2.5-coder:7b      # good for code-heavy flows
+```
+
+Check what you have: `ollama list`
+
+#### Step 3 — Configure the Docker stack
+
+Add two lines to your `.env` so the adapter and Mastra runner containers reach Ollama on your host:
+
+```env
+# .env — add these lines (or uncomment if already present)
+OPENAI_BASE_URL=http://host.docker.internal:11434/v1
+OPENAI_API_KEY=ollama
+```
+
+> **`host.docker.internal`** is the Docker-internal hostname that resolves to your Mac or Linux host. On Linux, run `docker compose up` with `--add-host=host.docker.internal:host-gateway` if this hostname isn't available in your Docker version.
+
+Then restart the adapter (or the whole stack) to pick up the new env vars:
+
+```bash
+docker compose up -d              # full stack
+# or, if already running:
+docker compose restart adapter mastra-runner
+```
+
+#### Step 4 — Run the adapter test
+
+[`setup-ollama.sh`](./setup-ollama.sh) submits [`flows/06-ollama-simple-flow.json`](./flows/06-ollama-simple-flow.json) to all four adapters, polls for completion, and verifies each response mentions the test topic.
+
+```bash
+# Basic — mistral:latest, all 4 runtimes:
+./setup-ollama.sh
+
+# Different model:
+./setup-ollama.sh qwen3:latest
+
+# Different test topic:
+./setup-ollama.sh mistral:latest "quantum computing"
+
+# Single runtime only:
+RUNTIME=langgraph ./setup-ollama.sh
+RUNTIME=mastra    ./setup-ollama.sh
+
+# Non-interactive / CI — skip the email prompt:
+TEST_EMAIL=ci@example.com TEST_PASSWORD=CiPass99! ./setup-ollama.sh
+```
+
+**What you'll see:**
+
+```
+━━  Preflight  ━━
+  ✓  Ollama is running at http://localhost:11434
+  ✓  Model 'mistral:latest' is available
+  ✓  Adapter v0.7.0 is running at http://localhost:8000
+
+━━  Authentication  ━━
+  Email:    you@example.com
+  Password: ········
+  ✓  Logged in as you@example.com
+
+━━  Submitting jobs  ━━
+  ✓  langgraph                       → 4f1a…
+  ✓  crewai                          → 8c2b…
+  ✓  microsoft_agent_framework       → d91e…
+  ✓  mastra                          → 3f7c…
+
+━━  Waiting for results  ━━
+  ✓  langgraph                      done in 5s — topic verified ✓
+     Photosynthesis is a process used by plants…
+  ✓  mastra                         done in 12s — topic verified ✓
+     Photosynthesis is a process used by plants…
+  ✓  microsoft_agent_framework      done in 18s — topic verified ✓
+     Photosynthesis is a process by which plants…
+  ✓  crewai                         done in 28s — topic verified ✓
+     Photosynthesis is a process used by plants…
+
+━━  Summary  ━━
+  ✓  langgraph                      PASS
+  ✓  crewai                         PASS
+  ✓  microsoft_agent_framework      PASS
+  ✓  mastra                         PASS
+
+  ✓  All 4 runtime(s) passed
+```
+
+#### Troubleshooting Ollama
+
+| Symptom | Fix |
+|---|---|
+| `Ollama is not running` | Run `ollama serve` (or open the macOS app) |
+| Model not found | Run `ollama pull mistral:latest` |
+| Adapter returns wrong topic / empty result | Check `docker compose logs adapter --tail 30` — OPENAI_BASE_URL may not be set |
+| `host.docker.internal` not resolving (Linux) | Add `--add-host=host.docker.internal:host-gateway` to the adapter's docker-compose service, or set `OPENAI_BASE_URL=http://172.17.0.1:11434/v1` |
+| Timeout on Mastra | Mastra compiles TypeScript and spins up a vm.Module — allow 30-60 s for first run |
+
+#### Without Docker (local dev)
+
+```bash
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama
+cd adapter && uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+./setup-ollama.sh mistral:latest
+```
+
+---
+
+### How it works under the hood
+
+In Docker, the adapter and Mastra runner containers have:
+
+```
+OPENAI_BASE_URL = http://litellm:4000   (default — the LiteLLM proxy)
+OPENAI_API_KEY  = <LITELLM_MASTER_KEY>  (authenticates to LiteLLM)
+```
+
+LiteLLM reads `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the host `.env` to call the actual APIs. Every LLM call is also traced in Langfuse automatically.
+
+When you set `OPENAI_BASE_URL` to an Ollama URL in `.env`, that value overrides the default, bypassing LiteLLM entirely and hitting Ollama directly.
+
+**Adding a custom model:** edit [`adapter/litellm_config.yaml`](./adapter/litellm_config.yaml) and restart the `litellm` container:
+
+```yaml
+- model_name: my-model          # use this name in the flow spec
+  litellm_params:
+    model: openai/gpt-4.1       # or anthropic/..., ollama/..., etc.
+    api_key: os.environ/OPENAI_API_KEY
+```
+
+---
+
 ## What it does
 
 - **Draw** — 14 node types on a visual canvas. Every spec field is directly editable.
@@ -227,13 +441,19 @@ curl -s -X POST "http://localhost:8000/compile?runtime=langgraph" \
 ### Execute a flow
 
 ```bash
+# The 'inputs' object seeds the flow's initial state.
+# Keys must match the fields declared in the flow's state_schema.
 JOB=$(curl -s -X POST "http://localhost:8000/run?runtime=langgraph" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"spec\": $(cat flows/01-rag-agent-flow.json)}" | jq -r .job_id)
+  -d "{
+    \"spec\":   $(cat flows/06-ollama-simple-flow.json),
+    \"inputs\": {\"topic\": \"quantum computing\"}
+  }" | jq -r .job_id)
 
+# Poll for status + result
 curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8000/run/$JOB" \
-  | jq '{status, trace_url}'
+  | jq '{status, result, trace_url}'
 ```
 
 ### Deploy a flow

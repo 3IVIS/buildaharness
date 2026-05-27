@@ -40,6 +40,19 @@ import textwrap
 from collections import defaultdict, deque
 from typing import Any
 
+from adapter_logger import (
+    get_adapter_logger,
+    log_compile_start,
+    log_compile_end,
+    log_compile_error,
+    log_empty_spec,
+    log_node_processing,
+    log_topo_sort,
+    log_section,
+)
+
+_log = get_adapter_logger("maf")
+
 ADAPTER_VERSION = "0.1.0"
 SK_MIN          = ">=1.0.0"
 
@@ -62,7 +75,7 @@ def py_str(s: str) -> str:
 
 # ─── Graph analysis (same helpers as langgraph_adapter) ──────────────────────
 
-def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
+def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     """Kahn's topological sort; returns nodes in execution order."""
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
     in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
@@ -90,7 +103,9 @@ def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
         if n["id"] not in seen:
             order.append(n["id"])
 
-    return [id_to_node[nid] for nid in order if nid in id_to_node]
+    result = [id_to_node[nid] for nid in order if nid in id_to_node]
+    log_topo_sort(_log, nodes, result, flow_id=flow_id)
+    return result
 
 
 def build_adjacency(nodes: list[dict], edges: list[dict]) -> tuple[dict, dict]:
@@ -338,15 +353,22 @@ def gen_kernel_factory(spec: dict) -> str:
         # ─── Kernel factory ───────────────────────────────────────────────────────────
 
         def _make_kernel(model: str = {repr(model_default)}) -> Kernel:
-            \"\"\"Create a configured Kernel instance with the requested model.\"\"\"
-            kernel = Kernel()
-            kernel.add_service(
-                OpenAIChatCompletion(
-                    ai_model_id=model,
-                    api_key=os.environ.get("OPENAI_API_KEY", ""),
-                    # Swap for AzureChatCompletion + endpoint env vars for Azure OpenAI.
+            \"\"\"Create a configured Kernel instance; routes to Ollama when OPENAI_BASE_URL is set.\"\"\"
+            kernel   = Kernel()
+            _base_url = os.environ.get("OPENAI_BASE_URL", "")
+            _api_key  = os.environ.get("OPENAI_API_KEY", "")
+            if _base_url:
+                from openai import AsyncOpenAI as _AsyncOpenAI
+                _client = _AsyncOpenAI(base_url=_base_url, api_key=_api_key or "ollama")
+                kernel.add_service(OpenAIChatCompletion(ai_model_id=model, async_client=_client))
+            else:
+                kernel.add_service(
+                    OpenAIChatCompletion(
+                        ai_model_id=model,
+                        api_key=_api_key,
+                        # Swap for AzureChatCompletion + endpoint env vars for Azure OpenAI.
+                    )
                 )
-            )
             return kernel
 
     """)
@@ -454,7 +476,7 @@ def gen_tools(spec: dict) -> str:
     # Only create _PLUGINS when agent_role nodes need to add_plugin.
     if agents_use_tools:
         lines += [
-            f"_PLUGINS = KernelPlugin.from_object(_TOOL_STUBS, plugin_name='tools')",
+            f"_PLUGINS = KernelPlugin.from_object('tools', _TOOL_STUBS)",  # SK 1.x: plugin_name is 1st arg
         ]
 
     lines.append("")
@@ -644,16 +666,15 @@ def gen_node_function(
         body = (
             f"{ctx}"
             f"# HITL pause — raises _HitlPause; runner marks job as 'paused'.\n"
-            f"# Resume: runner re-injects resume payload into initial state (ADR-001 Q9).\n"
-            f"# Full process-level checkpoint (Dapr/SQLite) is a follow-up item.\n"
-            f"# timeout_seconds={timeout_s}, on_timeout={repr(on_timeout)}\n"
+            f"# On resume, the runner wraps the payload as {{out_key: data}} and merges\n"
+            f"# it into state before re-running, so we check state first.\n"
+            f"if state.get({repr(out_key)}) is not None:\n"
+            f"    return {{}}\n"
             f"raise _HitlPause(\n"
             f"    node_id={repr(nid)},\n"
             f"    prompt={py_str(prompt)},\n"
             f"    fields={repr(fields)},\n"
             f")\n"
-            f"# After resume the runner injects the payload; downstream reads state[{repr(out_key)}].\n"
-            f"# The line below is unreachable in the current runner but documents the contract.\n"
             f"return {{}}\n"
         )
         return _async_fn(label, vid, body)
@@ -1175,37 +1196,55 @@ def compile_maf(spec: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     nodes = spec.get("nodes") or []
     edges = spec.get("edges") or []
+    flow_id = spec.get("id", "unknown")
 
-    if not nodes:
-        return "# Empty spec — no nodes to compile.\n", []
+    start_ts = log_compile_start(_log, spec)
 
-    sorted_nodes = topo_sort(nodes, edges)
-    ctx_map      = build_context_map(edges)
+    try:
+        if not nodes:
+            log_empty_spec(_log, spec)
+            return "# Empty spec — no nodes to compile.\n", []
 
-    parts: list[str] = [
-        gen_header(spec),
-        gen_imports(spec),
-        gen_otel_setup(spec),
-        gen_helpers(),
-        gen_kernel_factory(spec),
-        gen_memory_stores(spec),
-        gen_tools(spec),
-    ]
+        log_section(_log, "topo_sort", flow_id=flow_id)
+        sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
+        ctx_map      = build_context_map(edges)
 
-    # Condition routers + node functions
-    node_fns: list[str] = [
-        "# ─── Node functions ──────────────────────────────────────────────────────────",
-        "",
-    ]
-    for node in sorted_nodes:
-        if node["type"] == "condition":
-            node_fns.append(gen_condition_router(node))
-        fn = gen_node_function(node, spec, ctx_map, warnings)
-        if fn:
-            node_fns.append(fn)
+        log_section(_log, "header+imports+otel+helpers", flow_id=flow_id)
+        parts: list[str] = [
+            gen_header(spec),
+            gen_imports(spec),
+            gen_otel_setup(spec),
+            gen_helpers(),
+            gen_kernel_factory(spec),
+            gen_memory_stores(spec),
+            gen_tools(spec),
+        ]
 
-    parts.append("\n".join(node_fns))
-    parts.append(gen_flow_runner(spec, warnings))
-    parts.append(gen_entrypoint(spec))
+        # Condition routers + node functions
+        log_section(_log, "node_functions", flow_id=flow_id)
+        node_fns: list[str] = [
+            "# ─── Node functions ──────────────────────────────────────────────────────────",
+            "",
+        ]
+        for node in sorted_nodes:
+            log_node_processing(_log, node, flow_id=flow_id)
+            if node["type"] == "condition":
+                node_fns.append(gen_condition_router(node))
+            fn = gen_node_function(node, spec, ctx_map, warnings)
+            if fn:
+                node_fns.append(fn)
 
-    return "\n".join(filter(None, parts)), warnings
+        parts.append("\n".join(node_fns))
+
+        log_section(_log, "flow_runner", flow_id=flow_id)
+        parts.append(gen_flow_runner(spec, warnings))
+        log_section(_log, "entrypoint", flow_id=flow_id)
+        parts.append(gen_entrypoint(spec))
+
+        code = "\n".join(filter(None, parts))
+        log_compile_end(_log, start_ts, code, warnings, spec)
+        return code, warnings
+
+    except Exception as exc:
+        log_compile_error(_log, start_ts, exc, spec)
+        raise

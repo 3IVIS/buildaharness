@@ -26,6 +26,19 @@ import json
 from collections import defaultdict, deque
 from typing import Any
 
+from adapter_logger import (
+    get_adapter_logger,
+    log_compile_start,
+    log_compile_end,
+    log_compile_error,
+    log_empty_spec,
+    log_node_processing,
+    log_topo_sort,
+    log_section,
+)
+
+_log = get_adapter_logger("mastra")
+
 ADAPTER_VERSION  = "0.1.0"
 MASTRA_PKG       = "@mastra/core@^0.10.0"
 
@@ -39,8 +52,34 @@ def safe_id(s: str) -> str:
 
 
 def ts_str(s: str) -> str:
-    """TypeScript template-literal safe string."""
+    """TypeScript template-literal safe string (no Handlebars expansion)."""
     return "`" + s.replace("`", "\\`").replace("${", "\\${") + "`"
+
+
+import re as _re
+
+def ts_prompt(s: str, data_var: str = "triggerData") -> str:
+    """Convert a Handlebars-style prompt template to a TypeScript template literal.
+
+    Replaces ``{{key}}`` and ``{{$.state.key}}`` expressions with
+    ``${String(triggerData?.key ?? '')}`` so that the actual runtime values
+    are interpolated into the prompt string.  Any bare ``${`` in the original
+    string is escaped to prevent unintended JS interpolation.
+    """
+    # Escape any existing ${ sequences first (before we insert our own)
+    escaped = s.replace("`", "\\`").replace("${", "\\${")
+
+    def _sub(m: _re.Match) -> str:
+        key = m.group(1).strip()
+        # Strip $.state. / $. path prefixes → bare key name
+        key = _re.sub(r"^\$\.state\.", "", key)
+        key = _re.sub(r"^\$\.", "", key)
+        # Use only the last segment of dotted paths (e.g. $.state.foo.bar → bar)
+        key = key.split(".")[-1] if key else key
+        return "${" + f"String({data_var}?.[{json.dumps(key)}] ?? '')" + "}"
+
+    result = _re.sub(r"\{\{([^}]+)\}\}", _sub, escaped)
+    return "`" + result + "`"
 
 
 def ts_obj(d: dict) -> str:
@@ -74,7 +113,7 @@ def build_graph(nodes: list[dict], edges: list[dict]) -> dict:
     }
 
 
-def topo_sort(nodes: list[dict], edges: list[dict]) -> list[str]:
+def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[str]:
     """Kahn's topological sort; returns node IDs in execution order."""
     g = build_graph(nodes, edges)
     in_deg = {n["id"]: 0 for n in nodes}
@@ -96,6 +135,7 @@ def topo_sort(nodes: list[dict], edges: list[dict]) -> list[str]:
     for n in nodes:
         if n["id"] not in seen:
             order.append(n["id"])
+    log_topo_sort(_log, nodes, order, flow_id=flow_id)
     return order
 
 
@@ -188,10 +228,15 @@ def gen_header(spec: dict) -> str:
  * Run    : npx mastra dev
  */
 
-import {{ createStep, createWorkflow }} from '@mastra/core'
-import {{ openai }} from '@ai-sdk/openai'
+import {{ createOpenAI }} from '@ai-sdk/openai'
 import {{ generateText, generateObject }} from 'ai'
 import {{ z }} from 'zod'
+
+// Routes to Ollama (or any OpenAI-compatible endpoint) when OPENAI_BASE_URL is set.
+const _openaiProvider = createOpenAI({{
+  baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+  apiKey: process.env.OPENAI_API_KEY || 'ollama',
+}})
 """
 
 
@@ -243,7 +288,7 @@ const {vid}Step = createStep({{
   description: {json.dumps(label)},
   inputSchema: {input_schema},
   outputSchema: {output_schema},
-  execute: async ({{ context, mastra }}) => {{
+  execute: async ({{ inputData, resumeData, suspend, getStepResult, mastra }}) => {{
 {body}
   }},
 }})
@@ -265,11 +310,11 @@ const {vid}Step = createStep({{
 
         if struct:
             core_body = f"""\
-    const triggerData = context.getEvent('trigger')?.payload ?? {{}}
+    const triggerData = inputData ?? {{}}
     const {{ object }} = await generateObject({{
-      model: openai({json.dumps(model)}),
+      model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
-      prompt: {ts_str(prompt)},
+      prompt: {ts_prompt(prompt)},
       schema: z.object({{ {out_key}: z.unknown() }}),
       temperature: {temp},
       maxTokens: {max_tok},
@@ -277,11 +322,11 @@ const {vid}Step = createStep({{
     return {{ {out_key}: object.{out_key} }}"""
         else:
             core_body = f"""\
-    const triggerData = context.getEvent('trigger')?.payload ?? {{}}
+    const triggerData = inputData ?? {{}}
     const {{ text }} = await generateText({{
-      model: openai({json.dumps(model)}),
+      model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
-      prompt: {ts_str(prompt)},
+      prompt: {ts_prompt(prompt)},
       temperature: {temp},
       maxTokens: {max_tok},
     }})
@@ -304,8 +349,11 @@ const {vid}Step = createStep({{
         else:
             body = core_body
 
+        # Use the flow's state_schema as the step input schema so all state
+        # fields (including trigger data like 'topic') are accessible via inputData.
+        input_schema = state_schema_to_zod(state_schema) + ".passthrough()" if state_schema else "z.object({}).passthrough()"
         return step_wrap(
-            "z.object({ input: z.string().optional() })",
+            input_schema,
             f"z.object({{ {out_key}: z.string() }})",
             body,
         )
@@ -324,7 +372,7 @@ const {vid}Step = createStep({{
     // Invoke tool '{tool_id}' with fail_branch → '{fb_target}' (max_attempts={fb_retry})
     for (let _attempt = 0; _attempt < {fb_retry}; _attempt++) {{
       try {{
-        const result = await {tool_var}.execute({{ context: context.getEvent('trigger')?.payload }})
+        const result = await {tool_var}.execute({{ context: inputData ?? {{}} }})
         return {{ {out_key}: result }}
       }} catch (err) {{
         if (_attempt === {fb_retry} - 1) {{
@@ -336,7 +384,7 @@ const {vid}Step = createStep({{
         else:
             body = f"""\
     // Invoke tool '{tool_id}'
-    const result = await {tool_var}.execute({{ context: context.getEvent('trigger')?.payload }})
+    const result = await {tool_var}.execute({{ context: inputData ?? {{}} }})
     return {{ {out_key}: result }}"""
         return step_wrap(
             "z.object({})",
@@ -355,10 +403,10 @@ const {vid}Step = createStep({{
     // fn_ref: {fn_ref}
     // Import and call the transform function
     const {{ default: transformFn }} = await import({json.dumps(fn_ref)})
-    const state = context.getStepPayload?.('trigger') ?? {{}}
+    const state = inputData ?? {{}}
     return {{ result: await transformFn(state) }}"""
         else:
-            lines = ["    const state = context.getEvent('trigger')?.payload ?? {}"]
+            lines = ["    const state = inputData ?? {}"]
             lines.append("    const out: Record<string, unknown> = {}")
             for m in mapping:
                 frm = m.get("from", "")
@@ -382,14 +430,21 @@ const {vid}Step = createStep({{
         resume_sch  = node.get("resume_schema", {})
         timeout_s   = node.get("timeout_seconds", 86400)
         zod_resume  = state_schema_to_zod(resume_sch) if resume_sch else "z.object({ decision: z.string() })"
+        resume_fields = list((resume_sch.get("properties") or {}).keys()) if resume_sch else []
         body = f"""\
     // Suspend workflow and wait for human input
     // timeout_seconds: {timeout_s}
-    const resumeData = await context.suspend({{
+    // In Mastra ^0.10.x, suspend() signals a pause; the step is re-invoked on
+    // resume with resumeData set — so we check resumeData first.
+    if (resumeData !== undefined && resumeData !== null) {{
+      return {{ {out_key}: resumeData }}
+    }}
+    await suspend({{
       prompt: {json.dumps(prompt)},
       schema: {zod_resume},
+      resume_schema_fields: {json.dumps(resume_fields)},
     }})
-    return {{ {out_key}: resumeData }}"""
+    return {{ {out_key}: null }}"""
         return step_wrap(
             "z.object({}).passthrough()",
             f"z.object({{ {out_key}: z.unknown() }})",
@@ -409,7 +464,7 @@ const {vid}Step = createStep({{
     let {out_key}: unknown = null
     if (memory) {{
       if ({json.dumps(mode)} === 'semantic') {{
-        const state = context.getEvent('trigger')?.payload ?? {{}}
+        const state = inputData ?? {{}}
         const query = {ts_str(query_exp)} // resolves query_expr
         const results = await memory.query({{ query, topK: {top_k} }})
         {out_key} = results
@@ -434,7 +489,7 @@ const {vid}Step = createStep({{
         body = f"""\
     // memory_write: store='{store_id}', tier='{tier}', mode='{write_mode}'
     const memory = mastra?.memory
-    const state  = context.getEvent('trigger')?.payload ?? {{}}
+    const state  = inputData ?? {{}}
     const key    = {ts_str(key_expr)}   // key_expr
     const value  = {ts_str(val_expr)}  // value_expr
     if (memory) {{
@@ -464,7 +519,7 @@ const {vid}Step = createStep({{
 
         body = f"""\
 {hitl_comment}    // agent_role → agent_ref='{agent_ref}', memory_access='{mem_acc}'
-    const agentModel = openai({json.dumps(model)})
+    const agentModel = _openaiProvider({json.dumps(model)})
     const {{ text }} = await generateText({{
       model: agentModel,
       system: {json.dumps(f"You are a {(agents_by_id.get(agent_ref) or {}).get('role', 'specialist')}. {(agents_by_id.get(agent_ref) or {}).get('goal', '')}")},
@@ -494,7 +549,7 @@ const {vid}Step = createStep({{
             agent_models.append((ref, role, m))
 
         agent_inits = "\n".join(
-            f"    const {safe_id(ref)}Model = openai({json.dumps(m)}) // {role}"
+            f"    const {safe_id(ref)}Model = _openaiProvider({json.dumps(m)}) // {role}"
             for ref, role, m in agent_models
         )
         warnings.append(
@@ -506,9 +561,9 @@ const {vid}Step = createStep({{
     // termination: {json.dumps(term_cond) if term_cond else 'max_rounds reached'}
 {agent_inits}
     const transcript: string[] = []
-    let lastMessage = context.getEvent('trigger')?.payload?.proposition ?? ''
+    let lastMessage = inputData?.proposition ?? ''
     // Model map avoids eval() — keys match the const names emitted above.
-    const _modelMap: Record<string, ReturnType<typeof openai>> = {{
+    const _modelMap: Record<string, ReturnType<typeof _openaiProvider>> = {{
 {chr(10).join(f'      [{json.dumps(safe_id(ref) + "Model")}]: {safe_id(ref)}Model,' for ref, _, __ in agent_models)}
     }}
     for (let round = 0; round < {max_rounds}; round++) {{
@@ -542,7 +597,7 @@ const {vid}Step = createStep({{
     // Import the compiled workflow and trigger it:
     // const {{ {safe_id(flow_ref)}Workflow }} = await import('{flow_ref}')
     // const run = {safe_id(flow_ref)}Workflow.createRun()
-    // const result = await run.start({{ triggerData: context.getEvent('trigger')?.payload }})
+    // const result = await run.start({{ triggerData: inputData }})
     throw new Error('Subgraph {flow_ref} not yet wired — see comment above')"""
         return step_wrap(
             "z.object({}).passthrough()",
@@ -557,7 +612,7 @@ const {vid}Step = createStep({{
         body = f"""\
     // parallel_join: Mastra's .parallel() resolves all branches before this step.
     // Merge results here if needed.
-    const branchResults = context.getStepPayload?.('parallel') ?? {{}}
+    const branchResults = inputData ?? {{}}
     return {{ merged: branchResults }}"""
         return step_wrap(
             "z.record(z.unknown())",
@@ -690,31 +745,40 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
                 expr   = (b.get("condition") or {}).get("expr", "true")
                 target = b.get("target", "")
                 if target and target in id_to_node:
-                    safe_expr = expr.replace("$.state.", "context.getEvent('trigger')?.payload?.") or "true"
+                    safe_expr = expr.replace("$.state.", "inputData?.") or "true"
+                    # Mastra ^0.10 branch() takes [conditionFn, step] tuples
                     branch_lines.append(
-                        f"    {{ condition: async ({{ context }}) => Boolean({safe_expr}), "
-                        f"step: {safe_id(target)}Step }},"
+                        f"    [async ({{ inputData }}) => Boolean({safe_expr}), {safe_id(target)}Step],"
                     )
 
             if def_target and def_target in id_to_node:
-                branch_lines.append(
-                    f"    {{ condition: async () => true, step: {safe_id(def_target)}Step }},  // default"
-                )
-                visited.add(def_target)
+                def_node_type = id_to_node[def_target].get("type", "")
+                if def_node_type not in ("output", "annotation"):
+                    # Mastra ^0.10 branch() takes [conditionFn, step] tuples
+                    branch_lines.append(
+                        f"    [async () => true, {safe_id(def_target)}Step],  // default"
+                    )
+                # NOTE: do NOT add def_target to visited — we need to continue the chain into it
 
             lines.append("  .branch([")
             lines.extend(branch_lines)
             lines.append("  ])")
 
-            # Find common successor (node after all branches converge)
-            all_branch_succs: set[str] = set()
-            all_branch_targets = [b.get("target", "") for b in branches] + ([def_target] if def_target else [])
-            for bt in all_branch_targets:
-                for s in g["fwd"].get(bt, []):
-                    all_branch_succs.add(s)
-            common = [s for s in all_branch_succs if s not in all_branch_targets]
-            if common:
-                walk(common[0], depth)
+            # Continue chain from def_target's successor (def_target itself is already
+            # listed in the .branch([]) so we must not emit .then(def_target) again).
+            # If def_target is a back-edge (retry loop), look for other forward successors.
+            all_branch_targets = {b.get("target", "") for b in branches} | ({def_target} if def_target else set())
+            if def_target and def_target in id_to_node and def_target not in visited:
+                visited.add(def_target)  # mark as covered by the branch entry
+                # continue from def_target's successor
+                def_succs = [s for s in g["fwd"].get(def_target, []) if s not in visited]
+                if def_succs:
+                    walk(def_succs[0], depth)
+            else:
+                succs = g["fwd"].get(nid, [])
+                forward = [s for s in succs if s not in all_branch_targets and s not in visited]
+                if forward:
+                    walk(forward[0], depth)
             return
 
         # ── regular step ──────────────────────────────────────────────────────
@@ -743,23 +807,44 @@ def compile_mastra(spec: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     nodes = spec.get("nodes", [])
     edges = spec.get("edges", [])
+    flow_id = spec.get("id", "unknown")
 
-    if not nodes:
-        return "// Empty spec — no nodes to compile.\n", []
+    start_ts = log_compile_start(_log, spec)
 
-    skip_for_steps = {"input", "output", "annotation", "parallel_fork", "condition"}
+    try:
+        if not nodes:
+            log_empty_spec(_log, spec)
+            return "// Empty spec — no nodes to compile.\n", []
 
-    step_blocks: list[str] = []
-    for nid in topo_sort(nodes, edges):
-        node = next((n for n in nodes if n["id"] == nid), None)
-        if node and node["type"] not in skip_for_steps:
-            step_blocks.append(gen_step_for_node(node, spec, warnings))
+        log_section(_log, "topo_sort", flow_id=flow_id)
+        skip_for_steps = {"input", "output", "annotation", "parallel_fork", "condition"}
 
-    parts = [
-        gen_header(spec),
-        gen_tools(spec),
-        "// ─── Steps ──────────────────────────────────────────────────────────────────\n",
-        "\n".join(step_blocks),
-        build_workflow_chain(spec, warnings),
-    ]
-    return "\n".join(filter(None, parts)), warnings
+        log_section(_log, "steps", flow_id=flow_id)
+        step_blocks: list[str] = []
+        for nid in topo_sort(nodes, edges, flow_id=flow_id):
+            node = next((n for n in nodes if n["id"] == nid), None)
+            if node:
+                if node["type"] not in skip_for_steps:
+                    log_node_processing(_log, node, flow_id=flow_id)
+                    step_blocks.append(gen_step_for_node(node, spec, warnings))
+                else:
+                    log_node_processing(_log, node, flow_id=flow_id, skipped=True,
+                                        reason=f"type '{node['type']}' has no step")
+
+        log_section(_log, "header+tools", flow_id=flow_id)
+        log_section(_log, "workflow_chain", flow_id=flow_id)
+        parts = [
+            gen_header(spec),
+            gen_tools(spec),
+            "// ─── Steps ──────────────────────────────────────────────────────────────────\n",
+            "\n".join(step_blocks),
+            build_workflow_chain(spec, warnings),
+        ]
+
+        code = "\n".join(filter(None, parts))
+        log_compile_end(_log, start_ts, code, warnings, spec)
+        return code, warnings
+
+    except Exception as exc:
+        log_compile_error(_log, start_ts, exc, spec)
+        raise

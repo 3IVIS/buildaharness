@@ -1,4 +1,24 @@
 model_list:
+  # ── Ollama (local) ──────────────────────────────────────────────────────────
+  # api_base uses host.docker.internal so the LiteLLM container can reach the
+  # Ollama daemon running on the host.  For local-only (no Docker) use, set
+  # OLLAMA_BASE_URL=http://localhost:11434 instead.
+  - model_name: mistral
+    litellm_params:
+      model: ollama/mistral
+      api_base: http://host.docker.internal:11434
+
+  - model_name: qwen3
+    litellm_params:
+      model: ollama/qwen3
+      api_base: http://host.docker.internal:11434
+
+  - model_name: qwen2.5-coder
+    litellm_params:
+      model: ollama/qwen2.5-coder:7b
+      api_base: http://host.docker.internal:11434
+
+  # ── OpenAI ──────────────────────────────────────────────────────────────────
   - model_name: gpt-4o-mini
     litellm_params:
       model: openai/gpt-4o-mini
@@ -9,9 +29,22 @@ model_list:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
+  # ── Anthropic / Claude ──────────────────────────────────────────────────────
+  # Set ANTHROPIC_API_KEY in .env to enable these models.
+  # Use these model_name values in your flow spec's model field.
   - model_name: claude-sonnet
     litellm_params:
-      model: anthropic/claude-sonnet-4-20250514
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-4-7
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
       api_key: os.environ/ANTHROPIC_API_KEY
 
 general_settings:

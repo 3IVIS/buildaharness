@@ -33,7 +33,7 @@ import { executeWorkflow } from "./executor.js";
 import { jobStore } from "./job-store.js";
 
 const PORT         = parseInt(process.env.MASTRA_RUNNER_PORT  ?? "8001", 10);
-const API_KEY      = process.env.RUNNER_API_KEY ?? "";
+const API_KEY = process.env.MASTRA_RUNNER_API_KEY ?? process.env.RUNNER_API_KEY ?? "";
 const MAX_JOBS     = parseInt(process.env.MASTRA_RUNNER_MAX_JOBS ?? "50", 10);
 const VERSION      = "0.1.0";
 
@@ -175,6 +175,64 @@ app.get("/jobs/:job_id/events", requireAuth, (req: Request, res: Response): void
   send();
 
   req.on("close", () => clearInterval(timer));
+});
+
+// ── POST /jobs/:job_id/resume ────────────────────────────────────────────────
+
+interface ResumeBody {
+  step_id:     string;
+  resume_data: Record<string, unknown>;
+}
+
+app.post("/jobs/:job_id/resume", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const job = jobStore.get(req.params.job_id);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  if (job.status !== "suspended") {
+    res.status(409).json({ error: `Job is '${job.status}', not suspended` });
+    return;
+  }
+
+  const { step_id, resume_data }: ResumeBody = req.body;
+  if (!step_id) {
+    res.status(400).json({ error: "step_id is required" });
+    return;
+  }
+
+  const runHandle = job._run as { run: { resume(opts: { step: string; resumeData: unknown }): Promise<any> }; stepId: string } | undefined;
+  if (!runHandle?.run) {
+    res.status(500).json({ error: "Run object not available for resume" });
+    return;
+  }
+
+  // Mark as running again before resuming
+  (job as any).status     = "running";
+  (job as any).hitl_state = undefined;
+  (job as any).ended_at   = undefined;
+
+  res.status(202).json({ job_id: job.job_id, status: "running" });
+
+  // Resume in background using the stored run object and the suspended step id
+  try {
+    const runResult = await runHandle.run.resume({ step: runHandle.stepId, resumeData: resume_data }) as any;
+    if (runResult?.status === "suspended") {
+      const suspendedSteps = runResult.suspended ?? [];
+      const firstSuspendedId = suspendedSteps[0]?.[0] ?? "unknown";
+      const stepInfo = (runResult.steps ?? {})[firstSuspendedId] as Record<string, unknown> | undefined;
+      const suspendPayload = (stepInfo?.suspendPayload ?? {}) as Record<string, unknown>;
+      const prompt = (suspendPayload.prompt as string) ?? "Human input required";
+      const resumeSchemaFields = Array.isArray(suspendPayload.resume_schema_fields)
+        ? suspendPayload.resume_schema_fields as string[]
+        : [];
+      jobStore.suspend(job.job_id, { node_id: firstSuspendedId, prompt, suspend_payload: suspendPayload, resume_schema_fields: resumeSchemaFields }, { run: runHandle.run, stepId: firstSuspendedId });
+    } else {
+      jobStore.complete(job.job_id, JSON.stringify(runResult?.results ?? runResult, null, 2));
+    }
+  } catch (err) {
+    jobStore.fail(job.job_id, String(err));
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

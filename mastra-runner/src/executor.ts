@@ -32,6 +32,46 @@
 import vm from "node:vm";
 import { jobStore, NodeEvent } from "./job-store.js";
 
+// ── In-memory snapshot storage for HITL suspend/resume ──────────────────────
+import { Mastra, MastraStorage } from "@mastra/core";
+
+class InMemoryStorage extends MastraStorage {
+  #snapshots = new Map<string, any>();
+  constructor() { super({ name: "InMemoryStorage" }); }
+  async init() {}
+  // Snapshot persistence — the only methods we actually need
+  async persistWorkflowSnapshot({ workflowName, runId, snapshot }: any): Promise<void> {
+    this.#snapshots.set(`${workflowName}:${runId}`, snapshot);
+  }
+  async loadWorkflowSnapshot({ workflowName, runId }: any): Promise<any> {
+    return this.#snapshots.get(`${workflowName}:${runId}`) ?? null;
+  }
+  // Required abstract stubs — all no-ops since we only need snapshot support
+  async createTable(_a: any): Promise<void> {}
+  async clearTable(_a: any): Promise<void> {}
+  async alterTable(_a: any): Promise<void> {}
+  async insert(_a: any): Promise<void> {}
+  async batchInsert(_a: any): Promise<void> {}
+  async load<R>(_a: any): Promise<R | null> { return null; }
+  async getThreadById(_a: any): Promise<any> { return null; }
+  async getThreadsByResourceId(_a: any): Promise<any[]> { return []; }
+  async saveThread({ thread }: any): Promise<any> { return thread; }
+  async updateThread(_a: any): Promise<any> { return null; }
+  async deleteThread(_a: any): Promise<void> {}
+  async getMessages(_a: any): Promise<any[]> { return []; }
+  async saveMessages({ messages }: any): Promise<any[]> { return messages; }
+  async updateMessages(_a: any): Promise<any[]> { return []; }
+  async getTraces(_a: any): Promise<any[]> { return []; }
+  async getTracesPaginated(_a: any): Promise<any> { return { traces: [], page: 0, perPage: 0, total: 0 }; }
+  async getEvalsByAgentName(_a: any): Promise<any[]> { return []; }
+  async getWorkflowRuns(_a?: any): Promise<any> { return { runs: [], total: 0 }; }
+  async getWorkflowRunById(_a: any): Promise<any> { return null; }
+  async getThreadsByResourceIdPaginated(_a: any): Promise<any> { return { threads: [], page: 0, perPage: 0, total: 0 }; }
+  async getMessagesPaginated(_a: any): Promise<any> { return { messages: [], page: 0, perPage: 0, total: 0 }; }
+}
+
+const _mastraInstance = new Mastra({ storage: new InMemoryStorage() });
+
 // External modules the generated Mastra code is allowed to import.
 // Any import not in this map causes a hard error — this prevents the vm
 // code from pulling in fs, child_process, etc.
@@ -81,6 +121,7 @@ function makeContext(
     process: {        // minimal process surface — no exec, no env writes
       env: {
         OPENAI_API_KEY:    process.env.OPENAI_API_KEY    ?? "",
+        OPENAI_BASE_URL:   process.env.OPENAI_BASE_URL   ?? "",
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
         NODE_ENV:          process.env.NODE_ENV           ?? "production",
       },
@@ -234,10 +275,16 @@ export { __allWorkflows__ }
 
   // Use the first registered workflow (single-workflow assumption for now).
   const workflow = workflows.values().next().value as {
-    createRun(): { start(opts: { triggerData: Record<string, unknown> }): Promise<{ results: unknown }> };
+    __registerMastra(m: unknown): void;
+    createRunAsync(opts?: { runId?: string }): Promise<{
+      runId: string;
+      start(opts: { triggerData: Record<string, unknown> }): Promise<{ status: string; results?: unknown; steps?: Record<string, unknown>; suspended?: string[][] }>;
+      resume(opts: { step: string; resumeData: unknown }): Promise<{ status: string; results?: unknown; steps?: Record<string, unknown>; suspended?: string[][] }>;
+    }>;
   };
 
-  const run = workflow.createRun();
+  workflow.__registerMastra(_mastraInstance);
+  const run = await workflow.createRunAsync();
 
   let runTimerHandle: ReturnType<typeof setTimeout> | undefined;
   const runTimeout = new Promise<never>((_, reject) => {
@@ -247,15 +294,37 @@ export { __allWorkflows__ }
     );
   });
 
-  let results: unknown;
+  let runResult: { status: string; results?: unknown; steps?: Record<string, unknown>; suspended?: string[][] };
   try {
-    ({ results } = await Promise.race([
-      run.start({ triggerData }),
+    // Pass triggerData as both `triggerData` (for schema validation) AND `inputData`
+    // (so the first step's execute function receives it as inputData, since Mastra 0.10.x
+    // does not automatically forward triggerData to the first step's inputData).
+    runResult = await Promise.race([
+      run.start({ triggerData, inputData: triggerData } as any),
       runTimeout,
-    ]));
+    ]);
   } finally {
     clearTimeout(runTimerHandle);
   }
 
-  jobStore.complete(job_id, JSON.stringify(results, null, 2));
+  if (runResult.status === "suspended") {
+    // Find the first suspended step and its payload
+    const suspendedSteps = runResult.suspended ?? [];
+    const firstSuspendedId = suspendedSteps[0]?.[0] ?? "unknown";
+    const stepInfo = (runResult.steps ?? {})[firstSuspendedId] as Record<string, unknown> | undefined;
+    const suspendPayload = (stepInfo?.suspendPayload ?? {}) as Record<string, unknown>;
+    const prompt = (suspendPayload.prompt as string) ?? "Human input required";
+    const resumeSchemaFields = Array.isArray(suspendPayload.resume_schema_fields)
+      ? suspendPayload.resume_schema_fields as string[]
+      : [];
+
+    jobStore.suspend(job_id, {
+      node_id:              firstSuspendedId,
+      prompt,
+      suspend_payload:      suspendPayload,
+      resume_schema_fields: resumeSchemaFields,
+    }, { run, stepId: firstSuspendedId });
+  } else {
+    jobStore.complete(job_id, JSON.stringify(runResult.results ?? runResult, null, 2));
+  }
 }

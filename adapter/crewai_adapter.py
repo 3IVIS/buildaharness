@@ -19,7 +19,7 @@ Coverage:
   ✓ process_type        → Crew(process=Process.sequential/hierarchical)
   ✓ flow_config.checkpoint → Crew(memory=True)
   ✓ context_from        → Task.context=[...] (ADR-001 RFC-1 resolved)
-  ✓ memory_write.tier   → XXXMemory() in Crew constructor (ADR-001 RFC-2 resolved)
+  ✓ memory_write.tier   → Crew(memory=True) unified memory (crewai 1.x, ADR-001 RFC-2)
 """
 
 from __future__ import annotations
@@ -27,15 +27,33 @@ import textwrap
 from collections import defaultdict, deque
 from typing import Any
 
-ADAPTER_VERSION = "0.2.0"
-CREWAI_MIN      = ">=0.80.0"
+from adapter_logger import (
+    get_adapter_logger,
+    log_compile_start,
+    log_compile_end,
+    log_compile_error,
+    log_empty_spec,
+    log_node_processing,
+    log_node_warning,
+    log_topo_sort,
+    log_section,
+)
 
-# ADR-001 RFC-2: memory_write.tier → CrewAI memory class map
-_TIER_CLASS: dict[str, str] = {
-    "short":  "ShortTermMemory",
-    "long":   "LongTermMemory",
-    "entity": "EntityMemory",
-    "user":   "UserMemory",
+_log = get_adapter_logger("crewai")
+
+ADAPTER_VERSION = "0.2.0"
+CREWAI_MIN      = ">=1.0.0"
+
+# ADR-001 RFC-2: memory_write.tier → CrewAI 1.x memory mapping.
+# crewai 1.x removed the old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory
+# classes from crewai.memory.  All memory is now enabled via Crew(memory=True), which
+# uses a unified storage backend.  The tier names are preserved here only for comment
+# generation; they no longer map to importable class names.
+_TIER_COMMENT: dict[str, str] = {
+    "short":  "short-term (unified memory, crewai 1.x)",
+    "long":   "long-term  (unified memory, crewai 1.x)",
+    "entity": "entity     (unified memory, crewai 1.x)",
+    "user":   "user       (unified memory, crewai 1.x)",
 }
 
 
@@ -57,7 +75,7 @@ def dedent0(text: str) -> str:
 
 # ─── Topological sort (Kahn's algorithm) ─────────────────────────────────────
 
-def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
+def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
     in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
     adj: dict[str, list[str]]    = defaultdict(list)
@@ -84,7 +102,9 @@ def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
         if n["id"] not in seen:
             order.append(n["id"])
 
-    return [id_to_node[nid] for nid in order if nid in id_to_node]
+    result = [id_to_node[nid] for nid in order if nid in id_to_node]
+    log_topo_sort(_log, nodes, result, flow_id=flow_id)
+    return result
 
 
 def find_parallel_targets(spec: dict) -> set[str]:
@@ -124,10 +144,20 @@ def gen_header(spec: dict) -> str:
         Requires: crewai{CREWAI_MIN}
         \"\"\"
 
-        from crewai import Agent, Task, Crew, Process
-        from crewai.memory import ShortTermMemory, LongTermMemory, EntityMemory, UserMemory
+        from crewai import Agent, Task, Crew, Process, LLM
         from crewai.tools import BaseTool
         import os
+        # crewai 1.x: ShortTermMemory/LongTermMemory/EntityMemory/UserMemory were
+        # removed.  Enable memory via Crew(memory=True); see gen_crew() below.
+
+
+        def _make_llm(model: str):
+            \"\"\"Return an LLM object with Ollama routing when OPENAI_BASE_URL is set, else model string.\"\"\"
+            _base_url = os.environ.get("OPENAI_BASE_URL", "")
+            _api_key  = os.environ.get("OPENAI_API_KEY", "")
+            if _base_url:
+                return LLM(model=model, base_url=_base_url, api_key=_api_key or "ollama")
+            return model or None
     """)
 
 
@@ -162,6 +192,7 @@ def gen_tools(spec: dict) -> str:
 def gen_agents(spec: dict) -> str:
     agents = spec.get("agents", [])
     tool_ids = set(spec.get("tools", {}).keys())
+    model_default = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
 
     lines: list[str] = [
         "# ─── Agents ─────────────────────────────────────────────────────────────────",
@@ -184,8 +215,9 @@ def gen_agents(spec: dict) -> str:
         lines.append(f"    role={repr(role)},")
         lines.append(f"    backstory={repr(backstory)},")
         lines.append(f"    goal={repr(goal)},")
-        if model:
-            lines.append(f"    llm={repr(model)},")
+        effective_model = model or model_default
+        if effective_model:
+            lines.append(f"    llm=_make_llm({repr(effective_model)}),")
         if a_tools:
             lines.append(f"    tools=[{', '.join(safe_id(t) for t in a_tools)}],")
         if use_mem:
@@ -202,6 +234,7 @@ def gen_agents(spec: dict) -> str:
         '    role="Executor",',
         '    backstory="A general-purpose executor that runs non-agent workflow steps.",',
         '    goal="Complete the assigned step accurately and concisely.",',
+        f"    llm=_make_llm({repr(model_default)}),",
         "    verbose=True,",
         ")",
         "",
@@ -226,6 +259,8 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
         vid   = safe_id(nid)
         ctx   = ctx_map.get(nid, [])
         is_parallel = nid in parallel_tgts
+
+        log_node_processing(_log, node, flow_id=spec.get("id", "unknown"))
 
         if ntype in ("input", "output", "annotation"):
             lines.append(f"# '{nid}' ({ntype}) — no Task needed")
@@ -387,7 +422,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 f"Write to memory store '{store_id}': key={key_expr}, value={val_expr}.",
                 "Memory write confirmed.",
                 "_executor",
-                [f"# memory tier: '{tier}' → {_TIER_CLASS.get(tier, 'ShortTermMemory')} configured at Crew level (ADR-001 RFC-2)"],
+                [f"# memory tier: '{tier}' → unified memory via Crew(memory=True) (crewai 1.x, ADR-001 RFC-2)"],
             )
             continue
 
@@ -504,16 +539,20 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
         backend = checkpoint.get("backend", "memory")
         lines.append(f"    memory=True,  # checkpoint.backend={backend}")
 
-    # ADR-001 RFC-2: add XXXMemory() instances for each tier used by memory_write nodes
+    # ADR-001 RFC-2: crewai 1.x uses unified memory enabled via memory=True.
+    # The old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory constructor
+    # args are gone.  If memory_write nodes request specific tiers, enable
+    # memory=True (idempotent if checkpoint already set it) and emit a comment.
     used_tiers = {
         n.get("tier", "short")
         for n in spec.get("nodes", [])
         if n["type"] == "memory_write"
     }
+    if used_tiers and not checkpoint.get("enabled"):
+        lines.append("    memory=True,  # memory_write nodes present — unified memory (crewai 1.x)")
     for tier in sorted(used_tiers):
-        cls = _TIER_CLASS.get(tier)
-        if cls:
-            lines.append(f"    {tier}_term_memory={cls}(),  # from memory_write tier='{tier}' (ADR-001)")
+        desc = _TIER_COMMENT.get(tier, tier)
+        lines.append(f"    # memory tier '{tier}': {desc} — configure storage via CREWAI_STORAGE_DIR env")
 
     if telemetry.get("enabled"):
         provider = telemetry.get("provider", "")
@@ -552,17 +591,33 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     nodes = spec.get("nodes", [])
     edges = spec.get("edges", [])
+    flow_id = spec.get("id", "unknown")
 
-    if not nodes:
-        return "# Empty spec — no nodes to compile.\n", []
+    start_ts = log_compile_start(_log, spec)
 
-    sorted_nodes = topo_sort(nodes, edges)
+    try:
+        if not nodes:
+            log_empty_spec(_log, spec)
+            return "# Empty spec — no nodes to compile.\n", []
 
-    code = "\n\n".join(filter(None, [
-        gen_header(spec),
-        gen_tools(spec),
-        gen_agents(spec),
-        gen_tasks(spec, sorted_nodes, warnings),
-        gen_crew_and_kickoff(spec, sorted_nodes),
-    ]))
-    return code, warnings
+        log_section(_log, "topo_sort", flow_id=flow_id)
+        sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
+
+        log_section(_log, "header", flow_id=flow_id)
+        _header = gen_header(spec)
+        log_section(_log, "tools", flow_id=flow_id)
+        _tools = gen_tools(spec)
+        log_section(_log, "agents", flow_id=flow_id)
+        _agents = gen_agents(spec)
+        log_section(_log, "tasks", flow_id=flow_id)
+        _tasks = gen_tasks(spec, sorted_nodes, warnings)
+        log_section(_log, "crew_and_kickoff", flow_id=flow_id)
+        _crew = gen_crew_and_kickoff(spec, sorted_nodes)
+
+        code = "\n\n".join(filter(None, [_header, _tools, _agents, _tasks, _crew]))
+        log_compile_end(_log, start_ts, code, warnings, spec)
+        return code, warnings
+
+    except Exception as exc:
+        log_compile_error(_log, start_ts, exc, spec)
+        raise

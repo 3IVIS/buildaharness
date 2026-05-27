@@ -103,7 +103,8 @@ JobStatus = Literal["queued", "running", "paused", "done", "error"]
 # ─── Pydantic models ──────────────────────────────────────────────────────────
 
 class RunRequest(BaseModel):
-    spec: dict
+    spec:   dict
+    inputs: dict = {}   # user-supplied initial state values; merged over schema defaults
 
 class ResumeRequest(BaseModel):
     payload: dict = {}
@@ -116,11 +117,12 @@ class HitlState(BaseModel):
     resume_schema_fields: list[str] = []
 
 class NodeEvent(BaseModel):
-    node_id: str
-    status:  Literal["pending", "running", "paused", "done", "error"]
-    ts:      str
-    ms:      int | None = None
-    tokens:  int | None = None
+    node_id:       str
+    status:        Literal["pending", "running", "paused", "done", "error"]
+    ts:            str
+    ms:            int | None = None
+    tokens:        int | None = None
+    error_message: str | None = None  # present only when status="error"
 
 class JobStatusResponse(BaseModel):
     job_id:      str
@@ -245,20 +247,29 @@ _lg_runtime_state: dict[str, dict[str, Any]] = {}
 # ─── Internal node-event / job-update helpers ─────────────────────────────────
 
 async def _emit(
-    job_id:  str,
-    node_id: str,
-    status:  str,
-    db:      AsyncSession,
-    ms:      int | None = None,
-    tokens:  int | None = None,
+    job_id:        str,
+    node_id:       str,
+    status:        str,
+    db:            AsyncSession,
+    ms:            int | None = None,
+    tokens:        int | None = None,
+    error_message: str | None = None,
 ) -> None:
-    """Append a node event to the job row."""
+    """Append a node event to the job row.
+
+    error_message is set when status='error' to carry the exception text so
+    the canvas can display it inline on the failing node without a separate
+    API call.
+    """
     job = await _jobs_get(job_id, db)
     if job is None:
         return
     events: list = list(job.node_events or [])
-    events.append({"node_id": node_id, "status": status,
-                   "ts": _now_iso(), "ms": ms, "tokens": tokens})
+    event: dict  = {"node_id": node_id, "status": status,
+                    "ts": _now_iso(), "ms": ms, "tokens": tokens}
+    if error_message is not None:
+        event["error_message"] = error_message[:2000]  # guard against huge tracebacks
+    events.append(event)
     job.node_events = events
     await db.commit()
 
@@ -288,7 +299,17 @@ async def _mark_stale_nodes_done(
             await _emit(job_id, nid, "done", db)
 
 
-async def _mark_error_nodes(job_id: str, db: AsyncSession) -> None:
+async def _mark_error_nodes(
+    job_id:        str,
+    db:            AsyncSession,
+    error_message: str | None = None,
+) -> None:
+    """Mark all pending/running nodes as error.
+
+    error_message is attached to the node that was 'running' at the time
+    of failure (i.e. the probable cause node).  Pending nodes that never
+    ran get no message — they failed because their predecessor failed.
+    """
     job = await _jobs_get(job_id, db)
     if not job:
         return
@@ -297,7 +318,10 @@ async def _mark_error_nodes(job_id: str, db: AsyncSession) -> None:
         latest[ev["node_id"]] = ev["status"]
     for nid, st in latest.items():
         if st in ("pending", "running"):
-            await _emit(job_id, nid, "error", db)
+            # Only attach the error message to the node that was actively
+            # running — that's the node that most likely caused the failure.
+            msg = error_message if st == "running" else None
+            await _emit(job_id, nid, "error", db, error_message=msg)
 
 
 async def _job_update(job_id: str, db: AsyncSession, **fields: Any) -> None:
@@ -332,40 +356,82 @@ def _stream_graph(
         node_start_times[trackable[0]] = datetime.now(timezone.utc)
         emit_cb(trackable[0], "running", None, None)
 
-    for chunk in compiled_graph.stream(inputs, stream_mode="updates", config=config):
-        for node_id, state_update in chunk.items():
-            if node_id.startswith("__"):
-                continue
+    # _current_node tracks which node was running when an exception escapes
+    # the stream loop, so we can emit a precise "error" event for that node
+    # rather than marking every pending node as error in _mark_error_nodes.
+    _current_node: str | None = None
 
-            t0 = node_start_times.get(node_id, datetime.now(timezone.utc))
-            ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+    # In LangGraph >=1.x, interrupt() no longer raises GraphInterrupt from
+    # inside stream(). Instead it emits an __interrupt__ chunk and the stream
+    # ends cleanly. We capture the value here and re-raise after the loop.
+    _pending_interrupt: Any = None
 
-            try:
-                with _itsharness_tracer.start_as_current_span(
-                    f"node.{node_id}",
-                    attributes={"node.id": node_id, "flow.job_id": job_id, "node.ms": ms},
-                ) as span:
-                    span.set_attribute(
-                        "node.output_keys",
-                        str(list(state_update.keys()))[:200]
-                        if isinstance(state_update, dict) else "",
-                    )
-            except Exception:
-                pass
+    try:
+        for chunk in compiled_graph.stream(inputs, stream_mode="updates", config=config):
+            for node_id, state_update in chunk.items():
+                if node_id == "__interrupt__":
+                    _pending_interrupt = state_update
+                    continue
+                if node_id.startswith("__"):
+                    continue
 
-            emit_cb(node_id, "done", ms, None)
+                _current_node = node_id
+                t0 = node_start_times.get(node_id, datetime.now(timezone.utc))
+                ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
 
-            if isinstance(state_update, dict):
-                final_state.update(state_update)
+                # Check for LangGraph node-level error payloads: when a node
+                # raises, LangGraph may surface the error as a special key in
+                # state_update rather than propagating it as a Python exception.
+                if isinstance(state_update, dict) and "__error__" in state_update:
+                    node_err = state_update["__error__"]
+                    err_msg  = str(node_err) if not isinstance(node_err, str) else node_err
+                    emit_cb(node_id, "error", ms, None, err_msg)
+                    raise RuntimeError(f"Node '{node_id}' failed: {err_msg}")
 
-            try:
-                idx = trackable.index(node_id)
-                if idx + 1 < len(trackable):
-                    nxt = trackable[idx + 1]
-                    node_start_times[nxt] = datetime.now(timezone.utc)
-                    emit_cb(nxt, "running", None, None)
-            except ValueError:
-                pass
+                try:
+                    with _itsharness_tracer.start_as_current_span(
+                        f"node.{node_id}",
+                        attributes={"node.id": node_id, "flow.job_id": job_id, "node.ms": ms},
+                    ) as span:
+                        span.set_attribute(
+                            "node.output_keys",
+                            str(list(state_update.keys()))[:200]
+                            if isinstance(state_update, dict) else "",
+                        )
+                except Exception:
+                    pass
+
+                emit_cb(node_id, "done", ms, None)
+                _current_node = None
+
+                if isinstance(state_update, dict):
+                    final_state.update(state_update)
+
+                try:
+                    idx = trackable.index(node_id)
+                    if idx + 1 < len(trackable):
+                        nxt = trackable[idx + 1]
+                        node_start_times[nxt] = datetime.now(timezone.utc)
+                        emit_cb(nxt, "running", None, None)
+                        _current_node = nxt
+                except ValueError:
+                    pass
+
+    except Exception:
+        # If we know which node was active, emit a precise error event for it
+        # so the canvas highlights exactly the failing node, not all pending nodes.
+        if _current_node is not None:
+            import sys
+            exc_info = sys.exc_info()
+            err_msg  = str(exc_info[1]) if exc_info[1] else "Unknown error"
+            emit_cb(_current_node, "error", None, None, err_msg)
+        raise
+
+    # LangGraph >=1.x: interrupt() ends the stream cleanly with an
+    # __interrupt__ chunk instead of raising GraphInterrupt. Re-raise so
+    # the caller's _is_interrupt() check can route to _handle_pause().
+    if _pending_interrupt is not None and _GraphInterrupt is not None:
+        raise _GraphInterrupt(_pending_interrupt)
 
     return final_state
 
@@ -375,11 +441,22 @@ def _make_emit_cb(
     loop:       asyncio.AbstractEventLoop,
     db_factory: Any,
 ) -> Any:
-    """Return a thread-safe synchronous emit callback for _stream_graph."""
-    def _cb(node_id: str, status: str, ms: int | None, tokens: int | None) -> None:
+    """Return a thread-safe synchronous emit callback for _stream_graph.
+
+    Signature: cb(node_id, status, ms, tokens, error_message=None)
+    error_message is forwarded to _emit so it lands in the node_events row
+    and the canvas can display it inline.
+    """
+    def _cb(
+        node_id:       str,
+        status:        str,
+        ms:            int | None,
+        tokens:        int | None,
+        error_message: str | None = None,
+    ) -> None:
         async def _do():
             async with db_factory() as db:
-                await _emit(job_id, node_id, status, db, ms, tokens)
+                await _emit(job_id, node_id, status, db, ms, tokens, error_message)
         asyncio.run_coroutine_threadsafe(_do(), loop)
     return _cb
 
@@ -387,7 +464,7 @@ def _make_emit_cb(
 # ─── CrewAI runner ────────────────────────────────────────────────────────────
 
 @_lf_observe(name="crewai-flow-run", as_type="chain")
-async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None) -> None:
+async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs: dict | None = None) -> None:
     async with _job_session() as db:
         await _job_update(job_id, db,
                           status="running",
@@ -466,7 +543,11 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None) -> Non
 
             task.callback = make_cb(nid, next_nid)
 
-        result = await loop.run_in_executor(None, crew.kickoff)
+        # Pass user inputs so CrewAI substitutes {{key}} placeholders in task descriptions.
+        _kickoff_inputs = inputs if inputs else None
+        result = await loop.run_in_executor(
+            None, lambda: crew.kickoff(inputs=_kickoff_inputs) if _kickoff_inputs else crew.kickoff()
+        )
 
         async with _job_session() as db:
             job = await _jobs_get(job_id, db)
@@ -491,7 +572,7 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None) -> Non
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -509,7 +590,7 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None) -> Non
 #       (correct for single-HITL flows; multi-HITL requires Dapr checkpointing).
 
 @_lf_observe(name="maf-flow-run", as_type="chain")
-async def _run_maf(job_id: str, spec: dict, org_id: str | None = None) -> None:
+async def _run_maf(job_id: str, spec: dict, org_id: str | None = None, inputs: dict | None = None) -> None:
     async with _job_session() as db:
         await _job_update(job_id, db,
                           status="running",
@@ -545,7 +626,7 @@ async def _run_maf(job_id: str, spec: dict, org_id: str | None = None) -> None:
             async with _job_session() as db:
                 await _emit(job_id, node_id, "done", db, elapsed_ms, tokens)
 
-        initial_state = _build_initial_state(spec)
+        initial_state = _build_initial_state(spec, inputs)
 
         try:
             final_state = await run_flow_async(
@@ -594,7 +675,7 @@ async def _run_maf(job_id: str, spec: dict, org_id: str | None = None) -> None:
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -611,10 +692,21 @@ _maf_runtime_state: dict[str, dict] = {}
 async def _resume_maf(job_id: str, resume_payload: dict, spec: dict,
                        org_id: str | None = None) -> None:
     """Resume a paused MAF job by re-running the flow with the HITL payload merged in."""
+    # Read the paused job's hitl_state to find out which node paused and its out_key.
     async with _job_session() as db:
+        paused_job = await _jobs_get(job_id, db)
+        hitl_state_snap = (paused_job.hitl_state or {}) if paused_job else {}
         await _job_update(job_id, db,
                           status="running",
                           ended_at=None)
+
+    # Wrap the resume payload under the node's output_key so the hitl_breakpoint
+    # node can find it in state and skip re-raising _HitlPause.
+    node_id_snap = hitl_state_snap.get("node_id", "")
+    spec_nodes   = {n["id"]: n for n in (spec or {}).get("nodes", [])}
+    hitl_node    = spec_nodes.get(node_id_snap, {})
+    out_key      = hitl_node.get("output_key") or (node_id_snap.replace("-", "_") + "_resume")
+    wrapped_resume = {out_key: resume_payload}
 
     try:
         # Re-compile from the original spec (or use cached namespace if available)
@@ -649,7 +741,7 @@ async def _resume_maf(job_id: str, resume_payload: dict, spec: dict,
                 initial_state,
                 on_node_start=on_node_start,
                 on_node_done=on_node_done,
-                _hitl_resume=resume_payload,
+                _hitl_resume=wrapped_resume,
             )
         except Exception as exc:
             pause_cls = namespace.get("_HitlPause")
@@ -684,7 +776,7 @@ async def _resume_maf(job_id: str, resume_payload: dict, spec: dict,
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -719,7 +811,7 @@ def _mastra_headers() -> dict[str, str]:
 
 
 @_lf_observe(name="mastra-flow-run", as_type="chain")
-async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> None:
+async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None, inputs: dict | None = None) -> None:
     """Execute a Mastra workflow via the Node.js runner sidecar.
 
     Steps:
@@ -747,7 +839,7 @@ async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> Non
         payload = {
             "job_id":       job_id,
             "code":         code,
-            "trigger_data": {},   # future: extract from spec.input_defaults
+            "trigger_data": inputs or {},   # user-supplied inputs flow to the workflow
         }
         async with _httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -828,10 +920,21 @@ async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> Non
                 _lg_runtime_state.pop(job_id, None)
                 return
 
+            if runner_status == "suspended":
+                hitl = data.get("hitl_state", {}) or {}
+                node_id = hitl.get("node_id", "unknown")
+                async with _job_session() as db:
+                    await _emit(job_id, node_id, "paused", db)
+                    await _job_update(job_id, db,
+                                      status="paused",
+                                      hitl_state=hitl,
+                                      ended_at=datetime.now(timezone.utc))
+                return
+
             if runner_status == "error":
                 error = data.get("error", "Unknown Mastra runner error")
                 async with _job_session() as db:
-                    await _mark_error_nodes(job_id, db)
+                    await _mark_error_nodes(job_id, db, error_message=error)
                     await _job_update(job_id, db,
                                       status="error",
                                       error=error,
@@ -840,7 +943,7 @@ async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> Non
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -849,7 +952,13 @@ async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> Non
 
 # ─── LangGraph helpers ────────────────────────────────────────────────────────
 
-def _build_initial_state(spec: dict) -> dict:
+def _build_initial_state(spec: dict, inputs: dict | None = None) -> dict:
+    """Build the initial state dict for a flow run.
+
+    Seeds every field listed in ``state_schema.required`` with its schema
+    default (or a sensible type-zero), then overlays the caller-supplied
+    *inputs* so that any value the user actually provided wins.
+    """
     schema   = spec.get("state_schema") or {}
     props    = schema.get("properties") or {}
     required = schema.get("required") or []
@@ -872,6 +981,10 @@ def _build_initial_state(spec: dict) -> dict:
             result[field] = field_schema["default"]
         else:
             result[field] = _type_defaults.get(field_type, None)
+
+    # User-supplied inputs take priority over schema defaults.
+    if inputs:
+        result.update(inputs)
 
     return result
 
@@ -897,7 +1010,7 @@ def _is_interrupt(exc: Exception) -> bool:
 # ─── LangGraph runner ─────────────────────────────────────────────────────────
 
 @_lf_observe(name="langgraph-flow-run", as_type="chain")
-async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None) -> None:
+async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inputs: dict | None = None) -> None:
     async with _job_session() as db:
         await _job_update(job_id, db,
                           status="running",
@@ -932,7 +1045,7 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None) -> 
             for nid in trackable:
                 await _emit(job_id, nid, "pending", db)
 
-        initial_state = _build_initial_state(spec)
+        initial_state = _build_initial_state(spec, inputs)
         loop          = asyncio.get_running_loop()
         emit_cb       = _make_emit_cb(job_id, loop, _job_session)
         ctx           = contextvars.copy_context()
@@ -965,7 +1078,7 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None) -> 
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -1067,7 +1180,7 @@ async def _resume_langgraph(job_id: str, resume_payload: dict, spec: dict,
 
     except Exception as exc:
         async with _job_session() as db:
-            await _mark_error_nodes(job_id, db)
+            await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db,
                               status="error",
                               error=str(exc),
@@ -1087,7 +1200,8 @@ async def run_flow(
     user:       User         = Depends(current_user),
     db:         AsyncSession = Depends(get_session),
     org:        Org          = Depends(_current_org),):
-    spec = req.spec
+    spec   = req.spec
+    inputs = req.inputs   # user-supplied initial state values (e.g. {"topic": "photosynthesis"})
     _validate_spec(spec)
     spec = await resolve_prompts(spec, org)
 
@@ -1108,16 +1222,90 @@ async def run_flow(
     await _jobs_create(job_id, str(user.id), runtime, db, org_id=org_id)
 
     if runtime == "langgraph":
-        background.add_task(_run_langgraph, job_id, spec, org_id)
+        background.add_task(_run_langgraph, job_id, spec, org_id, inputs)
     elif runtime == "mastra":
-        background.add_task(_run_mastra, job_id, spec, org_id)
+        background.add_task(_run_mastra, job_id, spec, org_id, inputs)
     elif runtime == "microsoft_agent_framework":
-        background.add_task(_run_maf, job_id, spec, org_id)
+        background.add_task(_run_maf, job_id, spec, org_id, inputs)
     else:
-        background.add_task(_run_crewai, job_id, spec, org_id)
+        background.add_task(_run_crewai, job_id, spec, org_id, inputs)
 
     return {"job_id": job_id, "status": "queued", "runtime": runtime}
 
+
+
+@_lf_observe(name="mastra-flow-resume", as_type="chain")
+async def _resume_mastra(job_id: str, resume_payload: dict,
+                         org_id: str | None = None) -> None:
+    """Resume a suspended Mastra HITL job by forwarding the payload to the runner."""
+    async with _job_session() as db:
+        job = await _jobs_get(job_id, db)
+        hitl_state = job.hitl_state or {}
+        step_id = hitl_state.get("node_id", "")
+        await _job_update(job_id, db, status="running", ended_at=None)
+
+    payload = {
+        "step_id":     step_id,
+        "resume_data": resume_payload,
+    }
+    async with _httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{MASTRA_RUNNER_URL}/jobs/{job_id}/resume",
+            json=payload,
+            headers=_mastra_headers(),
+        )
+    if resp.status_code not in (200, 202):
+        async with _job_session() as db:
+            await _job_update(job_id, db,
+                              status="error",
+                              error=f"Mastra runner resume failed: HTTP {resp.status_code} — {resp.text[:200]}",
+                              ended_at=datetime.now(timezone.utc))
+        return
+
+    # Re-enter the poll loop to track the resumed run
+    from asyncio import sleep as _sleep
+    sent_events = 0  # events already stored; runner resets its own counter
+    for _ in range(int(MASTRA_RUNNER_TIMEOUT / MASTRA_POLL_INTERVAL)):
+        await _sleep(MASTRA_POLL_INTERVAL)
+        async with _httpx.AsyncClient(timeout=10) as client:
+            poll = await client.get(
+                f"{MASTRA_RUNNER_URL}/jobs/{job_id}",
+                headers=_mastra_headers(),
+            )
+        if poll.status_code != 200:
+            break
+        data = poll.json()
+        runner_events = data.get("node_events", [])
+        new_events = runner_events[sent_events:]
+        if new_events:
+            async with _job_session() as db:
+                for ev in new_events:
+                    await _emit(job_id, ev["node_id"], ev["status"], db,
+                                ev.get("ms"), ev.get("tokens"))
+            sent_events += len(new_events)
+
+        runner_status = data.get("status", "running")
+        if runner_status == "done":
+            result = data.get("result", "")
+            async with _job_session() as db:
+                await _job_update(job_id, db, status="done", result=result,
+                                  ended_at=datetime.now(timezone.utc))
+            return
+        if runner_status == "suspended":
+            hitl = data.get("hitl_state", {}) or {}
+            node_id = hitl.get("node_id", "unknown")
+            async with _job_session() as db:
+                await _emit(job_id, node_id, "paused", db)
+                await _job_update(job_id, db, status="paused", hitl_state=hitl,
+                                  ended_at=datetime.now(timezone.utc))
+            return
+        if runner_status == "error":
+            error = data.get("error", "Unknown error after resume")
+            async with _job_session() as db:
+                await _mark_error_nodes(job_id, db, error_message=error)
+                await _job_update(job_id, db, status="error", error=error,
+                                  ended_at=datetime.now(timezone.utc))
+            return
 
 @router.post("/{job_id}/resume", status_code=202)
 @limiter.limit("10/minute")
@@ -1132,10 +1320,13 @@ async def resume_flow(
     job = await _jobs_get_owned(job_id, str(user.id), db)
     if job.status != "paused":
         raise HTTPException(status_code=409, detail=f"Job is '{job.status}', not paused")
-    if job.runtime not in ("langgraph", "microsoft_agent_framework"):
+    if job.runtime not in ("langgraph", "microsoft_agent_framework", "mastra"):
         raise HTTPException(status_code=400, detail=f"Runtime '{job.runtime}' does not support HITL resume")
 
-    if job.runtime == "microsoft_agent_framework":
+    if job.runtime == "mastra":
+        background.add_task(_resume_mastra, job_id, req.payload,
+                            str(job.org_id) if job.org_id else None)
+    elif job.runtime == "microsoft_agent_framework":
         background.add_task(_resume_maf, job_id, req.payload, req.spec,
                             str(job.org_id) if job.org_id else None)
     else:

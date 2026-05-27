@@ -42,6 +42,7 @@ except ImportError:
 # Import the in-memory job store to resolve trace_id from job_id for feedback.
 # No circular dependency: run_api never imports eval_api.
 from run_api import _jobs_get  # noqa: E402 (after stdlib/third-party)
+from rate_limit import limiter  # noqa: E402
 
 _LANGFUSE_BASE_URL   = os.getenv("LANGFUSE_BASE_URL",   "http://langfuse:3000")
 # Global fallback keys — used when no per-org keys are configured on the Org row.

@@ -42,6 +42,7 @@ export function useRunPoller() {
   const setActiveJob         = useCanvasStore((s) => s.setActiveJob)
   const setHitlState         = useCanvasStore((s) => s.setHitlState)
   const setTraceUrl          = useCanvasStore((s) => s.setTraceUrl)
+  const setJobError          = useCanvasStore((s) => s.setJobError)
   const setLastCompleted     = useCanvasStore((s) => s.setLastCompleted)
   const setEvalScores        = useCanvasStore((s) => s.setEvalScores)
 
@@ -55,6 +56,7 @@ export function useRunPoller() {
     if (!activeJobId || hitlState) return
 
     clearExecStats()
+    setJobError(null)   // clear any error from a previous run
     processedIdx.current = 0
     wiredTraceId.current = null
 
@@ -78,9 +80,10 @@ export function useRunPoller() {
 
         for (const ev of newEvents) {
           setNodeExecStat(ev.node_id, {
-            status: ev.status as 'pending' | 'running' | 'paused' | 'done' | 'error',
-            ms:     ev.ms     ?? undefined,
-            tokens: ev.tokens ?? undefined,
+            status:       ev.status as 'pending' | 'running' | 'paused' | 'done' | 'error',
+            ms:           ev.ms            ?? undefined,
+            tokens:       ev.tokens        ?? undefined,
+            errorMessage: ev.error_message ?? undefined,   // from adapter node error
           })
         }
 
@@ -90,6 +93,13 @@ export function useRunPoller() {
           setActiveJob(null)
           setHitlState(null)
           setActiveExecutionTrace(null)
+
+          // Surface the job-level error string (compile error, network failure,
+          // adapter crash) so the RunDrawer can display it even when no specific
+          // node error_message is available.
+          if (job.status === 'error' && job.error) {
+            setJobError(job.error)
+          }
 
           // Record which job just finished so FeedbackBar can reference it.
           setLastCompleted(activeJobId)
@@ -128,5 +138,5 @@ export function useRunPoller() {
     return () => clearInterval(interval)
   // Fix: hitlState added so clearing it (after resume) re-triggers the effect
   // and restarts polling. Without this the interval stays dead after HITL resume.
-  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl, setLastCompleted, setEvalScores])
+  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl, setJobError, setLastCompleted, setEvalScores])
 }

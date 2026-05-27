@@ -59,8 +59,17 @@ services:
       - "8001:8001"
     environment:
       - MASTRA_RUNNER_PORT=8001
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # ── LLM routing ───────────────────────────────────────────────────────────
+      # In Docker, all LLM calls route through LiteLLM (the unified gateway).
+      # LiteLLM picks the right provider (OpenAI, Anthropic, Ollama) from the
+      # model name in the flow spec.  OPENAI_API_KEY here is the LiteLLM master
+      # key — the actual provider keys (OPENAI_API_KEY, ANTHROPIC_API_KEY) are
+      # read by the LiteLLM container from the host .env file.
+      #
+      # To bypass LiteLLM and call Ollama directly (e.g. for offline dev) set
+      # OPENAI_BASE_URL=http://host.docker.internal:11434/v1 in your .env.
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://litellm:4000}
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
       # Set a shared secret so only the adapter can call the runner.
       - RUNNER_API_KEY=${MASTRA_RUNNER_API_KEY:-}
       - JOB_TTL_HOURS=${JOB_TTL_HOURS:-4}
@@ -88,8 +97,17 @@ services:
       # Fix #3: JWT_SECRET must be set in .env — no fallback; adapter exits if unset.
       - JWT_SECRET=${JWT_SECRET}
       - LITELLM_URL=http://litellm:4000
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # ── LLM routing ───────────────────────────────────────────────────────────
+      # In Docker, all LLM calls route through LiteLLM (the unified gateway).
+      # LiteLLM picks the right provider (OpenAI, Anthropic, Ollama) from the
+      # model name in the flow spec.  OPENAI_API_KEY here is the LiteLLM master
+      # key — the actual provider keys (OPENAI_API_KEY, ANTHROPIC_API_KEY) are
+      # read by the LiteLLM container from the host .env file.
+      #
+      # To bypass LiteLLM and call Ollama directly (e.g. for offline dev) set
+      # OPENAI_BASE_URL=http://host.docker.internal:11434/v1 in your .env.
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://litellm:4000}
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
       # Fix #9: CORS_ORIGINS controls which origins the adapter allows.
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://canvas:3000}
       # Job TTL — completed jobs are evicted after this many hours (Fix #15)
@@ -127,6 +145,8 @@ services:
       langfuse:
         condition: service_healthy
       mastra-runner:
+        condition: service_healthy
+      litellm:
         condition: service_healthy
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
@@ -168,6 +188,12 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=http://langfuse:3000
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy

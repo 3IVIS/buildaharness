@@ -32,6 +32,20 @@ import textwrap
 from collections import defaultdict, deque
 from typing import Any
 
+from adapter_logger import (
+    get_adapter_logger,
+    log_compile_start,
+    log_compile_end,
+    log_compile_error,
+    log_empty_spec,
+    log_node_processing,
+    log_node_warning,
+    log_topo_sort,
+    log_section,
+)
+
+_log = get_adapter_logger("langgraph")
+
 ADAPTER_VERSION = "0.1.0"
 LG_MIN          = ">=0.2.0"
 LCX_OPENAI_MIN  = ">=0.2.0"
@@ -55,7 +69,7 @@ def py_str(s: str) -> str:
 
 # ─── Graph analysis ───────────────────────────────────────────────────────────
 
-def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
+def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     """Kahn's topological sort; returns nodes in execution order."""
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
     in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
@@ -83,7 +97,9 @@ def topo_sort(nodes: list[dict], edges: list[dict]) -> list[dict]:
         if n["id"] not in seen:
             order.append(n["id"])
 
-    return [id_to_node[nid] for nid in order if nid in id_to_node]
+    result = [id_to_node[nid] for nid in order if nid in id_to_node]
+    log_topo_sort(_log, nodes, result, flow_id=flow_id)
+    return result
 
 
 def build_adjacency(nodes: list[dict], edges: list[dict]) -> tuple[dict, dict]:
@@ -158,8 +174,16 @@ def gen_imports(spec: dict) -> str:
     nodes = spec.get("nodes", [])
     types = {n["type"] for n in nodes}
 
+    # NOTE: do NOT add `from __future__ import annotations` here.
+    # The generated code is exec()'d with a bare namespace dict; that dict
+    # is never registered as a real module in sys.modules.  When LangGraph
+    # later calls typing.get_type_hints(FlowState), Python tries to resolve
+    # the PEP-563 stringified annotations in the module's global scope — but
+    # <langgraph_generated> is not in sys.modules, so it falls back to an
+    # empty dict and `Annotated` is not found.  Without the future import,
+    # annotations are evaluated eagerly at class-definition time, when all
+    # imports are already present in the exec namespace.
     lines = [
-        "from __future__ import annotations",
         "import operator, os, re",
         "from typing import Any, TypedDict, Annotated",
         "from langchain_openai import ChatOpenAI",
@@ -219,6 +243,17 @@ def gen_helpers() -> str:
                 _STORES[store_id] = {}
             if overwrite or str(key) not in _STORES[store_id]:
                 _STORES[store_id][str(key)] = value
+
+
+        def _make_llm(model: str, temperature: float = 0.7, max_tokens: int = 1024) -> "ChatOpenAI":
+            \"\"\"Build a ChatOpenAI instance; routes to Ollama when OPENAI_BASE_URL is set.\"\"\"
+            _base_url = os.environ.get("OPENAI_BASE_URL", "")
+            _api_key  = os.environ.get("OPENAI_API_KEY", "")
+            kw: dict = {"model": model, "temperature": temperature, "max_tokens": max_tokens}
+            if _base_url:
+                kw["base_url"] = _base_url
+                kw["api_key"]  = _api_key or "ollama"
+            return ChatOpenAI(**kw)
 
     """)
 
@@ -350,6 +385,7 @@ def gen_node_function(
     vid   = safe_id(nid)
     label = node.get("label", nid)
 
+    log_node_processing(_log, node, flow_id=spec.get("id", "unknown"))
     model_default  = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
     agents_by_id   = {a["id"]: a for a in (spec.get("agents") or [])}
     tools_registry = spec.get("tools") or {}
@@ -407,7 +443,7 @@ def gen_node_function(
         ret = f"return {{{repr(out_key)}: response.content}}" if out_key else "return {}"
 
         core_lines = [
-            f"llm = ChatOpenAI(model={repr(model)}, temperature={temp}, max_tokens={max_tok})",
+            f"llm = _make_llm({repr(model)}, temperature={temp}, max_tokens={max_tok})",
             f"messages = [",
             f"    SystemMessage(content={py_str(sys_p)}),",
             f"    HumanMessage(content=_render({py_str(prompt_tmpl)}, state)),",
@@ -643,7 +679,7 @@ def gen_node_function(
             f"{hitl_lines}"
             f"# agent_role → agent_ref={repr(agent_ref)}, memory_access={repr(mem_acc)}\n"
             f"# Expands to ReAct sub-graph in LangGraph (ADR-001 Q10)\n"
-            f"_llm   = ChatOpenAI(model={repr(model)})\n"
+            f"_llm   = _make_llm({repr(model)})\n"
             f"_agent = create_react_agent(_llm, {tools_arg})\n"
             f"_task  = _render({py_str(task_desc)}, state)\n"
             f"_out   = _agent.invoke({{\n"
@@ -665,7 +701,7 @@ def gen_node_function(
         init_msg   = cfg.get("initial_message", "{{$.state.input}}")
 
         init_lines = "\n".join(
-            f"_models[{repr(ref)}] = ChatOpenAI(model={repr((agents_by_id.get(ref) or {}).get('model', model_default))})"
+            f"_models[{repr(ref)}] = _make_llm({repr((agents_by_id.get(ref) or {}).get('model', model_default))})"
             for ref in a_refs
         )
         roles_map = {ref: (agents_by_id.get(ref) or {}).get("role", ref) for ref in a_refs}
@@ -965,40 +1001,56 @@ def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     nodes = spec.get("nodes") or []
     edges = spec.get("edges") or []
+    flow_id = spec.get("id", "unknown")
 
-    if not nodes:
-        return "# Empty spec — no nodes to compile.\n", []
+    start_ts = log_compile_start(_log, spec)
 
-    sorted_nodes  = topo_sort(nodes, edges)
-    ctx_map       = build_context_map(edges)
-    output_key_map = build_output_key_map(nodes)
+    try:
+        if not nodes:
+            log_empty_spec(_log, spec)
+            return "# Empty spec — no nodes to compile.\n", []
 
-    # ── Section: header + imports + helpers
-    parts: list[str] = [
-        gen_header(spec),
-        gen_imports(spec),
-        gen_helpers(),
-        gen_state_typeddict(spec),
-        gen_memory_stores(spec),
-        gen_tools(spec),
-    ]
+        log_section(_log, "topo_sort", flow_id=flow_id)
+        sorted_nodes   = topo_sort(nodes, edges, flow_id=flow_id)
+        ctx_map        = build_context_map(edges)
+        output_key_map = build_output_key_map(nodes)
 
-    # ── Section: node functions + condition routers
-    node_fns: list[str] = [
-        "# ─── Node functions ──────────────────────────────────────────────────────────",
-        "",
-    ]
-    for node in sorted_nodes:
-        if node["type"] == "condition":
-            node_fns.append(gen_condition_router(node, spec))
-        fn = gen_node_function(node, spec, ctx_map, output_key_map, warnings)
-        if fn:
-            node_fns.append(fn)
+        # ── Section: header + imports + helpers
+        log_section(_log, "header+imports+helpers", flow_id=flow_id)
+        parts: list[str] = [
+            gen_header(spec),
+            gen_imports(spec),
+            gen_helpers(),
+            gen_state_typeddict(spec),
+            gen_memory_stores(spec),
+            gen_tools(spec),
+        ]
 
-    parts.append("\n".join(node_fns))
+        # ── Section: node functions + condition routers
+        log_section(_log, "node_functions", flow_id=flow_id)
+        node_fns: list[str] = [
+            "# ─── Node functions ──────────────────────────────────────────────────────────",
+            "",
+        ]
+        for node in sorted_nodes:
+            if node["type"] == "condition":
+                node_fns.append(gen_condition_router(node, spec))
+            fn = gen_node_function(node, spec, ctx_map, output_key_map, warnings)
+            if fn:
+                node_fns.append(fn)
 
-    # ── Section: graph assembly + entrypoint
-    parts.append(gen_graph_assembly(spec, sorted_nodes, warnings))
-    parts.append(gen_entrypoint(spec))
+        parts.append("\n".join(node_fns))
 
-    return "\n".join(filter(None, parts)), warnings
+        # ── Section: graph assembly + entrypoint
+        log_section(_log, "graph_assembly", flow_id=flow_id)
+        parts.append(gen_graph_assembly(spec, sorted_nodes, warnings))
+        log_section(_log, "entrypoint", flow_id=flow_id)
+        parts.append(gen_entrypoint(spec))
+
+        code = "\n".join(filter(None, parts))
+        log_compile_end(_log, start_ts, code, warnings, spec)
+        return code, warnings
+
+    except Exception as exc:
+        log_compile_error(_log, start_ts, exc, spec)
+        raise

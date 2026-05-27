@@ -266,7 +266,7 @@ export function RunDrawer() {
   const {
     isRunDrawerOpen, closeRunDrawer,
     nodes, stateSchema, flowMeta,
-    execStats, activeJobId, hitlState, traceUrl,
+    execStats, activeJobId, hitlState, traceUrl, jobError,
     exportSpec, validate,
     setActiveJob, clearExecStats, isProblemsOpen, toggleProblems,
   } = useCanvasStore()
@@ -432,11 +432,29 @@ export function RunDrawer() {
                     </div>
                     {/* HITL inline form (§14) */}
                     {isOpen && isPaused && hitlState && <HitlInline hitl={hitlState} />}
-                    {/* Generic expand — input/output JSON (placeholder until runPoller surfaces it) */}
+                    {/* Generic expand — status, error detail, trace link */}
                     {isOpen && !isPaused && (
                       <div className="run-step__expand">
                         <div className="run-step__expand-label">status</div>
                         <pre>{status}{row.stat?.score != null ? ` · score ${row.stat.score.toFixed(2)}` : ''}</pre>
+                        {/* Per-node error message from adapter (e.g. LangGraph node throw) */}
+                        {status === 'error' && row.stat?.errorMessage && (
+                          <>
+                            <div className="run-step__expand-label" style={{ color: '#ef4444' }}>error</div>
+                            <pre style={{
+                              color: '#fca5a5',
+                              background: 'rgba(239,68,68,0.08)',
+                              border: '1px solid rgba(239,68,68,0.2)',
+                              borderRadius: 4,
+                              padding: '6px 8px',
+                              fontSize: 10.5,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                              maxHeight: 160,
+                              overflowY: 'auto',
+                            }}>{row.stat.errorMessage}</pre>
+                          </>
+                        )}
                         {traceUrl && (
                           <>
                             <div className="run-step__expand-label">trace</div>
@@ -451,6 +469,31 @@ export function RunDrawer() {
                   </div>
                 )
               })}
+            </section>
+          )}
+
+          {/* Job-level error banner — shown when the run ended in error but no
+               individual node carried an error_message (e.g. compile failure,
+               network error, adapter crash before any node ran). */}
+          {!activeJobId && jobError && (
+            <section className="run-section">
+              <div className="run-section__label">
+                <AlertCircle size={12} style={{ color: '#ef4444' }} />
+                <span style={{ color: '#ef4444' }}>Run failed</span>
+              </div>
+              <pre style={{
+                color: '#fca5a5',
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: 4,
+                padding: '8px 10px',
+                fontSize: 10.5,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                maxHeight: 200,
+                overflowY: 'auto',
+                margin: 0,
+              }}>{jobError}</pre>
             </section>
           )}
 

@@ -21,6 +21,7 @@ from db import Flow, FlowVersion, User, get_session, next_version_num
 from auth import current_user
 from validate import validate_spec as _validate_spec
 from org_context import OrgDep, Org
+from rate_limit import limiter
 
 router  = APIRouter(prefix="/flows", tags=["flows"])
 AuthDep = Annotated[User,         Depends(current_user)]
@@ -96,7 +97,7 @@ async def list_flows(
 
 @router.post("", response_model=SaveFlowResponse, status_code=200)
 @limiter.limit("30/minute")
-async def save_flow(req: SaveFlowRequest, user: AuthDep, db: DbDep, org: OrgDep):
+async def save_flow(request: Request, req: SaveFlowRequest, user: AuthDep, db: DbDep, org: OrgDep):
     spec    = req.spec
     flow_id = spec.get("id")
     name    = spec.get("name") or flow_id or "Untitled"
@@ -136,7 +137,7 @@ async def save_flow(req: SaveFlowRequest, user: AuthDep, db: DbDep, org: OrgDep)
 
 @router.get("/{flow_id}", response_model=dict)
 @limiter.limit("20/minute")
-async def get_flow(flow_id: str, user: AuthDep, db: DbDep, org: OrgDep):
+async def get_flow(request: Request, flow_id: str, user: AuthDep, db: DbDep, org: OrgDep):
     flow = await _get_flow(flow_id, user, db, org)
     return flow.current_spec
 

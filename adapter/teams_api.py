@@ -210,7 +210,7 @@ def _team_out(team: Team) -> TeamOut:
 
 @router.post("", response_model=TeamOut, status_code=201)
 @limiter.limit("20/minute")
-async def create_team(req: TeamCreate, user: AuthDep, db: DbDep):
+async def create_team(request: Request, req: TeamCreate, user: AuthDep, db: DbDep):
     """Create a new team. The caller is automatically added as admin."""
     team = Team(name=req.name, created_by=user.id)
     db.add(team)
@@ -239,7 +239,7 @@ async def list_teams(user: AuthDep, db: DbDep):
 
 @router.get("/{team_id}", response_model=TeamOut)
 @limiter.limit("20/minute")
-async def get_team(team_id: str, user: AuthDep, db: DbDep):
+async def get_team(request: Request, team_id: str, user: AuthDep, db: DbDep):
     """Return team detail. Caller must be a member."""
     tid = _parse_team_uuid(team_id)
     await _get_membership(tid, user.id, db)

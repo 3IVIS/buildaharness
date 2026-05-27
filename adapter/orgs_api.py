@@ -183,7 +183,7 @@ async def list_orgs(user: AuthDep, db: DbDep):
 
 @router.post("", response_model=OrgOut, status_code=201)
 @limiter.limit("20/minute")
-async def create_org(req: OrgCreate, user: AuthDep, db: DbDep):
+async def create_org(request: Request, req: OrgCreate, user: AuthDep, db: DbDep):
     """Create a new org. The caller becomes the admin and owner."""
     org = Org(name=req.name, owner_id=user.id)
     db.add(org)
@@ -196,7 +196,7 @@ async def create_org(req: OrgCreate, user: AuthDep, db: DbDep):
 
 @router.get("/{org_id}", response_model=OrgOut)
 @limiter.limit("20/minute")
-async def get_org(org_id: str, user: AuthDep, db: DbDep):
+async def get_org(request: Request, org_id: str, user: AuthDep, db: DbDep):
     oid = _parse_uuid(org_id, "org_id")
     # Verify membership.
     m = (await db.execute(
@@ -268,7 +268,7 @@ async def delete_org(
 
 @router.get("/{org_id}/members", response_model=list[MemberOut])
 @limiter.limit("20/minute")
-async def list_members(org_id: str, user: AuthDep, db: DbDep):
+async def list_members(request: Request, org_id: str, user: AuthDep, db: DbDep):
     oid = _parse_uuid(org_id, "org_id")
     # Any member can list members.
     m = (await db.execute(

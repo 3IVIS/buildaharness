@@ -32,7 +32,11 @@ limits>=3.13.0
 # ── Agent runtimes ────────────────────────────────────────────────────────────
 crewai>=1.0.0                   # 1.x dropped many 0.x breaking changes
 langgraph>=0.2.0
+langchain-openai>=0.1.0         # LangGraph generated code: ChatOpenAI
+langchain-core>=0.2.0           # LangGraph generated code: messages, tools
+langchain-community>=0.2.0      # LangGraph generated code: community integrations
 semantic-kernel>=1.0.0          # MAF v1.0 GA (Apr 2026) — merger of SK + AutoGen
+opentelemetry-exporter-otlp>=1.24.0  # MAF generated code: OTLPSpanExporter (telemetry.enabled)
 
 # ── Observability ─────────────────────────────────────────────────────────────
 langfuse>=4.0.0

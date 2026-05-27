@@ -7,6 +7,7 @@
  *   - node_events accumulated during execution
  *   - final result / error text
  *   - status tracking
+ *   - suspended HITL state (suspend payload + run snapshot for resume)
  *
  * The adapter polls GET /jobs/:id to sync this state back to Postgres.
  *
@@ -16,14 +17,21 @@
 
 const JOB_TTL_MS = parseInt(process.env.JOB_TTL_HOURS ?? "4", 10) * 60 * 60 * 1000;
 
-export type JobStatus = "running" | "done" | "error";
+export type JobStatus = "running" | "suspended" | "done" | "error";
 
 export interface NodeEvent {
   node_id: string;
-  status:  "pending" | "running" | "done" | "error";
+  status:  "pending" | "running" | "paused" | "done" | "error";
   ts:      string;
   ms?:     number;
   tokens?: number;
+}
+
+export interface HitlState {
+  node_id:             string;
+  prompt:              string;
+  suspend_payload:     Record<string, unknown>;
+  resume_schema_fields?: string[];
 }
 
 export interface Job {
@@ -32,8 +40,11 @@ export interface Job {
   node_events: NodeEvent[];
   result?:     string;
   error?:      string;
+  hitl_state?: HitlState;
   started_at:  string;
   ended_at?:   string;
+  // Internal: the Run object kept alive for resume (not serialised to API)
+  _run?:       unknown;
 }
 
 class JobStore {
@@ -73,7 +84,18 @@ class JobStore {
       job.status   = "done";
       job.result   = result;
       job.ended_at = new Date().toISOString();
+      job._run     = undefined;
       this._scheduleEviction(job_id);
+    }
+  }
+
+  suspend(job_id: string, hitl_state: HitlState, run: unknown): void {
+    const job = this._jobs.get(job_id);
+    if (job) {
+      job.status     = "suspended";
+      job.hitl_state = hitl_state;
+      job._run       = run;
+      job.ended_at   = new Date().toISOString();
     }
   }
 
@@ -83,6 +105,7 @@ class JobStore {
       job.status   = "error";
       job.error    = error;
       job.ended_at = new Date().toISOString();
+      job._run     = undefined;
       this._scheduleEviction(job_id);
     } else {
       // Job never made it into the map (creation error) — no-op.
