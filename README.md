@@ -1,4 +1,4 @@
-# itsharness
+# Its Harness
 
 **Build, run, and observe AI agent workflows.**
 
@@ -91,7 +91,7 @@ pytest adapter/tests/test_maf_adapter.py -v   # MAF adapter suite (742 tests)
 
 ## LLM provider setup
 
-itsharness routes all LLM calls through **LiteLLM** — a unified proxy that sits between the adapters and the actual model providers. You pick a model name in your flow spec; LiteLLM sends it to the right provider.
+Its Harness routes all LLM calls through **LiteLLM** — a unified proxy that sits between the adapters and the actual model providers. You pick a model name in your flow spec; LiteLLM sends it to the right provider.
 
 ```
 flow spec  →  adapter  →  LiteLLM proxy  →  OpenAI   (gpt-4o, gpt-4o-mini)
