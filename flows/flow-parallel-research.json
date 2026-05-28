@@ -1,0 +1,259 @@
+{
+  "spec_version": "0.2.0",
+  "id": "toddly-parallel-research",
+  "name": "Parallel Research",
+  "description": "Mirrors toddly parallel_group metadata: multiple independent research topics execute concurrently, findings are joined and cross-analysed, then a final comparative report is written. Maps parallel_group to ParallelFork/Join. Three simultaneous researcher agents with isolated memory, merged via append join reducer.",
+  "runtime_hints": {
+    "preferred_adapter": "crewai",
+    "compatible": ["crewai", "langgraph", "mastra", "microsoft_agent_framework"]
+  },
+  "model_defaults": {
+    "model": "gpt-4o",
+    "model_params": { "temperature": 0.2 }
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "topics":           { "type": "array",  "description": "List of research topics to investigate in parallel (2–5 items)" },
+      "context":          { "type": "string", "description": "Background context and framing for all topics" },
+      "output_format":    { "type": "string", "description": "Desired output format (comparative report, individual summaries, etc.)" },
+      "findings_a":       { "type": "object", "description": "Findings for topic A" },
+      "findings_b":       { "type": "object", "description": "Findings for topic B" },
+      "findings_c":       { "type": "object", "description": "Findings for topic C" },
+      "cross_analysis":   { "type": "string", "description": "Cross-topic analysis — patterns, contrasts, connections" },
+      "final_report":     { "type": "string", "description": "Final comparative report" }
+    },
+    "required": ["topics"]
+  },
+  "tools": {
+    "web_search": {
+      "tool_ref": "@langchain/community/tools/TavilySearchResults",
+      "source": "npm",
+      "description": "search_web — maps to toddly web_research skill execution step"
+    },
+    "fetch_url": {
+      "tool_ref": "@langchain/community/tools/CheerioWebBaseLoader",
+      "source": "npm",
+      "description": "fetch_url — maps to toddly fetch_url execution step"
+    }
+  },
+  "agents": [
+    {
+      "id": "researcher_a",
+      "role": "Research Specialist — Topic A",
+      "backstory": "Focused researcher. Investigates a single topic exhaustively using web search and URL fetching. Produces structured findings with source attribution.",
+      "goal": "Gather at least 5 key findings on the assigned topic, with source URLs for each.",
+      "tools": ["web_search", "fetch_url"],
+      "max_iter": 10,
+      "memory_config": { "short_term": true, "long_term": false, "entity": false, "user": false }
+    },
+    {
+      "id": "researcher_b",
+      "role": "Research Specialist — Topic B",
+      "backstory": "Focused researcher. Investigates a single topic exhaustively using web search and URL fetching. Produces structured findings with source attribution.",
+      "goal": "Gather at least 5 key findings on the assigned topic, with source URLs for each.",
+      "tools": ["web_search", "fetch_url"],
+      "max_iter": 10,
+      "memory_config": { "short_term": true, "long_term": false, "entity": false, "user": false }
+    },
+    {
+      "id": "researcher_c",
+      "role": "Research Specialist — Topic C",
+      "backstory": "Focused researcher. Investigates a single topic exhaustively using web search and URL fetching. Produces structured findings with source attribution.",
+      "goal": "Gather at least 5 key findings on the assigned topic, with source URLs for each.",
+      "tools": ["web_search", "fetch_url"],
+      "max_iter": 10,
+      "memory_config": { "short_term": true, "long_term": false, "entity": false, "user": false }
+    },
+    {
+      "id": "analyst",
+      "role": "Cross-Topic Analyst",
+      "backstory": "Compares and contrasts findings across multiple research tracks. Identifies patterns, tensions, and connections that individual researchers would miss.",
+      "goal": "Produce a structured cross-analysis: shared themes, key contrasts, and synthesis insights.",
+      "max_iter": 4
+    },
+    {
+      "id": "report_writer",
+      "role": "Comparative Report Writer",
+      "backstory": "Transforms cross-topic analysis into polished comparative reports. Expert at structuring complex multi-source material.",
+      "goal": "Write a final comparative report that directly addresses the research context and uses the requested output format.",
+      "allow_delegation": false,
+      "max_iter": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "input",
+      "label": "Research topics",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "topics":        { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 5 },
+          "context":       { "type": "string" },
+          "output_format": { "type": "string" }
+        }
+      },
+      "position": { "x": 60, "y": 340 }
+    },
+    {
+      "id": "fork",
+      "type": "parallel_fork",
+      "label": "Dispatch to parallel researchers",
+      "targets": ["research_a", "research_b", "research_c"],
+      "input_map": {
+        "research_a": { "topic": "$.state.topics[0]", "context": "$.state.context" },
+        "research_b": { "topic": "$.state.topics[1]", "context": "$.state.context" },
+        "research_c": { "topic": "$.state.topics[2]", "context": "$.state.context" }
+      },
+      "position": { "x": 340, "y": 340 }
+    },
+    {
+      "id": "research_a",
+      "type": "agent_role",
+      "label": "Research topic A",
+      "config": {
+        "agent_ref": "researcher_a",
+        "task_description": "Research this topic thoroughly. Use web_search to find relevant sources, then fetch_url to read them in detail.\n\nTopic: {{$.state.topics[0]}}\nContext: {{$.state.context}}\n\nFor each finding, include:\n- The key insight (1–2 sentences)\n- The source URL\n- Relevance to the context",
+        "expected_output": "5+ structured findings, each with insight, source URL, and relevance note. JSON: { \"topic\": \"...\", \"findings\": [ { \"insight\": \"...\", \"source\": \"...\", \"relevance\": \"...\" } ] }",
+        "output_field": "findings_a",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 620, "y": 100 }
+    },
+    {
+      "id": "research_b",
+      "type": "agent_role",
+      "label": "Research topic B",
+      "config": {
+        "agent_ref": "researcher_b",
+        "task_description": "Research this topic thoroughly. Use web_search to find relevant sources, then fetch_url to read them in detail.\n\nTopic: {{$.state.topics[1]}}\nContext: {{$.state.context}}\n\nFor each finding, include:\n- The key insight (1–2 sentences)\n- The source URL\n- Relevance to the context",
+        "expected_output": "5+ structured findings, each with insight, source URL, and relevance note. JSON: { \"topic\": \"...\", \"findings\": [ { \"insight\": \"...\", \"source\": \"...\", \"relevance\": \"...\" } ] }",
+        "output_field": "findings_b",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 620, "y": 340 }
+    },
+    {
+      "id": "research_c",
+      "type": "agent_role",
+      "label": "Research topic C",
+      "config": {
+        "agent_ref": "researcher_c",
+        "task_description": "Research this topic thoroughly. Use web_search to find relevant sources, then fetch_url to read them in detail.\n\nTopic: {{$.state.topics[2]}}\nContext: {{$.state.context}}\n\nFor each finding, include:\n- The key insight (1–2 sentences)\n- The source URL\n- Relevance to the context",
+        "expected_output": "5+ structured findings, each with insight, source URL, and relevance note. JSON: { \"topic\": \"...\", \"findings\": [ { \"insight\": \"...\", \"source\": \"...\", \"relevance\": \"...\" } ] }",
+        "output_field": "findings_c",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 620, "y": 580 }
+    },
+    {
+      "id": "join",
+      "type": "parallel_join",
+      "label": "Collect all findings",
+      "wait_for": "all",
+      "join_reducer": "merge",
+      "output_key": "all_findings",
+      "position": { "x": 900, "y": 340 }
+    },
+    {
+      "id": "cross_analyse",
+      "type": "agent_role",
+      "label": "Cross-topic analysis",
+      "config": {
+        "agent_ref": "analyst",
+        "task_description": "Analyse the findings across all research topics. Identify:\n1. Shared themes (what appears across multiple topics)\n2. Key contrasts (where topics diverge or conflict)\n3. Synthesis insights (what the combined picture reveals that no single topic shows)\n\nContext: {{$.state.context}}\nFindings A: {{$.state.findings_a}}\nFindings B: {{$.state.findings_b}}\nFindings C: {{$.state.findings_c}}",
+        "expected_output": "Structured cross-analysis: shared themes (2–4), key contrasts (2–4), synthesis insights (1–3). 400–600 words.",
+        "output_field": "cross_analysis",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1180, "y": 340 }
+    },
+    {
+      "id": "write_report",
+      "type": "agent_role",
+      "label": "Write comparative report",
+      "config": {
+        "agent_ref": "report_writer",
+        "task_description": "Write the final comparative report.\n\nTopics researched: {{$.state.topics}}\nContext: {{$.state.context}}\nRequested format: {{$.state.output_format}}\nCross-analysis: {{$.state.cross_analysis}}\nFindings A: {{$.state.findings_a}}\nFindings B: {{$.state.findings_b}}\nFindings C: {{$.state.findings_c}}",
+        "expected_output": "A polished comparative report in the requested format, covering all topics, incorporating cross-analysis insights, and citing sources.",
+        "output_field": "final_report",
+        "memory_access": "shared",
+        "memory_store_id": "report_context",
+        "tool_approval": "human"
+      },
+      "position": { "x": 1460, "y": 340 }
+    },
+    {
+      "id": "quality_check",
+      "type": "llm_call",
+      "label": "Quality check report",
+      "system_prompt": "You are a quality reviewer. Check whether the report covers all topics and addresses the context. Respond with JSON only.",
+      "prompt_template": "Quality check this comparative report.\n\nTopics: {{$.state.topics}}\nContext: {{$.state.context}}\nReport: {{$.state.final_report}}\n\nCheck: (1) all topics covered, (2) cross-analysis present, (3) sources cited, (4) addresses context.\n\nRespond with JSON: { \"passed\": true/false, \"issues\": [\"issue 1\", ...] }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "passed": { "type": "boolean" },
+            "issues": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["passed"]
+        }
+      },
+      "output_key": "verification_result",
+      "position": { "x": 1740, "y": 340 }
+    },
+    {
+      "id": "route_quality",
+      "type": "condition",
+      "label": "Report passes QC?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.verification_result.passed == false" },
+          "target": "write_report"
+        }
+      ],
+      "default_target": "done",
+      "position": { "x": 2020, "y": 340 }
+    },
+    {
+      "id": "done",
+      "type": "output",
+      "label": "Comparative report",
+      "position": { "x": 2300, "y": 340 }
+    }
+  ],
+  "memory_stores": {
+    "report_context": {
+      "type": "hybrid",
+      "description": "Shared memory for report writer — holds cross-analysis and all findings for in-context reference",
+      "backend": "in_memory",
+      "scope": "thread"
+    }
+  },
+  "edges": [
+    { "type": "direct", "from": "start",         "to": "fork" },
+    { "type": "direct", "from": "fork",          "to": "research_a" },
+    { "type": "direct", "from": "fork",          "to": "research_b" },
+    { "type": "direct", "from": "fork",          "to": "research_c" },
+    { "type": "direct", "from": "research_a",    "to": "join" },
+    { "type": "direct", "from": "research_b",    "to": "join" },
+    { "type": "direct", "from": "research_c",    "to": "join" },
+    { "type": "direct", "from": "join",          "to": "cross_analyse" },
+    { "type": "direct", "from": "cross_analyse", "to": "write_report",  "context_from": ["join"] },
+    { "type": "direct", "from": "write_report",  "to": "quality_check" },
+    { "type": "direct", "from": "quality_check", "to": "route_quality" },
+    { "type": "direct", "from": "route_quality", "to": "write_report",  "label": "retry" },
+    { "type": "direct", "from": "route_quality", "to": "done",          "label": "pass" }
+  ],
+  "flow_config": {
+    "process_type": "hierarchical",
+    "checkpoint": { "enabled": true, "backend": "sqlite" },
+    "streaming":  { "enabled": true, "mode": "updates" },
+    "telemetry":  { "enabled": true, "provider": "langfuse", "project": "toddly-parallel-research", "trace_all_nodes": true }
+  }
+}

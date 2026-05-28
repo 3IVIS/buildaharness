@@ -1,0 +1,205 @@
+{
+  "spec_version": "0.2.0",
+  "id": "toddly-llm-planner-meta",
+  "name": "LLM Planner (meta-flow)",
+  "description": "Implements the cuddlytoddly LLMPlanner.propose() loop as an itsharness flow. Takes a goal, runs clarification, generates a FlowSpec JSON via the planner agent, scrutinises it, and emits a valid FlowSpec that can be loaded into the canvas or submitted to /compile + /run. This is the 'dynamic planning as a meta-flow' strategy: planning itself becomes a visible, editable, versioned itsharness workflow.",
+  "runtime_hints": {
+    "preferred_adapter": "langgraph",
+    "compatible": ["langgraph", "mastra"]
+  },
+  "model_defaults": {
+    "model": "gpt-4o",
+    "model_params": { "temperature": 0.1 }
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "goal":               { "type": "string",  "description": "User goal text (maps to toddly goal node description)" },
+      "skills_available":   { "type": "array",   "description": "List of available tool/skill names (maps to LLMPlanner skills_summary)" },
+      "clarifications":     { "type": "object",  "description": "Clarification answers (maps to clarification node result)" },
+      "draft_flowspec":     { "type": "object",  "description": "LLM-generated FlowSpec JSON (maps to LLMPlanner EVENT_LIST output → translated to FlowSpec)" },
+      "scrutiny_result":    { "type": "object",  "description": "Plan scrutiniser verdict (maps to build_plan_scrutinizer_prompt output)" },
+      "refined_flowspec":   { "type": "object",  "description": "Refined FlowSpec after scrutiny feedback" },
+      "validation_result":  { "type": "object",  "description": "Schema validation result (maps to LLMOutputValidator)" },
+      "final_flowspec":     { "type": "object",  "description": "Final validated FlowSpec ready to load into canvas or submit to /compile" }
+    },
+    "required": ["goal"]
+  },
+  "agents": [
+    {
+      "id": "planner",
+      "role": "FlowSpec Planning Engine",
+      "backstory": "Generates itsharness FlowSpec JSON from a natural language goal. Knows the FlowSpec v0.2.0 schema: node types (input, output, llm_call, tool_invoke, condition, parallel_fork, parallel_join, hitl_breakpoint, memory_read, memory_write, subgraph, transform, agent_role, agent_debate), edge types (direct, conditional), and state_schema conventions. Always responds with valid JSON and nothing else.",
+      "goal": "Produce a complete, valid FlowSpec v0.2.0 JSON for the given goal. Use the minimum number of nodes needed. Always include input and output nodes. Add hitl_breakpoint for any step requiring human action. Use parallel_fork/join for independent tasks that can run concurrently.",
+      "max_iter": 3
+    },
+    {
+      "id": "scrutiniser",
+      "role": "Plan Scrutiniser",
+      "backstory": "Reviews FlowSpec drafts for correctness and completeness. Checks edge targets, state field coverage, node type appropriateness, and whether the flow will actually achieve the stated goal.",
+      "goal": "Produce a detailed scrutiny report identifying any issues with the draft FlowSpec. Be specific — name the node IDs and fields that are wrong.",
+      "max_iter": 2
+    },
+    {
+      "id": "refiner",
+      "role": "FlowSpec Refiner",
+      "backstory": "Applies scrutiny feedback to improve a draft FlowSpec. Makes targeted corrections without restructuring the whole flow unless necessary.",
+      "goal": "Produce a corrected FlowSpec that addresses all issues identified by the scrutiniser. Always respond with valid JSON and nothing else.",
+      "max_iter": 3
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "input",
+      "label": "Goal + available skills",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "goal":             { "type": "string" },
+          "skills_available": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "position": { "x": 60, "y": 360 }
+    },
+    {
+      "id": "clarify_goal",
+      "type": "hitl_breakpoint",
+      "label": "Clarify planning scope",
+      "prompt": "Before generating a flow plan, I need a few details.\n\nGoal: {{$.state.goal}}\nAvailable tools: {{$.state.skills_available}}\n\nPlease answer:\n1. Preferred adapter runtime (langgraph / crewai / mastra / microsoft_agent_framework)\n2. Does this flow need human-in-the-loop steps? (yes/no — will add hitl_breakpoint nodes)\n3. Will tasks run in parallel? (yes/no — will add parallel_fork/join)\n4. Should clarification questions be asked at runtime? (yes/no — will add a clarify hitl_breakpoint at flow start)\n5. Min tasks (default: 3) and max tasks (default: 8)",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "preferred_adapter": { "type": "string", "enum": ["langgraph", "crewai", "mastra", "microsoft_agent_framework"] },
+          "needs_hitl":        { "type": "boolean" },
+          "parallel_tasks":    { "type": "boolean" },
+          "needs_clarify":     { "type": "boolean" },
+          "min_tasks":         { "type": "integer", "default": 3 },
+          "max_tasks":         { "type": "integer", "default": 8 }
+        },
+        "required": ["preferred_adapter"]
+      },
+      "output_key": "clarifications",
+      "position": { "x": 340, "y": 360 }
+    },
+    {
+      "id": "generate_flowspec",
+      "type": "agent_role",
+      "label": "Generate FlowSpec draft",
+      "config": {
+        "agent_ref": "planner",
+        "task_description": "Generate a complete FlowSpec v0.2.0 JSON for this goal.\n\nGoal: {{$.state.goal}}\nPreferred adapter: {{$.state.clarifications.preferred_adapter}}\nNeeds HITL: {{$.state.clarifications.needs_hitl}}\nParallel tasks: {{$.state.clarifications.parallel_tasks}}\nNeeds clarify node: {{$.state.clarifications.needs_clarify}}\nMin tasks: {{$.state.clarifications.min_tasks}}\nMax tasks: {{$.state.clarifications.max_tasks}}\nAvailable tools: {{$.state.skills_available}}\n\nFlowSpec v0.2.0 rules:\n- spec_version must be \"0.2.0\"\n- id must be kebab-case\n- nodes[] must include exactly one input node and at least one output node\n- Every node needs: id, type, label, position {x, y}\n- Node types: input, output, llm_call, tool_invoke, condition, parallel_fork, parallel_join, hitl_breakpoint, memory_read, memory_write, subgraph, transform, agent_role\n- Every edge needs: type (\"direct\"), from, to\n- All edge targets must reference valid node ids\n- state_schema must cover all values read/written by nodes via output_key\n- For llm_call: include system_prompt, prompt_template with {{$.state.field}} references\n- For condition: branches[] with condition.type and condition.expr, plus default_target\n- For parallel_fork: targets[] must match existing node ids\n- For hitl_breakpoint: include prompt and resume_schema\n- Positions: space nodes 280px apart horizontally, 260px vertically for branches\n\nRespond with valid FlowSpec JSON only — no explanation, no markdown fences.",
+        "expected_output": "A complete, valid FlowSpec v0.2.0 JSON object.",
+        "output_field": "draft_flowspec",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 620, "y": 360 }
+    },
+    {
+      "id": "scrutinise_plan",
+      "type": "agent_role",
+      "label": "Scrutinise FlowSpec",
+      "config": {
+        "agent_ref": "scrutiniser",
+        "task_description": "Scrutinise this FlowSpec draft for correctness.\n\nOriginal goal: {{$.state.goal}}\nPreferred adapter: {{$.state.clarifications.preferred_adapter}}\nDraft FlowSpec: {{$.state.draft_flowspec}}\n\nCheck:\n1. Every edge from/to references a valid node id\n2. Every condition branch target references a valid node id\n3. Every parallel_fork target references a valid node id\n4. Every output_key used in a node is defined in state_schema.properties\n5. The flow can actually achieve the goal (correct node types, prompts are task-appropriate)\n6. At least one path from input to output exists\n7. No isolated nodes (every non-input/output node has at least one incoming and one outgoing edge)\n\nRespond with JSON: { \"issues\": [ { \"severity\": \"error|warning\", \"node_id\": \"...\", \"field\": \"...\", \"message\": \"...\" } ], \"overall\": \"pass|fail\" }",
+        "expected_output": "A JSON scrutiny report listing all issues found, or { \"issues\": [], \"overall\": \"pass\" } if the spec is correct.",
+        "output_field": "scrutiny_result",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 900, "y": 360 }
+    },
+    {
+      "id": "route_scrutiny",
+      "type": "condition",
+      "label": "Scrutiny passed?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.scrutiny_result.overall == 'fail'" },
+          "target": "refine_flowspec"
+        }
+      ],
+      "default_target": "validate_schema",
+      "position": { "x": 1180, "y": 360 }
+    },
+    {
+      "id": "refine_flowspec",
+      "type": "agent_role",
+      "label": "Refine FlowSpec",
+      "config": {
+        "agent_ref": "refiner",
+        "task_description": "Fix the FlowSpec based on scrutiny feedback.\n\nOriginal FlowSpec: {{$.state.draft_flowspec}}\nScrutiny issues: {{$.state.scrutiny_result.issues}}\n\nFix each error-severity issue. Address warning-severity issues if they are straightforward.\nDo not restructure the entire flow — make targeted corrections only.\n\nRespond with the corrected FlowSpec JSON only — no explanation.",
+        "expected_output": "The corrected FlowSpec v0.2.0 JSON.",
+        "output_field": "draft_flowspec",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1180, "y": 580 }
+    },
+    {
+      "id": "validate_schema",
+      "type": "llm_call",
+      "label": "Validate FlowSpec schema",
+      "system_prompt": "You are a FlowSpec v0.2.0 schema validator. Check the spec against the schema rules. Respond with JSON only.",
+      "prompt_template": "Validate this FlowSpec against the v0.2.0 rules.\n\nFlowSpec: {{$.state.draft_flowspec}}\n\nRequired top-level fields: spec_version (must be \"0.2.0\"), id (kebab-case), nodes (array, min 2), edges (array).\nRequired per node: id, type, position.\nRequired per edge: type (\"direct\"), from, to.\n\nRespond with JSON: { \"valid\": true/false, \"errors\": [\"error 1\", ...] }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "valid":  { "type": "boolean" },
+            "errors": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["valid"]
+        }
+      },
+      "output_key": "validation_result",
+      "position": { "x": 1460, "y": 360 }
+    },
+    {
+      "id": "route_validation",
+      "type": "condition",
+      "label": "Schema valid?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.validation_result.valid == false" },
+          "target": "refine_flowspec"
+        }
+      ],
+      "default_target": "finalise_flowspec",
+      "position": { "x": 1740, "y": 360 }
+    },
+    {
+      "id": "finalise_flowspec",
+      "type": "transform",
+      "label": "Emit final FlowSpec",
+      "mode": "mapping",
+      "output_map": { "final_flowspec": "$.state.draft_flowspec" },
+      "position": { "x": 2020, "y": 360 }
+    },
+    {
+      "id": "done",
+      "type": "output",
+      "label": "Generated FlowSpec",
+      "position": { "x": 2300, "y": 360 }
+    }
+  ],
+  "edges": [
+    { "type": "direct", "from": "start",              "to": "clarify_goal" },
+    { "type": "direct", "from": "clarify_goal",       "to": "generate_flowspec" },
+    { "type": "direct", "from": "generate_flowspec",  "to": "scrutinise_plan" },
+    { "type": "direct", "from": "scrutinise_plan",    "to": "route_scrutiny" },
+    { "type": "direct", "from": "route_scrutiny",     "to": "refine_flowspec",   "label": "fail" },
+    { "type": "direct", "from": "route_scrutiny",     "to": "validate_schema",   "label": "pass" },
+    { "type": "direct", "from": "refine_flowspec",    "to": "scrutinise_plan" },
+    { "type": "direct", "from": "validate_schema",    "to": "route_validation" },
+    { "type": "direct", "from": "route_validation",   "to": "refine_flowspec",   "label": "invalid" },
+    { "type": "direct", "from": "route_validation",   "to": "finalise_flowspec", "label": "valid" },
+    { "type": "direct", "from": "finalise_flowspec",  "to": "done" }
+  ],
+  "flow_config": {
+    "checkpoint": { "enabled": true, "backend": "postgres", "connection_env": "DATABASE_URL" },
+    "streaming":  { "enabled": true, "mode": "updates" },
+    "telemetry":  { "enabled": true, "provider": "langfuse", "project": "toddly-planner-meta", "trace_all_nodes": true }
+  }
+}

@@ -1,0 +1,307 @@
+{
+  "spec_version": "0.2.0",
+  "id": "toddly-plan-execute",
+  "name": "Plan + Execute",
+  "description": "Mirrors the cuddlytoddly plan-first loop: clarify goal → LLM generates task DAG → sequential execution with per-task quality gate → HITL for real-world steps → final output. Maps LLMPlanner.propose() to a plan_goal llm_call node, Orchestrator task loop to agent_role nodes, QualityGate to a verify llm_call+condition, and MARK_AWAITING_USER to hitl_breakpoint.",
+  "runtime_hints": {
+    "preferred_adapter": "langgraph",
+    "compatible": ["langgraph", "microsoft_agent_framework", "mastra"]
+  },
+  "model_defaults": {
+    "model": "gpt-4o",
+    "model_params": { "temperature": 0.1 }
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "goal":                  { "type": "string",  "description": "User-supplied goal text" },
+      "clarifications":        { "type": "object",  "description": "Clarification field answers (maps to clarification node result)" },
+      "task_plan":             { "type": "object",  "description": "LLM-generated task DAG as JSON (maps to LLMPlanner EVENT_LIST output)" },
+      "current_task":          { "type": "object",  "description": "Task being executed (description, required_input, execution_steps)" },
+      "task_results":          { "type": "array",   "description": "Accumulated task results (maps to SET_RESULT events)", "reducer": "append" },
+      "pending_human_steps":   { "type": "array",   "description": "Execution steps requiring user action (maps to MARK_AWAITING_USER pending_steps)" },
+      "handoff_artifact":      { "type": "string",  "description": "Instructions for human steps (maps to MARK_AWAITING_USER handoff_artifact)" },
+      "human_confirmation":    { "type": "object",  "description": "User confirmation that real-world steps are done (maps to CONFIRM_USER_DONE)" },
+      "verification_result":   { "type": "object",  "description": "QualityGate verdict for the current task" },
+      "final_output":          { "type": "string",  "description": "Synthesised final result across all tasks" }
+    },
+    "required": ["goal"]
+  },
+  "tools": {
+    "web_search": {
+      "tool_ref": "@langchain/community/tools/TavilySearchResults",
+      "source": "npm",
+      "description": "search_web execution_type from LLMExecutor tool loop"
+    },
+    "fetch_url": {
+      "tool_ref": "@langchain/community/tools/CheerioWebBaseLoader",
+      "source": "npm",
+      "description": "fetch_url execution_type from LLMExecutor tool loop"
+    },
+    "run_code": {
+      "tool_ref": "@langchain/community/tools/NodeJsRepl",
+      "source": "npm",
+      "description": "run_code / analyse_data execution_type from LLMExecutor tool loop"
+    },
+    "write_file": {
+      "tool_ref": "@langchain/community/tools/FileManagementToolkit",
+      "source": "npm",
+      "description": "write_file execution_type — creates output artifacts in run directory"
+    }
+  },
+  "agents": [
+    {
+      "id": "planner_agent",
+      "role": "Task Planning Engine",
+      "backstory": "Decomposes goals into directed acyclic graphs of concrete, executable tasks. Domain-agnostic — handles software development, document creation, research, data analysis, and content production.",
+      "goal": "Produce a valid task plan as a JSON DAG. Always respond with valid JSON and nothing else.",
+      "max_iter": 3
+    },
+    {
+      "id": "executor_agent",
+      "role": "Task Execution Engine",
+      "backstory": "Executes individual task nodes from a pre-planned DAG, using tools as needed in a loop until the task is done.",
+      "goal": "Complete the assigned task, calling tools as needed. Produce a detailed, self-contained result that can be passed verbatim to downstream tasks.",
+      "tools": ["web_search", "fetch_url", "run_code", "write_file"],
+      "max_iter": 10
+    },
+    {
+      "id": "verifier_agent",
+      "role": "Quality Gate",
+      "backstory": "Verifies that a task result actually satisfies the declared output contract. Matches the toddly QualityGate RESULT_VERIFICATION_SCHEMA.",
+      "goal": "Return a structured pass/fail verdict with specific failure reasons when the result does not meet the output contract.",
+      "max_iter": 2
+    },
+    {
+      "id": "synthesiser_agent",
+      "role": "Output Synthesiser",
+      "backstory": "Assembles all task results into a coherent final output matching the original goal.",
+      "goal": "Produce a final, polished output from all accumulated task results.",
+      "max_iter": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "input",
+      "label": "User goal",
+      "output_schema": {
+        "type": "object",
+        "properties": { "goal": { "type": "string" } }
+      },
+      "position": { "x": 60, "y": 420 }
+    },
+    {
+      "id": "clarify",
+      "type": "hitl_breakpoint",
+      "label": "Clarify goal",
+      "prompt": "Before planning, I need a few details to scope the work correctly.\n\nGoal: {{$.state.goal}}\n\nPlease answer:\n1. What does a successful outcome look like? (specific deliverable)\n2. Are there constraints I should know about? (time, tools, access, format)\n3. Are there steps that will require your action in the real world? (e.g. sending emails, publishing content, running commands locally)",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "success_criteria":   { "type": "string" },
+          "constraints":        { "type": "string" },
+          "has_human_steps":    { "type": "boolean" }
+        },
+        "required": ["success_criteria"]
+      },
+      "output_key": "clarifications",
+      "position": { "x": 320, "y": 420 }
+    },
+    {
+      "id": "plan_goal",
+      "type": "agent_role",
+      "label": "Generate task plan",
+      "config": {
+        "agent_ref": "planner_agent",
+        "task_description": "Decompose this goal into a task plan (3–8 tasks).\n\nGoal: {{$.state.goal}}\nSuccess criteria: {{$.state.clarifications.success_criteria}}\nConstraints: {{$.state.clarifications.constraints}}\n\nFor each task produce:\n- node_id (kebab-case)\n- description (one sentence)\n- dependencies (list of node_ids this task depends on)\n- execution_steps (ordered list: each step has execution_type, description, produces)\n  - LLM-executable: search_web, fetch_url, run_code, analyse_data, write_file, write_plan, write_document\n  - Human-required: post_to_reddit, send_email, publish_blog_post, run_terminal_command, deploy_service, open_pull_request\n- required_input (list: name, type, description)\n- output (list: name, type, description)\n\nRespond with JSON: { \"tasks\": [ { ...task } ] }",
+        "expected_output": "A JSON task plan with 3–8 tasks. Valid JSON only — no explanation.",
+        "output_field": "task_plan",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 580, "y": 420 }
+    },
+    {
+      "id": "verify_plan",
+      "type": "llm_call",
+      "label": "Scrutinise plan",
+      "system_prompt": "You are a plan scrutiniser. Check the task plan for completeness and dependency correctness. Respond with JSON only.",
+      "prompt_template": "Scrutinise this task plan for the goal below.\n\nGoal: {{$.state.goal}}\nPlan: {{$.state.task_plan}}\n\nCheck: (1) all declared dependencies exist, (2) no circular dependencies, (3) every task has at least one execution_step, (4) the plan covers the full goal.\n\nRespond with JSON: { \"valid\": true/false, \"issues\": [\"issue 1\", ...] }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "valid":  { "type": "boolean" },
+            "issues": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["valid", "issues"]
+        }
+      },
+      "output_key": "verification_result",
+      "position": { "x": 840, "y": 420 }
+    },
+    {
+      "id": "route_plan",
+      "type": "condition",
+      "label": "Plan valid?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.verification_result.valid == false" },
+          "target": "plan_goal"
+        }
+      ],
+      "default_target": "execute_tasks",
+      "position": { "x": 1100, "y": 420 }
+    },
+    {
+      "id": "execute_tasks",
+      "type": "agent_role",
+      "label": "Execute task sequence",
+      "config": {
+        "agent_ref": "executor_agent",
+        "task_description": "Execute each task in the plan in dependency order. For each task:\n1. Use tools to complete it (search_web, fetch_url, run_code, write_file as needed)\n2. Produce a self-contained result that can be passed to downstream tasks\n3. Accumulate all results\n\nTask plan: {{$.state.task_plan}}\nGoal: {{$.state.goal}}\nPrevious results: {{$.state.task_results}}",
+        "expected_output": "Completed results for all LLM-executable tasks. Each result is self-contained and references its task node_id.",
+        "output_field": "task_results",
+        "memory_access": "shared",
+        "memory_store_id": "execution_context",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1360, "y": 300 }
+    },
+    {
+      "id": "detect_human_steps",
+      "type": "llm_call",
+      "label": "Detect human-required steps",
+      "system_prompt": "You are an execution planner. Identify which tasks in the plan have execution_steps that require human action. Respond with JSON only.",
+      "prompt_template": "Identify all pending human-required steps from the task plan.\n\nPlan: {{$.state.task_plan}}\nCompleted LLM results: {{$.state.task_results}}\n\nHuman-required execution_types: post_to_reddit, post_to_linkedin, send_email, send_newsletter, publish_blog_post, run_terminal_command, deploy_service, open_pull_request, schedule_meeting\n\nRespond with JSON: { \"has_human_steps\": true/false, \"pending_steps\": [\"step description 1\", ...], \"handoff_artifact\": \"full instructions for the user\" }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "has_human_steps":  { "type": "boolean" },
+            "pending_steps":    { "type": "array", "items": { "type": "string" } },
+            "handoff_artifact": { "type": "string" }
+          },
+          "required": ["has_human_steps"]
+        }
+      },
+      "output_key": "pending_human_steps",
+      "position": { "x": 1360, "y": 540 }
+    },
+    {
+      "id": "route_human_steps",
+      "type": "condition",
+      "label": "Any human steps?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.pending_human_steps.has_human_steps == true" },
+          "target": "human_action"
+        }
+      ],
+      "default_target": "synthesise_output",
+      "position": { "x": 1640, "y": 420 }
+    },
+    {
+      "id": "human_action",
+      "type": "hitl_breakpoint",
+      "label": "Human steps required",
+      "prompt": "The following steps require your action before the workflow can continue.\n\n{{$.state.pending_human_steps.handoff_artifact}}\n\nSteps:\n{{$.state.pending_human_steps.pending_steps}}\n\nOnce you have completed all steps, confirm below.",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "confirmed":   { "type": "boolean" },
+          "notes":       { "type": "string" }
+        },
+        "required": ["confirmed"]
+      },
+      "output_key": "human_confirmation",
+      "timeout_seconds": 172800,
+      "on_timeout": "raise",
+      "position": { "x": 1900, "y": 540 }
+    },
+    {
+      "id": "synthesise_output",
+      "type": "agent_role",
+      "label": "Synthesise final output",
+      "config": {
+        "agent_ref": "synthesiser_agent",
+        "task_description": "Synthesise all task results into a final output that directly addresses the original goal.\n\nOriginal goal: {{$.state.goal}}\nSuccess criteria: {{$.state.clarifications.success_criteria}}\nAll task results: {{$.state.task_results}}\nHuman step confirmation: {{$.state.human_confirmation}}",
+        "expected_output": "A polished final output that directly addresses the original goal and success criteria.",
+        "output_field": "final_output",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 2160, "y": 420 }
+    },
+    {
+      "id": "final_quality_gate",
+      "type": "llm_call",
+      "label": "Final quality gate",
+      "system_prompt": "You are a quality gate. Verify the final output meets the original goal and success criteria. Respond with JSON only.",
+      "prompt_template": "Verify the final output.\n\nOriginal goal: {{$.state.goal}}\nSuccess criteria: {{$.state.clarifications.success_criteria}}\nFinal output: {{$.state.final_output}}\n\nRespond with JSON: { \"passed\": true/false, \"verdict\": \"one sentence\", \"missing\": [\"gap 1\", ...] }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "passed":  { "type": "boolean" },
+            "verdict": { "type": "string" },
+            "missing": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["passed", "verdict"]
+        }
+      },
+      "output_key": "verification_result",
+      "position": { "x": 2420, "y": 420 }
+    },
+    {
+      "id": "route_final",
+      "type": "condition",
+      "label": "Output passes QG?",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.verification_result.passed == false" },
+          "target": "synthesise_output"
+        }
+      ],
+      "default_target": "done",
+      "position": { "x": 2680, "y": 420 }
+    },
+    {
+      "id": "done",
+      "type": "output",
+      "label": "Final output",
+      "position": { "x": 2940, "y": 420 }
+    }
+  ],
+  "memory_stores": {
+    "execution_context": {
+      "type": "key_value",
+      "description": "Shared context store for executor agent — holds accumulated task results across the execution loop",
+      "backend": "in_memory",
+      "scope": "thread"
+    }
+  },
+  "edges": [
+    { "type": "direct", "from": "start",                "to": "clarify" },
+    { "type": "direct", "from": "clarify",              "to": "plan_goal" },
+    { "type": "direct", "from": "plan_goal",            "to": "verify_plan" },
+    { "type": "direct", "from": "verify_plan",          "to": "route_plan" },
+    { "type": "direct", "from": "route_plan",           "to": "plan_goal",         "label": "invalid" },
+    { "type": "direct", "from": "route_plan",           "to": "execute_tasks",     "label": "valid" },
+    { "type": "direct", "from": "execute_tasks",        "to": "detect_human_steps" },
+    { "type": "direct", "from": "detect_human_steps",   "to": "route_human_steps" },
+    { "type": "direct", "from": "route_human_steps",    "to": "human_action",      "label": "human steps" },
+    { "type": "direct", "from": "route_human_steps",    "to": "synthesise_output", "label": "no human steps" },
+    { "type": "direct", "from": "human_action",         "to": "synthesise_output" },
+    { "type": "direct", "from": "synthesise_output",    "to": "final_quality_gate" },
+    { "type": "direct", "from": "final_quality_gate",   "to": "route_final" },
+    { "type": "direct", "from": "route_final",          "to": "synthesise_output", "label": "retry" },
+    { "type": "direct", "from": "route_final",          "to": "done",              "label": "pass" }
+  ],
+  "flow_config": {
+    "checkpoint": { "enabled": true, "backend": "postgres", "connection_env": "DATABASE_URL" },
+    "streaming":  { "enabled": true, "mode": "updates" },
+    "telemetry":  { "enabled": true, "provider": "langfuse", "project": "toddly-plan-execute", "trace_all_nodes": true }
+  }
+}
