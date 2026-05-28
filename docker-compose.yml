@@ -18,6 +18,12 @@
 #   #51       — Langfuse healthcheck uses 127.0.0.1 instead of localhost; Next.js
 #               binds to IPv4 only, so 'localhost' resolves to ::1 (IPv6) inside
 #               the container and gets ECONNREFUSED even though the server is up.
+#   #52       — MinIO added as a local S3 backend for Langfuse OTel ingestion.
+#               The OTel ingest code path in Langfuse bypasses LANGFUSE_S3_EVENT_
+#               UPLOAD_ENABLED=false and always writes spans to S3 before queuing
+#               them for the worker.  Without a working S3 endpoint the missing-
+#               region error crashes Langfuse repeatedly.  MinIO provides a local
+#               S3-compatible store; minio-init creates the required bucket.
 #
 # Quick start:
 #   cp .env.example .env
@@ -200,6 +206,45 @@ services:
       langfuse:
         condition: service_healthy
 
+  # ── MinIO (local S3 for Langfuse OTel ingestion) ─────────────────────────
+  # Fix #52: Langfuse's OTel ingest path always writes to S3 before queuing
+  # spans for the worker — it does not honour LANGFUSE_S3_EVENT_UPLOAD_ENABLED.
+  # MinIO provides a local S3-compatible store so spans are stored and processed
+  # correctly instead of crashing Langfuse with "Region is missing".
+  # Dev credentials only — do not expose port 9002/9003 to untrusted networks.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=langfuse
+      - MINIO_ROOT_PASSWORD=langfuse-minio-dev
+    ports:
+      - "9002:9000"   # S3 API  (9000 is taken by ClickHouse on the host)
+      - "9003:9001"   # MinIO console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      # MinIO 2025 image has no curl/wget; use mc (bundled binary) to probe readiness.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # One-shot container: creates the langfuse-events bucket on first run.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 langfuse langfuse-minio-dev &&
+      mc mb local/langfuse-events --ignore-existing &&
+      echo 'langfuse-events bucket ready.'
+      "
+    restart: "no"
+
   # ── ClickHouse (Langfuse analytics store) ─────────────────────────────────
   clickhouse:
     image: clickhouse/clickhouse-server:24.3
@@ -278,11 +323,15 @@ services:
       - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_ADMIN_EMAIL}
       - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_ADMIN_PASSWORD}
       - LANGFUSE_INIT_USER_NAME=Admin
-      # Fix #50: Langfuse v3 requires LANGFUSE_S3_EVENT_UPLOAD_BUCKET to be present
-      # as a string (Zod validation), even when S3 is not used. Setting _ENABLED=false
-      # ensures no actual S3 calls are made.
-      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
-      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=placeholder
+      # Fix #52: Route Langfuse S3 event uploads (including the OTel ingest path)
+      # to the local MinIO container.  force-path-style is required for MinIO.
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=true
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse-events
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=langfuse-minio-dev
     # Fix #47: use service_healthy for ClickHouse and Redis.
     depends_on:
       postgres:
@@ -291,6 +340,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     # Fix #2: langfuse-worker depends on langfuse with service_healthy — so langfuse
     # MUST have a healthcheck. Without one, docker compose up fails with:
     #   "Service 'langfuse-worker' depends on service 'langfuse' which does not have
@@ -321,9 +372,14 @@ services:
       - SALT=${LANGFUSE_SALT}
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - TELEMETRY_ENABLED=false
-      # Fix #50: same S3 vars required by langfuse-worker for the same reason.
-      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=false
-      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=placeholder
+      # Fix #52: same MinIO config as langfuse so the worker can read OTel span files.
+      - LANGFUSE_S3_EVENT_UPLOAD_ENABLED=true
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse-events
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=us-east-1
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=langfuse-minio-dev
     # Fix #47: wait for langfuse to be healthy (migrations complete) before starting worker.
     depends_on:
       postgres:
@@ -332,6 +388,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       langfuse:
         condition: service_healthy
 
@@ -339,3 +397,4 @@ volumes:
   postgres_data:
   clickhouse_data:
   redis_data:
+  minio_data:

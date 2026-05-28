@@ -23,7 +23,7 @@ flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
 ### 1. Run setup
 
 ```bash
-./setup-env.sh
+./scripts/setup-env.sh
 ```
 
 That single command does everything needed before `docker compose up`:
@@ -38,11 +38,11 @@ That single command does everything needed before `docker compose up`:
   - Generate `mastra-runner/package-lock.json` (requires Node.js, one-time)
   - Start the full Docker stack immediately
 
-**Re-run safe** — if a secret is already set to a real value, `setup-env.sh` keeps it and skips it. Run it again any time to repair a partially-filled `.env` or add secrets that were introduced after your initial setup.
+**Re-run safe** — if a secret is already set to a real value, `scripts/setup-env.sh` keeps it and skips it. Run it again any time to repair a partially-filled `.env` or add secrets that were introduced after your initial setup.
 
 ### 2. Start the stack
 
-If you didn't start it inside `setup-env.sh`:
+If you didn't start it inside `scripts/setup-env.sh`:
 
 ```bash
 docker compose up
@@ -73,7 +73,7 @@ Checks every required secret is present, non-placeholder, and — for `LANGFUSE_
 ### Without Docker
 
 ```bash
-./setup-env.sh                  # handles secrets, venv, and deps
+./scripts/setup-env.sh          # handles secrets, venv, and deps
 source adapter/.venv/bin/activate
 npm install && npm run dev       # canvas → http://localhost:3000
 cd adapter && python main.py     # adapter → http://localhost:8000
@@ -86,6 +86,18 @@ npm test                         # Vitest — validates all 5 reference flows
 pytest adapter/tests/ -v         # adapter unit + integration suite
 pytest adapter/tests/test_maf_adapter.py -v   # MAF adapter suite (742 tests)
 ```
+
+### Diagnostics
+
+| Script | What it checks |
+|---|---|
+| `bash scripts/verify_services.sh` | All containers running · healthchecks · HTTP endpoints · Redis / Postgres / Langfuse auth |
+| `bash scripts/verify_llm.sh` | Ollama direct → LiteLLM proxy → adapter flow (3 independent layers) |
+| `bash scripts/verify_hitl.sh` | HITL pause → resume → done for LangGraph, Mastra, MAF |
+| `bash scripts/verify_observability.sh` | Langfuse trace confirmed for all 4 runtimes |
+| `bash scripts/verify_prompts.sh` | Langfuse prompt API · adapter HTTP proxy · SDK resolve |
+
+Set `TEST_EMAIL=... TEST_PASSWORD=...` to skip the interactive credentials prompt in any verify script.
 
 ---
 
@@ -200,24 +212,24 @@ docker compose restart adapter mastra-runner
 
 #### Step 4 — Run the adapter test
 
-[`setup-ollama.sh`](./setup-ollama.sh) submits [`flows/06-ollama-simple-flow.json`](./flows/06-ollama-simple-flow.json) to all four adapters, polls for completion, and verifies each response mentions the test topic.
+[`scripts/setup-ollama.sh`](./scripts/setup-ollama.sh) submits [`flows/06-ollama-simple-flow.json`](./flows/06-ollama-simple-flow.json) to all four adapters, polls for completion, and verifies each response mentions the test topic.
 
 ```bash
 # Basic — mistral:latest, all 4 runtimes:
-./setup-ollama.sh
+./scripts/setup-ollama.sh
 
 # Different model:
-./setup-ollama.sh qwen3:latest
+./scripts/setup-ollama.sh qwen3:latest
 
 # Different test topic:
-./setup-ollama.sh mistral:latest "quantum computing"
+./scripts/setup-ollama.sh mistral:latest "quantum computing"
 
 # Single runtime only:
-RUNTIME=langgraph ./setup-ollama.sh
-RUNTIME=mastra    ./setup-ollama.sh
+RUNTIME=langgraph ./scripts/setup-ollama.sh
+RUNTIME=mastra    ./scripts/setup-ollama.sh
 
 # Non-interactive / CI — skip the email prompt:
-TEST_EMAIL=ci@example.com TEST_PASSWORD=CiPass99! ./setup-ollama.sh
+TEST_EMAIL=ci@example.com TEST_PASSWORD=CiPass99! ./scripts/setup-ollama.sh
 ```
 
 **What you'll see:**
@@ -274,7 +286,7 @@ TEST_EMAIL=ci@example.com TEST_PASSWORD=CiPass99! ./setup-ollama.sh
 export OPENAI_BASE_URL=http://localhost:11434/v1
 export OPENAI_API_KEY=ollama
 cd adapter && uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
-./setup-ollama.sh mistral:latest
+./scripts/setup-ollama.sh mistral:latest
 ```
 
 ---
@@ -327,7 +339,29 @@ itsharness/
 │   ├── schema.json                Derived JSON Schema
 │   └── CHANGELOG.md
 │
-├── flows/                       ← 5 reference flows (JSON)
+├── flows/                       ← 11 flows (5 published reference + 6 working)
+│   ├── 01–05-*.json               Published reference flows (see table below)
+│   ├── 06-ollama-simple-flow.json   Single llm_call; no external deps — used by setup-ollama.sh
+│   ├── 07-minimal-hitl-test-flow.json  No LLM; always pauses — used by verify_hitl.sh
+│   ├── flow-plan-execute.json     Plan + Execute — clarify → plan → HITL → output
+│   ├── flow-parallel-research.json  3 parallel researcher agents + join
+│   ├── flow-llm-planner-meta.json  Meta-flow: LLM generates a FlowSpec
+│   └── flow-research-write.json   Research + Write with parallel topics and HITL gate
+│
+├── scripts/                     ← Helper shell scripts (all run from project root)
+│   ├── setup-env.sh               First-time setup — secrets, venv, Docker
+│   ├── setup-ollama.sh            Test all 4 runtimes against local Ollama
+│   ├── check-env.sh               Validate required secrets in .env
+│   ├── reset-volumes.sh           Wipe Postgres / Redis / Clickhouse volumes
+│   ├── run_langgraph.sh           Submit + poll a LangGraph job (HITL-aware)
+│   ├── run_crewai.sh              Submit + poll a CrewAI job
+│   ├── run_mastra.sh              Submit + poll a Mastra job (HITL-aware)
+│   ├── run_maf.sh                 Submit + poll a MAF job (HITL-aware)
+│   ├── verify_services.sh         Check all Docker services are healthy
+│   ├── verify_llm.sh              Verify Ollama → LiteLLM → adapter LLM path
+│   ├── verify_hitl.sh             HITL regression: pause → resume → done
+│   ├── verify_observability.sh    Confirm Langfuse traces are written
+│   └── verify_prompts.sh          Test Langfuse-managed prompt templates
 │
 ├── packages/
 │   └── canvas/                  ← @itsharness/canvas (published npm)
@@ -411,6 +445,12 @@ itsharness/
 | [03 — Parallel Risk Assessment](./flows/03-parallel-risk-assessment-flow.json) | CrewAI | `parallel_fork/join`, `agent_role` ×3 |
 | [04 — Research Crew](./flows/04-research-crew-flow.json) | CrewAI | `context_from` on edges, `tool_approval: "human"` |
 | [05 — Debate Agent + A2A](./flows/05-debate-agent-a2a-flow.json) | MS Agent Framework | `agent_debate`, `a2a_config` |
+| [06 — Ollama Simple](./flows/06-ollama-simple-flow.json) | All | Single `llm_call`; no external deps — used by `scripts/setup-ollama.sh` |
+| [07 — Minimal HITL Test](./flows/07-minimal-hitl-test-flow.json) | LG / MA / MAF | No LLM; always pauses — used by `scripts/verify_hitl.sh` |
+| [Plan + Execute](./flows/flow-plan-execute.json) | All | `hitl_breakpoint` ×2, `agent_role`, `llm_call` quality gates |
+| [Parallel Research](./flows/flow-parallel-research.json) | All | `parallel_fork/join`, 3 concurrent `agent_role` researchers |
+| [LLM Planner (meta-flow)](./flows/flow-llm-planner-meta.json) | All | `agent_role` generates a FlowSpec; `condition` retry loop |
+| [Research + Write](./flows/flow-research-write.json) | All | `parallel_fork/join`, `hitl_breakpoint` quality gate, `transform` |
 
 ### Adapter coverage
 
@@ -455,6 +495,28 @@ JOB=$(curl -s -X POST "http://localhost:8000/run?runtime=langgraph" \
 curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:8000/run/$JOB" \
   | jq '{status, result, trace_url}'
 ```
+
+### Run a flow from the CLI
+
+The `scripts/run_*.sh` scripts are an interactive wrapper: they prompt for credentials, submit the job, stream live node events, and handle HITL pauses — prompting for a JSON payload and resuming automatically.
+
+```bash
+# LangGraph (full HITL support)
+bash scripts/run_langgraph.sh flow-plan-execute.json
+
+# Mastra
+bash scripts/run_mastra.sh flow-plan-execute.json
+
+# Microsoft Agent Framework
+bash scripts/run_maf.sh flow-plan-execute.json
+
+# CrewAI (no API-level HITL — human_input=True runs inline)
+bash scripts/run_crewai.sh flow-plan-execute.json
+```
+
+The first argument is the flow spec file (defaults to `flow-plan-execute.json`). Override the adapter URL with `BASE_URL=http://...`.
+
+---
 
 ### Deploy a flow
 

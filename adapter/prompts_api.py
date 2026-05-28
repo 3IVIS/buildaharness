@@ -88,7 +88,9 @@ async def list_prompts(
 
     async with _lf_http(org) as http:
         try:
-            resp = await http.get("/api/public/prompts", params={"limit": limit})
+            # Langfuse v3 moved the list endpoint to /api/public/v2/prompts.
+            # /api/public/prompts without a ?name= param returns 400 in v3.
+            resp = await http.get("/api/public/v2/prompts", params={"limit": limit})
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPStatusError as exc:
@@ -105,9 +107,12 @@ async def list_prompts(
     for item in data.get("data", []):
         if not isinstance(item, dict) or not item.get("name"):
             continue
+        # v2 response has "versions": [1, 2, ...] instead of "version": N.
+        versions_list: list[int] = item.get("versions") or []
+        latest_version: int = max(versions_list) if versions_list else 1
         result.append(PromptSummary(
             name=item["name"],
-            version=item.get("version", 1),
+            version=item.get("version") or latest_version,
             labels=item.get("labels", []),
         ))
     return result
@@ -136,7 +141,9 @@ async def get_prompt(
 
     async with _lf_http(org) as http:
         try:
-            resp = await http.get(f"/api/public/prompts/{name}")
+            # Langfuse v3: path param /api/public/prompts/{name} was removed;
+            # use ?name= query param on /api/public/prompts instead.
+            resp = await http.get("/api/public/prompts", params={"name": name})
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPStatusError as exc:

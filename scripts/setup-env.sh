@@ -17,6 +17,7 @@
 #   5. Start the full Docker stack
 
 set -euo pipefail
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ── Colour helpers ─────────────────────────────────────────────────────────────
 BOLD="\033[1m"; GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"

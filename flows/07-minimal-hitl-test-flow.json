@@ -1,0 +1,60 @@
+{
+  "spec_version": "0.2.0",
+  "id": "minimal-hitl-test",
+  "name": "Minimal HITL Regression Test",
+  "description": "Purpose-built for automated HITL verification. No LLM calls — always pauses at the hitl_breakpoint node, making it deterministic regardless of which model is available.",
+  "runtime_hints": {
+    "preferred_adapter": "langgraph",
+    "compatible": ["langgraph", "mastra", "microsoft_agent_framework"]
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "message":        { "type": "string",  "description": "Input message passed through the flow" },
+      "human_response": { "type": "object",  "description": "Payload supplied at the HITL resume step" }
+    },
+    "required": ["message"]
+  },
+  "nodes": [
+    {
+      "id": "start",
+      "type": "input",
+      "label": "Input message",
+      "output_schema": {
+        "type": "object",
+        "properties": { "message": { "type": "string" } }
+      },
+      "position": { "x": 80, "y": 200 }
+    },
+    {
+      "id": "review",
+      "type": "hitl_breakpoint",
+      "label": "Human review",
+      "prompt": "Please confirm the following message before the flow continues.\n\nMessage: {{$.state.message}}\n\nRespond with {\"confirmed\": true} to proceed.",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "confirmed": { "type": "boolean" },
+          "notes":     { "type": "string" }
+        },
+        "required": ["confirmed"]
+      },
+      "output_key": "human_response",
+      "position": { "x": 340, "y": 200 }
+    },
+    {
+      "id": "done",
+      "type": "output",
+      "label": "Final state",
+      "position": { "x": 600, "y": 200 }
+    }
+  ],
+  "edges": [
+    { "type": "direct", "from": "start",  "to": "review" },
+    { "type": "direct", "from": "review", "to": "done"   }
+  ],
+  "flow_config": {
+    "checkpoint": { "enabled": true, "backend": "postgres", "connection_env": "DATABASE_URL" },
+    "streaming":  { "enabled": false }
+  }
+}

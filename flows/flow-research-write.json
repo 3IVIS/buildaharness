@@ -1,0 +1,292 @@
+{
+  "spec_version": "0.2.0",
+  "id": "toddly-research-write",
+  "name": "Research + Write",
+  "description": "Mirrors the toddly plan-first research+write pattern: clarify goal → web research (parallel topics) → synthesise findings → draft document → HITL quality gate → write final file. Maps LLMExecutor tool loop to agent_role nodes, MARK_AWAITING_USER to hitl_breakpoint, and parallel_group metadata to fork/join.",
+  "runtime_hints": {
+    "preferred_adapter": "langgraph",
+    "compatible": ["langgraph", "crewai", "mastra", "microsoft_agent_framework"]
+  },
+  "model_defaults": {
+    "model": "gpt-4o",
+    "model_params": { "temperature": 0.2 }
+  },
+  "state_schema": {
+    "type": "object",
+    "properties": {
+      "goal":              { "type": "string",  "description": "User-supplied research goal (maps to toddly goal node description)" },
+      "clarifications":    { "type": "object",  "description": "Answers to clarification fields (maps to toddly clarification node result)" },
+      "research_queries":  { "type": "array",   "description": "Sub-topics to research in parallel (maps to parallel_group tasks)" },
+      "raw_findings":      { "type": "array",   "description": "Raw search results per sub-topic (append reducer — mirrors toddly SET_RESULT per node)", "reducer": "append" },
+      "synthesis":         { "type": "string",  "description": "Merged, de-duplicated findings" },
+      "draft":             { "type": "string",  "description": "First document draft" },
+      "reviewer_feedback": { "type": "object",  "description": "Human reviewer decision (maps to HITL resume payload)" },
+      "final_document":    { "type": "string",  "description": "Polished final document (maps to write_file execution step)" }
+    },
+    "required": ["goal"]
+  },
+  "tools": {
+    "web_search": {
+      "tool_ref": "@langchain/community/tools/TavilySearchResults",
+      "source": "npm",
+      "description": "Maps to toddly web_research skill — search_web execution_type"
+    },
+    "fetch_url": {
+      "tool_ref": "@langchain/community/tools/CheerioWebBaseLoader",
+      "source": "npm",
+      "description": "Maps to toddly fetch_url execution_type in LLMExecutor tool loop"
+    }
+  },
+  "agents": [
+    {
+      "id": "researcher",
+      "role": "Web Research Specialist",
+      "backstory": "Expert at finding accurate, up-to-date information via web search and URL fetching.",
+      "goal": "Gather comprehensive, source-attributed findings on an assigned sub-topic.",
+      "tools": ["web_search", "fetch_url"],
+      "max_iter": 8,
+      "memory_config": { "short_term": true, "long_term": false, "entity": false, "user": false }
+    },
+    {
+      "id": "synthesiser",
+      "role": "Research Synthesiser",
+      "backstory": "Turns raw multi-source findings into coherent, de-duplicated summaries.",
+      "goal": "Produce a structured synthesis from all parallel research branches.",
+      "max_iter": 4
+    },
+    {
+      "id": "writer",
+      "role": "Technical Writer",
+      "backstory": "Transforms structured analysis into polished, well-structured documents.",
+      "goal": "Write a clear, well-structured document matching the user goal and addressing reviewer feedback.",
+      "max_iter": 5
+    }
+  ],
+  "nodes": [
+    {
+      "id": "start",
+      "type": "input",
+      "label": "Research goal",
+      "output_schema": {
+        "type": "object",
+        "properties": { "goal": { "type": "string" } }
+      },
+      "position": { "x": 60, "y": 340 }
+    },
+    {
+      "id": "clarify",
+      "type": "hitl_breakpoint",
+      "label": "Clarify goal",
+      "prompt": "Before planning, I need a few details to scope the research correctly.\n\nGoal: {{$.state.goal}}\n\nPlease answer:\n1. Target audience (e.g. executive summary, technical deep-dive, blog post)\n2. Desired output format (e.g. markdown report, bullet summary, long-form article)\n3. Any sources to prefer or exclude\n4. Approximate length (e.g. 500 words, 2000 words)",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "audience":      { "type": "string" },
+          "output_format": { "type": "string" },
+          "source_prefs":  { "type": "string" },
+          "length":        { "type": "string" }
+        },
+        "required": ["audience", "output_format"]
+      },
+      "output_key": "clarifications",
+      "position": { "x": 340, "y": 340 }
+    },
+    {
+      "id": "plan_queries",
+      "type": "llm_call",
+      "label": "Plan research sub-topics",
+      "system_prompt": "You are the planning engine of an autonomous task-execution system. Your job is to decompose a research goal into 2–4 concrete sub-topics that can be researched in parallel. Respond with JSON only — no explanation, no markdown.",
+      "prompt_template": "Decompose this research goal into 2–4 parallel sub-topics.\n\nGoal: {{$.state.goal}}\nAudience: {{$.state.clarifications.audience}}\nFormat: {{$.state.clarifications.output_format}}\n\nRespond with JSON: { \"queries\": [\"sub-topic 1\", \"sub-topic 2\", ...] }",
+      "structured_output": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "queries": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 4 }
+          },
+          "required": ["queries"]
+        }
+      },
+      "output_key": "research_queries",
+      "position": { "x": 620, "y": 340 }
+    },
+    {
+      "id": "fork_research",
+      "type": "parallel_fork",
+      "label": "Dispatch research sub-topics",
+      "targets": ["research_a", "research_b", "research_c"],
+      "input_map": {
+        "research_a": { "topic": "$.state.research_queries[0]" },
+        "research_b": { "topic": "$.state.research_queries[1]" },
+        "research_c": { "topic": "$.state.research_queries[2]" }
+      },
+      "position": { "x": 900, "y": 340 }
+    },
+    {
+      "id": "research_a",
+      "type": "agent_role",
+      "label": "Research sub-topic A",
+      "config": {
+        "agent_ref": "researcher",
+        "task_description": "Research this sub-topic thoroughly using web search and URL fetching.\n\nSub-topic: {{$.state.research_queries[0]}}\nOverall goal: {{$.state.goal}}",
+        "expected_output": "At least 3 key findings with source URLs. One finding per paragraph.",
+        "output_field": "raw_findings",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1180, "y": 100 }
+    },
+    {
+      "id": "research_b",
+      "type": "agent_role",
+      "label": "Research sub-topic B",
+      "config": {
+        "agent_ref": "researcher",
+        "task_description": "Research this sub-topic thoroughly using web search and URL fetching.\n\nSub-topic: {{$.state.research_queries[1]}}\nOverall goal: {{$.state.goal}}",
+        "expected_output": "At least 3 key findings with source URLs. One finding per paragraph.",
+        "output_field": "raw_findings",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1180, "y": 340 }
+    },
+    {
+      "id": "research_c",
+      "type": "agent_role",
+      "label": "Research sub-topic C",
+      "config": {
+        "agent_ref": "researcher",
+        "task_description": "Research this sub-topic thoroughly using web search and URL fetching.\n\nSub-topic: {{$.state.research_queries[2]}}\nOverall goal: {{$.state.goal}}",
+        "expected_output": "At least 3 key findings with source URLs. One finding per paragraph.",
+        "output_field": "raw_findings",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1180, "y": 580 }
+    },
+    {
+      "id": "join_research",
+      "type": "parallel_join",
+      "label": "Collect research branches",
+      "wait_for": "all",
+      "join_reducer": "append",
+      "output_key": "raw_findings",
+      "position": { "x": 1460, "y": 340 }
+    },
+    {
+      "id": "synthesise",
+      "type": "agent_role",
+      "label": "Synthesise findings",
+      "config": {
+        "agent_ref": "synthesiser",
+        "task_description": "Synthesise these parallel research findings into a single coherent summary. De-duplicate overlapping points. Preserve source attributions.\n\nGoal: {{$.state.goal}}\nFindings: {{$.state.raw_findings}}",
+        "expected_output": "A structured synthesis: key themes, supporting evidence, source URLs. 400–600 words.",
+        "output_field": "synthesis",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 1740, "y": 340 }
+    },
+    {
+      "id": "draft_document",
+      "type": "agent_role",
+      "label": "Draft document",
+      "config": {
+        "agent_ref": "writer",
+        "task_description": "Write a first draft of the document.\n\nGoal: {{$.state.goal}}\nAudience: {{$.state.clarifications.audience}}\nFormat: {{$.state.clarifications.output_format}}\nApproximate length: {{$.state.clarifications.length}}\n\nSynthesised research:\n{{$.state.synthesis}}",
+        "expected_output": "A complete first draft in the requested format, addressing the goal and audience.",
+        "output_field": "draft",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 2020, "y": 340 }
+    },
+    {
+      "id": "quality_review",
+      "type": "hitl_breakpoint",
+      "label": "Quality review",
+      "prompt": "Please review the draft document below.\n\nOriginal goal: {{$.state.goal}}\nAudience: {{$.state.clarifications.audience}}\n\n---\n{{$.state.draft}}\n---\n\nProvide your decision and any specific revision notes.",
+      "resume_schema": {
+        "type": "object",
+        "properties": {
+          "decision":       { "type": "string", "enum": ["approve", "revise", "reject"] },
+          "revision_notes": { "type": "string" }
+        },
+        "required": ["decision"]
+      },
+      "output_key": "reviewer_feedback",
+      "timeout_seconds": 86400,
+      "on_timeout": "raise",
+      "position": { "x": 2300, "y": 340 }
+    },
+    {
+      "id": "route_review",
+      "type": "condition",
+      "label": "Route on review outcome",
+      "branches": [
+        {
+          "condition": { "type": "expr", "expr": "$.state.reviewer_feedback.decision == 'revise'" },
+          "target": "revise_document"
+        },
+        {
+          "condition": { "type": "expr", "expr": "$.state.reviewer_feedback.decision == 'reject'" },
+          "target": "start"
+        }
+      ],
+      "default_target": "finalise",
+      "position": { "x": 2580, "y": 340 }
+    },
+    {
+      "id": "revise_document",
+      "type": "agent_role",
+      "label": "Revise document",
+      "config": {
+        "agent_ref": "writer",
+        "task_description": "Revise the draft based on reviewer feedback.\n\nOriginal draft:\n{{$.state.draft}}\n\nReviewer notes:\n{{$.state.reviewer_feedback.revision_notes}}",
+        "expected_output": "Revised document incorporating all reviewer feedback.",
+        "output_field": "draft",
+        "memory_access": "isolated",
+        "tool_approval": "auto"
+      },
+      "position": { "x": 2580, "y": 580 }
+    },
+    {
+      "id": "finalise",
+      "type": "transform",
+      "label": "Finalise document",
+      "mode": "mapping",
+      "output_map": { "final_document": "$.state.draft" },
+      "position": { "x": 2860, "y": 340 }
+    },
+    {
+      "id": "done",
+      "type": "output",
+      "label": "Final document",
+      "position": { "x": 3140, "y": 340 }
+    }
+  ],
+  "edges": [
+    { "type": "direct", "from": "start",           "to": "clarify" },
+    { "type": "direct", "from": "clarify",          "to": "plan_queries" },
+    { "type": "direct", "from": "plan_queries",     "to": "fork_research" },
+    { "type": "direct", "from": "fork_research",    "to": "research_a" },
+    { "type": "direct", "from": "fork_research",    "to": "research_b" },
+    { "type": "direct", "from": "fork_research",    "to": "research_c" },
+    { "type": "direct", "from": "research_a",       "to": "join_research" },
+    { "type": "direct", "from": "research_b",       "to": "join_research" },
+    { "type": "direct", "from": "research_c",       "to": "join_research" },
+    { "type": "direct", "from": "join_research",    "to": "synthesise" },
+    { "type": "direct", "from": "synthesise",       "to": "draft_document", "context_from": ["join_research"] },
+    { "type": "direct", "from": "draft_document",   "to": "quality_review" },
+    { "type": "direct", "from": "quality_review",   "to": "route_review" },
+    { "type": "direct", "from": "route_review",     "to": "revise_document", "label": "revise" },
+    { "type": "direct", "from": "route_review",     "to": "finalise",        "label": "approve" },
+    { "type": "direct", "from": "route_review",     "to": "start",           "label": "reject" },
+    { "type": "direct", "from": "revise_document",  "to": "quality_review" },
+    { "type": "direct", "from": "finalise",         "to": "done" }
+  ],
+  "flow_config": {
+    "checkpoint": { "enabled": true, "backend": "postgres", "connection_env": "DATABASE_URL" },
+    "streaming":  { "enabled": true, "mode": "updates" },
+    "telemetry":  { "enabled": true, "provider": "langfuse", "project": "toddly-research-write", "trace_all_nodes": true }
+  }
+}
