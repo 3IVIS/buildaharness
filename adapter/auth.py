@@ -134,6 +134,13 @@ async def current_user(
     creds: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
     db:    Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
+    import logging
+    log = logging.getLogger("auth")
+
+    token_preview = creds.credentials[:20] + "…" if creds.credentials else "EMPTY"
+    log.warning("[auth] token received: %s (%d chars)", token_preview, len(creds.credentials))
+    log.warning("[auth] JWT_SECRET set: %s, length: %d", bool(JWT_SECRET), len(JWT_SECRET))
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
     )
@@ -144,23 +151,29 @@ async def current_user(
         )
         user_id: str = payload.get("sub", "")
         jti: str     = payload.get("jti", "")
+        log.warning("[auth] decoded ok — sub=%s jti=%s", user_id, jti)
         if not user_id or not jti:
+            log.warning("[auth] FAIL — missing sub or jti in payload: %s", payload)
             raise ValueError
-    except (JWTError, ValueError):
+    except (JWTError, ValueError) as exc:
+        log.warning("[auth] FAIL — jwt.decode raised %s: %s", type(exc).__name__, exc)
         raise credentials_exception from None
 
     # Check revocation — skip in TESTING mode (no Redis in CI).
     if os.getenv("TESTING") != "true":
         from redis_client import is_revoked
         if await is_revoked(jti):
+            log.warning("[auth] FAIL — token jti=%s is revoked", jti)
             raise credentials_exception from None
 
     user = await db.get(User, user_id)
     if not user:
+        log.warning("[auth] FAIL — user_id=%s not found in DB", user_id)
         raise credentials_exception from None
     # SSO deactivation check (migration 0008).
     if getattr(user, "is_active", True) is False:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+    log.warning("[auth] OK — user=%s", user.email)
     return user
 
 

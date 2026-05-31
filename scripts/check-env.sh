@@ -70,6 +70,36 @@ check_secret LANGFUSE_SALT            "openssl rand -base64 32"
 check_secret LANGFUSE_ENCRYPTION_KEY  "openssl rand -hex 32  ← must be exactly 64 hex chars"
 check_secret CLICKHOUSE_PASSWORD      "openssl rand -hex 24"
 
+# ── Special check: DATABASE_URL must have real password and correct host ────────
+DB_URL=$(get_val "DATABASE_URL")
+PG_PASS=$(get_val "POSTGRES_PASSWORD")
+if ! is_placeholder "$DB_URL"; then
+  # Check for placeholder password in URL
+  if echo "$DB_URL" | grep -qE "REPLACE_WITH_REAL|REPLACE_ME|changeme|placeholder"; then
+    fail "DATABASE_URL — still contains a placeholder password"
+    echo "         Fix: run ./setup-env.sh to rebuild it from POSTGRES_PASSWORD"
+    echo ""
+    ALL_OK=1
+  else
+    # Check password in URL matches POSTGRES_PASSWORD
+    url_pass=$(echo "$DB_URL" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')
+    if [[ -n "$PG_PASS" && "$url_pass" != "$PG_PASS" ]]; then
+      fail "DATABASE_URL — password does not match POSTGRES_PASSWORD"
+      echo "         Fix: run ./setup-env.sh to sync it automatically"
+      echo ""
+      ALL_OK=1
+    # Warn if using localhost instead of Docker service name
+    elif echo "$DB_URL" | grep -q "@localhost:"; then
+      warn "DATABASE_URL uses 'localhost' — should be '@postgres:5432' inside Docker Compose"
+      echo "         Fix: run ./setup-env.sh to correct it"
+      echo ""
+      ALL_OK=1
+    else
+      ok "DATABASE_URL"
+    fi
+  fi
+fi
+
 # ── Special check: LANGFUSE_ENCRYPTION_KEY must be exactly 64 hex chars ───────
 ENC=$(get_val "LANGFUSE_ENCRYPTION_KEY")
 if ! is_placeholder "$ENC"; then
@@ -94,6 +124,63 @@ if is_placeholder "$OPENAI" && is_placeholder "$ANTHROPIC"; then
   echo "         LLM nodes won't execute until at least one is added to .env."
 else
   ok "At least one LLM API key is set"
+fi
+
+# ── .env.local cross-check — VITE_LANGFUSE_PUBLIC_KEY must match .env ──────────
+echo ""
+echo "Checking .env.local sync …"
+echo ""
+
+if [[ ! -f .env.local ]]; then
+  warn ".env.local not found — run ./setup-env.sh to create it"
+  ALL_OK=1
+else
+  lf_env=$(grep -E "^LANGFUSE_PUBLIC_KEY=" .env 2>/dev/null | cut -d= -f2-)
+  lf_vite=$(grep -E "^VITE_LANGFUSE_PUBLIC_KEY=" .env.local 2>/dev/null | cut -d= -f2-)
+  if [[ -n "$lf_env" && "$lf_env" != "$lf_vite" ]]; then
+    fail "VITE_LANGFUSE_PUBLIC_KEY in .env.local does not match LANGFUSE_PUBLIC_KEY in .env"
+    echo "         .env           = ${lf_env:0:16}…"
+    echo "         .env.local     = ${lf_vite:0:16}…"
+    echo "         Traces will be rejected by Langfuse — fix: run ./setup-env.sh"
+    echo ""
+    ALL_OK=1
+  else
+    ok "VITE_LANGFUSE_PUBLIC_KEY matches LANGFUSE_PUBLIC_KEY"
+  fi
+fi
+
+# ── .env.bak cross-check ─────────────────────────────────────────────────────
+echo ""
+echo "Checking .env.bak sync …"
+echo ""
+
+CRITICAL_KEYS=(JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD DATABASE_URL LITELLM_MASTER_KEY
+               LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY)
+
+if [[ ! -f .env.bak ]]; then
+  warn ".env.bak not found — run ./setup-env.sh to create it"
+  ALL_OK=1
+else
+  BAK_DRIFT=0
+  for key in "${CRITICAL_KEYS[@]}"; do
+    v_env=$(grep -E "^${key}=" .env     2>/dev/null | tail -1 | cut -d= -f2-)
+    v_bak=$(grep -E "^${key}=" .env.bak 2>/dev/null | tail -1 | cut -d= -f2-)
+    if [[ -z "$v_env" ]]; then
+      continue  # already caught above
+    fi
+    if [[ "$v_env" != "$v_bak" ]]; then
+      fail "$key — MISMATCH between .env and .env.bak"
+      echo "         .env     = ${v_env:0:8}… (${#v_env} chars)"
+      echo "         .env.bak = ${v_bak:0:8}… (${#v_bak} chars)"
+      echo "         Fix: run ./setup-env.sh — it will sync .env.bak automatically"
+      echo ""
+      BAK_DRIFT=1
+      ALL_OK=1
+    fi
+  done
+  if [[ $BAK_DRIFT -eq 0 ]]; then
+    ok ".env.bak is in sync with .env for all critical secrets"
+  fi
 fi
 
 # ── Result ─────────────────────────────────────────────────────────────────────
