@@ -44,21 +44,26 @@ ask_yes_no() {
 rand_base64() { openssl rand -base64 "$1" | tr -d '\n=/+'; }
 rand_hex()    { openssl rand -hex "$1"; }
 
-# Write or replace a key=value line in .env.
+# Write or replace a key=value line in a given file.
 # If the key exists (even with a placeholder), replaces it in place.
 # If it doesn't exist, appends it.
-set_env_key() {
-  local key="$1" value="$2"
-  if grep -qE "^${key}=" .env 2>/dev/null; then
-    # In-place replacement — works on macOS (BSD sed) and Linux (GNU sed)
+_set_key_in_file() {
+  local file="$1" key="$2" value="$3"
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
     if [[ "$(uname)" == "Darwin" ]]; then
-      sed -i '' "s|^${key}=.*|${key}=${value}|" .env
+      sed -i '' "s|^${key}=.*|${key}=${value}|" "$file"
     else
-      sed -i    "s|^${key}=.*|${key}=${value}|" .env
+      sed -i    "s|^${key}=.*|${key}=${value}|" "$file"
     fi
   else
-    printf '\n%s=%s\n' "$key" "$value" >> .env
+    printf '\n%s=%s\n' "$key" "$value" >> "$file"
   fi
+}
+
+# Write or replace a key in BOTH .env and .env.bak (keeps them in sync).
+set_env_key_both() {
+  _set_key_in_file .env     "$1" "$2"
+  _set_key_in_file .env.bak "$1" "$2"
 }
 
 is_placeholder() {
@@ -75,7 +80,13 @@ is_placeholder() {
 }
 
 get_env_val() {
-  grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2-
+  # Reads from .env first; falls back to .env.bak so existing values seed .env.
+  local val
+  val=$(grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2-)
+  if [[ -z "$val" ]]; then
+    val=$(grep -E "^$1=" .env.bak 2>/dev/null | tail -1 | cut -d= -f2-)
+  fi
+  echo "$val"
 }
 
 # ── Preflight ──────────────────────────────────────────────────────────────────
@@ -122,7 +133,7 @@ _fix_secret() {
   if $needs_fix; then
     local val
     val=$(eval "$generator")
-    set_env_key "$key" "$val"
+    set_env_key_both "$key" "$val"
     success "$key"
   else
     dim "  ↳ $key already set — keeping"
@@ -132,6 +143,35 @@ _fix_secret() {
 _fix_secret JWT_SECRET               'rand_base64 32'
 _fix_secret POSTGRES_PASSWORD        'rand_base64 24'
 _fix_secret REDIS_PASSWORD           'rand_base64 24'
+
+# DATABASE_URL — build from POSTGRES_PASSWORD so they're always in sync.
+# Replaces placeholder password AND fixes localhost → postgres (Docker service name).
+_fix_database_url() {
+  local pg_pass current_url
+  pg_pass=$(get_env_val "POSTGRES_PASSWORD")
+  current_url=$(get_env_val "DATABASE_URL")
+  local needs_fix=false
+
+  # Fix if password is still a placeholder
+  if echo "$current_url" | grep -qE "REPLACE_WITH_REAL|REPLACE_ME|changeme|placeholder"; then
+    needs_fix=true
+  fi
+  # Fix if the password in the URL doesn't match POSTGRES_PASSWORD
+  local url_pass
+  url_pass=$(echo "$current_url" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')
+  if [[ -n "$pg_pass" && "$url_pass" != "$pg_pass" ]]; then
+    needs_fix=true
+  fi
+
+  if $needs_fix; then
+    local new_url="postgresql+asyncpg://itsharness:${pg_pass}@postgres:5432/itsharness"
+    set_env_key_both DATABASE_URL "$new_url"
+    success "DATABASE_URL"
+  else
+    dim "  ↳ DATABASE_URL already set — keeping"
+  fi
+}
+_fix_database_url
 _fix_secret LITELLM_MASTER_KEY       'rand_base64 32'
 _fix_secret LANGFUSE_NEXTAUTH_SECRET 'rand_base64 32'
 _fix_secret LANGFUSE_SALT            'rand_base64 32'
@@ -143,8 +183,8 @@ _fix_secret CLICKHOUSE_PASSWORD      'rand_hex 24'
 LFPUB=$(get_env_val "LANGFUSE_PUBLIC_KEY")
 LFSEC=$(get_env_val "LANGFUSE_SECRET_KEY")
 if is_placeholder "$LFPUB" || is_placeholder "$LFSEC"; then
-  set_env_key LANGFUSE_PUBLIC_KEY "pk-lf-$(rand_hex 16)"
-  set_env_key LANGFUSE_SECRET_KEY "sk-lf-$(rand_hex 16)"
+  set_env_key_both LANGFUSE_PUBLIC_KEY "pk-lf-$(rand_hex 16)"
+  set_env_key_both LANGFUSE_SECRET_KEY "sk-lf-$(rand_hex 16)"
   success "LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY"
 else
   dim "  ↳ LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY already set — keeping"
@@ -160,7 +200,7 @@ CURRENT_EMAIL=$(get_env_val "LANGFUSE_ADMIN_EMAIL")
 if is_placeholder "$CURRENT_EMAIL"; then
   printf "  Langfuse admin email [admin@example.com]: "
   read -r inp_email
-  set_env_key LANGFUSE_ADMIN_EMAIL "${inp_email:-admin@example.com}"
+  set_env_key_both LANGFUSE_ADMIN_EMAIL "${inp_email:-admin@example.com}"
   success "LANGFUSE_ADMIN_EMAIL"
 else
   dim "  ↳ LANGFUSE_ADMIN_EMAIL already set — keeping (${CURRENT_EMAIL})"
@@ -175,7 +215,7 @@ if is_placeholder "$CURRENT_PW"; then
     inp_pw="$(rand_base64 16)"
     warn "Auto-generated Langfuse password — see .env for the value"
   fi
-  set_env_key LANGFUSE_ADMIN_PASSWORD "$inp_pw"
+  set_env_key_both LANGFUSE_ADMIN_PASSWORD "$inp_pw"
   success "LANGFUSE_ADMIN_PASSWORD"
 else
   dim "  ↳ LANGFUSE_ADMIN_PASSWORD already set — keeping"
@@ -190,7 +230,7 @@ CURRENT_OPENAI=$(get_env_val "OPENAI_API_KEY")
 if is_placeholder "$CURRENT_OPENAI"; then
   printf "  OpenAI API key (sk-...): "
   read -r inp_openai
-  [[ -n "$inp_openai" ]] && set_env_key OPENAI_API_KEY "$inp_openai" && success "OPENAI_API_KEY"
+  [[ -n "$inp_openai" ]] && set_env_key_both OPENAI_API_KEY "$inp_openai" && success "OPENAI_API_KEY"
 else
   dim "  ↳ OPENAI_API_KEY already set — keeping"
 fi
@@ -199,7 +239,7 @@ CURRENT_ANTHROPIC=$(get_env_val "ANTHROPIC_API_KEY")
 if is_placeholder "$CURRENT_ANTHROPIC"; then
   printf "  Anthropic API key (sk-ant-...): "
   read -rs inp_anthropic; echo
-  [[ -n "$inp_anthropic" ]] && set_env_key ANTHROPIC_API_KEY "$inp_anthropic" && success "ANTHROPIC_API_KEY"
+  [[ -n "$inp_anthropic" ]] && set_env_key_both ANTHROPIC_API_KEY "$inp_anthropic" && success "ANTHROPIC_API_KEY"
 else
   dim "  ↳ ANTHROPIC_API_KEY already set — keeping"
 fi
@@ -208,7 +248,7 @@ fi
 echo ""
 LFPUB_FINAL=$(get_env_val "LANGFUSE_PUBLIC_KEY")
 
-if [[ ! -f .env.local ]]; then
+_write_env_local() {
   cat > .env.local << EOF
 # itsharness canvas — generated by setup-env.sh on $(date -u '+%Y-%m-%d %H:%M UTC')
 # Vite bakes VITE_* vars at dev-server start. Never commit this file.
@@ -223,9 +263,56 @@ VITE_LANGFUSE_HOST=http://localhost:3001
 # VITE_COLLAB_SERVER_URL=
 # VITE_COLLAB_OFFLINE_PERSISTENCE=true
 EOF
+}
+
+if [[ ! -f .env.local ]]; then
+  _write_env_local
   success ".env.local written"
 else
-  dim "  ↳ .env.local already exists — keeping"
+  # Always sync VITE_LANGFUSE_PUBLIC_KEY from .env — they must match
+  current_vite_key=$(grep -E "^VITE_LANGFUSE_PUBLIC_KEY=" .env.local | cut -d= -f2-)
+  if [[ "$current_vite_key" != "$LFPUB_FINAL" ]]; then
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s|^VITE_LANGFUSE_PUBLIC_KEY=.*|VITE_LANGFUSE_PUBLIC_KEY=${LFPUB_FINAL}|" .env.local
+    else
+      sed -i    "s|^VITE_LANGFUSE_PUBLIC_KEY=.*|VITE_LANGFUSE_PUBLIC_KEY=${LFPUB_FINAL}|" .env.local
+    fi
+    warn ".env.local VITE_LANGFUSE_PUBLIC_KEY updated to match .env"
+  else
+    dim "  ↳ .env.local already exists and VITE_LANGFUSE_PUBLIC_KEY is in sync — keeping"
+  fi
+fi
+
+# --- Sync .env → .env.bak and cross-check for drift ---------------------------
+echo ""
+info "Syncing secrets to .env.bak and checking for drift …"
+
+SYNC_KEYS=(
+  JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD DATABASE_URL LITELLM_MASTER_KEY
+  LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_ADMIN_EMAIL
+  LANGFUSE_ADMIN_PASSWORD LANGFUSE_NEXTAUTH_SECRET LANGFUSE_SALT
+  LANGFUSE_ENCRYPTION_KEY CLICKHOUSE_PASSWORD OPENAI_API_KEY ANTHROPIC_API_KEY
+)
+
+DRIFT_FOUND=0
+if [[ ! -f .env.bak ]]; then
+  cp .env .env.bak
+  success ".env.bak created from .env"
+else
+  for key in "${SYNC_KEYS[@]}"; do
+    v_env=$(grep -E "^${key}=" .env     2>/dev/null | tail -1 | cut -d= -f2-)
+    v_bak=$(grep -E "^${key}=" .env.bak 2>/dev/null | tail -1 | cut -d= -f2-)
+    if [[ -n "$v_env" && "$v_env" != "$v_bak" ]]; then
+      warn "DRIFT: $key differs between .env and .env.bak — updating .env.bak"
+      _set_key_in_file .env.bak "$key" "$v_env"
+      DRIFT_FOUND=1
+    fi
+  done
+  if [[ $DRIFT_FOUND -eq 0 ]]; then
+    success ".env and .env.bak are in sync"
+  else
+    success ".env.bak updated to match .env"
+  fi
 fi
 
 # --- Run check-env to confirm everything is good -----------------------------

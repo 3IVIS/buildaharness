@@ -27,7 +27,7 @@ export const EXAMPLE_FLOWS: { label: string; spec: FlowSpec }[] = [
       nodes: [
         { id: 'start',          type: 'input',        label: 'User question',          output_schema: { type: 'object', properties: { question: { type: 'string' } } }, position: { x: 60,  y: 220 } },
         { id: 'retrieve',       type: 'memory_read',  label: 'Semantic retrieval',     store_id: 'knowledge_base', retrieval_mode: 'semantic', query_expr: '$.state.question', top_k: 5, min_score: 0.72, output_key: 'retrieved_chunks', position: { x: 368, y: 220 } },
-        { id: 'format_context', type: 'transform',    label: 'Format chunks',          mode: 'fn_ref', fn_ref: '@canvas/flows-rag/formatChunks', position: { x: 676, y: 220 } },
+        { id: 'format_context', type: 'transform',    label: 'Format chunks',          mode: 'fn_ref', fn_ref: 'rag_utils:format_chunks', position: { x: 676, y: 220 } },
         { id: 'generate',       type: 'llm_call',     label: 'Generate grounded answer', system_prompt: 'You are a helpful assistant. Answer using only the provided context.', prompt_template: 'Context:\n{{$.state.formatted_context}}\n\nQuestion: {{$.state.question}}\n\nAnswer:', model_params: { temperature: 0.1, max_tokens: 512 }, output_key: 'answer', position: { x: 984, y: 220 } },
         { id: 'cache_qa',       type: 'memory_write', label: 'Cache Q&A pair',         store_id: 'qa_cache', key_expr: '$.state.question', value_expr: '$.state.answer', write_mode: 'upsert', position: { x: 1292, y: 220 } },
         { id: 'done',           type: 'output',       label: 'Return answer',          position: { x: 1600, y: 220 } },

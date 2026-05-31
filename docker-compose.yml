@@ -133,7 +133,9 @@ services:
       # Langfuse
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
-      - LANGFUSE_BASE_URL=http://langfuse:3000
+      - LANGFUSE_BASE_URL=http://langfuse:3000        # internal: SDK sends traces here
+      - LANGFUSE_HOST=http://langfuse:3000            # Python SDK reads this for HTTP calls
+      - LANGFUSE_PUBLIC_URL=${LANGFUSE_PUBLIC_URL:-http://localhost:3001}  # browser-accessible: used in trace links
     # Fix #46: healthcheck so canvas (and CI) knows when the adapter is ready.
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]

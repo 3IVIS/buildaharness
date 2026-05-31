@@ -12,18 +12,29 @@ function authHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-  })
+  const token = getAuthToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...authHeaders(),
+    ...(init?.headers as Record<string, string> | undefined),
+  }
+
+  console.group(`[api] ${init?.method ?? 'GET'} ${path}`)
+  console.log('BASE URL :', BASE)
+  console.log('Token    :', token ? `${token.slice(0, 20)}… (${token.length} chars)` : 'NULL — no token in store')
+  console.log('Auth hdr :', headers['Authorization'] ?? 'NOT SET')
+
+  const res = await fetch(`${BASE}${path}`, { ...init, headers })
+
+  console.log('Status   :', res.status, res.statusText)
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
+    console.error('Error body:', body)
+    console.groupEnd()
     throw new Error((body as { detail?: string }).detail ?? 'Request failed')
   }
+  console.groupEnd()
+
   if (res.status === 204) return undefined as unknown as T
   return res.json() as Promise<T>
 }

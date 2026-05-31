@@ -88,7 +88,15 @@ def _lf_trace_info() -> tuple[str | None, str | None]:
         return None, None
     try:
         lf = _lf_get_client()
-        return lf.get_current_trace_id(), lf.get_trace_url()
+        trace_id  = lf.get_current_trace_id()
+        trace_url = lf.get_trace_url()
+        # get_trace_url() uses the internal Docker hostname (http://langfuse:3000).
+        # Rewrite it to LANGFUSE_PUBLIC_URL so the link works in the browser.
+        public_url = os.getenv("LANGFUSE_PUBLIC_URL", "").rstrip("/")
+        if trace_url and public_url:
+            internal_url = os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000").rstrip("/")
+            trace_url = trace_url.replace(internal_url, public_url)
+        return trace_id, trace_url
     except Exception:
         return None, None
 

@@ -178,7 +178,10 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"]         = "DENY"
     response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"]         = "0"
-    response.headers["Content-Security-Policy"]  = "default-src 'none'; frame-ancestors 'none'"
+
+    if not request.url.path.startswith("/auth") and not request.url.path.startswith("/run"):
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+
     return response
 
 
@@ -212,7 +215,7 @@ async def limit_body_size(request: Request, call_next):
 
 _cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://canvas:3000")
 _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=_cors_origins,
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(auth_router)
