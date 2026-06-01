@@ -67,7 +67,10 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   adapter-tests:
     name: Adapter tests + eval gate
-    if: ${{ github.event.inputs.skip_tests != 'true' && github.event.inputs.promote_staging != 'true' }}
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      (github.event.inputs.skip_tests != 'true' &&
+       github.event.inputs.promote_staging != 'true')
     runs-on: ubuntu-latest
 
     defaults:
