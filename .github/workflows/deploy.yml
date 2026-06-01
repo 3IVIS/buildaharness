@@ -20,15 +20,8 @@ on:
   push:
     branches: [main]
     tags:     ['v*']
-    paths:
-      - 'adapter/**'
-      - 'Dockerfile.adapter'
-      - '.github/workflows/deploy.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'adapter/**'
-      - 'Dockerfile.adapter'
   workflow_dispatch:
     inputs:
       environment:

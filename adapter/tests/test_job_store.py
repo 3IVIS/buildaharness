@@ -166,11 +166,12 @@ async def test_evict_stale_jobs(db_engine):
 
         # Insert a minimal user row directly.
         await db.execute(
-            text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :pw)"),
+            text("INSERT INTO users (id, email, password_hash, is_active, created_at) VALUES (:id, :email, :pw, 1, :ts)"),
             {
                 "id": str(user_id),
                 "email": "evict-test@example.com",
                 "pw": bcrypt.hashpw(b"Password1", bcrypt.gensalt()).decode(),
+                "ts": datetime.now(UTC).isoformat(),
             },
         )
         await db.commit()

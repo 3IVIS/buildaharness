@@ -456,7 +456,21 @@ def gen_tools(spec: dict) -> str:
         lines.append(f"    # tool_ref: {ref}  source: {source}")
 
         builtin = _BUILTIN_TOOL_IMPLS.get(tid)
-        if builtin:
+        if source == "mcp" and mcp_url:
+            env_var = mcp_url.replace("${", "").replace("}", "")
+            method_lines = [
+                f"    async def {vid}(self, query: str) -> str:",
+                f"        # MCP tool — calls server at env var {env_var!r}",
+                "        import httpx",
+                f"        url = os.environ.get({env_var!r}, '')",
+                "        if not url:",
+                f'            raise RuntimeError(f"MCP server URL env var {env_var!r} is not set")',
+                "        async with httpx.AsyncClient() as client:",
+                "            r = await client.post(url, json={'query': query})",
+                "            return r.text",
+                "",
+            ]
+        elif builtin:
             imp_line, body_stmts = builtin
             if imp_line:
                 import_lines.append(imp_line)
@@ -467,20 +481,6 @@ def gen_tools(spec: dict) -> str:
                 + [f"        {stmt}" for stmt in body_stmts]
                 + [""]
             )
-        elif source == "mcp" and mcp_url:
-            env_var = mcp_url.replace("${", "").replace("}", "")
-            method_lines = [
-                f"    async def {vid}(self, query: str) -> str:",
-                f"        # MCP tool — calls server at env var {env_var!r}",
-                "        import httpx",
-                f"        url = os.environ.get({env_var!r}, '')",
-                "        if not url:",
-                f"            raise RuntimeError(f'MCP server URL env var {env_var!r} is not set')",
-                "        async with httpx.AsyncClient() as client:",
-                "            r = await client.post(url, json={'query': query})",
-                "            return r.text",
-                "",
-            ]
         else:
             method_lines = [
                 f"    async def {vid}(self, query: str) -> str:",
@@ -685,6 +685,7 @@ def gen_node_function(
             f"# HITL pause — raises _HitlPause; runner marks job as 'paused'.\n"
             f"# On resume, the runner wraps the payload as {{out_key: data}} and merges\n"
             f"# it into state before re-running, so we check state first.\n"
+            f"# Full checkpoint-based resume (Dapr/SQLite) is a follow-up item.\n"
             f"if state.get({out_key!r}) is not None:\n"
             f"    return {{}}\n"
             f"raise _HitlPause(\n"
@@ -994,6 +995,8 @@ def gen_condition_router(node: dict) -> str:
                 py_cond = f"{lhs} is not None"
             elif op == "contains":
                 py_cond = f"{value!r} in ({lhs} or '')"
+            elif op in ("gt", "gte", "lt", "lte"):
+                py_cond = f"(lambda _v: _v is not None and _v {py_op} {value!r})({lhs})"
             else:
                 py_cond = f"{lhs} {py_op} {value!r}"
         else:
