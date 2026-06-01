@@ -592,7 +592,6 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
         async with _job_session() as db:
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
-        raise
 
 
 # ─── MS Agent Framework runner ───────────────────────────────────────────────
@@ -694,7 +693,6 @@ async def _run_maf(job_id: str, spec: dict, org_id: str | None = None, inputs: d
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
         _maf_runtime_state.pop(job_id, None)
-        raise
 
 
 # In-memory map of paused MAF jobs: job_id → {namespace, spec}
@@ -791,7 +789,6 @@ async def _resume_maf(job_id: str, resume_payload: dict, spec: dict, org_id: str
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
         _maf_runtime_state.pop(job_id, None)
-        raise
 
 
 # ─── Mastra runner client ─────────────────────────────────────────────────────
@@ -941,7 +938,6 @@ async def _run_mastra(job_id: str, spec: dict, org_id: str | None = None, inputs
         async with _job_session() as db:
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
-        raise
 
 
 # ─── LangGraph helpers ────────────────────────────────────────────────────────
@@ -1084,7 +1080,6 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inp
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
         _lg_runtime_state.pop(job_id, None)
-        raise
 
 
 async def _handle_pause(job_id: str, exc: Exception) -> None:
@@ -1189,7 +1184,6 @@ async def _resume_langgraph(job_id: str, resume_payload: dict, spec: dict, org_i
             await _mark_error_nodes(job_id, db, error_message=str(exc))
             await _job_update(job_id, db, status="error", error=str(exc), ended_at=datetime.now(UTC))
         _lg_runtime_state.pop(job_id, None)
-        raise
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────

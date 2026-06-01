@@ -316,7 +316,7 @@ async def test_mastra_codegen_called_before_execute(client, auth_headers):
 
     original_import = __builtins__  # noqa: F841 — used below via closure
 
-    async def _fake_run_mastra(job_id: str, spec: dict, org_id: str | None = None) -> None:
+    async def _fake_run_mastra(job_id: str, spec: dict, org_id: str | None = None, inputs: dict | None = None) -> None:
         called_with_spec.append(spec)
 
     with patch("run_api._run_mastra", _fake_run_mastra):

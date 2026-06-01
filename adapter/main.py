@@ -140,6 +140,7 @@ from eval_api import router as eval_router  # noqa: E402
 from eval_api import seed_eval_templates  # noqa: E402
 from flows_api import router as flows_router  # noqa: E402
 from langgraph_adapter import compile_langgraph  # noqa: E402
+from maf_adapter import compile_maf  # noqa: E402
 from marketplace_api import router as marketplace_router  # noqa: E402
 from marketplace_api import seed_marketplace  # noqa: E402
 from mastra_adapter import compile_mastra  # noqa: E402
@@ -247,6 +248,7 @@ SUPPORTED_RUNTIMES = {
     "langgraph": {"status": "full", "note": "Python codegen + execution. All 14 node types.", "executable": True},
     "crewai": {"status": "full", "note": "Python codegen + execution. All RFC stubs resolved.", "executable": True},
     "mastra": {"status": "full", "note": "TypeScript codegen + execution via Node.js sidecar.", "executable": True},
+    "microsoft_agent_framework": {"status": "full", "note": "Python codegen + in-process execution via Semantic Kernel.", "executable": True},
 }
 
 
@@ -321,6 +323,13 @@ async def compile_flow(
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"LangGraph codegen failed: {exc}") from exc
         return CompileResponse(runtime="langgraph", code=code, warnings=warnings)
+
+    if runtime == "microsoft_agent_framework":
+        try:
+            code, warnings = compile_maf(spec)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"MAF codegen failed: {exc}") from exc
+        return CompileResponse(runtime="microsoft_agent_framework", code=code, warnings=warnings)
 
     raise HTTPException(status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
 

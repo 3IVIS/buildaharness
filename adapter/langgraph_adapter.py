@@ -897,14 +897,17 @@ def gen_graph_assembly(
 
     lines += ["", "# Edges"]
 
-    # Find input node and wire START
+    # Find input/output nodes
     input_node = next((n for n in nodes if n["type"] == "input"), None)
+    output_nodes = {n["id"] for n in nodes if n["type"] == "output"}
+
+    # Wire START → first real node (or END if input connects directly to output)
     if input_node:
         for succ in fwd.get(input_node["id"], []):
-            lines.append(f"graph.add_edge(START, {succ!r})")
-
-    # Find output nodes and wire END
-    output_nodes = {n["id"] for n in nodes if n["type"] == "output"}
+            if succ in output_nodes:
+                lines.append(f"graph.add_edge(START, END)")
+            else:
+                lines.append(f"graph.add_edge(START, {succ!r})")
 
     # Process each edge
     added_edges: set[tuple[str, str]] = set()
