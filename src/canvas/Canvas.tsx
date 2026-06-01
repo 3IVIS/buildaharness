@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useMemo } from 'react'
 import {
-  ReactFlow, Background, Controls, MiniMap, BackgroundVariant,
+  ReactFlow, Background, MiniMap, BackgroundVariant,
   useReactFlow,
   type Node, type NodeMouseHandler, type EdgeMouseHandler,
 } from '@xyflow/react'
@@ -212,7 +212,6 @@ export function Canvas() {
         <RegionLayer />
 
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
-        <Controls showInteractive={false} />
         <MiniMap
           nodeColor={(n) => {
             const hex = NODE_HEX[n.type as NodeType]

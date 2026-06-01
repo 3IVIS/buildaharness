@@ -502,7 +502,7 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
 
     try:
         code, warnings = compile_crewai(spec)
-        namespace: dict = {}
+        namespace: dict = {"_inputs": inputs or {}}
         exec(compile(code, "<crewai_generated>", "exec"), namespace)
 
         crew = namespace.get("crew")

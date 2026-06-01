@@ -333,12 +333,18 @@ const {vid}Step = createStep({{
         fb_target = fail_branch.get("target", "")
         fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
+        # _state merges the vm-global __triggerData__ (always the workflow's
+        # initial input) with inputData (this step's direct predecessor output).
+        # This ensures {{$.state.topic}} resolves correctly even in later steps
+        # where triggerData is not forwarded as a named execute parameter.
+        state_merge = "    const _state = { ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {}), ...inputData }"
         if struct:
             core_body = f"""\
+{state_merge}
     const {{ object }} = await generateObject({{
       model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
-      prompt: {ts_prompt(prompt)},
+      prompt: {ts_prompt(prompt, "_state")},
       schema: z.object({{ {out_key}: z.unknown() }}),
       temperature: {temp},
       maxTokens: {max_tok},
@@ -346,10 +352,11 @@ const {vid}Step = createStep({{
     return {{ {out_key}: object.{out_key} }}"""
         else:
             core_body = f"""\
+{state_merge}
     const {{ text }} = await generateText({{
       model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
-      prompt: {ts_prompt(prompt)},
+      prompt: {ts_prompt(prompt, "_state")},
       temperature: {temp},
       maxTokens: {max_tok},
     }})
@@ -552,7 +559,7 @@ const {vid}Step = createStep({{
             ctx_lines.append("    const _ctxParts = []")
             for ctx_id in ctx_ids:
                 var = f"_ctx{safe_id(ctx_id)}"
-                ctx_lines.append(f"    const {var} = getStepResult({json.dumps(ctx_id)})")
+                ctx_lines.append(f"    const {var} = getStepResult({{ id: {json.dumps(ctx_id)} }})")
                 ctx_lines.append(
                     f"    if ({var}) _ctxParts.push("
                     f"Object.entries({var}).map(([k, v]) => `${{k}}: ${{String(v)}}`).join('\\n')"
@@ -570,11 +577,12 @@ const {vid}Step = createStep({{
 
         body = f"""\
 {hitl_comment}    // agent_role → agent_ref='{agent_ref}', memory_access='{mem_acc}'{ctx_block}
+    const _state = {{ ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {{}}), ...inputData }}
     const agentModel = _openaiProvider({json.dumps(model)})
     const {{ text }} = await generateText({{
       model: agentModel,
       system: {system_expr},
-      prompt: {ts_prompt(task_desc)},
+      prompt: {ts_prompt(task_desc, "_state")},
       maxTokens: 2048,
     }})
     // expected_output: {json.dumps(expected)}

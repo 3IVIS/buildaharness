@@ -1969,11 +1969,11 @@ html, body, #root {
   transform: translateX(-50%);
   z-index: 14;
   display: flex; align-items: center; gap: 6px;
-  background: rgba(22,22,31,0.88);
+  background: var(--bg-raised);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   border: 0.5px solid var(--border-mid);
   border-radius: 8px; padding: 4px 6px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-sm);
 }
 .canvas-toolbar__btn {
   display: flex; align-items: center; justify-content: center;
@@ -1990,7 +1990,7 @@ html, body, #root {
   position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
   z-index: 15;
   width: 340px;
-  background: rgba(22,22,31,0.92);
+  background: var(--bg-raised);
   backdrop-filter: blur(8px);
   border: 0.5px solid var(--border-hi);
   border-radius: 8px;
