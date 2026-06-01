@@ -9,6 +9,9 @@
  * types for building your own toolbars or config panels.
  */
 
+// ── Styles — must be imported so Vite emits dist/styles.css ──────────────────
+import './styles/canvas.css'
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export { ItsHarnessCanvas } from './ItsHarnessCanvas'
 export type { ItsHarnessCanvasProps } from './ItsHarnessCanvas'

@@ -41,7 +41,7 @@ def _get_pool() -> aioredis.ConnectionPool:
     return _pool
 
 
-def get_redis() -> aioredis.Redis:
+def get_redis() -> aioredis.Redis[str]:
     """Return a Redis client backed by the shared pool."""
     return aioredis.Redis(connection_pool=_get_pool())
 

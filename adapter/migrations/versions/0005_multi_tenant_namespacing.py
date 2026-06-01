@@ -163,6 +163,8 @@ def upgrade() -> None:
             sa.text("INSERT INTO orgs (name, owner_id, is_personal) VALUES (:name, :owner_id, 'true') RETURNING id"),
             {"name": f"{name}'s workspace", "owner_id": uid},
         ).fetchone()
+        if org_id_row is None:
+            raise RuntimeError(f"INSERT INTO orgs returned no row for user {uid}")
         org_id = org_id_row[0]
 
         # Membership (admin of own org).
