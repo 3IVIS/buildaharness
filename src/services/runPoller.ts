@@ -45,6 +45,7 @@ export function useRunPoller() {
   const setJobError          = useCanvasStore((s) => s.setJobError)
   const setLastCompleted     = useCanvasStore((s) => s.setLastCompleted)
   const setEvalScores        = useCanvasStore((s) => s.setEvalScores)
+  const setJobResult         = useCanvasStore((s) => s.setJobResult)
 
   // Track which trace we've already wired (avoid redundant calls)
   const wiredTraceId = useRef<string | null>(null)
@@ -94,6 +95,10 @@ export function useRunPoller() {
           setHitlState(null)
           setActiveExecutionTrace(null)
 
+          if (job.status === 'done' && job.result != null) {
+            setJobResult(job.result)
+          }
+
           // Surface the job-level error string (compile error, network failure,
           // adapter crash) so the RunDrawer can display it even when no specific
           // node error_message is available.
@@ -138,5 +143,5 @@ export function useRunPoller() {
     return () => clearInterval(interval)
   // Fix: hitlState added so clearing it (after resume) re-triggers the effect
   // and restarts polling. Without this the interval stays dead after HITL resume.
-  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl, setJobError, setLastCompleted, setEvalScores])
+  }, [activeJobId, hitlState, setNodeExecStat, clearExecStats, setActiveJob, setHitlState, setTraceUrl, setJobError, setLastCompleted, setEvalScores, setJobResult])
 }

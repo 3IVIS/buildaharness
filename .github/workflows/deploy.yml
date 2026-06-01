@@ -62,10 +62,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   adapter-tests:
     name: Adapter tests + eval gate
-    if: >-
-      github.event_name != 'workflow_dispatch' ||
-      (github.event.inputs.skip_tests != 'true' &&
-      github.event.inputs.promote_staging != 'true')
+    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
     runs-on: ubuntu-latest
 
     defaults:
@@ -127,11 +124,7 @@ jobs:
     # Don't push on PRs — just build to verify the Dockerfile is intact.
     # Also skip for promote_staging (no rebuild needed).
     needs: [adapter-tests]
-    if: >-
-      always() &&
-      (needs.adapter-tests.result == 'success' || needs.adapter-tests.result == 'skipped') &&
-      github.event.inputs.promote_staging != 'true' &&
-      github.event_name != 'pull_request'
+    if: always() && (needs.adapter-tests.result == 'success' || needs.adapter-tests.result == 'skipped') && (github.event_name != 'workflow_dispatch' || inputs.promote_staging != 'true') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     outputs:
@@ -206,7 +199,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   promote-staging:
     name: Promote staging → production
-    if: github.event.inputs.promote_staging == 'true'
+    if: inputs.promote_staging == 'true'
     runs-on: ubuntu-latest
 
     outputs:

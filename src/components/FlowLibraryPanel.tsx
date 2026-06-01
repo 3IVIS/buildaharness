@@ -80,7 +80,7 @@ export function FlowLibraryPanel({ onClose }: Props) {
     setSaveError('')
     setIsStarting(true)
     try {
-      const job = await api.run.start(spec)
+      const job = await api.run.start(spec, {})
       setActiveJob(job.job_id)
       onClose()
     } catch (err) {

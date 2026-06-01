@@ -140,6 +140,8 @@ export interface CanvasStore extends PersistedState {
   traceUrl:        string | null
   /** Error string from the most recent failed job. Cleared when a new run starts. */
   jobError:        string | null
+  /** Result string from the most recently completed job. JSON for LangGraph/MAF, raw string for CrewAI. */
+  jobResult:       string | null
 
   // ── Online eval / feedback state ─────────────────────────────────────────
   /** job_id of the most recently completed (done or error) job. Used by
@@ -204,6 +206,7 @@ export interface CanvasStore extends PersistedState {
   setHitlState:         (state: HitlState | null) => void
   setTraceUrl:          (url: string | null) => void
   setJobError:          (err: string | null) => void
+  setJobResult:         (r: string | null) => void
   /** Called by runPoller when a job reaches 'done' or 'error'.
    *  Stores the jobId for FeedbackBar and resets the per-run feedback state. */
   setLastCompleted:     (jobId: string) => void
@@ -351,7 +354,7 @@ export const useCanvasStore = create<CanvasStore>()(
       isProblemsOpen: false,
       isRunDrawerOpen: false,
       execStats: {},
-      activeJobId: null, hitlState: null, traceUrl: null, jobError: null, zodErrors: null, crossRefErrors: [],
+      activeJobId: null, hitlState: null, traceUrl: null, jobError: null, jobResult: null, zodErrors: null, crossRefErrors: [],
       past: [], future: [], canUndo: false, canRedo: false,
       // Online eval / feedback
       lastCompletedJobId: null,
@@ -551,6 +554,7 @@ export const useCanvasStore = create<CanvasStore>()(
       setNodeExecStat: (nodeId, stat) => set((s) => ({ execStats: { ...s.execStats, [nodeId]: stat } })),
       clearExecStats:  ()            => set({
         execStats: {},
+        jobResult: null,
         // Reset per-run eval/feedback state when a new run starts.
         lastCompletedJobId: null,
         feedbackSubmitted:  false,
@@ -560,6 +564,7 @@ export const useCanvasStore = create<CanvasStore>()(
       setHitlState:    (state)       => set({ hitlState: state }),
       setTraceUrl:     (url)         => set({ traceUrl: url }),
       setJobError:     (err)         => set({ jobError: err }),
+      setJobResult:    (r)           => set({ jobResult: r }),
       setCrossRefErrors: (errors)    => set({ crossRefErrors: errors }),
       setLastCompleted:     (jobId)  => set({ lastCompletedJobId: jobId, feedbackSubmitted: false }),
       setFeedbackSubmitted: ()       => set({ feedbackSubmitted: true }),

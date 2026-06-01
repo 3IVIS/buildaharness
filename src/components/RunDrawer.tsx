@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { useCanvasStore, type HitlState, type NodeExecStat } from '../store'
 import type { StateField } from '../spec/schema'
-import { api } from '../services/api'
+import { api, type RunJobResponse } from '../services/api'
 
 // ─── Run-history persistence (localStorage, scoped per flow id) ──────────────
 
@@ -266,7 +266,7 @@ export function RunDrawer() {
   const {
     isRunDrawerOpen, closeRunDrawer,
     nodes, stateSchema, flowMeta,
-    execStats, activeJobId, hitlState, traceUrl, jobError,
+    execStats, activeJobId, hitlState, traceUrl, jobError, jobResult, lastCompletedJobId,
     exportSpec, validate,
     setActiveJob, clearExecStats, isProblemsOpen, toggleProblems,
   } = useCanvasStore()
@@ -278,6 +278,24 @@ export function RunDrawer() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting,  setSubmitting]  = useState(false)
   const [history, setHistory] = useState<RunHistoryEntry[]>([])
+  // History detail view: jobId → fetched job or loading/expired sentinel
+  const [historyExpanded, setHistoryExpanded] = useState<string | null>(null)
+  const [historyFetched, setHistoryFetched] = useState<Record<string, RunJobResponse | 'loading' | 'expired'>>({})
+
+  // Parse the job result — strip optional "[warnings]…\n\n" prefix, try JSON
+  const parsedResult = useMemo((): { type: 'json'; data: Record<string, unknown> } | { type: 'raw'; data: string } | null => {
+    if (!jobResult) return null
+    const content = /^\[warnings\]/.test(jobResult)
+      ? jobResult.replace(/^\[warnings\][\s\S]*?\n\n/, '')
+      : jobResult
+    try {
+      const parsed = JSON.parse(content)
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { type: 'json', data: parsed as Record<string, unknown> }
+      }
+    } catch { /* not JSON */ }
+    return { type: 'raw', data: jobResult }
+  }, [jobResult])
 
   // Auto-expand the paused step when HITL state arrives (§14)
   useEffect(() => {
@@ -305,6 +323,33 @@ export function RunDrawer() {
     setHistory(loadHistory(flowMeta.id))
   }, [activeJobId, hitlState, traceUrl, flowMeta.id, flowMeta.runtimeHints?.preferred_adapter])
 
+  // When a job completes, fetch its final status and update the history entry
+  useEffect(() => {
+    if (!lastCompletedJobId) return
+    api.run.status(lastCompletedJobId)
+      .then((job) => {
+        upsertHistory(flowMeta.id, {
+          jobId: lastCompletedJobId,
+          startedAt: job.started_at,
+          endedAt: job.ended_at,
+          status: job.status as RunHistoryEntry['status'],
+          runtime: job.runtime,
+          traceUrl: job.trace_url,
+          durationMs: job.ended_at && job.started_at
+            ? new Date(job.ended_at).getTime() - new Date(job.started_at).getTime()
+            : null,
+        })
+        setHistory(loadHistory(flowMeta.id))
+      })
+      .catch(() => { /* job may be expired — ignore */ })
+  }, [lastCompletedJobId, flowMeta.id])
+
+  // When a structured JSON result arrives, populate the form fields with output values
+  useEffect(() => {
+    if (!parsedResult || parsedResult.type !== 'json') return
+    setInputValues((prev) => ({ ...prev, ...parsedResult.data }))
+  }, [parsedResult])
+
   const schemaProps = stateSchema?.properties ?? {}
   const required    = stateSchema?.required ?? []
 
@@ -317,6 +362,16 @@ export function RunDrawer() {
     }))
   }, [nodes, execStats])
 
+  function handleHistoryClick(jobId: string) {
+    if (historyExpanded === jobId) { setHistoryExpanded(null); return }
+    setHistoryExpanded(jobId)
+    if (historyFetched[jobId]) return
+    setHistoryFetched((prev) => ({ ...prev, [jobId]: 'loading' }))
+    api.run.status(jobId)
+      .then((job) => setHistoryFetched((prev) => ({ ...prev, [jobId]: job })))
+      .catch(() => setHistoryFetched((prev) => ({ ...prev, [jobId]: 'expired' })))
+  }
+
   async function handleSubmit() {
     setSubmitError(null)
     const spec = exportSpec()
@@ -324,7 +379,7 @@ export function RunDrawer() {
     setSubmitting(true)
     try {
       const runtime = flowMeta.runtimeHints?.preferred_adapter
-      const res = await api.run.start({ ...spec, _inputs: inputValues } as unknown, runtime)
+      const res = await api.run.start(spec, inputValues as Record<string, unknown>, runtime)
       setActiveJob(res.job_id)
       clearExecStats()
       upsertHistory(flowMeta.id, {
@@ -472,6 +527,41 @@ export function RunDrawer() {
             </section>
           )}
 
+          {/* Run output — shown once a job completes */}
+          {!activeJobId && parsedResult && (
+            <section className="run-section">
+              <div className="run-section__label">
+                <span>Output</span>
+                <span style={{ color: 'var(--text-tertiary)' }}>
+                  {parsedResult.type === 'json' ? 'state fields' : 'raw'}
+                </span>
+              </div>
+              {parsedResult.type === 'raw' ? (
+                <pre style={{
+                  fontSize: 10.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                  borderRadius: 4, padding: '8px 10px', maxHeight: 260, overflowY: 'auto', margin: 0,
+                }}>{parsedResult.data}</pre>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.entries(parsedResult.data).map(([k, v]) => {
+                    const text = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+                    return (
+                      <div key={k} className="field">
+                        <label className="field__label">{k}</label>
+                        <pre style={{
+                          fontSize: 10.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                          borderRadius: 4, padding: '6px 8px', maxHeight: 160, overflowY: 'auto', margin: 0,
+                        }}>{text || '—'}</pre>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Job-level error banner — shown when the run ended in error but no
                individual node carried an error_message (e.g. compile failure,
                network error, adapter crash before any node ran). */}
@@ -508,18 +598,60 @@ export function RunDrawer() {
                 No runs yet for this flow. They'll show up here as you run.
               </div>
             )}
-            {history.map((h) => (
-              <div key={h.jobId} className="run-history-row">
-                <span className="run-history-row__dot" style={{ background: statusColor(h.status as NodeExecStat['status']) }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-primary)' }}>{h.jobId.slice(0, 10)}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{h.status}</span>
-                <span style={{ flex: 1 }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)' }}>
-                  {fmtDuration(h.durationMs)}
-                </span>
-                <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)' }}>{relTime(h.startedAt)}</span>
-              </div>
-            ))}
+            {history.map((h) => {
+              const isExpanded = historyExpanded === h.jobId
+              const fetched = historyFetched[h.jobId]
+              return (
+                <div key={h.jobId}>
+                  <div
+                    className="run-history-row"
+                    onClick={() => handleHistoryClick(h.jobId)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span className="run-history-row__dot" style={{ background: statusColor(h.status as NodeExecStat['status']) }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-primary)' }}>{h.jobId.slice(0, 10)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{h.status}</span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)' }}>
+                      {fmtDuration(h.durationMs)}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)' }}>{relTime(h.startedAt)}</span>
+                    {isExpanded
+                      ? <ChevronDown size={11} style={{ color: 'var(--text-tertiary)' }} />
+                      : <ChevronRight size={11} style={{ color: 'var(--text-tertiary)' }} />}
+                  </div>
+                  {isExpanded && (
+                    <div style={{
+                      margin: '4px 0 8px', padding: '8px 10px',
+                      background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                      borderRadius: 4, fontSize: 10.5,
+                    }}>
+                      {fetched === 'loading' && (
+                        <span style={{ color: 'var(--text-tertiary)' }}>
+                          <Loader2 size={10} style={{ animation: 'spin 1s linear infinite', display: 'inline' }} /> Loading…
+                        </span>
+                      )}
+                      {fetched === 'expired' && (
+                        <span style={{ color: 'var(--text-tertiary)' }}>Run expired (results are only kept for a few hours)</span>
+                      )}
+                      {fetched && fetched !== 'loading' && fetched !== 'expired' && (() => {
+                        const job = fetched as RunJobResponse
+                        if (job.status === 'error') {
+                          return <pre style={{ color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 200, overflowY: 'auto', margin: 0 }}>{job.error ?? 'Unknown error'}</pre>
+                        }
+                        if (!job.result) {
+                          return <span style={{ color: 'var(--text-tertiary)' }}>No output recorded</span>
+                        }
+                        const content = /^\[warnings\]/.test(job.result)
+                          ? job.result.replace(/^\[warnings\][\s\S]*?\n\n/, '')
+                          : job.result
+                        return <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 260, overflowY: 'auto', margin: 0 }}>{content}</pre>
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </section>
         </div>
       </aside>
