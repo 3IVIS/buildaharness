@@ -7,7 +7,9 @@ Extracted from main.py to break the circular import:
 Now both main.py and flows_api.py import from validate.py, which has no
 local imports and no circular dependency.
 """
+
 import re
+
 from fastapi import HTTPException
 
 # Fix: the original pattern used a single character-class regex that allowed
@@ -21,9 +23,9 @@ from fastapi import HTTPException
 #   • local path ref:     ./path/to/file:fn            (at most one colon)
 #
 # We enforce at most one colon with two patterns:
-_SAFE_CHARS = r'[@A-Za-z0-9/._~-]'
-_FN_REF_NO_COLON  = re.compile(rf'^(?!\.\./)' + _SAFE_CHARS + r'+$')
-_FN_REF_ONE_COLON = re.compile(rf'^(?!\.\./)' + _SAFE_CHARS + r'+:' + _SAFE_CHARS + r'+$')
+_SAFE_CHARS = r"[@A-Za-z0-9/._~-]"
+_FN_REF_NO_COLON = re.compile(r"^(?!\.\./)" + _SAFE_CHARS + r"+$")
+_FN_REF_ONE_COLON = re.compile(r"^(?!\.\./)" + _SAFE_CHARS + r"+:" + _SAFE_CHARS + r"+$")
 
 
 def _fn_ref_ok(value: str) -> bool:
@@ -68,14 +70,14 @@ def _validate_fn_refs(spec: dict) -> None:
             for branch in node.get("branches", []):
                 cond = branch.get("condition", {})
                 if isinstance(cond, dict) and cond.get("type") == "fn_ref":
-                    check_fn_ref(cond.get("fn_ref", ""),
-                                 f"node '{node.get('id')}' branch condition fn_ref")
+                    check_fn_ref(cond.get("fn_ref", ""), f"node '{node.get('id')}' branch condition fn_ref")
 
         if ntype == "agent_debate":
             cfg = node.get("config", {})
             if isinstance(cfg, dict) and cfg.get("speaker_selection") == "fn_ref":
-                check_fn_ref(cfg.get("speaker_selection_fn_ref", ""),
-                             f"node '{node.get('id')}' speaker_selection_fn_ref")
+                check_fn_ref(
+                    cfg.get("speaker_selection_fn_ref", ""), f"node '{node.get('id')}' speaker_selection_fn_ref"
+                )
 
         if ntype == "tool_invoke":
             tools = spec.get("tools", {})

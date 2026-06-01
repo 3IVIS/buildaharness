@@ -33,13 +33,13 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "a2a_deployments",
-        sa.Column("id",           postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "flow_id",
             sa.Text(),
             sa.ForeignKey("flows.id", ondelete="CASCADE"),
             nullable=False,
-            unique=True,   # one deployment per flow
+            unique=True,  # one deployment per flow
         ),
         sa.Column(
             "user_id",
@@ -47,8 +47,8 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("endpoint_url", sa.Text(),       nullable=False),
-        sa.Column("agent_card",   postgresql.JSONB(), nullable=False),
+        sa.Column("endpoint_url", sa.Text(), nullable=False),
+        sa.Column("agent_card", postgresql.JSONB(), nullable=False),
         sa.Column(
             "deployed_at",
             sa.DateTime(timezone=True),
@@ -57,11 +57,13 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_a2a_deployments_user_id", "a2a_deployments", ["user_id"], unique=False,
+        "ix_a2a_deployments_user_id",
+        "a2a_deployments",
+        ["user_id"],
+        unique=False,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_a2a_deployments_user_id",
-                  table_name="a2a_deployments", if_exists=True)
+    op.drop_index("ix_a2a_deployments_user_id", table_name="a2a_deployments", if_exists=True)
     op.drop_table("a2a_deployments", if_exists=True)

@@ -30,8 +30,8 @@ def upgrade() -> None:
     # ── teams ─────────────────────────────────────────────────────────────────
     op.create_table(
         "teams",
-        sa.Column("id",         postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("name",       sa.Text(), nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("name", sa.Text(), nullable=False),
         sa.Column(
             "created_by",
             postgresql.UUID(as_uuid=True),
@@ -50,7 +50,7 @@ def upgrade() -> None:
     # role values: 'admin' | 'editor' | 'viewer'
     op.create_table(
         "team_memberships",
-        sa.Column("id",      postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "team_id",
             postgresql.UUID(as_uuid=True),
@@ -63,7 +63,7 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("role",       sa.Text(), nullable=False, server_default="viewer"),
+        sa.Column("role", sa.Text(), nullable=False, server_default="viewer"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -73,14 +73,17 @@ def upgrade() -> None:
         sa.UniqueConstraint("team_id", "user_id", name="uq_team_memberships_team_user"),
     )
     op.create_index(
-        "ix_team_memberships_user_id", "team_memberships", ["user_id"], unique=False,
+        "ix_team_memberships_user_id",
+        "team_memberships",
+        ["user_id"],
+        unique=False,
     )
 
     # ── flow_permissions ──────────────────────────────────────────────────────
     # permission values: 'view' | 'edit'
     op.create_table(
         "flow_permissions",
-        sa.Column("id",      postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "flow_id",
             sa.Text(),
@@ -103,10 +106,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("flow_id", "team_id", name="uq_flow_permissions_flow_team"),
     )
     op.create_index(
-        "ix_flow_permissions_flow_id", "flow_permissions", ["flow_id"], unique=False,
+        "ix_flow_permissions_flow_id",
+        "flow_permissions",
+        ["flow_id"],
+        unique=False,
     )
     op.create_index(
-        "ix_flow_permissions_team_id", "flow_permissions", ["team_id"], unique=False,
+        "ix_flow_permissions_team_id",
+        "flow_permissions",
+        ["team_id"],
+        unique=False,
     )
 
 

@@ -260,7 +260,6 @@ function useCollab() {
       collabRef.current = null
     }
   // Re-run when the active flow changes so we join the correct Yjs room
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverUrl, collabRoomKey, email])
 
   return { collabRef, collabReady }
@@ -286,7 +285,7 @@ export function App() {
 
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false)
 
-  const { collabRef, collabReady } = useCollab()
+  useCollab()
 
   useRunPoller()
 
@@ -363,7 +362,7 @@ export function App() {
           <Sidebar />
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
             <ErrorBoundary>
-              <Canvas collabRef={collabRef} collabReady={collabReady} />
+              <Canvas />
             </ErrorBoundary>
             {isProblemsOpen && <ProblemsPanel />}
             {isPanelOpen     && <ConfigPanel />}

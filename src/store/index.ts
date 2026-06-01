@@ -246,10 +246,8 @@ export interface CanvasStore extends PersistedState {
   /** Live WebsocketProvider — set once collab setup completes, null in solo mode.
    *  Stored here so Canvas components (CollabStatus, CollabCursors) can read it
    *  without prop-threading through Canvas → every panel. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _collabWsProvider: any | null
   /** Live Awareness instance — set alongside _collabWsProvider. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   _collabAwareness: any | null
 }
 

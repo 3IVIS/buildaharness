@@ -62,6 +62,7 @@ Endpoints
   POST /marketplace                         → publish a component (auth required)
   POST /marketplace/{slug}/install          → install component, returns node_spec
 """
+
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -70,6 +71,7 @@ from pathlib import Path
 if os.getenv("DOTENV_LOAD", "true").lower() not in ("false", "0", "no"):
     try:
         from dotenv import load_dotenv
+
         _env_path = Path(__file__).parent.parent / ".env"
         if _env_path.exists():
             load_dotenv(_env_path, override=False)
@@ -77,8 +79,8 @@ if os.getenv("DOTENV_LOAD", "true").lower() not in ("false", "0", "no"):
         pass
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -108,15 +110,13 @@ for _var, _hint in _REQUIRED_SECRETS.items():
         _startup_errors.append(f"  {_var} is not set or insecure. {_hint}")
 
 if _startup_errors:
-    print("FATAL: required secrets missing or insecure:\n" + "\n".join(_startup_errors),
-          file=sys.stderr)
+    print("FATAL: required secrets missing or insecure:\n" + "\n".join(_startup_errors), file=sys.stderr)
     sys.exit(1)
 
 for _opt_var in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
     _opt_val = os.getenv(_opt_var, "")
     if not _opt_val:
-        print(f"[itsharness] WARNING: {_opt_var} not set — Langfuse tracing disabled.",
-              file=sys.stderr)
+        print(f"[itsharness] WARNING: {_opt_var} not set — Langfuse tracing disabled.", file=sys.stderr)
     elif _is_insecure(_opt_val):
         print(
             f"[itsharness] WARNING: {_opt_var} is still at its placeholder value. "
@@ -125,32 +125,32 @@ for _opt_var in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
             file=sys.stderr,
         )
 
+from a2a_api import router_deploy as a2a_deploy_router  # noqa: E402
+from a2a_api import router_tasks as a2a_tasks_router  # noqa: E402
+from a2a_api import router_well_known as a2a_wk_router  # noqa: E402
 from auth import current_user  # noqa: E402
 from auth import router as auth_router  # noqa: E402
 from crewai_adapter import compile_crewai  # noqa: E402
 from db import User, init_db  # noqa: E402
-from orgs_api import router as orgs_router  # noqa: E402
-from org_context import Org, current_org as _current_org_dep  # noqa: E402
+from deploy_api import router_deploy as deploy_router  # noqa: E402
+from deploy_api import router_invoke as deploy_invoke_router  # noqa: E402
+from deploy_api import router_share as deploy_share_router  # noqa: E402
+from deploy_api import router_well_known as deploy_wk_router  # noqa: E402
 from eval_api import router as eval_router  # noqa: E402
 from eval_api import seed_eval_templates  # noqa: E402
 from flows_api import router as flows_router  # noqa: E402
 from langgraph_adapter import compile_langgraph  # noqa: E402
+from marketplace_api import router as marketplace_router  # noqa: E402
+from marketplace_api import seed_marketplace  # noqa: E402
 from mastra_adapter import compile_mastra  # noqa: E402
-from maf_adapter import compile_maf  # noqa: E402
-from sso_auth import router_sso, router_token, router_scim  # noqa: E402
-from a2a_api import router_deploy as a2a_deploy_router   # noqa: E402
-from a2a_api import router_tasks  as a2a_tasks_router    # noqa: E402
-from a2a_api import router_well_known as a2a_wk_router   # noqa: E402
-from deploy_api import router_deploy     as deploy_router         # noqa: E402
-from deploy_api import router_well_known as deploy_wk_router      # noqa: E402
-from deploy_api import router_share      as deploy_share_router   # noqa: E402
-from deploy_api import router_invoke     as deploy_invoke_router  # noqa: E402
-from marketplace_api import router as marketplace_router           # noqa: E402
-from marketplace_api import seed_marketplace                       # noqa: E402
+from org_context import Org  # noqa: E402
+from org_context import current_org as _current_org_dep  # noqa: E402
+from orgs_api import router as orgs_router  # noqa: E402
 from prompt_resolver import resolve_prompts  # noqa: E402
 from prompts_api import router as prompts_router  # noqa: E402
 from rate_limit import limiter  # noqa: E402
 from run_api import router as run_router  # noqa: E402
+from sso_auth import router_scim, router_sso, router_token  # noqa: E402
 from teams_api import router as teams_router  # noqa: E402
 from validate import validate_spec as _validate_spec  # noqa: E402
 
@@ -163,6 +163,7 @@ async def lifespan(app: FastAPI):
     yield
     if os.getenv("TESTING") != "true":
         from redis_client import close_pool
+
         await close_pool()
 
 
@@ -175,9 +176,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"]         = "DENY"
-    response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
-    response.headers["X-XSS-Protection"]         = "0"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-XSS-Protection"] = "0"
 
     if not request.url.path.startswith("/auth") and not request.url.path.startswith("/run"):
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
@@ -187,19 +188,20 @@ async def security_headers(request: Request, call_next):
 
 MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(1 * 1024 * 1024)))
 
+
 @app.middleware("http")
 async def limit_body_size(request: Request, call_next):
     content_length = request.headers.get("content-length")
     if content_length and int(content_length) > MAX_BODY_BYTES:
-        return JSONResponse(status_code=413,
-            content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"})
+        return JSONResponse(status_code=413, content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"})
     if not content_length and request.method in ("POST", "PUT", "PATCH"):
         body_so_far = b""
         async for chunk in request.stream():
             body_so_far += chunk
             if len(body_so_far) > MAX_BODY_BYTES:
-                return JSONResponse(status_code=413,
-                    content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"})
+                return JSONResponse(
+                    status_code=413, content={"detail": f"Request body too large (max {MAX_BODY_BYTES} bytes)"}
+                )
         body_consumed = False
 
         async def _receive():
@@ -215,13 +217,14 @@ async def limit_body_size(request: Request, call_next):
 
 _cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://canvas:3000")
 _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=_cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+)
 
 app.include_router(auth_router)
-app.include_router(router_sso)    # GET /auth/sso/config, GET /auth/sso/login, GET /auth/sso/callback
+app.include_router(router_sso)  # GET /auth/sso/config, GET /auth/sso/login, GET /auth/sso/callback
 app.include_router(router_token)  # POST /auth/token/refresh
-app.include_router(router_scim)   # GET|PATCH /scim/v2/Users
+app.include_router(router_scim)  # GET|PATCH /scim/v2/Users
 app.include_router(flows_router)
 app.include_router(run_router)
 app.include_router(teams_router)
@@ -241,25 +244,30 @@ app.include_router(orgs_router)
 
 
 SUPPORTED_RUNTIMES = {
-    "langgraph": {"status": "full",         "note": "Python codegen + execution. All 14 node types.",                       "executable": True},
-    "crewai":    {"status": "full",         "note": "Python codegen + execution. All RFC stubs resolved.",                  "executable": True},
-    "mastra":    {"status": "full",         "note": "TypeScript codegen + execution via Node.js sidecar (mastra-runner).", "executable": True},
+    "langgraph": {"status": "full", "note": "Python codegen + execution. All 14 node types.", "executable": True},
+    "crewai": {"status": "full", "note": "Python codegen + execution. All RFC stubs resolved.", "executable": True},
+    "mastra": {"status": "full", "note": "TypeScript codegen + execution via Node.js sidecar.", "executable": True},
 }
 
 
 class CompileRequest(BaseModel):
     spec: dict
 
+
 class CompileResponse(BaseModel):
-    runtime:  str
-    code:     str
+    runtime: str
+    code: str
     warnings: list[str]
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "adapter": "itsharness", "version": "0.7.0",
-            "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000")}
+    return {
+        "status": "ok",
+        "adapter": "itsharness",
+        "version": "0.7.0",
+        "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000"),
+    }
 
 
 @app.get("/runtimes")
@@ -271,10 +279,10 @@ def runtimes():
 @limiter.limit("30/minute")
 async def compile_flow(
     request: Request,
-    req:     CompileRequest,
+    req: CompileRequest,
     runtime: str | None = Query(default=None),
-    user:    User = Depends(current_user),
-    org:     "Org" = Depends(_current_org_dep),
+    user: User = Depends(current_user),
+    org: "Org" = Depends(_current_org_dep),
 ) -> CompileResponse:
     spec = req.spec
     _validate_spec(spec)
@@ -289,8 +297,9 @@ async def compile_flow(
     runtime = runtime.lower()
 
     if runtime not in SUPPORTED_RUNTIMES:
-        raise HTTPException(status_code=400,
-                            detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}"
+        )
 
     if runtime == "crewai":
         try:
@@ -313,10 +322,10 @@ async def compile_flow(
             raise HTTPException(status_code=422, detail=f"LangGraph codegen failed: {exc}") from exc
         return CompileResponse(runtime="langgraph", code=code, warnings=warnings)
 
-    raise HTTPException(status_code=400,
-                        detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
+    raise HTTPException(status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)  # noqa: S104

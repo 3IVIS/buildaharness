@@ -22,28 +22,29 @@ No RFC_PENDING blockers — Mastra maps cleanly to the current spec.
 """
 
 from __future__ import annotations
+
 import json
 from collections import defaultdict, deque
-from typing import Any
 
 from adapter_logger import (
     get_adapter_logger,
-    log_compile_start,
     log_compile_end,
     log_compile_error,
+    log_compile_start,
     log_empty_spec,
     log_node_processing,
-    log_topo_sort,
     log_section,
+    log_topo_sort,
 )
 
 _log = get_adapter_logger("mastra")
 
-ADAPTER_VERSION  = "0.1.0"
-MASTRA_PKG       = "@mastra/core@^0.10.0"
+ADAPTER_VERSION = "0.1.0"
+MASTRA_PKG = "@mastra/core@^0.10.0"
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
+
 
 def safe_id(s: str) -> str:
     """Convert a node/agent ID to a camelCase-safe TypeScript identifier."""
@@ -56,7 +57,8 @@ def ts_str(s: str) -> str:
     return "`" + s.replace("`", "\\`").replace("${", "\\${") + "`"
 
 
-import re as _re
+import re as _re  # noqa: E402
+
 
 def ts_prompt(s: str, data_var: str = "triggerData") -> str:
     """Convert a Handlebars-style prompt template to a TypeScript template literal.
@@ -90,16 +92,17 @@ def ts_obj(d: dict) -> str:
 
 # ─── Graph analysis ───────────────────────────────────────────────────────────
 
+
 def build_graph(nodes: list[dict], edges: list[dict]) -> dict:
     """Build forward/backward adjacency lists and categorise topology."""
     id_to_node = {n["id"]: n for n in nodes}
-    fwd: dict[str, list[str]] = defaultdict(list)   # node → [successors]
-    bwd: dict[str, list[str]] = defaultdict(list)   # node → [predecessors]
-    edge_meta: dict[tuple[str,str], dict] = {}      # (src,tgt) → edge data
+    fwd: dict[str, list[str]] = defaultdict(list)  # node → [successors]
+    bwd: dict[str, list[str]] = defaultdict(list)  # node → [predecessors]
+    edge_meta: dict[tuple[str, str], dict] = {}  # (src,tgt) → edge data
 
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in id_to_node and tgt in id_to_node:
             fwd[src].append(tgt)
             bwd[tgt].append(src)
@@ -107,9 +110,9 @@ def build_graph(nodes: list[dict], edges: list[dict]) -> dict:
 
     return {
         "id_to_node": id_to_node,
-        "fwd":        fwd,
-        "bwd":        bwd,
-        "edge_meta":  edge_meta,
+        "fwd": fwd,
+        "bwd": bwd,
+        "edge_meta": edge_meta,
     }
 
 
@@ -117,7 +120,7 @@ def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[s
     """Kahn's topological sort; returns node IDs in execution order."""
     g = build_graph(nodes, edges)
     in_deg = {n["id"]: 0 for n in nodes}
-    for src, tgts in g["fwd"].items():
+    for _src, tgts in g["fwd"].items():
         for tgt in tgts:
             in_deg[tgt] += 1
 
@@ -163,14 +166,16 @@ def find_condition_branches(nodes: list[dict], edges: list[dict]) -> dict[str, l
     for n in nodes:
         if n["type"] == "condition":
             branches = n.get("branches", [])
-            default  = n.get("default_target", "")
+            default = n.get("default_target", "")
             items: list[dict] = []
             for b in branches:
                 cond_expr = b.get("condition", {})
-                items.append({
-                    "expr": cond_expr.get("expr", "true"),
-                    "target": b.get("target", ""),
-                })
+                items.append(
+                    {
+                        "expr": cond_expr.get("expr", "true"),
+                        "target": b.get("target", ""),
+                    }
+                )
             if default:
                 items.append({"expr": None, "target": default})  # None = catch-all
             cond_map[n["id"]] = items
@@ -183,6 +188,7 @@ def find_condition_branches(nodes: list[dict], edges: list[dict]) -> dict[str, l
 
 # ─── Schema helpers ───────────────────────────────────────────────────────────
 
+
 def state_schema_to_zod(schema: dict | None) -> str:
     """Emit a zod schema for the state_schema properties."""
     if not schema or not schema.get("properties"):
@@ -192,19 +198,19 @@ def state_schema_to_zod(schema: dict | None) -> str:
     required = set(schema.get("required", []))
 
     type_map = {
-        "string":  "z.string()",
-        "number":  "z.number()",
+        "string": "z.string()",
+        "number": "z.number()",
         "integer": "z.number().int()",
         "boolean": "z.boolean()",
-        "object":  "z.record(z.unknown())",
-        "array":   "z.array(z.unknown())",
+        "object": "z.record(z.unknown())",
+        "array": "z.array(z.unknown())",
     }
 
     lines = ["z.object({"]
     for key, pdef in props.items():
         ztype = type_map.get(pdef.get("type", "string"), "z.unknown()")
-        desc  = pdef.get("description", "")
-        opt   = "" if key in required else ".optional()"
+        desc = pdef.get("description", "")
+        opt = "" if key in required else ".optional()"
         comment = f"  // {desc}" if desc else ""
         lines.append(f"  {key}: {ztype}{opt},{comment}")
     lines.append("})")
@@ -213,11 +219,12 @@ def state_schema_to_zod(schema: dict | None) -> str:
 
 # ─── Step generators ──────────────────────────────────────────────────────────
 
+
 def gen_header(spec: dict) -> str:
     name = spec.get("name", spec.get("id", "unknown"))
-    fid  = spec.get("id", "unknown")
-    nc   = len(spec.get("nodes", []))
-    ec   = len(spec.get("edges", []))
+    fid = spec.get("id", "unknown")
+    nc = len(spec.get("nodes", []))
+    ec = len(spec.get("edges", []))
     return f"""\
 /**
  * Mastra workflow generated by itsharness-adapter v{ADAPTER_VERSION}
@@ -240,6 +247,20 @@ const _openaiProvider = createOpenAI({{
 """
 
 
+# Built-in Mastra tool implementations: tool_id → execute body lines (JS, 4-space indent)
+_BUILTIN_TOOL_IMPLS: dict[str, list[str]] = {
+    "web_search": [
+        "    const q = encodeURIComponent(context.query ?? '');",
+        "    const res = await fetch(`https://api.duckduckgo.com/?q=${q}&format=json&no_html=1&skip_disambig=1`);",
+        "    const data = await res.json();",
+        "    const hits = (data.RelatedTopics ?? []).slice(0, 5)",
+        "      .map((t) => t.Text ?? t.Result ?? '').filter(Boolean);",
+        "    const result = hits.length ? hits.join('\\n') : (data.AbstractText ?? 'No results found.');",
+        "    return { result };",
+    ],
+}
+
+
 def gen_tools(spec: dict) -> str:
     tools = spec.get("tools", {})
     if not tools:
@@ -247,35 +268,39 @@ def gen_tools(spec: dict) -> str:
 
     lines = [
         "// ─── Tool stubs ──────────────────────────────────────────────────────────────",
-        "// Replace with real Mastra tool implementations.",
         "// See: https://mastra.ai/docs/tools",
         "",
     ]
     for tid, tdef in tools.items():
-        vid  = safe_id(tid)
+        vid = safe_id(tid)
         desc = tdef.get("description", tid)
-        ref  = tdef.get("tool_ref", tid)
+        ref = tdef.get("tool_ref", tid)
+        body = _BUILTIN_TOOL_IMPLS.get(tid)
+        if body:
+            execute_body = "\n".join(body)
+        else:
+            execute_body = f"    throw new Error({json.dumps(f'Implement {tid} tool')})"
         lines += [
             f"// tool_ref: {ref}",
             f"const {vid}Tool = {{",
             f"  id: {json.dumps(tid)},",
             f"  description: {json.dumps(desc)},",
-            f"  inputSchema: z.object({{ query: z.string() }}),",
-            f"  outputSchema: z.object({{ result: z.string() }}),",
-            f"  execute: async ({{ context }}) => {{",
-            f"    throw new Error({json.dumps(f'Implement {tid} tool')})",
-            f"  }},",
-            f"}}",
+            "  inputSchema: z.object({ query: z.string() }),",
+            "  outputSchema: z.object({ result: z.string() }),",
+            "  execute: async ({ context }) => {",
+            execute_body,
+            "  },",
+            "}",
             "",
         ]
     return "\n".join(lines)
 
 
-def gen_step_for_node(node: dict, spec: dict, warnings: list[str]) -> str:
+def gen_step_for_node(node: dict, spec: dict, warnings: list[str], context_from_ids: list[str] | None = None) -> str:
     """Emit a createStep(...) for a single node."""
     ntype = node["type"]
-    nid   = node["id"]
-    vid   = safe_id(nid)
+    nid = node["id"]
+    vid = safe_id(nid)
     label = node.get("label", nid)
     agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
     state_schema = spec.get("state_schema", {})
@@ -288,7 +313,7 @@ const {vid}Step = createStep({{
   description: {json.dumps(label)},
   inputSchema: {input_schema},
   outputSchema: {output_schema},
-  execute: async ({{ inputData, resumeData, suspend, getStepResult, mastra }}) => {{
+  execute: async ({{ inputData, triggerData, resumeData, suspend, getStepResult, mastra }}) => {{
 {body}
   }},
 }})
@@ -296,21 +321,20 @@ const {vid}Step = createStep({{
 
     # ── llm_call ─────────────────────────────────────────────────────────────
     if ntype == "llm_call":
-        sys_p    = node.get("system_prompt", "You are a helpful assistant.")
-        prompt   = node.get("prompt_template", "{{$.state.input}}")
-        out_key  = node.get("output_key", "result")
-        model    = node.get("model", model_default)
-        max_tok  = (node.get("model_params") or {}).get("max_tokens", 512)
-        temp     = (node.get("model_params") or {}).get("temperature", 0.7)
-        struct   = node.get("structured_output")
+        sys_p = node.get("system_prompt", "You are a helpful assistant.")
+        prompt = node.get("prompt_template", "{{$.state.input}}")
+        out_key = node.get("output_key", "result")
+        model = node.get("model", model_default)
+        max_tok = (node.get("model_params") or {}).get("max_tokens", 512)
+        temp = (node.get("model_params") or {}).get("temperature", 0.7)
+        struct = node.get("structured_output")
 
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
         if struct:
             core_body = f"""\
-    const triggerData = inputData ?? {{}}
     const {{ object }} = await generateObject({{
       model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
@@ -322,7 +346,6 @@ const {vid}Step = createStep({{
     return {{ {out_key}: object.{out_key} }}"""
         else:
             core_body = f"""\
-    const triggerData = inputData ?? {{}}
     const {{ text }} = await generateText({{
       model: _openaiProvider({json.dumps(model)}),
       system: {json.dumps(sys_p)},
@@ -337,7 +360,7 @@ const {vid}Step = createStep({{
     // fail_branch: on error route to '{fb_target}' (max_attempts={fb_retry})
     for (let _attempt = 0; _attempt < {fb_retry}; _attempt++) {{
       try {{
-{chr(10).join("        " + l for l in core_body.strip().splitlines())}
+{chr(10).join("        " + ln for ln in core_body.strip().splitlines())}
       }} catch (err) {{
         if (_attempt === {fb_retry} - 1) {{
           // All retries exhausted — the workflow engine should route to '{fb_target}'
@@ -351,7 +374,9 @@ const {vid}Step = createStep({{
 
         # Use the flow's state_schema as the step input schema so all state
         # fields (including trigger data like 'topic') are accessible via inputData.
-        input_schema = state_schema_to_zod(state_schema) + ".passthrough()" if state_schema else "z.object({}).passthrough()"
+        input_schema = (
+            state_schema_to_zod(state_schema) + ".passthrough()" if state_schema else "z.object({}).passthrough()"
+        )
         return step_wrap(
             input_schema,
             f"z.object({{ {out_key}: z.string() }})",
@@ -362,10 +387,10 @@ const {vid}Step = createStep({{
     if ntype == "tool_invoke":
         tool_id = node.get("tool_id", "")
         tool_var = safe_id(tool_id) + "Tool" if tool_id else "undefined"
-        out_key  = "result"
+        out_key = "result"
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
         if fb_target:
             body = f"""\
@@ -394,8 +419,8 @@ const {vid}Step = createStep({{
 
     # ── transform ─────────────────────────────────────────────────────────────
     if ntype == "transform":
-        mode    = node.get("mode", "mapping")
-        fn_ref  = node.get("fn_ref", "")
+        mode = node.get("mode", "mapping")
+        fn_ref = node.get("fn_ref", "")
         mapping = node.get("mapping", [])
 
         if mode == "fn_ref" and fn_ref:
@@ -407,13 +432,13 @@ const {vid}Step = createStep({{
     return {{ result: await transformFn(state) }}"""
         else:
             lines = ["    const state = inputData ?? {}"]
-            lines.append("    const out: Record<string, unknown> = {}")
+            lines.append("    const out = {}")
             for m in mapping:
                 frm = m.get("from", "")
-                to  = m.get("to",  "")
+                to = m.get("to", "")
                 # Simplistic path resolution — $.state.foo → state.foo
                 frm_expr = frm.replace("$.state.", "state.").replace("$.output.", "out.")
-                to_key   = to.split(".")[-1] if "." in to else to
+                to_key = to.split(".")[-1] if "." in to else to
                 lines.append(f"    out[{json.dumps(to_key)}] = {frm_expr}")
             lines.append("    return out")
             body = "\n".join(lines)
@@ -425,11 +450,11 @@ const {vid}Step = createStep({{
 
     # ── hitl_breakpoint ───────────────────────────────────────────────────────
     if ntype == "hitl_breakpoint":
-        prompt      = node.get("prompt", "Please review and provide input.")
-        out_key     = node.get("output_key", "reviewerOutcome")
-        resume_sch  = node.get("resume_schema", {})
-        timeout_s   = node.get("timeout_seconds", 86400)
-        zod_resume  = state_schema_to_zod(resume_sch) if resume_sch else "z.object({ decision: z.string() })"
+        prompt = node.get("prompt", "Please review and provide input.")
+        out_key = node.get("output_key", "reviewerOutcome")
+        resume_sch = node.get("resume_schema", {})
+        timeout_s = node.get("timeout_seconds", 86400)
+        zod_resume = state_schema_to_zod(resume_sch) if resume_sch else "z.object({ decision: z.string() })"
         resume_fields = list((resume_sch.get("properties") or {}).keys()) if resume_sch else []
         body = f"""\
     // Suspend workflow and wait for human input
@@ -453,15 +478,15 @@ const {vid}Step = createStep({{
 
     # ── memory_read ───────────────────────────────────────────────────────────
     if ntype == "memory_read":
-        store_id  = node.get("store_id", "")
-        mode      = node.get("retrieval_mode", "key_value")
+        store_id = node.get("store_id", "")
+        mode = node.get("retrieval_mode", "key_value")
         query_exp = node.get("query_expr", "")
-        top_k     = node.get("top_k", 5)
-        out_key   = node.get("output_key", "retrieved")
+        top_k = node.get("top_k", 5)
+        out_key = node.get("output_key", "retrieved")
         body = f"""\
     // memory_read: store='{store_id}', mode='{mode}'
     const memory = mastra?.memory
-    let {out_key}: unknown = null
+    let {out_key} = null
     if (memory) {{
       if ({json.dumps(mode)} === 'semantic') {{
         const state = inputData ?? {{}}
@@ -481,11 +506,11 @@ const {vid}Step = createStep({{
 
     # ── memory_write ──────────────────────────────────────────────────────────
     if ntype == "memory_write":
-        store_id  = node.get("store_id", "")
-        key_expr  = node.get("key_expr",   "")
-        val_expr  = node.get("value_expr", "")
+        store_id = node.get("store_id", "")
+        key_expr = node.get("key_expr", "")
+        val_expr = node.get("value_expr", "")
         write_mode = node.get("write_mode", "upsert")
-        tier      = node.get("tier", "short")
+        tier = node.get("tier", "short")
         body = f"""\
     // memory_write: store='{store_id}', tier='{tier}', mode='{write_mode}'
     const memory = mastra?.memory
@@ -493,7 +518,7 @@ const {vid}Step = createStep({{
     const key    = {ts_str(key_expr)}   // key_expr
     const value  = {ts_str(val_expr)}  // value_expr
     if (memory) {{
-      await memory.set({{ key, value, overwrite: {json.dumps(write_mode == 'overwrite')} }})
+      await memory.set({{ key, value, overwrite: {json.dumps(write_mode == "overwrite")} }})
     }}
     return {{ written: true }}"""
         return step_wrap(
@@ -504,26 +529,52 @@ const {vid}Step = createStep({{
 
     # ── agent_role ────────────────────────────────────────────────────────────
     if ntype == "agent_role":
-        cfg       = node.get("config", {})
+        cfg = node.get("config", {})
         agent_ref = cfg.get("agent_ref", "")
         task_desc = cfg.get("task_description", "Complete the task.")
-        expected  = cfg.get("expected_output", "")
+        expected = cfg.get("expected_output", "")
         out_field = cfg.get("output_field", "result")
         tool_appr = cfg.get("tool_approval", "auto")
-        mem_acc   = cfg.get("memory_access", "isolated")
-        model     = (agents_by_id.get(agent_ref) or {}).get("model", model_default)
+        mem_acc = cfg.get("memory_access", "isolated")
+        model = (agents_by_id.get(agent_ref) or {}).get("model", model_default)
+        agent_info = agents_by_id.get(agent_ref) or {}
+        role_str = f"You are a {agent_info.get('role', 'specialist')}. {agent_info.get('goal', '')}"
 
         hitl_comment = ""
         if tool_appr == "human":
             hitl_comment = "    // tool_approval=human — consider adding a suspend() gate before tool calls\n"
 
+        # Build context_from injection: call getStepResult for each prior step and
+        # append their outputs to the system prompt so the agent has full context.
+        ctx_lines: list[str] = []
+        ctx_ids = context_from_ids or []
+        if ctx_ids:
+            ctx_lines.append("    const _ctxParts = []")
+            for ctx_id in ctx_ids:
+                var = f"_ctx{safe_id(ctx_id)}"
+                ctx_lines.append(f"    const {var} = getStepResult({json.dumps(ctx_id)})")
+                ctx_lines.append(
+                    f"    if ({var}) _ctxParts.push("
+                    f"Object.entries({var}).map(([k, v]) => `${{k}}: ${{String(v)}}`).join('\\n')"
+                    ")"
+                )
+            ctx_lines.append(
+                "    const _ctxStr = _ctxParts.length > 0"
+                " ? `\\n\\nContext from prior steps:\\n${_ctxParts.join('\\n\\n')}` : ''"
+            )
+            system_expr = f"`{role_str.replace('`', chr(92) + '`')}${{_ctxStr}}`"
+        else:
+            system_expr = json.dumps(role_str)
+
+        ctx_block = ("\n" + "\n".join(ctx_lines)) if ctx_lines else ""
+
         body = f"""\
-{hitl_comment}    // agent_role → agent_ref='{agent_ref}', memory_access='{mem_acc}'
+{hitl_comment}    // agent_role → agent_ref='{agent_ref}', memory_access='{mem_acc}'{ctx_block}
     const agentModel = _openaiProvider({json.dumps(model)})
     const {{ text }} = await generateText({{
       model: agentModel,
-      system: {json.dumps(f"You are a {(agents_by_id.get(agent_ref) or {}).get('role', 'specialist')}. {(agents_by_id.get(agent_ref) or {}).get('goal', '')}")},
-      prompt: {ts_str(task_desc)},
+      system: {system_expr},
+      prompt: {ts_prompt(task_desc)},
       maxTokens: 2048,
     }})
     // expected_output: {json.dumps(expected)}
@@ -536,11 +587,11 @@ const {vid}Step = createStep({{
 
     # ── agent_debate ──────────────────────────────────────────────────────────
     if ntype == "agent_debate":
-        cfg        = node.get("config", {})
-        a_refs     = cfg.get("agents", [])
+        cfg = node.get("config", {})
+        a_refs = cfg.get("agents", [])
         max_rounds = cfg.get("max_rounds", 10)
-        out_field  = cfg.get("output_field", "debateTranscript")
-        term_cond  = (cfg.get("termination_condition") or {}).get("expr", "")
+        out_field = cfg.get("output_field", "debateTranscript")
+        term_cond = (cfg.get("termination_condition") or {}).get("expr", "")
 
         agent_models = []
         for ref in a_refs:
@@ -556,19 +607,21 @@ const {vid}Step = createStep({{
             f"agent_debate '{nid}': multi-agent loop synthesised — "
             f"consider using Mastra's Agent API with custom turn management for production"
         )
+        _tc_kw = term_cond.split(" contains ")[-1] if " contains " in term_cond else "VERDICT"
+        _break_cond = f"if (lastMessage.includes({json.dumps(_tc_kw)})) break" if term_cond else ""
         body = f"""\
     // agent_debate: {max_rounds} rounds, agents: {a_refs}
-    // termination: {json.dumps(term_cond) if term_cond else 'max_rounds reached'}
+    // termination: {json.dumps(term_cond) if term_cond else "max_rounds reached"}
 {agent_inits}
-    const transcript: string[] = []
+    const transcript = []
     let lastMessage = inputData?.proposition ?? ''
     // Model map avoids eval() — keys match the const names emitted above.
-    const _modelMap: Record<string, ReturnType<typeof _openaiProvider>> = {{
-{chr(10).join(f'      [{json.dumps(safe_id(ref) + "Model")}]: {safe_id(ref)}Model,' for ref, _, __ in agent_models)}
+    const _modelMap = {{
+{chr(10).join(f"      [{json.dumps(safe_id(ref) + 'Model')}]: {safe_id(ref)}Model," for ref, _, __ in agent_models)}
     }}
     for (let round = 0; round < {max_rounds}; round++) {{
       for (const [modelId, role] of [
-{chr(10).join(f'        [{json.dumps(safe_id(ref) + "Model")}, {json.dumps(role)}],' for ref, role, _ in agent_models)}
+{chr(10).join(f"        [{json.dumps(safe_id(ref) + 'Model')}, {json.dumps(role)}]," for ref, role, _ in agent_models)}
       ]) {{
         const {{ text }} = await generateText({{
           model: _modelMap[modelId],  // explicit map — no eval()
@@ -577,7 +630,7 @@ const {vid}Step = createStep({{
         }})
         transcript.push(`[${{role}}]: ${{text}}`)
         lastMessage = text
-        {f'if (lastMessage.includes({json.dumps(term_cond.split(" contains ")[-1] if " contains " in term_cond else "VERDICT")})) break' if term_cond else ''}
+        {_break_cond}
       }}
     }}
     return {{ {out_field}: transcript.join("\\n") }}"""
@@ -589,8 +642,8 @@ const {vid}Step = createStep({{
 
     # ── subgraph ──────────────────────────────────────────────────────────────
     if ntype == "subgraph":
-        flow_ref  = node.get("flow_ref", "")
-        input_map = node.get("input_map", {})
+        flow_ref = node.get("flow_ref", "")
+        _input_map = node.get("input_map", {})
         warnings.append(f"subgraph '{nid}': import and invoke '{flow_ref}' workflow manually")
         body = f"""\
     // subgraph: flow_ref='{flow_ref}'
@@ -607,13 +660,13 @@ const {vid}Step = createStep({{
 
     # ── parallel_join (no-op step — results arrive via .parallel()) ───────────
     if ntype == "parallel_join":
-        wait_for = node.get("wait_for", "all")
-        reducer  = node.get("join_reducer", "merge")
-        body = f"""\
+        _wait_for = node.get("wait_for", "all")
+        _reducer = node.get("join_reducer", "merge")
+        body = """\
     // parallel_join: Mastra's .parallel() resolves all branches before this step.
     // Merge results here if needed.
-    const branchResults = inputData ?? {{}}
-    return {{ merged: branchResults }}"""
+    const branchResults = inputData ?? {}
+    return { merged: branchResults }"""
         return step_wrap(
             "z.record(z.unknown())",
             "z.object({ merged: z.record(z.unknown()) })",
@@ -628,6 +681,7 @@ const {vid}Step = createStep({{
 
 # ─── Workflow chain builder ───────────────────────────────────────────────────
 
+
 def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
     """
     Walk the spec graph and emit the Mastra workflow builder chain.
@@ -637,12 +691,12 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
       - condition nodes        → .branch([{ condition, step }])
       - parallel_fork/join     → .parallel([step, step, ...])
     """
-    nodes      = spec.get("nodes", [])
-    edges      = spec.get("edges", [])
+    nodes = spec.get("nodes", [])
+    edges = spec.get("edges", [])
     id_to_node = {n["id"]: n for n in nodes}
-    g          = build_graph(nodes, edges)
+    g = build_graph(nodes, edges)
 
-    name  = spec.get("name", spec.get("id", "workflow"))
+    name = spec.get("name", spec.get("id", "workflow"))
     state = spec.get("state_schema")
 
     trigger_schema = state_schema_to_zod(state) if state else "z.object({ input: z.string() })"
@@ -654,7 +708,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
         f"export const {safe_id(spec.get('id', 'workflow'))}Workflow = createWorkflow({{",
         f"  name: {json.dumps(name)},",
         f"  triggerSchema: {trigger_schema},",
-        f"}})",
+        "})",
         "",
         f"{safe_id(spec.get('id', 'workflow'))}Workflow",
     ]
@@ -667,9 +721,9 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
         return "\n".join(lines)
 
     # Walk graph from input, emitting chain segments
-    visited:  set[str] = set()
+    visited: set[str] = set()
     parallel_groups = find_parallel_groups(nodes, edges)
-    fork_to_join:    dict[str, str] = {}
+    fork_to_join: dict[str, str] = {}
 
     # Pre-compute fork → join mapping
     join_ids = {n["id"] for n in nodes if n["type"] == "parallel_join"}
@@ -689,7 +743,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
             return
 
         ntype = node["type"]
-        vid   = safe_id(nid)
+        vid = safe_id(nid)
 
         if ntype in ("input",):
             visited.add(nid)
@@ -737,12 +791,12 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
         # ── condition ────────────────────────────────────────────────────────
         if ntype == "condition":
             visited.add(nid)
-            branches   = node.get("branches", [])
+            branches = node.get("branches", [])
             def_target = node.get("default_target", "")
             branch_lines: list[str] = []
 
             for b in branches:
-                expr   = (b.get("condition") or {}).get("expr", "true")
+                expr = (b.get("condition") or {}).get("expr", "true")
                 target = b.get("target", "")
                 if target and target in id_to_node:
                     safe_expr = expr.replace("$.state.", "inputData?.") or "true"
@@ -755,9 +809,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
                 def_node_type = id_to_node[def_target].get("type", "")
                 if def_node_type not in ("output", "annotation"):
                     # Mastra ^0.10 branch() takes [conditionFn, step] tuples
-                    branch_lines.append(
-                        f"    [async () => true, {safe_id(def_target)}Step],  // default"
-                    )
+                    branch_lines.append(f"    [async () => true, {safe_id(def_target)}Step],  // default")
                 # NOTE: do NOT add def_target to visited — we need to continue the chain into it
 
             lines.append("  .branch([")
@@ -799,6 +851,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+
 def compile_mastra(spec: dict) -> tuple[str, list[str]]:
     """
     Compile a FlowSpec dict to Mastra TypeScript source code.
@@ -819,6 +872,14 @@ def compile_mastra(spec: dict) -> tuple[str, list[str]]:
         log_section(_log, "topo_sort", flow_id=flow_id)
         skip_for_steps = {"input", "output", "annotation", "parallel_fork", "condition"}
 
+        # Build context_from map: target_node_id → [source_node_id, ...]
+        context_from_map: dict[str, list[str]] = {}
+        for e in edges:
+            tgt = e.get("to", e.get("target", ""))
+            ctx = e.get("context_from", [])
+            if tgt and ctx:
+                context_from_map[tgt] = list(ctx)
+
         log_section(_log, "steps", flow_id=flow_id)
         step_blocks: list[str] = []
         for nid in topo_sort(nodes, edges, flow_id=flow_id):
@@ -826,10 +887,18 @@ def compile_mastra(spec: dict) -> tuple[str, list[str]]:
             if node:
                 if node["type"] not in skip_for_steps:
                     log_node_processing(_log, node, flow_id=flow_id)
-                    step_blocks.append(gen_step_for_node(node, spec, warnings))
+                    step_blocks.append(
+                        gen_step_for_node(
+                            node,
+                            spec,
+                            warnings,
+                            context_from_ids=context_from_map.get(nid),
+                        )
+                    )
                 else:
-                    log_node_processing(_log, node, flow_id=flow_id, skipped=True,
-                                        reason=f"type '{node['type']}' has no step")
+                    log_node_processing(
+                        _log, node, flow_id=flow_id, skipped=True, reason=f"type '{node['type']}' has no step"
+                    )
 
         log_section(_log, "header+tools", flow_id=flow_id)
         log_section(_log, "workflow_chain", flow_id=flow_id)

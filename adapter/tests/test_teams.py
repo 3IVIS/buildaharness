@@ -8,7 +8,8 @@ import pytest
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-async def _register(client, email, password="Password1"):  # noqa: S107
+
+async def _register(client, email, password="Password1"):
     r = await client.post("/auth/register", json={"email": email, "password": password})
     assert r.status_code == 201, r.text
     return r.json()["token"]
@@ -19,6 +20,7 @@ def _auth(token):
 
 
 # ── team CRUD ─────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_team(client, auth_headers):
@@ -84,7 +86,9 @@ async def test_rename_team_non_admin_forbidden(client, auth_headers):
         headers=auth_headers,
     )
     r = await client.patch(
-        f"/teams/{team_id}", json={"name": "Hacked"}, headers=_auth(editor_token),
+        f"/teams/{team_id}",
+        json={"name": "Hacked"},
+        headers=_auth(editor_token),
     )
     assert r.status_code == 403
 
@@ -100,6 +104,7 @@ async def test_delete_team(client, auth_headers):
 
 
 # ── member management ─────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_invite_member(client, auth_headers):
@@ -183,6 +188,7 @@ async def test_remove_member(client, auth_headers):
 
 # ── flow sharing ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_share_and_unshare_flow(client, auth_headers):
     from tests.conftest import MINIMAL_SPEC
@@ -222,6 +228,7 @@ async def test_share_nonowned_flow_404(client, auth_headers):
 
 
 # ── Pass 1 additions ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_invalid_team_uuid_returns_422(client, auth_headers):
@@ -290,7 +297,8 @@ async def test_list_shared_flows_non_member_forbidden(client, auth_headers):
     team_id = cr.json()["id"]
     other_token = await _register(client, "outsider2@example.com")
     r = await client.get(
-        f"/teams/{team_id}/flows", headers=_auth(other_token),
+        f"/teams/{team_id}/flows",
+        headers=_auth(other_token),
     )
     assert r.status_code == 403
 

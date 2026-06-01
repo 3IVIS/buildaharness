@@ -1,8 +1,11 @@
 """
 Tests for /flows CRUD + versioning.
 """
+
 import copy
+
 import pytest
+
 from tests.conftest import MINIMAL_SPEC
 
 
@@ -40,9 +43,13 @@ async def test_list_flows_isolated_between_users(client, auth_headers):
     """A second user must not see the first user's flows."""
     await client.post("/flows", json={"spec": MINIMAL_SPEC}, headers=auth_headers)
 
-    r2 = await client.post("/auth/register", json={
-        "email": "other@example.com", "password": "Password1",
-    })
+    r2 = await client.post(
+        "/auth/register",
+        json={
+            "email": "other@example.com",
+            "password": "Password1",
+        },
+    )
     other_headers = {"Authorization": f"Bearer {r2.json()['token']}"}
 
     r = await client.get("/flows", headers=other_headers)
@@ -76,12 +83,18 @@ async def test_save_flow_rejects_missing_id(client, auth_headers):
 @pytest.mark.asyncio
 async def test_save_flow_rejects_invalid_spec(client, auth_headers):
     """Fix #7: save_flow now validates the spec structure before storing."""
-    r = await client.post("/flows", json={"spec": {
-        "id": "bad-flow",
-        "spec_version": "0.2.0",
-        "nodes": [],    # empty nodes — should fail validation
-        "edges": [],
-    }}, headers=auth_headers)
+    r = await client.post(
+        "/flows",
+        json={
+            "spec": {
+                "id": "bad-flow",
+                "spec_version": "0.2.0",
+                "nodes": [],  # empty nodes — should fail validation
+                "edges": [],
+            }
+        },
+        headers=auth_headers,
+    )
     assert r.status_code == 400
 
 
@@ -102,8 +115,6 @@ async def test_version_history_and_restore(client, auth_headers):
 
     # Restore v1
     ver_id = versions[1]["id"]  # version_num == 1
-    r2 = await client.post(
-        f"/flows/test-flow/versions/{ver_id}/restore", headers=auth_headers
-    )
+    r2 = await client.post(f"/flows/test-flow/versions/{ver_id}/restore", headers=auth_headers)
     assert r2.status_code == 200
     assert r2.json()["version_num"] == 3  # restore creates a new version

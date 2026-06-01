@@ -48,38 +48,34 @@ import hmac
 import os
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
-from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import JWT_ALGORITHM, JWT_SECRET, JWT_TTL_DAYS, _make_token
+from auth import JWT_SECRET, JWT_TTL_DAYS, _make_token
 from db import Org, OrgMembership, OrgRole, User, get_session
 from org_context import ensure_personal_org
 from rate_limit import limiter
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-OIDC_ENABLED        = os.getenv("OIDC_ENABLED",        "false").lower() == "true"
-OIDC_PROVIDER_NAME  = os.getenv("OIDC_PROVIDER_NAME",  "SSO")
-OIDC_ISSUER_URL     = os.getenv("OIDC_ISSUER_URL",     "").rstrip("/")
-OIDC_CLIENT_ID      = os.getenv("OIDC_CLIENT_ID",      "")
-OIDC_CLIENT_SECRET  = os.getenv("OIDC_CLIENT_SECRET",  "")
-OIDC_REDIRECT_URI   = os.getenv("OIDC_REDIRECT_URI",   "")
-OIDC_SCOPES         = os.getenv("OIDC_SCOPES",         "openid email profile groups")
-OIDC_GROUP_CLAIM    = os.getenv("OIDC_GROUP_CLAIM",     "groups")
-OIDC_ADMIN_GROUPS   = {
-    g.strip() for g in os.getenv("OIDC_ADMIN_GROUPS", "").split(",") if g.strip()
-}
+OIDC_ENABLED = os.getenv("OIDC_ENABLED", "false").lower() == "true"
+OIDC_PROVIDER_NAME = os.getenv("OIDC_PROVIDER_NAME", "SSO")
+OIDC_ISSUER_URL = os.getenv("OIDC_ISSUER_URL", "").rstrip("/")
+OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
+OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_REDIRECT_URI = os.getenv("OIDC_REDIRECT_URI", "")
+OIDC_SCOPES = os.getenv("OIDC_SCOPES", "openid email profile groups")
+OIDC_GROUP_CLAIM = os.getenv("OIDC_GROUP_CLAIM", "groups")
+OIDC_ADMIN_GROUPS = {g.strip() for g in os.getenv("OIDC_ADMIN_GROUPS", "").split(",") if g.strip()}
 OIDC_ORG_SLUG_CLAIM = os.getenv("OIDC_ORG_SLUG_CLAIM", "org")
-OIDC_AUTO_PROVISION = os.getenv("OIDC_AUTO_PROVISION",  "true").lower() == "true"
-SCIM_BEARER_TOKEN   = os.getenv("SCIM_BEARER_TOKEN",    "")
+OIDC_AUTO_PROVISION = os.getenv("OIDC_AUTO_PROVISION", "true").lower() == "true"
+SCIM_BEARER_TOKEN = os.getenv("SCIM_BEARER_TOKEN", "")
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("REFRESH_TOKEN_TTL_DAYS", "30"))
 
 # OIDC discovery document endpoint (standard for Keycloak and all OIDC providers).
@@ -89,17 +85,18 @@ _DISCOVERY_URL = f"{OIDC_ISSUER_URL}/.well-known/openid-configuration" if OIDC_I
 _discovery_cache: dict | None = None
 
 
-router_sso  = APIRouter(prefix="/auth/sso",    tags=["sso"])
-router_token = APIRouter(prefix="/auth/token",  tags=["auth"])
-router_scim  = APIRouter(prefix="/scim/v2",     tags=["scim"])
+router_sso = APIRouter(prefix="/auth/sso", tags=["sso"])
+router_token = APIRouter(prefix="/auth/token", tags=["auth"])
+router_scim = APIRouter(prefix="/scim/v2", tags=["scim"])
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
+
 class SSOConfig(BaseModel):
-    enabled:       bool
+    enabled: bool
     provider_name: str
-    login_url:     str | None = None
+    login_url: str | None = None
 
 
 class RefreshRequest(BaseModel):
@@ -107,31 +104,32 @@ class RefreshRequest(BaseModel):
 
 
 class TokenPair(BaseModel):
-    token:         str
-    token_type:    str = "bearer"
-    user_id:       str
-    email:         str
-    jti:           str
+    token: str
+    token_type: str = "bearer"  # noqa: S105
+    user_id: str
+    email: str
+    jti: str
     refresh_token: str | None = None
 
 
 class ScimUser(BaseModel):
-    id:         str
-    userName:   str
-    active:     bool
-    emails:     list[dict]
-    meta:       dict
+    id: str
+    userName: str
+    active: bool
+    emails: list[dict]
+    meta: dict
 
 
 class ScimListResponse(BaseModel):
-    schemas:      list[str] = ["urn:ietf:params:scim:api:messages:2.0:ListResponse"]
+    schemas: list[str] = ["urn:ietf:params:scim:api:messages:2.0:ListResponse"]
     totalResults: int
-    startIndex:   int = 1
+    startIndex: int = 1
     itemsPerPage: int
-    Resources:    list[ScimUser]
+    Resources: list[ScimUser]
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 async def _get_discovery() -> dict:
     """Fetch and cache the OIDC discovery document."""
@@ -173,10 +171,10 @@ async def _exchange_code(code: str, discovery: dict) -> dict:
         r = await client.post(
             token_url,
             data={
-                "grant_type":   "authorization_code",
-                "code":         code,
+                "grant_type": "authorization_code",
+                "code": code,
                 "redirect_uri": OIDC_REDIRECT_URI,
-                "client_id":    OIDC_CLIENT_ID,
+                "client_id": OIDC_CLIENT_ID,
                 "client_secret": OIDC_CLIENT_SECRET,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -211,12 +209,14 @@ def _decode_id_token_claims(id_token: str) -> dict:
     In a hardened deployment, swap this for python-jose's jwt.decode() with the
     provider's JWKS URI.
     """
-    import base64, json as _json
+    import base64
+    import json as _json
+
     try:
-        parts   = id_token.split(".")
+        parts = id_token.split(".")
         payload = parts[1] if len(parts) >= 2 else ""
         # Base64url — pad to multiple of 4
-        padded  = payload + "=" * (4 - len(payload) % 4)
+        padded = payload + "=" * (4 - len(payload) % 4)
         return _json.loads(base64.urlsafe_b64decode(padded))
     except Exception:
         return {}
@@ -224,10 +224,10 @@ def _decode_id_token_claims(id_token: str) -> dict:
 
 async def _provision_user(
     email: str,
-    sub:   str,
-    name:  str,
+    sub: str,
+    name: str,
     claims: dict,
-    db:    AsyncSession,
+    db: AsyncSession,
 ) -> User:
     """
     Find or create a User for the given OIDC subject.
@@ -241,9 +241,7 @@ async def _provision_user(
     On subsequent logins:
       - Returns the existing user; updates name if the column exists (future migration)
     """
-    user = (
-        await db.execute(select(User).where(User.email == email))
-    ).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
 
     if not user:
         if not OIDC_AUTO_PROVISION:
@@ -252,8 +250,8 @@ async def _provision_user(
                 detail=f"User {email!r} not found and auto-provisioning is disabled",
             )
         user = User(
-            email         = email,
-            password_hash = "",   # SSO users have no password
+            email=email,
+            password_hash="",  # SSO users have no password
         )
         db.add(user)
         await db.flush()
@@ -272,15 +270,13 @@ async def _provision_user(
 
 
 async def _ensure_org_membership(
-    user:     User,
+    user: User,
     org_slug: str,
-    claims:   dict,
-    db:       AsyncSession,
+    claims: dict,
+    db: AsyncSession,
 ) -> None:
     """Join (or create) the org identified by org_slug, applying group→role mapping."""
-    org = (
-        await db.execute(select(Org).where(Org.name == org_slug, Org.is_personal == "false"))
-    ).scalar_one_or_none()
+    org = (await db.execute(select(Org).where(Org.name == org_slug, Org.is_personal == "false"))).scalar_one_or_none()
 
     if not org:
         # Create a new org for this slug — happens once per new enterprise tenant.
@@ -291,12 +287,12 @@ async def _ensure_org_membership(
     # Determine role from group claims.
     user_groups: list[str] = claims.get(OIDC_GROUP_CLAIM, []) or []
     is_admin = bool(OIDC_ADMIN_GROUPS and set(user_groups) & OIDC_ADMIN_GROUPS)
-    role     = OrgRole.admin.value if is_admin else OrgRole.member.value
+    role = OrgRole.admin.value if is_admin else OrgRole.member.value
 
     existing = (
         await db.execute(
             select(OrgMembership).where(
-                OrgMembership.org_id  == org.id,
+                OrgMembership.org_id == org.id,
                 OrgMembership.user_id == user.id,
             )
         )
@@ -319,7 +315,7 @@ def _make_refresh_token(user_id: str, jti: str) -> str:
     without a database lookup during the fast path.
     """
     rand = secrets.token_urlsafe(32)
-    sig  = hmac.new(
+    sig = hmac.new(
         JWT_SECRET.encode(),
         f"{rand}.{user_id}.{jti}".encode(),
         hashlib.sha256,
@@ -333,7 +329,8 @@ async def _store_refresh_token(refresh_token: str, user_id: str, jti: str) -> No
         return
     try:
         from redis_client import get_redis
-        r = get_redis()   # BUG-1 fix: get_redis() is synchronous — no await
+
+        r = get_redis()  # BUG-1 fix: get_redis() is synchronous — no await
         key = f"rt:{refresh_token}"
         ttl = REFRESH_TOKEN_TTL_DAYS * 86400
         await r.setex(key, ttl, f"{user_id}:{jti}")
@@ -352,9 +349,10 @@ async def _consume_refresh_token(refresh_token: str) -> tuple[str, str] | None:
         return None
     try:
         from redis_client import get_redis
-        r    = get_redis()   # BUG-1 fix: synchronous
-        key  = f"rt:{refresh_token}"
-        val  = await r.getdel(key)   # atomic get + delete (rotation)
+
+        r = get_redis()  # BUG-1 fix: synchronous
+        key = f"rt:{refresh_token}"
+        val = await r.getdel(key)  # atomic get + delete (rotation)
         if not val:
             return None
         # BUG-2 fix: decode_responses=True → val is already str, not bytes
@@ -382,19 +380,20 @@ def _user_to_scim(user: User) -> ScimUser:
     if getattr(user, "password_hash", "") == "DEACTIVATED":
         is_active = False
     return ScimUser(
-        id       = str(user.id),
-        userName = user.email,
-        active   = bool(is_active),
-        emails   = [{"value": user.email, "primary": True}],
-        meta     = {
+        id=str(user.id),
+        userName=user.email,
+        active=bool(is_active),
+        emails=[{"value": user.email, "primary": True}],
+        meta={
             "resourceType": "User",
-            "created":      user.created_at.isoformat() if user.created_at else "",
-            "location":     f"/scim/v2/Users/{user.id}",
+            "created": user.created_at.isoformat() if user.created_at else "",
+            "location": f"/scim/v2/Users/{user.id}",
         },
     )
 
 
 # ── SSO routes ────────────────────────────────────────────────────────────────
+
 
 @router_sso.get("/config", response_model=SSOConfig)
 async def sso_config():
@@ -408,18 +407,18 @@ async def sso_config():
 
     try:
         discovery = await _get_discovery()
-        auth_url  = discovery["authorization_endpoint"]
-        params    = {
-            "client_id":     OIDC_CLIENT_ID,
-            "redirect_uri":  OIDC_REDIRECT_URI,
+        auth_url = discovery["authorization_endpoint"]
+        params = {
+            "client_id": OIDC_CLIENT_ID,
+            "redirect_uri": OIDC_REDIRECT_URI,
             "response_type": "code",
-            "scope":         OIDC_SCOPES,
-            "state":         "static-config-probe",  # not a real auth request
+            "scope": OIDC_SCOPES,
+            "state": "static-config-probe",  # not a real auth request
         }
         return SSOConfig(
-            enabled       = True,
-            provider_name = OIDC_PROVIDER_NAME,
-            login_url     = f"{auth_url}?{urlencode(params)}",
+            enabled=True,
+            provider_name=OIDC_PROVIDER_NAME,
+            login_url=f"{auth_url}?{urlencode(params)}",
         )
     except Exception:
         return SSOConfig(enabled=True, provider_name=OIDC_PROVIDER_NAME)
@@ -436,24 +435,25 @@ async def sso_login(request: Request):
     """
     _require_oidc()
     discovery = await _get_discovery()
-    state     = _state_token()
+    state = _state_token()
 
     # Persist state for CSRF check (best-effort — Redis may not be available in dev).
     if os.getenv("TESTING") != "true":
         try:
             from redis_client import get_redis
-            r = get_redis()   # synchronous — no await
+
+            r = get_redis()  # synchronous — no await
             await r.setex(f"oidc_state:{state}", 600, "1")
         except Exception:
             pass
 
     params = {
-        "client_id":     OIDC_CLIENT_ID,
-        "redirect_uri":  OIDC_REDIRECT_URI,
+        "client_id": OIDC_CLIENT_ID,
+        "redirect_uri": OIDC_REDIRECT_URI,
         "response_type": "code",
-        "scope":         OIDC_SCOPES,
-        "state":         state,
-        "prompt":        "login",
+        "scope": OIDC_SCOPES,
+        "state": state,
+        "prompt": "login",
     }
     auth_url = discovery["authorization_endpoint"]
     return RedirectResponse(url=f"{auth_url}?{urlencode(params)}", status_code=302)
@@ -462,12 +462,12 @@ async def sso_login(request: Request):
 @router_sso.get("/callback", response_model=TokenPair)
 @limiter.limit("30/minute")
 async def sso_callback(
-    request:     Request,
-    code:        str  | None = Query(default=None),
-    state:       str  | None = Query(default=None),
-    error:       str  | None = Query(default=None),
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
     error_description: str | None = Query(default=None),
-    db:          AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     OIDC authorization-code callback.
@@ -493,9 +493,10 @@ async def sso_callback(
     if os.getenv("TESTING") != "true":
         try:
             from redis_client import get_redis
-            r         = get_redis()   # synchronous — no await
+
+            r = get_redis()  # synchronous — no await
             state_key = f"oidc_state:{state}"
-            valid     = await r.getdel(state_key)
+            valid = await r.getdel(state_key)
             if not valid:
                 raise HTTPException(
                     status_code=400,
@@ -510,8 +511,8 @@ async def sso_callback(
 
     # Exchange code for tokens.
     token_response = await _exchange_code(code, discovery)
-    id_token       = token_response.get("id_token", "")
-    access_token   = token_response.get("access_token", "")
+    id_token = token_response.get("id_token", "")
+    access_token = token_response.get("access_token", "")
 
     # Decode id_token claims (email, sub, groups).
     id_claims = _decode_id_token_claims(id_token)
@@ -522,12 +523,9 @@ async def sso_callback(
     # Merge: id_token claims take precedence over userinfo for identity fields.
     merged_claims = {**userinfo, **id_claims}
 
-    email = (
-        merged_claims.get("email")
-        or merged_claims.get("preferred_username", "")
-    )
-    sub   = merged_claims.get("sub", "")
-    name  = merged_claims.get("name", email)
+    email = merged_claims.get("email") or merged_claims.get("preferred_username", "")
+    sub = merged_claims.get("sub", "")
+    name = merged_claims.get("name", email)
 
     if not email:
         raise HTTPException(
@@ -546,22 +544,23 @@ async def sso_callback(
     await _store_refresh_token(refresh_token, str(user.id), jti)
 
     return TokenPair(
-        token         = jwt_token,
-        user_id       = str(user.id),
-        email         = user.email,
-        jti           = jti,
-        refresh_token = refresh_token,
+        token=jwt_token,
+        user_id=str(user.id),
+        email=user.email,
+        jti=jti,
+        refresh_token=refresh_token,
     )
 
 
 # ── Token refresh routes ──────────────────────────────────────────────────────
 
+
 @router_token.post("/refresh", response_model=TokenPair)
 @limiter.limit("30/minute")
 async def refresh_token(
     request: Request,
-    req:     RefreshRequest,
-    db:      AsyncSession = Depends(get_session),
+    req: RefreshRequest,
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Exchange a refresh token for a new access JWT and rotated refresh token.
@@ -582,6 +581,7 @@ async def refresh_token(
     if os.getenv("TESTING") != "true" and old_jti:
         try:
             from redis_client import revoke_token
+
             # Revoke for the remaining JWT lifetime (max JWT_TTL_DAYS).
             await revoke_token(old_jti, JWT_TTL_DAYS * 86400)
         except Exception:
@@ -592,22 +592,22 @@ async def refresh_token(
     try:
         uid = uuid.UUID(user_id)
     except (ValueError, AttributeError):
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="User not found") from None
 
     user = await db.get(User, uid)
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
-    jwt_token, new_jti   = _make_token(str(user.id), user.email)
-    new_refresh          = _make_refresh_token(str(user.id), new_jti)
+    jwt_token, new_jti = _make_token(str(user.id), user.email)
+    new_refresh = _make_refresh_token(str(user.id), new_jti)
     await _store_refresh_token(new_refresh, str(user.id), new_jti)
 
     return TokenPair(
-        token         = jwt_token,
-        user_id       = str(user.id),
-        email         = user.email,
-        jti           = new_jti,
-        refresh_token = new_refresh,
+        token=jwt_token,
+        user_id=str(user.id),
+        email=user.email,
+        jti=new_jti,
+        refresh_token=new_refresh,
     )
 
 
@@ -620,13 +620,14 @@ async def refresh_token(
 #
 # Full SCIM provisioning (POST /scim/v2/Users, group push) is a follow-up item.
 
+
 @router_scim.get("/Users", response_model=ScimListResponse)
 async def scim_list_users(
     authorization: str | None = Header(default=None),
-    startIndex:    int         = Query(default=1, ge=1),
-    count:         int         = Query(default=100, ge=1, le=500),
-    filter:        str | None  = Query(default=None),
-    db:            AsyncSession = Depends(get_session),
+    startIndex: int = Query(default=1, ge=1),
+    count: int = Query(default=100, ge=1, le=500),
+    filter: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     SCIM 2.0 list users.
@@ -642,43 +643,39 @@ async def scim_list_users(
     # Parse simple filter (userName eq "..." or emails.value eq "...")
     if filter:
         import re
+
         m = re.search(r'(?:userName|emails\.value)\s+eq\s+"([^"]+)"', filter, re.I)
         if m:
             query = query.where(User.email == m.group(1))
 
     # Count total matching rows.
     from sqlalchemy import func
-    count_result = await db.execute(
-        select(func.count()).select_from(query.subquery())
-    )
+
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar_one()
 
     # Paginate (SCIM startIndex is 1-based).
-    rows = (
-        await db.execute(
-            query.offset(startIndex - 1).limit(count).order_by(User.created_at)
-        )
-    ).scalars().all()
+    rows = (await db.execute(query.offset(startIndex - 1).limit(count).order_by(User.created_at))).scalars().all()
 
     return ScimListResponse(
-        totalResults = total,
-        startIndex   = startIndex,
-        itemsPerPage = len(rows),
-        Resources    = [_user_to_scim(u) for u in rows],
+        totalResults=total,
+        startIndex=startIndex,
+        itemsPerPage=len(rows),
+        Resources=[_user_to_scim(u) for u in rows],
     )
 
 
 @router_scim.get("/Users/{user_id}", response_model=ScimUser)
 async def scim_get_user(
-    user_id:       str,
+    user_id: str,
     authorization: str | None = Header(default=None),
-    db:            AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ):
     _scim_auth(authorization)
     try:
         uid = uuid.UUID(user_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid user_id: {user_id!r}")
+        raise HTTPException(status_code=400, detail=f"Invalid user_id: {user_id!r}") from None
 
     user = await db.get(User, uid)
     if not user:
@@ -688,10 +685,10 @@ async def scim_get_user(
 
 @router_scim.patch("/Users/{user_id}", response_model=ScimUser)
 async def scim_patch_user(
-    user_id:       str,
-    body:          dict,
+    user_id: str,
+    body: dict,
     authorization: str | None = Header(default=None),
-    db:            AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Minimal SCIM PATCH — supports deactivating users (active=false).
@@ -709,7 +706,7 @@ async def scim_patch_user(
     try:
         uid = uuid.UUID(user_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid user_id: {user_id!r}")
+        raise HTTPException(status_code=400, detail=f"Invalid user_id: {user_id!r}") from None
 
     user = await db.get(User, uid)
     if not user:
@@ -720,7 +717,7 @@ async def scim_patch_user(
     if "Operations" in body:
         for op in body["Operations"]:
             if op.get("op", "").lower() == "replace":
-                path  = op.get("path", "")
+                path = op.get("path", "")
                 value = op.get("value")
                 if path == "active" or (isinstance(value, dict) and "active" in value):
                     active = value if isinstance(value, bool) else value.get("active")
@@ -730,8 +727,8 @@ async def scim_patch_user(
     if active is False:
         # BUG-4 fix: set is_active=False so current_user() blocks the user,
         # AND set the password_hash sentinel so direct bcrypt compare also fails.
-        user.is_active     = False
-        user.password_hash = "DEACTIVATED"
+        user.is_active = False
+        user.password_hash = "DEACTIVATED"  # noqa: S105
         await db.commit()
 
     await db.refresh(user)

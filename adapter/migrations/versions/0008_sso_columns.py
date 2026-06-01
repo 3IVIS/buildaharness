@@ -22,21 +22,20 @@ Backward compatibility:
     the new is_active column provides a cleaner signal and is checked in current_user().
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
-revision: str      = "0008"
+revision: str = "0008"
 down_revision: str = "0007"
-branch_labels      = None
-depends_on         = None
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
     # Add SSO identity columns.
-    op.add_column("users", sa.Column("sso_sub",       sa.Text,    nullable=True))
-    op.add_column("users", sa.Column("sso_provider",  sa.Text,    nullable=True))
-    op.add_column("users", sa.Column("is_active",     sa.Boolean, nullable=False,
-                                     server_default=sa.text("TRUE")))
+    op.add_column("users", sa.Column("sso_sub", sa.Text, nullable=True))
+    op.add_column("users", sa.Column("sso_provider", sa.Text, nullable=True))
+    op.add_column("users", sa.Column("is_active", sa.Boolean, nullable=False, server_default=sa.text("TRUE")))
     op.add_column("users", sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True))
 
     # Composite index for SSO callback lookup (sub + provider).

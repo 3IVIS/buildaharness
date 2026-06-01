@@ -71,11 +71,13 @@ describe('FlowSpec — Zod validation', () => {
 
   // ── LlmCallNode ─────────────────────────────────────────────────────────────
   it('rejects llm_call with missing prompt_template', () => {
-    const result = parseFlowSpec({
+    // prompt_template/prompt_ref is enforced by validateCrossRefs, not Zod schema
+    // (it must allow prompt_ref as alternative, which can't be expressed in a discriminated union member)
+    const spec = assertFlowSpec({
       ...BASE,
       nodes: [
         { id: 'start', type: 'input' },
-        { id: 'call',  type: 'llm_call' },   // prompt_template required
+        { id: 'call',  type: 'llm_call' },   // neither prompt_template nor prompt_ref
         { id: 'done',  type: 'output' },
       ],
       edges: [
@@ -83,7 +85,7 @@ describe('FlowSpec — Zod validation', () => {
         { type: 'direct', from: 'call',  to: 'done' },
       ],
     })
-    expect(result.success).toBe(false)
+    expect(validateCrossRefs(spec).some((e) => e.field === 'prompt_template')).toBe(true)
   })
 
   it('accepts llm_call with only prompt_template', () => {

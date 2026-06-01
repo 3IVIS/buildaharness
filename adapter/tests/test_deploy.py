@@ -17,23 +17,24 @@ Covered:
 """
 
 import asyncio
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 # ── Shared test specs ─────────────────────────────────────────────────────────
 
 MINIMAL_SPEC = {
     "spec_version": "0.2.0",
-    "id":           "deploy-test-flow",
-    "name":         "Deploy Test Flow",
+    "id": "deploy-test-flow",
+    "name": "Deploy Test Flow",
     "nodes": [
-        {"id": "input-1",  "type": "input",  "position": {"x": 0,   "y": 0}},
+        {"id": "input-1", "type": "input", "position": {"x": 0, "y": 0}},
         {"id": "output-1", "type": "output", "position": {"x": 300, "y": 0}},
     ],
     "edges": [{"id": "e1", "type": "direct", "from": "input-1", "to": "output-1"}],
     "state_schema": {
         "fields": [
-            {"name": "query",   "type": "str",       "reducer": "replace"},
+            {"name": "query", "type": "str", "reducer": "replace"},
             {"name": "results", "type": "list[str]", "reducer": "append"},
         ]
     },
@@ -41,13 +42,13 @@ MINIMAL_SPEC = {
 
 A2A_SPEC = {
     **MINIMAL_SPEC,
-    "id":   "a2a-deploy-flow",
+    "id": "a2a-deploy-flow",
     "name": "A2A Deploy Flow",
     "flow_config": {
         "a2a_config": {
-            "enabled":      True,
-            "agent_name":   "Deploy Test Agent",
-            "version":      "1.0.0",
+            "enabled": True,
+            "agent_name": "Deploy Test Agent",
+            "version": "1.0.0",
             "capabilities": ["streaming"],
         }
     },
@@ -55,6 +56,7 @@ A2A_SPEC = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _register(client, email: str, password: str = "Password1") -> dict:
     r = await client.post("/auth/register", json={"email": email, "password": password})
@@ -73,8 +75,10 @@ async def _save_flow(client, headers: dict, spec: dict) -> None:
 
 # ── generate_mcp_manifest() unit tests ───────────────────────────────────────
 
+
 def test_generate_mcp_manifest_basic():
     from deploy_api import generate_mcp_manifest
+
     manifest = generate_mcp_manifest(
         flow_id="flow-1",
         flow_name="My Test Flow",
@@ -92,6 +96,7 @@ def test_generate_mcp_manifest_basic():
 
 def test_generate_mcp_manifest_input_schema():
     from deploy_api import generate_mcp_manifest
+
     manifest = generate_mcp_manifest(
         flow_id="f",
         flow_name="F",
@@ -113,17 +118,15 @@ def test_generate_mcp_manifest_input_schema():
 
 def test_generate_mcp_manifest_tool_name_sanitisation():
     from deploy_api import generate_mcp_manifest
-    manifest = generate_mcp_manifest(
-        flow_id="f", flow_name="Hello, World! (v2)", flow_description=None, spec={}
-    )
+
+    manifest = generate_mcp_manifest(flow_id="f", flow_name="Hello, World! (v2)", flow_description=None, spec={})
     assert manifest["tools"][0]["name"] == "hello_world_v2"
 
 
 def test_generate_mcp_manifest_no_state_schema():
     from deploy_api import generate_mcp_manifest
-    manifest = generate_mcp_manifest(
-        flow_id="f", flow_name="Simple", flow_description=None, spec={}
-    )
+
+    manifest = generate_mcp_manifest(flow_id="f", flow_name="Simple", flow_description=None, spec={})
     tool = manifest["tools"][0]
     assert tool["inputSchema"]["properties"] == {}
     assert "required" not in tool["inputSchema"]
@@ -131,25 +134,27 @@ def test_generate_mcp_manifest_no_state_schema():
 
 def test_generate_mcp_manifest_type_mapping():
     from deploy_api import generate_mcp_manifest
+
     spec = {
         "state_schema": {
             "fields": [
-                {"name": "count",  "type": "int",   "reducer": "replace"},
-                {"name": "ratio",  "type": "float", "reducer": "replace"},
-                {"name": "active", "type": "bool",  "reducer": "replace"},
-                {"name": "meta",   "type": "dict",  "reducer": "replace"},
+                {"name": "count", "type": "int", "reducer": "replace"},
+                {"name": "ratio", "type": "float", "reducer": "replace"},
+                {"name": "active", "type": "bool", "reducer": "replace"},
+                {"name": "meta", "type": "dict", "reducer": "replace"},
             ]
         }
     }
     manifest = generate_mcp_manifest("f", "F", None, spec)
     props = manifest["tools"][0]["inputSchema"]["properties"]
-    assert props["count"]["type"]  == "integer"
-    assert props["ratio"]["type"]  == "number"
+    assert props["count"]["type"] == "integer"
+    assert props["ratio"]["type"] == "number"
     assert props["active"]["type"] == "boolean"
-    assert props["meta"]["type"]   == "object"
+    assert props["meta"]["type"] == "object"
 
 
 # ── POST /deploy/{flow_id} ────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_unified_deploy_404_unknown_flow(client):
@@ -168,13 +173,13 @@ async def test_unified_deploy_success(client):
     assert r.status_code == 200, r.text
 
     body = r.json()
-    assert body["flow_id"]       == MINIMAL_SPEC["id"]
-    assert "/flows/"             in body["rest_url"]
-    assert "invoke"              in body["rest_url"]
-    assert "/.well-known/mcp/"  in body["mcp_url"]
-    assert body["a2a_url"]      is None   # no a2a_config
-    assert "/share/"            in body["shareable_url"]
-    assert "tools"              in body["mcp_manifest"]
+    assert body["flow_id"] == MINIMAL_SPEC["id"]
+    assert "/flows/" in body["rest_url"]
+    assert "invoke" in body["rest_url"]
+    assert "/.well-known/mcp/" in body["mcp_url"]
+    assert body["a2a_url"] is None  # no a2a_config
+    assert "/share/" in body["shareable_url"]
+    assert "tools" in body["mcp_manifest"]
     assert body["mcp_manifest"]["tools"][0]["name"] == "deploy_test_flow"
 
 
@@ -237,6 +242,7 @@ async def test_unified_deploy_wrong_user(client):
 
 # ── DELETE /deploy/{flow_id} ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_unified_undeploy_removes_row(client):
     creds = await _register(client, "undeploy1@test.com")
@@ -284,6 +290,7 @@ async def test_unified_undeploy_idempotent(client):
 
 # ── GET /.well-known/mcp/{flow_id}.json ──────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_mcp_manifest_404_before_deploy(client):
     r = await client.get("/.well-known/mcp/never-deployed.json")
@@ -319,6 +326,7 @@ async def test_mcp_manifest_public_no_auth(client):
 
 # ── GET /share/{flow_id} ──────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_share_404_before_deploy(client):
     r = await client.get("/share/no-such-flow")
@@ -335,11 +343,11 @@ async def test_share_200_after_deploy(client):
     r = await client.get(f"/share/{MINIMAL_SPEC['id']}")
     assert r.status_code == 200
     body = r.json()
-    assert body["flow_id"]   == MINIMAL_SPEC["id"]
+    assert body["flow_id"] == MINIMAL_SPEC["id"]
     assert body["flow_name"] == MINIMAL_SPEC["name"]
-    assert "rest_url"        in body
-    assert "mcp_url"         in body
-    assert "shareable_url"   in body
+    assert "rest_url" in body
+    assert "mcp_url" in body
+    assert "shareable_url" in body
 
 
 @pytest.mark.asyncio
@@ -353,6 +361,7 @@ async def test_share_public_no_auth(client):
 
 
 # ── POST /flows/{flow_id}/invoke ──────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_invoke_404_when_not_deployed(client):
@@ -378,7 +387,7 @@ async def test_invoke_success_with_mock_runner(client):
 
     async def _fake_run(job_id, spec, org_id=None):
         import run_api as _ra
-        from db import Job
+
         async with _ra._job_session() as db:
             job = await _ra._jobs_get(job_id, db)
             if job:
@@ -395,8 +404,8 @@ async def test_invoke_success_with_mock_runner(client):
 
     assert r.status_code == 200, r.text
     body = r.json()
-    assert "job_id"  in body
-    assert "output"  in body
+    assert "job_id" in body
+    assert "output" in body
     assert body["runtime"] == "langgraph"
 
 
@@ -410,8 +419,7 @@ async def test_invoke_504_on_timeout(client):
     async def _hang(job_id, spec, org_id=None):
         await asyncio.sleep(999)
 
-    with patch("deploy_api._run_langgraph", side_effect=_hang), \
-         patch("deploy_api.INVOKE_TIMEOUT_S", 0):
+    with patch("deploy_api._run_langgraph", side_effect=_hang), patch("deploy_api.INVOKE_TIMEOUT_S", 0):
         r = await client.post(
             f"/flows/{MINIMAL_SPEC['id']}/invoke",
             json={"input": {}},

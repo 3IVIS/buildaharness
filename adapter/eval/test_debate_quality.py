@@ -31,6 +31,7 @@ try:
     from deepeval import assert_test
     from deepeval.metrics import AnswerRelevancyMetric, GEval
     from deepeval.test_case import LLMTestCase, LLMTestCaseParams
+
     _DEEPEVAL_AVAILABLE = True
 except ImportError:
     _DEEPEVAL_AVAILABLE = False
@@ -41,7 +42,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 _THRESHOLD_COHERENCE = float(os.getenv("EVAL_THRESHOLD_COHERENCE", "0.7"))
-_THRESHOLD_VERDICT   = float(os.getenv("EVAL_THRESHOLD_VERDICT",   "0.7"))
+_THRESHOLD_VERDICT = float(os.getenv("EVAL_THRESHOLD_VERDICT", "0.7"))
 
 # ── Synthetic debate eval dataset ─────────────────────────────────────────────
 # Each sample represents what a well-functioning debate flow should produce
@@ -97,11 +98,13 @@ DEBATE_EVAL_DATASET = [
 
 # ── Structural tests (no LLM — always run) ────────────────────────────────────
 
+
 class TestDebateSpecStructure:
     """Cheap structural checks on the debate flow spec and generated code."""
 
     def test_debate_flow_validates(self, debate_flow_spec):
         from validate import validate_spec
+
         validate_spec(debate_flow_spec)
 
     def test_debate_flow_has_agent_debate_node(self, debate_flow_spec):
@@ -115,12 +118,12 @@ class TestDebateSpecStructure:
     def test_debate_flow_prefers_maf(self, debate_flow_spec):
         preferred = debate_flow_spec.get("runtime_hints", {}).get("preferred_adapter", "")
         assert preferred == "microsoft_agent_framework", (
-            f"Flow 05 should prefer microsoft_agent_framework, got {repr(preferred)}"
+            f"Flow 05 should prefer microsoft_agent_framework, got {preferred!r}"
         )
 
     def test_debate_flow_compiles_to_maf(self, debate_flow_spec):
         """Compile to MAF — must be syntactically valid Python."""
-        code, warnings = compile_maf(debate_flow_spec)
+        code, _ = compile_maf(debate_flow_spec)
         ast.parse(code)
 
     def test_maf_code_has_agent_group_chat(self, debate_flow_spec):
@@ -129,8 +132,7 @@ class TestDebateSpecStructure:
 
     def test_maf_code_has_termination_strategy(self, debate_flow_spec):
         code, _ = compile_maf(debate_flow_spec)
-        assert "KernelFunctionTerminationStrategy" in code, \
-            "MAF code must emit a termination strategy"
+        assert "KernelFunctionTerminationStrategy" in code, "MAF code must emit a termination strategy"
 
     def test_maf_code_has_verdict_keyword(self, debate_flow_spec):
         """The termination keyword 'VERDICT' must be extracted from the condition expr."""
@@ -158,11 +160,11 @@ class TestDebateSpecStructure:
             # Must be syntactically valid Python
             ast.parse(code)
             # Must export the runner
-            assert "run_flow" in code, \
-                f"Flow {spec.get('id')} MAF output missing run_flow"
+            assert "run_flow" in code, f"Flow {spec.get('id')} MAF output missing run_flow"
 
 
 # ── Metric tests (real LLM, guarded by needs_real_llm) ────────────────────────
+
 
 class TestDebateFlowQuality:
     """LLM-graded quality metrics for the debate flow output."""
@@ -202,10 +204,7 @@ class TestDebateFlowQuality:
         )
         for sample in DEBATE_EVAL_DATASET:
             tc = LLMTestCase(
-                input=(
-                    f"Proposition: {sample['proposition']}\n"
-                    f"Opening argument: {sample['advocate_opening']}"
-                ),
+                input=(f"Proposition: {sample['proposition']}\nOpening argument: {sample['advocate_opening']}"),
                 actual_output=sample["devil_advocate_response"],
             )
             assert_test(tc, [metric])
@@ -238,9 +237,7 @@ class TestDebateFlowQuality:
     def test_verdict_contains_keyword(self):
         """Structural check: all sample verdicts must contain VERDICT (as per termination cond)."""
         for sample in DEBATE_EVAL_DATASET:
-            assert "VERDICT" in sample["judge_verdict"], (
-                f"Verdict for '{sample['proposition']}' must contain 'VERDICT'"
-            )
+            assert "VERDICT" in sample["judge_verdict"], f"Verdict for '{sample['proposition']}' must contain 'VERDICT'"
             for kw in sample["expected_verdict_keywords"]:
                 assert kw.lower() in sample["judge_verdict"].lower(), (
                     f"Expected keyword '{kw}' not found in verdict for '{sample['proposition']}'"

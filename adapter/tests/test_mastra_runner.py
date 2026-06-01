@@ -23,40 +23,38 @@ Covered:
   POST /a2a/.../tasks/send — mastra runtime accepted (no 400)
   compile_mastra           — called before POST /execute (codegen smoke test)
 """
+
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-
-from tests.conftest import MINIMAL_SPEC
-from db import get_session
-from main import app
-from run_api import _jobs_get
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from run_api import _jobs_get
+from tests.conftest import MINIMAL_SPEC
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+
 def _mock_runner_response(
-    status:       str = "done",
-    node_events:  list | None = None,
-    result:       str = '{"output": "hello from mastra"}',
-    error:        str | None = None,
+    status: str = "done",
+    node_events: list | None = None,
+    result: str = '{"output": "hello from mastra"}',
+    error: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON body the mock sidecar returns from GET /jobs/:id."""
     return {
-        "job_id":      "will-be-overwritten",
-        "status":      status,
+        "job_id": "will-be-overwritten",
+        "status": status,
         "node_events": node_events or [],
-        "result":      result,
-        "error":       error,
-        "started_at":  datetime.now(timezone.utc).isoformat(),
-        "ended_at":    datetime.now(timezone.utc).isoformat(),
+        "result": result,
+        "error": error,
+        "started_at": datetime.now(UTC).isoformat(),
+        "ended_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -90,7 +88,8 @@ def _make_httpx_mock(post_status: int = 202, poll_responses: list | None = None)
             return json.dumps(self._body)
 
     class _FakeClient:
-        def __init__(self, **kwargs): pass  # absorb timeout= etc.
+        def __init__(self, **kwargs):
+            pass  # absorb timeout= etc.
 
         async def __aenter__(self):
             return self
@@ -113,6 +112,7 @@ def _make_httpx_mock(post_status: int = 202, poll_responses: list | None = None)
 
 # ── GET /runtimes ──────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_runtimes_mastra_executable(client, auth_headers):
     """After the runner is wired, /runtimes must report mastra as executable."""
@@ -120,13 +120,12 @@ async def test_runtimes_mastra_executable(client, auth_headers):
     assert r.status_code == 200
     rt = r.json()["runtimes"]
     assert "mastra" in rt, "mastra key missing from /runtimes"
-    assert rt["mastra"]["executable"] is True, (
-        f"mastra should be executable: True, got {rt['mastra']}"
-    )
+    assert rt["mastra"]["executable"] is True, f"mastra should be executable: True, got {rt['mastra']}"
     assert rt["mastra"]["status"] == "full"
 
 
 # ── POST /run?runtime=mastra ───────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_mastra_run_creates_job_row(client, auth_headers, db_engine):
@@ -156,9 +155,7 @@ async def test_mastra_run_creates_job_row(client, auth_headers, db_engine):
 @pytest.mark.asyncio
 async def test_mastra_run_reaches_done(client, auth_headers, db_engine):
     """_run_mastra must drive the job to 'done' when the sidecar reports done."""
-    FakeClient = _make_httpx_mock(
-        poll_responses=[(200, _mock_runner_response("done", result='{"answer": 42}'))]
-    )
+    FakeClient = _make_httpx_mock(poll_responses=[(200, _mock_runner_response("done", result='{"answer": 42}'))])
     with patch("run_api._httpx.AsyncClient", FakeClient):
         r = await client.post(
             "/run?runtime=mastra",
@@ -212,11 +209,18 @@ async def test_mastra_run_sidecar_unreachable_lands_in_error(client, auth_header
     import httpx as _httpx_real
 
     class _UnreachableClient:
-        def __init__(self, **kwargs): pass  # absorb timeout=
-        async def __aenter__(self): return self
-        async def __aexit__(self, *_): pass
+        def __init__(self, **kwargs):
+            pass  # absorb timeout=
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
         async def post(self, *args, **kwargs):
             raise _httpx_real.ConnectError("Connection refused")
+
         async def get(self, *args, **kwargs):
             raise _httpx_real.ConnectError("Connection refused")
 
@@ -245,8 +249,8 @@ async def test_mastra_run_sidecar_unreachable_lands_in_error(client, auth_header
 async def test_mastra_run_node_events_synced(client, auth_headers, db_engine):
     """Node events returned by the sidecar must appear in the DB job row."""
     events = [
-        {"node_id": "llm-1", "status": "running", "ts": datetime.now(timezone.utc).isoformat(), "ms": None, "tokens": None},
-        {"node_id": "llm-1", "status": "done",    "ts": datetime.now(timezone.utc).isoformat(), "ms": 123,  "tokens": 42},
+        {"node_id": "llm-1", "status": "running", "ts": datetime.now(UTC).isoformat(), "ms": None, "tokens": None},
+        {"node_id": "llm-1", "status": "done", "ts": datetime.now(UTC).isoformat(), "ms": 123, "tokens": 42},
     ]
     poll = _mock_runner_response("done", node_events=events)
     FakeClient = _make_httpx_mock(poll_responses=[(200, poll)])
@@ -304,6 +308,7 @@ async def test_mastra_run_sidecar_error_status(client, auth_headers, db_engine):
 
 # ── compile_mastra is called before /execute ───────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_mastra_codegen_called_before_execute(client, auth_headers):
     """compile_mastra must be invoked before POSTing to the sidecar."""
@@ -329,6 +334,7 @@ async def test_mastra_codegen_called_before_execute(client, auth_headers):
 
 # ── GET /run/{job_id} returns mastra job ───────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_run_returns_mastra_job(client, auth_headers, db_engine):
     """GET /run/{job_id} must return the mastra job row correctly."""
@@ -350,16 +356,16 @@ async def test_get_run_returns_mastra_job(client, auth_headers, db_engine):
 
 A2A_MASTRA_SPEC = {
     **MINIMAL_SPEC,
-    "id":   "mastra-a2a-flow",
+    "id": "mastra-a2a-flow",
     "name": "Mastra A2A Test",
     "runtime_hints": {"preferred_adapter": "mastra"},
     "flow_config": {
         "a2a_config": {
-            "enabled":           True,
-            "agent_name":        "Mastra A2A Agent",
+            "enabled": True,
+            "agent_name": "Mastra A2A Agent",
             "agent_description": "Test",
-            "version":           "1.0.0",
-            "authentication":    "none",
+            "version": "1.0.0",
+            "authentication": "none",
         }
     },
 }
@@ -372,7 +378,7 @@ async def test_mastra_run_polling_timeout_lands_in_error(client, auth_headers, d
 
     # Patch a very short timeout so the test doesn't wait 3600s.
     original_timeout = run_api.MASTRA_RUNNER_TIMEOUT
-    run_api.MASTRA_RUNNER_TIMEOUT = 0.1   # 100ms — expires immediately
+    run_api.MASTRA_RUNNER_TIMEOUT = 0.1  # 100ms — expires immediately
 
     # Sidecar always returns "running" — never done or error.
     stuck_poll = _mock_runner_response("running")

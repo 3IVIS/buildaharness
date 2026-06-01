@@ -51,6 +51,7 @@ target_metadata = Base.metadata
 
 # ── Offline mode (generate SQL without a live DB connection) ──────────────────
 
+
 def run_migrations_offline() -> None:
     """Emit SQL to stdout without an active DB connection.
 
@@ -70,6 +71,7 @@ def run_migrations_offline() -> None:
 
 
 # ── Online mode (run against a live DB) ──────────────────────────────────────
+
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(

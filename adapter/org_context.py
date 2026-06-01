@@ -27,6 +27,7 @@ get_langfuse_keys(org) → (public_key, secret_key)
     otherwise the global LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY env vars.
     Used by eval_api and prompt_resolver.
 """
+
 from __future__ import annotations
 
 import os
@@ -40,8 +41,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import current_user
 from db import Org, OrgMembership, OrgRole, User, get_session
 
-
 # ── Public helper: ensure personal org ───────────────────────────────────────
+
 
 async def ensure_personal_org(user: User, db: AsyncSession) -> Org:
     """Idempotently return (or create) the personal org for *user*.
@@ -57,8 +58,8 @@ async def ensure_personal_org(user: User, db: AsyncSession) -> Org:
             .join(OrgMembership, OrgMembership.org_id == Org.id)
             .where(
                 OrgMembership.user_id == user.id,
-                OrgMembership.role    == OrgRole.admin.value,
-                Org.owner_id          == user.id,
+                OrgMembership.role == OrgRole.admin.value,
+                Org.owner_id == user.id,
             )
             .limit(1)
         )
@@ -69,15 +70,15 @@ async def ensure_personal_org(user: User, db: AsyncSession) -> Org:
 
     # Create the personal org.
     email: str = user.email or ""
-    name  = email.split("@")[0] if "@" in email else str(user.id)[:8]
-    org   = Org(
-        name        = f"{name}'s workspace",
-        owner_id    = user.id,
-        is_personal = "true",
+    name = email.split("@")[0] if "@" in email else str(user.id)[:8]
+    org = Org(
+        name=f"{name}'s workspace",
+        owner_id=user.id,
+        is_personal="true",
     )
     db.add(org)
     try:
-        await db.flush()   # get org.id before adding membership
+        await db.flush()  # get org.id before adding membership
     except Exception:
         # Concurrent request already created the personal org (race on the
         # unique partial index ix_orgs_personal_per_owner).  Roll back the
@@ -89,8 +90,8 @@ async def ensure_personal_org(user: User, db: AsyncSession) -> Org:
                 .join(OrgMembership, OrgMembership.org_id == Org.id)
                 .where(
                     OrgMembership.user_id == user.id,
-                    OrgMembership.role    == OrgRole.admin.value,
-                    Org.owner_id          == user.id,
+                    OrgMembership.role == OrgRole.admin.value,
+                    Org.owner_id == user.id,
                 )
                 .limit(1)
             )
@@ -99,17 +100,20 @@ async def ensure_personal_org(user: User, db: AsyncSession) -> Org:
             return existing
         raise  # unexpected error — re-raise
 
-    db.add(OrgMembership(
-        org_id  = org.id,
-        user_id = user.id,
-        role    = OrgRole.admin.value,
-    ))
+    db.add(
+        OrgMembership(
+            org_id=org.id,
+            user_id=user.id,
+            role=OrgRole.admin.value,
+        )
+    )
     await db.commit()
     await db.refresh(org)
     return org
 
 
 # ── Public helper: Langfuse key resolution ────────────────────────────────────
+
 
 def get_langfuse_keys(org: Org | None) -> tuple[str, str]:
     """Return (public_key, secret_key) for the org.
@@ -137,11 +141,12 @@ def get_langfuse_keys(org: Org | None) -> tuple[str, str]:
 
 # ── FastAPI dependency ────────────────────────────────────────────────────────
 
+
 async def current_org(
-    user:       User         = Depends(current_user),
-    db:         AsyncSession = Depends(get_session),
-    x_org_id:   str | None   = Header(default=None, alias="X-Org-ID"),
-    org_id_qp:  str | None   = Query(default=None,  alias="org_id"),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+    x_org_id: str | None = Header(default=None, alias="X-Org-ID"),
+    org_id_qp: str | None = Query(default=None, alias="org_id"),
 ) -> Org:
     """Resolve the active org for the current request.
 
@@ -155,13 +160,13 @@ async def current_org(
         try:
             org_uuid = uuid.UUID(explicit_id)
         except (ValueError, AttributeError):
-            raise HTTPException(status_code=422, detail=f"Invalid org_id: {explicit_id!r}")
+            raise HTTPException(status_code=422, detail=f"Invalid org_id: {explicit_id!r}") from None
 
         # Verify membership.
         membership = (
             await db.execute(
                 select(OrgMembership).where(
-                    OrgMembership.org_id  == org_uuid,
+                    OrgMembership.org_id == org_uuid,
                     OrgMembership.user_id == user.id,
                 )
             )

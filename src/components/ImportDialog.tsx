@@ -23,7 +23,7 @@ export function ImportDialog({ onLoad, onClose }: Props) {
   const [isDragging, setIsDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  function parseFile(file: File) {
+  const parseFile = useCallback((file: File) => {
     setFileName(file.name)
     setRawError('')
     setResult(null)
@@ -58,9 +58,9 @@ export function ImportDialog({ onLoad, onClose }: Props) {
       })
     }
     reader.readAsText(file)
-  }
+  }, [])
 
-  function handleFiles(files: FileList | null) {
+  const handleFiles = useCallback((files: FileList | null) => {
     const file = files?.[0]
     if (!file) return
     if (!file.name.endsWith('.json')) {
@@ -68,12 +68,12 @@ export function ImportDialog({ onLoad, onClose }: Props) {
       return
     }
     parseFile(file)
-  }
+  }, [parseFile])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setIsDragging(false)
     handleFiles(e.dataTransfer.files)
-  }, [])
+  }, [handleFiles])
 
   const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true)  }, [])
   const onDragLeave= useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false) }, [])

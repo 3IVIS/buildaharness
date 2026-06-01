@@ -64,10 +64,10 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("status",  sa.Text(), nullable=False, server_default="queued"),
+        sa.Column("status", sa.Text(), nullable=False, server_default="queued"),
         sa.Column("runtime", sa.Text(), nullable=False),
-        sa.Column("result",  sa.Text(), nullable=True),
-        sa.Column("error",   sa.Text(), nullable=True),
+        sa.Column("result", sa.Text(), nullable=True),
+        sa.Column("error", sa.Text(), nullable=True),
         sa.Column(
             "node_events",
             postgresql.JSONB(),
@@ -75,15 +75,15 @@ def upgrade() -> None:
             server_default="[]",
         ),
         sa.Column("hitl_state", postgresql.JSONB(), nullable=True),
-        sa.Column("trace_id",   sa.Text(), nullable=True),
-        sa.Column("trace_url",  sa.Text(), nullable=True),
+        sa.Column("trace_id", sa.Text(), nullable=True),
+        sa.Column("trace_url", sa.Text(), nullable=True),
         sa.Column(
             "started_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
             nullable=False,
         ),
-        sa.Column("ended_at",  sa.DateTime(timezone=True), nullable=True),
+        sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -96,12 +96,10 @@ def upgrade() -> None:
     )
 
     op.create_index("ix_jobs_user_id", "jobs", ["user_id"], unique=False)
-    op.create_index(
-        "ix_jobs_status_ended_at", "jobs", ["status", "ended_at"], unique=False
-    )
+    op.create_index("ix_jobs_status_ended_at", "jobs", ["status", "ended_at"], unique=False)
 
 
 def downgrade() -> None:
     op.drop_index("ix_jobs_status_ended_at", table_name="jobs", if_exists=True)
-    op.drop_index("ix_jobs_user_id",         table_name="jobs", if_exists=True)
+    op.drop_index("ix_jobs_user_id", table_name="jobs", if_exists=True)
     op.drop_table("jobs", if_exists=True)

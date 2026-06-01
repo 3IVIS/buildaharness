@@ -63,8 +63,7 @@ def upgrade() -> None:
     # ── 1. Create orgs table ──────────────────────────────────────────────────
     op.create_table(
         "orgs",
-        sa.Column("id",   postgresql.UUID(as_uuid=True), primary_key=True,
-                  server_default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column(
             "owner_id",
@@ -100,8 +99,7 @@ def upgrade() -> None:
     # ── 2. Create org_memberships table ───────────────────────────────────────
     op.create_table(
         "org_memberships",
-        sa.Column("id",   postgresql.UUID(as_uuid=True), primary_key=True,
-                  server_default=sa.text("gen_random_uuid()")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column(
             "org_id",
             postgresql.UUID(as_uuid=True),
@@ -123,8 +121,8 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("org_id", "user_id", name="uq_org_memberships_org_user"),
     )
-    op.create_index("ix_org_memberships_user_id",  "org_memberships", ["user_id"],  unique=False)
-    op.create_index("ix_org_memberships_org_id",   "org_memberships", ["org_id"],   unique=False)
+    op.create_index("ix_org_memberships_user_id", "org_memberships", ["user_id"], unique=False)
+    op.create_index("ix_org_memberships_org_id", "org_memberships", ["org_id"], unique=False)
 
     # ── 3. Add org_id columns ─────────────────────────────────────────────────
     for table in ("flows", "jobs", "a2a_deployments", "teams"):
@@ -134,7 +132,7 @@ def upgrade() -> None:
                 "org_id",
                 postgresql.UUID(as_uuid=True),
                 sa.ForeignKey("orgs.id", ondelete="SET NULL"),
-                nullable=True,   # nullable so the column can be added to existing rows
+                nullable=True,  # nullable so the column can be added to existing rows
             ),
         )
         op.create_index(f"ix_{table}_org_id", table, ["org_id"], unique=False)
@@ -156,33 +154,25 @@ def upgrade() -> None:
     users = conn.execute(sa.text("SELECT id, email FROM users")).fetchall()
 
     for row in users:
-        uid   = row[0]
+        uid = row[0]
         email = row[1]
-        name  = email.split("@")[0] if email and "@" in email else str(uid)[:8]
+        name = email.split("@")[0] if email and "@" in email else str(uid)[:8]
 
         # Create personal org.
         org_id_row = conn.execute(
-            sa.text(
-                "INSERT INTO orgs (name, owner_id, is_personal) "
-                "VALUES (:name, :owner_id, 'true') "
-                "RETURNING id"
-            ),
+            sa.text("INSERT INTO orgs (name, owner_id, is_personal) VALUES (:name, :owner_id, 'true') RETURNING id"),
             {"name": f"{name}'s workspace", "owner_id": uid},
         ).fetchone()
         org_id = org_id_row[0]
 
         # Membership (admin of own org).
         conn.execute(
-            sa.text(
-                "INSERT INTO org_memberships (org_id, user_id, role) "
-                "VALUES (:org_id, :user_id, 'admin')"
-            ),
+            sa.text("INSERT INTO org_memberships (org_id, user_id, role) VALUES (:org_id, :user_id, 'admin')"),
             {"org_id": org_id, "user_id": uid},
         )
 
         # Scope existing data to this org.
-        for table, id_col in [("flows", "user_id"), ("jobs", "user_id"),
-                               ("a2a_deployments", "user_id")]:
+        for table, id_col in [("flows", "user_id"), ("jobs", "user_id"), ("a2a_deployments", "user_id")]:
             conn.execute(
                 sa.text(f"UPDATE {table} SET org_id = :org_id WHERE {id_col} = :uid"),
                 {"org_id": org_id, "uid": uid},
@@ -194,7 +184,7 @@ def downgrade() -> None:
         op.drop_index(f"ix_{table}_org_id", table_name=table, if_exists=True)
         op.drop_column(table, "org_id")
 
-    op.drop_index("ix_org_memberships_org_id",  table_name="org_memberships", if_exists=True)
+    op.drop_index("ix_org_memberships_org_id", table_name="org_memberships", if_exists=True)
     op.drop_index("ix_org_memberships_user_id", table_name="org_memberships", if_exists=True)
     op.drop_table("org_memberships", if_exists=True)
 

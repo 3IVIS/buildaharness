@@ -14,30 +14,34 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 async def _register(client, email: str, password: str = "Password1") -> dict:
     r = await client.post("/auth/register", json={"email": email, "password": password})
     assert r.status_code == 201, r.text
     return r.json()
 
+
 def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
+
 # Minimal valid publish payload
 PUBLISH_PAYLOAD = {
-    "slug":        "my-custom-tool",
-    "name":        "My Custom Tool",
+    "slug": "my-custom-tool",
+    "name": "My Custom Tool",
     "description": "Does something useful",
-    "category":    "tool",
-    "icon_emoji":  "🛠️",
-    "npm_ref":     "@acme/custom-tool",
-    "source":      "npm",
-    "node_spec":   {"type": "tool_invoke", "tool_id": "my_custom_tool", "data": {"label": "My Custom Tool"}},
-    "tool_def":    {"tool_ref": "@acme/custom-tool", "source": "npm", "description": "Does something"},
-    "tags":        ["custom", "acme"],
+    "category": "tool",
+    "icon_emoji": "🛠️",
+    "npm_ref": "@acme/custom-tool",
+    "source": "npm",
+    "node_spec": {"type": "tool_invoke", "tool_id": "my_custom_tool", "data": {"label": "My Custom Tool"}},
+    "tool_def": {"tool_ref": "@acme/custom-tool", "source": "npm", "description": "Does something"},
+    "tags": ["custom", "acme"],
 }
 
 
 # ── GET /marketplace ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_marketplace_list_empty(client):
@@ -66,7 +70,7 @@ async def test_marketplace_list_after_publish(client):
     assert len(items) == 1
     assert items[0]["slug"] == "my-custom-tool"
     assert items[0]["name"] == "My Custom Tool"
-    assert items[0]["verified"] is False   # user-published = not verified
+    assert items[0]["verified"] is False  # user-published = not verified
 
 
 @pytest.mark.asyncio
@@ -117,6 +121,7 @@ async def test_marketplace_filter_verified(client):
 
 # ── GET /marketplace/{slug} ───────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_marketplace_get_404(client):
     r = await client.get("/marketplace/does-not-exist")
@@ -132,9 +137,9 @@ async def test_marketplace_get_200(client):
     r = await client.get("/marketplace/my-custom-tool")
     assert r.status_code == 200
     body = r.json()
-    assert body["slug"]      == "my-custom-tool"
+    assert body["slug"] == "my-custom-tool"
     assert body["node_spec"] == PUBLISH_PAYLOAD["node_spec"]
-    assert body["tool_def"]  == PUBLISH_PAYLOAD["tool_def"]
+    assert body["tool_def"] == PUBLISH_PAYLOAD["tool_def"]
     assert "created_at" in body
 
 
@@ -150,13 +155,14 @@ async def test_marketplace_get_public_no_auth(client):
 
 # ── POST /marketplace ─────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_marketplace_publish_201(client):
     creds = await _register(client, "mkt-pub@test.com")
     r = await client.post("/marketplace", json=PUBLISH_PAYLOAD, headers=_auth(creds["token"]))
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["slug"]     == "my-custom-tool"
+    assert body["slug"] == "my-custom-tool"
     assert body["verified"] is False
 
 
@@ -182,7 +188,7 @@ async def test_marketplace_publish_invalid_slug(client):
     h = _auth(creds["token"])
     bad = {**PUBLISH_PAYLOAD, "slug": "Bad Slug!"}
     r = await client.post("/marketplace", json=bad, headers=h)
-    assert r.status_code == 422   # Pydantic pattern validation
+    assert r.status_code == 422  # Pydantic pattern validation
 
 
 @pytest.mark.asyncio
@@ -195,6 +201,7 @@ async def test_marketplace_publish_invalid_category(client):
 
 
 # ── POST /marketplace/{slug}/install ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_marketplace_install_404(client):
@@ -221,11 +228,11 @@ async def test_marketplace_install_200_returns_fragments(client):
     r = await client.post("/marketplace/my-custom-tool/install", headers=h)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["slug"]      == "my-custom-tool"
-    assert body["name"]      == "My Custom Tool"
+    assert body["slug"] == "my-custom-tool"
+    assert body["name"] == "My Custom Tool"
     assert body["node_spec"] == PUBLISH_PAYLOAD["node_spec"]
-    assert body["tool_def"]  == PUBLISH_PAYLOAD["tool_def"]
-    assert body["tool_id"]   == "my_custom_tool"   # hyphens → underscores
+    assert body["tool_def"] == PUBLISH_PAYLOAD["tool_def"]
+    assert body["tool_id"] == "my_custom_tool"  # hyphens → underscores
 
 
 @pytest.mark.asyncio
@@ -254,6 +261,7 @@ async def test_marketplace_install_tool_id_derivation(client):
 
 
 # ── Pagination ────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_marketplace_pagination(client):

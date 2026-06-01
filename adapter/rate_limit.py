@@ -19,7 +19,9 @@ is behind a proxy that authenticates those headers.  If the adapter is exposed
 directly to the internet, clients can spoof these headers to appear as any IP.
 Set TRUST_PROXY=false in that scenario to force the TCP peer address.
 """
+
 import os as _os
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
@@ -55,6 +57,7 @@ def _test_key(request: Request) -> str:
     keeping the limiter wired up (middleware, exception handlers all still run).
     """
     import uuid
+
     return str(uuid.uuid4())
 
 

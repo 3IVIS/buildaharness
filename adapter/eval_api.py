@@ -13,17 +13,18 @@ seed_eval_templates()   — called from lifespan in main.py; idempotently regist
 TESTING=true skips all real Langfuse calls so the CI suite never needs a live
 Langfuse instance.  Endpoints still validate inputs and return correct HTTP status.
 """
+
 import os
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import current_user
-from sqlalchemy.ext.asyncio import AsyncSession
 from db import User, get_session
-from org_context import OrgDep, Org, get_langfuse_keys
+from org_context import Org, OrgDep, get_langfuse_keys
 
 # ── Langfuse client ───────────────────────────────────────────────────────────
 # get_client() returns the process-wide Langfuse singleton.  The client is only
@@ -31,6 +32,7 @@ from org_context import OrgDep, Org, get_langfuse_keys
 # _LANGFUSE_ENABLED first and falls back gracefully when Langfuse is absent.
 try:
     from langfuse import get_client as _lf_get_client
+
     _LANGFUSE_ENABLED = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
 except ImportError:
     _LANGFUSE_ENABLED = False
@@ -41,10 +43,10 @@ except ImportError:
 
 # Import the in-memory job store to resolve trace_id from job_id for feedback.
 # No circular dependency: run_api never imports eval_api.
-from run_api import _jobs_get  # noqa: E402 (after stdlib/third-party)
-from rate_limit import limiter  # noqa: E402
+from rate_limit import limiter
+from run_api import _jobs_get
 
-_LANGFUSE_BASE_URL   = os.getenv("LANGFUSE_BASE_URL",   "http://langfuse:3000")
+_LANGFUSE_BASE_URL = os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000")
 # Global fallback keys — used when no per-org keys are configured on the Org row.
 _LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
@@ -54,21 +56,23 @@ router = APIRouter(prefix="/eval", tags=["eval"])
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class ScoreRequest(BaseModel):
-    trace_id:       str
+    trace_id: str
     observation_id: str | None = None
-    name:           str
-    value:          float
-    comment:        str | None = None
+    name: str
+    value: float
+    comment: str | None = None
 
 
 class FeedbackRequest(BaseModel):
-    job_id:  str
-    value:   int   # 1 = thumbs up,  -1 = thumbs down,  0 = neutral retraction
+    job_id: str
+    value: int  # 1 = thumbs up,  -1 = thumbs down,  0 = neutral retraction
     comment: str | None = None
 
 
 # ── HTTP client for Langfuse REST API ─────────────────────────────────────────
+
 
 def _lf_http(org: Org | None = None) -> httpx.AsyncClient:
     """Authenticated async httpx client for the Langfuse HTTP API.
@@ -86,14 +90,15 @@ def _lf_http(org: Org | None = None) -> httpx.AsyncClient:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.post("/score", status_code=204)
 @limiter.limit("30/minute")
 async def write_score(
     request: Request,
-    req:  ScoreRequest,
+    req: ScoreRequest,
+    org: OrgDep,
     user: User = Depends(current_user),
-    db:   AsyncSession = Depends(get_session),
-    org:  OrgDep = ...,
+    db: AsyncSession = Depends(get_session),
 ) -> None:
     """Write a programmatic score (e.g. from an LLM-as-judge background task) to
     a Langfuse trace or child observation.
@@ -105,7 +110,7 @@ async def write_score(
 
     try:
         lf = _lf_get_client()
-        lf.score(
+        lf.create_score(
             trace_id=req.trace_id,
             observation_id=req.observation_id,
             name=req.name,
@@ -123,10 +128,10 @@ async def write_score(
 @limiter.limit("30/minute")
 async def submit_feedback(
     request: Request,
-    req:  FeedbackRequest,
-    user: User         = Depends(current_user),
-    db:   AsyncSession = Depends(get_session),
-    org:  OrgDep = ...,
+    req: FeedbackRequest,
+    org: OrgDep,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
 ) -> None:
     """Record a thumbs-up / thumbs-down signal for a completed run.
 
@@ -163,7 +168,7 @@ async def submit_feedback(
 
     try:
         lf = _lf_get_client()
-        lf.score(
+        lf.create_score(
             trace_id=trace_id,
             name="user_feedback",
             value=float(req.value),
@@ -178,8 +183,8 @@ async def submit_feedback(
 
 @router.get("/templates")
 async def list_eval_templates(
+    org: OrgDep,
     user: User = Depends(current_user),
-    org:  OrgDep = ...,
 ) -> dict:
     """Proxy Langfuse GET /api/evals/configs.
 
@@ -192,7 +197,7 @@ async def list_eval_templates(
 
     async with _lf_http(org) as http:
         try:
-            resp = await http.get("/api/evals/configs")
+            resp = await http.get("/api/public/score-configs")
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as exc:
@@ -209,9 +214,9 @@ async def list_eval_templates(
 
 @router.get("/scores")
 async def get_scores(
+    org: OrgDep,
     trace_id: str = Query(..., description="Langfuse trace ID returned by GET /run/{job_id}"),
-    user:     User = Depends(current_user),
-    org:      OrgDep = ...,
+    user: User = Depends(current_user),
 ) -> dict:
     """Fetch all scores attached to a Langfuse trace.
 
@@ -227,7 +232,7 @@ async def get_scores(
 
     async with _lf_http(org) as http:
         try:
-            resp = await http.get("/api/scores", params={"traceId": trace_id})
+            resp = await http.get("/api/public/scores", params={"traceId": trace_id})
             resp.raise_for_status()
             return resp.json()
         except Exception:
@@ -237,60 +242,25 @@ async def get_scores(
 
 # ── Eval template seeder ──────────────────────────────────────────────────────
 
-# Three evaluator configs registered in Langfuse at startup.
-# These use Langfuse's built-in LLM-as-judge evaluation pipeline:
-# once registered, Langfuse automatically scores every new trace matching
-# the filter criteria without any per-run code in the adapter.
+# Score config definitions registered in Langfuse at startup via POST /api/public/score-configs.
+# These register the score names and data types so Langfuse knows the schema when scores
+# are written programmatically (e.g. via POST /eval/score).  LLM-as-judge prompts that
+# compute these scores are configured separately in the Langfuse UI.
 _EVAL_TEMPLATES: list[dict[str, Any]] = [
-    {
-        "name":        "faithfulness",
-        "prompt":      (
-            "You are evaluating the faithfulness of an AI response. "
-            "Score from 0 to 1 where 1 means the response is fully grounded "
-            "in the provided context and 0 means it contains hallucinations.\n\n"
-            "Context: {{input}}\nResponse: {{output}}\n\n"
-            "Return ONLY a JSON object (no markdown): "
-            "{\"score\": <float 0-1>, \"reasoning\": \"<one sentence>\"}."
-        ),
-        "vars":        ["input", "output"],
-        "outputScore": "faithfulness",
-    },
-    {
-        "name":        "task_completion",
-        "prompt":      (
-            "Evaluate whether the AI response fully completes the requested task. "
-            "Score from 0 to 1 where 1 = task fully completed, 0 = task not completed.\n\n"
-            "Task: {{input}}\nResponse: {{output}}\n\n"
-            "Return ONLY a JSON object (no markdown): "
-            "{\"score\": <float 0-1>, \"reasoning\": \"<one sentence>\"}."
-        ),
-        "vars":        ["input", "output"],
-        "outputScore": "task_completion",
-    },
-    {
-        "name":        "hallucination",
-        "prompt":      (
-            "Evaluate whether the AI response contains hallucinations "
-            "(claims not grounded in the context or demonstrably false). "
-            "Score from 0 to 1 where 0 = no hallucinations, 1 = severe hallucinations.\n\n"
-            "Context: {{input}}\nResponse: {{output}}\n\n"
-            "Return ONLY a JSON object (no markdown): "
-            "{\"score\": <float 0-1>, \"reasoning\": \"<one sentence>\"}."
-        ),
-        "vars":        ["input", "output"],
-        "outputScore": "hallucination",
-    },
+    {"name": "faithfulness", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1},
+    {"name": "task_completion", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1},
+    {"name": "hallucination", "dataType": "NUMERIC", "minValue": 0, "maxValue": 1},
 ]
 
 
 async def seed_eval_templates() -> None:
-    """Register LLM-as-judge evaluator configs in Langfuse at adapter startup.
+    """Register score config schemas in Langfuse at adapter startup.
 
-    Idempotent: a 409 Conflict response means the config already exists and
-    is silently skipped.  Designed to be called once from the FastAPI lifespan
-    so operators don't need to configure evaluators manually in the Langfuse UI.
+    Uses POST /api/public/score-configs to create named NUMERIC score definitions
+    (0-1 range) for faithfulness, task_completion, and hallucination.  Idempotent:
+    a 409 means the config already exists and is silently skipped.
 
-    Gated on LANGFUSE_EVAL_ENABLED=true to avoid registering evaluators in
+    Gated on LANGFUSE_EVAL_ENABLED=true to avoid registering configs in
     environments where automated scoring is not wanted (e.g. dev laptops).
 
     No-op when:
@@ -308,7 +278,7 @@ async def seed_eval_templates() -> None:
     async with _lf_http(None) as http:  # seeder runs at startup — uses global keys
         for template in _EVAL_TEMPLATES:
             try:
-                resp = await http.post("/api/evals/configs", json=template)
+                resp = await http.post("/api/public/score-configs", json=template)
                 # 200/201 → created; 409 → already registered — both are fine.
                 if resp.status_code not in (200, 201, 409):
                     print(
@@ -326,7 +296,6 @@ async def seed_eval_templates() -> None:
                 # Don't crash the adapter if Langfuse is temporarily unreachable
                 # at boot time — the seeder will run again on the next restart.
                 print(
-                    f"[itsharness] WARNING: eval template seeder — "
-                    f"could not register '{template['name']}': {exc}",
+                    f"[itsharness] WARNING: eval template seeder — could not register '{template['name']}': {exc}",
                     flush=True,
                 )

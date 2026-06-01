@@ -26,6 +26,7 @@ Routes
       Synchronous REST execution.  Runs the flow inline and returns the
       result when it finishes (or 504 on timeout, 422 on HITL pause).
 """
+
 import asyncio
 import os
 import re
@@ -38,6 +39,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from a2a_api import A2A_BASE_URL, generate_agent_card
 from auth import current_user
 from db import (
     A2ADeployment,
@@ -46,7 +48,9 @@ from db import (
     User,
     get_session,
 )
-from org_context import Org, current_org as _current_org
+from org_context import Org
+from org_context import current_org as _current_org
+from prompt_resolver import resolve_prompts
 from rate_limit import limiter
 from run_api import (
     _evict_stale_jobs,
@@ -55,12 +59,10 @@ from run_api import (
     _jobs_get,
     _run_crewai,
     _run_langgraph,
-    _run_mastra,
     _run_maf,
+    _run_mastra,
 )
 from validate import validate_spec as _validate_spec
-from prompt_resolver import resolve_prompts
-from a2a_api import generate_agent_card, A2A_BASE_URL
 
 # ── Base URL ─────────────────────────────────────────────────────────────────
 
@@ -73,22 +75,22 @@ INVOKE_TIMEOUT_S = int(os.getenv("INVOKE_TIMEOUT_S", "120"))
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
-router_deploy      = APIRouter(prefix="/deploy",   tags=["deploy"])
-router_well_known  = APIRouter(tags=["deploy"])
-router_share       = APIRouter(tags=["deploy"])
-router_invoke      = APIRouter(prefix="/flows",    tags=["deploy"])
+router_deploy = APIRouter(prefix="/deploy", tags=["deploy"])
+router_well_known = APIRouter(tags=["deploy"])
+router_share = APIRouter(tags=["deploy"])
+router_invoke = APIRouter(prefix="/flows", tags=["deploy"])
 
 # ── Python → JSON Schema type map ────────────────────────────────────────────
 
 _PY_TYPE_MAP: dict[str, str] = {
-    "str":   "string",
-    "int":   "integer",
+    "str": "string",
+    "int": "integer",
     "float": "number",
-    "bool":  "boolean",
-    "list":  "array",
-    "dict":  "object",
-    "Any":   "string",
-    "None":  "null",
+    "bool": "boolean",
+    "list": "array",
+    "dict": "object",
+    "Any": "string",
+    "None": "null",
 }
 
 
@@ -100,12 +102,13 @@ def _py_to_json_schema_type(py_type: str) -> str:
 
 # ── MCP manifest generator ───────────────────────────────────────────────────
 
+
 def generate_mcp_manifest(
-    flow_id:          str,
-    flow_name:        str,
+    flow_id: str,
+    flow_name: str,
     flow_description: str | None,
-    spec:             dict,
-    base_url:         str = ADAPTER_BASE_URL,
+    spec: dict,
+    base_url: str = ADAPTER_BASE_URL,
 ) -> dict:
     """Build an MCP tool manifest from a FlowSpec.
 
@@ -117,27 +120,27 @@ def generate_mcp_manifest(
     JSON Schema property.  Fields with reducer=append are typed as arrays.
     """
     state_schema = spec.get("state_schema") or {}
-    fields:       list[dict] = state_schema.get("fields") or []
+    fields: list[dict] = state_schema.get("fields") or []
 
     properties: dict[str, Any] = {}
-    required:   list[str]      = []
+    required: list[str] = []
 
     for field in fields:
-        name    = field.get("name")
-        ftype   = field.get("type", "str")
+        name = field.get("name")
+        ftype = field.get("type", "str")
         reducer = field.get("reducer", "replace")
         if not name:
             continue
 
         if reducer == "append":
             prop: dict[str, Any] = {
-                "type":        "array",
-                "items":       {"type": _py_to_json_schema_type(ftype)},
+                "type": "array",
+                "items": {"type": _py_to_json_schema_type(ftype)},
                 "description": f"Append-reducer list field: {name}",
             }
         else:
             prop = {
-                "type":        _py_to_json_schema_type(ftype),
+                "type": _py_to_json_schema_type(ftype),
                 "description": f"Flow state field: {name}",
             }
 
@@ -150,12 +153,14 @@ def generate_mcp_manifest(
     # Sanitise tool name: MCP requires [a-z0-9_] slug.
     # Apply the same sanitisation to the flow_id fallback so hyphens are
     # replaced with underscores (flow IDs are kebab-case, MCP names cannot be).
-    tool_name = re.sub(r"[^a-zA-Z0-9]+", "_", flow_name).lower().strip("_") \
-                or re.sub(r"[^a-zA-Z0-9]+", "_", flow_id).lower().strip("_") \
-                or "flow"
+    tool_name = (
+        re.sub(r"[^a-zA-Z0-9]+", "_", flow_name).lower().strip("_")
+        or re.sub(r"[^a-zA-Z0-9]+", "_", flow_id).lower().strip("_")
+        or "flow"
+    )
 
     input_schema: dict[str, Any] = {
-        "type":       "object",
+        "type": "object",
         "properties": properties,
     }
     if required:
@@ -165,10 +170,10 @@ def generate_mcp_manifest(
         "schema_version": "v1",
         "tools": [
             {
-                "name":        tool_name,
+                "name": tool_name,
                 "description": flow_description or f"Execute the '{flow_name}' flow",
                 "inputSchema": input_schema,
-                "endpoint":    f"{base_url}/flows/{flow_id}/invoke",
+                "endpoint": f"{base_url}/flows/{flow_id}/invoke",
             }
         ],
     }
@@ -176,24 +181,25 @@ def generate_mcp_manifest(
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class UnifiedDeployResponse(BaseModel):
-    flow_id:       str
-    rest_url:      str
-    mcp_url:       str
-    a2a_url:       str | None
+    flow_id: str
+    rest_url: str
+    mcp_url: str
+    a2a_url: str | None
     shareable_url: str
-    mcp_manifest:  dict
-    deployed_at:   datetime
+    mcp_manifest: dict
+    deployed_at: datetime
 
 
 class ShareResponse(BaseModel):
-    flow_id:       str
-    flow_name:     str
-    rest_url:      str
-    mcp_url:       str
-    a2a_url:       str | None
+    flow_id: str
+    flow_name: str
+    rest_url: str
+    mcp_url: str
+    a2a_url: str | None
     shareable_url: str
-    deployed_at:   datetime
+    deployed_at: datetime
 
 
 class InvokeRequest(BaseModel):
@@ -201,37 +207,35 @@ class InvokeRequest(BaseModel):
 
 
 class InvokeResponse(BaseModel):
-    job_id:  str
-    output:  Any
+    job_id: str
+    output: Any
     runtime: str
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
+
 async def _get_unified_deployment(
     flow_id: str,
-    db:      AsyncSession,
+    db: AsyncSession,
 ) -> UnifiedDeployment:
-    record = (await db.execute(
-        select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id)
-    )).scalar_one_or_none()
+    record = (
+        await db.execute(select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id))
+    ).scalar_one_or_none()
     if not record:
         raise HTTPException(
             status_code=404,
-            detail=f"No unified deployment found for flow '{flow_id}'. "
-                   "Call POST /deploy/{flow_id} first.",
+            detail=f"No unified deployment found for flow '{flow_id}'. Call POST /deploy/{{flow_id}} first.",
         )
     return record
 
 
 async def _get_flow_owned(
     flow_id: str,
-    user:    User,
-    db:      AsyncSession,
+    user: User,
+    db: AsyncSession,
 ) -> Flow:
-    result = await db.execute(
-        select(Flow).where(Flow.id == flow_id, Flow.user_id == user.id)
-    )
+    result = await db.execute(select(Flow).where(Flow.id == flow_id, Flow.user_id == user.id))
     flow = result.scalar_one_or_none()
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -240,14 +244,15 @@ async def _get_flow_owned(
 
 # ── Deploy management ─────────────────────────────────────────────────────────
 
+
 @router_deploy.post("/{flow_id}", response_model=UnifiedDeployResponse, status_code=200)
 @limiter.limit("20/minute")
 async def unified_deploy(
     request: Request,
     flow_id: str,
-    user:    User         = Depends(current_user),
-    db:      AsyncSession = Depends(get_session),
-    org:     "Org"        = Depends(_current_org),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+    org: "Org" = Depends(_current_org),
 ) -> UnifiedDeployResponse:
     """Deploy a flow as a REST endpoint + MCP tool + A2A agent in one call.
 
@@ -263,9 +268,9 @@ async def unified_deploy(
     # Validate spec before snapshotting.
     _validate_spec(spec)
 
-    now          = datetime.now(UTC)
-    rest_url     = f"{ADAPTER_BASE_URL}/flows/{flow_id}/invoke"
-    mcp_url      = f"{ADAPTER_BASE_URL}/.well-known/mcp/{flow_id}.json"
+    now = datetime.now(UTC)
+    rest_url = f"{ADAPTER_BASE_URL}/flows/{flow_id}/invoke"
+    mcp_url = f"{ADAPTER_BASE_URL}/.well-known/mcp/{flow_id}.json"
     shareable_url = f"{ADAPTER_BASE_URL}/share/{flow_id}"
 
     mcp_manifest = generate_mcp_manifest(
@@ -285,9 +290,9 @@ async def unified_deploy(
     org_id = org.id if org else None
 
     # ── Upsert unified_deployments ────────────────────────────────────────────
-    existing = (await db.execute(
-        select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id)
-    )).scalar_one_or_none()
+    existing = (
+        await db.execute(select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id))
+    ).scalar_one_or_none()
 
     if existing:
         if str(existing.user_id) != str(user.id):
@@ -295,12 +300,12 @@ async def unified_deploy(
                 status_code=403,
                 detail="A deployment for this flow already exists and belongs to a different user.",
             )
-        existing.rest_url      = rest_url
-        existing.mcp_url       = mcp_url
-        existing.a2a_url       = a2a_url
+        existing.rest_url = rest_url
+        existing.mcp_url = mcp_url
+        existing.a2a_url = a2a_url
         existing.shareable_url = shareable_url
-        existing.mcp_manifest  = mcp_manifest
-        existing.deployed_at   = now
+        existing.mcp_manifest = mcp_manifest
+        existing.deployed_at = now
         record = existing
     else:
         record = UnifiedDeployment(
@@ -327,24 +332,26 @@ async def unified_deploy(
             base_url=A2A_BASE_URL,
         )
         if card:
-            a2a_existing = (await db.execute(
-                select(A2ADeployment).where(A2ADeployment.flow_id == flow_id)
-            )).scalar_one_or_none()
+            a2a_existing = (
+                await db.execute(select(A2ADeployment).where(A2ADeployment.flow_id == flow_id))
+            ).scalar_one_or_none()
 
             if a2a_existing:
                 a2a_existing.endpoint_url = a2a_url
-                a2a_existing.agent_card   = card
-                a2a_existing.deployed_at  = now
+                a2a_existing.agent_card = card
+                a2a_existing.deployed_at = now
             else:
-                db.add(A2ADeployment(
-                    id=uuid.uuid4(),
-                    flow_id=flow_id,
-                    user_id=user.id,
-                    org_id=org_id,
-                    endpoint_url=a2a_url,
-                    agent_card=card,
-                    deployed_at=now,
-                ))
+                db.add(
+                    A2ADeployment(
+                        id=uuid.uuid4(),
+                        flow_id=flow_id,
+                        user_id=user.id,
+                        org_id=org_id,
+                        endpoint_url=a2a_url,
+                        agent_card=card,
+                        deployed_at=now,
+                    )
+                )
 
     # Protect against the rare race where two simultaneous deploys both read
     # existing=None and both attempt INSERT — the second will hit the UNIQUE
@@ -356,9 +363,9 @@ async def unified_deploy(
         if "unique" in str(exc).lower() or "integrity" in str(exc).lower():
             await db.rollback()
             # Re-read whatever the concurrent winner inserted
-            winner = (await db.execute(
-                select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id)
-            )).scalar_one_or_none()
+            winner = (
+                await db.execute(select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id))
+            ).scalar_one_or_none()
             if winner:
                 return UnifiedDeployResponse(
                     flow_id=winner.flow_id,
@@ -387,8 +394,8 @@ async def unified_deploy(
 async def unified_undeploy(
     request: Request,
     flow_id: str,
-    user:    User         = Depends(current_user),
-    db:      AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
 ) -> None:
     """Remove the unified deployment for a flow.
 
@@ -397,9 +404,9 @@ async def unified_undeploy(
     """
     await _get_flow_owned(flow_id, user, db)
 
-    unified = (await db.execute(
-        select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id)
-    )).scalar_one_or_none()
+    unified = (
+        await db.execute(select(UnifiedDeployment).where(UnifiedDeployment.flow_id == flow_id))
+    ).scalar_one_or_none()
 
     if unified:
         if str(unified.user_id) != str(user.id):
@@ -407,9 +414,7 @@ async def unified_undeploy(
         await db.delete(unified)
 
     # Also remove A2A deployment so /.well-known/agent/ returns 404.
-    a2a = (await db.execute(
-        select(A2ADeployment).where(A2ADeployment.flow_id == flow_id)
-    )).scalar_one_or_none()
+    a2a = (await db.execute(select(A2ADeployment).where(A2ADeployment.flow_id == flow_id))).scalar_one_or_none()
 
     if a2a and str(a2a.user_id) == str(user.id):
         await db.delete(a2a)
@@ -419,12 +424,13 @@ async def unified_undeploy(
 
 # ── MCP discovery (public) ────────────────────────────────────────────────────
 
+
 @router_well_known.get("/.well-known/mcp/{flow_id}.json", include_in_schema=True)
 @limiter.limit("60/minute")
 async def mcp_manifest_for_flow(
     request: Request,
     flow_id: str,
-    db:      AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Return the MCP tool manifest for a deployed flow.
 
@@ -441,12 +447,13 @@ async def mcp_manifest_for_flow(
 
 # ── Shareable URL (public) ────────────────────────────────────────────────────
 
+
 @router_share.get("/share/{flow_id}", response_model=ShareResponse)
 @limiter.limit("60/minute")
 async def share_page(
     request: Request,
     flow_id: str,
-    db:      AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),
 ) -> ShareResponse:
     """Return deployment metadata for the shareable URL.
 
@@ -457,8 +464,8 @@ async def share_page(
 
     # Flow name — fetch from flows table (may be public info via the share link).
     flow_result = await db.execute(select(Flow).where(Flow.id == flow_id))
-    flow        = flow_result.scalar_one_or_none()
-    flow_name   = flow.name if flow else flow_id
+    flow = flow_result.scalar_one_or_none()
+    flow_name = flow.name if flow else flow_id
 
     return ShareResponse(
         flow_id=flow_id,
@@ -473,15 +480,16 @@ async def share_page(
 
 # ── REST invocation ────────────────────────────────────────────────────────────
 
+
 @router_invoke.post("/{flow_id}/invoke", response_model=InvokeResponse)
 @limiter.limit("10/minute")
 async def invoke_flow(
     request: Request,
     flow_id: str,
-    req:     InvokeRequest,
-    user:    User          = Depends(current_user),
-    db:      AsyncSession  = Depends(get_session),
-    org:     "Org"         = Depends(_current_org),
+    req: InvokeRequest,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+    org: "Org" = Depends(_current_org),
 ) -> InvokeResponse:
     """Synchronously execute a deployed flow and return the result.
 
@@ -528,22 +536,22 @@ async def invoke_flow(
     # internally so they don't interfere with the request session.
     runner = {
         "langgraph": _run_langgraph,
-        "crewai":    _run_crewai,
-        "mastra":    _run_mastra,
+        "crewai": _run_crewai,
+        "mastra": _run_mastra,
         "microsoft_agent_framework": _run_maf,
     }[runtime]
 
     try:
         await asyncio.wait_for(runner(job_id, spec, org_id), timeout=INVOKE_TIMEOUT_S)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # The runner coroutine was cancelled — mark the job as failed so it
         # doesn't stay in "running" state until TTL eviction.
         try:
             async with _job_session() as _db:
                 _timeout_job = await _jobs_get(job_id, _db)
                 if _timeout_job and _timeout_job.status not in ("done", "error", "paused"):
-                    _timeout_job.status   = "error"
-                    _timeout_job.error    = f"Invocation timed out after {INVOKE_TIMEOUT_S}s"
+                    _timeout_job.status = "error"
+                    _timeout_job.error = f"Invocation timed out after {INVOKE_TIMEOUT_S}s"
                     _timeout_job.ended_at = datetime.now(UTC)
                     await _db.commit()
         except Exception:
@@ -551,8 +559,8 @@ async def invoke_flow(
         raise HTTPException(
             status_code=504,
             detail=f"Flow execution timed out after {INVOKE_TIMEOUT_S}s. "
-                   "Use POST /run for long-running flows and poll GET /run/{job_id}.",
-        )
+            "Use POST /run for long-running flows and poll GET /run/{job_id}.",
+        ) from None
 
     # Fetch final job state via a fresh background session to bypass the
     # request session's identity map (the runner wrote via its own sessions).
@@ -565,8 +573,7 @@ async def invoke_flow(
     if job.status == "paused":
         raise HTTPException(
             status_code=422,
-            detail="Flow paused waiting for human input. "
-                   "Use POST /run + POST /run/{job_id}/resume for HITL flows.",
+            detail="Flow paused waiting for human input. Use POST /run + POST /run/{job_id}/resume for HITL flows.",
         )
 
     if job.status == "error":

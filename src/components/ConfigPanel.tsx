@@ -116,7 +116,6 @@ function FailBranchSection({ data, update }: { data: NodeData; update: (d: Parti
     setFb({ retry: { ...retry, ...patch } })
   }
   function clearFb() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     update({ fail_branch: undefined as any })
   }
 

@@ -12,7 +12,8 @@ import { NewFlowChooser, SUPPRESS_KEY } from './NewFlowChooser'
 import { generateAgentCard, downloadAgentCard, A2A_ENABLED } from '../services/a2a'
 import { validateCrossRefs } from '../spec/validation'
 import { api } from '../services/api'
-import type { AdapterName, ValidationError } from '../spec/schema'
+import type { AdapterName } from '../spec/schema'
+import type { ValidationError } from '../spec/validation'
 import { relativeTime } from '../store/library'
 
 // §15 — runtime metadata for the chip dropdown

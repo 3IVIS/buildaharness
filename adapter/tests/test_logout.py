@@ -16,23 +16,35 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_register_includes_jti(client):
-    resp = await client.post("/auth/register", json={
-        "email": "jti@example.com", "password": "Password1",
-    })
+    resp = await client.post(
+        "/auth/register",
+        json={
+            "email": "jti@example.com",
+            "password": "Password1",
+        },
+    )
     assert resp.status_code == 201
     body = resp.json()
     assert "jti" in body
-    assert len(body["jti"]) == 36   # UUID4 string
+    assert len(body["jti"]) == 36  # UUID4 string
 
 
 @pytest.mark.asyncio
 async def test_login_includes_jti(client):
-    await client.post("/auth/register", json={
-        "email": "jti2@example.com", "password": "Password1",
-    })
-    resp = await client.post("/auth/login", json={
-        "email": "jti2@example.com", "password": "Password1",
-    })
+    await client.post(
+        "/auth/register",
+        json={
+            "email": "jti2@example.com",
+            "password": "Password1",
+        },
+    )
+    resp = await client.post(
+        "/auth/login",
+        json={
+            "email": "jti2@example.com",
+            "password": "Password1",
+        },
+    )
     assert resp.status_code == 200
     assert "jti" in resp.json()
 

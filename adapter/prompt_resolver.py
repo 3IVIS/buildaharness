@@ -26,15 +26,22 @@ TESTING=true:
   Returns the spec completely unchanged — no Langfuse calls, no cache writes,
   safe for the CI suite.
 """
+
+from __future__ import annotations
+
 import asyncio
 import copy
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from org_context import Org
 
 # ── Langfuse client (optional) ────────────────────────────────────────────────
 try:
     from langfuse import get_client as _lf_get_client
+
     _LANGFUSE_ENABLED = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
 except ImportError:
     _LANGFUSE_ENABLED = False
@@ -71,6 +78,7 @@ def _cache_clear() -> None:
 
 # ── Sync Langfuse fetch (runs in thread executor) ─────────────────────────────
 
+
 def _fetch_prompt_sync(name: str, version: int | None, label: str | None) -> str:
     """Call langfuse.get_prompt() synchronously.
 
@@ -100,17 +108,14 @@ def _fetch_prompt_sync(name: str, version: int | None, label: str | None) -> str
     raw = prompt_obj.prompt
     if isinstance(raw, list):
         # Convert chat prompt to a single user-turn string for text-mode adapters
-        return "\n".join(
-            f"[{m.get('role', '?')}] {m.get('content', '')}"
-            for m in raw
-            if isinstance(m, dict)
-        )
+        return "\n".join(f"[{m.get('role', '?')}] {m.get('content', '')}" for m in raw if isinstance(m, dict))
     return str(raw)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
+
+async def resolve_prompts(spec: dict, org: Org | None = None) -> dict:
     """Inject Langfuse-managed prompt text into all llm_call nodes that have
     a prompt_ref field.
 
@@ -129,6 +134,7 @@ async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
     # Determine effective Langfuse enablement — per-org keys take priority.
     if org is not None:
         from org_context import get_langfuse_keys as _get_lf_keys
+
         _pub, _sec = _get_lf_keys(org)
         _lf_active = bool(_pub)
     else:
@@ -139,12 +145,10 @@ async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
 
     nodes = spec.get("nodes", [])
     needs_resolve = any(
-        n.get("type") == "llm_call" and n.get("prompt_ref", {}).get("name")
-        for n in nodes
-        if isinstance(n, dict)
+        n.get("type") == "llm_call" and n.get("prompt_ref", {}).get("name") for n in nodes if isinstance(n, dict)
     )
     if not needs_resolve:
-        return spec   # fast path — nothing to resolve, no copy needed
+        return spec  # fast path — nothing to resolve, no copy needed
 
     # Deep copy so we never mutate the caller's dict.
     spec = copy.deepcopy(spec)
@@ -157,9 +161,9 @@ async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
         if not isinstance(ref, dict) or not ref.get("name"):
             continue
 
-        name:    str       = ref["name"]
-        version: int | None = ref.get("version")     # None → latest
-        label:   str | None = ref.get("label")        # None → "production"
+        name: str = ref["name"]
+        version: int | None = ref.get("version")  # None → latest
+        label: str | None = ref.get("label")  # None → "production"
 
         # Cache key includes org_id so two orgs with different Langfuse
         # projects but the same prompt name/version get independent entries.
@@ -172,9 +176,7 @@ async def resolve_prompts(spec: dict, org: "Org | None" = None) -> dict:
             continue
 
         try:
-            resolved = await loop.run_in_executor(
-                None, _fetch_prompt_sync, name, version, label
-            )
+            resolved = await loop.run_in_executor(None, _fetch_prompt_sync, name, version, label)
             _cache_set(cache_key, resolved)
             node["prompt_template"] = resolved
         except Exception as exc:

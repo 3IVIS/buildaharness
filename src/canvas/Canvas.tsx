@@ -22,7 +22,7 @@ type FocusDepth = 1 | 2 | 'all'
 // CROSS the boundary (one endpoint inside, one outside) stay visible at
 // ~35% so the user can see where the focused subgraph connects.
 
-function useFocusMode(nodes: Node[], edges: { source: string; target: string }[]) {
+function useFocusMode(_nodes: Node[], edges: { source: string; target: string }[]) {
   const [focusId, setFocusId]   = useState<string | null>(null)
   const [depth, setDepth]       = useState<FocusDepth>(1)
 

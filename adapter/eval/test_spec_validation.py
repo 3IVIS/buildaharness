@@ -17,8 +17,8 @@ import ast
 
 from crewai_adapter import compile_crewai
 from langgraph_adapter import compile_langgraph
-from mastra_adapter import compile_mastra
 from maf_adapter import compile_maf
+from mastra_adapter import compile_mastra
 from validate import validate_spec
 
 
@@ -26,7 +26,7 @@ class TestSpecValidation:
     """All five reference flows must validate and compile without errors."""
 
     def test_rag_flow_validates(self, rag_flow_spec):
-        validate_spec(rag_flow_spec)   # raises HTTPException on failure
+        validate_spec(rag_flow_spec)  # raises HTTPException on failure
 
     def test_moderation_flow_validates(self, moderation_flow_spec):
         validate_spec(moderation_flow_spec)
@@ -56,8 +56,9 @@ class TestSpecValidation:
             code, _warnings = compile_mastra(spec)
             # TypeScript syntax check: verify the output is non-empty and
             # contains expected structural markers.
-            assert "createStep" in code or "workflow" in code or "import" in code, \
+            assert "createStep" in code or "workflow" in code or "import" in code, (
                 f"Mastra output for {spec.get('id')} looks empty: {code[:200]}"
+            )
 
     def test_all_flows_compile_maf(self, all_flow_specs):
         """Phase 4: all 5 flows must compile to MS Agent Framework Python."""
@@ -66,7 +67,5 @@ class TestSpecValidation:
             # Generated Python must be syntactically valid.
             ast.parse(code)
             # Must export the flow runner.
-            assert "run_flow" in code, \
-                f"MAF output for {spec.get('id')} missing run_flow()"
-            assert "_run_flow_async" in code, \
-                f"MAF output for {spec.get('id')} missing _run_flow_async()"
+            assert "run_flow" in code, f"MAF output for {spec.get('id')} missing run_flow()"
+            assert "_run_flow_async" in code, f"MAF output for {spec.get('id')} missing _run_flow_async()"

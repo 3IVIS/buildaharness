@@ -8,6 +8,7 @@ graceful fallback when Langfuse is unreachable.
 
 All HTTP endpoint tests use the in-memory SQLite database (no Postgres needed).
 """
+
 import copy
 import os
 import time
@@ -16,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _register(client, email: str, password: str = "Password1") -> dict:
     r = await client.post("/auth/register", json={"email": email, "password": password})
@@ -27,12 +29,15 @@ def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _llm_call_node(node_id: str = "llm-1", prompt_template: str = "Hello {{$.state.input}}",
-                   prompt_ref: dict | None = None) -> dict:
+def _llm_call_node(
+    node_id: str = "llm-1", prompt_template: str = "Hello {{$.state.input}}", prompt_ref: dict | None = None
+) -> dict:
     node: dict = {
-        "id": node_id, "type": "llm_call",
+        "id": node_id,
+        "type": "llm_call",
         "position": {"x": 100, "y": 100},
-        "label": "Test LLM", "output_key": "answer",
+        "label": "Test LLM",
+        "output_key": "answer",
     }
     if prompt_template:
         node["prompt_template"] = prompt_template
@@ -41,25 +46,25 @@ def _llm_call_node(node_id: str = "llm-1", prompt_template: str = "Hello {{$.sta
     return node
 
 
-def _minimal_spec_with_llm(prompt_ref: dict | None = None,
-                            prompt_template: str = "Hello") -> dict:
+def _minimal_spec_with_llm(prompt_ref: dict | None = None, prompt_template: str = "Hello") -> dict:
     return {
         "spec_version": "0.2.0",
         "id": "test-flow",
         "name": "Test Flow",
         "nodes": [
-            {"id": "input-1",  "type": "input",  "position": {"x": 0,   "y": 0}},
+            {"id": "input-1", "type": "input", "position": {"x": 0, "y": 0}},
             _llm_call_node("llm-1", prompt_template=prompt_template, prompt_ref=prompt_ref),
             {"id": "output-1", "type": "output", "position": {"x": 600, "y": 0}},
         ],
         "edges": [
-            {"id": "e1", "type": "direct", "from": "input-1",  "to": "llm-1"},
-            {"id": "e2", "type": "direct", "from": "llm-1",    "to": "output-1"},
+            {"id": "e1", "type": "direct", "from": "input-1", "to": "llm-1"},
+            {"id": "e2", "type": "direct", "from": "llm-1", "to": "output-1"},
         ],
     }
 
 
 # ── GET /prompts ───────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_list_prompts_returns_empty_in_testing(client, auth_headers):
@@ -84,6 +89,7 @@ async def test_list_prompts_limit_param_accepted(client, auth_headers):
 
 # ── GET /prompts/{name} ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_get_prompt_returns_404_in_testing(client, auth_headers):
     """TESTING=true → 404 for any prompt name (Langfuse not configured)."""
@@ -98,6 +104,7 @@ async def test_get_prompt_requires_auth(client):
 
 
 # ── resolve_prompts() — unit tests ────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_resolve_prompts_noop_in_testing():
@@ -137,16 +144,16 @@ async def test_resolve_prompts_injects_prompt_template():
         prompt_template="",  # empty inline — will be replaced by resolver
     )
 
-    with patch.object(pr, "_LANGFUSE_ENABLED", True), \
-         patch.object(pr, "_lf_get_client", return_value=mock_client), \
-         patch.dict(os.environ, {"TESTING": "false"}):
+    with (
+        patch.object(pr, "_LANGFUSE_ENABLED", True),
+        patch.object(pr, "_lf_get_client", return_value=mock_client),
+        patch.dict(os.environ, {"TESTING": "false"}),
+    ):
         result = await resolve_prompts(spec)
 
     llm_node = next(n for n in result["nodes"] if n.get("type") == "llm_call")
     assert llm_node["prompt_template"] == "You are a RAG assistant. Query: {{$.state.question}}"
-    mock_client.get_prompt.assert_called_once_with(
-        "rag-prompt", version=3, label="production"
-    )
+    mock_client.get_prompt.assert_called_once_with("rag-prompt", version=3, label="production")
 
 
 @pytest.mark.asyncio
@@ -166,9 +173,11 @@ async def test_resolve_prompts_cache_hit_no_second_api_call():
         prompt_template="",
     )
 
-    with patch.object(pr, "_LANGFUSE_ENABLED", True), \
-         patch.object(pr, "_lf_get_client", return_value=mock_client), \
-         patch.dict(os.environ, {"TESTING": "false"}):
+    with (
+        patch.object(pr, "_LANGFUSE_ENABLED", True),
+        patch.object(pr, "_lf_get_client", return_value=mock_client),
+        patch.dict(os.environ, {"TESTING": "false"}),
+    ):
         await resolve_prompts(spec)
         await resolve_prompts(copy.deepcopy(spec))  # second call
 
@@ -180,7 +189,7 @@ async def test_resolve_prompts_cache_hit_no_second_api_call():
 async def test_resolve_prompts_cache_miss_after_expiry():
     """After TTL expires, the next call fetches from Langfuse again."""
     import prompt_resolver as pr
-    from prompt_resolver import _cache_clear, _cache_set, resolve_prompts
+    from prompt_resolver import _cache_clear, resolve_prompts
 
     _cache_clear()
     # Manually insert a stale entry (ts = now - TTL - 1)
@@ -197,9 +206,11 @@ async def test_resolve_prompts_cache_miss_after_expiry():
         prompt_template="",
     )
 
-    with patch.object(pr, "_LANGFUSE_ENABLED", True), \
-         patch.object(pr, "_lf_get_client", return_value=mock_client), \
-         patch.dict(os.environ, {"TESTING": "false"}):
+    with (
+        patch.object(pr, "_LANGFUSE_ENABLED", True),
+        patch.object(pr, "_lf_get_client", return_value=mock_client),
+        patch.dict(os.environ, {"TESTING": "false"}),
+    ):
         result = await resolve_prompts(spec)
 
     llm_node = next(n for n in result["nodes"] if n.get("type") == "llm_call")
@@ -224,30 +235,36 @@ async def test_resolve_prompts_mixed_flow_only_resolves_nodes_with_ref():
         "id": "mixed-flow",
         "name": "Mixed",
         "nodes": [
-            {"id": "input-1",  "type": "input",  "position": {"x": 0,   "y": 0}},
+            {"id": "input-1", "type": "input", "position": {"x": 0, "y": 0}},
             {
-                "id": "llm-with-ref", "type": "llm_call", "output_key": "a",
+                "id": "llm-with-ref",
+                "type": "llm_call",
+                "output_key": "a",
                 "position": {"x": 100, "y": 0},
                 "prompt_template": "",
                 "prompt_ref": {"name": "managed-prompt"},
             },
             {
-                "id": "llm-inline", "type": "llm_call", "output_key": "b",
+                "id": "llm-inline",
+                "type": "llm_call",
+                "output_key": "b",
                 "position": {"x": 300, "y": 0},
                 "prompt_template": "Inline prompt stays as-is",
             },
             {"id": "output-1", "type": "output", "position": {"x": 500, "y": 0}},
         ],
         "edges": [
-            {"id": "e1", "type": "direct", "from": "input-1",     "to": "llm-with-ref"},
-            {"id": "e2", "type": "direct", "from": "llm-with-ref","to": "llm-inline"},
-            {"id": "e3", "type": "direct", "from": "llm-inline",  "to": "output-1"},
+            {"id": "e1", "type": "direct", "from": "input-1", "to": "llm-with-ref"},
+            {"id": "e2", "type": "direct", "from": "llm-with-ref", "to": "llm-inline"},
+            {"id": "e3", "type": "direct", "from": "llm-inline", "to": "output-1"},
         ],
     }
 
-    with patch.object(pr, "_LANGFUSE_ENABLED", True), \
-         patch.object(pr, "_lf_get_client", return_value=mock_client), \
-         patch.dict(os.environ, {"TESTING": "false"}):
+    with (
+        patch.object(pr, "_LANGFUSE_ENABLED", True),
+        patch.object(pr, "_lf_get_client", return_value=mock_client),
+        patch.dict(os.environ, {"TESTING": "false"}),
+    ):
         result = await resolve_prompts(spec)
 
     nodes_by_id = {n["id"]: n for n in result["nodes"]}
@@ -270,9 +287,11 @@ async def test_resolve_prompts_graceful_fallback_when_langfuse_unreachable():
         prompt_template="fallback inline text",
     )
 
-    with patch.object(pr, "_LANGFUSE_ENABLED", True), \
-         patch.object(pr, "_lf_get_client", return_value=mock_client), \
-         patch.dict(os.environ, {"TESTING": "false"}):
+    with (
+        patch.object(pr, "_LANGFUSE_ENABLED", True),
+        patch.object(pr, "_lf_get_client", return_value=mock_client),
+        patch.dict(os.environ, {"TESTING": "false"}),
+    ):
         result = await resolve_prompts(spec)  # must not raise
 
     llm_node = next(n for n in result["nodes"] if n.get("type") == "llm_call")
@@ -282,6 +301,7 @@ async def test_resolve_prompts_graceful_fallback_when_langfuse_unreachable():
 
 # ── Compile roundtrip with prompt_ref ─────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_compile_with_prompt_ref_noop_in_testing(client, auth_headers):
     """In TESTING=true, resolve_prompts is a no-op.  A spec with both prompt_ref
@@ -290,8 +310,7 @@ async def test_compile_with_prompt_ref_noop_in_testing(client, auth_headers):
         prompt_ref={"name": "rag-prompt"},
         prompt_template="Fallback inline prompt",  # needed since resolver is a no-op in CI
     )
-    r = await client.post("/compile?runtime=langgraph",
-                          json={"spec": spec}, headers=auth_headers)
+    r = await client.post("/compile?runtime=langgraph", json={"spec": spec}, headers=auth_headers)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["runtime"] == "langgraph"

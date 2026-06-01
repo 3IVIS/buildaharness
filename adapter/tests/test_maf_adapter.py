@@ -14,13 +14,13 @@ Covers:
   - HITL resume endpoint now accepts microsoft_agent_framework jobs
   - NODE_SUPPORT_MATRIX: agent_debate=full, hitl_breakpoint=partial
 """
+
 import copy
-import json
+
 import pytest
 
-from maf_adapter import compile_maf, safe_id
+from maf_adapter import compile_maf
 from tests.conftest import MINIMAL_SPEC
-
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -32,10 +32,10 @@ DEBATE_SPEC = {
     "state_schema": {
         "type": "object",
         "properties": {
-            "proposition":       {"type": "string"},
+            "proposition": {"type": "string"},
             "advocate_position": {"type": "string"},
             "debate_transcript": {"type": "string", "reducer": "append"},
-            "verdict":           {"type": "string"},
+            "verdict": {"type": "string"},
         },
         "required": ["proposition"],
     },
@@ -63,31 +63,41 @@ DEBATE_SPEC = {
         },
     ],
     "nodes": [
-        {"id": "start",           "type": "input",        "label": "Debate proposition",
-         "position": {"x": 0, "y": 0}},
-        {"id": "prepare_position", "type": "agent_role",   "label": "Advocate prepares opening",
-         "config": {"agent_ref": "advocate",
-                    "task_description": "Prepare an opening for: {{$.state.proposition}}",
-                    "expected_output": "Opening argument",
-                    "output_field": "advocate_position",
-                    "memory_access": "isolated", "tool_approval": "auto"},
-         "position": {"x": 200, "y": 0}},
-        {"id": "debate",          "type": "agent_debate",  "label": "Moderated debate",
-         "config": {"agents": ["advocate", "devil_advocate", "judge"],
-                    "max_rounds": 12,
-                    "termination_condition": {"type": "expr", "expr": "$.last_message contains 'VERDICT'"},
-                    "speaker_selection": "round_robin",
-                    "output_field": "debate_transcript",
-                    "initial_message": "{{$.state.advocate_position}}"},
-         "position": {"x": 400, "y": 0}},
-        {"id": "done",            "type": "output",        "label": "Result",
-         "position": {"x": 600, "y": 0}},
+        {"id": "start", "type": "input", "label": "Debate proposition", "position": {"x": 0, "y": 0}},
+        {
+            "id": "prepare_position",
+            "type": "agent_role",
+            "label": "Advocate prepares opening",
+            "config": {
+                "agent_ref": "advocate",
+                "task_description": "Prepare an opening for: {{$.state.proposition}}",
+                "expected_output": "Opening argument",
+                "output_field": "advocate_position",
+                "memory_access": "isolated",
+                "tool_approval": "auto",
+            },
+            "position": {"x": 200, "y": 0},
+        },
+        {
+            "id": "debate",
+            "type": "agent_debate",
+            "label": "Moderated debate",
+            "config": {
+                "agents": ["advocate", "devil_advocate", "judge"],
+                "max_rounds": 12,
+                "termination_condition": {"type": "expr", "expr": "$.last_message contains 'VERDICT'"},
+                "speaker_selection": "round_robin",
+                "output_field": "debate_transcript",
+                "initial_message": "{{$.state.advocate_position}}",
+            },
+            "position": {"x": 400, "y": 0},
+        },
+        {"id": "done", "type": "output", "label": "Result", "position": {"x": 600, "y": 0}},
     ],
     "edges": [
-        {"type": "direct", "from": "start",           "to": "prepare_position"},
-        {"type": "direct", "from": "prepare_position", "to": "debate",
-         "context_from": ["prepare_position"]},
-        {"type": "direct", "from": "debate",          "to": "done"},
+        {"type": "direct", "from": "start", "to": "prepare_position"},
+        {"type": "direct", "from": "prepare_position", "to": "debate", "context_from": ["prepare_position"]},
+        {"type": "direct", "from": "debate", "to": "done"},
     ],
 }
 
@@ -101,16 +111,20 @@ HITL_SPEC = {
         "required": ["input"],
     },
     "nodes": [
-        {"id": "start",  "type": "input",            "position": {"x": 0, "y": 0}},
-        {"id": "review", "type": "hitl_breakpoint",  "label": "Human review",
-         "prompt": "Please review the content.",
-         "output_key": "review",
-         "resume_schema": {"type": "object", "properties": {"approved": {"type": "boolean"}}},
-         "position": {"x": 200, "y": 0}},
-        {"id": "end",    "type": "output",            "position": {"x": 400, "y": 0}},
+        {"id": "start", "type": "input", "position": {"x": 0, "y": 0}},
+        {
+            "id": "review",
+            "type": "hitl_breakpoint",
+            "label": "Human review",
+            "prompt": "Please review the content.",
+            "output_key": "review",
+            "resume_schema": {"type": "object", "properties": {"approved": {"type": "boolean"}}},
+            "position": {"x": 200, "y": 0},
+        },
+        {"id": "end", "type": "output", "position": {"x": 400, "y": 0}},
     ],
     "edges": [
-        {"type": "direct", "from": "start",  "to": "review"},
+        {"type": "direct", "from": "start", "to": "review"},
         {"type": "direct", "from": "review", "to": "end"},
     ],
 }
@@ -125,23 +139,26 @@ PARALLEL_SPEC = {
         "required": ["input"],
     },
     "nodes": [
-        {"id": "start",      "type": "input",         "position": {"x": 0,   "y": 0}},
-        {"id": "fork",       "type": "parallel_fork",  "position": {"x": 200, "y": 0}},
-        {"id": "branch_a",   "type": "transform",      "mode": "mapping", "mapping": [],
-         "position": {"x": 400, "y": -60}},
-        {"id": "branch_b",   "type": "transform",      "mode": "mapping", "mapping": [],
-         "position": {"x": 400, "y": 60}},
-        {"id": "join",       "type": "parallel_join",  "join_reducer": "merge",
-         "output_key": "merged", "position": {"x": 600, "y": 0}},
-        {"id": "end",        "type": "output",          "position": {"x": 800, "y": 0}},
+        {"id": "start", "type": "input", "position": {"x": 0, "y": 0}},
+        {"id": "fork", "type": "parallel_fork", "position": {"x": 200, "y": 0}},
+        {"id": "branch_a", "type": "transform", "mode": "mapping", "mapping": [], "position": {"x": 400, "y": -60}},
+        {"id": "branch_b", "type": "transform", "mode": "mapping", "mapping": [], "position": {"x": 400, "y": 60}},
+        {
+            "id": "join",
+            "type": "parallel_join",
+            "join_reducer": "merge",
+            "output_key": "merged",
+            "position": {"x": 600, "y": 0},
+        },
+        {"id": "end", "type": "output", "position": {"x": 800, "y": 0}},
     ],
     "edges": [
-        {"type": "direct", "from": "start",    "to": "fork"},
-        {"type": "direct", "from": "fork",     "to": "branch_a"},
-        {"type": "direct", "from": "fork",     "to": "branch_b"},
+        {"type": "direct", "from": "start", "to": "fork"},
+        {"type": "direct", "from": "fork", "to": "branch_a"},
+        {"type": "direct", "from": "fork", "to": "branch_b"},
         {"type": "direct", "from": "branch_a", "to": "join"},
         {"type": "direct", "from": "branch_b", "to": "join"},
-        {"type": "direct", "from": "join",     "to": "end"},
+        {"type": "direct", "from": "join", "to": "end"},
     ],
 }
 
@@ -155,39 +172,49 @@ CONDITION_SPEC = {
         "required": ["score"],
     },
     "nodes": [
-        {"id": "start", "type": "input",     "position": {"x": 0,   "y": 0}},
-        {"id": "check", "type": "condition",
-         "branches": [
-             {"condition": {"expr": "$.state.score", "op": "gte", "value": 0.8},
-              "target": "high_branch"},
-             {"condition": {"expr": "$.state.score", "op": "lt",  "value": 0.8},
-              "target": "low_branch"},
-         ],
-         "default_target": "low_branch",
-         "position": {"x": 200, "y": 0}},
-        {"id": "high_branch", "type": "transform", "mode": "mapping",
-         "mapping": [{"from": "$.state.score", "to": "$.output.result"}],
-         "position": {"x": 400, "y": -60}},
-        {"id": "low_branch",  "type": "transform", "mode": "mapping",
-         "mapping": [{"from": "$.state.score", "to": "$.output.result"}],
-         "position": {"x": 400, "y": 60}},
+        {"id": "start", "type": "input", "position": {"x": 0, "y": 0}},
+        {
+            "id": "check",
+            "type": "condition",
+            "branches": [
+                {"condition": {"expr": "$.state.score", "op": "gte", "value": 0.8}, "target": "high_branch"},
+                {"condition": {"expr": "$.state.score", "op": "lt", "value": 0.8}, "target": "low_branch"},
+            ],
+            "default_target": "low_branch",
+            "position": {"x": 200, "y": 0},
+        },
+        {
+            "id": "high_branch",
+            "type": "transform",
+            "mode": "mapping",
+            "mapping": [{"from": "$.state.score", "to": "$.output.result"}],
+            "position": {"x": 400, "y": -60},
+        },
+        {
+            "id": "low_branch",
+            "type": "transform",
+            "mode": "mapping",
+            "mapping": [{"from": "$.state.score", "to": "$.output.result"}],
+            "position": {"x": 400, "y": 60},
+        },
         {"id": "end", "type": "output", "position": {"x": 600, "y": 0}},
     ],
     "edges": [
-        {"type": "direct", "from": "start",       "to": "check"},
-        {"type": "direct", "from": "check",       "to": "high_branch"},
-        {"type": "direct", "from": "check",       "to": "low_branch"},
+        {"type": "direct", "from": "start", "to": "check"},
+        {"type": "direct", "from": "check", "to": "high_branch"},
+        {"type": "direct", "from": "check", "to": "low_branch"},
         {"type": "direct", "from": "high_branch", "to": "end"},
-        {"type": "direct", "from": "low_branch",  "to": "end"},
+        {"type": "direct", "from": "low_branch", "to": "end"},
     ],
 }
 
 
 # ─── compile_maf unit tests ───────────────────────────────────────────────────
 
+
 def test_compile_maf_minimal():
     """Minimal spec compiles without error and produces importable code."""
-    code, warnings = compile_maf(MINIMAL_SPEC)
+    code, _ = compile_maf(MINIMAL_SPEC)
     assert isinstance(code, str)
     assert len(code) > 100
     # Generated code must be syntactically valid Python
@@ -217,16 +244,21 @@ LLM_SPEC = {
         "required": ["input"],
     },
     "nodes": [
-        {"id": "input-1", "type": "input",    "position": {"x": 0,   "y": 0}},
-        {"id": "llm-1",   "type": "llm_call", "label": "Generate",
-         "system_prompt": "You are helpful.",
-         "prompt_template": "{{$.state.input}}", "output_key": "response",
-         "position": {"x": 200, "y": 0}},
+        {"id": "input-1", "type": "input", "position": {"x": 0, "y": 0}},
+        {
+            "id": "llm-1",
+            "type": "llm_call",
+            "label": "Generate",
+            "system_prompt": "You are helpful.",
+            "prompt_template": "{{$.state.input}}",
+            "output_key": "response",
+            "position": {"x": 200, "y": 0},
+        },
         {"id": "output-1", "type": "output", "position": {"x": 400, "y": 0}},
     ],
     "edges": [
         {"type": "direct", "from": "input-1", "to": "llm-1"},
-        {"type": "direct", "from": "llm-1",   "to": "output-1"},
+        {"type": "direct", "from": "llm-1", "to": "output-1"},
     ],
 }
 
@@ -262,18 +294,23 @@ def test_compile_maf_helpers_present():
 
 # ─── Node type coverage ───────────────────────────────────────────────────────
 
+
 def test_llm_call_node():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "gen", "type": "llm_call", "label": "Generate",
-        "system_prompt": "You are a writer.",
-        "prompt_template": "Write about {{$.state.input}}",
-        "output_key": "draft",
-        "model": "gpt-4o-mini",
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "gen",
+            "type": "llm_call",
+            "label": "Generate",
+            "system_prompt": "You are a writer.",
+            "prompt_template": "Write about {{$.state.input}}",
+            "output_key": "draft",
+            "model": "gpt-4o-mini",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "gen"})
-    code, warnings = compile_maf(spec)
+    code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
     assert "async def node_gen(" in code
     assert "ChatHistory" in code
@@ -283,10 +320,15 @@ def test_llm_call_node():
 
 def test_llm_call_no_output_key_warns():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "gen", "type": "llm_call", "label": "Generate",
-        "prompt_template": "Hello", "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "gen",
+            "type": "llm_call",
+            "label": "Generate",
+            "prompt_template": "Hello",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "gen"})
     _, warnings = compile_maf(spec)
     assert any("output_key" in w for w in warnings)
@@ -297,13 +339,17 @@ def test_tool_invoke_node():
     spec["tools"] = {
         "web_search": {"description": "Search the web", "source": "npm", "tool_ref": "@tavily/search"},
     }
-    spec["nodes"].append({
-        "id": "search", "type": "tool_invoke", "label": "Search",
-        "tool_id": "web_search",
-        "input_map": {"query": "$.state.input"},
-        "output_map": {"results": "result"},
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "search",
+            "type": "tool_invoke",
+            "label": "Search",
+            "tool_id": "web_search",
+            "input_map": {"query": "$.state.input"},
+            "output_map": {"results": "result"},
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "search"})
     code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
@@ -313,10 +359,14 @@ def test_tool_invoke_node():
 
 def test_tool_invoke_unknown_tool_warns():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "t1", "type": "tool_invoke", "tool_id": "ghost_tool",
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "t1",
+            "type": "tool_invoke",
+            "tool_id": "ghost_tool",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "t1"})
     _, warnings = compile_maf(spec)
     assert any("ghost_tool" in w for w in warnings)
@@ -324,11 +374,15 @@ def test_tool_invoke_unknown_tool_warns():
 
 def test_transform_mapping_node():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "fmt", "type": "transform", "mode": "mapping",
-        "mapping": [{"from": "$.state.input", "to": "$.output.text"}],
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "fmt",
+            "type": "transform",
+            "mode": "mapping",
+            "mapping": [{"from": "$.state.input", "to": "$.output.text"}],
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "fmt"})
     code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
@@ -341,7 +395,7 @@ def test_hitl_breakpoint_raises_pause():
     code, _ = compile_maf(HITL_SPEC)
     compile(code, "<test>", "exec")
     assert "raise _HitlPause(" in code
-    assert "node_id='review'" in code or "node_id=\"review\"" in code
+    assert "node_id='review'" in code or 'node_id="review"' in code
 
 
 def test_hitl_pause_class_present():
@@ -358,6 +412,7 @@ def test_hitl_node_function_raises_at_runtime():
     ns: dict = {}
     exec(compile(code, "<test>", "exec"), ns)
     import asyncio
+
     with pytest.raises(ns["_HitlPause"]) as exc_info:
         asyncio.run(ns["node_review"]({"input": "hello"}))
     assert exc_info.value.node_id == "review"
@@ -366,12 +421,18 @@ def test_hitl_node_function_raises_at_runtime():
 
 def test_memory_read_node():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "read1", "type": "memory_read", "label": "Read memory",
-        "store_id": "kv_store", "retrieval_mode": "key_value",
-        "key_expr": "$.state.input", "output_key": "doc",
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "read1",
+            "type": "memory_read",
+            "label": "Read memory",
+            "store_id": "kv_store",
+            "retrieval_mode": "key_value",
+            "key_expr": "$.state.input",
+            "output_key": "doc",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "read1"})
     code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
@@ -381,12 +442,18 @@ def test_memory_read_node():
 
 def test_memory_write_node():
     spec = copy.deepcopy(MINIMAL_SPEC)
-    spec["nodes"].append({
-        "id": "write1", "type": "memory_write", "label": "Write memory",
-        "store_id": "kv_store", "key_expr": "$.state.input",
-        "value_expr": "$.state.draft", "write_mode": "upsert",
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "write1",
+            "type": "memory_write",
+            "label": "Write memory",
+            "store_id": "kv_store",
+            "key_expr": "$.state.input",
+            "value_expr": "$.state.draft",
+            "write_mode": "upsert",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "write1"})
     code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
@@ -416,13 +483,14 @@ def test_condition_router_returns_correct_branch():
     exec(compile(code, "<test>", "exec"), ns)
     assert ns["route_check"]({"score": 0.9}) == "high_branch"
     assert ns["route_check"]({"score": 0.5}) == "low_branch"
-    assert ns["route_check"]({})             == "low_branch"  # default
+    assert ns["route_check"]({}) == "low_branch"  # default
 
 
 # ─── agent_role and agent_debate ─────────────────────────────────────────────
 
+
 def test_agent_role_uses_chat_completion_agent():
-    code, warnings = compile_maf(DEBATE_SPEC)
+    code, _ = compile_maf(DEBATE_SPEC)
     compile(code, "<test>", "exec")
     assert "ChatCompletionAgent" in code
     assert "async def node_prepare_position(" in code
@@ -432,7 +500,7 @@ def test_agent_role_uses_chat_completion_agent():
 
 def test_agent_debate_uses_agent_group_chat():
     """agent_debate must use AgentGroupChat — the only native MAF mapping."""
-    code, warnings = compile_maf(DEBATE_SPEC)
+    code, _ = compile_maf(DEBATE_SPEC)
     compile(code, "<test>", "exec")
     assert "AgentGroupChat" in code
     assert "KernelFunctionTerminationStrategy" in code
@@ -461,9 +529,12 @@ def test_agent_role_tool_approval_human():
 
 # ─── Reference flow 05 (debate-agent-a2a) ────────────────────────────────────
 
+
 def test_reference_flow_05_compiles():
     """Full reference flow 05 (the MAF showcase flow) must compile cleanly."""
-    import pathlib, json as _json
+    import json as _json
+    import pathlib
+
     flow_path = pathlib.Path(__file__).parent.parent.parent / "flows" / "05-debate-agent-a2a-flow.json"
     if not flow_path.exists():
         pytest.skip("Reference flow file not found")
@@ -483,7 +554,9 @@ def test_reference_flow_05_compiles():
 
 
 def test_reference_flow_05_exports_run_flow():
-    import pathlib, json as _json
+    import json as _json
+    import pathlib
+
     flow_path = pathlib.Path(__file__).parent.parent.parent / "flows" / "05-debate-agent-a2a-flow.json"
     if not flow_path.exists():
         pytest.skip("Reference flow file not found")
@@ -501,6 +574,7 @@ def test_reference_flow_05_exports_run_flow():
 
 # ─── MCP tool source ──────────────────────────────────────────────────────────
 
+
 def test_mcp_tool_generates_httpx_call():
     spec = copy.deepcopy(MINIMAL_SPEC)
     spec["tools"] = {
@@ -511,10 +585,14 @@ def test_mcp_tool_generates_httpx_call():
             "mcp_server_url": "${TAVILY_MCP_URL}",
         }
     }
-    spec["nodes"].append({
-        "id": "search", "type": "tool_invoke", "tool_id": "web_search",
-        "position": {"x": 200, "y": 0},
-    })
+    spec["nodes"].append(
+        {
+            "id": "search",
+            "type": "tool_invoke",
+            "tool_id": "web_search",
+            "position": {"x": 200, "y": 0},
+        }
+    )
     spec["edges"].append({"type": "direct", "from": "input-1", "to": "search"})
     code, _ = compile_maf(spec)
     compile(code, "<test>", "exec")
@@ -523,6 +601,7 @@ def test_mcp_tool_generates_httpx_call():
 
 
 # ─── OTel telemetry ──────────────────────────────────────────────────────────
+
 
 def test_otel_setup_emitted_when_enabled():
     spec = copy.deepcopy(MINIMAL_SPEC)
@@ -539,6 +618,7 @@ def test_otel_not_emitted_when_disabled():
 
 
 # ─── /compile endpoint ────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_compile_maf_endpoint(client, auth_headers):
@@ -580,6 +660,7 @@ async def test_compile_requires_auth_maf(client):
 
 # ─── /runtimes endpoint ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_runtimes_includes_maf(client):
     r = await client.get("/runtimes")
@@ -592,6 +673,7 @@ async def test_runtimes_includes_maf(client):
 
 
 # ─── /run endpoint dispatch ───────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_run_maf_queues_job(client, auth_headers):
@@ -619,6 +701,7 @@ async def test_run_preferred_adapter_maf(client, auth_headers):
 
 # ─── HITL resume endpoint ─────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_resume_rejects_crewai(client, auth_headers):
     """Resuming a CrewAI job must still return 400."""
@@ -641,15 +724,13 @@ async def test_resume_rejects_crewai(client, auth_headers):
 
 # ─── NODE_SUPPORT_MATRIX correctness ─────────────────────────────────────────
 
+
 def test_node_support_matrix_agent_debate_full():
     """agent_debate is the only node with ms_agent_framework='full' because
     AgentGroupChat is the native equivalent (ADR-001 Q11)."""
-    import sys
-    import os
-    src_path = os.path.join(os.path.dirname(__file__), "..", "..", "src", "spec")
     # We can't import TypeScript directly; check the matrix values via the maf_adapter
     # by verifying the generated warning for agent_debate mentions "NATIVE MAF"
-    code, warnings = compile_maf(DEBATE_SPEC)
+    _, warnings = compile_maf(DEBATE_SPEC)
     native_warns = [w for w in warnings if "NATIVE MAF" in w]
     assert native_warns, "agent_debate should generate a NATIVE MAF warning"
 
@@ -675,14 +756,13 @@ _TOOL_INVOKE_ONLY_SPEC = {
         "required": ["q"],
     },
     "nodes": [
-        {"id": "start", "type": "input",       "position": {"x": 0,   "y": 0}},
-        {"id": "inv",   "type": "tool_invoke", "tool_id": "search",
-         "position": {"x": 200, "y": 0}},
-        {"id": "end",   "type": "output",      "position": {"x": 400, "y": 0}},
+        {"id": "start", "type": "input", "position": {"x": 0, "y": 0}},
+        {"id": "inv", "type": "tool_invoke", "tool_id": "search", "position": {"x": 200, "y": 0}},
+        {"id": "end", "type": "output", "position": {"x": 400, "y": 0}},
     ],
     "edges": [
         {"type": "direct", "from": "start", "to": "inv"},
-        {"type": "direct", "from": "inv",   "to": "end"},
+        {"type": "direct", "from": "inv", "to": "end"},
     ],
 }
 
@@ -691,12 +771,9 @@ def test_tool_invoke_only_has_no_sk_imports():
     """P7-1: specs where tools are only used by tool_invoke (not agent_role)
     must not import semantic_kernel — tool_invoke calls stubs directly."""
     code, _ = compile_maf(_TOOL_INVOKE_ONLY_SPEC)
-    assert "semantic_kernel" not in code, \
-        "SK imported unnecessarily when no agent uses tools"
-    assert "@kernel_function" not in code, \
-        "@kernel_function emitted without any agent using the tool"
-    assert "_PLUGINS" not in code, \
-        "_PLUGINS created without any agent needing it"
+    assert "semantic_kernel" not in code, "SK imported unnecessarily when no agent uses tools"
+    assert "@kernel_function" not in code, "@kernel_function emitted without any agent using the tool"
+    assert "_PLUGINS" not in code, "_PLUGINS created without any agent needing it"
     # _TOOL_STUBS must still be present — tool_invoke calls it directly
     assert "_TOOL_STUBS" in code
 
@@ -704,7 +781,7 @@ def test_tool_invoke_only_has_no_sk_imports():
 def test_tool_invoke_only_code_executes():
     """P7-1: tool-invoke-only generated code must exec without semantic_kernel."""
     code, _ = compile_maf(_TOOL_INVOKE_ONLY_SPEC)
-    compile(code, "<tool-only>", "exec")   # SyntaxError if broken
+    compile(code, "<tool-only>", "exec")  # SyntaxError if broken
 
 
 def test_agent_role_tool_approval_human_no_syntax_error():
@@ -723,20 +800,25 @@ def test_agent_role_tool_approval_human_no_syntax_error():
                 "required": ["input"],
             },
             "nodes": [
-                {"id": "s",  "type": "input",      "position": {"x": 0,   "y": 0}},
-                {"id": "wr", "type": "agent_role",
-                 "config": {"agent_ref": agent_ref,
-                             "task_description": "Do task",
-                             "output_field": "result",
-                             "tool_approval": "human"},
-                 "position": {"x": 200, "y": 0}},
-                {"id": "e",  "type": "output",     "position": {"x": 400, "y": 0}},
+                {"id": "s", "type": "input", "position": {"x": 0, "y": 0}},
+                {
+                    "id": "wr",
+                    "type": "agent_role",
+                    "config": {
+                        "agent_ref": agent_ref,
+                        "task_description": "Do task",
+                        "output_field": "result",
+                        "tool_approval": "human",
+                    },
+                    "position": {"x": 200, "y": 0},
+                },
+                {"id": "e", "type": "output", "position": {"x": 400, "y": 0}},
             ],
             "edges": [
-                {"type": "direct", "from": "s",  "to": "wr"},
+                {"type": "direct", "from": "s", "to": "wr"},
                 {"type": "direct", "from": "wr", "to": "e"},
             ],
         }
         code, _ = compile_maf(spec)
-        compile(code, f"<ha-{agent_ref}>", "exec")   # SyntaxError if broken
+        compile(code, f"<ha-{agent_ref}>", "exec")  # SyntaxError if broken
         assert "_HitlPause" in code

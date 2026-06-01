@@ -9,6 +9,7 @@ Fixes applied:
         calling the bcrypt package directly. bcrypt 4.x removed __about__ and
         raises ValueError for passwords > 72 bytes; passlib had no fix for either.
 """
+
 import os
 import re
 import uuid
@@ -38,58 +39,63 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # main.py validates this env var before importing auth, so by the time this runs
 # the variable is guaranteed to be set and non-insecure.
 _raw_secret = os.getenv("JWT_SECRET", "")
-JWT_SECRET    = _raw_secret
+JWT_SECRET = _raw_secret
 JWT_ALGORITHM = "HS256"
 # Fix #7: make token lifetime configurable; default 30 days.
-JWT_TTL_DAYS  = int(os.getenv("JWT_TTL_DAYS", "30"))
+JWT_TTL_DAYS = int(os.getenv("JWT_TTL_DAYS", "30"))
 
 # Fix #4: pre-computed dummy hash used in constant-time login comparison.
 # When the email is not in the database we still call _verify() against this
 # hash so bcrypt always runs (~100 ms), preventing timing-based user enumeration.
 # bcrypt is called directly — passlib is abandoned and broken on bcrypt 4.x.
-_DUMMY_HASH: bytes = bcrypt.hashpw(
-    b"itsharness-dummy-constant-time-sentinel", bcrypt.gensalt()
-)
+_DUMMY_HASH: str = bcrypt.hashpw(b"itsharness-dummy-constant-time-sentinel", bcrypt.gensalt()).decode()
 bearer = HTTPBearer()
 
 # Fix #8: password complexity — at least one letter and one digit.
 # Also enforce an upper bound of 72 bytes: bcrypt silently truncated in older
 # versions but raises ValueError in bcrypt 4.x when the limit is exceeded.
 _PW_COMPLEXITY = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
-_PW_MAX_BYTES  = 72
+_PW_MAX_BYTES = 72
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
+
 class RegisterRequest(BaseModel):
-    email:    EmailStr   # Fix #7: validates email format
+    email: EmailStr  # Fix #7: validates email format
     password: str
+
 
 class LoginRequest(BaseModel):
-    email:    EmailStr
+    email: EmailStr
     password: str
 
+
 class TokenResponse(BaseModel):
-    token:      str
+    token: str
     token_type: str = "bearer"  # noqa: S105
-    user_id:    str
-    email:      str
-    jti:        str   # JWT ID — returned so clients can cache it for logout
+    user_id: str
+    email: str
+    jti: str  # JWT ID — returned so clients can cache it for logout
+
 
 class UserResponse(BaseModel):
     user_id: str
-    email:   str
+    email: str
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _hash(pw: str) -> str:
     return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
 
+
 def _verify(plain: str, hashed: str | bytes) -> bool:
-    plain_b  = plain.encode()
+    plain_b = plain.encode()
     hashed_b = hashed if isinstance(hashed, bytes) else hashed.encode()
     return bcrypt.checkpw(plain_b, hashed_b)
+
 
 def _make_token(user_id: str, email: str) -> tuple[str, str]:
     """Return (encoded_jwt, jti).
@@ -101,14 +107,16 @@ def _make_token(user_id: str, email: str) -> tuple[str, str]:
     jti = str(uuid.uuid4())
     token = jwt.encode(
         {
-            "sub":   user_id,
+            "sub": user_id,
             "email": email,
-            "jti":   jti,
-            "exp":   datetime.now(UTC) + timedelta(days=JWT_TTL_DAYS),
+            "jti": jti,
+            "exp": datetime.now(UTC) + timedelta(days=JWT_TTL_DAYS),
         },
-        JWT_SECRET, algorithm=JWT_ALGORITHM,
+        JWT_SECRET,
+        algorithm=JWT_ALGORITHM,
     )
     return token, jti
+
 
 def _validate_password(pw: str) -> None:
     """Fix #8: min 8 chars, at least one letter, at least one digit.
@@ -123,34 +131,32 @@ def _validate_password(pw: str) -> None:
     if not _PW_COMPLEXITY.match(pw):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Password must be at least 8 characters and contain "
-                "at least one letter and one digit."
-            ),
+            detail=("Password must be at least 8 characters and contain at least one letter and one digit."),
         )
 
 
 async def current_user(
     creds: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
-    db:    Annotated[AsyncSession, Depends(get_session)],
+    db: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
     import logging
+
     log = logging.getLogger("auth")
 
     token_preview = creds.credentials[:20] + "…" if creds.credentials else "EMPTY"
     log.warning("[auth] token received: %s (%d chars)", token_preview, len(creds.credentials))
     log.warning("[auth] JWT_SECRET set: %s, length: %d", bool(JWT_SECRET), len(JWT_SECRET))
 
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-    )
+    credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     try:
         payload = jwt.decode(
-            creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM],
+            creds.credentials,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
             options={"leeway": 30},
         )
         user_id: str = payload.get("sub", "")
-        jti: str     = payload.get("jti", "")
+        jti: str = payload.get("jti", "")
         log.warning("[auth] decoded ok — sub=%s jti=%s", user_id, jti)
         if not user_id or not jti:
             log.warning("[auth] FAIL — missing sub or jti in payload: %s", payload)
@@ -162,6 +168,7 @@ async def current_user(
     # Check revocation — skip in TESTING mode (no Redis in CI).
     if os.getenv("TESTING") != "true":
         from redis_client import is_revoked
+
         if await is_revoked(jti):
             log.warning("[auth] FAIL — token jti=%s is revoked", jti)
             raise credentials_exception from None
@@ -178,6 +185,7 @@ async def current_user(
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 @limiter.limit("5/minute")
@@ -196,6 +204,7 @@ async def register(request: Request, req: RegisterRequest, db: AsyncSession = De
     # Create the user's personal org (idempotent; also handles the lazy-create
     # path for users who existed before migration 0005).
     from org_context import ensure_personal_org
+
     await ensure_personal_org(user, db)
 
     token, jti = _make_token(str(user.id), user.email)
@@ -219,7 +228,7 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
     # so the timing is preserved but no exception escapes.
     if not candidate_hash or not candidate_hash.startswith("$2"):
         candidate_hash = _DUMMY_HASH
-    password_ok    = _verify(req.password, candidate_hash)
+    password_ok = _verify(req.password, candidate_hash)
 
     if not user or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -252,7 +261,9 @@ async def logout(
 
     try:
         payload = jwt.decode(
-            creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM],
+            creds.credentials,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
             options={"leeway": 30, "verify_exp": False},  # revoke even expired tokens
         )
         jti: str = payload.get("jti", "")
@@ -262,6 +273,7 @@ async def logout(
 
     if jti:
         from redis_client import revoke_token
+
         remaining = max(0, exp - int(datetime.now(UTC).timestamp()))
         if remaining > 0:
             await revoke_token(jti, remaining)
