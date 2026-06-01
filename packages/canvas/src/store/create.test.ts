@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createCanvasStore } from '../store/create'
+import type { FlowSpec } from '../spec/schema'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ describe('undo / redo', () => {
 describe('loadFlow / exportSpec', () => {
   it('round-trips a minimal spec', () => {
     const store = makeStore()
-    store.getState().loadFlow(MINIMAL_SPEC as Parameters<typeof store.getState().loadFlow>[0])
+    store.getState().loadFlow(MINIMAL_SPEC as FlowSpec)
     expect(store.getState().nodes).toHaveLength(2)
     expect(store.getState().edges).toHaveLength(1)
 
@@ -169,7 +170,7 @@ describe('loadFlow / exportSpec', () => {
   it('resets selection and history on loadFlow', () => {
     const store = makeStore()
     store.getState().addNode('llm_call', { x: 0, y: 0 })
-    store.getState().loadFlow(MINIMAL_SPEC as Parameters<typeof store.getState().loadFlow>[0])
+    store.getState().loadFlow(MINIMAL_SPEC as FlowSpec)
     expect(store.getState().selectedNodeId).toBeNull()
     expect(store.getState().past).toHaveLength(0)
     expect(store.getState().canUndo).toBe(false)
@@ -177,7 +178,7 @@ describe('loadFlow / exportSpec', () => {
 
   it('newFlow produces a single input node', () => {
     const store = makeStore()
-    store.getState().loadFlow(MINIMAL_SPEC as Parameters<typeof store.getState().loadFlow>[0])
+    store.getState().loadFlow(MINIMAL_SPEC as FlowSpec)
     store.getState().newFlow()
     expect(store.getState().nodes).toHaveLength(1)
     expect(store.getState().nodes[0].type).toBe('input')
@@ -189,7 +190,7 @@ describe('loadFlow / exportSpec', () => {
 describe('validate', () => {
   it('returns true for a valid flow', () => {
     const store = makeStore()
-    store.getState().loadFlow(MINIMAL_SPEC as Parameters<typeof store.getState().loadFlow>[0])
+    store.getState().loadFlow(MINIMAL_SPEC as FlowSpec)
     expect(store.getState().validate()).toBe(true)
     expect(store.getState().crossRefErrors).toHaveLength(0)
   })
@@ -261,7 +262,7 @@ describe('store subscription', () => {
 describe('autoLayout', () => {
   it('repositions nodes without changing their count', () => {
     const store = makeStore()
-    store.getState().loadFlow(MINIMAL_SPEC as Parameters<typeof store.getState().loadFlow>[0])
+    store.getState().loadFlow(MINIMAL_SPEC as FlowSpec)
     const before = store.getState().nodes.map((n) => ({ ...n.position }))
     store.getState().autoLayout()
     // Dagre will have repositioned at least one node

@@ -35,29 +35,28 @@ HITL note (Q9 resolution):
 
 from __future__ import annotations
 
-import json
 import textwrap
 from collections import defaultdict, deque
-from typing import Any
 
 from adapter_logger import (
     get_adapter_logger,
-    log_compile_start,
     log_compile_end,
     log_compile_error,
+    log_compile_start,
     log_empty_spec,
     log_node_processing,
-    log_topo_sort,
     log_section,
+    log_topo_sort,
 )
 
 _log = get_adapter_logger("maf")
 
 ADAPTER_VERSION = "0.1.0"
-SK_MIN          = ">=1.0.0"
+SK_MIN = ">=1.0.0"
 
 
 # ─── Utilities (same as langgraph_adapter) ───────────────────────────────────
+
 
 def safe_id(s: str) -> str:
     """Convert any node/agent ID to a valid Python identifier."""
@@ -75,15 +74,16 @@ def py_str(s: str) -> str:
 
 # ─── Graph analysis (same helpers as langgraph_adapter) ──────────────────────
 
+
 def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     """Kahn's topological sort; returns nodes in execution order."""
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
-    in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
-    adj: dict[str, list[str]]    = defaultdict(list)
+    in_deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, list[str]] = defaultdict(list)
 
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in id_to_node and tgt in id_to_node:
             adj[src].append(tgt)
             in_deg[tgt] += 1
@@ -115,7 +115,7 @@ def build_adjacency(nodes: list[dict], edges: list[dict]) -> tuple[dict, dict]:
     bwd: dict[str, list[str]] = defaultdict(list)
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in ids and tgt in ids:
             fwd[src].append(tgt)
             bwd[tgt].append(src)
@@ -126,7 +126,7 @@ def build_context_map(edges: list[dict]) -> dict[str, list[str]]:
     """target_node_id → [source_node_ids from context_from fields]."""
     ctx: dict[str, list[str]] = defaultdict(list)
     for e in edges:
-        cf  = e.get("context_from", [])
+        cf = e.get("context_from", [])
         tgt = e.get("to", e.get("target", ""))
         if cf and tgt:
             ctx[tgt].extend(cf)
@@ -145,9 +145,10 @@ def find_parallel_groups(nodes: list[dict], edges: list[dict]) -> dict[str, list
 
 # ─── Code section generators ─────────────────────────────────────────────────
 
+
 def gen_header(spec: dict) -> str:
-    name   = spec.get("name", spec.get("id", "unknown"))
-    fid    = spec.get("id",   "unknown")
+    name = spec.get("name", spec.get("id", "unknown"))
+    fid = spec.get("id", "unknown")
     nc, ec = len(spec.get("nodes", [])), len(spec.get("edges", []))
     return dedent0(f"""\
         \"\"\"
@@ -176,7 +177,7 @@ def gen_imports(spec: dict) -> str:
     #          uses tools from the tools registry — tool_invoke calls stubs directly
     #          without going through the Kernel, so @kernel_function is not needed for it.
     _sk_node_types = {"llm_call", "agent_role", "agent_debate"}
-    needs_sk_base  = bool(types & _sk_node_types)
+    needs_sk_base = bool(types & _sk_node_types)
 
     # P7-1 fix: only need KernelPlugin when an agent_role actually references a tool.
     _agents_by_id = {a["id"]: a for a in (spec.get("agents") or [])}
@@ -184,8 +185,8 @@ def gen_imports(spec: dict) -> str:
     for node in spec.get("nodes", []):
         if node.get("type") != "agent_role":
             continue
-        agent_ref  = (node.get("config") or {}).get("agent_ref", "")
-        agent_def  = _agents_by_id.get(agent_ref) or {}
+        agent_ref = (node.get("config") or {}).get("agent_ref", "")
+        agent_def = _agents_by_id.get(agent_ref) or {}
         agent_tools = [t for t in (agent_def.get("tools") or []) if t in tools]
         if agent_tools:
             needs_sk_tools = True
@@ -250,14 +251,13 @@ def gen_otel_setup(spec: dict) -> str:
     if not telemetry.get("enabled"):
         return ""
 
-    endpoint = telemetry.get("otlp_endpoint", "http://langfuse:3001/api/public/otel/v1/traces")
-    project  = telemetry.get("project", spec.get("id", "flow"))
+    endpoint = telemetry.get("otlp_endpoint", "http://langfuse:3000/api/public/otel/v1/traces")
     return dedent0(f"""\
         # ─── OTel setup (SK built-in, routes to Langfuse OTLP) ──────────────────────
 
         def _setup_telemetry() -> None:
             provider = _TracerProvider()
-            exporter = _OTLPExp(endpoint={repr(endpoint)})
+            exporter = _OTLPExp(endpoint={endpoint!r})
             provider.add_span_processor(_BSP(exporter))
             _otel_trace.set_tracer_provider(provider)
             # semantic-kernel ≥1.0 picks up the ambient TracerProvider automatically
@@ -346,13 +346,13 @@ def gen_kernel_factory(spec: dict) -> str:
     types = {n["type"] for n in nodes}
     _sk_node_types = {"llm_call", "agent_role", "agent_debate"}
     if not (types & _sk_node_types):
-        return ""   # P4-3 fix: no SK imports or kernel factory for non-SK flows
+        return ""  # P4-3 fix: no SK imports or kernel factory for non-SK flows
 
     model_default = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
     return dedent0(f"""\
         # ─── Kernel factory ───────────────────────────────────────────────────────────
 
-        def _make_kernel(model: str = {repr(model_default)}) -> Kernel:
+        def _make_kernel(model: str = {model_default!r}) -> Kernel:
             \"\"\"Create a configured Kernel instance; routes to Ollama when OPENAI_BASE_URL is set.\"\"\"
             kernel   = Kernel()
             _base_url = os.environ.get("OPENAI_BASE_URL", "")
@@ -387,10 +387,10 @@ def gen_memory_stores(spec: dict) -> str:
         "",
     ]
     for sid, sdef in stores.items():
-        stype   = sdef.get("type", "key_value")
+        stype = sdef.get("type", "key_value")
         backend = sdef.get("backend", "memory")
-        conn    = sdef.get("connection_env", "")
-        desc    = sdef.get("description", "")
+        conn = sdef.get("connection_env", "")
+        desc = sdef.get("description", "")
         lines.append(
             f"# store '{sid}': type={stype}, backend={backend}"
             + (f", conn_env={conn}" if conn else "")
@@ -398,6 +398,19 @@ def gen_memory_stores(spec: dict) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+# Built-in tool implementations: tool_id → (import_line | None, method_body_lines)
+# method_body_lines are the *body* of the async def (0-indent, without the def line).
+_BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, list[str]]] = {
+    "web_search": (
+        "from langchain_community.tools import DuckDuckGoSearchRun as _DDGSearch",
+        [
+            "_ddg = _DDGSearch()",
+            "return _ddg.invoke(query)",
+        ],
+    ),
+}
 
 
 def gen_tools(spec: dict) -> str:
@@ -413,59 +426,72 @@ def gen_tools(spec: dict) -> str:
         return ""
 
     # Determine whether any agent_role uses these tools.
-    agents_by_id  = {a["id"]: a for a in (spec.get("agents") or [])}
-    tool_keys     = set(tools.keys())
+    agents_by_id = {a["id"]: a for a in (spec.get("agents") or [])}
+    tool_keys = set(tools.keys())
     agents_use_tools = False
     for node in spec.get("nodes", []):
         if node.get("type") != "agent_role":
             continue
-        agent_ref  = (node.get("config") or {}).get("agent_ref", "")
-        agent_def  = agents_by_id.get(agent_ref) or {}
+        agent_ref = (node.get("config") or {}).get("agent_ref", "")
+        agent_def = agents_by_id.get(agent_ref) or {}
         if [t for t in (agent_def.get("tools") or []) if t in tool_keys]:
             agents_use_tools = True
             break
 
+    import_lines: list[str] = []
     lines = [
         "# ─── Tools (KernelFunctions) ─────────────────────────────────────────────────",
-        "# Stub implementations — replace raise with real logic.",
         "# MCP-source tools: replace the stub body with an async HTTP call to",
         "# mcp_server_url (set via env var per ADR-001 Q12).",
         "",
         "class _ToolStubs:",
     ]
     for tid, tdef in tools.items():
-        vid    = safe_id(tid)
-        desc   = tdef.get("description", tid)
+        vid = safe_id(tid)
+        desc = tdef.get("description", tid)
         source = tdef.get("source", "npm")
-        ref    = tdef.get("tool_ref", tid)
+        ref = tdef.get("tool_ref", tid)
         mcp_url = tdef.get("mcp_server_url", "")
 
         lines.append(f"    # tool_ref: {ref}  source: {source}")
-        if source == "mcp" and mcp_url:
+
+        builtin = _BUILTIN_TOOL_IMPLS.get(tid)
+        if builtin:
+            imp_line, body_stmts = builtin
+            if imp_line:
+                import_lines.append(imp_line)
+            method_lines = (
+                [
+                    f"    async def {vid}(self, query: str) -> str:",
+                ]
+                + [f"        {stmt}" for stmt in body_stmts]
+                + [""]
+            )
+        elif source == "mcp" and mcp_url:
             env_var = mcp_url.replace("${", "").replace("}", "")
             method_lines = [
                 f"    async def {vid}(self, query: str) -> str:",
-                f"        # MCP tool — calls server at env var {repr(env_var)}",
-                f"        import httpx",
-                f"        url = os.environ.get({repr(env_var)}, '')",
-                f"        if not url:",
-                f"            raise RuntimeError(f'MCP server URL env var {repr(env_var)} is not set')",
-                f"        async with httpx.AsyncClient() as client:",
-                f"            r = await client.post(url, json={{'query': query}})",
-                f"            return r.text",
+                f"        # MCP tool — calls server at env var {env_var!r}",
+                "        import httpx",
+                f"        url = os.environ.get({env_var!r}, '')",
+                "        if not url:",
+                f"            raise RuntimeError(f'MCP server URL env var {env_var!r} is not set')",
+                "        async with httpx.AsyncClient() as client:",
+                "            r = await client.post(url, json={'query': query})",
+                "            return r.text",
                 "",
             ]
         else:
             method_lines = [
                 f"    async def {vid}(self, query: str) -> str:",
                 f"        {py_str(desc)}",
-                f"        raise NotImplementedError({repr(f'Implement {tid}')})",
+                f"        raise NotImplementedError({f'Implement {tid}'!r})",
                 "",
             ]
 
         # P7-1 fix: only add @kernel_function decorator when an agent uses these tools.
         if agents_use_tools:
-            lines.append(f"    @kernel_function(name={repr(vid)}, description={repr(desc)})")
+            lines.append(f"    @kernel_function(name={vid!r}, description={desc!r})")
         lines.extend(method_lines)
 
     lines += [
@@ -476,21 +502,20 @@ def gen_tools(spec: dict) -> str:
     # Only create _PLUGINS when agent_role nodes need to add_plugin.
     if agents_use_tools:
         lines += [
-            f"_PLUGINS = KernelPlugin.from_object('tools', _TOOL_STUBS)",  # SK 1.x: plugin_name is 1st arg
+            "_PLUGINS = KernelPlugin.from_object('tools', _TOOL_STUBS)",  # SK 1.x: plugin_name is 1st arg
         ]
 
     lines.append("")
-    return "\n".join(lines)
+    prefix = "\n".join(import_lines) + "\n\n" if import_lines else ""
+    return prefix + "\n".join(lines)
 
 
 # ─── Node function generators ─────────────────────────────────────────────────
 
+
 def _async_fn(label: str, vid: str, body: str) -> str:
     """Wrap a body string (0-indent) in an async node function."""
-    indented = "\n".join(
-        "    " + line if line.strip() else ""
-        for line in body.rstrip().splitlines()
-    )
+    indented = "\n".join("    " + line if line.strip() else "" for line in body.rstrip().splitlines())
     return f"# {label}\nasync def node_{vid}(state: dict) -> dict:\n{indented}\n"
 
 
@@ -506,12 +531,12 @@ def gen_node_function(
     condition, parallel_fork — these are handled in the flow runner).
     """
     ntype = node["type"]
-    nid   = node["id"]
-    vid   = safe_id(nid)
+    nid = node["id"]
+    vid = safe_id(nid)
     label = node.get("label", nid)
 
-    model_default  = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
-    agents_by_id   = {a["id"]: a for a in (spec.get("agents") or [])}
+    model_default = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
+    agents_by_id = {a["id"]: a for a in (spec.get("agents") or [])}
     tools_registry = spec.get("tools") or {}
 
     # context_from annotation
@@ -526,47 +551,43 @@ def gen_node_function(
 
     # ── llm_call ──────────────────────────────────────────────────────────────
     if ntype == "llm_call":
-        sys_p       = node.get("system_prompt", "You are a helpful assistant.")
+        sys_p = node.get("system_prompt", "You are a helpful assistant.")
         prompt_tmpl = node.get("prompt_template", "{{$.state.input}}")
-        out_key     = node.get("output_key")
-        model       = node.get("model", model_default)
-        params      = node.get("model_params") or {}
-        temp        = params.get("temperature", 0.7)
-        max_tok     = params.get("max_tokens", 1024)
+        out_key = node.get("output_key")
+        model = node.get("model", model_default)
+        params = node.get("model_params") or {}
+        temp = params.get("temperature", 0.7)
+        max_tok = params.get("max_tokens", 1024)
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
         if not out_key:
-            warnings.append(
-                f"llm_call '{nid}' has no output_key — result will be discarded (ADR-001)"
-            )
+            warnings.append(f"llm_call '{nid}' has no output_key — result will be discarded (ADR-001)")
 
-        ret = f"return {{{repr(out_key)}: response}}" if out_key else "return {}"
+        ret = f"return {{{out_key!r}: response}}" if out_key else "return {}"
 
         core_lines = [
-            f"kernel = _make_kernel({repr(model)})",
+            f"kernel = _make_kernel({model!r})",
             f"prompt = _render({py_str(prompt_tmpl)}, state)",
-            f"history = ChatHistory()",
-            f"history.add_message(ChatMessageContent(",
+            "history = ChatHistory()",
+            "history.add_message(ChatMessageContent(",
             f"    role=AuthorRole.SYSTEM, content={py_str(sys_p)}))",
-            f"history.add_message(ChatMessageContent(",
-            f"    role=AuthorRole.USER, content=prompt))",
-            f"svc = kernel.get_service()",
-            f"settings = svc.get_prompt_execution_settings_class()()",
+            "history.add_message(ChatMessageContent(",
+            "    role=AuthorRole.USER, content=prompt))",
+            "svc = kernel.get_service()",
+            "settings = svc.get_prompt_execution_settings_class()()",
             f"settings.temperature = {temp}",
             f"settings.max_tokens  = {max_tok}",
-            f"result  = await svc.get_chat_message_contents(history, settings=settings)",
-            f"response = str(result[0]) if result else ''",
+            "result  = await svc.get_chat_message_contents(history, settings=settings)",
+            "response = str(result[0]) if result else ''",
             ret,
         ]
         core = "\n".join(core_lines)
 
         if fb_target:
-            warnings.append(
-                f"llm_call '{nid}': fail_branch.target='{fb_target}' → retry wrapper emitted"
-            )
-            inner = "\n".join("    " + l for l in core_lines)
+            warnings.append(f"llm_call '{nid}': fail_branch.target='{fb_target}' → retry wrapper emitted")
+            inner = "\n".join("    " + ln for ln in core_lines)
             body = (
                 f"{ctx}"
                 f"for _attempt in range({fb_retry}):\n"
@@ -575,7 +596,7 @@ def gen_node_function(
                 f"    except Exception as _e:\n"
                 f"        if _attempt == {fb_retry} - 1:\n"
                 f"            err = RuntimeError(str(_e))\n"
-                f"            err.fail_target = {repr(fb_target)}  # type: ignore[attr-defined]\n"
+                f"            err.fail_target = {fb_target!r}  # type: ignore[attr-defined]\n"
                 f"            raise err\n"
                 f"return {{}}\n"
             )
@@ -586,16 +607,16 @@ def gen_node_function(
 
     # ── tool_invoke ───────────────────────────────────────────────────────────
     if ntype == "tool_invoke":
-        tool_id    = node.get("tool_id", "")
-        input_map  = node.get("input_map") or {}
+        tool_id = node.get("tool_id", "")
+        input_map = node.get("input_map") or {}
         output_map = node.get("output_map") or {}
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
-        plugin_fn  = f"_TOOL_STUBS.{safe_id(tool_id)}" if tool_id in tools_registry else "None"
-        in_expr    = repr(input_map) if input_map else "{'query': str(state)}"
-        out_expr   = repr(output_map) if output_map else "{'result': result}"
+        plugin_fn = f"_TOOL_STUBS.{safe_id(tool_id)}" if tool_id in tools_registry else "None"
+        in_expr = repr(input_map) if input_map else "{'query': str(state)}"
+        out_expr = repr(output_map) if output_map else "{'result': result}"
 
         if plugin_fn == "None":
             warnings.append(f"tool_invoke '{nid}': tool_id='{tool_id}' not in tools registry — stub emitted")
@@ -611,22 +632,18 @@ def gen_node_function(
                 f"    except Exception as _e:\n"
                 f"        if _attempt == {fb_retry} - 1:\n"
                 f"            err = RuntimeError(str(_e))\n"
-                f"            err.fail_target = {repr(fb_target)}  # type: ignore[attr-defined]\n"
+                f"            err.fail_target = {fb_target!r}  # type: ignore[attr-defined]\n"
                 f"            raise err\n"
                 f"return {{}}\n"
             )
         else:
-            body = (
-                f"{ctx}"
-                f"result = await {plugin_fn}(**{in_expr})\n"
-                f"return {out_expr}\n"
-            )
+            body = f"{ctx}result = await {plugin_fn}(**{in_expr})\nreturn {out_expr}\n"
         return _async_fn(label, vid, body)
 
     # ── transform ─────────────────────────────────────────────────────────────
     if ntype == "transform":
-        mode    = node.get("mode", "mapping")
-        fn_ref  = node.get("fn_ref", "")
+        mode = node.get("mode", "mapping")
+        fn_ref = node.get("fn_ref", "")
         mapping = node.get("mapping") or []
 
         if mode == "fn_ref" and fn_ref:
@@ -635,18 +652,18 @@ def gen_node_function(
                 f"{ctx}"
                 f"# fn_ref: {fn_ref}\n"
                 f"import importlib\n"
-                f"_mod  = importlib.import_module({repr(parts[0])})\n"
-                f"_fn   = _mod.__dict__[{repr(parts[1])}]\n"
+                f"_mod  = importlib.import_module({parts[0]!r})\n"
+                f"_fn   = _mod.__dict__[{parts[1]!r}]\n"
                 f"_res  = _fn(dict(state))\n"
                 f"return _res if isinstance(_res, dict) else {{}}\n"
             )
         elif mapping:
             map_lines = [f"{ctx}out: dict = {{}}"]
             for m in mapping:
-                frm  = m.get("from", "")
-                to   = m.get("to", "")
+                frm = m.get("from", "")
+                to = m.get("to", "")
                 to_k = to.split(".")[-1] if "." in to else to
-                map_lines.append(f"out[{repr(to_k)}] = _resolve(state, {repr(frm)})")
+                map_lines.append(f"out[{to_k!r}] = _resolve(state, {frm!r})")
             map_lines.append("return out")
             body = "\n".join(map_lines)
         else:
@@ -656,24 +673,24 @@ def gen_node_function(
 
     # ── hitl_breakpoint ───────────────────────────────────────────────────────
     if ntype == "hitl_breakpoint":
-        prompt     = node.get("prompt", "Please review and provide input.")
-        out_key    = node.get("output_key") or (safe_id(nid) + "_resume")
+        prompt = node.get("prompt", "Please review and provide input.")
+        out_key = node.get("output_key") or (safe_id(nid) + "_resume")
         resume_sch = node.get("resume_schema") or {}
-        timeout_s  = node.get("timeout_seconds", 86400)
-        on_timeout = node.get("on_timeout", "raise")
-        fields     = list((resume_sch.get("properties") or {}).keys())
+        _timeout_s = node.get("timeout_seconds", 86400)
+        _on_timeout = node.get("on_timeout", "raise")
+        fields = list((resume_sch.get("properties") or {}).keys())
 
         body = (
             f"{ctx}"
             f"# HITL pause — raises _HitlPause; runner marks job as 'paused'.\n"
             f"# On resume, the runner wraps the payload as {{out_key: data}} and merges\n"
             f"# it into state before re-running, so we check state first.\n"
-            f"if state.get({repr(out_key)}) is not None:\n"
+            f"if state.get({out_key!r}) is not None:\n"
             f"    return {{}}\n"
             f"raise _HitlPause(\n"
-            f"    node_id={repr(nid)},\n"
+            f"    node_id={nid!r},\n"
             f"    prompt={py_str(prompt)},\n"
-            f"    fields={repr(fields)},\n"
+            f"    fields={fields!r},\n"
             f")\n"
             f"return {{}}\n"
         )
@@ -682,12 +699,12 @@ def gen_node_function(
     # ── memory_read ───────────────────────────────────────────────────────────
     if ntype == "memory_read":
         store_id = node.get("store_id", "")
-        mode     = node.get("retrieval_mode", "key_value")
+        mode = node.get("retrieval_mode", "key_value")
         key_expr = node.get("key_expr", "")
-        q_expr   = node.get("query_expr", "")
-        top_k    = node.get("top_k", 5)
-        min_sc   = node.get("min_score")
-        out_key  = node.get("output_key", "retrieved")
+        q_expr = node.get("query_expr", "")
+        top_k = node.get("top_k", 5)
+        min_sc = node.get("min_score")
+        out_key = node.get("output_key", "retrieved")
 
         if mode == "semantic":
             min_sc_comment = f"# filter: min_score={min_sc}\n" if min_sc else ""
@@ -695,58 +712,58 @@ def gen_node_function(
                 f"{ctx}"
                 f"# memory_read: semantic — use SemanticTextMemory for production\n"
                 f"# query_expr resolved via _resolve() (ADR-001)\n"
-                f"query = _resolve(state, {repr(q_expr)})\n"
+                f"query = _resolve(state, {q_expr!r})\n"
                 f"# TODO: replace with kernel-registered IMemoryStore:\n"
-                f"#   results = await memory.search({repr(store_id)}, str(query), limit={top_k})\n"
+                f"#   results = await memory.search({store_id!r}, str(query), limit={top_k})\n"
                 f"{min_sc_comment}"
-                f"results = _store_get({repr(store_id)}, str(query))\n"
-                f"return {{{repr(out_key)}: results}}\n"
+                f"results = _store_get({store_id!r}, str(query))\n"
+                f"return {{{out_key!r}: results}}\n"
             )
         else:
             body = (
                 f"{ctx}"
-                f"# memory_read: key-value from store {repr(store_id)}\n"
-                f"key   = _resolve(state, {repr(key_expr)})\n"
-                f"value = _store_get({repr(store_id)}, key)\n"
-                f"return {{{repr(out_key)}: value}}\n"
+                f"# memory_read: key-value from store {store_id!r}\n"
+                f"key   = _resolve(state, {key_expr!r})\n"
+                f"value = _store_get({store_id!r}, key)\n"
+                f"return {{{out_key!r}: value}}\n"
             )
         return _async_fn(label, vid, body)
 
     # ── memory_write ──────────────────────────────────────────────────────────
     if ntype == "memory_write":
-        store_id   = node.get("store_id", "")
-        key_expr   = node.get("key_expr", "")
-        val_expr   = node.get("value_expr", "")
+        store_id = node.get("store_id", "")
+        key_expr = node.get("key_expr", "")
+        val_expr = node.get("value_expr", "")
         write_mode = node.get("write_mode", "upsert")
-        tier       = node.get("tier", "short")
-        overwrite  = write_mode == "overwrite"
+        tier = node.get("tier", "short")
+        overwrite = write_mode == "overwrite"
 
         body = (
             f"{ctx}"
-            f"# memory_write: store={repr(store_id)}, tier={repr(tier)} (ADR-001 RFC-2)\n"
-            f"key   = _resolve(state, {repr(key_expr)})\n"
-            f"value = _resolve(state, {repr(val_expr)})\n"
-            f"_store_set({repr(store_id)}, key, value, overwrite={overwrite})\n"
+            f"# memory_write: store={store_id!r}, tier={tier!r} (ADR-001 RFC-2)\n"
+            f"key   = _resolve(state, {key_expr!r})\n"
+            f"value = _resolve(state, {val_expr!r})\n"
+            f"_store_set({store_id!r}, key, value, overwrite={overwrite})\n"
             f"return {{}}\n"
         )
         return _async_fn(label, vid, body)
 
     # ── agent_role → ChatCompletionAgent (MAF native) ─────────────────────────
     if ntype == "agent_role":
-        cfg        = node.get("config") or {}
-        agent_ref  = cfg.get("agent_ref", "")
-        task_desc  = cfg.get("task_description", "Complete the task.")
-        expected   = cfg.get("expected_output", "")
-        out_field  = cfg.get("output_field", safe_id(nid) + "_result")
-        mem_acc    = cfg.get("memory_access", "isolated")
-        tool_appr  = cfg.get("tool_approval", "auto")
+        cfg = node.get("config") or {}
+        agent_ref = cfg.get("agent_ref", "")
+        task_desc = cfg.get("task_description", "Complete the task.")
+        expected = cfg.get("expected_output", "")
+        out_field = cfg.get("output_field", safe_id(nid) + "_result")
+        mem_acc = cfg.get("memory_access", "isolated")
+        tool_appr = cfg.get("tool_approval", "auto")
 
-        agent_def   = agents_by_id.get(agent_ref) or {}
-        model       = agent_def.get("model", model_default)
-        role        = agent_def.get("role", agent_ref or "specialist")
-        backstory   = agent_def.get("backstory", "")
-        goal        = agent_def.get("goal", "")
-        max_iter    = agent_def.get("max_iter", 10)
+        agent_def = agents_by_id.get(agent_ref) or {}
+        model = agent_def.get("model", model_default)
+        role = agent_def.get("role", agent_ref or "specialist")
+        backstory = agent_def.get("backstory", "")
+        goal = agent_def.get("goal", "")
+        max_iter = agent_def.get("max_iter", 10)
         agent_tools = [t for t in (agent_def.get("tools") or []) if t in tools_registry]
 
         instructions = f"You are {role}."
@@ -757,9 +774,9 @@ def gen_node_function(
 
         # BUG-7 fix: plugin_line is a single statement with no leading spaces.
         plugin_line = (
-            f"kernel.add_plugin(_PLUGINS, plugin_name='tools')"
-            if agent_tools else
-            "# No tools registered for this agent"
+            "kernel.add_plugin(_PLUGINS, plugin_name='tools')"
+            if agent_tools
+            else "# No tools registered for this agent"
         )
 
         hitl_lines = ""
@@ -768,7 +785,7 @@ def gen_node_function(
             hitl_lines = (
                 f"# tool_approval=human — pause for approval before tool calls (ADR-001 Q29)\n"
                 f"raise _HitlPause(\n"
-                f"    node_id={repr(nid)},\n"
+                f"    node_id={nid!r},\n"
                 # P7-2 fix: repr(agent_ref) may produce single-quoted strings
                 # which conflict when embedded inside a single-quoted f-string.
                 # Use py_str() (triple-double-quotes) to safely embed any string.
@@ -777,18 +794,41 @@ def gen_node_function(
                 f")\n"
             )
 
+        # Build context injection from context_from sources using accumulated state.
+        ctx_sources = ctx_map.get(nid, [])
+        ctx_inject = ""
+        if ctx_sources:
+            output_key_map = {
+                n["id"]: (n.get("config") or {}).get("output_field") or n.get("output_key")
+                for n in spec.get("nodes", [])
+            }
+            ctx_inject = "_ctx_parts = []\n"
+            for src in ctx_sources:
+                src_key = output_key_map.get(src)
+                if src_key:
+                    ctx_inject += (
+                        f"if state.get({src_key!r}): _ctx_parts.append({src_key + ': '!r} + str(state[{src_key!r}]))\n"
+                    )
+            ctx_inject += (
+                "_ctx_str = ('\\n\\nContext from prior steps:\\n' + '\\n\\n'.join(_ctx_parts)) if _ctx_parts else ''\n"
+            )
+            instructions_expr = f"{py_str(instructions)} + _ctx_str"
+        else:
+            instructions_expr = py_str(instructions)
+
         body = (
             f"{ctx}"
             f"# agent_role → ChatCompletionAgent  (MAF native — ADR-001 Q10)\n"
-            f"# agent_ref={repr(agent_ref)}, memory_access={repr(mem_acc)}\n"
-            f"# max_iter={max_iter}  expected_output: {repr(expected)}\n"
+            f"# agent_ref={agent_ref!r}, memory_access={mem_acc!r}\n"
+            f"# max_iter={max_iter}  expected_output: {expected!r}\n"
             f"{hitl_lines}"
-            f"kernel = _make_kernel({repr(model)})\n"
+            f"kernel = _make_kernel({model!r})\n"
             f"{plugin_line}\n"
+            f"{ctx_inject}"
             f"agent = ChatCompletionAgent(\n"
             f"    kernel=kernel,\n"
-            f"    name={repr(safe_id(agent_ref) if agent_ref else safe_id(nid))},\n"
-            f"    instructions={py_str(instructions)},\n"
+            f"    name={safe_id(agent_ref) if agent_ref else safe_id(nid)!r},\n"
+            f"    instructions={instructions_expr},\n"
             f")\n"
             f"task  = _render({py_str(task_desc)}, state)\n"
             f"history = ChatHistory()\n"
@@ -797,18 +837,18 @@ def gen_node_function(
             f"async for msg in agent.invoke(history):\n"
             f"    response_parts.append(str(msg.content))\n"
             f"final = response_parts[-1] if response_parts else ''\n"
-            f"return {{{repr(out_field)}: final}}\n"
+            f"return {{{out_field!r}: final}}\n"
         )
         return _async_fn(label, vid, body)
 
     # ── agent_debate → AgentGroupChat (MAF native — the only full match) ──────
     if ntype == "agent_debate":
-        cfg        = node.get("config") or {}
-        a_refs     = cfg.get("agents") or []
+        cfg = node.get("config") or {}
+        a_refs = cfg.get("agents") or []
         max_rounds = cfg.get("max_rounds", 10)
-        term_cond  = (cfg.get("termination_condition") or {}).get("expr", "")
-        out_field  = cfg.get("output_field", "debate_transcript")
-        init_msg   = cfg.get("initial_message", "{{$.state.input}}")
+        term_cond = (cfg.get("termination_condition") or {}).get("expr", "")
+        out_field = cfg.get("output_field", "debate_transcript")
+        init_msg = cfg.get("initial_message", "{{$.state.input}}")
         speaker_sel = cfg.get("speaker_selection", "round_robin")
         allow_repeat = cfg.get("allow_repeat_speaker", False)
 
@@ -821,31 +861,31 @@ def gen_node_function(
         # Build agent declarations
         agent_decls: list[str] = []
         for ref in a_refs:
-            adef      = agents_by_id.get(ref) or {}
-            model     = adef.get("model", model_default)
-            role      = adef.get("role", ref)
+            adef = agents_by_id.get(ref) or {}
+            model = adef.get("model", model_default)
+            role = adef.get("role", ref)
             backstory = adef.get("backstory", "")
-            goal      = adef.get("goal", "")
+            goal = adef.get("goal", "")
             instructions = f"You are {role}."
             if backstory:
                 instructions += f" {backstory}"
             if goal:
                 instructions += f"\n\nGoal: {goal}"
-            vid_ref  = safe_id(ref)
+            vid_ref = safe_id(ref)
             # BUG-7 fix: no leading spaces — _async_fn adds exactly 4-space indent.
             agent_decls.append(
-                f"{vid_ref}_kernel = _make_kernel({repr(model)})\n"
+                f"{vid_ref}_kernel = _make_kernel({model!r})\n"
                 f"{vid_ref}_agent  = ChatCompletionAgent(\n"
                 f"    kernel={vid_ref}_kernel,\n"
-                f"    name={repr(vid_ref)},\n"
+                f"    name={vid_ref!r},\n"
                 f"    instructions={py_str(instructions)},\n"
                 f")"
             )
 
         agents_list = ", ".join(f"{safe_id(r)}_agent" for r in a_refs)
         # The last agent in the list is conventionally the judge/terminator
-        term_agent_ref  = a_refs[-1] if a_refs else ""
-        term_agent_var  = safe_id(term_agent_ref) + "_agent"  if term_agent_ref else "None"
+        term_agent_ref = a_refs[-1] if a_refs else ""
+        term_agent_var = safe_id(term_agent_ref) + "_agent" if term_agent_ref else "None"
         term_kernel_var = safe_id(term_agent_ref) + "_kernel" if term_agent_ref else "None"
 
         warnings.append(
@@ -862,9 +902,10 @@ def gen_node_function(
             f"{ctx}"
             f"# agent_debate → AgentGroupChat  (MAF native — ADR-001 Q11)\n"
             f"# This is the only adapter where agent_debate maps natively.\n"
-            f"# speaker_selection={repr(speaker_sel)}, allow_repeat={allow_repeat}\n"
-            f"# max_rounds={max_rounds}, termination_keyword={repr(term_keyword)}\n"
-            + agent_decls_block + "\n"
+            f"# speaker_selection={speaker_sel!r}, allow_repeat={allow_repeat}\n"
+            f"# max_rounds={max_rounds}, termination_keyword={term_keyword!r}\n"
+            + agent_decls_block
+            + "\n"
             + f"termination_fn = KernelFunctionFromPrompt(\n"
             f"    function_name='check_termination',\n"
             f"    prompt=(\n"
@@ -892,25 +933,22 @@ def gen_node_function(
             f"transcript: list[str] = []\n"
             f"async for msg in group_chat.invoke():\n"
             f"    transcript.append(f'[{{msg.name}}]: {{msg.content}}')\n"
-            f"return {{{repr(out_field)}: chr(10).join(transcript)}}\n"
+            f"return {{{out_field!r}: chr(10).join(transcript)}}\n"
         )
         return _async_fn(label, vid, body)
 
     # ── subgraph ──────────────────────────────────────────────────────────────
     if ntype == "subgraph":
-        flow_ref   = node.get("flow_ref", "")
-        input_map  = node.get("input_map") or {}
-        warnings.append(
-            f"subgraph '{nid}': compile flow_ref={repr(flow_ref)} separately "
-            f"and call its run_flow() function"
-        )
+        flow_ref = node.get("flow_ref", "")
+        input_map = node.get("input_map") or {}
+        warnings.append(f"subgraph '{nid}': compile flow_ref={flow_ref!r} separately and call its run_flow() function")
         in_expr = repr(input_map) if input_map else "dict(state)"
         body = (
             f"{ctx}"
-            f"# subgraph: flow_ref={repr(flow_ref)}\n"
+            f"# subgraph: flow_ref={flow_ref!r}\n"
             f"# from {safe_id(flow_ref)}_flow import run_flow as _sub_run\n"
             f"# return _sub_run({in_expr})\n"
-            f"raise NotImplementedError(f'Subgraph {repr(flow_ref)} not wired — see comment above')\n"
+            f"raise NotImplementedError(f'Subgraph {flow_ref!r} not wired — see comment above')\n"
         )
         return _async_fn(label, vid, body)
 
@@ -922,43 +960,50 @@ def gen_node_function(
 
 # ─── Condition router (sync, same contract as LangGraph adapter) ──────────────
 
+
 def gen_condition_router(node: dict) -> str:
-    nid      = node["id"]
-    vid      = safe_id(nid)
+    nid = node["id"]
+    vid = safe_id(nid)
     branches = node.get("branches") or []
-    default  = node.get("default_target", "")
-    label    = node.get("label", nid)
+    default = node.get("default_target", "")
+    label = node.get("label", nid)
 
     lines = [f"# {label} — condition router", f"def route_{vid}(state: dict) -> str:"]
 
     op_map = {
-        "eq": "==", "neq": "!=", "gt": ">", "gte": ">=",
-        "lt": "<", "lte": "<=", "contains": "in", "exists": "is not None",
+        "eq": "==",
+        "neq": "!=",
+        "gt": ">",
+        "gte": ">=",
+        "lt": "<",
+        "lte": "<=",
+        "contains": "in",
+        "exists": "is not None",
     }
     for b in branches:
-        cond   = b.get("condition") or {}
-        expr   = cond.get("expr", "")
+        cond = b.get("condition") or {}
+        expr = cond.get("expr", "")
         target = b.get("target", "")
-        op     = cond.get("op", "eq")
-        value  = cond.get("value", "")
-        py_op  = op_map.get(op, "==")
+        op = cond.get("op", "eq")
+        value = cond.get("value", "")
+        py_op = op_map.get(op, "==")
 
         if expr:
-            lhs = f"_resolve(state, {repr(expr)})"
+            lhs = f"_resolve(state, {expr!r})"
             if op == "exists":
                 py_cond = f"{lhs} is not None"
             elif op == "contains":
-                py_cond = f"{repr(value)} in ({lhs} or '')"
+                py_cond = f"{value!r} in ({lhs} or '')"
             else:
-                py_cond = f"{lhs} {py_op} {repr(value)}"
+                py_cond = f"{lhs} {py_op} {value!r}"
         else:
             py_cond = "True"
 
         lines.append(f"    if {py_cond}:")
-        lines.append(f"        return {repr(safe_id(target))}")
+        lines.append(f"        return {safe_id(target)!r}")
 
     if default:
-        lines.append(f"    return {repr(safe_id(default))}  # default_target")
+        lines.append(f"    return {safe_id(default)!r}  # default_target")
     else:
         lines.append("    return '__end__'")
 
@@ -968,6 +1013,7 @@ def gen_condition_router(node: dict) -> str:
 
 # ─── Flow runner generator ───────────────────────────────────────────────────
 
+
 def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
     """
     Generate _run_flow_async() by walking the spec graph and emitting
@@ -976,10 +1022,10 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
       - parallel  → asyncio.gather
       - condition → if/elif dispatch
     """
-    nodes      = spec.get("nodes", [])
-    edges      = spec.get("edges", [])
+    nodes = spec.get("nodes", [])
+    edges = spec.get("edges", [])
     id_to_node = {n["id"]: n for n in nodes}
-    fwd, bwd   = build_adjacency(nodes, edges)
+    fwd, bwd = build_adjacency(nodes, edges)
 
     parallel_groups = find_parallel_groups(nodes, edges)
     join_ids = {n["id"] for n in nodes if n["type"] == "parallel_join"}
@@ -1014,7 +1060,7 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
 
     def indent(code: str, n: int = 4) -> str:
         pad = " " * n
-        return "\n".join(pad + l if l.strip() else "" for l in code.splitlines())
+        return "\n".join(pad + ln if ln.strip() else "" for ln in code.splitlines())
 
     def walk(nid: str) -> None:
         if nid in visited:
@@ -1024,7 +1070,7 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
             return
 
         ntype = node["type"]
-        vid   = safe_id(nid)
+        vid = safe_id(nid)
 
         if ntype in ("input", "annotation"):
             visited.add(nid)
@@ -1041,13 +1087,12 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
             visited.add(nid)
             branch_ids = parallel_groups.get(nid, [])
             calls = ", ".join(
-                f"_exec_node({repr(bid)}, node_{safe_id(bid)}, state, on_node_start, on_node_done)"
-                for bid in branch_ids
+                f"_exec_node({bid!r}, node_{safe_id(bid)}, state, on_node_start, on_node_done)" for bid in branch_ids
             )
             lines.append(f"    # parallel_fork → asyncio.gather for branches: {branch_ids}")
             lines.append(f"    _par_results = await asyncio.gather({calls})")
-            lines.append(f"    for _r in _par_results:")
-            lines.append(f"        state = {{**state, **_r}}")
+            lines.append("    for _r in _par_results:")
+            lines.append("        state = {**state, **_r}")
             lines.append("")
             for bid in branch_ids:
                 visited.add(bid)
@@ -1060,16 +1105,14 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
         # ── parallel_join ─────────────────────────────────────────────────────
         if ntype == "parallel_join":
             visited.add(nid)
-            out_key     = node.get("output_key")
-            reducer     = node.get("join_reducer", "merge")
+            out_key = node.get("output_key")
+            reducer = node.get("join_reducer", "merge")
             join_fn_ref = node.get("join_fn_ref", "")
-            lines.append(f"    # parallel_join: reducer={repr(reducer)}")
+            lines.append(f"    # parallel_join: reducer={reducer!r}")
             if reducer == "fn_ref" and join_fn_ref:
                 parts = join_fn_ref.rsplit(":", 1) if ":" in join_fn_ref else (join_fn_ref, "join")
-                lines.append(f"    import importlib as _ilib")
-                lines.append(
-                    f"    _join_fn = _ilib.import_module({repr(parts[0])}).__dict__[{repr(parts[1])}]"
-                )
+                lines.append("    import importlib as _ilib")
+                lines.append(f"    _join_fn = _ilib.import_module({parts[0]!r}).__dict__[{parts[1]!r}]")
                 merged = "_join_fn(list(state.values()))"
             elif reducer == "append":
                 merged = "[v for v in state.values() if v is not None]"
@@ -1079,9 +1122,9 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
             # Without one, the parallel branches have already been merged into state
             # by the asyncio.gather loop above; no further assignment is needed.
             if out_key:
-                lines.append(f"    state = {{**state, {repr(out_key)}: {merged}}}")
+                lines.append(f"    state = {{**state, {out_key!r}: {merged}}}")
             else:
-                lines.append(f"    # (no output_key — branch results already in state)")
+                lines.append("    # (no output_key — branch results already in state)")
             lines.append("")
             for s in fwd.get(nid, []):
                 walk(s)
@@ -1090,7 +1133,7 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
         # ── condition ─────────────────────────────────────────────────────────
         if ntype == "condition":
             visited.add(nid)
-            branches   = node.get("branches") or []
+            branches = node.get("branches") or []
             def_target = node.get("default_target", "")
 
             lines.append(f"    # condition: route via route_{vid}()")
@@ -1107,10 +1150,10 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
                     continue
                 kw = "    if" if first else "    elif"
                 first = False
-                lines.append(f"{kw} _route_{vid} == {repr(safe_id(target))}:")
+                lines.append(f"{kw} _route_{vid} == {safe_id(target)!r}:")
                 lines.append(
                     f"        state = {{**state, **(await _exec_node("
-                    f"{repr(target)}, node_{safe_id(target)}, state, on_node_start, on_node_done))}}"
+                    f"{target!r}, node_{safe_id(target)}, state, on_node_start, on_node_done))}}"
                 )
 
             if def_target:
@@ -1121,7 +1164,7 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
                     lines.append(kw)
                 lines.append(
                     f"        state = {{**state, **(await _exec_node("
-                    f"{repr(def_target)}, node_{safe_id(def_target)}, state, on_node_start, on_node_done))}}"
+                    f"{def_target!r}, node_{safe_id(def_target)}, state, on_node_start, on_node_done))}}"
                 )
             lines.append("")
 
@@ -1140,8 +1183,7 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
         # ── regular node ──────────────────────────────────────────────────────
         visited.add(nid)
         lines.append(
-            f"    state = {{**state, **(await _exec_node("
-            f"{repr(nid)}, node_{vid}, state, on_node_start, on_node_done))}}"
+            f"    state = {{**state, **(await _exec_node({nid!r}, node_{vid}, state, on_node_start, on_node_done))}}"
         )
 
         for s in fwd.get(nid, []):
@@ -1170,16 +1212,16 @@ def gen_flow_runner(spec: dict, warnings: list[str]) -> str:
 
 def gen_entrypoint(spec: dict) -> str:
     state_schema = spec.get("state_schema") or {}
-    required     = state_schema.get("required") or []
-    props        = state_schema.get("properties") or {}
-    example      = {f: f"<{props.get(f, {}).get('type', 'str')}>" for f in required}
+    required = state_schema.get("required") or []
+    props = state_schema.get("properties") or {}
+    example = {f: f"<{props.get(f, {}).get('type', 'str')}>" for f in required}
 
     return dedent0(f"""\
         # ─── Entry point ──────────────────────────────────────────────────────────────
 
         if __name__ == "__main__":
             import json as _json
-            _inputs = {repr(example)}
+            _inputs = {example!r}
             print("Running flow with inputs:", _inputs)
             _result = run_flow(_inputs)
             print("Final state:", _json.dumps(_result, default=str, indent=2))
@@ -1187,6 +1229,7 @@ def gen_entrypoint(spec: dict) -> str:
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+
 
 def compile_maf(spec: dict) -> tuple[str, list[str]]:
     """
@@ -1207,7 +1250,7 @@ def compile_maf(spec: dict) -> tuple[str, list[str]]:
 
         log_section(_log, "topo_sort", flow_id=flow_id)
         sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
-        ctx_map      = build_context_map(edges)
+        ctx_map = build_context_map(edges)
 
         log_section(_log, "header+imports+otel+helpers", flow_id=flow_id)
         parts: list[str] = [

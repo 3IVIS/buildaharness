@@ -30,7 +30,6 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from rate_limit import limiter
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,15 +45,17 @@ from db import (
     User,
     get_session,
 )
+from rate_limit import limiter
 
-router  = APIRouter(prefix="/teams", tags=["teams"])
-AuthDep = Annotated[User,         Depends(current_user)]
-DbDep   = Annotated[AsyncSession, Depends(get_session)]
+router = APIRouter(prefix="/teams", tags=["teams"])
+AuthDep = Annotated[User, Depends(current_user)]
+DbDep = Annotated[AsyncSession, Depends(get_session)]
 
 _ROLE_RANK = {TeamRole.viewer: 0, TeamRole.editor: 1, TeamRole.admin: 2}
 
 
 # ── UUID path-param parsing ───────────────────────────────────────────────────
+
 
 def _parse_team_uuid(team_id: str) -> uuid.UUID:
     try:
@@ -71,6 +72,7 @@ def _parse_user_uuid(user_id: str) -> uuid.UUID:
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
+
 
 class TeamCreate(BaseModel):
     name: str
@@ -98,7 +100,7 @@ class TeamRename(BaseModel):
 
 class MemberInvite(BaseModel):
     email: EmailStr
-    role:  Literal["admin", "editor", "viewer"] = "viewer"
+    role: Literal["admin", "editor", "viewer"] = "viewer"
 
 
 class MemberRoleUpdate(BaseModel):
@@ -111,43 +113,42 @@ class FlowShareRequest(BaseModel):
 
 class MemberOut(BaseModel):
     user_id: str
-    email:   str
-    role:    str
+    email: str
+    role: str
 
 
 class TeamOut(BaseModel):
-    id:         str
-    name:       str
+    id: str
+    name: str
     created_by: str | None
-    members:    list[MemberOut]
+    members: list[MemberOut]
 
 
 class TeamSummary(BaseModel):
-    id:   str
+    id: str
     name: str
     role: str
 
 
 class FlowPermissionOut(BaseModel):
-    flow_id:    str
-    team_id:    str
+    flow_id: str
+    team_id: str
     permission: str
 
 
 class SharedFlowOut(BaseModel):
-    flow_id:    str
-    flow_name:  str
+    flow_id: str
+    flow_name: str
     permission: str
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
+
 async def _get_team(tid: uuid.UUID, db: AsyncSession) -> Team:
     team = (
         await db.execute(
-            select(Team)
-            .where(Team.id == tid)
-            .options(selectinload(Team.memberships).selectinload(TeamMembership.user))
+            select(Team).where(Team.id == tid).options(selectinload(Team.memberships).selectinload(TeamMembership.user))
         )
     ).scalar_one_or_none()
     if not team:
@@ -170,7 +171,10 @@ async def _get_membership(tid: uuid.UUID, uid: uuid.UUID, db: AsyncSession) -> T
 
 
 async def _require_role(
-    tid: uuid.UUID, user: User, minimum: TeamRole, db: AsyncSession,
+    tid: uuid.UUID,
+    user: User,
+    minimum: TeamRole,
+    db: AsyncSession,
 ) -> TeamMembership:
     m = await _get_membership(tid, user.id, db)
     if _ROLE_RANK[TeamRole(m.role)] < _ROLE_RANK[minimum]:
@@ -183,21 +187,22 @@ async def _require_role(
 
 async def _count_admins(tid: uuid.UUID, db: AsyncSession) -> int:
     rows = (
-        await db.execute(
-            select(TeamMembership).where(
-                TeamMembership.team_id == tid,
-                TeamMembership.role    == TeamRole.admin.value,
+        (
+            await db.execute(
+                select(TeamMembership).where(
+                    TeamMembership.team_id == tid,
+                    TeamMembership.role == TeamRole.admin.value,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return len(rows)
 
 
 def _team_out(team: Team) -> TeamOut:
-    members = [
-        MemberOut(user_id=str(m.user_id), email=m.user.email, role=m.role)
-        for m in team.memberships
-    ]
+    members = [MemberOut(user_id=str(m.user_id), email=m.user.email, role=m.role) for m in team.memberships]
     return TeamOut(
         id=str(team.id),
         name=team.name,
@@ -207,6 +212,7 @@ def _team_out(team: Team) -> TeamOut:
 
 
 # ── Team CRUD ─────────────────────────────────────────────────────────────────
+
 
 @router.post("", response_model=TeamOut, status_code=201)
 @limiter.limit("20/minute")
@@ -231,10 +237,7 @@ async def list_teams(user: AuthDep, db: DbDep):
             .order_by(Team.name)
         )
     ).all()
-    return [
-        TeamSummary(id=str(team.id), name=team.name, role=membership.role)
-        for membership, team in rows
-    ]
+    return [TeamSummary(id=str(team.id), name=team.name, role=membership.role) for membership, team in rows]
 
 
 @router.get("/{team_id}", response_model=TeamOut)
@@ -248,9 +251,7 @@ async def get_team(request: Request, team_id: str, user: AuthDep, db: DbDep):
 
 @router.patch("/{team_id}", response_model=TeamOut)
 @limiter.limit("20/minute")
-async def rename_team(
-    request: Request,
-    team_id: str, req: TeamRename, user: AuthDep, db: DbDep):
+async def rename_team(request: Request, team_id: str, req: TeamRename, user: AuthDep, db: DbDep):
     """Rename a team. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)
@@ -262,9 +263,7 @@ async def rename_team(
 
 @router.delete("/{team_id}", status_code=204)
 @limiter.limit("20/minute")
-async def delete_team(
-    request: Request,
-    team_id: str, user: AuthDep, db: DbDep):
+async def delete_team(request: Request, team_id: str, user: AuthDep, db: DbDep):
     """Delete a team and cascade to memberships/permissions. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)
@@ -277,23 +276,21 @@ async def delete_team(
 
 # ── Member management ─────────────────────────────────────────────────────────
 
+
 @router.post("/{team_id}/members", response_model=MemberOut, status_code=201)
 @limiter.limit("20/minute")
-async def invite_member(
-    request: Request,
-    team_id: str, req: MemberInvite, user: AuthDep, db: DbDep):
+async def invite_member(request: Request, team_id: str, req: MemberInvite, user: AuthDep, db: DbDep):
     """Add a user by email. Admin only.
 
     Idempotent: re-inviting an existing member updates their role and returns 200.
     New members return 201. The last-admin guard applies on re-invite.
     """
     from fastapi import Response
+
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)
 
-    invitee = (
-        await db.execute(select(User).where(User.email == req.email))
-    ).scalar_one_or_none()
+    invitee = (await db.execute(select(User).where(User.email == req.email))).scalar_one_or_none()
     if not invitee:
         raise HTTPException(status_code=404, detail="No user with that email")
 
@@ -310,7 +307,7 @@ async def invite_member(
         # Guard: cannot demote sole admin via re-invite
         if (
             existing.role == TeamRole.admin.value
-            and req.role   != TeamRole.admin.value
+            and req.role != TeamRole.admin.value
             and await _count_admins(tid, db) <= 1
         ):
             raise HTTPException(
@@ -322,7 +319,9 @@ async def invite_member(
         # Return 200 (not 201) for an update to an existing membership.
         return Response(
             content=MemberOut(
-                user_id=str(invitee.id), email=invitee.email, role=req.role,
+                user_id=str(invitee.id),
+                email=invitee.email,
+                role=req.role,
             ).model_dump_json(),
             media_type="application/json",
             status_code=200,
@@ -337,14 +336,14 @@ async def invite_member(
 @limiter.limit("20/minute")
 async def update_member_role(
     request: Request,
-    team_id:        str,
+    team_id: str,
     target_user_id: str,
-    req:            MemberRoleUpdate,
-    user:           AuthDep,
-    db:             DbDep,
+    req: MemberRoleUpdate,
+    user: AuthDep,
+    db: DbDep,
 ):
     """Change a member's role. Admin only."""
-    tid  = _parse_team_uuid(team_id)
+    tid = _parse_team_uuid(team_id)
     tuid = _parse_user_uuid(target_user_id)
     await _require_role(tid, user, TeamRole.admin, db)
 
@@ -359,11 +358,7 @@ async def update_member_role(
     if not target_m:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    if (
-        target_m.role == TeamRole.admin.value
-        and req.role   != TeamRole.admin.value
-        and await _count_admins(tid, db) <= 1
-    ):
+    if target_m.role == TeamRole.admin.value and req.role != TeamRole.admin.value and await _count_admins(tid, db) <= 1:
         raise HTTPException(
             status_code=409,
             detail="Cannot demote the last admin. Promote another member first.",
@@ -383,13 +378,13 @@ async def update_member_role(
 @limiter.limit("20/minute")
 async def remove_member(
     request: Request,
-    team_id:        str,
+    team_id: str,
     target_user_id: str,
-    user:           AuthDep,
-    db:             DbDep,
+    user: AuthDep,
+    db: DbDep,
 ):
     """Remove a member. Admin only; a member may remove themselves regardless of role."""
-    tid  = _parse_team_uuid(team_id)
+    tid = _parse_team_uuid(team_id)
     tuid = _parse_user_uuid(target_user_id)
 
     if user.id != tuid:
@@ -418,6 +413,7 @@ async def remove_member(
 
 # ── Flow sharing ──────────────────────────────────────────────────────────────
 
+
 @router.get("/{team_id}/flows", response_model=list[SharedFlowOut])
 async def list_shared_flows(team_id: str, user: AuthDep, db: DbDep):
     """List flows shared with a team. Any member may call this."""
@@ -432,10 +428,7 @@ async def list_shared_flows(team_id: str, user: AuthDep, db: DbDep):
             .order_by(Flow.name)
         )
     ).all()
-    return [
-        SharedFlowOut(flow_id=fp.flow_id, flow_name=flow.name, permission=fp.permission)
-        for fp, flow in rows
-    ]
+    return [SharedFlowOut(flow_id=fp.flow_id, flow_name=flow.name, permission=fp.permission) for fp, flow in rows]
 
 
 @router.post("/{team_id}/flows/{flow_id}", response_model=FlowPermissionOut, status_code=201)
@@ -444,9 +437,9 @@ async def share_flow(
     request: Request,
     team_id: str,
     flow_id: str,
-    req:     FlowShareRequest,
-    user:    AuthDep,
-    db:      DbDep,
+    req: FlowShareRequest,
+    user: AuthDep,
+    db: DbDep,
 ):
     """Share a flow with a team. Admin only; caller must also own the flow.
 
@@ -479,9 +472,7 @@ async def share_flow(
 
 @router.delete("/{team_id}/flows/{flow_id}", status_code=204)
 @limiter.limit("20/minute")
-async def unshare_flow(
-    request: Request,
-    team_id: str, flow_id: str, user: AuthDep, db: DbDep):
+async def unshare_flow(request: Request, team_id: str, flow_id: str, user: AuthDep, db: DbDep):
     """Revoke a team's access to a flow. Admin only."""
     tid = _parse_team_uuid(team_id)
     await _require_role(tid, user, TeamRole.admin, db)

@@ -23,6 +23,7 @@ try:
     from deepeval import assert_test
     from deepeval.metrics import HallucinationMetric, TaskCompletionMetric
     from deepeval.test_case import LLMTestCase
+
     _DEEPEVAL_AVAILABLE = True
 except ImportError:
     _DEEPEVAL_AVAILABLE = False
@@ -32,8 +33,8 @@ _llm_skip = pytest.mark.skipif(
     reason="deepeval not installed — run: pip install -r requirements-eval.txt",
 )
 
-_THRESHOLD_TASK       = float(os.getenv("EVAL_THRESHOLD_TASK_COMPLETION", "0.8"))
-_THRESHOLD_HALLUC_MAX = float(os.getenv("EVAL_THRESHOLD_HALLUCINATION",   "0.2"))
+_THRESHOLD_TASK = float(os.getenv("EVAL_THRESHOLD_TASK_COMPLETION", "0.8"))
+_THRESHOLD_HALLUC_MAX = float(os.getenv("EVAL_THRESHOLD_HALLUCINATION", "0.2"))
 
 _MODERATION_SAMPLES = [
     {
@@ -72,16 +73,14 @@ class TestModerationStructure:
         """The moderation flow must contain a hitl_breakpoint node."""
         node_types = [n["type"] for n in moderation_flow_spec.get("nodes", [])]
         assert "hitl_breakpoint" in node_types, (
-            "hitl_breakpoint node missing from moderation flow — "
-            "the HITL gate may have been accidentally removed."
+            "hitl_breakpoint node missing from moderation flow — the HITL gate may have been accidentally removed."
         )
 
     def test_condition_node_present(self, moderation_flow_spec):
         """Safe/unsafe branching requires a condition node."""
         node_types = [n["type"] for n in moderation_flow_spec.get("nodes", [])]
         assert "condition" in node_types, (
-            "condition node missing from moderation flow — "
-            "safe/unsafe branching cannot work without it."
+            "condition node missing from moderation flow — safe/unsafe branching cannot work without it."
         )
 
 

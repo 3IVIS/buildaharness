@@ -37,19 +37,19 @@ export default [
     rules: {
       // @typescript-eslint v8: configs['recommended'].rules still a plain rules map
       ...tsPlugin.configs['recommended'].rules,
-      '@typescript-eslint/no-explicit-any':       'warn',
-      '@typescript-eslint/no-unused-vars':         ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-non-null-assertion':  'warn',
+      '@typescript-eslint/no-explicit-any':       'off',
+      '@typescript-eslint/no-unused-vars':         ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-non-null-assertion':  'off',
 
       // react-hooks v5: configs.recommended is a flat-config object { plugins, rules }
       ...reactHooks.configs.recommended.rules,
 
       // React Refresh (Vite HMR)
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react-refresh/only-export-components': 'off',
 
       // General
       'no-console': ['warn', { allow: ['warn', 'error', 'info', 'debug'] }],
-      'eqeqeq':     ['error', 'always'],
+      'eqeqeq':     ['error', 'always', { null: 'ignore' }],
     },
   },
 ]

@@ -35,6 +35,7 @@ langgraph>=0.2.0
 langchain-openai>=0.1.0         # LangGraph generated code: ChatOpenAI
 langchain-core>=0.2.0           # LangGraph generated code: messages, tools
 langchain-community>=0.2.0      # LangGraph generated code: community integrations
+ddgs>=9.0.0                     # DuckDuckGo search — used by web_search built-in tool
 semantic-kernel>=1.0.0          # MAF v1.0 GA (Apr 2026) — merger of SK + AutoGen
 opentelemetry-exporter-otlp>=1.24.0  # MAF generated code: OTLPSpanExporter (telemetry.enabled)
 

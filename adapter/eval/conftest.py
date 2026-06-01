@@ -31,6 +31,7 @@ _FLOWS_DIR = _REPO_ROOT / "flows"
 
 # ── Real-LLM guard ────────────────────────────────────────────────────────────
 
+
 def needs_real_llm(func):
     """Decorator: skip a test unless EVAL_USE_REAL_LLM=true.
 
@@ -45,6 +46,7 @@ def needs_real_llm(func):
 
 
 # ── Reference flow fixtures ───────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def rag_flow_spec() -> dict:
@@ -159,6 +161,7 @@ def rag_eval_dataset() -> list[dict]:
 
 # ── Langfuse dataset export (optional) ────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def langfuse_dataset_samples() -> list[dict]:
     """Pull samples from a named Langfuse dataset if LANGFUSE_EVAL_DATASET is set.
@@ -172,13 +175,14 @@ def langfuse_dataset_samples() -> list[dict]:
 
     try:
         from langfuse import Langfuse
+
         lf = Langfuse()
         dataset = lf.get_dataset(dataset_name)
         return [
             {
-                "input":           item.input,
+                "input": item.input,
                 "expected_output": item.expected_output,
-                "metadata":        item.metadata or {},
+                "metadata": item.metadata or {},
             }
             for item in dataset.items
         ]

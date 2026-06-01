@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle, ChevronUp } from 'lucide-react'
 import { useCanvasStore } from '../store'
 
 export function ProblemsPanel() {

@@ -23,26 +23,26 @@ Coverage:
 """
 
 from __future__ import annotations
+
+import re as _re
 import textwrap
 from collections import defaultdict, deque
-from typing import Any
 
 from adapter_logger import (
     get_adapter_logger,
-    log_compile_start,
     log_compile_end,
     log_compile_error,
+    log_compile_start,
     log_empty_spec,
     log_node_processing,
-    log_node_warning,
-    log_topo_sort,
     log_section,
+    log_topo_sort,
 )
 
 _log = get_adapter_logger("crewai")
 
 ADAPTER_VERSION = "0.2.0"
-CREWAI_MIN      = ">=1.0.0"
+CREWAI_MIN = ">=1.0.0"
 
 # ADR-001 RFC-2: memory_write.tier → CrewAI 1.x memory mapping.
 # crewai 1.x removed the old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory
@@ -50,18 +50,19 @@ CREWAI_MIN      = ">=1.0.0"
 # uses a unified storage backend.  The tier names are preserved here only for comment
 # generation; they no longer map to importable class names.
 _TIER_COMMENT: dict[str, str] = {
-    "short":  "short-term (unified memory, crewai 1.x)",
-    "long":   "long-term  (unified memory, crewai 1.x)",
+    "short": "short-term (unified memory, crewai 1.x)",
+    "long": "long-term  (unified memory, crewai 1.x)",
     "entity": "entity     (unified memory, crewai 1.x)",
-    "user":   "user       (unified memory, crewai 1.x)",
+    "user": "user       (unified memory, crewai 1.x)",
 }
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
 
+
 def py_str(s: str) -> str:
     """Single-line Python string literal with minimal escaping."""
-    return '"""' + s.replace('\\', '\\\\').replace('"""', '\\"\\"\\"') + '"""'
+    return '"""' + s.replace("\\", "\\\\").replace('"""', '\\"\\"\\"') + '"""'
 
 
 def safe_id(s: str) -> str:
@@ -73,16 +74,27 @@ def dedent0(text: str) -> str:
     return textwrap.dedent(text).lstrip("\n")
 
 
+def crewai_template(s: str) -> str:
+    """Convert itsharness {{$.state.key}} templates to CrewAI {key} placeholders.
+
+    CrewAI's crew.kickoff(inputs={...}) substitutes {key} placeholders in task
+    descriptions.  The spec uses {{$.state.key}} mustache syntax which CrewAI
+    doesn't understand, so we normalise it here during codegen.
+    """
+    return _re.sub(r"\{\{[^}]*\.state\.(\w+)[^}]*\}\}", r"{\1}", s)
+
+
 # ─── Topological sort (Kahn's algorithm) ─────────────────────────────────────
+
 
 def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
-    in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
-    adj: dict[str, list[str]]    = defaultdict(list)
+    in_deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, list[str]] = defaultdict(list)
 
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in id_to_node and tgt in id_to_node:
             adj[src].append(tgt)
             in_deg[tgt] += 1
@@ -113,7 +125,7 @@ def find_parallel_targets(spec: dict) -> set[str]:
     out: set[str] = set()
     for e in spec.get("edges", []):
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in fork_ids:
             out.add(tgt)
     return out
@@ -123,7 +135,7 @@ def build_context_map(edges: list[dict]) -> dict[str, list[str]]:
     """node_id → list of context_from node IDs arriving on that node's incoming edges."""
     ctx: dict[str, list[str]] = defaultdict(list)
     for e in edges:
-        cf  = e.get("context_from", [])
+        cf = e.get("context_from", [])
         tgt = e.get("to", e.get("target", ""))
         if cf and tgt:
             ctx[tgt].extend(cf)
@@ -132,9 +144,10 @@ def build_context_map(edges: list[dict]) -> dict[str, list[str]]:
 
 # ─── Section generators ───────────────────────────────────────────────────────
 
+
 def gen_header(spec: dict) -> str:
-    name   = spec.get("name", spec.get("id", "unknown"))
-    fid    = spec.get("id",   "unknown")
+    name = spec.get("name", spec.get("id", "unknown"))
+    fid = spec.get("id", "unknown")
     nc, ec = len(spec.get("nodes", [])), len(spec.get("edges", []))
     return dedent0(f"""\
         \"\"\"
@@ -161,32 +174,65 @@ def gen_header(spec: dict) -> str:
     """)
 
 
+# Built-in tool implementations: tool_id → (import_line | None, class_body_or_instance_expr)
+# When present the class stub is replaced with a real instantiation.
+# CrewAI 1.x requires crewai.tools.BaseTool instances — langchain BaseTool is rejected.
+# BaseTool is already imported in gen_header(); ddgs is the renamed duckduckgo_search.
+_BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, str]] = {
+    "web_search": (
+        "from ddgs import DDGS as _DDGS",
+        (
+            "class _WebSearchTool(BaseTool):\n"
+            '    name: str = "web_search"\n'
+            '    description: str = "Search the web for recent information on a topic"\n'
+            "    def _run(self, query: str) -> str:\n"
+            "        results = _DDGS().text(query, max_results=5)\n"
+            "        parts = [r.get('title', '') + ': ' + r.get('body', '') for r in (results or [])]\n"
+            "        return '\\n'.join(parts) or 'No results.'\n"
+            "web_search = _WebSearchTool()"
+        ),
+    ),
+}
+
+
 def gen_tools(spec: dict) -> str:
     tools = spec.get("tools", {})
     if not tools:
         return "# (no tools defined)\n"
 
-    lines: list[str] = [
+    import_lines: list[str] = []
+    body_lines: list[str] = [
         "# ─── Tools ──────────────────────────────────────────────────────────────────",
-        "# Stub classes — replace _run with real implementations.",
         "",
     ]
     for tid, tdef in tools.items():
-        vid  = safe_id(tid)
+        vid = safe_id(tid)
         desc = tdef.get("description", tid)
-        ref  = tdef.get("tool_ref", tid)
-        lines += [
-            f"# tool_ref: {ref}",
-            f"class _{vid.capitalize()}Tool(BaseTool):",
-            f"    name: str = {repr(tid)}",
-            f"    description: str = {repr(desc)}",
-            f"    def _run(self, query: str) -> str:",
-            f"        raise NotImplementedError({repr(f'Implement {tid}')})",
-            "",
-            f"{vid} = _{vid.capitalize()}Tool()",
-            "",
-        ]
-    return "\n".join(lines)
+        ref = tdef.get("tool_ref", tid)
+        impl = _BUILTIN_TOOL_IMPLS.get(tid)
+        if impl:
+            imp_line, inst_expr = impl
+            if imp_line:
+                import_lines.append(imp_line)
+            body_lines += [
+                f"# tool_ref: {ref}",
+                inst_expr,
+                "",
+            ]
+        else:
+            body_lines += [
+                f"# tool_ref: {ref}",
+                "# Stub — replace _run with real logic.",
+                f"class _{vid.capitalize()}Tool(BaseTool):",
+                f"    name: str = {tid!r}",
+                f"    description: str = {desc!r}",
+                "    def _run(self, query: str) -> str:",
+                f"        raise NotImplementedError({f'Implement {tid}'!r})",
+                "",
+                f"{vid} = _{vid.capitalize()}Tool()",
+                "",
+            ]
+    return "\n".join(import_lines + ([""] if import_lines else []) + body_lines)
 
 
 def gen_agents(spec: dict) -> str:
@@ -200,32 +246,32 @@ def gen_agents(spec: dict) -> str:
     ]
 
     for a in agents:
-        vid      = safe_id(a["id"])
-        role     = a.get("role", a["id"])
+        vid = safe_id(a["id"])
+        role = a.get("role", a["id"])
         backstory = a.get("backstory", "")
-        goal     = a.get("goal", "")
-        model    = a.get("model", "")
-        a_tools  = [t for t in a.get("tools", []) if t in tool_ids]
-        mem_cfg  = a.get("memory_config", {})
-        use_mem  = any(mem_cfg.values()) if mem_cfg else False
+        goal = a.get("goal", "")
+        model = a.get("model", "")
+        a_tools = [t for t in a.get("tools", []) if t in tool_ids]
+        mem_cfg = a.get("memory_config", {})
+        use_mem = any(mem_cfg.values()) if mem_cfg else False
         max_iter = a.get("max_iter", 10)
-        allow_d  = a.get("allow_delegation", False)
+        allow_d = a.get("allow_delegation", False)
 
         lines.append(f"{vid} = Agent(")
-        lines.append(f"    role={repr(role)},")
-        lines.append(f"    backstory={repr(backstory)},")
-        lines.append(f"    goal={repr(goal)},")
+        lines.append(f"    role={role!r},")
+        lines.append(f"    backstory={backstory!r},")
+        lines.append(f"    goal={goal!r},")
         effective_model = model or model_default
         if effective_model:
-            lines.append(f"    llm=_make_llm({repr(effective_model)}),")
+            lines.append(f"    llm=_make_llm({effective_model!r}),")
         if a_tools:
             lines.append(f"    tools=[{', '.join(safe_id(t) for t in a_tools)}],")
         if use_mem:
-            lines.append(f"    memory=True,")
+            lines.append("    memory=True,")
         lines.append(f"    max_iter={max_iter},")
         lines.append(f"    allow_delegation={allow_d},")
-        lines.append(f"    verbose=True,")
-        lines.append(f")")
+        lines.append("    verbose=True,")
+        lines.append(")")
         lines.append("")
 
     lines += [
@@ -234,7 +280,7 @@ def gen_agents(spec: dict) -> str:
         '    role="Executor",',
         '    backstory="A general-purpose executor that runs non-agent workflow steps.",',
         '    goal="Complete the assigned step accurately and concisely.",',
-        f"    llm=_make_llm({repr(model_default)}),",
+        f"    llm=_make_llm({model_default!r}),",
         "    verbose=True,",
         ")",
         "",
@@ -243,9 +289,9 @@ def gen_agents(spec: dict) -> str:
 
 
 def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
-    agents_by_id   = {a["id"]: a for a in spec.get("agents", [])}
-    parallel_tgts  = find_parallel_targets(spec)
-    ctx_map        = build_context_map(spec.get("edges", []))
+    agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
+    parallel_tgts = find_parallel_targets(spec)
+    ctx_map = build_context_map(spec.get("edges", []))
 
     lines: list[str] = [
         "# ─── Tasks ──────────────────────────────────────────────────────────────────",
@@ -255,9 +301,9 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
     for node in sorted_nodes:
         ntype = node["type"]
-        nid   = node["id"]
-        vid   = safe_id(nid)
-        ctx   = ctx_map.get(nid, [])
+        nid = node["id"]
+        vid = safe_id(nid)
+        ctx = ctx_map.get(nid, [])
         is_parallel = nid in parallel_tgts
 
         log_node_processing(_log, node, flow_id=spec.get("id", "unknown"))
@@ -274,39 +320,48 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             continue
 
         # ── Build task kwargs shared across types ────────────────────────────
-        def emit_task(description: str, expected_output: str, agent_var: str,
-                      extra_lines: list[str] | None = None) -> None:
-            lines.append(f"task_{vid} = Task(")
-            lines.append(f"    description={repr(description)},")
-            lines.append(f"    expected_output={repr(expected_output)},")
-            lines.append(f"    agent={agent_var},")
-            if is_parallel:
-                lines.append(f"    async_execution=True,  # parallel_fork branch")
+        def emit_task(
+            description: str,
+            expected_output: str,
+            agent_var: str,
+            extra_lines: list[str] | None = None,
+            *,
+            _lines: list[str] = lines,
+            _vid: str = vid,
+            _is_parallel: bool = is_parallel,
+            _ctx: list[str] = ctx,
+        ) -> None:
+            _lines.append(f"task_{_vid} = Task(")
+            _lines.append(f"    description={description!r},")
+            _lines.append(f"    expected_output={expected_output!r},")
+            _lines.append(f"    agent={agent_var},")
+            if _is_parallel:
+                _lines.append("    async_execution=True,  # parallel_fork branch")
             if extra_lines:
-                lines.extend(f"    {l}" for l in extra_lines)
+                _lines.extend(f"    {ln}" for ln in extra_lines)
             # ADR-001 RFC-1: context_from → Task.context=[task_a, task_b]
-            if ctx:
-                ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in ctx)
-                lines.append(f"    context=[{ctx_vars}],")
-            lines.append(")")
-            lines.append("")
+            if _ctx:
+                ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in _ctx)
+                _lines.append(f"    context=[{ctx_vars}],")
+            _lines.append(")")
+            _lines.append("")
 
         # ── agent_role ───────────────────────────────────────────────────────
         if ntype == "agent_role":
-            cfg       = node.get("config", {})
+            cfg = node.get("config", {})
             agent_ref = cfg.get("agent_ref", "")
             agent_var = safe_id(agent_ref) if agent_ref in agents_by_id else "_executor"
             if agent_ref and agent_ref not in agents_by_id:
                 warnings.append(f"agent_role '{nid}': agent_ref '{agent_ref}' not in agents[]")
 
-            task_desc = cfg.get("task_description", "Execute agent task.")
-            expected  = cfg.get("expected_output", "Task result.")
+            task_desc = crewai_template(cfg.get("task_description", "Execute agent task."))
+            expected = cfg.get("expected_output", "Task result.")
             out_field = cfg.get("output_field", "")
             human_inp = cfg.get("tool_approval", "auto") == "human"
 
             extra = []
             if out_field:
-                extra.append(f"# output_field={repr(out_field)} — capture via callback or post-process")
+                extra.append(f"# output_field={out_field!r} — capture via callback or post-process")
             if human_inp:
                 extra.append("human_input=True,  # tool_approval=human")
             emit_task(task_desc, expected, agent_var, extra)
@@ -314,21 +369,21 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── agent_debate ─────────────────────────────────────────────────────
         if ntype == "agent_debate":
-            cfg        = node.get("config", {})
-            a_refs     = cfg.get("agents", [])
+            cfg = node.get("config", {})
+            a_refs = cfg.get("agents", [])
             max_rounds = cfg.get("max_rounds", 10)
-            out_field  = cfg.get("output_field", "")
-            a_vars     = " + ".join(f"[{safe_id(a)}]" for a in a_refs if a in agents_by_id)
+            out_field = cfg.get("output_field", "")
+            a_vars = " + ".join(f"[{safe_id(a)}]" for a in a_refs if a in agents_by_id)
             lines += [
                 f"# agent_debate '{nid}' — synthesised as an inner sequential Crew",
-                f"# (CrewAI has no native GroupChat; production should use a loop)",
+                "# (CrewAI has no native GroupChat; production should use a loop)",
                 f"_debate_crew_{vid} = Crew(",
                 f"    agents={a_vars or '[]'},",
-                f"    tasks=[],  # populate debate turn tasks at runtime",
-                f"    process=Process.sequential,",
-                f"    verbose=True,",
+                "    tasks=[],  # populate debate turn tasks at runtime",
+                "    process=Process.sequential,",
+                "    verbose=True,",
                 f"    # max_rounds={max_rounds}",
-                f")",
+                ")",
             ]
             emit_task(
                 f"Orchestrate a {max_rounds}-round debate between agents {a_refs}.",
@@ -344,9 +399,9 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── hitl_breakpoint ──────────────────────────────────────────────────
         if ntype == "hitl_breakpoint":
-            prompt    = node.get("prompt", "Please review and provide input.")
+            prompt = node.get("prompt", "Please review and provide input.")
             timeout_s = node.get("timeout_seconds", 86400)
-            out_key   = node.get("output_key", "")
+            out_key = node.get("output_key", "")
             emit_task(
                 prompt,
                 f"Human reviewer decision.{' Stored in state.' + out_key if out_key else ''}",
@@ -360,16 +415,16 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── llm_call ─────────────────────────────────────────────────────────
         if ntype == "llm_call":
-            sys_p       = node.get("system_prompt", "")
-            prompt      = node.get("prompt_template", "")
-            out_key     = node.get("output_key", "")
+            sys_p = crewai_template(node.get("system_prompt", ""))
+            prompt = crewai_template(node.get("prompt_template", ""))
+            out_key = node.get("output_key", "")
             fail_branch = node.get("fail_branch") or {}
             desc = "\n\n".join(filter(None, [sys_p, prompt])) or "Call LLM with configured prompt."
-            extra: list[str] = []
+            extra = []
             if fail_branch.get("target"):
                 retry = fail_branch.get("retry") or {}
                 max_a = retry.get("max_attempts", 3)
-                extra.append(f"# fail_branch → target={repr(fail_branch['target'])}, max_attempts={max_a}")
+                extra.append(f"# fail_branch → target={fail_branch['target']!r}, max_attempts={max_a}")
                 extra.append(f"# Use Task(max_retries={max_a}) or wrap crew.kickoff() in a try/except")
                 warnings.append(f"llm_call '{nid}': fail_branch.target='{fail_branch['target']}' noted above")
             emit_task(
@@ -382,14 +437,14 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── tool_invoke ──────────────────────────────────────────────────────
         if ntype == "tool_invoke":
-            tool_id     = node.get("tool_id", "")
-            tool_ref    = f"[{safe_id(tool_id)}]" if tool_id else "[]"
+            tool_id = node.get("tool_id", "")
+            tool_ref = f"[{safe_id(tool_id)}]" if tool_id else "[]"
             fail_branch = node.get("fail_branch") or {}
             extra = [f"tools={tool_ref},"]
             if fail_branch.get("target"):
                 retry = fail_branch.get("retry") or {}
                 max_a = retry.get("max_attempts", 3)
-                extra.append(f"# fail_branch → target={repr(fail_branch['target'])}, max_attempts={max_a}")
+                extra.append(f"# fail_branch → target={fail_branch['target']!r}, max_attempts={max_a}")
                 warnings.append(f"tool_invoke '{nid}': fail_branch.target='{fail_branch['target']}' noted above")
             emit_task(
                 f"Invoke tool '{tool_id}' with the current state inputs.",
@@ -402,13 +457,13 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
         # ── memory_read ──────────────────────────────────────────────────────
         if ntype == "memory_read":
             store_id = node.get("store_id", "")
-            mode     = node.get("retrieval_mode", "key_value")
-            out_key  = node.get("output_key", "")
+            mode = node.get("retrieval_mode", "key_value")
+            out_key = node.get("output_key", "")
             emit_task(
                 f"Read from memory store '{store_id}' using {mode} retrieval.",
                 f"Retrieved content.{' Stored in state.' + out_key if out_key else ''}",
                 "_executor",
-                [f"# CrewAI uses built-in agent memory — configure via Agent(memory=True)"],
+                ["# CrewAI uses built-in agent memory — configure via Agent(memory=True)"],
             )
             continue
 
@@ -417,7 +472,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             store_id = node.get("store_id", "")
             key_expr = node.get("key_expr", "")
             val_expr = node.get("value_expr", "")
-            tier     = node.get("tier", "short")
+            tier = node.get("tier", "short")
             emit_task(
                 f"Write to memory store '{store_id}': key={key_expr}, value={val_expr}.",
                 "Memory write confirmed.",
@@ -428,15 +483,13 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── transform ────────────────────────────────────────────────────────
         if ntype == "transform":
-            mode    = node.get("mode", "mapping")
-            fn_ref  = node.get("fn_ref", "")
+            mode = node.get("mode", "mapping")
+            fn_ref = node.get("fn_ref", "")
             mapping = node.get("mapping", [])
             if mode == "fn_ref" and fn_ref:
                 desc = f"Transform state using function ref '{fn_ref}'."
             elif mapping:
-                pairs = "; ".join(
-                    f"{m.get('from','')}→{m.get('to','')}" for m in mapping[:4]
-                )
+                pairs = "; ".join(f"{m.get('from', '')}→{m.get('to', '')}" for m in mapping[:4])
                 desc = f"Map state fields: {pairs}."
             else:
                 desc = "Transform the current state."
@@ -445,11 +498,9 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── condition ────────────────────────────────────────────────────────
         if ntype == "condition":
-            branches    = node.get("branches", [])
-            def_target  = node.get("default_target", "")
-            branch_list = [b.get("target", "") for b in branches] + (
-                [f"{def_target} (default)"] if def_target else []
-            )
+            branches = node.get("branches", [])
+            def_target = node.get("default_target", "")
+            branch_list = [b.get("target", "") for b in branches] + ([f"{def_target} (default)"] if def_target else [])
             emit_task(
                 "Evaluate conditions and return the name of the branch to follow.",
                 f"One of: {', '.join(filter(None, branch_list))}.",
@@ -464,7 +515,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
         # ── parallel_join ────────────────────────────────────────────────────
         if ntype == "parallel_join":
             wait_for = node.get("wait_for", "all")
-            reducer  = node.get("join_reducer", "merge")
+            reducer = node.get("join_reducer", "merge")
             emit_task(
                 f"Collect and merge parallel branch results (wait_for={wait_for}, reducer={reducer}).",
                 "Merged state from all parallel branches.",
@@ -482,8 +533,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 [f"# Load and kickoff a nested Crew for flow_ref='{flow_ref}'"],
             )
             warnings.append(
-                f"subgraph '{nid}': flow_ref='{flow_ref}' — compile and invoke "
-                f"as a nested Crew.kickoff() call"
+                f"subgraph '{nid}': flow_ref='{flow_ref}' — compile and invoke as a nested Crew.kickoff() call"
             )
             continue
 
@@ -500,26 +550,22 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
 def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
-    flow_config  = spec.get("flow_config", {})
+    flow_config = spec.get("flow_config", {})
     process_type = flow_config.get("process_type", "sequential")
-    manager_ref  = flow_config.get("manager_agent_ref", "")
-    checkpoint   = flow_config.get("checkpoint", {})
-    telemetry    = flow_config.get("telemetry", {})
+    manager_ref = flow_config.get("manager_agent_ref", "")
+    checkpoint = flow_config.get("checkpoint", {})
+    telemetry = flow_config.get("telemetry", {})
 
     process_map = {
-        "sequential":   "Process.sequential",
+        "sequential": "Process.sequential",
         "hierarchical": "Process.hierarchical",
-        "consensual":   "Process.sequential",   # no direct equivalent
+        "consensual": "Process.sequential",  # no direct equivalent
     }
     process_val = process_map.get(process_type, "Process.sequential")
 
     # Collect task vars (skip input/output/annotation/parallel_fork — they have no task_*)
     skip_types = {"input", "output", "annotation", "parallel_fork"}
-    task_vars  = [
-        f"task_{safe_id(n['id'])}"
-        for n in sorted_nodes
-        if n["type"] not in skip_types
-    ]
+    task_vars = [f"task_{safe_id(n['id'])}" for n in sorted_nodes if n["type"] not in skip_types]
     agent_vars = [safe_id(a["id"]) for a in spec.get("agents", [])] + ["_executor"]
 
     lines: list[str] = [
@@ -534,7 +580,7 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     if process_type == "hierarchical" and manager_ref in agents_by_id:
         lines.append(f"    manager_agent={safe_id(manager_ref)},")
     if process_type == "consensual":
-        lines.append(f"    # process_type=consensual → no direct equivalent; using sequential")
+        lines.append("    # process_type=consensual → no direct equivalent; using sequential")
     if checkpoint.get("enabled"):
         backend = checkpoint.get("backend", "memory")
         lines.append(f"    memory=True,  # checkpoint.backend={backend}")
@@ -543,11 +589,7 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     # The old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory constructor
     # args are gone.  If memory_write nodes request specific tiers, enable
     # memory=True (idempotent if checkpoint already set it) and emit a comment.
-    used_tiers = {
-        n.get("tier", "short")
-        for n in spec.get("nodes", [])
-        if n["type"] == "memory_write"
-    }
+    used_tiers = {n.get("tier", "short") for n in spec.get("nodes", []) if n["type"] == "memory_write"}
     if used_tiers and not checkpoint.get("enabled"):
         lines.append("    memory=True,  # memory_write nodes present — unified memory (crewai 1.x)")
     for tier in sorted(used_tiers):
@@ -560,28 +602,26 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     lines += ["    verbose=True,", ")", ""]
 
     # Derive example kickoff inputs from state_schema.required
-    state_schema   = spec.get("state_schema", {})
-    required_flds  = state_schema.get("required", [])
-    props          = state_schema.get("properties", {})
-    example_inputs = {
-        f: f"<{props.get(f, {}).get('type', 'str')}>"
-        for f in required_flds
-    }
+    state_schema = spec.get("state_schema", {})
+    required_flds = state_schema.get("required", [])
+    props = state_schema.get("properties", {})
+    example_inputs = {f: f"<{props.get(f, {}).get('type', 'str')}>" for f in required_flds}
 
     lines += [
         "",
         "# ─── Kickoff ─────────────────────────────────────────────────────────────────",
         "",
         "if __name__ == '__main__':",
-        f"    result = crew.kickoff(",
+        "    result = crew.kickoff(",
         f"        inputs={repr(example_inputs) if example_inputs else '{}'},",
-        f"    )",
-        f"    print(result)",
+        "    )",
+        "    print(result)",
     ]
     return "\n".join(lines)
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+
 
 def compile_crewai(spec: dict) -> tuple[str, list[str]]:
     """

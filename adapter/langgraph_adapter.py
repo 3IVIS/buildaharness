@@ -30,28 +30,27 @@ from __future__ import annotations
 import json
 import textwrap
 from collections import defaultdict, deque
-from typing import Any
 
 from adapter_logger import (
     get_adapter_logger,
-    log_compile_start,
     log_compile_end,
     log_compile_error,
+    log_compile_start,
     log_empty_spec,
     log_node_processing,
-    log_node_warning,
-    log_topo_sort,
     log_section,
+    log_topo_sort,
 )
 
 _log = get_adapter_logger("langgraph")
 
 ADAPTER_VERSION = "0.1.0"
-LG_MIN          = ">=0.2.0"
-LCX_OPENAI_MIN  = ">=0.2.0"
+LG_MIN = ">=0.2.0"
+LCX_OPENAI_MIN = ">=0.2.0"
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
+
 
 def safe_id(s: str) -> str:
     """Convert any node/agent ID to a valid Python identifier."""
@@ -69,15 +68,16 @@ def py_str(s: str) -> str:
 
 # ─── Graph analysis ───────────────────────────────────────────────────────────
 
+
 def topo_sort(nodes: list[dict], edges: list[dict], flow_id: str = "") -> list[dict]:
     """Kahn's topological sort; returns nodes in execution order."""
     id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
-    in_deg: dict[str, int]       = {n["id"]: 0 for n in nodes}
-    adj: dict[str, list[str]]    = defaultdict(list)
+    in_deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    adj: dict[str, list[str]] = defaultdict(list)
 
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in id_to_node and tgt in id_to_node:
             adj[src].append(tgt)
             in_deg[tgt] += 1
@@ -109,7 +109,7 @@ def build_adjacency(nodes: list[dict], edges: list[dict]) -> tuple[dict, dict]:
     bwd: dict[str, list[str]] = defaultdict(list)
     for e in edges:
         src = e.get("from", e.get("source", ""))
-        tgt = e.get("to",   e.get("target", ""))
+        tgt = e.get("to", e.get("target", ""))
         if src in ids and tgt in ids:
             fwd[src].append(tgt)
             bwd[tgt].append(src)
@@ -120,7 +120,7 @@ def build_context_map(edges: list[dict]) -> dict[str, list[str]]:
     """target_node_id → [source_node_ids from context_from fields]."""
     ctx: dict[str, list[str]] = defaultdict(list)
     for e in edges:
-        cf  = e.get("context_from", [])
+        cf = e.get("context_from", [])
         tgt = e.get("to", e.get("target", ""))
         if cf and tgt:
             ctx[tgt].extend(cf)
@@ -151,9 +151,10 @@ def build_output_key_map(nodes: list[dict]) -> dict[str, str | None]:
 
 # ─── Code section generators ──────────────────────────────────────────────────
 
+
 def gen_header(spec: dict) -> str:
-    name   = spec.get("name", spec.get("id", "unknown"))
-    fid    = spec.get("id",   "unknown")
+    name = spec.get("name", spec.get("id", "unknown"))
+    fid = spec.get("id", "unknown")
     nc, ec = len(spec.get("nodes", [])), len(spec.get("edges", []))
     return dedent0(f"""\
         \"\"\"
@@ -170,9 +171,35 @@ def gen_header(spec: dict) -> str:
     """)
 
 
+# Built-in marketplace tool implementations keyed by tool_id.
+# Each entry: (import_line | None, instantiation_expression)
+# The instantiation expression becomes:  <tool_id_var> = <expr>
+_BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, str]] = {
+    "web_search": (
+        "from langchain_community.tools import DuckDuckGoSearchRun",
+        "DuckDuckGoSearchRun()",
+    ),
+    "slack_notifier": (
+        "from langchain_community.tools.slack.base import SlackTool",
+        "SlackTool()",
+    ),
+    "github_issues": (
+        "from langchain_community.agent_toolkits.github.toolkit import GitHubToolkit\n"
+        "from langchain_community.utilities.github import GitHubAPIWrapper",
+        "GitHubToolkit.from_github_api_wrapper(GitHubAPIWrapper()).get_tools()[0]",
+    ),
+    "sql_query": (
+        "from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool\n"
+        "from langchain_community.utilities import SQLDatabase",
+        "QuerySQLDatabaseTool(db=SQLDatabase.from_uri(os.environ['DATABASE_URL']))",
+    ),
+}
+
+
 def gen_imports(spec: dict) -> str:
     nodes = spec.get("nodes", [])
     types = {n["type"] for n in nodes}
+    tools = spec.get("tools") or {}
 
     # NOTE: do NOT add `from __future__ import annotations` here.
     # The generated code is exec()'d with a bare namespace dict; that dict
@@ -201,6 +228,11 @@ def gen_imports(spec: dict) -> str:
     checkpoint = (spec.get("flow_config") or {}).get("checkpoint") or {}
     if checkpoint.get("enabled"):
         lines.append("from langgraph.checkpoint.memory import MemorySaver")
+
+    for tid in tools:
+        impl = _BUILTIN_TOOL_IMPLS.get(tid)
+        if impl and impl[0]:
+            lines.append(impl[0])
 
     lines.append("")
     return "\n".join(lines)
@@ -261,19 +293,19 @@ def gen_helpers() -> str:
 def gen_state_typeddict(spec: dict) -> str:
     """Generate FlowState TypedDict from state_schema."""
     state_schema = spec.get("state_schema") or {}
-    props        = state_schema.get("properties") or {}
+    props = state_schema.get("properties") or {}
 
     type_map = {
-        "string":  "str",
-        "number":  "float",
+        "string": "str",
+        "number": "float",
         "integer": "int",
         "boolean": "bool",
-        "object":  "dict",
-        "array":   "list",
+        "object": "dict",
+        "array": "list",
     }
-    reducer_map = {
+    _reducer_map = {
         "append": "Annotated[list, operator.add]",
-        "merge":  "dict",  # adapters handle merge semantics
+        "merge": "dict",  # adapters handle merge semantics
     }
 
     lines = [
@@ -286,10 +318,10 @@ def gen_state_typeddict(spec: dict) -> str:
         lines.append("    pass")
     else:
         for field, pdef in props.items():
-            reducer  = pdef.get("reducer", "replace")
+            reducer = pdef.get("reducer", "replace")
             raw_type = pdef.get("type", "string")
-            desc     = pdef.get("description", "")
-            comment  = f"  # {desc}" if desc else ""
+            desc = pdef.get("description", "")
+            comment = f"  # {desc}" if desc else ""
 
             if reducer == "append":
                 py_type = "Annotated[list, operator.add]"
@@ -316,10 +348,10 @@ def gen_memory_stores(spec: dict) -> str:
         "",
     ]
     for sid, sdef in stores.items():
-        stype   = sdef.get("type", "key_value")
+        stype = sdef.get("type", "key_value")
         backend = sdef.get("backend", "memory")
-        conn    = sdef.get("connection_env", "")
-        desc    = sdef.get("description", "")
+        conn = sdef.get("connection_env", "")
+        desc = sdef.get("description", "")
         lines.append(
             f"# store '{sid}': type={stype}, backend={backend}"
             + (f", conn_env={conn}" if conn else "")
@@ -336,32 +368,37 @@ def gen_tools(spec: dict) -> str:
 
     lines = [
         "# ─── Tools ───────────────────────────────────────────────────────────────────",
-        "# Stub implementations — replace raise with real logic.",
         "",
     ]
     for tid, tdef in tools.items():
-        vid    = safe_id(tid)
-        desc   = tdef.get("description", tid)
-        ref    = tdef.get("tool_ref", tid)
+        vid = safe_id(tid)
+        desc = tdef.get("description", tid)
+        ref = tdef.get("tool_ref", tid)
         source = tdef.get("source", "npm")
-        lines += [
-            f"# tool_ref: {ref}  source: {source}",
-            f"@tool",
-            f"def {vid}(query: str) -> str:",
-            f"    {py_str(desc)}",
-            f"    raise NotImplementedError({repr(f'Implement {tid}')})",
-            "",
-        ]
+        impl = _BUILTIN_TOOL_IMPLS.get(tid)
+        if impl:
+            _, expr = impl
+            lines += [
+                f"# tool_ref: {ref}  source: {source}",
+                f"{vid} = {expr}",
+                "",
+            ]
+        else:
+            lines += [
+                f"# tool_ref: {ref}  source: {source}",
+                "# Stub — replace raise with real logic.",
+                "@tool",
+                f"def {vid}(query: str) -> str:",
+                f"    {py_str(desc)}",
+                f"    raise NotImplementedError({f'Implement {tid}'!r})",
+                "",
+            ]
     return "\n".join(lines)
-
 
 
 def _fn(label: str, vid: str, body: str) -> str:
     """Wrap a body string (0-indent) in a properly indented node function."""
-    indented = "\n".join(
-        "    " + line if line.strip() else ""
-        for line in body.rstrip().splitlines()
-    )
+    indented = "\n".join("    " + line if line.strip() else "" for line in body.rstrip().splitlines())
     return f"# {label}\ndef node_{vid}(state: FlowState) -> dict:\n{indented}\n"
 
 
@@ -381,13 +418,13 @@ def gen_node_function(
     _fn() adds the 4-space function-body indent before returning.
     """
     ntype = node["type"]
-    nid   = node["id"]
-    vid   = safe_id(nid)
+    nid = node["id"]
+    vid = safe_id(nid)
     label = node.get("label", nid)
 
     log_node_processing(_log, node, flow_id=spec.get("id", "unknown"))
-    model_default  = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
-    agents_by_id   = {a["id"]: a for a in (spec.get("agents") or [])}
+    model_default = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
+    agents_by_id = {a["id"]: a for a in (spec.get("agents") or [])}
     tools_registry = spec.get("tools") or {}
 
     # context_from annotation — 0-indent comment lines prepended to every body
@@ -398,12 +435,11 @@ def gen_node_function(
         for src in ctx_sources:
             src_key = output_key_map.get(src)
             if src_key:
-                ctx_lines.append(f"#   → state[{repr(src_key)}]  (output_key of '{src}')")
+                ctx_lines.append(f"#   → state[{src_key!r}]  (output_key of '{src}')")
             else:
                 ctx_lines.append(f"#   → '{src}' has no output_key — nothing explicit to inject")
                 warnings.append(
-                    f"context_from on edge to '{nid}': source '{src}' has no output_key "
-                    f"— nothing to inject (ADR-001)"
+                    f"context_from on edge to '{nid}': source '{src}' has no output_key — nothing to inject (ADR-001)"
                 )
     ctx = ("\n".join(ctx_lines) + "\n") if ctx_lines else ""
 
@@ -422,43 +458,39 @@ def gen_node_function(
 
     # ── llm_call ──────────────────────────────────────────────────────────────
     if ntype == "llm_call":
-        sys_p       = node.get("system_prompt", "You are a helpful assistant.")
+        sys_p = node.get("system_prompt", "You are a helpful assistant.")
         prompt_tmpl = node.get("prompt_template", "{{$.state.input}}")
-        out_key     = node.get("output_key")
-        model       = node.get("model", model_default)
-        params      = node.get("model_params") or {}
-        temp        = params.get("temperature", 0.7)
-        max_tok     = params.get("max_tokens", 1024)
-        struct      = node.get("structured_output")
+        out_key = node.get("output_key")
+        model = node.get("model", model_default)
+        params = node.get("model_params") or {}
+        temp = params.get("temperature", 0.7)
+        max_tok = params.get("max_tokens", 1024)
+        struct = node.get("structured_output")
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
         if not out_key and not struct:
             warnings.append(
-                f"llm_call '{nid}' has no output_key and no structured_output — "
-                f"result will be discarded (ADR-001)"
+                f"llm_call '{nid}' has no output_key and no structured_output — result will be discarded (ADR-001)"
             )
 
-        ret = f"return {{{repr(out_key)}: response.content}}" if out_key else "return {}"
+        ret = f"return {{{out_key!r}: response.content}}" if out_key else "return {}"
 
         core_lines = [
-            f"llm = _make_llm({repr(model)}, temperature={temp}, max_tokens={max_tok})",
-            f"messages = [",
+            f"llm = _make_llm({model!r}, temperature={temp}, max_tokens={max_tok})",
+            "messages = [",
             f"    SystemMessage(content={py_str(sys_p)}),",
             f"    HumanMessage(content=_render({py_str(prompt_tmpl)}, state)),",
-            f"]",
-            f"response = llm.invoke(messages)",
+            "]",
+            "response = llm.invoke(messages)",
             ret,
         ]
         core = "\n".join(core_lines)
 
         if fb_target:
-            warnings.append(
-                f"llm_call '{nid}': fail_branch.target='{fb_target}' → "
-                f"retry wrapper emitted"
-            )
-            inner = "\n".join("    " + l for l in core_lines)
+            warnings.append(f"llm_call '{nid}': fail_branch.target='{fb_target}' → retry wrapper emitted")
+            inner = "\n".join("    " + ln for ln in core_lines)
             body = (
                 f"{ctx}"
                 f"for _attempt in range({fb_retry}):\n"
@@ -467,7 +499,7 @@ def gen_node_function(
                 f"    except Exception as _e:\n"
                 f"        if _attempt == {fb_retry} - 1:\n"
                 f"            err = RuntimeError(str(_e))\n"
-                f"            err.fail_target = {repr(fb_target)}  # type: ignore[attr-defined]\n"
+                f"            err.fail_target = {fb_target!r}  # type: ignore[attr-defined]\n"
                 f"            raise err\n"
             )
         else:
@@ -477,15 +509,15 @@ def gen_node_function(
 
     # ── tool_invoke ───────────────────────────────────────────────────────────
     if ntype == "tool_invoke":
-        tool_id     = node.get("tool_id", "")
-        tool_var    = safe_id(tool_id) if tool_id in tools_registry else "_missing_tool"
-        input_map   = node.get("input_map") or {}
-        output_map  = node.get("output_map") or {}
+        tool_id = node.get("tool_id", "")
+        tool_var = safe_id(tool_id) if tool_id in tools_registry else "_missing_tool"
+        input_map = node.get("input_map") or {}
+        output_map = node.get("output_map") or {}
         fail_branch = node.get("fail_branch") or {}
-        fb_target   = fail_branch.get("target", "")
-        fb_retry    = (fail_branch.get("retry") or {}).get("max_attempts", 3)
+        fb_target = fail_branch.get("target", "")
+        fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
-        in_expr  = repr(input_map) if input_map else "{'query': str(state)}"
+        in_expr = repr(input_map) if input_map else "{'query': str(state)}"
         out_expr = repr(output_map) if output_map else "{'result': result}"
 
         if fb_target:
@@ -499,22 +531,18 @@ def gen_node_function(
                 f"    except Exception as _e:\n"
                 f"        if _attempt == {fb_retry} - 1:\n"
                 f"            err = RuntimeError(str(_e))\n"
-                f"            err.fail_target = {repr(fb_target)}  # type: ignore[attr-defined]\n"
+                f"            err.fail_target = {fb_target!r}  # type: ignore[attr-defined]\n"
                 f"            raise err\n"
             )
         else:
-            body = (
-                f"{ctx}"
-                f"result = {tool_var}.invoke({in_expr})\n"
-                f"return {out_expr}\n"
-            )
+            body = f"{ctx}result = {tool_var}.invoke({in_expr})\nreturn {out_expr}\n"
 
         return _fn(label, vid, body)
 
     # ── transform ─────────────────────────────────────────────────────────────
     if ntype == "transform":
-        mode    = node.get("mode", "mapping")
-        fn_ref  = node.get("fn_ref", "")
+        mode = node.get("mode", "mapping")
+        fn_ref = node.get("fn_ref", "")
         mapping = node.get("mapping") or []
 
         if mode == "fn_ref" and fn_ref:
@@ -523,16 +551,16 @@ def gen_node_function(
                 f"{ctx}"
                 f"# fn_ref: {fn_ref}\n"
                 f"import importlib\n"
-                f"_mod  = importlib.import_module({repr(parts[0])})\n"
-                f"return _mod.__dict__[{repr(parts[1])}](dict(state))\n"
+                f"_mod  = importlib.import_module({parts[0]!r})\n"
+                f"return _mod.__dict__[{parts[1]!r}](dict(state))\n"
             )
         elif mapping:
             map_lines = [f"{ctx}out: dict = {{}}"]
             for m in mapping:
-                frm  = m.get("from", "")
-                to   = m.get("to", "")
+                frm = m.get("from", "")
+                to = m.get("to", "")
                 to_k = to.split(".")[-1] if "." in to else to
-                map_lines.append(f"out[{repr(to_k)}] = _resolve(state, {repr(frm)})")
+                map_lines.append(f"out[{to_k!r}] = _resolve(state, {frm!r})")
             map_lines.append("return out")
             body = "\n".join(map_lines)
         else:
@@ -542,101 +570,101 @@ def gen_node_function(
 
     # ── hitl_breakpoint ───────────────────────────────────────────────────────
     if ntype == "hitl_breakpoint":
-        prompt     = node.get("prompt", "Please review and provide input.")
-        out_key    = node.get("output_key") or (safe_id(nid) + "_resume")
+        prompt = node.get("prompt", "Please review and provide input.")
+        out_key = node.get("output_key") or (safe_id(nid) + "_resume")
         resume_sch = node.get("resume_schema") or {}
-        timeout_s  = node.get("timeout_seconds", 86400)
+        timeout_s = node.get("timeout_seconds", 86400)
         on_timeout = node.get("on_timeout", "raise")
-        fields     = ", ".join(repr(k) for k in (resume_sch.get("properties") or {}))
+        fields = ", ".join(repr(k) for k in (resume_sch.get("properties") or {}))
 
         body = (
             f"{ctx}"
             f"# interrupt(): suspends execution; resumed via graph.update_state()\n"
-            f"# timeout_seconds={timeout_s}, on_timeout={repr(on_timeout)}\n"
+            f"# timeout_seconds={timeout_s}, on_timeout={on_timeout!r}\n"
             f"resume_payload = interrupt({{\n"
             f"    'prompt': {py_str(prompt)},\n"
             f"    'resume_schema_fields': [{fields}],\n"
             f"}})\n"
-            f"return {{{repr(out_key)}: resume_payload}}\n"
+            f"return {{{out_key!r}: resume_payload}}\n"
         )
         return _fn(label, vid, body)
 
     # ── memory_read ───────────────────────────────────────────────────────────
     if ntype == "memory_read":
         store_id = node.get("store_id", "")
-        mode     = node.get("retrieval_mode", "key_value")
+        mode = node.get("retrieval_mode", "key_value")
         key_expr = node.get("key_expr", "")
-        q_expr   = node.get("query_expr", "")
-        top_k    = node.get("top_k", 5)
-        min_sc   = node.get("min_score")
-        out_key  = node.get("output_key", "retrieved")
+        q_expr = node.get("query_expr", "")
+        top_k = node.get("top_k", 5)
+        min_sc = node.get("min_score")
+        out_key = node.get("output_key", "retrieved")
 
         if mode == "semantic":
             min_sc_comment = f"# filter: min_score={min_sc}\n" if min_sc else ""
             body = (
                 f"{ctx}"
-                f"# memory_read: semantic retrieval from store {repr(store_id)}\n"
+                f"# memory_read: semantic retrieval from store {store_id!r}\n"
                 f"# query_expr resolved via _resolve() — bare JSONPath (ADR-001)\n"
-                f"query = _resolve(state, {repr(q_expr)})\n"
+                f"query = _resolve(state, {q_expr!r})\n"
                 f"# TODO: replace _store_get with your vector store:\n"
                 f"#   results = your_vector_store.similarity_search(query, k={top_k})\n"
                 f"{min_sc_comment}"
-                f"results = _store_get({repr(store_id)}, str(query))\n"
-                f"return {{{repr(out_key)}: results}}\n"
+                f"results = _store_get({store_id!r}, str(query))\n"
+                f"return {{{out_key!r}: results}}\n"
             )
         else:
             body = (
                 f"{ctx}"
-                f"# memory_read: key-value retrieval from store {repr(store_id)}\n"
-                f"key   = _resolve(state, {repr(key_expr)})\n"
-                f"value = _store_get({repr(store_id)}, key)\n"
-                f"return {{{repr(out_key)}: value}}\n"
+                f"# memory_read: key-value retrieval from store {store_id!r}\n"
+                f"key   = _resolve(state, {key_expr!r})\n"
+                f"value = _store_get({store_id!r}, key)\n"
+                f"return {{{out_key!r}: value}}\n"
             )
         return _fn(label, vid, body)
 
     # ── memory_write ──────────────────────────────────────────────────────────
     if ntype == "memory_write":
-        store_id   = node.get("store_id", "")
-        key_expr   = node.get("key_expr", "")
-        val_expr   = node.get("value_expr", "")
+        store_id = node.get("store_id", "")
+        key_expr = node.get("key_expr", "")
+        val_expr = node.get("value_expr", "")
         write_mode = node.get("write_mode", "upsert")
-        tier       = node.get("tier", "short")
-        overwrite  = write_mode == "overwrite"
+        tier = node.get("tier", "short")
+        overwrite = write_mode == "overwrite"
 
         body = (
             f"{ctx}"
-            f"# memory_write: store={repr(store_id)}, tier={repr(tier)} (ADR-001 RFC-2)\n"
-            f"key   = _resolve(state, {repr(key_expr)})\n"
-            f"value = _resolve(state, {repr(val_expr)})\n"
-            f"_store_set({repr(store_id)}, key, value, overwrite={overwrite})\n"
+            f"# memory_write: store={store_id!r}, tier={tier!r} (ADR-001 RFC-2)\n"
+            f"key   = _resolve(state, {key_expr!r})\n"
+            f"value = _resolve(state, {val_expr!r})\n"
+            f"_store_set({store_id!r}, key, value, overwrite={overwrite})\n"
             f"return {{}}\n"
         )
         return _fn(label, vid, body)
 
     # ── parallel_join ─────────────────────────────────────────────────────────
     if ntype == "parallel_join":
-        wait_for    = node.get("wait_for", "all")
-        reducer     = node.get("join_reducer", "merge")
-        out_key     = node.get("output_key")
+        wait_for = node.get("wait_for", "all")
+        reducer = node.get("join_reducer", "merge")
+        out_key = node.get("output_key")
         join_fn_ref = node.get("join_fn_ref", "")
 
         if reducer == "fn_ref" and join_fn_ref:
-            parts   = join_fn_ref.rsplit(":", 1) if ":" in join_fn_ref else (join_fn_ref, "join")
+            parts = join_fn_ref.rsplit(":", 1) if ":" in join_fn_ref else (join_fn_ref, "join")
             # Fix: `import importlib` must appear in the generated body. transform already
             # emits `import importlib` as a statement; parallel_join used importlib inline
             # without importing it, causing NameError at runtime.
-            m_expr  = f"importlib.import_module({repr(parts[0])}).__dict__[{repr(parts[1])}](list(state.values()))"
+            m_expr = f"importlib.import_module({parts[0]!r}).__dict__[{parts[1]!r}](list(state.values()))"
         elif reducer == "append":
-            m_expr  = "[v for v in state.values() if v is not None]"
+            m_expr = "[v for v in state.values() if v is not None]"
         else:
-            m_expr  = "{k: v for k, v in state.items()}"
+            m_expr = "{k: v for k, v in state.items()}"
 
-        ret = f"return {{{repr(out_key)}: merged}}" if out_key else "return merged if isinstance(merged, dict) else {}"
+        ret = f"return {{{out_key!r}: merged}}" if out_key else "return merged if isinstance(merged, dict) else {}"
         body = (
             f"{ctx}"
-            f"# parallel_join: wait_for={repr(wait_for)}, reducer={repr(reducer)}\n"
+            f"# parallel_join: wait_for={wait_for!r}, reducer={reducer!r}\n"
             f"# LangGraph already merges parallel branch state; apply extra logic here.\n"
-            + (f"import importlib\n" if reducer == "fn_ref" and join_fn_ref else "")
+            + ("import importlib\n" if reducer == "fn_ref" and join_fn_ref else "")
             + f"merged = {m_expr}\n"
             f"{ret}\n"
         )
@@ -644,20 +672,20 @@ def gen_node_function(
 
     # ── agent_role ────────────────────────────────────────────────────────────
     if ntype == "agent_role":
-        cfg        = node.get("config") or {}
-        agent_ref  = cfg.get("agent_ref", "")
-        task_desc  = cfg.get("task_description", "Complete the task.")
-        expected   = cfg.get("expected_output", "")
-        out_field  = cfg.get("output_field", safe_id(nid) + "_result")
-        mem_acc    = cfg.get("memory_access", "isolated")
-        tool_appr  = cfg.get("tool_approval", "auto")
+        cfg = node.get("config") or {}
+        agent_ref = cfg.get("agent_ref", "")
+        task_desc = cfg.get("task_description", "Complete the task.")
+        expected = cfg.get("expected_output", "")
+        out_field = cfg.get("output_field", safe_id(nid) + "_result")
+        mem_acc = cfg.get("memory_access", "isolated")
+        tool_appr = cfg.get("tool_approval", "auto")
 
-        agent_def   = agents_by_id.get(agent_ref) or {}
-        model       = agent_def.get("model", model_default)
-        role        = agent_def.get("role", agent_ref or "specialist")
-        goal        = agent_def.get("goal", "")
+        agent_def = agents_by_id.get(agent_ref) or {}
+        model = agent_def.get("model", model_default)
+        role = agent_def.get("role", agent_ref or "specialist")
+        goal = agent_def.get("goal", "")
         agent_tools = [safe_id(t) for t in (agent_def.get("tools") or []) if t in tools_registry]
-        tools_arg   = f"[{', '.join(agent_tools)}]" if agent_tools else "[]"
+        tools_arg = f"[{', '.join(agent_tools)}]" if agent_tools else "[]"
 
         warnings.append(
             f"agent_role '{nid}': expanded to ReAct sub-graph via create_react_agent "
@@ -668,48 +696,68 @@ def gen_node_function(
         if tool_appr == "human":
             hitl_lines = (
                 f"# tool_approval=human — pause for approval before tool calls (ADR-001 Q29)\n"
-                f"_approval = interrupt({{'prompt': 'Approve tool calls for {agent_ref}?', 'agent': {repr(agent_ref)}}})\n"
+                f"_approval = interrupt({{'prompt': 'Approve tool calls for {agent_ref}?', 'agent': {agent_ref!r}}})\n"
                 f"if not _approval.get('approved', True):\n"
-                f"    return {{{repr(out_field)}: 'Tool call rejected by human reviewer.'}}\n"
+                f"    return {{{out_field!r}: 'Tool call rejected by human reviewer.'}}\n"
             )
 
         system_msg = f"You are {role}. {goal}".strip()
+
+        # Build context injection from context_from sources using shared LangGraph state.
+        ctx_inject = ""
+        if ctx_sources:
+            ctx_inject = "_ctx_parts = []\n"
+            for src in ctx_sources:
+                src_key = output_key_map.get(src)
+                if src_key:
+                    ctx_inject += (
+                        f"if state.get({src_key!r}): _ctx_parts.append({src_key + ': '!r} + str(state[{src_key!r}]))\n"
+                    )
+            ctx_inject += (
+                "_ctx_str = ('\\n\\nContext from prior steps:\\n' + '\\n\\n'.join(_ctx_parts)) if _ctx_parts else ''\n"
+            )
+            system_expr = f"{py_str(system_msg)} + _ctx_str"
+        else:
+            system_expr = py_str(system_msg)
+
         body = (
             f"{ctx}"
             f"{hitl_lines}"
-            f"# agent_role → agent_ref={repr(agent_ref)}, memory_access={repr(mem_acc)}\n"
+            f"# agent_role → agent_ref={agent_ref!r}, memory_access={mem_acc!r}\n"
             f"# Expands to ReAct sub-graph in LangGraph (ADR-001 Q10)\n"
-            f"_llm   = _make_llm({repr(model)})\n"
+            f"_llm   = _make_llm({model!r})\n"
             f"_agent = create_react_agent(_llm, {tools_arg})\n"
             f"_task  = _render({py_str(task_desc)}, state)\n"
+            f"{ctx_inject}"
             f"_out   = _agent.invoke({{\n"
-            f"    'messages': [SystemMessage(content={py_str(system_msg)}), HumanMessage(content=_task)]\n"
+            f"    'messages': [SystemMessage(content={system_expr}), HumanMessage(content=_task)]\n"
             f"}})\n"
-            f"# expected_output: {repr(expected)}\n"
+            f"# expected_output: {expected!r}\n"
             f"_final = _out['messages'][-1].content if _out.get('messages') else ''\n"
-            f"return {{{repr(out_field)}: _final}}\n"
+            f"return {{{out_field!r}: _final}}\n"
         )
         return _fn(label, vid, body)
 
     # ── agent_debate ──────────────────────────────────────────────────────────
     if ntype == "agent_debate":
-        cfg        = node.get("config") or {}
-        a_refs     = cfg.get("agents") or []
+        cfg = node.get("config") or {}
+        a_refs = cfg.get("agents") or []
         max_rounds = cfg.get("max_rounds", 10)
-        term_cond  = (cfg.get("termination_condition") or {}).get("expr", "")
-        out_field  = cfg.get("output_field", "debate_transcript")
-        init_msg   = cfg.get("initial_message", "{{$.state.input}}")
+        term_cond = (cfg.get("termination_condition") or {}).get("expr", "")
+        out_field = cfg.get("output_field", "debate_transcript")
+        init_msg = cfg.get("initial_message", "{{$.state.input}}")
 
         init_lines = "\n".join(
-            f"_models[{repr(ref)}] = _make_llm({repr((agents_by_id.get(ref) or {}).get('model', model_default))})"
+            f"_models[{ref!r}] = _make_llm({(agents_by_id.get(ref) or {}).get('model', model_default)!r})"
             for ref in a_refs
         )
         roles_map = {ref: (agents_by_id.get(ref) or {}).get("role", ref) for ref in a_refs}
 
         term_snippet = (
-            f"if {repr(term_cond.split(' contains ')[-1] if ' contains ' in term_cond else 'DONE')} in _last:\n"
+            f"if {term_cond.split(' contains ')[-1] if ' contains ' in term_cond else 'DONE'!r} in _last:\n"
             f"            break"
-            if term_cond else "pass  # no termination — runs max_rounds"
+            if term_cond
+            else "pass  # no termination — runs max_rounds"
         )
 
         warnings.append(
@@ -722,11 +770,11 @@ def gen_node_function(
             f"# agent_debate: {max_rounds} rounds, agents={a_refs}\n"
             f"_models: dict = {{}}\n"
             f"{init_lines}\n"
-            f"_roles  = {repr(roles_map)}\n"
+            f"_roles  = {roles_map!r}\n"
             f"_log:  list[str] = []\n"
             f"_last = _render({py_str(init_msg)}, state)\n"
             f"for _round in range({max_rounds}):\n"
-            f"    for _ref in {repr(a_refs)}:\n"
+            f"    for _ref in {a_refs!r}:\n"
             f"        _llm = _models.get(_ref)\n"
             f"        if not _llm:\n"
             f"            continue\n"
@@ -735,28 +783,27 @@ def gen_node_function(
             f"        _last = _resp.content\n"
             f"        _log.append(f'[{{_role}}]: {{_last}}')\n"
             f"        {term_snippet}\n"
-            f"return {{{repr(out_field)}: chr(10).join(_log)}}\n"
+            f"return {{{out_field!r}: chr(10).join(_log)}}\n"
         )
         return _fn(label, vid, body)
 
     # ── subgraph ──────────────────────────────────────────────────────────────
     if ntype == "subgraph":
-        flow_ref   = node.get("flow_ref", "")
-        input_map  = node.get("input_map") or {}
+        flow_ref = node.get("flow_ref", "")
+        input_map = node.get("input_map") or {}
         output_map = node.get("output_map") or {}
         warnings.append(
-            f"subgraph '{nid}': compile flow_ref={repr(flow_ref)} separately "
-            f"and invoke as a compiled LangGraph sub-graph"
+            f"subgraph '{nid}': compile flow_ref={flow_ref!r} separately and invoke as a compiled LangGraph sub-graph"
         )
-        in_expr  = repr(input_map) if input_map else "dict(state)"
+        in_expr = repr(input_map) if input_map else "dict(state)"
         out_expr = repr(output_map) if output_map else "_result"
         body = (
             f"{ctx}"
-            f"# subgraph: flow_ref={repr(flow_ref)}\n"
+            f"# subgraph: flow_ref={flow_ref!r}\n"
             f"# from {safe_id(flow_ref)}_flow import compiled as _sub\n"
             f"# _result = _sub.invoke({in_expr})\n"
             f"# return {out_expr}\n"
-            f"raise NotImplementedError(f'Subgraph {repr(flow_ref)} not wired — see comment above')\n"
+            f"raise NotImplementedError(f'Subgraph {flow_ref!r} not wired — see comment above')\n"
         )
         return _fn(label, vid, body)
 
@@ -766,53 +813,52 @@ def gen_node_function(
     return _fn(f"{label} ({ntype})", vid, body)
 
 
-
 def gen_condition_router(node: dict, spec: dict) -> str:
     """Generate a router function for a condition node (used in add_conditional_edges)."""
-    nid      = node["id"]
-    vid      = safe_id(nid)
+    nid = node["id"]
+    vid = safe_id(nid)
     branches = node.get("branches") or []
-    default  = node.get("default_target", "")
-    label    = node.get("label", nid)
+    default = node.get("default_target", "")
+    label = node.get("label", nid)
 
     lines = [f"# {label} — condition router", f"def route_{vid}(state: FlowState) -> str:"]
 
     for b in branches:
-        cond    = b.get("condition") or {}
-        expr    = cond.get("expr", "")
-        target  = b.get("target", "")
-        op      = cond.get("op", "eq")
-        value   = cond.get("value", "")
+        cond = b.get("condition") or {}
+        expr = cond.get("expr", "")
+        target = b.get("target", "")
+        op = cond.get("op", "eq")
+        value = cond.get("value", "")
 
         # Generate a Python condition from the JSONPath expression + op
         op_map = {
-            "eq":       "==",
-            "neq":      "!=",
-            "gt":       ">",
-            "gte":      ">=",
-            "lt":       "<",
-            "lte":      "<=",
+            "eq": "==",
+            "neq": "!=",
+            "gt": ">",
+            "gte": ">=",
+            "lt": "<",
+            "lte": "<=",
             "contains": "in",
-            "exists":   "is not None",
+            "exists": "is not None",
         }
         py_op = op_map.get(op, "==")
 
         if expr:
-            lhs = f"_resolve(state, {repr(expr)})"
+            lhs = f"_resolve(state, {expr!r})"
             if op == "exists":
                 py_cond = f"{lhs} is not None"
             elif op == "contains":
-                py_cond = f"{repr(value)} in ({lhs} or '')"
+                py_cond = f"{value!r} in ({lhs} or '')"
             else:
-                py_cond = f"{lhs} {py_op} {repr(value)}"
+                py_cond = f"{lhs} {py_op} {value!r}"
         else:
             py_cond = "True"
 
         lines.append(f"    if {py_cond}:")
-        lines.append(f"        return {repr(safe_id(target))}")
+        lines.append(f"        return {safe_id(target)!r}")
 
     if default:
-        lines.append(f"    return {repr(safe_id(default))}  # default_target")
+        lines.append(f"    return {safe_id(default)!r}  # default_target")
     else:
         lines.append("    return '__end__'")
 
@@ -826,11 +872,10 @@ def gen_graph_assembly(
     warnings: list[str],
 ) -> str:
     """Generate StateGraph construction, add_node, add_edge, add_conditional_edges, compile."""
-    nodes  = spec.get("nodes") or []
-    edges  = spec.get("edges") or []
+    nodes = spec.get("nodes") or []
+    edges = spec.get("edges") or []
     fwd, _ = build_adjacency(nodes, edges)
 
-    id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
     checkpoint = (spec.get("flow_config") or {}).get("checkpoint") or {}
 
     skip_as_node = {"input", "output", "annotation", "condition"}
@@ -848,7 +893,7 @@ def gen_graph_assembly(
         if n["type"] in skip_as_node:
             continue
         vid = safe_id(n["id"])
-        lines.append(f"graph.add_node({repr(n['id'])}, node_{vid})")
+        lines.append(f"graph.add_node({n['id']!r}, node_{vid})")
 
     lines += ["", "# Edges"]
 
@@ -856,7 +901,7 @@ def gen_graph_assembly(
     input_node = next((n for n in nodes if n["type"] == "input"), None)
     if input_node:
         for succ in fwd.get(input_node["id"], []):
-            lines.append(f"graph.add_edge(START, {repr(succ)})")
+            lines.append(f"graph.add_edge(START, {succ!r})")
 
     # Find output nodes and wire END
     output_nodes = {n["id"] for n in nodes if n["type"] == "output"}
@@ -881,12 +926,12 @@ def gen_graph_assembly(
             if tgt in output_nodes:
                 key = (src, "__end__")
                 if key not in added_edges:
-                    lines.append(f"graph.add_edge({repr(src)}, END)")
+                    lines.append(f"graph.add_edge({src!r}, END)")
                     added_edges.add(key)
             else:
                 key = (src, tgt)
                 if key not in added_edges:
-                    lines.append(f"graph.add_edge({repr(src)}, {repr(tgt)})")
+                    lines.append(f"graph.add_edge({src!r}, {tgt!r})")
                     added_edges.add(key)
 
         elif etype == "conditional":
@@ -900,12 +945,10 @@ def gen_graph_assembly(
                 mapping[label] = tgt if tgt not in output_nodes else "__end__"
             if default_tgt:
                 mapping["__default__"] = default_tgt if default_tgt not in output_nodes else "__end__"
-            lines.append(
-                f"# conditional edge from '{src}' — wire router function manually"
-            )
+            lines.append(f"# conditional edge from '{src}' — wire router function manually")
             warnings.append(
                 f"ConditionalEdge from '{src}': generate a router function and use "
-                f"add_conditional_edges({repr(src)}, router, {mapping})"
+                f"add_conditional_edges({src!r}, router, {mapping})"
             )
 
     # add_conditional_edges for condition nodes
@@ -914,11 +957,11 @@ def gen_graph_assembly(
     for n in nodes:
         if n["type"] != "condition":
             continue
-        nid      = n["id"]
-        vid      = safe_id(nid)
+        nid = n["id"]
+        vid = safe_id(nid)
         branches = n.get("branches") or []
-        default  = n.get("default_target", "")
-        mapping: dict[str, str] = {}
+        default = n.get("default_target", "")
+        mapping = {}
 
         for b in branches:
             tgt = b.get("target", "")
@@ -929,19 +972,17 @@ def gen_graph_assembly(
             mapping[safe_id(default)] = default if default not in output_nodes else "__end__"
 
         # The condition node itself needs to be added as a node (passthrough)
-        lines.append(f"graph.add_node({repr(nid)}, lambda s: {{}})")
+        lines.append(f"graph.add_node({nid!r}, lambda s: {{}})")
         # Incoming edges to the condition node
         for pred_edge in [e for e in edges if e.get("to", e.get("target", "")) == nid]:
             src = pred_edge.get("from", pred_edge.get("source", ""))
             if src != (input_node["id"] if input_node else None):
                 key = (src, nid)
                 if key not in added_edges:
-                    lines.append(f"graph.add_edge({repr(src)}, {repr(nid)})")
+                    lines.append(f"graph.add_edge({src!r}, {nid!r})")
                     added_edges.add(key)
         # Conditional edges from condition node
-        lines.append(
-            f"graph.add_conditional_edges({repr(nid)}, route_{vid}, {json.dumps(mapping)})"
-        )
+        lines.append(f"graph.add_conditional_edges({nid!r}, route_{vid}, {json.dumps(mapping)})")
 
     # Compile
     lines += ["", "# Compile"]
@@ -959,15 +1000,12 @@ def gen_graph_assembly(
 def gen_entrypoint(spec: dict) -> str:
     """Generate the run_flow() function and __main__ block."""
     state_schema = spec.get("state_schema") or {}
-    required     = state_schema.get("required") or []
-    props        = state_schema.get("properties") or {}
+    required = state_schema.get("required") or []
+    props = state_schema.get("properties") or {}
 
     example = {f: f"<{props.get(f, {}).get('type', 'str')}>" for f in required}
     checkpoint = (spec.get("flow_config") or {}).get("checkpoint") or {}
-    config_arg = (
-        ', config={"configurable": {"thread_id": "run-1"}}'
-        if checkpoint.get("enabled") else ""
-    )
+    config_arg = ', config={"configurable": {"thread_id": "run-1"}}' if checkpoint.get("enabled") else ""
 
     return dedent0(f"""\
         # ─── Entry point ──────────────────────────────────────────────────────────────
@@ -984,7 +1022,7 @@ def gen_entrypoint(spec: dict) -> str:
 
         if __name__ == "__main__":
             import json as _json
-            _inputs = {repr(example)}
+            _inputs = {example!r}
             print("Running flow with inputs:", _inputs)
             _result = run_flow(_inputs)
             print("Final state:", _json.dumps(_result, default=str, indent=2))
@@ -992,6 +1030,7 @@ def gen_entrypoint(spec: dict) -> str:
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+
 
 def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
     """
@@ -1011,8 +1050,8 @@ def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
             return "# Empty spec — no nodes to compile.\n", []
 
         log_section(_log, "topo_sort", flow_id=flow_id)
-        sorted_nodes   = topo_sort(nodes, edges, flow_id=flow_id)
-        ctx_map        = build_context_map(edges)
+        sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
+        ctx_map = build_context_map(edges)
         output_key_map = build_output_key_map(nodes)
 
         # ── Section: header + imports + helpers

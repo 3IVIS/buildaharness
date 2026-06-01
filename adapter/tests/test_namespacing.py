@@ -36,23 +36,19 @@ Covered:
     - resolve_prompts(spec, org=org_with_keys) uses org keys (not env)
     - resolve_prompts(spec, org=None) uses env fallback
 """
-import asyncio
-import os
+
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.conftest import MINIMAL_SPEC
-from db import Org, OrgMembership, OrgRole, get_session
+from db import Org
 from org_context import ensure_personal_org, get_langfuse_keys
-from main import app
-
+from tests.conftest import MINIMAL_SPEC
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
 
 async def _register(client: AsyncClient, email: str, pw: str = "Password1") -> dict:
     r = await client.post("/auth/register", json={"email": email, "password": pw})
@@ -69,6 +65,7 @@ def _hdr(token: str, org_id: str) -> dict:
 
 
 # ── Personal org created on register ──────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_register_creates_personal_org(client, db_engine):
@@ -97,6 +94,7 @@ async def test_two_users_have_separate_personal_orgs(client, db_engine):
 
 
 # ── Org CRUD ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_org(client, auth_headers):
@@ -134,10 +132,14 @@ async def test_patch_org_sets_langfuse_keys(client, auth_headers):
     r = await client.post("/orgs", json={"name": "LF Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
-    r2 = await client.patch(f"/orgs/{org_id}", json={
-        "langfuse_public_key": "pk-test-abc",
-        "langfuse_secret_key": "sk-test-xyz",
-    }, headers=auth_headers)
+    r2 = await client.patch(
+        f"/orgs/{org_id}",
+        json={
+            "langfuse_public_key": "pk-test-abc",
+            "langfuse_secret_key": "sk-test-xyz",
+        },
+        headers=auth_headers,
+    )
     assert r2.status_code == 200
     assert r2.json()["has_langfuse_keys"] is True
 
@@ -147,15 +149,23 @@ async def test_patch_org_clears_langfuse_keys(client, auth_headers):
     r = await client.post("/orgs", json={"name": "LF Clear Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
-    await client.patch(f"/orgs/{org_id}", json={
-        "langfuse_public_key": "pk-test-abc",
-        "langfuse_secret_key": "sk-test-xyz",
-    }, headers=auth_headers)
+    await client.patch(
+        f"/orgs/{org_id}",
+        json={
+            "langfuse_public_key": "pk-test-abc",
+            "langfuse_secret_key": "sk-test-xyz",
+        },
+        headers=auth_headers,
+    )
 
-    r2 = await client.patch(f"/orgs/{org_id}", json={
-        "langfuse_public_key": "",
-        "langfuse_secret_key": "",
-    }, headers=auth_headers)
+    r2 = await client.patch(
+        f"/orgs/{org_id}",
+        json={
+            "langfuse_public_key": "",
+            "langfuse_secret_key": "",
+        },
+        headers=auth_headers,
+    )
     assert r2.json()["has_langfuse_keys"] is False
 
 
@@ -179,17 +189,18 @@ async def test_delete_non_personal_org_succeeds(client, auth_headers):
 
 # ── Member management ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_invite_and_list_members(client, auth_headers):
     # Register a second user.
-    bob = await _register(client, "bob_inv@example.com")
+    await _register(client, "bob_inv@example.com")
 
     r = await client.post("/orgs", json={"name": "Shared Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
-    r2 = await client.post(f"/orgs/{org_id}/members",
-                           json={"email": "bob_inv@example.com", "role": "member"},
-                           headers=auth_headers)
+    r2 = await client.post(
+        f"/orgs/{org_id}/members", json={"email": "bob_inv@example.com", "role": "member"}, headers=auth_headers
+    )
     assert r2.status_code == 201
 
     members = (await client.get(f"/orgs/{org_id}/members", headers=auth_headers)).json()
@@ -205,8 +216,7 @@ async def test_last_admin_guard_demote(client, auth_headers):
     r = await client.post("/orgs", json={"name": "Guard Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
-    r2 = await client.patch(f"/orgs/{org_id}/members/{user_id}",
-                             json={"role": "member"}, headers=auth_headers)
+    r2 = await client.patch(f"/orgs/{org_id}/members/{user_id}", json={"role": "member"}, headers=auth_headers)
     assert r2.status_code == 409, "Cannot demote the last admin"
 
 
@@ -224,6 +234,7 @@ async def test_last_admin_guard_remove(client, auth_headers):
 
 # ── X-Org-ID flow isolation ───────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_flow_scoped_to_org(client, auth_headers):
     """A flow saved in org A must not appear when listing with org B header."""
@@ -237,8 +248,7 @@ async def test_flow_scoped_to_org(client, auth_headers):
 
     # Save a flow under org A.
     spec = {**MINIMAL_SPEC, "id": "flow-org-a", "name": "Org A Flow"}
-    save = await client.post("/flows", json={"spec": spec},
-                             headers=_hdr(token, org_a_id))
+    save = await client.post("/flows", json={"spec": spec}, headers=_hdr(token, org_a_id))
     assert save.status_code == 200
 
     # Listing under org A should see the flow.
@@ -268,6 +278,7 @@ async def test_get_flow_wrong_org_returns_404(client, auth_headers):
 
 # ── Job org_id stamped correctly ──────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_run_job_stamped_with_org_id(client, auth_headers, db_engine):
     """POST /run must stamp the job row with the active org_id."""
@@ -277,9 +288,7 @@ async def test_run_job_stamped_with_org_id(client, auth_headers, db_engine):
     personal_org_id = orgs[0]["id"]
     token = auth_headers["Authorization"].split(" ")[1]
 
-    r = await client.post("/run?runtime=langgraph",
-                          json={"spec": MINIMAL_SPEC},
-                          headers=_hdr(token, personal_org_id))
+    r = await client.post("/run?runtime=langgraph", json={"spec": MINIMAL_SPEC}, headers=_hdr(token, personal_org_id))
     assert r.status_code == 202
     job_id = r.json()["job_id"]
 
@@ -294,9 +303,13 @@ async def test_run_job_stamped_with_org_id(client, auth_headers, db_engine):
 
 # ── LangGraph thread_id namespacing ───────────────────────────────────────────
 
+
 def test_thread_id_namespaced_with_org_id():
     """_run_langgraph must use {org_id}:{job_id} as the LG thread_id."""
-    import inspect, run_api
+    import inspect
+
+    import run_api
+
     src = inspect.getsource(run_api._run_langgraph)
     assert 'f"{org_id}:{job_id}"' in src or "org_id}:{job_id" in src, (
         "_run_langgraph must namespace LG thread_id with org_id"
@@ -305,18 +318,22 @@ def test_thread_id_namespaced_with_org_id():
 
 def test_thread_id_plain_when_no_org():
     """When org_id is None the thread_id should fall back to plain job_id."""
-    import inspect, run_api
+    import inspect
+
+    import run_api
+
     src = inspect.getsource(run_api._run_langgraph)
-    assert "else job_id" in src, (
-        "_run_langgraph must fall back to plain job_id when org_id is None"
-    )
+    assert "else job_id" in src, "_run_langgraph must fall back to plain job_id when org_id is None"
 
 
 # ── get_langfuse_keys ─────────────────────────────────────────────────────────
 
+
 def test_get_langfuse_keys_per_org():
     org = Org(
-        id=uuid.uuid4(), name="test", owner_id=uuid.uuid4(),
+        id=uuid.uuid4(),
+        name="test",
+        owner_id=uuid.uuid4(),
         langfuse_public_key="pk-org-123",
         langfuse_secret_key="sk-org-456",
     )
@@ -328,8 +345,7 @@ def test_get_langfuse_keys_per_org():
 def test_get_langfuse_keys_falls_back_to_env(monkeypatch):
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-env-111")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-env-222")
-    org = Org(id=uuid.uuid4(), name="test", owner_id=uuid.uuid4(),
-              langfuse_public_key=None, langfuse_secret_key=None)
+    org = Org(id=uuid.uuid4(), name="test", owner_id=uuid.uuid4(), langfuse_public_key=None, langfuse_secret_key=None)
     pub, sec = get_langfuse_keys(org)
     assert pub == "pk-env-111"
     assert sec == "sk-env-222"
@@ -345,25 +361,29 @@ def test_get_langfuse_keys_empty_when_none(monkeypatch):
 
 # ── X-Org-ID header — invalid UUID returns 422 ────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_invalid_org_id_header_returns_422(client, auth_headers):
     token = auth_headers["Authorization"].split(" ")[1]
-    r = await client.get("/flows", headers={
-        "Authorization": f"Bearer {token}",
-        "X-Org-ID": "not-a-uuid",
-    })
+    r = await client.get(
+        "/flows",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Org-ID": "not-a-uuid",
+        },
+    )
     assert r.status_code == 422
 
 
 # ── Non-member org access returns 401 ─────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_non_member_org_access_returns_401(client, auth_headers):
     """Passing another org's ID in X-Org-ID must return 401."""
     # Register a second user and get their org.
     bob = await _register(client, "bob_orgisolate@example.com")
-    bob_orgs = (await client.get("/orgs",
-                                  headers=_auth(bob["token"]))).json()
+    bob_orgs = (await client.get("/orgs", headers=_auth(bob["token"]))).json()
     bob_org_id = bob_orgs[0]["id"]
 
     # Alice (auth_headers) tries to use Bob's org.
@@ -373,6 +393,7 @@ async def test_non_member_org_access_returns_401(client, auth_headers):
 
 
 # ── GET /orgs/{id} non-member returns 404 ────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_org_non_member_returns_404(client, auth_headers):
@@ -389,6 +410,7 @@ async def test_get_org_non_member_returns_404(client, auth_headers):
 
 # ── A2A task stamps org_id on the job row ─────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_a2a_task_stamped_with_org_id(client, auth_headers, db_engine):
     """POST /a2a/{flow_id}/tasks/send must stamp the created job row with the
@@ -398,20 +420,19 @@ async def test_a2a_task_stamped_with_org_id(client, auth_headers, db_engine):
     # Use the personal org (default resolution with no X-Org-ID header).
     orgs = (await client.get("/orgs", headers=auth_headers)).json()
     personal_org_id = orgs[0]["id"]
-    token = auth_headers["Authorization"].split(" ")[1]
 
     # Create a flow with A2A enabled in the personal org.
     a2a_spec = {
         **MINIMAL_SPEC,
-        "id":   "a2a-org-stamp-flow",
+        "id": "a2a-org-stamp-flow",
         "name": "A2A Org Stamp Test",
         "flow_config": {
             "a2a_config": {
-                "enabled":           True,
-                "agent_name":        "Stamp Agent",
+                "enabled": True,
+                "agent_name": "Stamp Agent",
                 "agent_description": "Tests org_id stamping",
-                "version":           "1.0.0",
-                "authentication":    "none",
+                "version": "1.0.0",
+                "authentication": "none",
             }
         },
     }
@@ -439,11 +460,13 @@ async def test_a2a_task_stamped_with_org_id(client, auth_headers, db_engine):
 
 # ── ensure_personal_org is idempotent ─────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_ensure_personal_org_idempotent(client, auth_headers, db_engine):
     """Calling ensure_personal_org twice must not create duplicate orgs."""
-    from db import User
     from sqlalchemy import select
+
+    from db import User
 
     SessionLocal = async_sessionmaker(db_engine, expire_on_commit=False)
     async with SessionLocal() as db:
@@ -456,29 +479,31 @@ async def test_ensure_personal_org_idempotent(client, auth_headers, db_engine):
 
 # ── Re-invite returns 200 ──────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_invite_existing_member_returns_200(client, auth_headers):
     """Re-inviting an existing member must update their role and return 200."""
-    bob = await _register(client, "bob_reinvite@example.com")
+    await _register(client, "bob_reinvite@example.com")
 
     r = await client.post("/orgs", json={"name": "Reinvite Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
     # First invite — 201
-    r1 = await client.post(f"/orgs/{org_id}/members",
-                           json={"email": "bob_reinvite@example.com", "role": "member"},
-                           headers=auth_headers)
+    r1 = await client.post(
+        f"/orgs/{org_id}/members", json={"email": "bob_reinvite@example.com", "role": "member"}, headers=auth_headers
+    )
     assert r1.status_code == 201
 
     # Re-invite with different role — must return 200
-    r2 = await client.post(f"/orgs/{org_id}/members",
-                           json={"email": "bob_reinvite@example.com", "role": "admin"},
-                           headers=auth_headers)
+    r2 = await client.post(
+        f"/orgs/{org_id}/members", json={"email": "bob_reinvite@example.com", "role": "admin"}, headers=auth_headers
+    )
     assert r2.status_code == 200, "Re-invite must return 200, not 201"
     assert r2.json()["role"] == "admin"
 
 
 # ── Cross-org re-save blocked ─────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_resave_flow_wrong_org_returns_404(client, auth_headers):
@@ -501,6 +526,7 @@ async def test_resave_flow_wrong_org_returns_404(client, auth_headers):
 
 # ── Prompt resolver cache isolation ───────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_non_admin_cannot_patch_org(client, auth_headers):
     """A plain member must not be able to rename the org (403)."""
@@ -510,13 +536,11 @@ async def test_non_admin_cannot_patch_org(client, auth_headers):
     org_id = r.json()["id"]
 
     # Invite bob as member (not admin)
-    await client.post(f"/orgs/{org_id}/members",
-                      json={"email": "bob_nonadmin@example.com", "role": "member"},
-                      headers=auth_headers)
+    await client.post(
+        f"/orgs/{org_id}/members", json={"email": "bob_nonadmin@example.com", "role": "member"}, headers=auth_headers
+    )
 
-    r2 = await client.patch(f"/orgs/{org_id}",
-                             json={"name": "Hacked Name"},
-                             headers=_auth(bob["token"]))
+    r2 = await client.patch(f"/orgs/{org_id}", json={"name": "Hacked Name"}, headers=_auth(bob["token"]))
     assert r2.status_code == 403, "Non-admin member must not be able to rename org"
 
 
@@ -540,13 +564,12 @@ async def test_member_can_remove_self(client, auth_headers):
     r = await client.post("/orgs", json={"name": "Self-Remove Org"}, headers=auth_headers)
     org_id = r.json()["id"]
 
-    await client.post(f"/orgs/{org_id}/members",
-                      json={"email": "bob_selfremove@example.com", "role": "member"},
-                      headers=auth_headers)
+    await client.post(
+        f"/orgs/{org_id}/members", json={"email": "bob_selfremove@example.com", "role": "member"}, headers=auth_headers
+    )
 
     bob_id = bob["user_id"]
-    r2 = await client.delete(f"/orgs/{org_id}/members/{bob_id}",
-                              headers=_auth(bob["token"]))
+    r2 = await client.delete(f"/orgs/{org_id}/members/{bob_id}", headers=_auth(bob["token"]))
     assert r2.status_code == 204, "Member should be able to remove themselves"
 
     # Confirm bob is gone
@@ -560,9 +583,13 @@ async def test_partial_langfuse_keys_fall_back_to_global(monkeypatch):
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "global-pub")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "global-sec")
 
-    org = Org(id=uuid.uuid4(), name="partial", owner_id=uuid.uuid4(),
-              langfuse_public_key="org-pub-only",  # only pub set
-              langfuse_secret_key=None)
+    org = Org(
+        id=uuid.uuid4(),
+        name="partial",
+        owner_id=uuid.uuid4(),
+        langfuse_public_key="org-pub-only",  # only pub set
+        langfuse_secret_key=None,
+    )
     pub, sec = get_langfuse_keys(org)
 
     # Must fall back to global — do NOT mix org pub with global sec
@@ -574,20 +601,22 @@ def test_prompt_cache_key_includes_org_id():
     """The prompt resolver cache key must include the org_id to prevent
     cross-tenant prompt bleed when two orgs use the same prompt name."""
     import inspect
+
     from prompt_resolver import resolve_prompts
+
     src = inspect.getsource(resolve_prompts)
     assert "org_prefix" in src or "org.id" in src, (
-        "resolve_prompts cache key must incorporate the org identifier "
-        "to prevent cross-org prompt cache sharing."
+        "resolve_prompts cache key must incorporate the org identifier to prevent cross-org prompt cache sharing."
     )
 
 
 @pytest.mark.asyncio
 async def test_resolve_prompts_cache_segregated_by_org(monkeypatch):
     """Two calls with different orgs must produce independent cache entries."""
-    from prompt_resolver import _cache, _cache_clear, resolve_prompts
-    from db import Org
     import uuid as _uuid
+
+    from db import Org
+    from prompt_resolver import _cache_clear, resolve_prompts
 
     _cache_clear()
 
@@ -597,8 +626,11 @@ async def test_resolve_prompts_cache_segregated_by_org(monkeypatch):
     # Verify the function accepts distinct org objects without raising.
     monkeypatch.setenv("TESTING", "true")
     spec = {
-        "spec_version": "0.2.0", "id": "t", "name": "t",
-        "nodes": [], "edges": [],
+        "spec_version": "0.2.0",
+        "id": "t",
+        "name": "t",
+        "nodes": [],
+        "edges": [],
     }
     result_a = await resolve_prompts(spec, org_a)
     result_b = await resolve_prompts(spec, org_b)
@@ -608,6 +640,7 @@ async def test_resolve_prompts_cache_segregated_by_org(monkeypatch):
 
 
 # ── Input validation ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_create_org_empty_name_returns_422(client, auth_headers):

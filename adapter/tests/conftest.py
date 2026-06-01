@@ -5,11 +5,12 @@ Uses an in-memory SQLite database so no Postgres is required in CI.
 JWT_SECRET and DATABASE_URL are set before any adapter module is imported
 so the startup guards in main.py and db.py don't exit(1).
 """
+
 import os
-import pytest
+
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # ── Set required env vars BEFORE importing any adapter module ─────────────────
 os.environ.setdefault("JWT_SECRET", "test-secret-for-ci-only-not-production")
@@ -21,9 +22,9 @@ os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("MASTRA_POLL_INTERVAL_S", "0")
 
 # Now safe to import
-from db import Base, get_session          # noqa: E402
-from main import app                      # noqa: E402
-import run_api as _run_api               # noqa: E402
+import run_api as _run_api
+from db import Base, get_session
+from main import app
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -65,10 +66,13 @@ async def client(db_engine):
 @pytest_asyncio.fixture(scope="function")
 async def auth_headers(client):
     """Register a user and return Bearer headers for authenticated requests."""
-    resp = await client.post("/auth/register", json={
-        "email": "ci@example.com",
-        "password": "Password1",
-    })
+    resp = await client.post(
+        "/auth/register",
+        json={
+            "email": "ci@example.com",
+            "password": "Password1",
+        },
+    )
     assert resp.status_code == 201, resp.text
     token = resp.json()["token"]
     return {"Authorization": f"Bearer {token}"}
@@ -81,7 +85,7 @@ MINIMAL_SPEC = {
     "id": "test-flow",
     "name": "Test Flow",
     "nodes": [
-        {"id": "input-1",  "type": "input",  "position": {"x": 0,   "y": 0}},
+        {"id": "input-1", "type": "input", "position": {"x": 0, "y": 0}},
         {"id": "output-1", "type": "output", "position": {"x": 300, "y": 0}},
     ],
     "edges": [

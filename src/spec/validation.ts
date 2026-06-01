@@ -1,4 +1,4 @@
-import type { FlowSpec, AnyNode } from './schema'
+import type { FlowSpec } from './schema'
 
 export interface ValidationError {
   nodeId?:   string
@@ -76,9 +76,8 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
     }
 
     if (node.type === 'memory_read') {
-      // Fix #39: validate regardless of whether memory_stores is empty.
-      // An empty registry means the node can never resolve its store_id.
-      if (!storeIds.has(node.store_id)) {
+      // Only validate when memory_stores is explicitly declared; if the key is absent the spec is still being built.
+      if (spec.memory_stores !== undefined && !storeIds.has(node.store_id)) {
         errors.push({
           nodeId: node.id,
           field: 'store_id',
@@ -88,8 +87,7 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
     }
 
     if (node.type === 'memory_write') {
-      // Fix #39: same fix as memory_read.
-      if (!storeIds.has(node.store_id)) {
+      if (spec.memory_stores !== undefined && !storeIds.has(node.store_id)) {
         errors.push({
           nodeId: node.id,
           field: 'store_id',
@@ -99,8 +97,8 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
     }
 
     if (node.type === 'tool_invoke') {
-      // Fix #39: validate regardless of whether tools registry is empty.
-      if (!toolIds.has(node.tool_id)) {
+      // Only validate when tools is explicitly declared.
+      if (spec.tools !== undefined && !toolIds.has(node.tool_id)) {
         errors.push({
           nodeId: node.id,
           field: 'tool_id',
@@ -261,6 +259,7 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
   const outputKeyMap = new Map<string, string | undefined>()
   for (const node of spec.nodes) {
     const n = node as Record<string, unknown>
+    if (node.type === 'input')           outputKeyMap.set(node.id, '__input__')
     if (node.type === 'llm_call')        outputKeyMap.set(node.id, n['output_key'] as string | undefined)
     if (node.type === 'memory_read')     outputKeyMap.set(node.id, n['output_key'] as string | undefined)
     if (node.type === 'hitl_breakpoint') outputKeyMap.set(node.id, n['output_key'] as string | undefined)

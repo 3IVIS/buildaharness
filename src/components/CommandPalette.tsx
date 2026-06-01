@@ -172,7 +172,6 @@ export function CommandPalette({ onClose }: Props) {
         y: 240 + (Math.random() - 0.5) * 200,
       })
     } else if (r.kind === 'example') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       loadFlow(r.spec)
     }
     onClose()

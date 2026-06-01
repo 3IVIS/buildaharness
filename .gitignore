@@ -12,6 +12,7 @@ dist-ssr/
 
 # Environment files — NEVER commit secrets
 .env
+.env.bak
 .env.local
 .env.*.local
 

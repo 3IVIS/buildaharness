@@ -67,9 +67,9 @@ def upgrade() -> None:
             sa.ForeignKey("orgs.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("rest_url",      sa.Text(), nullable=False),
-        sa.Column("mcp_url",       sa.Text(), nullable=False),
-        sa.Column("a2a_url",       sa.Text(), nullable=True),
+        sa.Column("rest_url", sa.Text(), nullable=False),
+        sa.Column("mcp_url", sa.Text(), nullable=False),
+        sa.Column("a2a_url", sa.Text(), nullable=True),
         sa.Column("shareable_url", sa.Text(), nullable=False),
         sa.Column(
             "mcp_manifest",
@@ -85,10 +85,10 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_unified_deployments_user_id", "unified_deployments", ["user_id"])
-    op.create_index("ix_unified_deployments_org_id",  "unified_deployments", ["org_id"])
+    op.create_index("ix_unified_deployments_org_id", "unified_deployments", ["org_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_unified_deployments_org_id",  table_name="unified_deployments")
+    op.drop_index("ix_unified_deployments_org_id", table_name="unified_deployments")
     op.drop_index("ix_unified_deployments_user_id", table_name="unified_deployments")
     op.drop_table("unified_deployments")

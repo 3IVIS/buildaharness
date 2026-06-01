@@ -23,14 +23,13 @@ import logging
 import os
 import sys
 import time
-import traceback
-from typing import Any
+from typing import Any, ClassVar
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-_ENV_LEVEL  = os.environ.get("ADAPTER_LOG_LEVEL",  "INFO").upper()
+_ENV_LEVEL = os.environ.get("ADAPTER_LOG_LEVEL", "INFO").upper()
 _ENV_FORMAT = os.environ.get("ADAPTER_LOG_FORMAT", "text").lower()
-_ENV_FILE   = os.environ.get("ADAPTER_LOG_FILE",   "")
+_ENV_FILE = os.environ.get("ADAPTER_LOG_FILE", "")
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR"}
 _LOG_LEVEL = getattr(logging, _ENV_LEVEL if _ENV_LEVEL in _VALID_LEVELS else "INFO")
@@ -38,23 +37,41 @@ _LOG_LEVEL = getattr(logging, _ENV_LEVEL if _ENV_LEVEL in _VALID_LEVELS else "IN
 
 # ─── JSON formatter ───────────────────────────────────────────────────────────
 
+
 class _JsonFormatter(logging.Formatter):
     """Emit one JSON object per log line for machine-readable ingestion."""
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "ts":      self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-            "level":   record.levelname,
-            "logger":  record.name,
-            "msg":     record.getMessage(),
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
         }
         # Attach any extra fields set via the `extra=` kwarg
         for key, val in record.__dict__.items():
             if key.startswith("_") or key in (
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "message",
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "message",
                 "taskName",
             ):
                 continue
@@ -66,30 +83,48 @@ class _JsonFormatter(logging.Formatter):
 
 # ─── Text formatter ───────────────────────────────────────────────────────────
 
+
 class _TextFormatter(logging.Formatter):
     """Human-readable coloured text formatter."""
 
-    _COLOURS = {
-        "DEBUG":   "\033[36m",   # cyan
-        "INFO":    "\033[32m",   # green
-        "WARNING": "\033[33m",   # yellow
-        "ERROR":   "\033[31m",   # red
-        "RESET":   "\033[0m",
+    _COLOURS: ClassVar[dict[str, str]] = {
+        "DEBUG": "\033[36m",  # cyan
+        "INFO": "\033[32m",  # green
+        "WARNING": "\033[33m",  # yellow
+        "ERROR": "\033[31m",  # red
+        "RESET": "\033[0m",
     }
 
     def format(self, record: logging.LogRecord) -> str:
-        col   = self._COLOURS.get(record.levelname, "")
+        col = self._COLOURS.get(record.levelname, "")
         reset = self._COLOURS["RESET"]
-        ts    = self.formatTime(record, "%H:%M:%S")
-        base  = f"{col}[{ts}] {record.levelname:<7} {record.name}: {record.getMessage()}{reset}"
+        ts = self.formatTime(record, "%H:%M:%S")
+        base = f"{col}[{ts}] {record.levelname:<7} {record.name}: {record.getMessage()}{reset}"
         # Append extra fields if present
         extras: list[str] = []
         for key, val in record.__dict__.items():
             if key.startswith("_") or key in (
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "message",
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "message",
                 "taskName",
             ):
                 continue
@@ -102,6 +137,7 @@ class _TextFormatter(logging.Formatter):
 
 
 # ─── Handler setup ────────────────────────────────────────────────────────────
+
 
 def _build_handler(stream: Any, fmt: str) -> logging.StreamHandler:
     h = logging.StreamHandler(stream)
@@ -122,9 +158,7 @@ def _setup_root_adapter_logger() -> None:
     if _ENV_FILE:
         try:
             fh = logging.FileHandler(_ENV_FILE, encoding="utf-8")
-            fh.setFormatter(
-                _JsonFormatter() if _ENV_FORMAT == "json" else _TextFormatter()
-            )
+            fh.setFormatter(_JsonFormatter() if _ENV_FORMAT == "json" else _TextFormatter())
             root.addHandler(fh)
         except OSError as exc:
             root.warning("adapter_logger: could not open log file %r: %s", _ENV_FILE, exc)
@@ -134,6 +168,7 @@ _setup_root_adapter_logger()
 
 
 # ─── Public helpers ───────────────────────────────────────────────────────────
+
 
 def get_adapter_logger(adapter_name: str) -> logging.Logger:
     """
@@ -145,22 +180,23 @@ def get_adapter_logger(adapter_name: str) -> logging.Logger:
 
 # ── compile lifecycle ─────────────────────────────────────────────────────────
 
+
 def log_compile_start(logger: logging.Logger, spec: dict) -> float:
     """
     Log the beginning of a compile call.
     Returns the start timestamp (float) for use in log_compile_end.
     """
-    flow_id   = spec.get("id", "unknown")
+    flow_id = spec.get("id", "unknown")
     flow_name = spec.get("name", flow_id)
-    n_nodes   = len(spec.get("nodes", []))
-    n_edges   = len(spec.get("edges", []))
+    n_nodes = len(spec.get("nodes", []))
+    n_edges = len(spec.get("edges", []))
     logger.info(
         "compile start",
         extra={
-            "flow_id":   flow_id,
+            "flow_id": flow_id,
             "flow_name": flow_name,
-            "n_nodes":   n_nodes,
-            "n_edges":   n_edges,
+            "n_nodes": n_nodes,
+            "n_edges": n_edges,
         },
     )
     return time.monotonic()
@@ -175,14 +211,14 @@ def log_compile_end(
 ) -> None:
     """Log the successful end of a compile call with timing and summary."""
     elapsed_ms = int((time.monotonic() - start_ts) * 1000)
-    flow_id    = spec.get("id", "unknown")
+    flow_id = spec.get("id", "unknown")
     logger.info(
         "compile ok",
         extra={
-            "flow_id":     flow_id,
-            "elapsed_ms":  elapsed_ms,
+            "flow_id": flow_id,
+            "elapsed_ms": elapsed_ms,
             "output_chars": len(code),
-            "n_warnings":  len(warnings),
+            "n_warnings": len(warnings),
         },
     )
     if warnings:
@@ -198,13 +234,13 @@ def log_compile_error(
 ) -> None:
     """Log a compile failure with traceback."""
     elapsed_ms = int((time.monotonic() - start_ts) * 1000)
-    flow_id    = spec.get("id", "unknown")
+    flow_id = spec.get("id", "unknown")
     logger.error(
         "compile failed",
         extra={
-            "flow_id":    flow_id,
+            "flow_id": flow_id,
             "elapsed_ms": elapsed_ms,
-            "error":      str(exc),
+            "error": str(exc),
         },
         exc_info=True,
     )
@@ -220,6 +256,7 @@ def log_empty_spec(logger: logging.Logger, spec: dict) -> None:
 
 # ── node-level debug ──────────────────────────────────────────────────────────
 
+
 def log_node_processing(
     logger: logging.Logger,
     node: dict,
@@ -230,8 +267,8 @@ def log_node_processing(
 ) -> None:
     """DEBUG-level log for each node being processed."""
     extra: dict[str, Any] = {
-        "flow_id":   flow_id,
-        "node_id":   node.get("id", "?"),
+        "flow_id": flow_id,
+        "node_id": node.get("id", "?"),
         "node_type": node.get("type", "?"),
     }
     if skipped:
@@ -251,10 +288,10 @@ def log_node_warning(
     logger.warning(
         "node issue",
         extra={
-            "flow_id":   flow_id,
-            "node_id":   node.get("id", "?"),
+            "flow_id": flow_id,
+            "node_id": node.get("id", "?"),
             "node_type": node.get("type", "?"),
-            "detail":    message,
+            "detail": message,
         },
     )
 
@@ -267,15 +304,15 @@ def log_topo_sort(
 ) -> None:
     """DEBUG the topological sort result (node order + any cycle detection)."""
     sorted_ids = [n["id"] if isinstance(n, dict) else n for n in order]
-    has_cycle  = len(sorted_ids) < len(nodes)
+    has_cycle = len(sorted_ids) < len(nodes)
     extra: dict[str, Any] = {
-        "flow_id":    flow_id,
-        "order":      sorted_ids,
-        "has_cycle":  has_cycle,
+        "flow_id": flow_id,
+        "order": sorted_ids,
+        "has_cycle": has_cycle,
     }
     if has_cycle:
-        all_ids    = {n["id"] for n in nodes}
-        cycle_ids  = sorted(all_ids - set(sorted_ids))
+        all_ids = {n["id"] for n in nodes}
+        cycle_ids = sorted(all_ids - set(sorted_ids))
         extra["cycle_nodes"] = cycle_ids
         logger.warning("topo sort detected cycle(s)", extra=extra)
     else:

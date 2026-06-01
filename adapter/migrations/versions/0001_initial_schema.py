@@ -26,8 +26,8 @@ def upgrade() -> None:
     # ── users ─────────────────────────────────────────────────────────────────
     op.create_table(
         "users",
-        sa.Column("id",            postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("email",         sa.Text(), nullable=False, unique=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("email", sa.Text(), nullable=False, unique=True),
         sa.Column("password_hash", sa.Text(), nullable=False),
         sa.Column(
             "created_at",
@@ -41,14 +41,14 @@ def upgrade() -> None:
     # ── flows ─────────────────────────────────────────────────────────────────
     op.create_table(
         "flows",
-        sa.Column("id",           sa.Text(), primary_key=True),
+        sa.Column("id", sa.Text(), primary_key=True),
         sa.Column(
             "user_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("name",         sa.Text(), nullable=False),
+        sa.Column("name", sa.Text(), nullable=False),
         sa.Column("current_spec", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column(
             "created_at",
@@ -64,13 +64,12 @@ def upgrade() -> None:
         ),
         if_not_exists=True,
     )
-    op.create_index("ix_flows_user_id", "flows", ["user_id"], unique=False,
-                    if_not_exists=True)
+    op.create_index("ix_flows_user_id", "flows", ["user_id"], unique=False, if_not_exists=True)
 
     # ── flow_versions ─────────────────────────────────────────────────────────
     op.create_table(
         "flow_versions",
-        sa.Column("id",      postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "flow_id",
             sa.Text(),
@@ -83,9 +82,9 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("spec",        postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("spec", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("version_num", sa.Integer(), nullable=False),
-        sa.Column("label",       sa.Text(),    nullable=True),
+        sa.Column("label", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

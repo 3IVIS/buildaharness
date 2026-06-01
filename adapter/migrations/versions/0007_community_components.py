@@ -59,14 +59,14 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "community_components",
-        sa.Column("id",            postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("slug",          sa.Text(), nullable=False, unique=True),
-        sa.Column("name",          sa.Text(), nullable=False),
-        sa.Column("description",   sa.Text(), nullable=False),
-        sa.Column("category",      sa.Text(), nullable=False),
-        sa.Column("icon_emoji",    sa.Text(), nullable=False, server_default=sa.text("'🔧'")),
-        sa.Column("npm_ref",       sa.Text(), nullable=False),
-        sa.Column("source",        sa.Text(), nullable=False, server_default=sa.text("'npm'")),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("slug", sa.Text(), nullable=False, unique=True),
+        sa.Column("name", sa.Text(), nullable=False),
+        sa.Column("description", sa.Text(), nullable=False),
+        sa.Column("category", sa.Text(), nullable=False),
+        sa.Column("icon_emoji", sa.Text(), nullable=False, server_default=sa.text("'🔧'")),
+        sa.Column("npm_ref", sa.Text(), nullable=False),
+        sa.Column("source", sa.Text(), nullable=False, server_default=sa.text("'npm'")),
         sa.Column(
             "node_spec",
             postgresql.JSONB(astext_type=sa.Text()),
@@ -84,9 +84,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'[]'"),
         ),
-        sa.Column("verified",       sa.Text(), nullable=False, server_default=sa.text("'false'")),
-        sa.Column("author",         sa.Text(), nullable=False, server_default=sa.text("'@itsharness'")),
-        sa.Column("install_count",  sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("verified", sa.Text(), nullable=False, server_default=sa.text("'false'")),
+        sa.Column("author", sa.Text(), nullable=False, server_default=sa.text("'@itsharness'")),
+        sa.Column("install_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -100,7 +100,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
-    op.create_index("ix_community_components_slug",     "community_components", ["slug"],     unique=True)
+    op.create_index("ix_community_components_slug", "community_components", ["slug"], unique=True)
     op.create_index("ix_community_components_category", "community_components", ["category"])
     op.create_index("ix_community_components_verified", "community_components", ["verified"])
 
@@ -108,5 +108,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_community_components_verified", table_name="community_components")
     op.drop_index("ix_community_components_category", table_name="community_components")
-    op.drop_index("ix_community_components_slug",     table_name="community_components")
+    op.drop_index("ix_community_components_slug", table_name="community_components")
     op.drop_table("community_components")

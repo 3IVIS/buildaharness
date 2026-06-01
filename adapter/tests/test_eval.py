@@ -14,14 +14,14 @@ Covered:
   GET  /eval/scores      — 200, returns {"data": []} in TESTING mode
   seed_eval_templates()  — no-op in TESTING mode (called twice → still no-op)
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from run_api import _jobs_create, _jobs_get
-
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _register(client, email: str, password: str = "Password1") -> dict:
     r = await client.post("/auth/register", json={"email": email, "password": password})
@@ -35,26 +35,28 @@ def _auth(token: str) -> dict:
 
 async def _seed_job(
     db_engine,
-    user_id:  str,
-    job_id:   str  = "eval-test-job",
+    user_id: str,
+    job_id: str = "eval-test-job",
     trace_id: str | None = "trace-abc-123",
 ) -> None:
     """Insert a synthetic completed job row directly into the test DB."""
-    from db import Job
     import uuid
+
+    from db import Job
+
     SessionLocal = async_sessionmaker(db_engine, expire_on_commit=False)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     async with SessionLocal() as db:
         row = Job(
-            id          = job_id,
-            user_id     = uuid.UUID(user_id),
-            status      = "done",
-            runtime     = "langgraph",
-            started_at  = now,
-            ended_at    = now,
-            result      = "ok",
-            node_events = [],
-            trace_id    = trace_id,
+            id=job_id,
+            user_id=uuid.UUID(user_id),
+            status="done",
+            runtime="langgraph",
+            started_at=now,
+            ended_at=now,
+            result="ok",
+            node_events=[],
+            trace_id=trace_id,
         )
         db.add(row)
         await db.commit()
@@ -63,7 +65,9 @@ async def _seed_job(
 async def _cleanup_job(db_engine, job_id: str = "eval-test-job") -> None:
     """Delete a job row from the test DB (idempotent)."""
     from sqlalchemy import delete
+
     from db import Job
+
     SessionLocal = async_sessionmaker(db_engine, expire_on_commit=False)
     async with SessionLocal() as db:
         await db.execute(delete(Job).where(Job.id == job_id))
@@ -72,35 +76,47 @@ async def _cleanup_job(db_engine, job_id: str = "eval-test-job") -> None:
 
 # ── POST /eval/score ──────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_score_returns_204(client, auth_headers):
-    r = await client.post("/eval/score", json={
-        "trace_id": "trace-xyz",
-        "name":     "faithfulness",
-        "value":    0.85,
-    }, headers=auth_headers)
+    r = await client.post(
+        "/eval/score",
+        json={
+            "trace_id": "trace-xyz",
+            "name": "faithfulness",
+            "value": 0.85,
+        },
+        headers=auth_headers,
+    )
     assert r.status_code == 204, r.text
 
 
 @pytest.mark.asyncio
 async def test_score_with_observation_id(client, auth_headers):
-    r = await client.post("/eval/score", json={
-        "trace_id":       "trace-xyz",
-        "observation_id": "obs-123",
-        "name":           "task_completion",
-        "value":          1.0,
-        "comment":        "Fully completed",
-    }, headers=auth_headers)
+    r = await client.post(
+        "/eval/score",
+        json={
+            "trace_id": "trace-xyz",
+            "observation_id": "obs-123",
+            "name": "task_completion",
+            "value": 1.0,
+            "comment": "Fully completed",
+        },
+        headers=auth_headers,
+    )
     assert r.status_code == 204, r.text
 
 
 @pytest.mark.asyncio
 async def test_score_requires_auth(client):
-    r = await client.post("/eval/score", json={
-        "trace_id": "trace-xyz",
-        "name":     "faithfulness",
-        "value":    0.5,
-    })
+    r = await client.post(
+        "/eval/score",
+        json={
+            "trace_id": "trace-xyz",
+            "name": "faithfulness",
+            "value": 0.5,
+        },
+    )
     assert r.status_code == 401, r.text
 
 
@@ -113,15 +129,20 @@ async def test_score_missing_required_fields(client, auth_headers):
 
 # ── POST /eval/feedback ───────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_feedback_thumbs_up(client, auth_headers, db_engine):
     data = await _register(client, "fb-up@example.com")
     await _seed_job(db_engine, user_id=data["user_id"], job_id="fb-job-up")
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-up",
-            "value":  1,
-        }, headers=_auth(data["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-up",
+                "value": 1,
+            },
+            headers=_auth(data["token"]),
+        )
         assert r.status_code == 204, r.text
     finally:
         await _cleanup_job(db_engine, "fb-job-up")
@@ -132,11 +153,15 @@ async def test_feedback_thumbs_down(client, auth_headers, db_engine):
     data = await _register(client, "fb-down@example.com")
     await _seed_job(db_engine, user_id=data["user_id"], job_id="fb-job-down")
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-down",
-            "value":  -1,
-            "comment": "Wrong answer",
-        }, headers=_auth(data["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-down",
+                "value": -1,
+                "comment": "Wrong answer",
+            },
+            headers=_auth(data["token"]),
+        )
         assert r.status_code == 204, r.text
     finally:
         await _cleanup_job(db_engine, "fb-job-down")
@@ -147,10 +172,14 @@ async def test_feedback_neutral(client, auth_headers, db_engine):
     data = await _register(client, "fb-neutral@example.com")
     await _seed_job(db_engine, user_id=data["user_id"], job_id="fb-job-neutral")
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-neutral",
-            "value":  0,
-        }, headers=_auth(data["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-neutral",
+                "value": 0,
+            },
+            headers=_auth(data["token"]),
+        )
         assert r.status_code == 204, r.text
     finally:
         await _cleanup_job(db_engine, "fb-job-neutral")
@@ -161,10 +190,14 @@ async def test_feedback_invalid_value(client, auth_headers, db_engine):
     data = await _register(client, "fb-invalid@example.com")
     await _seed_job(db_engine, user_id=data["user_id"], job_id="fb-job-invalid")
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-invalid",
-            "value":  99,  # not in {1, -1, 0}
-        }, headers=_auth(data["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-invalid",
+                "value": 99,  # not in {1, -1, 0}
+            },
+            headers=_auth(data["token"]),
+        )
         assert r.status_code == 422, r.text
     finally:
         await _cleanup_job(db_engine, "fb-job-invalid")
@@ -172,24 +205,32 @@ async def test_feedback_invalid_value(client, auth_headers, db_engine):
 
 @pytest.mark.asyncio
 async def test_feedback_unknown_job_returns_404(client, auth_headers):
-    r = await client.post("/eval/feedback", json={
-        "job_id": "nonexistent-job-id",
-        "value":  1,
-    }, headers=auth_headers)
+    r = await client.post(
+        "/eval/feedback",
+        json={
+            "job_id": "nonexistent-job-id",
+            "value": 1,
+        },
+        headers=auth_headers,
+    )
     assert r.status_code == 404, r.text
 
 
 @pytest.mark.asyncio
 async def test_feedback_wrong_owner_returns_404(client, db_engine):
     """A user cannot submit feedback for a job owned by someone else."""
-    owner   = await _register(client, "fb-owner@example.com")
-    other   = await _register(client, "fb-other@example.com")
+    owner = await _register(client, "fb-owner@example.com")
+    other = await _register(client, "fb-other@example.com")
     await _seed_job(db_engine, user_id=owner["user_id"], job_id="fb-job-owned")
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-owned",
-            "value":  1,
-        }, headers=_auth(other["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-owned",
+                "value": 1,
+            },
+            headers=_auth(other["token"]),
+        )
         # Same 404 as "not found" — no info leak about the job existing
         assert r.status_code == 404, r.text
     finally:
@@ -204,10 +245,14 @@ async def test_feedback_no_trace_id_still_succeeds(client, db_engine):
     data = await _register(client, "fb-notrace@example.com")
     await _seed_job(db_engine, user_id=data["user_id"], job_id="fb-job-notrace", trace_id=None)
     try:
-        r = await client.post("/eval/feedback", json={
-            "job_id": "fb-job-notrace",
-            "value":  1,
-        }, headers=_auth(data["token"]))
+        r = await client.post(
+            "/eval/feedback",
+            json={
+                "job_id": "fb-job-notrace",
+                "value": 1,
+            },
+            headers=_auth(data["token"]),
+        )
         assert r.status_code == 204, r.text
     finally:
         await _cleanup_job(db_engine, "fb-job-notrace")
@@ -220,6 +265,7 @@ async def test_feedback_requires_auth(client):
 
 
 # ── GET /eval/templates ───────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_list_templates_returns_empty_in_test_mode(client, auth_headers):
@@ -238,6 +284,7 @@ async def test_list_templates_requires_auth(client):
 
 
 # ── GET /eval/scores ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_scores_returns_empty_in_test_mode(client, auth_headers):
@@ -262,12 +309,14 @@ async def test_get_scores_requires_auth(client):
 
 # ── seed_eval_templates() ─────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_seed_eval_templates_is_noop_in_testing():
     """seed_eval_templates() must exit immediately when TESTING=true.
     Calling it twice must not raise or fail — idempotency check.
     """
     from eval_api import seed_eval_templates
+
     # Both calls should complete without error
     await seed_eval_templates()
     await seed_eval_templates()

@@ -29,6 +29,7 @@ try:
         FaithfulnessMetric,
     )
     from deepeval.test_case import LLMTestCase
+
     _DEEPEVAL_AVAILABLE = True
 except ImportError:
     _DEEPEVAL_AVAILABLE = False
@@ -38,9 +39,9 @@ pytestmark = pytest.mark.skipif(
     reason="deepeval not installed — run: pip install -r requirements-eval.txt",
 )
 
-_THRESHOLD_RELEVANCY    = float(os.getenv("EVAL_THRESHOLD_RELEVANCY",    "0.7"))
+_THRESHOLD_RELEVANCY = float(os.getenv("EVAL_THRESHOLD_RELEVANCY", "0.7"))
 _THRESHOLD_FAITHFULNESS = float(os.getenv("EVAL_THRESHOLD_FAITHFULNESS", "0.7"))
-_THRESHOLD_RECALL       = float(os.getenv("EVAL_THRESHOLD_RECALL",       "0.6"))
+_THRESHOLD_RECALL = float(os.getenv("EVAL_THRESHOLD_RECALL", "0.6"))
 
 
 class TestRagFlowQuality:

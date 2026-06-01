@@ -44,7 +44,7 @@ export function CollabCursors() {
             <svg width="16" height="20" viewBox="0 0 16 20" fill="none">
               <path
                 d="M0 0L0 16L4.5 12L7.5 19L9.5 18L6.5 11L12 11Z"
-                fill={peer.color ?? '#6366f1'}
+                fill={peer.user?.color ?? '#6366f1'}
               />
             </svg>
             {/* Name label */}
@@ -53,7 +53,7 @@ export function CollabCursors() {
               marginLeft:   6,
               padding:      '1px 5px',
               borderRadius: 3,
-              background:   peer.color ?? '#6366f1',
+              background:   peer.user?.color ?? '#6366f1',
               color:        '#fff',
               fontSize:     11,
               whiteSpace:   'nowrap',
@@ -61,7 +61,7 @@ export function CollabCursors() {
               overflow:     'hidden',
               textOverflow: 'ellipsis',
             }}>
-              {peer.name ?? 'Anonymous'}
+              {peer.user?.name ?? 'Anonymous'}
             </div>
           </div>
         )

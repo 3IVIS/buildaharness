@@ -4,7 +4,7 @@
 # and silently ignored every setting.
 
 target-version = "py312"
-line-length = 100
+line-length = 120
 src = ["adapter"]
 
 [lint]
@@ -23,7 +23,10 @@ ignore = [
   "S102",  # exec — intentional in codegen runners (exec'd code is fn_ref-validated upstream)
   "S603",  # subprocess — intentional in build scripts
   "B008",  # function calls in default args — FastAPI Depends() pattern
+  "S110",  # try-except-pass — intentional in cleanup/teardown paths
 ]
 
 [lint.per-file-ignores]
-# No per-file ignores needed — S102 is suppressed globally above with a justification comment.
+"adapter/tests/*.py" = ["S105", "S106", "S107"]   # test-only hardcoded credentials
+"adapter/eval/*.py"  = ["S105", "S106", "S107"]
+"adapter/migrations/**" = ["S608"]                 # raw SQL in Alembic migration scripts

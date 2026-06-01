@@ -58,12 +58,13 @@ export function Sidebar() {
   const runtime = flowMeta.runtimeHints?.preferred_adapter ?? null
 
   const stateCounts: Record<SettingsTab, number> = {
-    meta:   0,
-    state:  Object.keys(stateSchema?.properties ?? {}).length,
-    memory: Object.keys(memoryStores).length,
-    tools:  Object.keys(tools).length,
-    agents: agents.length,
-    config: 0,
+    meta:       0,
+    state:      Object.keys(stateSchema?.properties ?? {}).length,
+    memory:     Object.keys(memoryStores).length,
+    tools:      Object.keys(tools).length,
+    agents:     agents.length,
+    config:     0,
+    appearance: 0,
   }
 
   // Filter palette by search query
