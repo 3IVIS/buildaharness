@@ -355,8 +355,9 @@ async def _consume_refresh_token(refresh_token: str) -> tuple[str, str] | None:
         val = await r.getdel(key)  # atomic get + delete (rotation)
         if not val:
             return None
-        # BUG-2 fix: decode_responses=True → val is already str, not bytes
-        parts = val.split(":", 1)
+        # decode_responses=True means val is str at runtime; guard for mypy
+        val_str: str = val.decode("utf-8") if isinstance(val, bytes) else val
+        parts = val_str.split(":", 1)
         return (parts[0], parts[1]) if len(parts) == 2 else None
     except Exception:
         return None

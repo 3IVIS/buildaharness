@@ -30,7 +30,7 @@ export default defineConfig({
       output: {
         // Put CSS assets where package.json exports expects them.
         assetFileNames: (assetInfo) =>
-          assetInfo.names?.includes('index.css') ? 'styles.css' : (assetInfo.name ?? 'asset'),
+          assetInfo.name?.endsWith('.css') ? 'styles.css' : (assetInfo.name ?? 'asset'),
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
