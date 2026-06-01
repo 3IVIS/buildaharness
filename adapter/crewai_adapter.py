@@ -171,6 +171,24 @@ def gen_header(spec: dict) -> str:
             if _base_url:
                 return LLM(model=model, base_url=_base_url, api_key=_api_key or "ollama")
             return model or None
+    """) + dedent0("""\
+
+
+        # _inputs is injected into this namespace by run_api before exec().
+        # The try/except guard preserves the injected value; standalone runs fall back to {}.
+        # _sub() resolves {key} placeholders (produced by crewai_template from {{$.state.key}})
+        # at task-creation time so the LLM never sees an unresolved placeholder.
+        try:
+            _inputs
+        except NameError:
+            _inputs = {}
+
+        def _sub(s: str) -> str:
+            if not s or '{' not in s:
+                return s
+            for _k, _v in _inputs.items():
+                s = s.replace('{' + _k + '}', str(_v))
+            return s
     """)
 
 
@@ -332,7 +350,8 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             _ctx: list[str] = ctx,
         ) -> None:
             _lines.append(f"task_{_vid} = Task(")
-            _lines.append(f"    description={description!r},")
+            desc_expr = f"_sub({description!r})" if "{" in description else repr(description)
+            _lines.append(f"    description={desc_expr},")
             _lines.append(f"    expected_output={expected_output!r},")
             _lines.append(f"    agent={agent_var},")
             if _is_parallel:
