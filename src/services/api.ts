@@ -233,10 +233,10 @@ export const api = {
   },
 
   run: {
-    start: (spec: unknown, runtime?: string) =>
+    start: (spec: unknown, inputs: Record<string, unknown>, runtime?: string) =>
       request<{ job_id: string; status: string; runtime: string }>(
         `/run${runtime ? `?runtime=${runtime}` : ''}`,
-        { method: 'POST', body: JSON.stringify({ spec }) },
+        { method: 'POST', body: JSON.stringify({ spec, inputs }) },
       ),
 
     status: (jobId: string) => request<RunJobResponse>(`/run/${jobId}`),
