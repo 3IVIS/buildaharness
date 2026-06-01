@@ -248,7 +248,11 @@ SUPPORTED_RUNTIMES = {
     "langgraph": {"status": "full", "note": "Python codegen + execution. All 14 node types.", "executable": True},
     "crewai": {"status": "full", "note": "Python codegen + execution. All RFC stubs resolved.", "executable": True},
     "mastra": {"status": "full", "note": "TypeScript codegen + execution via Node.js sidecar.", "executable": True},
-    "microsoft_agent_framework": {"status": "full", "note": "Python codegen + in-process execution via Semantic Kernel.", "executable": True},
+    "microsoft_agent_framework": {
+        "status": "full",
+        "note": "Python codegen + in-process execution via Semantic Kernel.",
+        "executable": True,
+    },
 }
 
 

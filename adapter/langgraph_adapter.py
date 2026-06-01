@@ -905,7 +905,7 @@ def gen_graph_assembly(
     if input_node:
         for succ in fwd.get(input_node["id"], []):
             if succ in output_nodes:
-                lines.append(f"graph.add_edge(START, END)")
+                lines.append("graph.add_edge(START, END)")
             else:
                 lines.append(f"graph.add_edge(START, {succ!r})")
 
