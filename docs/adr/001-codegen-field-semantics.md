@@ -260,32 +260,34 @@ CrewAI's memory model is Crew-level, not Task-level. Attempting to generate per-
 
 ## Implementation checklist
 
+All items below are complete as of v0.8.0.
+
 ### `adapter/crewai_adapter.py`
 
-- [ ] **RFC-1** — In `emit_task()`: replace the `RFC_PENDING[RFC-1]` commented lines with live `context=[...]` argument when `ctx` is non-empty
-- [ ] **RFC-2** — In `gen_tasks()` for `memory_write`: replace `RFC_PENDING[RFC-2]` comment with `# memory tier: '{tier}' → configured at Crew level`
-- [ ] **RFC-2** — In `gen_crew()`: scan `memory_write` nodes for distinct tiers; add `XXXMemory()` kwargs to `Crew()` constructor
-- [ ] Update the module docstring: remove `RFC_PENDING` entries from the "isolated" section, move to "resolved"
-- [ ] Update `main.py` `SUPPORTED_RUNTIMES["crewai"]["note"]` from `"RFC_PENDING: context_from + memory tier."` → `"Full codegen."`
+- [x] **RFC-1** — In `emit_task()`: replace the `RFC_PENDING[RFC-1]` commented lines with live `context=[...]` argument when `ctx` is non-empty
+- [x] **RFC-2** — In `gen_tasks()` for `memory_write`: replace `RFC_PENDING[RFC-2]` comment with `# memory tier: '{tier}' → configured at Crew level`
+- [x] **RFC-2** — In `gen_crew()`: scan `memory_write` nodes for distinct tiers; add `XXXMemory()` kwargs to `Crew()` constructor
+- [x] Update the module docstring: remove `RFC_PENDING` entries from the "isolated" section, move to "resolved"
+- [x] Update `main.py` `SUPPORTED_RUNTIMES["crewai"]["note"]` from `"RFC_PENDING: context_from + memory tier."` → `"Full codegen."`
 
-### `adapter/langgraph_adapter.py` (new file)
+### `adapter/langgraph_adapter.py`
 
-- [ ] Implement `resolve_expr(expr, state)` helper
-- [ ] `llm_call` → node function returning `{output_key: result}` or `{}` if absent, with canvas warning logged
-- [ ] `memory_read` → `resolve_expr(query_expr, state)` for semantic mode; `resolve_expr(key_expr, state)` for key-value mode
-- [ ] `memory_write` → `resolve_expr(key_expr, state)` + `resolve_expr(value_expr, state)` + tier comment
-- [ ] `context_from` on edges → generate comment block per Decision 3; emit stderr warning if source node has no `output_key`
-- [ ] `hitl_breakpoint` → `interrupt()` + `update_state()` pattern; `output_key` receives resume payload
-- [ ] `parallel_fork` / `parallel_join` → `Send()` pattern; `parallel_join.output_key` receives aggregated result
+- [x] Implement `resolve_expr(expr, state)` helper
+- [x] `llm_call` → node function returning `{output_key: result}` or `{}` if absent, with canvas warning logged
+- [x] `memory_read` → `resolve_expr(query_expr, state)` for semantic mode; `resolve_expr(key_expr, state)` for key-value mode
+- [x] `memory_write` → `resolve_expr(key_expr, state)` + `resolve_expr(value_expr, state)` + tier comment
+- [x] `context_from` on edges → generate comment block per Decision 3; emit stderr warning if source node has no `output_key`
+- [x] `hitl_breakpoint` → `interrupt()` + `update_state()` pattern; `output_key` receives resume payload
+- [x] `parallel_fork` / `parallel_join` → `Send()` pattern; `parallel_join.output_key` receives aggregated result
 
 ### `src/spec/validation.ts`
 
-- [ ] Add canvas warning: `context_from` source node has no `output_key` (non-blocking, warning level)
-- [ ] Add canvas warning: `llm_call` has no `output_key` and no `structured_output`
+- [x] Add canvas warning: `context_from` source node has no `output_key` (non-blocking, warning level)
+- [x] Add canvas warning: `llm_call` has no `output_key` and no `structured_output`
 
 ### `spec/CHANGELOG.md`
 
-- [ ] Add entry under `[Unreleased]` → _"ADR-001: Codegen semantics for `output_key`, `*_expr`, `context_from`, `memory_write.tier` — no schema changes, adapter contracts formalised."_
+- [x] Added entry under v0.2.0 — _"ADR-001: Codegen semantics for `output_key`, `*_expr`, `context_from`, `memory_write.tier` — no schema changes, adapter contracts formalised."_
 
 ---
 
