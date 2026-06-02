@@ -14,7 +14,7 @@
     "langgraph_version": ">=0.2.0"
   },
   "model_defaults": {
-    "model": "gpt-4o-mini",
+    "model": "mistral:latest",
     "embedding_model": "text-embedding-3-small"
   },
   "state_schema": {
@@ -48,8 +48,8 @@
       "description": "Product documentation \u2014 pre-embedded at ingest time",
       "backend": "qdrant",
       "connection_env": "QDRANT_URL",
-      "embedding_model": "text-embedding-3-small",
-      "dimensions": 1536,
+      "embedding_model": "nomic-embed-text",
+      "dimensions": 768,
       "scope": "global"
     },
     "qa_cache": {
@@ -98,7 +98,7 @@
       "type": "transform",
       "label": "Format chunks",
       "mode": "fn_ref",
-      "fn_ref": "@itsharness/flows-rag/formatChunks",
+      "fn_ref": "rag_utils:format_chunks",
       "position": {
         "x": 560,
         "y": 200

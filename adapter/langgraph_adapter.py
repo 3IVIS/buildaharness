@@ -196,6 +196,12 @@ _BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, str]] = {
 }
 
 
+def _has_qdrant_store(spec: dict) -> bool:
+    """Return True if any memory_store in spec uses backend='qdrant'."""
+    stores = spec.get("memory_stores") or {}
+    return any(s.get("backend") == "qdrant" for s in stores.values())
+
+
 def gen_imports(spec: dict) -> str:
     nodes = spec.get("nodes", [])
     types = {n["type"] for n in nodes}
@@ -229,6 +235,10 @@ def gen_imports(spec: dict) -> str:
     if checkpoint.get("enabled"):
         lines.append("from langgraph.checkpoint.memory import MemorySaver")
 
+    if _has_qdrant_store(spec):
+        lines.append("from qdrant_client import QdrantClient")
+        lines.append("from langchain_openai import OpenAIEmbeddings")
+
     for tid in tools:
         impl = _BUILTIN_TOOL_IMPLS.get(tid)
         if impl and impl[0]:
@@ -238,7 +248,38 @@ def gen_imports(spec: dict) -> str:
     return "\n".join(lines)
 
 
-def gen_helpers() -> str:
+def _gen_qdrant_helper() -> str:
+    return dedent0("""\
+
+        def _qdrant_search(
+            query: str,
+            collection: str,
+            embedding_model: str,
+            top_k: int = 5,
+            min_score: float = 0.0,
+        ) -> list[dict]:
+            \"\"\"Embed *query* and run a cosine similarity search against Qdrant.\"\"\"
+            _base = os.environ.get("EMBED_BASE_URL") or os.environ.get("OPENAI_BASE_URL", "")
+            _key  = os.environ.get("OPENAI_API_KEY", "ollama")
+            _emb  = OpenAIEmbeddings(model=embedding_model, base_url=_base or None, api_key=_key)
+            _vec  = _emb.embed_query(query)
+            _client = QdrantClient(url=os.environ.get("QDRANT_URL", "http://localhost:6333"))
+            _result = _client.query_points(
+                collection_name=collection,
+                query=_vec,
+                limit=top_k,
+                score_threshold=min_score,
+                with_payload=True,
+            )
+            return [
+                {"text": h.payload.get("text", ""), "source": h.payload.get("source", ""), "score": h.score}
+                for h in _result.points
+            ]
+
+    """)
+
+
+def gen_helpers(spec: dict | None = None) -> str:
     """Emit runtime helper functions into the generated code."""
     return dedent0("""\
         # ─── Runtime helpers (ADR-001) ────────────────────────────────────────────────
@@ -287,7 +328,7 @@ def gen_helpers() -> str:
                 kw["api_key"]  = _api_key or "ollama"
             return ChatOpenAI(**kw)
 
-    """)
+    """) + (_gen_qdrant_helper() if spec and _has_qdrant_store(spec) else "")
 
 
 def gen_state_typeddict(spec: dict) -> str:
@@ -600,18 +641,36 @@ def gen_node_function(
         out_key = node.get("output_key", "retrieved")
 
         if mode == "semantic":
-            min_sc_comment = f"# filter: min_score={min_sc}\n" if min_sc else ""
-            body = (
-                f"{ctx}"
-                f"# memory_read: semantic retrieval from store {store_id!r}\n"
-                f"# query_expr resolved via _resolve() — bare JSONPath (ADR-001)\n"
-                f"query = _resolve(state, {q_expr!r})\n"
-                f"# TODO: replace _store_get with your vector store:\n"
-                f"#   results = your_vector_store.similarity_search(query, k={top_k})\n"
-                f"{min_sc_comment}"
-                f"results = _store_get({store_id!r}, str(query))\n"
-                f"return {{{out_key!r}: results}}\n"
-            )
+            store_def = (spec.get("memory_stores") or {}).get(store_id, {})
+            backend = store_def.get("backend", "")
+            emb_model = store_def.get("embedding_model", "nomic-embed-text")
+            min_sc_val = float(min_sc) if min_sc else 0.0
+            if backend == "qdrant":
+                body = (
+                    f"{ctx}"
+                    f"# memory_read: semantic retrieval from Qdrant store {store_id!r}\n"
+                    f"query = _resolve(state, {q_expr!r})\n"
+                    f"results = _qdrant_search(\n"
+                    f"    query=str(query),\n"
+                    f"    collection={store_id!r},\n"
+                    f"    embedding_model={emb_model!r},\n"
+                    f"    top_k={top_k},\n"
+                    f"    min_score={min_sc_val},\n"
+                    f")\n"
+                    f"return {{{out_key!r}: results}}\n"
+                )
+            else:
+                min_sc_comment = f"# filter: min_score={min_sc}\n" if min_sc else ""
+                body = (
+                    f"{ctx}"
+                    f"# memory_read: semantic retrieval from store {store_id!r}\n"
+                    f"query = _resolve(state, {q_expr!r})\n"
+                    f"# TODO: replace _store_get with your vector store:\n"
+                    f"#   results = your_vector_store.similarity_search(query, k={top_k})\n"
+                    f"{min_sc_comment}"
+                    f"results = _store_get({store_id!r}, str(query))\n"
+                    f"return {{{out_key!r}: results}}\n"
+                )
         else:
             body = (
                 f"{ctx}"
@@ -1062,7 +1121,7 @@ def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
         parts: list[str] = [
             gen_header(spec),
             gen_imports(spec),
-            gen_helpers(),
+            gen_helpers(spec),
             gen_state_typeddict(spec),
             gen_memory_stores(spec),
             gen_tools(spec),

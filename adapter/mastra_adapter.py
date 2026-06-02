@@ -337,7 +337,9 @@ const {vid}Step = createStep({{
         # initial input) with inputData (this step's direct predecessor output).
         # This ensures {{$.state.topic}} resolves correctly even in later steps
         # where triggerData is not forwarded as a named execute parameter.
-        state_merge = "    const _state = { ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {}), ...inputData }"
+        state_merge = (
+            "    const _state = { ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {}), ...inputData }"
+        )
         if struct:
             core_body = f"""\
 {state_merge}
@@ -431,7 +433,27 @@ const {vid}Step = createStep({{
         mapping = node.get("mapping", [])
 
         if mode == "fn_ref" and fn_ref:
-            body = f"""\
+            # Python-style "module:function" refs (e.g. rag_utils:format_chunks) cannot be
+            # imported as ES modules. Inline TypeScript equivalents for known rag_utils fns;
+            # fall back to a pass-through stub for unknown refs.
+            _INLINE_FN_REFS: dict[str, str] = {
+                "rag_utils:format_chunks": """\
+    // fn_ref: rag_utils:format_chunks (inlined as plain JS — Python module not importable here)
+    const state = inputData ?? {}
+    const chunks = Array.isArray(state.retrieved_chunks) ? state.retrieved_chunks : []
+    const parts = chunks.map((chunk, i) => {
+      if (typeof chunk === 'string') return `[${i + 1}]\\n${chunk.trim()}`
+      const text = String(chunk.text ?? chunk.page_content ?? chunk.content ?? '').trim()
+      const src = String(chunk.source ?? (chunk.metadata && chunk.metadata.source) ?? '')
+      const header = src ? `[${i + 1}] ${src}` : `[${i + 1}]`
+      return `${header}\\n${text}`
+    })
+    return { ...state, formatted_context: parts.join('\\n\\n') }""",
+            }
+            if fn_ref in _INLINE_FN_REFS:
+                body = _INLINE_FN_REFS[fn_ref]
+            else:
+                body = f"""\
     // fn_ref: {fn_ref}
     // Import and call the transform function
     const {{ default: transformFn }} = await import({json.dumps(fn_ref)})
@@ -489,8 +511,43 @@ const {vid}Step = createStep({{
         mode = node.get("retrieval_mode", "key_value")
         query_exp = node.get("query_expr", "")
         top_k = node.get("top_k", 5)
+        min_sc = node.get("min_score", 0.0) or 0.0
         out_key = node.get("output_key", "retrieved")
-        body = f"""\
+        store_def = (spec.get("memory_stores") or {}).get(store_id, {})
+        backend = store_def.get("backend", "")
+        emb_model = store_def.get("embedding_model", "nomic-embed-text")
+
+        if mode == "semantic" and backend == "qdrant":
+            body = f"""\
+    // memory_read: semantic retrieval from Qdrant store '{store_id}'
+    const _state   = inputData ?? {{}}
+    const _question = String(_state.question ?? _state[Object.keys(_state)[0]] ?? '')
+    // Embed via LiteLLM (EMBED_BASE_URL) so the call appears in Langfuse
+    const _embBase = process.env.EMBED_BASE_URL || process.env.OPENAI_BASE_URL || 'http://localhost:11434/v1'
+    const _embResp = await fetch(`${{_embBase}}/embeddings`, {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json',
+                 'Authorization': `Bearer ${{process.env.OPENAI_API_KEY || 'ollama'}}` }},
+      body: JSON.stringify({{ model: {json.dumps(emb_model)}, input: _question }}),
+    }})
+    const _embData = await _embResp.json()
+    const _vector  = _embData?.data?.[0]?.embedding
+    if (!_vector) throw new Error('Embedding failed: ' + JSON.stringify(_embData))
+    // Search Qdrant
+    const _qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333'
+    const _srchResp  = await fetch(
+      `${{_qdrantUrl}}/collections/{store_id}/points/search`,
+      {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
+         body: JSON.stringify({{ vector: _vector, limit: {top_k},
+                                score_threshold: {min_sc}, with_payload: true }}) }},
+    )
+    const _srchData = await _srchResp.json()
+    const {out_key} = (_srchData?.result || []).map((h) => ({{
+      text: h.payload?.text || '', source: h.payload?.source || '', score: h.score,
+    }}))
+    return {{ {out_key} }}"""
+        else:
+            body = f"""\
     // memory_read: store='{store_id}', mode='{mode}'
     const memory = mastra?.memory
     let {out_key} = null

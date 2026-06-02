@@ -65,6 +65,10 @@ services:
       - "8001:8001"
     environment:
       - MASTRA_RUNNER_PORT=8001
+      - QDRANT_URL=http://qdrant:6333
+      # Embedding calls always route through LiteLLM so they appear in Langfuse,
+      # even when OPENAI_BASE_URL points directly to Ollama for LLM calls.
+      - EMBED_BASE_URL=http://litellm:4000
       # ── LLM routing ───────────────────────────────────────────────────────────
       # In Docker, all LLM calls route through LiteLLM (the unified gateway).
       # LiteLLM picks the right provider (OpenAI, Anthropic, Ollama) from the
@@ -99,6 +103,10 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - QDRANT_URL=http://qdrant:6333
+      # Embedding calls always route through LiteLLM so they appear in Langfuse,
+      # even when OPENAI_BASE_URL points directly to Ollama for LLM calls.
+      - EMBED_BASE_URL=http://litellm:4000
       - DATABASE_URL=postgresql+asyncpg://itsharness:${POSTGRES_PASSWORD}@postgres:5432/itsharness
       # Fix #3: JWT_SECRET must be set in .env — no fallback; adapter exits if unset.
       - JWT_SECRET=${JWT_SECRET}
@@ -155,6 +163,8 @@ services:
       mastra-runner:
         condition: service_healthy
       litellm:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
@@ -276,6 +286,20 @@ services:
       timeout: 10s
       retries: 30
       start_period: 30s
+
+  # ── Qdrant (vector store for RAG knowledge_base) ─────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.13.0
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/6333' && echo ok || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   # ── Redis (Langfuse ingestion queue) ──────────────────────────────────────
   redis:
@@ -400,3 +424,4 @@ volumes:
   clickhouse_data:
   redis_data:
   minio_data:
+  qdrant_data:
