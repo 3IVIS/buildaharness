@@ -27,6 +27,6 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-"adapter/tests/*.py" = ["S105", "S106", "S107"]   # test-only hardcoded credentials
+"adapter/tests/*.py" = ["S105", "S106", "S107", "S310"]   # test-only hardcoded credentials; S310: Wikipedia URL fetch is always HTTPS
 "adapter/eval/*.py"  = ["S105", "S106", "S107"]
 "adapter/migrations/**" = ["S608"]                 # raw SQL in Alembic migration scripts

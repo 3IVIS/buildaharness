@@ -188,6 +188,11 @@ def gen_header(spec: dict) -> str:
                 return s
             for _k, _v in _inputs.items():
                 s = s.replace('{' + _k + '}', str(_v))
+            # Remove any remaining unresolved {key} placeholders — these come from
+            # intermediate state fields (e.g. formatted_context, retrieved_chunks)
+            # that are populated mid-run and are not available at crew.kickoff() time.
+            import re as _re2
+            s = _re2.sub('[{][a-zA-Z_][a-zA-Z0-9_]*[}]', '', s)
             return s
     """)
 
@@ -213,9 +218,54 @@ _BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, str]] = {
 }
 
 
+def _has_qdrant_store(spec: dict) -> bool:
+    stores = spec.get("memory_stores") or {}
+    return any(s.get("backend") == "qdrant" for s in stores.values())
+
+
+def _gen_qdrant_tools(spec: dict) -> str:
+    """Emit BaseTool subclasses for every Qdrant-backed memory_store."""
+    stores = spec.get("memory_stores") or {}
+    lines: list[str] = [
+        "from qdrant_client import QdrantClient as _QdrantClient",
+        "from langchain_openai import OpenAIEmbeddings as _OAIEmb",
+        "",
+    ]
+    for store_id, store_def in stores.items():
+        if store_def.get("backend") != "qdrant":
+            continue
+        emb_model = store_def.get("embedding_model", "nomic-embed-text")
+        top_k = store_def.get("top_k", 5)
+        cls_name = f"_{safe_id(store_id).capitalize()}SearchTool"
+        inst_name = f"{safe_id(store_id)}_search_tool"
+        lines += [
+            f"class {cls_name}(BaseTool):",
+            f'    name: str = "{store_id}_search"',
+            (
+                f'    description: str = "Semantic search over the {store_id} '
+                'knowledge base. Input: a plain-text query string."'
+            ),
+            "    def _run(self, query: str) -> str:",
+            "        _base = os.environ.get('EMBED_BASE_URL') or os.environ.get('OPENAI_BASE_URL', '')",
+            "        _key  = os.environ.get('OPENAI_API_KEY', 'ollama')",
+            f"        _emb  = _OAIEmb(model={emb_model!r}, base_url=_base or None, api_key=_key)",
+            "        _vec  = _emb.embed_query(query)",
+            "        _cli  = _QdrantClient(url=os.environ.get('QDRANT_URL', 'http://localhost:6333'))",
+            f"        _hits = _cli.search(collection_name={store_id!r}, query_vector=_vec,",
+            f"                            limit={top_k}, with_payload=True)",
+            "        parts = [h.payload.get('text', '') for h in _hits if h.payload]",
+            "        return '\\n\\n'.join(parts) or 'No relevant results found.'",
+            "",
+            f"{inst_name} = {cls_name}()",
+            "",
+        ]
+    return "\n".join(lines)
+
+
 def gen_tools(spec: dict) -> str:
     tools = spec.get("tools", {})
-    if not tools:
+    has_qdrant = _has_qdrant_store(spec)
+    if not tools and not has_qdrant:
         return "# (no tools defined)\n"
 
     import_lines: list[str] = []
@@ -250,13 +300,20 @@ def gen_tools(spec: dict) -> str:
                 f"{vid} = _{vid.capitalize()}Tool()",
                 "",
             ]
-    return "\n".join(import_lines + ([""] if import_lines else []) + body_lines)
+    prefix = _gen_qdrant_tools(spec) if has_qdrant else ""
+    return prefix + "\n".join(import_lines + ([""] if import_lines else []) + body_lines)
 
 
 def gen_agents(spec: dict) -> str:
     agents = spec.get("agents", [])
     tool_ids = set(spec.get("tools", {}).keys())
     model_default = (spec.get("model_defaults") or {}).get("model", "gpt-4o-mini")
+    # Collect instance names of any Qdrant search tools to wire into _executor.
+    qdrant_tool_insts = [
+        f"{safe_id(sid)}_search_tool"
+        for sid, sdef in (spec.get("memory_stores") or {}).items()
+        if sdef.get("backend") == "qdrant"
+    ]
 
     lines: list[str] = [
         "# ─── Agents ─────────────────────────────────────────────────────────────────",
@@ -292,6 +349,7 @@ def gen_agents(spec: dict) -> str:
         lines.append(")")
         lines.append("")
 
+    executor_tools = f"    tools=[{', '.join(qdrant_tool_insts)}]," if qdrant_tool_insts else ""
     lines += [
         "# Generic executor for non-agent nodes (llm_call, tool_invoke, transform, etc.)",
         "_executor = Agent(",
@@ -299,6 +357,10 @@ def gen_agents(spec: dict) -> str:
         '    backstory="A general-purpose executor that runs non-agent workflow steps.",',
         '    goal="Complete the assigned step accurately and concisely.",',
         f"    llm=_make_llm({model_default!r}),",
+    ]
+    if executor_tools:
+        lines.append(executor_tools)
+    lines += [
         "    verbose=True,",
         ")",
         "",
@@ -478,12 +540,21 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             store_id = node.get("store_id", "")
             mode = node.get("retrieval_mode", "key_value")
             out_key = node.get("output_key", "")
-            emit_task(
-                f"Read from memory store '{store_id}' using {mode} retrieval.",
-                f"Retrieved content.{' Stored in state.' + out_key if out_key else ''}",
-                "_executor",
-                ["# CrewAI uses built-in agent memory — configure via Agent(memory=True)"],
-            )
+            store_def = (spec.get("memory_stores") or {}).get(store_id, {})
+            if mode == "semantic" and store_def.get("backend") == "qdrant":
+                tool_name = f"{safe_id(store_id)}_search"
+                emit_task(
+                    f"Use the {tool_name} tool to find relevant information about: {{question}}",
+                    f"Retrieved document chunks from the '{store_id}' knowledge base.",
+                    "_executor",
+                )
+            else:
+                emit_task(
+                    f"Read from memory store '{store_id}' using {mode} retrieval.",
+                    f"Retrieved content.{' Stored in state.' + out_key if out_key else ''}",
+                    "_executor",
+                    ["# CrewAI uses built-in agent memory — configure via Agent(memory=True)"],
+                )
             continue
 
         # ── memory_write ─────────────────────────────────────────────────────
