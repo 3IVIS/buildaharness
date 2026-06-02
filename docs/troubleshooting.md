@@ -217,83 +217,6 @@ grep LANGFUSE_ENCRYPTION_KEY .env | awk -F= '{print length($2), $2}'
 
 ## Multiple secrets missing at once
 
-If you're hitting one secret error after another on each restart, the fastest path is to verify all required secrets are set and non-placeholder before starting. Run this check against your `.env`:
-
-```bash
-python3 - << 'EOF'
-import re
-
-required = [
-    "JWT_SECRET", "POSTGRES_PASSWORD", "REDIS_PASSWORD",
-    "LITELLM_MASTER_KEY", "LANGFUSE_ADMIN_EMAIL", "LANGFUSE_ADMIN_PASSWORD",
-    "LANGFUSE_NEXTAUTH_SECRET", "LANGFUSE_SALT", "LANGFUSE_ENCRYPTION_KEY",
-    "CLICKHOUSE_PASSWORD",
-]
-placeholders = {"REPLACE_ME", "REPLACE_WITH_REAL_SECRET", "REPLACE_WITH_REAL_PASSWORD",
-                "your_password", "changeme", ""}
-
-env = {}
-with open(".env") as f:
-    for line in f:
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, _, v = line.partition("=")
-            env[k.strip()] = v.strip()
-
-all_ok = True
-for key in required:
-    val = env.get(key, "")
-    missing = not val or val in placeholders or "REPLACE" in val
-    if missing:
-        print(f"  ❌ {key}: {'not set' if not val else 'still a placeholder'}")
-        all_ok = False
-    else:
-        print(f"  ✅ {key}")
-
-# Special check: LANGFUSE_ENCRYPTION_KEY must be exactly 64 hex chars
-enc = env.get("LANGFUSE_ENCRYPTION_KEY", "")
-if enc and (len(enc) != 64 or not re.fullmatch(r"[0-9a-fA-F]+", enc)):
-    print(f"  ❌ LANGFUSE_ENCRYPTION_KEY: wrong format — must be 64 hex chars (openssl rand -hex 32)")
-    all_ok = False
-
-if all_ok:
-    print("\nAll required secrets look good.")
-else:
-    print("\nFix the above before running docker compose up.")
-
----
-
-## Langfuse `ENCRYPTION_KEY must be 256 bits, 64 string characters in hex format`
-
-**Symptom**
-
-```
-langfuse-1 | ZodError: ENCRYPTION_KEY must be 256 bits, 64 string characters in hex format,
-            | generate via: openssl rand -hex 32
-```
-
-**Cause**
-
-`LANGFUSE_ENCRYPTION_KEY` is missing from `.env`, still at a placeholder, or was generated with the wrong command. It must be **exactly 64 lowercase hex characters** — the output of `openssl rand -hex 32`. Using `openssl rand -base64 32` (~44 base64 characters) fails this check.
-
-**Fix**
-
-```bash
-echo "LANGFUSE_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
-docker compose down && docker compose up
-```
-
-Verify the value before restarting:
-
-```bash
-grep LANGFUSE_ENCRYPTION_KEY .env | awk -F= '{print length($2), $2}'
-# Should print: 64 <64-char-hex-string>
-```
-
----
-
-## Multiple secrets missing at once
-
 If you are hitting one secret error after another on each restart, verify all required secrets are set before starting again. Run from the project root:
 
 ```bash
@@ -339,5 +262,3 @@ if enc and (len(enc) != 64 or not re.fullmatch(r"[0-9a-fA-F]+", enc)):
 print()
 print("All secrets OK — ready to start." if all_ok else "Fix the above before running docker compose up.")
 ```
-
-Run it with `bash scripts/check-env.sh` from the project root.

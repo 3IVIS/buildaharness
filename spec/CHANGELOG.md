@@ -8,25 +8,29 @@ Format: [Semantic Versioning](https://semver.org). Schema changes in minor versi
 
 ## [Unreleased]
 
+No unreleased spec changes at this time.
+
+## [0.2.0] — 2025-05-14 (updated 2026-05-16)
+
 ### Adapter contracts (ADR-001 — no schema version bump)
 
 Codegen semantics formalised for four fields that were previously open RFC questions.
-See [`docs/adr/001-codegen-field-semantics.md`](../docs/adr/001-codegen-field-semantics.md) for full rationale and implementation checklist.
+All items implemented as of project v0.8.0.
+See [`docs/adr/001-codegen-field-semantics.md`](../docs/adr/001-codegen-field-semantics.md) for full rationale.
 
 - **`output_key`** — Direct state-dict write: node function returns `{output_key: result}`. If absent on `llm_call` or `hitl_breakpoint`, returns `{}`. Canvas warns when `llm_call` has neither `output_key` nor `structured_output`.
 - **`query_expr` / `key_expr` / `value_expr`** — Bare JSONPath selectors (`$.state.key`), not mustache templates. Adapters implement a shared `resolve_expr(expr, state)` helper.
-- **`context_from`** — CrewAI: maps to `Task.context=[...]` (RFC-1 stubs in `crewai_adapter.py` now uncommented). LangGraph: dependency declaration only — generates a comment block since LG already shares full state. Mastra: step input mapping (already implemented).
+- **`context_from`** — CrewAI: maps to `Task.context=[...]` (RFC-1 resolved). LangGraph: dependency declaration only — generates a comment block since LG already shares full state. Mastra: step input mapping.
 - **`memory_write.tier`** — CrewAI Crew-level construction hint: adapter scans all `memory_write` nodes for distinct tiers and adds the corresponding `XXXMemory()` instances to the `Crew()` constructor (RFC-2 resolved). Task-level tier targeting is not supported by the CrewAI API. Other adapters treat `tier` as a comment-only hint.
 
-### Added (spec)
+### Added
+
 - `FailBranch` and `RetryConfig` schema types for error-handling branches on `llm_call` and `tool_invoke` nodes
 - `fail_branch` optional field on `LlmCallNode` and `ToolInvokeNode`
 - Canvas renders `fail_branch` as a red dashed `FailEdge` with "on fail" label
 - CrewAI and Mastra adapters emit retry logic when `fail_branch` is configured
 
-## [0.2.0] — 2025-05-14
-
-### Added
+### Added (original release)
 
 **`agents[]` registry** — Top-level array of named agent personas (`AgentDef`). Each entry declares `id`, `role`, `backstory`, `goal`, `tools`, `memory_config`, `max_iter`, `allow_delegation`. Referenced by `agent_role` and `agent_debate` nodes.
 
