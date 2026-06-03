@@ -448,10 +448,6 @@ def test_maf_debate_group_chat_runs(debate_spec):
     devil_msg = "Historical displacement shows AI eliminates roles faster than new ones emerge."
     verdict_msg = "Having heard both sides, I declare: VERDICT — the motion passes on balance."
 
-    # Responses cycle: advocate → devil_advocate → judge (with VERDICT)
-    turn_responses = [advocate_msg, devil_msg, verdict_msg]
-    turn_idx = {"n": 0}
-
     code, warnings = compile_maf(debate_spec)
     debate_warns = [w for w in warnings if "agent_debate" in w]
     assert len(debate_warns) == 1, f"Expected exactly 1 debate warning, got: {warnings}"
@@ -511,5 +507,5 @@ def test_maf_termination_checks_for_verdict(debate_spec):
     verdict_idx = code.find("VERDICT")
     assert verdict_idx != -1, "VERDICT keyword must appear in generated MAF code"
     # And there must be a reference to the termination function near it
-    surrounding = code[max(0, verdict_idx - 300): verdict_idx + 300]
+    surrounding = code[max(0, verdict_idx - 300) : verdict_idx + 300]
     assert "check_termination" in surrounding or "KernelFunction" in surrounding or "termination" in surrounding.lower()

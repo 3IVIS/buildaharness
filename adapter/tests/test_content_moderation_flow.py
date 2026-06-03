@@ -303,9 +303,7 @@ def test_langgraph_high_severity_triggers_hitl_interrupt(moderation_spec):
     except ImportError:
         pytest.skip("langgraph not installed — skipping live interrupt test")
 
-    classify_json = json.dumps(
-        {"severity": "high", "reason": "Explicit phishing instructions violate policy."}
-    )
+    classify_json = json.dumps({"severity": "high", "reason": "Explicit phishing instructions violate policy."})
     mock_llm = MagicMock(invoke=lambda messages: _fake_llm_response(classify_json))
     code, _ = compile_langgraph(moderation_spec)
     ns: dict = {}

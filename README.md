@@ -263,6 +263,7 @@ itsharness/
 |---|---|
 | [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md) | System design, service interactions, data flows, key decisions |
 | [docs/api.md](https://github.com/3IVIS/itsharness/blob/main/docs/api.md) | Full API reference — all endpoints, auth, error codes |
+| [docs/tests-and-scripts.md](https://github.com/3IVIS/itsharness/blob/main/docs/tests-and-scripts.md) | All test suites and helper scripts — what each covers and how to run them |
 | [docs/llm-setup.md](https://github.com/3IVIS/itsharness/blob/main/docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom models |
 | [docs/collab.md](https://github.com/3IVIS/itsharness/blob/main/docs/collab.md) | Real-time collaboration — setup, Yjs internals, env vars |
 | [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md) | Docker, Helm, SSO/OIDC configuration, full env var reference |

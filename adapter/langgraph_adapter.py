@@ -522,7 +522,11 @@ def gen_node_function(
             # so downstream _resolve() calls can traverse the nested fields.
             ret = (
                 f"try:\n"
-                f"    _resp_val = json.loads(response.content) if isinstance(response.content, str) else response.content\n"
+                f"    _resp_val = (\n"
+                f"        json.loads(response.content)\n"
+                f"        if isinstance(response.content, str)\n"
+                f"        else response.content\n"
+                f"    )\n"
                 f"except Exception:\n"
                 f"    _resp_val = response.content\n"
                 f"return {{{out_key!r}: _resp_val}}"
@@ -1096,7 +1100,8 @@ def gen_entrypoint(spec: dict) -> str:
     parts: list[str] = ["# ─── Entry point ──────────────────────────────────────────────────────────────", ""]
 
     if telemetry.get("enabled") and telemetry.get("provider") == "langfuse":
-        parts.append(dedent0(f"""\
+        parts.append(
+            dedent0("""\
             # ─── Langfuse tracing setup ───────────────────────────────────────────────────
             try:
                 import os as _os
@@ -1111,10 +1116,12 @@ def gen_entrypoint(spec: dict) -> str:
             except Exception:
                 _lf_observe = lambda *a, **kw: (lambda f: f)
                 _LF_ENABLED = False
-        """))
+        """)
+        )
         parts.append(f"\n@_lf_observe(name={flow_name!r})")
 
-    parts.append(dedent0(f"""\
+    parts.append(
+        dedent0(f"""\
         def run_flow(inputs: dict) -> dict:
             \"\"\"Execute the compiled flow and return the final state.\"\"\"
             final: dict = {{}}
@@ -1131,7 +1138,8 @@ def gen_entrypoint(spec: dict) -> str:
             print("Running flow with inputs:", _inputs)
             _result = run_flow(_inputs)
             print("Final state:", _json.dumps(_result, default=str, indent=2))
-    """))
+    """)
+    )
 
     return "\n".join(parts)
 
