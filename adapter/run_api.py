@@ -1354,3 +1354,64 @@ async def job_status(
         "trace_id": job.trace_id,
         "trace_url": job.trace_url,
     }
+
+
+# ─── Harness state endpoints (P0.6) ──────────────────────────────────────────
+
+
+class HarnessStateUpdateRequest(BaseModel):
+    state: dict = {}
+
+
+@router.get("/{job_id}/harness-state")
+async def get_harness_state(
+    job_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Return the full harness run state for a job.
+
+    Returns 404 for non-harness runs — no empty-state response is leaked.
+    """
+    from harness.state_store import load as _harness_load
+
+    job = await _jobs_get_owned(job_id, str(user.id), db)
+    if not job.is_harness_run:
+        raise HTTPException(status_code=404, detail="No harness state for this run")
+
+    state = await _harness_load(job_id, db)
+    if state is None:
+        raise HTTPException(status_code=404, detail="No harness state for this run")
+
+    return state.to_dict()
+
+
+@router.put("/{job_id}/harness-state", status_code=200)
+async def put_harness_state(
+    job_id: str,
+    req: HarnessStateUpdateRequest,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Upsert harness run state for a job.
+
+    Merges the provided partial state dict with any existing state, then
+    persists. Marks the job as a harness run on first write.
+    """
+    from harness.state_store import HarnessRunState
+    from harness.state_store import load as _harness_load
+    from harness.state_store import save as _harness_save
+
+    job = await _jobs_get_owned(job_id, str(user.id), db)
+
+    existing = await _harness_load(job_id, db)
+    if existing is None:
+        existing = HarnessRunState(run_id=job_id)
+
+    existing_dict = existing.to_dict()
+    existing_dict.update(req.state)
+    merged = HarnessRunState.from_dict(job_id, existing_dict)
+
+    await _harness_save(job_id, merged, db)
+
+    return {"job_id": job_id, "saved": True}
