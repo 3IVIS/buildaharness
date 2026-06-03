@@ -56,22 +56,94 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 1 — adapter-tests
-  # Run the full adapter test suite (unit + integration) and the eval spec-
-  # validation gate.  Skippable only via workflow_dispatch.skip_tests.
+  # JOBs 1a-1d — adapter checks (run in parallel)
+  # Lint, typecheck, unit tests, and eval gate are independent and run
+  # concurrently.  All are skippable via workflow_dispatch.skip_tests.
   # ─────────────────────────────────────────────────────────────────────────────
-  adapter-tests:
-    name: Adapter tests + eval gate
+  adapter-lint:
+    name: Adapter — lint + format check
     if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: adapter
-
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+      - name: Install deps
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (ruff)
+        run: ruff format --check .
 
+  adapter-typecheck:
+    name: Adapter — typecheck (mypy)
+    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+      - name: Install deps
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Type-check (mypy)
+        run: mypy . --ignore-missing-imports --python-version 3.12
+
+  adapter-unit-tests:
+    name: Adapter — unit + integration + MAF tests
+    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+      - name: Install deps
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Unit + integration tests
+        run: pytest tests/ -v --tb=short
+        env:
+          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING:      'true'
+      - name: MAF adapter tests
+        run: pytest tests/test_maf_adapter.py -v --tb=short
+        env:
+          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          TESTING:      'true'
+
+  adapter-eval-gate:
+    name: Adapter — eval spec-validation gate
+    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapter
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -80,33 +152,8 @@ jobs:
             adapter/requirements.txt
             adapter/requirements-dev.txt
             adapter/requirements-eval.txt
-
       - name: Install deps
         run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-eval.txt
-
-      - name: Lint (ruff)
-        run: ruff check .
-
-      - name: Format check (ruff)
-        run: ruff format --check .
-
-      - name: Type-check (mypy)
-        run: mypy . --ignore-missing-imports --python-version 3.12
-
-      - name: Unit + integration tests
-        run: pytest tests/ -v --tb=short
-        env:
-          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
-          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
-          TESTING:      'true'
-
-      - name: MAF adapter tests
-        run: pytest tests/test_maf_adapter.py -v --tb=short
-        env:
-          JWT_SECRET:   ${{ secrets.JWT_SECRET_TEST || 'test-secret-ci-only' }}
-          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
-          TESTING:      'true'
-
       # Fast gate — no LLM needed.  All 5 reference flows must compile to all
       # 4 runtimes (LangGraph, CrewAI, Mastra, MAF) without syntax errors.
       - name: Eval spec-validation gate (all 4 runtimes × 5 flows)
@@ -123,8 +170,13 @@ jobs:
     name: Build & push adapter image
     # Don't push on PRs — just build to verify the Dockerfile is intact.
     # Also skip for promote_staging (no rebuild needed).
-    needs: [adapter-tests]
-    if: always() && (needs.adapter-tests.result == 'success' || needs.adapter-tests.result == 'skipped') && (github.event_name != 'workflow_dispatch' || inputs.promote_staging != 'true') && github.event_name != 'pull_request'
+    needs: [adapter-lint, adapter-typecheck, adapter-unit-tests, adapter-eval-gate]
+    if: >-
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled') &&
+      (github.event_name != 'workflow_dispatch' || inputs.promote_staging != 'true') &&
+      github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     outputs:
