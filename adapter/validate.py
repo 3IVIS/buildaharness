@@ -97,6 +97,7 @@ def validate_spec(spec: dict) -> None:
 _EVIDENCE_TYPES = {"OBSERVATION", "INFERENCE", "SYSTEM_ERROR"}
 _RELIABILITY_CLASSES = {"HIGH", "MEDIUM", "LOW"}
 _APPLY_TO_VALUES = {"inferences_only", "all"}
+_INTEGRATION_MODES = {"observations_only", "infer_beliefs"}
 
 
 def _validate_harness_configs(spec: dict) -> None:
@@ -147,6 +148,28 @@ def _validate_harness_configs(spec: dict) -> None:
                         f"apply_tool_reliability node '{node.get('id')}': "
                         f"harness_config.apply_to must be one of {sorted(_APPLY_TO_VALUES)}, "
                         f"got {apply_to!r}"
+                    ),
+                )
+
+        elif ntype == "update_world_model":
+            integration_mode = cfg.get("integration_mode", "observations_only")
+            if integration_mode not in _INTEGRATION_MODES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"update_world_model node '{node.get('id')}': "
+                        f"harness_config.integration_mode must be one of {sorted(_INTEGRATION_MODES)}, "
+                        f"got {integration_mode!r}"
+                    ),
+                )
+            reliability_threshold = cfg.get("reliability_threshold", "HIGH")
+            if reliability_threshold not in _RELIABILITY_CLASSES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"update_world_model node '{node.get('id')}': "
+                        f"harness_config.reliability_threshold must be one of {sorted(_RELIABILITY_CLASSES)}, "
+                        f"got {reliability_threshold!r}"
                     ),
                 )
 

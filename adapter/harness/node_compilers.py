@@ -42,7 +42,7 @@ def compile_gather_evidence(node: dict, evidence_store_var: str) -> str:
         "_ev = _Evidence(",
         "    id=str(_uuid.uuid4()),",
         "    obs=str(tool_output),",
-        f"    reliability=_ev_reliability,",
+        "    reliability=_ev_reliability,",
         f"    source={source_tool!r},",
         f"    evidence_type={evidence_type!r},",
         "    freshness=1.0,",
@@ -100,10 +100,34 @@ def compile_apply_tool_reliability(
     )
 
 
+def compile_update_world_model(
+    node: dict,
+    world_model_var: str,
+    evidence_store_var: str,
+) -> str:
+    """Generate Python code for an update_world_model canvas node.
+
+    The generated code calls integrate_evidence() with the configured
+    reliability_threshold, then recompute_belief_health() to update the
+    three proxy sub-dimensions. Never calls add_belief() directly (INV-01).
+    """
+    config = node.get("harness_config") or {}
+    reliability_threshold: str = config.get("reliability_threshold", "HIGH")
+
+    return (
+        "from harness.world_model_ops import integrate_evidence as _integrate_evidence\n"
+        "from harness.world_model_ops import recompute_belief_health as _recompute_belief_health\n"
+        f"_integrate_evidence({evidence_store_var}, {world_model_var},"
+        f" reliability_threshold={reliability_threshold!r})\n"
+        f"_recompute_belief_health({world_model_var})\n"
+    )
+
+
 # Dispatch table — shared across all framework adapters.
 # Framework-specific wiring is deferred to P11; this ensures the node types
 # are not silently skipped during compilation.
 HARNESS_NODE_COMPILERS: dict[str, object] = {
     "gather_evidence": compile_gather_evidence,
     "apply_tool_reliability": compile_apply_tool_reliability,
+    "update_world_model": compile_update_world_model,
 }

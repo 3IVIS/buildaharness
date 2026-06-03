@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .evidence import Evidence, ReliabilityClass, _RELIABILITY_FROM_ORDER, _RELIABILITY_ORDER
+from .evidence import _RELIABILITY_FROM_ORDER, _RELIABILITY_ORDER, Evidence, ReliabilityClass
 
 
 @dataclass
