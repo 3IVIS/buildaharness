@@ -484,6 +484,8 @@ class Job(Base):
     # A2A-specific metadata (null for plain /run jobs)
     a2a_flow_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     a2a_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Harness flag — set by the harness state store when first persisting P0 state
+    is_harness_run: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user = relationship("User")
     org = relationship("Org")

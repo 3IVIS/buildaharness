@@ -32,6 +32,24 @@ def _fn_ref_ok(value: str) -> bool:
     return bool(_FN_REF_NO_COLON.match(value)) or bool(_FN_REF_ONE_COLON.match(value))
 
 
+_SUPPORTED_VERSIONS = {"0.2.0", "1.0.0"}
+
+_HARNESS_NODE_TYPES = {
+    "world_model",
+    "hypothesis_set",
+    "gather_evidence",
+    "apply_tool_reliability",
+    "update_world_model",
+    "control_state",
+    "task_graph_node",
+    "verification_gate",
+    "recovery_node",
+    "evidence_store_node",
+    "experience_store_node",
+    "reviewer_pass",
+}
+
+
 def validate_spec(spec: dict) -> None:
     """Basic structural validation before codegen or persistence."""
     if not isinstance(spec, dict):
@@ -40,16 +58,36 @@ def validate_spec(spec: dict) -> None:
         raise HTTPException(status_code=400, detail="spec.nodes must be a non-empty array")
     if "edges" not in spec or not isinstance(spec["edges"], list):
         raise HTTPException(status_code=400, detail="spec.edges must be an array")
-    if spec.get("spec_version") != "0.2.0":
+
+    spec_version = spec.get("spec_version")
+    if spec_version not in _SUPPORTED_VERSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported spec_version '{spec.get('spec_version')}'. Expected '0.2.0'.",
+            detail=f"Unsupported spec_version '{spec_version}'. Expected one of: {sorted(_SUPPORTED_VERSIONS)}.",
         )
+
     node_types = {n.get("type") for n in spec["nodes"] if isinstance(n, dict)}
+
     if "input" not in node_types:
         raise HTTPException(status_code=400, detail="spec.nodes must contain at least one input node")
     if "output" not in node_types:
         raise HTTPException(status_code=400, detail="spec.nodes must contain at least one output node")
+
+    # Harness node types are only permitted when harness_meta.enabled is true.
+    harness_node_types_used = node_types & _HARNESS_NODE_TYPES
+    if harness_node_types_used:
+        harness_meta = spec.get("harness_meta") or {}
+        if not harness_meta.get("enabled", False):
+            offenders = sorted(t for t in harness_node_types_used if isinstance(t, str))
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Harness node type(s) {offenders} found in spec but "
+                    "harness_meta.enabled is false (or harness_meta is absent). "
+                    "Set harness_meta.enabled: true to use harness nodes."
+                ),
+            )
+
     _validate_fn_refs(spec)
 
 

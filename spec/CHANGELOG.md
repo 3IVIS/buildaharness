@@ -6,6 +6,20 @@ Format: [Semantic Versioning](https://semver.org). Schema changes in minor versi
 
 ---
 
+## [1.0.0] — 2026-06-03
+
+### Added — Harness architecture support (Phase 0 foundation)
+
+**`harness_meta` block (optional)** — New optional top-level field that marks a flow as harness-capable. Fields: `harness_version: string`, `phase: string`, `enabled: boolean` (default `false`). When `enabled` is `false`, the adapter rejects any harness node type with a clear error. Flows without this block are treated as `enabled: false`.
+
+**12 harness node type stubs** — New node types accepted by the schema (all require `harness_meta.enabled: true`): `world_model`, `hypothesis_set`, `gather_evidence`, `apply_tool_reliability`, `update_world_model`, `control_state`, `task_graph_node`, `verification_gate`, `recovery_node`, `evidence_store_node`, `experience_store_node`, `reviewer_pass`. Each accepts an opaque `harness_config: object` at this stage; field shapes are added per-phase.
+
+**`SpecVersion` accepts both `"0.2.0"` and `"1.0.0"`** — The `spec_version` field now accepts either string. Migration tool `scripts/migrate-v0.2-to-v1.0.mjs` converts existing flows.
+
+### Migration
+
+Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to convert a v0.2.0 flow to v1.0.0. The migration adds `"spec_version": "1.0.0"` and an empty `harness_meta` block with `enabled: false`. All existing node types and fields are preserved unchanged.
+
 ## [Unreleased]
 
 No unreleased spec changes at this time.

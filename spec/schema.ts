@@ -1,8 +1,14 @@
 /**
- * Its Harness flow spec v0.2.0 — Zod schema
+ * Its Harness flow spec v1.0.0 — Zod schema
  *
  * Runtime-agnostic workflow specification for LangGraph, CrewAI, Mastra,
  * and Microsoft Agent Framework adapters.
+ *
+ * v1.0.0 changes vs v0.2.0:
+ *   - spec_version now accepts "0.2.0" or "1.0.0" (fully backwards-compatible)
+ *   - New optional top-level field: harness_meta (harness_version, phase, enabled)
+ *   - 12 new harness node type stubs added to the Node discriminated union
+ *   - All changes additive and optional — existing v0.2.0 flows validate unchanged
  *
  * v0.2.0 changes vs v0.1.0:
  *   - 4 runtimes: adds CrewAI, renames SemanticKernel → MicrosoftAgentFramework
@@ -14,14 +20,8 @@
  *   - RuntimeHints: updated adapter enum + new compatible[] array
  *   - RuntimeSupportOverride: semantic_kernel → microsoft_agent_framework + crewai
  *
- * Phase 0 Q&A decisions applied (no version bump — design phase):
- *   - AgentRoleNodeConfig: memory_access ('isolated'|'shared'), memory_store_id, tool_approval ('auto'|'human') [Q28, Q29]
- *   - AgentRoleNodeConfig: refine — memory_store_id required when memory_access='shared' [Q28]
- *   - MemoryStoreDef: namespace field for vector store partitioning [Q33]
- *   - ToolDef.mcp_server_url: description updated — must reference env var, never hardcoded [Q12]
- *
- * @version 0.2.0
- * @see https://spec.itsharness.com/v0.2/flow
+ * @version 1.0.0
+ * @see https://spec.itsharness.com/v1.0/flow
  */
 
 import { z } from 'zod'
@@ -30,7 +30,7 @@ import { z } from 'zod'
 // Primitives
 // ---------------------------------------------------------------------------
 
-export const SpecVersion = z.literal('0.2.0')
+export const SpecVersion = z.union([z.literal('0.2.0'), z.literal('1.0.0')])
 
 export const FlowId = z
   .string()
@@ -456,7 +456,41 @@ export const AgentDebateNode = NodeBase.extend({
 export type AgentDebateNode = z.infer<typeof AgentDebateNode>
 
 // ---------------------------------------------------------------------------
-// v0.2 Node discriminated union (14 types)
+// Harness node type stubs (Phase 0) — full harness_config shapes added per-phase
+// ---------------------------------------------------------------------------
+
+const HarnessNodeBase = NodeBase.extend({
+  harness_config: z.record(z.unknown()).optional(),
+})
+
+export const WorldModelNode = HarnessNodeBase.extend({ type: z.literal('world_model') })
+export const HypothesisSetNode = HarnessNodeBase.extend({ type: z.literal('hypothesis_set') })
+export const GatherEvidenceNode = HarnessNodeBase.extend({ type: z.literal('gather_evidence') })
+export const ApplyToolReliabilityNode = HarnessNodeBase.extend({ type: z.literal('apply_tool_reliability') })
+export const UpdateWorldModelNode = HarnessNodeBase.extend({ type: z.literal('update_world_model') })
+export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
+export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
+export const VerificationGateNode = HarnessNodeBase.extend({ type: z.literal('verification_gate') })
+export const RecoveryNode = HarnessNodeBase.extend({ type: z.literal('recovery_node') })
+export const EvidenceStoreNode = HarnessNodeBase.extend({ type: z.literal('evidence_store_node') })
+export const ExperienceStoreNode = HarnessNodeBase.extend({ type: z.literal('experience_store_node') })
+export const ReviewerPassNode = HarnessNodeBase.extend({ type: z.literal('reviewer_pass') })
+
+export type WorldModelNode = z.infer<typeof WorldModelNode>
+export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
+export type GatherEvidenceNode = z.infer<typeof GatherEvidenceNode>
+export type ApplyToolReliabilityNode = z.infer<typeof ApplyToolReliabilityNode>
+export type UpdateWorldModelNode = z.infer<typeof UpdateWorldModelNode>
+export type ControlStateNode = z.infer<typeof ControlStateNode>
+export type TaskGraphNode = z.infer<typeof TaskGraphNode>
+export type VerificationGateNode = z.infer<typeof VerificationGateNode>
+export type RecoveryNode = z.infer<typeof RecoveryNode>
+export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
+export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
+export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+
+// ---------------------------------------------------------------------------
+// v0.2 Node discriminated union (14 types — unchanged)
 // ---------------------------------------------------------------------------
 
 export const Node = z.discriminatedUnion('type', [
@@ -477,6 +511,31 @@ export const Node = z.discriminatedUnion('type', [
 ])
 
 export type Node = z.infer<typeof Node>
+
+// ---------------------------------------------------------------------------
+// Harness node discriminated union (12 stubs — require harness_meta.enabled: true)
+// ---------------------------------------------------------------------------
+
+export const HarnessNode = z.discriminatedUnion('type', [
+  WorldModelNode,
+  HypothesisSetNode,
+  GatherEvidenceNode,
+  ApplyToolReliabilityNode,
+  UpdateWorldModelNode,
+  ControlStateNode,
+  TaskGraphNode,
+  VerificationGateNode,
+  RecoveryNode,
+  EvidenceStoreNode,
+  ExperienceStoreNode,
+  ReviewerPassNode,
+])
+
+export type HarnessNode = z.infer<typeof HarnessNode>
+
+// AnyNode accepts both v0.2 and harness nodes — used by FlowSpec.nodes
+export const AnyNode = z.union([Node, HarnessNode])
+export type AnyNode = z.infer<typeof AnyNode>
 
 // ---------------------------------------------------------------------------
 // Edges
@@ -655,6 +714,21 @@ export const FlowConfig = z.object({
 export type FlowConfig = z.infer<typeof FlowConfig>
 
 // ---------------------------------------------------------------------------
+// Harness meta block (v1.0.0+, optional)
+// ---------------------------------------------------------------------------
+
+export const HarnessMeta = z.object({
+  harness_version: z.string().optional(),
+  phase:           z.string().optional(),
+  enabled:         z.boolean().default(false),
+}).describe(
+  'Marks a flow as harness-capable. When enabled is false (default), the adapter rejects harness node types. ' +
+  'Set enabled: true only on flows that have been migrated and use harness nodes.'
+)
+
+export type HarnessMeta = z.infer<typeof HarnessMeta>
+
+// ---------------------------------------------------------------------------
 // Root FlowSpec
 // ---------------------------------------------------------------------------
 
@@ -667,14 +741,15 @@ export const FlowSpec = z
     runtime_hints:  RuntimeHints.optional(),
     state_schema:   StateSchema.optional(),
     agents:         z.array(AgentDef).optional(),
-    nodes:          z.array(Node).min(2),
+    nodes:          z.array(AnyNode).min(2),
     edges:          z.array(Edge),
     tools:          z.record(ToolDef).optional(),
     memory_stores:  z.record(MemoryStoreDef).optional(),
     model_defaults: ModelDefaults.optional(),
     flow_config:    FlowConfig.optional(),
+    harness_meta:   HarnessMeta.optional(),
   })
-  .describe('Its Harness flow spec v0.2.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters.')
+  .describe('Its Harness flow spec v1.0.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters.')
 
 export type FlowSpec = z.infer<typeof FlowSpec>
 

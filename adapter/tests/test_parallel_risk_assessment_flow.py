@@ -236,7 +236,7 @@ class TestMastraCompile:
 # ── End-to-end: LangGraph exec (mocked LLM) ──────────────────────────────────
 
 
-def _fake_agent_response(text: str) -> MagicMock:
+def _fake_agent_response(text: str) -> dict:
     msg = MagicMock()
     msg.content = text
     return {"messages": [msg]}
