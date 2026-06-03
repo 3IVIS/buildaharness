@@ -491,6 +491,33 @@ class Job(Base):
     org = relationship("Org")
 
 
+class HarnessRunStateRow(Base):
+    """ORM mirror of the harness_run_state table (created by migration 0009).
+
+    Exists solely so Base.metadata.create_all() in the test suite creates the
+    table. Production uses Alembic; state_store.py reads/writes via raw SQL.
+    """
+
+    __tablename__ = "harness_run_state"
+
+    run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    world_model: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    caller_state: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    output_contract: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    hypothesis_set: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    evidence_store: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    task_graph: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    diagnostics: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    control_state: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    memory_state: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    strategy_state: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    failure_diagnostics: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    experience_store_ref: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    belief_dep_graph: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 async def next_version_num(flow_id: str, db: AsyncSession) -> int:
     # Fix #17: use with_for_update() on Postgres to lock the flow row for the
     # duration of the transaction, preventing a TOCTOU race when two requests

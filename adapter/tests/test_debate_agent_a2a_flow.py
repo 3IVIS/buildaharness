@@ -379,6 +379,7 @@ def test_langgraph_prepare_position_writes_advocate_position(debate_spec):
     code, _ = compile_langgraph(debate_spec)
     ns = _exec_langgraph(code, "<debate_prepare>")
     ns["create_react_agent"] = lambda *_a, **_kw: mock_advocate
+    ns["_make_llm"] = lambda *_a, **_kw: MagicMock()
 
     result = ns["node_prepare_position"]({"proposition": PROPOSITION})
 
