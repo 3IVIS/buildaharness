@@ -1402,7 +1402,7 @@ async def put_harness_state(
     from harness.state_store import load as _harness_load
     from harness.state_store import save as _harness_save
 
-    job = await _jobs_get_owned(job_id, str(user.id), db)
+    await _jobs_get_owned(job_id, str(user.id), db)
 
     existing = await _harness_load(job_id, db)
     if existing is None:

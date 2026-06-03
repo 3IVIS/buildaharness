@@ -36,7 +36,7 @@ class CallerState:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "CallerState":
+    def from_dict(cls, d: dict[str, Any]) -> CallerState:
         return cls(
             current_constraints=d.get("current_constraints", []),
             clarification_history=d.get("clarification_history", []),

@@ -9,13 +9,12 @@ an unimplemented gate as a real gate.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any
 
 from .world_model import WorldModel
-
-F = TypeVar("F", bound=Callable[..., Any])
 
 
 class StalenessError(Exception):
@@ -29,6 +28,7 @@ class ControlStateStub:
     Replaced by the full ControlState from P3 once diagnostics and
     resolve_control_state() are implemented.
     """
+
     generation_id: int = 0
     # Additional fields added in P3
     extra: dict[str, Any] = field(default_factory=dict)
@@ -48,7 +48,7 @@ def staleness_check(control_state: ControlStateStub, world_model: WorldModel) ->
     return control_state.generation_id < world_model.generation_id
 
 
-def assert_generation_fresh(fn: F) -> F:
+def assert_generation_fresh[F: Callable[..., Any]](fn: F) -> F:
     """Decorator: raises StalenessError if the first control_state arg is stale.
 
     Gate functions decorated with this must accept (*, control_state, world_model, ...)
@@ -61,6 +61,7 @@ def assert_generation_fresh(fn: F) -> F:
     or pass them positionally with control_state at index -2 and world_model at -1.
     For simplicity, gates.py passes them as keyword arguments.
     """
+
     @wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         control_state = kwargs.get("control_state")
