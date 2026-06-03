@@ -18,7 +18,10 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from .caller_state import CallerState
+from .evidence import EvidenceStore
+from .hypothesis import HypothesisSet
 from .output_contract import OutputContract
+from .tool_manifest import ToolAvailabilityManifest
 from .world_model import WorldModel
 
 
@@ -43,9 +46,16 @@ class HarnessRunState:
     # P0.5 — output contract
     output_contract: OutputContract = field(default_factory=OutputContract)
 
-    # Phases P1–P9 — stored as raw dicts until typed dataclasses are added
-    hypothesis_set: dict[str, Any] = field(default_factory=dict)
-    evidence_store: dict[str, Any] = field(default_factory=dict)
+    # P1.1 — evidence store
+    evidence_store: EvidenceStore = field(default_factory=EvidenceStore)
+
+    # P1.3 — tool availability manifest (rebuilt at harness init, not persisted)
+    tool_manifest: ToolAvailabilityManifest | None = None
+
+    # P1.6 — hypothesis set
+    hypothesis_set: HypothesisSet = field(default_factory=HypothesisSet)
+
+    # Phases P2–P9 — stored as raw dicts until typed dataclasses are added
     task_graph: dict[str, Any] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     control_state: dict[str, Any] = field(default_factory=dict)
@@ -60,8 +70,8 @@ class HarnessRunState:
             "world_model": self.world_model.to_dict(),
             "caller_state": self.caller_state.to_dict(),
             "output_contract": self.output_contract.to_dict(),
-            "hypothesis_set": self.hypothesis_set,
-            "evidence_store": self.evidence_store,
+            "evidence_store": self.evidence_store.to_dict(),
+            "hypothesis_set": self.hypothesis_set.to_dict(),
             "task_graph": self.task_graph,
             "diagnostics": self.diagnostics,
             "control_state": self.control_state,
@@ -79,8 +89,11 @@ class HarnessRunState:
             world_model=WorldModel.from_dict(d.get("world_model") or {}),
             caller_state=CallerState.from_dict(d.get("caller_state") or {}),
             output_contract=OutputContract.from_dict(d.get("output_contract") or {}),
-            hypothesis_set=d.get("hypothesis_set") or {},
-            evidence_store=d.get("evidence_store") or {},
+            evidence_store=EvidenceStore.from_dict(d.get("evidence_store") or {}),
+            hypothesis_set=HypothesisSet.from_dict(d.get("hypothesis_set") or {}),
+            # tool_manifest is always None on load — callers must call build_manifest()
+            # on resume to reflect the current runtime environment.
+            tool_manifest=None,
             task_graph=d.get("task_graph") or {},
             diagnostics=d.get("diagnostics") or {},
             control_state=d.get("control_state") or {},

@@ -60,19 +60,19 @@ The difference is not a matter of degree — it is architectural. A workflow rou
 
 The full harness is organised into 11 layers, each with a distinct responsibility:
 
-| Layer | Colour | Responsibility |
-|---|---|---|
-| **Caller State** | `#67e8f9` | Requirements, constraints, clarifications — mutable first-class object updated mid-run |
-| **World Model** | `#8b5cf6` | Observations, beliefs, assumptions, contradictions — `generation_id` tracks every significant update |
-| **Reasoning** | `#4ade80` | Evidence handling, hypothesis generation from four sources, VOI-gated evidence gathering |
-| **Planning** | `#60a5fa` | Task decomposition, scheduling, parallel concurrency with write-domain conflict detection |
-| **Control** | `#f0abfc` | Risk state management — five-tier resolver outputs `NORMAL` / `CAUTIOUS` / `BLOCKED` |
-| **Execution** | `#fbbf24` | Action selection and mutation — control state is the sole control input |
-| **Verification** | `#f87171` | 9-layer verification · adversarial reviewer pass · pre-execution review gate |
-| **Policy** | `#ec4899` | Gate enforcement at decomposition, action selection, and post-execution |
-| **Recovery** | `#f97316` | Rollback and replanning — six named strategies · typed failure library |
-| **Memory** | `#a3e635` | Context compression · journal retention policy · budget tracking |
-| **Learning** | `#94a3b8` | Experience store (optional) — structural reuse across runs, not just probability priors |
+| Layer | Responsibility |
+|---|---|
+| **Caller State** | Requirements, constraints, clarifications — mutable first-class object updated mid-run |
+| **World Model** | Observations, beliefs, assumptions, contradictions — `generation_id` tracks every significant update |
+| **Reasoning** | Evidence handling, hypothesis generation from four sources, VOI-gated evidence gathering |
+| **Planning** | Task decomposition, scheduling, parallel concurrency with write-domain conflict detection |
+| **Control** | Risk state management — five-tier resolver outputs `NORMAL` / `CAUTIOUS` / `BLOCKED` |
+| **Execution** | Action selection and mutation — control state is the sole control input |
+| **Verification** | 9-layer verification · adversarial reviewer pass · pre-execution review gate |
+| **Policy** | Gate enforcement at decomposition, action selection, and post-execution |
+| **Recovery** | Rollback and replanning — six named strategies · typed failure library |
+| **Memory** | Context compression · journal retention policy · budget tracking |
+| **Learning** | Experience store (optional) — structural reuse across runs, not just probability priors |
 
 ### The 22 nodes
 

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Its Harness — Phase 2: World Model &amp; Contradiction Layer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#8b5cf6;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --p2:#8b5cf6;
+  --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(139,92,246,0.07);border-color:rgba(139,92,246,0.4);color:#8b5cf6;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+.card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem}
+.card-title{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.5rem}
+.card-body{font-size:13px;color:var(--t1);line-height:1.7}
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:26px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+.week-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.2rem}
+.week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-title{font-size:13px;font-weight:600;color:var(--p2);margin-bottom:.4rem}
+.week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.week-item::before{content:'·';position:absolute;left:0;color:var(--p2)}
+.task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p2);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
+.task-header:hover{background:var(--bg2)}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
+.task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
+.task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
+.steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
+.step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step-num{font-family:var(--font-mono);font-size:10px;color:var(--p2);flex-shrink:0;width:22px}
+.step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
+.step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.step-body strong{color:var(--t0)}
+.test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
+.test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
+.f-new{color:var(--green)}
+.f-mod{color:var(--amber)}
+.f-dir{color:var(--p2);font-weight:600}
+.f-note{color:var(--t1);opacity:.6;font-size:10px}
+.dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
+.dep-table th,.dep-table td{padding:.5rem .75rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.dep-table th{background:var(--bg2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px}
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .85rem;font-size:12px;color:var(--t1);line-height:1.5}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:3px;font-size:12px}
+.inv-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(139,92,246,0.06);border:.5px solid rgba(139,92,246,0.2);color:var(--p2);margin-left:6px;vertical-align:middle}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.85rem;margin-bottom:.35rem}
+.desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
+.note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.note-block strong{color:var(--amber)}
+.next-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;display:flex;align-items:center;gap:.8rem;margin-bottom:6px}
+.next-badge{font-family:var(--font-mono);font-size:11px;background:rgba(139,92,246,0.07);border:.5px solid rgba(139,92,246,0.2);color:var(--p2);padding:2px 8px;border-radius:3px;flex-shrink:0}
+.next-body{font-size:12.5px;color:var(--t1);line-height:1.5}
+.next-body strong{color:var(--t0)}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Phase 2 — World Model &amp; Contradiction Layer</h1>
+  <p>Implements the full belief dependency graph, belief propagation with confidence weighting, typed contradiction detection across four contradiction types and four severity levels, the resolution policy that routes each severity appropriately, and the TTL + environment-change staleness sweep.</p>
+  <span class="badge badge-blue">4 Weeks</span>
+  <span class="badge badge-green">6 Tasks</span>
+  <span class="badge badge-amber">31 Steps</span>
+  <span class="badge badge-blue">18 Acceptance Tests</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0 complete</span> · <span style="color:#4ade80">P1 complete</span> · Unlocks: <span style="color:#f0abfc">P3 Diagnostics &amp; Control State</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
+  <button class="tab" onclick="showTab('files',this)">File Map</button>
+  <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
+  <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
+  <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:var(--p2)">6</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">31</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">18</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">2</div><div class="sum-l">State structures</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--cyan)">4</div><div class="sum-l">Weeks</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What Phase 2 delivers</div>
+  <div class="card-body">
+    Phase 2 completes the <strong style="color:var(--t0)">World Model layer</strong> by adding everything that makes the world model dynamic and self-correcting. The P0 data structures defined the shape of the world model; Phase 2 implements the processes that operate on it over time.<br><br>
+    The belief dependency graph tracks causal links between beliefs — each edge carries its own confidence score that decays independently of content changes via <code>dep_graph_budget</code>. <code>propagate_beliefs()</code> forwards updates through these edges with confidence weighting, widening the invalidation frontier when the budget is breached. The contradiction detection system operates at four structural levels — pairwise, set-level, temporal, and abstraction — and assigns severity levels from LOW through SYSTEM_BREAKING. The resolution policy routes each contradiction to the appropriate response without ever raising an inline exception for SYSTEM_BREAKING contradictions (INV-05). The staleness sweep periodically invalidates beliefs using two independent mechanisms: TTL-based expiry and environment-change-based invalidation from <code>environment_change_log</code>.<br><br>
+    Phase 2 also introduces the <code>update_world_model</code> canvas node type — the mechanism by which flow authors integrate Evidence from the evidence store into the world model in a reliability-weighted way.
+  </div>
+</div>
+
+<div class="week-row">
+  <div class="week-card">
+    <div class="week-label">Week 1</div>
+    <div class="week-title">World Model Node &amp; Belief Graph</div>
+    <div class="week-item">P2.1 — update_world_model node + belief_health proxies</div>
+    <div class="week-item">P2.2 — BeliefDepGraph + DepGraphBudget</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 2</div>
+    <div class="week-title">Belief Propagation</div>
+    <div class="week-item">P2.3 — propagate_beliefs() with weighting</div>
+    <div class="week-item">P2.3 — dep_graph_quality recomputation</div>
+    <div class="week-item">P2.3 — budget breach → wider frontier</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 3</div>
+    <div class="week-title">Contradiction Detection &amp; Resolution</div>
+    <div class="week-item">P2.4 — 4 contradiction types + 4 severities</div>
+    <div class="week-item">P2.5 — resolution policy routing</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 4</div>
+    <div class="week-title">Staleness Sweep &amp; Integration Tests</div>
+    <div class="week-item">P2.6 — TTL + environment-change staleness</div>
+    <div class="week-item">P2.6 — dep_graph_budget edge decay</div>
+    <div class="week-item">Integration tests + HarnessRunState update</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:.75rem">
+  <div class="card-title">Key constraints to respect in Phase 2</div>
+  <div class="note-block"><strong>SYSTEM_BREAKING contradictions must never cause inline halts (INV-05):</strong> <code>detect_contradictions()</code> calls <code>world_model.add_contradiction()</code> — it never raises. The BLOCKED state that results from a SYSTEM_BREAKING contradiction is set only on the next <code>resolve_control_state()</code> call (in P3). Phase 2 must enforce this at the type level: contradiction detection has no return path that triggers execution termination.</div>
+  <div class="note-block"><strong>Observation / belief separation remains inviolate (INV-01):</strong> The <code>update_world_model</code> node (P2.1) integrates Evidence into observations[] using <code>add_observation()</code>. Beliefs are only created via explicit inference with non-empty <code>derived_from[]</code> chains. The node compiler must never call <code>add_belief()</code> with raw evidence as the sole derived_from entry.</div>
+  <div class="note-block"><strong>dep_class_gap_annotation is advisory only (INV-07):</strong> The annotation may be computed and stored in Phase 2 as a string note on the world model, but it must not be represented as a numeric field, must not feed into any arithmetic, and must not influence any control decision. It surfaces only to the adversarial reviewer lens (P9) and human escalation.</div>
+</div>
+
+<div style="margin-bottom:1rem">
+  <div class="section-label">Unlocks after Phase 2 completes</div>
+  <div class="next-card">
+    <div class="next-badge">P3 unblocked</div>
+    <div class="next-body"><strong>Diagnostics &amp; Control State</strong> — <code>belief_health</code> sub-dimensions (freshness, consistency, support) are computed from world model state updated by P2.1 and P2.6. <code>dep_graph_quality</code> from P2.3 feeds into Tier 2 of <code>resolve_control_state()</code>. Both require stable P2 implementations.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P5 partial</div>
+    <div class="next-body"><strong>Execution &amp; Verification</strong> — the pre-execution review gate (P5.3) checks world model consistency (no HIGH-reliability belief contradiction). It requires contradiction detection from P2.4 to be stable before it can make this dimension meaningful.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P9 partial</div>
+    <div class="next-body"><strong>Reviewer Pass</strong> — the reviewer pass calls <code>propagate_beliefs()</code> and <code>detect_contradictions()</code> after each lens. Both functions must be stable from P2 before the reviewer pass can be implemented in P9.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- TASKS & STEPS -->
+<div id="tasks" class="tab-content">
+
+<div class="desc-block">Click any task to expand. Tasks are ordered by dependency: the world model node first (P2.1), then the belief graph structures (P2.2–P2.3), then contradiction detection and resolution (P2.4–P2.5), then staleness sweep (P2.6).</div>
+
+<!-- P2.1 -->
+<div class="task-block" id="tb-p21">
+  <div class="task-header" onclick="toggleTask('p21')">
+    <span class="task-id">P2.1</span>
+    <span class="task-name">Update World Model canvas node (node type: update_world_model)</span>
+    <span class="task-meta">Week 1 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p21">
+    <div class="desc-block">Introduce the <code>update_world_model</code> FlowSpec node type. This node integrates Evidence objects from the evidence store into the world model using reliability-weighted logic. Observations are stored raw; beliefs are only created with explicit derivation chains. The node also recomputes the three belief_health proxy sub-dimensions after each update.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Add <code>update_world_model</code> node config to <code>spec/schema.ts</code></strong>. Expand the stub entry from P0.1 with a full <code>harness_config</code> shape: <code>integration_mode: "observations_only" | "infer_beliefs"</code> (default <code>"observations_only"</code> — belief creation always requires explicit derivation logic in the flow); <code>reliability_threshold: "HIGH" | "MEDIUM" | "LOW"</code> (only evidence at or above this reliability is integrated). Regenerate <code>spec/schema.json</code>.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Update <code>adapter/validate.py</code></strong> to validate the <code>update_world_model</code> node config. Required checks: <code>integration_mode</code> must be one of the two valid literals; <code>reliability_threshold</code> must be HIGH, MEDIUM, or LOW.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Create <code>adapter/harness/world_model_ops.py</code></strong>. Implement <code>integrate_evidence(evidence_store, world_model, reliability_threshold)</code>: iterate over <code>evidence_store.entries</code>; for each entry at or above <code>reliability_threshold</code>, call <code>world_model.add_observation(Observation(id=e.id, content=e.obs, source=e.source, recorded_at=e.recorded_at))</code>. Never call <code>add_belief()</code> directly from this function — belief creation is the responsibility of explicit inference nodes.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>recompute_belief_health(world_model) → dict</code></strong> in <code>world_model_ops.py</code>. Returns three proxy values: <code>freshness = normalise(1 − stale_flag_ratio)</code> (stale_flag_ratio from staleness tracking); <code>consistency = normalise(1 − contradiction_density)</code> where contradiction_density = len(contradictions) / max(1, len(beliefs)); <code>support = normalise(mean_reliability_weight)</code> where reliability weight maps HIGH→1.0, MEDIUM→0.5, LOW→0.2 over all beliefs' supporting_evidence. These raw values are stored in a <code>belief_health_proxies</code> dict on the world model pending the normalisation contract in P3.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Add <code>compile_update_world_model(node, world_model_var, evidence_store_var) → str</code></strong> to <code>adapter/harness/node_compilers.py</code>. Generated code calls <code>integrate_evidence()</code> followed by <code>recompute_belief_health()</code>. Register in the adapter dispatch table alongside the P1 compilers.</div></div>
+
+    <div class="steps-title">Note on dep_class_gap_annotation</div>
+    <div class="desc-block" style="font-size:11.5px">If any integration pass detects that a belief's derivation class (e.g., inferred from tool observation) differs significantly from the success criteria dependency class, a <code>dep_class_gap_annotation: str</code> is recorded as a text note on the world model's assumption list. It is not a numeric field and does not participate in any arithmetic (INV-07).</div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">Evidence with <code>evidence_type="OBSERVATION"</code> integrated via <code>integrate_evidence()</code> appears in <code>world_model.observations[]</code> and not in <code>world_model.beliefs[]</code></div>
+    <div class="test-item"><code>recompute_belief_health()</code> returns <code>{"freshness": 1.0, "consistency": 1.0, "support": 1.0}</code> on a world model with no stale beliefs and no contradictions</div>
+    <div class="test-item"><code>belief_health.consistency</code> decreases as contradictions are added to the world model</div>
+  </div>
+</div>
+
+<!-- P2.2 -->
+<div class="task-block" id="tb-p22">
+  <div class="task-header" onclick="toggleTask('p22')">
+    <span class="task-id">P2.2</span>
+    <span class="task-name">Belief dependency graph</span>
+    <span class="task-meta">Week 1 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p22">
+    <div class="desc-block">Implement the belief dependency graph data structures — the directed graph that tracks which beliefs are derived from which other beliefs, with confidence-weighted edges. Also implement the <code>DepGraphBudget</code> that controls when the graph widens its invalidation frontier and how quickly edge confidence decays.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/belief_graph.py</code></strong>. Define <code>BeliefEdge</code> dataclass: <code>from_id: str</code>, <code>to_id: str</code>, <code>confidence: float</code> (starts at the source belief's confidence; decays over time), <code>last_verified: datetime</code>. Edges have their own confidence independent of the beliefs they connect — a belief can be high-confidence while the link to it is uncertain.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Define <code>DepGraphBudget</code> dataclass</strong>: <code>max_unverified_edge_ratio: float = 0.3</code> (if more than 30% of edges are unverified, widen the frontier); <code>confidence_decay_rate: float = 0.02</code> (edge confidence decreases by this amount per iteration); <code>refresh_policy: Literal["lazy","eager"] = "lazy"</code> (lazy = only decay on access; eager = decay all edges each iteration).</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Define <code>BeliefDepGraph</code> dataclass</strong>: <code>belief_nodes: dict[str, str]</code> (belief_id → statement summary), <code>edges: list[BeliefEdge]</code>, <code>invalidation_frontier: set[str]</code> (belief IDs currently flagged for re-verification), <code>propagation_queue: list[str]</code> (belief IDs awaiting propagation). Implement <code>add_edge(from_id, to_id, confidence)</code>, <code>get_downstream(belief_id) → list[str]</code> (returns all belief IDs reachable from this one), and <code>compute_unverified_edge_ratio() → float</code>.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>apply_decay(graph, budget) → None</code></strong> in <code>belief_graph.py</code>. Iterates over all edges and subtracts <code>budget.confidence_decay_rate</code> from each edge's confidence, clamping at 0.0. An edge with confidence 0.0 is flagged as unverified (added to <code>invalidation_frontier</code>). This decay runs independently of content changes — an edge can become unreliable even if both connected beliefs are still valid.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Add <code>to_dict()</code> / <code>from_dict()</code></strong> to <code>BeliefDepGraph</code> and <code>DepGraphBudget</code>. Extend <code>HarnessRunState</code> in <code>state_store.py</code> with <code>belief_dep_graph: BeliefDepGraph</code> and update <code>save()</code> / <code>load()</code> accordingly.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">Calling <code>add_edge("A", "B", confidence=0.8)</code> followed by <code>get_downstream("A")</code> returns <code>["B"]</code></div>
+    <div class="test-item"><code>apply_decay()</code> called 5 times with <code>confidence_decay_rate=0.1</code> on an edge starting at confidence 0.5 produces an edge with confidence 0.0 (clamped, not negative)</div>
+    <div class="test-item"><code>compute_unverified_edge_ratio()</code> returns 0.5 when 1 of 2 edges has confidence 0.0</div>
+  </div>
+</div>
+
+<!-- P2.3 -->
+<div class="task-block" id="tb-p23">
+  <div class="task-header" onclick="toggleTask('p23')">
+    <span class="task-id">P2.3</span>
+    <span class="task-name">propagate_beliefs()</span>
+    <span class="task-meta">Week 2 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p23">
+    <div class="desc-block">Implement belief propagation — the process that forwards belief updates through the dependency graph with confidence weighting. Low-confidence edges propagate updates with proportionally lower weight. When the budget is breached, the invalidation frontier widens to include all downstream beliefs. The dep_graph_quality diagnostic is recomputed after each propagation pass.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>propagate_single_update(graph, belief_id, updated_confidence, budget) → list[str]</code></strong> in <code>belief_graph.py</code>. For the given <code>belief_id</code>: find all outgoing edges. For each downstream belief: new_confidence = edge.confidence × updated_confidence. If new_confidence differs from the downstream belief's current confidence by more than 0.05 (threshold to avoid infinite micro-updates): add the downstream belief_id to <code>propagation_queue</code>. Return the list of queued belief IDs.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>propagate_beliefs(graph, budget, world_model) → None</code></strong>. Process <code>graph.propagation_queue</code> in FIFO order until empty or a safety limit (100 iterations) is reached. For each dequeued belief_id: look up the belief in <code>world_model.beliefs</code> and call <code>propagate_single_update()</code> with its current confidence. Remove processed entries from the queue after propagation.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement budget-breach handling</strong>. After each propagation pass, call <code>compute_unverified_edge_ratio()</code>. If ratio exceeds <code>budget.max_unverified_edge_ratio</code>: widen the invalidation frontier — add all beliefs reachable from any belief already in the frontier to <code>graph.invalidation_frontier</code>. This signals to the diagnostics layer (P3) that a large portion of the belief graph is uncertain.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>compute_dep_graph_quality(graph, rolling_prediction_accuracy) → float</code></strong>. Quality = weighted average of two factors: <code>(1 - unverified_edge_ratio) × 0.6 + rolling_prediction_accuracy × 0.4</code>. Result is normalised to [0,1]. Store on graph as <code>graph.dep_graph_quality</code>. This scalar feeds into Tier 2 of <code>resolve_control_state()</code> in P3 — it is normalised here so no further normalisation is needed upstream.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Update <code>__init__.py</code></strong> to export <code>BeliefDepGraph</code>, <code>DepGraphBudget</code>, <code>propagate_beliefs</code>, and <code>compute_dep_graph_quality</code> from the harness package.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">A 0.3-confidence edge propagates a belief update at 0.3× weight — if the source belief has confidence 0.9, the downstream belief receives propagated confidence of 0.27</div>
+    <div class="test-item">Budget breach (unverified_edge_ratio > max) widens the invalidation_frontier to include all downstream beliefs of all frontier members</div>
+    <div class="test-item"><code>compute_dep_graph_quality()</code> returns a value in [0,1] and decreases when unverified_edge_ratio increases</div>
+  </div>
+</div>
+
+<!-- P2.4 -->
+<div class="task-block" id="tb-p24">
+  <div class="task-header" onclick="toggleTask('p24')">
+    <span class="task-id">P2.4</span>
+    <span class="task-name">Typed contradiction detection</span>
+    <span class="task-meta">Week 3 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p24">
+    <div class="desc-block">Implement <code>detect_contradictions()</code> — the function that scans the world model, evidence store, and hypothesis set for inconsistencies. Four contradiction types are detected independently. SYSTEM_BREAKING contradictions are always appended to <code>world_model.contradictions[]</code> and never cause inline execution halts — this is the central invariant (INV-05).</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/contradiction.py</code></strong>. Import <code>WorldModel</code>, <code>Contradiction</code> from <code>world_model.py</code>; <code>EvidenceStore</code> from <code>evidence.py</code>; <code>HypothesisSet</code> from <code>hypothesis.py</code>.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>detect_pairwise_contradictions(beliefs) → list[Contradiction]</code></strong>. For each pair of beliefs: check if the statements are semantically opposed using keyword negation (simple: "X is present" vs "X is absent", "X is true" vs "X is false"). If opposed and both have confidence ≥ 0.5: create a Contradiction with <code>type="pairwise"</code>. Severity assignment: both HIGH confidence → HIGH; at least one MEDIUM → MEDIUM; otherwise LOW.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>detect_set_level_contradictions(beliefs) → list[Contradiction]</code></strong>. Check if any group of three or more beliefs are jointly inconsistent (if A implies ¬B, and B implies ¬C, but C is asserted alongside A). Uses a simple inference chain check. Creates Contradictions with <code>type="set-level"</code> and <code>severity="HIGH"</code> when all involved beliefs have confidence ≥ 0.6.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>detect_temporal_contradictions(beliefs, environment_change_log) → list[Contradiction]</code></strong>. For each belief: check if a newer entry in <code>environment_change_log</code> invalidates the belief's statement (e.g., a file the belief was derived from has since been deleted or modified). Creates Contradictions with <code>type="temporal"</code>. Severity: MEDIUM if the change is recent; HIGH if the change pre-dates the belief's <code>recorded_at</code>.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement <code>detect_abstraction_contradictions(beliefs, task_graph) → list[Contradiction]</code></strong>. Checks for beliefs stated at a finer granularity than the current task's abstraction level (e.g., a belief about line 47 of a file when the current task is at module level). Creates Contradictions with <code>type="abstraction"</code> and severity LOW (these are typically style issues, not logical errors).</div></div>
+
+    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Implement <code>assign_system_breaking_severity(contradictions, hypothesis_set) → list[Contradiction]</code></strong>. Upgrades a pairwise or set-level contradiction to SYSTEM_BREAKING if: (a) both beliefs have HIGH confidence AND HIGH reliability supporting evidence, AND (b) the contradiction is also present in an active hypothesis as a predicted observation conflict. SYSTEM_BREAKING contradictions invalidate the entire current execution path.</div></div>
+
+    <div class="step"><span class="step-num">7</span><div class="step-body"><strong>Implement <code>detect_contradictions(world_model, evidence_store, hypothesis_set, task_graph=None) → list[Contradiction]</code></strong>. Orchestrator: calls all four detection functions, collects results, upgrades severities via <code>assign_system_breaking_severity()</code>, then calls <code>world_model.add_contradiction(c)</code> for each. Returns the full list. Does <em>not</em> raise or halt — SYSTEM_BREAKING contradictions simply enter the list for Tier 1 pickup (INV-05).</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">A SYSTEM_BREAKING contradiction is appended to <code>world_model.contradictions[]</code> via <code>add_contradiction()</code> without any exception being raised anywhere in the call stack</div>
+    <div class="test-item">Pairwise and set-level contradictions are detected independently — a set-level contradiction is not reported as a pairwise one</div>
+    <div class="test-item">Contradiction scope correctly maps to replan breadth: a contradiction with <code>scope="global"</code> is flagged for global replan (this scope field is set by the resolution policy in P2.5)</div>
+  </div>
+</div>
+
+<!-- P2.5 -->
+<div class="task-block" id="tb-p25">
+  <div class="task-header" onclick="toggleTask('p25')">
+    <span class="task-id">P2.5</span>
+    <span class="task-name">Resolution policy</span>
+    <span class="task-meta">Week 3 · ~1.5 days</span>
+  </div>
+  <div class="task-body" id="body-p25">
+    <div class="desc-block">Implement <code>apply_resolution_policy()</code> — the routing function that decides what to do with each detected contradiction based on its severity and scope. Resolution actions range from confidence updates (LOW) through task graph flagging (HIGH) to entering the contradiction queue for Tier 1 pickup (SYSTEM_BREAKING). The function is idempotent: applying it twice has the same effect as applying it once.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>apply_resolution_policy(contradiction, world_model, task_graph=None) → None</code></strong> in <code>contradiction.py</code>. Route by severity: LOW → call <code>_resolve_low(contradiction, world_model)</code>; MEDIUM → call <code>_resolve_medium(contradiction, world_model)</code>; HIGH → call <code>_resolve_high(contradiction, world_model, task_graph)</code>; SYSTEM_BREAKING → call <code>_resolve_system_breaking(contradiction, world_model)</code>.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>_resolve_low()</code></strong>: reduce the confidence of each involved belief by 10% (multiply by 0.9, clamp at 0.0). Mark the belief with a <code>pending_sweep: True</code> attribute so the next staleness sweep includes it in its re-evaluation pass. Does not touch the task graph.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>_resolve_medium()</code></strong>: reduce involved belief confidence by 25% (multiply by 0.75). Add the belief IDs to <code>belief_dep_graph.propagation_queue</code> so downstream beliefs are also updated via propagation. Mark beliefs for staleness sweep.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>_resolve_high()</code></strong>: for each belief ID in <code>contradiction.involved_belief_ids</code>, find all tasks in <code>task_graph</code> that list these beliefs as dependencies. Set those tasks' status to BLOCKED with <code>block_reason="high_contradiction"</code>. Also add the belief IDs to the invalidation frontier.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement <code>_resolve_system_breaking()</code></strong>: ensure the contradiction is in <code>world_model.contradictions[]</code> (it should already be there from detection — this is a safety re-check). Set <code>contradiction.scope = "global"</code> if not already set. No other action — Tier 1 of <code>resolve_control_state()</code> (P3) handles the rest.</div></div>
+
+    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Ensure idempotency</strong>: before modifying a belief's confidence, check if the same contradiction ID has already been applied (store applied IDs in a set on each belief as <code>applied_contradiction_ids</code>). Skip if already applied. This prevents double-penalising beliefs when <code>apply_resolution_policy()</code> is called more than once per loop iteration.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">Resolution policy correctly routes each severity level — LOW reduces confidence by 10%, HIGH blocks dependent tasks, SYSTEM_BREAKING does not touch the task graph</div>
+    <div class="test-item">A HIGH-severity contradiction flags all downstream task_graph tasks that depend on the involved beliefs as BLOCKED</div>
+    <div class="test-item">Applying <code>apply_resolution_policy()</code> twice with the same contradiction produces identical final state to applying it once (idempotency)</div>
+  </div>
+</div>
+
+<!-- P2.6 -->
+<div class="task-block" id="tb-p26">
+  <div class="task-header" onclick="toggleTask('p26')">
+    <span class="task-id">P2.6</span>
+    <span class="task-name">Staleness sweep</span>
+    <span class="task-meta">Week 4 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p26">
+    <div class="desc-block">Implement <code>staleness_sweep()</code> — the periodic process that invalidates beliefs using two independent mechanisms: TTL-based expiry and environment-change-based invalidation. Also integrate the edge confidence decay (<code>apply_decay()</code>) which runs on the same schedule but operates on the belief dependency graph independently of belief content.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Extend <code>adapter/harness/staleness.py</code></strong> (extending the P0.3 file). Add a <code>stale_flags: dict[str, bool]</code> field to <code>WorldModel</code> (or as a separate tracked dict, if modifying the dataclass is cleaner). Each key is a belief_id; value is True when the belief is considered stale.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement TTL-based staleness check</strong>. Add <code>belief_ttl: timedelta = timedelta(minutes=30)</code> as a configurable constant. In <code>staleness_sweep(world_model, environment_change_log, belief_ttl)</code>: for each belief in <code>world_model.beliefs</code>, check if <code>datetime.utcnow() - belief.recorded_at > belief_ttl</code>. If so, set <code>stale_flags[belief.id] = True</code>.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement environment-change-based invalidation</strong>. For each entry in <code>environment_change_log</code>: extract the <code>affected_source</code> field. For each belief where <code>belief.source == affected_source</code> AND the change log entry's timestamp is newer than <code>belief.recorded_at</code>: set <code>stale_flags[belief.id] = True</code>.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Compute and store <code>stale_flag_ratio</code></strong>. After processing: <code>stale_flag_ratio = len([k for k,v in stale_flags.items() if v]) / max(1, len(world_model.beliefs))</code>. Store on the world model as a transient proxy field. This value feeds into <code>belief_health.freshness</code> recomputation in P2.1 and ultimately into Tier 4 of <code>resolve_control_state()</code> in P3.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire edge decay into the sweep</strong>. At the end of <code>staleness_sweep()</code>, call <code>apply_decay(belief_dep_graph, dep_graph_budget)</code>. The edge decay runs on the same schedule as the staleness sweep but operates independently — a stale belief does not necessarily mean its outgoing edges are decayed, and vice versa.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">A belief with <code>recorded_at</code> older than <code>belief_ttl</code> is correctly flagged as stale in <code>stale_flags</code></div>
+    <div class="test-item">A belief whose <code>source</code> file appears in <code>environment_change_log</code> with a newer timestamp than <code>belief.recorded_at</code> is invalidated</div>
+    <div class="test-item"><code>stale_flag_ratio</code> correctly reflects the ratio of stale beliefs after the sweep completes — 0.0 when none are stale, 1.0 when all are stale</div>
+  </div>
+</div>
+
+</div>
+
+<!-- FILE MAP -->
+<div id="files" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Files created or modified in Phase 2</div>
+  <div class="card-body" style="margin-bottom:.7rem">Green = new file. Amber = existing file modified. Phase 2 is additive — it extends P0/P1 infrastructure without modifying existing logic.</div>
+
+  <div class="file-map">
+<span class="f-dir">spec/</span>
+  schema.ts                          <span class="f-mod">MOD</span>  <span class="f-note">add full harness_config shape for update_world_model node</span>
+  schema.json                        <span class="f-mod">MOD</span>  <span class="f-note">regenerated from schema.ts</span>
+
+<span class="f-dir">adapter/</span>
+  validate.py                        <span class="f-mod">MOD</span>  <span class="f-note">add update_world_model harness_config validation</span>
+
+<span class="f-dir">adapter/harness/</span>
+  world_model_ops.py                 <span class="f-new">NEW</span>  <span class="f-note">integrate_evidence, recompute_belief_health</span>
+  belief_graph.py                    <span class="f-new">NEW</span>  <span class="f-note">BeliefEdge, BeliefDepGraph, DepGraphBudget, apply_decay, propagate_beliefs, compute_dep_graph_quality</span>
+  contradiction.py                   <span class="f-new">NEW</span>  <span class="f-note">detect_pairwise, set_level, temporal, abstraction contradictions; detect_contradictions; apply_resolution_policy</span>
+  staleness.py                       <span class="f-mod">MOD</span>  <span class="f-note">add staleness_sweep (TTL + env-change), stale_flag_ratio computation</span>
+  node_compilers.py                  <span class="f-mod">MOD</span>  <span class="f-note">add compile_update_world_model; register in dispatch table</span>
+  state_store.py                     <span class="f-mod">MOD</span>  <span class="f-note">add belief_dep_graph field to HarnessRunState; update save/load</span>
+  __init__.py                        <span class="f-mod">MOD</span>  <span class="f-note">export BeliefDepGraph, DepGraphBudget, propagate_beliefs, detect_contradictions, apply_resolution_policy</span>
+
+<span class="f-dir">adapter/tests/</span>
+  test_harness_p2.py                 <span class="f-new">NEW</span>  <span class="f-note">all 18 acceptance tests for Phase 2</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Files NOT touched in Phase 2</div>
+  <div class="card-body">Unchanged by design: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">world_model.py</code> (P0, only data structures — P2 adds operations in separate files) · <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">gates.py</code> (full gate implementation is P3) · All framework adapters (P11) · All canvas source (P10).</div>
+</div>
+
+</div>
+
+<!-- DEPENDENCIES -->
+<div id="deps" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Intra-phase task ordering</div>
+  <div class="card-body">Tasks within Phase 2 have a strict partial order driven by data model dependencies.</div>
+</div>
+
+<table class="dep-table">
+<thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
+<tbody>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.1 — update_world_model node</td>
+  <td><span class="dep-tag">P0.2</span><span class="dep-tag">P1.1</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Needs <code>Evidence</code> from P1.1 to integrate into <code>world_model.observations[]</code></td>
+</tr>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.2 — Belief dependency graph</td>
+  <td><span class="dep-tag">P0.2</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Graph nodes reference belief IDs from <code>WorldModel.beliefs[]</code> — needs stable Belief type</td>
+</tr>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.3 — propagate_beliefs()</td>
+  <td><span class="dep-tag">P2.2</span><span class="dep-tag">P0.2</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Traverses the graph from P2.2 and updates beliefs in <code>WorldModel</code> from P0.2</td>
+</tr>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.4 — Contradiction detection</td>
+  <td><span class="dep-tag">P0.2</span><span class="dep-tag">P1.1</span><span class="dep-tag">P1.6</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Reads <code>world_model.beliefs[]</code>, <code>evidence_store</code>, and <code>hypothesis_set.active[]</code></td>
+</tr>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.5 — Resolution policy</td>
+  <td><span class="dep-tag">P2.4</span><span class="dep-tag">P2.2</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Routes contradictions detected in P2.4; adds to propagation_queue from P2.2 graph</td>
+</tr>
+<tr>
+  <td style="color:var(--p2);font-family:var(--font-mono);font-size:11px;font-weight:600">P2.6 — Staleness sweep</td>
+  <td><span class="dep-tag">P0.2</span><span class="dep-tag">P0.3</span><span class="dep-tag">P2.2</span></td>
+  <td style="font-size:11.5px;color:var(--t1)">Extends P0.3 staleness infrastructure; calls P2.2 <code>apply_decay()</code> at end of sweep</td>
+</tr>
+</tbody>
+</table>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Cross-phase dependencies blocked on Phase 2</div>
+  <table class="dep-table" style="margin-top:.5rem;margin-bottom:0">
+  <thead><tr><th>Later task</th><th>Blocked on</th><th>What it needs</th></tr></thead>
+  <tbody>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:#f0abfc">P3.1 — Diagnostic health vectors</td><td><span class="dep-tag">P2.1</span><span class="dep-tag">P2.6</span></td><td style="font-size:11.5px;color:var(--t1)"><code>belief_health.freshness</code> uses <code>stale_flag_ratio</code> from P2.6; consistency from contradiction density from P2.1</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:#f0abfc">P3.3 — resolve_control_state()</td><td><span class="dep-tag">P2.3</span><span class="dep-tag">P2.4</span></td><td style="font-size:11.5px;color:var(--t1)">Tier 1 reads SYSTEM_BREAKING contradictions from P2.4; Tier 2 reads dep_graph_quality from P2.3</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:#f87171">P5.3 — Pre-execution review gate</td><td><span class="dep-tag">P2.4</span></td><td style="font-size:11.5px;color:var(--t1)">Dimension 2 checks for HIGH-reliability belief contradictions — needs stable contradiction detection</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:#34d399">P9.2 — 3-lens reviewer pass</td><td><span class="dep-tag">P2.3</span><span class="dep-tag">P2.4</span></td><td style="font-size:11.5px;color:var(--t1)">Calls <code>propagate_beliefs()</code> and <code>detect_contradictions()</code> after each lens</td></tr>
+  </tbody>
+  </table>
+</div>
+
+</div>
+
+<!-- INVARIANTS -->
+<div id="invariants" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Architecture invariants engaged in Phase 2</div>
+  <div class="card-body">Phase 2 delivers the first full test of INV-05 (SYSTEM_BREAKING routing) and enforces INV-01 at the integration level. INV-07 is seeded by the dep_class_gap_annotation design.</div>
+</div>
+
+<div class="inv-list">
+  <div class="inv-item">
+    <strong>INV-05 — SYSTEM_BREAKING via Tier 1 only <span class="inv-tag">P2.4 full enforcement · P3 Tier 1 test</span></strong>
+    Phase 2 establishes the non-negotiable rule: <code>detect_contradictions()</code> and <code>apply_resolution_policy()</code> never raise an exception or halt execution for any contradiction severity. SYSTEM_BREAKING contradictions enter <code>world_model.contradictions[]</code> via the same <code>add_contradiction()</code> path as LOW contradictions. The BLOCKED control state is set exclusively by Tier 1 of <code>resolve_control_state()</code> in P3. Phase 2 tests inject SYSTEM_BREAKING contradictions at three different positions in the flow and assert no exception is raised.
+  </div>
+  <div class="inv-item">
+    <strong>INV-01 — Observation vs conclusion separation <span class="inv-tag">P2.1 integration test</span></strong>
+    The <code>update_world_model</code> node (P2.1) is the first place where Evidence objects flow into the world model at runtime. The compiler must generate code that calls <code>add_observation()</code> for all OBSERVATION and SYSTEM_ERROR evidence — never <code>add_belief()</code>. This is tested in P2: run the compiled node with a HIGH-reliability OBSERVATION evidence entry and assert the result appears in <code>world_model.observations[]</code>, not in <code>world_model.beliefs[]</code>.
+  </div>
+  <div class="inv-item">
+    <strong>INV-07 — dep_class_gap advisory only <span class="inv-tag">P2.1 seeds</span></strong>
+    The <code>dep_class_gap_annotation</code> — when detected during world model integration — is stored as a string in <code>world_model.assumptions[]</code> or as a text note. It has no numeric representation. Phase 2 must not create a <code>dep_class_gap</code> numeric field on any dataclass, must not include it in any arithmetic, and must not pass it as an argument to any control-path function. The annotation surfaces only to the adversarial reviewer in P9.
+  </div>
+</div>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Invariants that Phase 2 must not break</div>
+  <div class="inv-list">
+    <div class="inv-item"><strong>INV-03 — generation_id double-increment</strong> Phase 2 does not touch the generation_id increment path. None of the world model operations or contradiction detection functions call <code>increment_generation_id()</code>. The generation_id advances only in the main loop — not in sub-operations.</div>
+    <div class="inv-item"><strong>INV-06 — control_state as sole control input</strong> Contradiction detection and resolution policy produce no control signals. They update world model state and task graph BLOCKED flags — but no function in Phase 2 writes to a control_state structure or block_mask directly. Those writes are exclusively in P3's <code>resolve_control_state()</code>.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- ALL TESTS -->
+<div id="tests" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 18 acceptance tests — <code>adapter/tests/test_harness_p2.py</code></div>
+  <div class="card-body">Run with <code>pytest adapter/tests/test_harness_p2.py -v</code>. Tests T01–T15 run without infrastructure. Tests T16–T18 require Postgres (HarnessRunState round-trip with belief_dep_graph).</div>
+</div>
+
+<div class="section-label">P2.1 — update_world_model node (3 tests)</div>
+<div class="test-item">T01 · OBSERVATION evidence integrated via <code>integrate_evidence()</code> appears in <code>world_model.observations[]</code> and NOT in <code>world_model.beliefs[]</code></div>
+<div class="test-item">T02 · <code>recompute_belief_health()</code> on a fresh world model returns freshness=1.0, consistency=1.0, support=1.0</div>
+<div class="test-item">T03 · Adding 3 contradictions to a world model with 6 beliefs reduces <code>belief_health.consistency</code> below 1.0</div>
+
+<div class="section-label">P2.2 — Belief dependency graph (3 tests)</div>
+<div class="test-item">T04 · <code>add_edge("A","B", confidence=0.8)</code> followed by <code>get_downstream("A")</code> returns a list containing "B"</div>
+<div class="test-item">T05 · <code>apply_decay()</code> called 5 times with decay_rate=0.1 on an edge starting at confidence=0.5 produces confidence=0.0 (not negative)</div>
+<div class="test-item">T06 · <code>compute_unverified_edge_ratio()</code> returns 0.5 when 1 of 2 edges has confidence=0.0</div>
+
+<div class="section-label">P2.3 — propagate_beliefs() (3 tests)</div>
+<div class="test-item">T07 · A 0.3-confidence edge propagates a belief confidence of 0.9 to a downstream belief at 0.27 (0.9 × 0.3)</div>
+<div class="test-item">T08 · Budget breach (unverified_edge_ratio > max_unverified_edge_ratio) widens the invalidation_frontier to include all beliefs reachable from current frontier members</div>
+<div class="test-item">T09 · <code>compute_dep_graph_quality()</code> returns a value in [0,1] and is lower when unverified_edge_ratio is higher</div>
+
+<div class="section-label">P2.4 — Typed contradiction detection (3 tests)</div>
+<div class="test-item">T10 · A SYSTEM_BREAKING contradiction is appended to <code>world_model.contradictions[]</code> — no exception is raised anywhere in the call stack (INV-05)</div>
+<div class="test-item">T11 · Pairwise contradictions and set-level contradictions are detected independently — a three-belief set-level contradiction does not also generate three pairwise contradiction records</div>
+<div class="test-item">T12 · A belief invalidated by an environment_change_log entry generates a temporal contradiction with severity MEDIUM or HIGH</div>
+
+<div class="section-label">P2.5 — Resolution policy (3 tests)</div>
+<div class="test-item">T13 · Resolution policy routes LOW severity by reducing belief confidence by 10% and not touching the task graph</div>
+<div class="test-item">T14 · HIGH severity contradiction flags all task_graph tasks that depend on the involved beliefs as BLOCKED</div>
+<div class="test-item">T15 · Applying <code>apply_resolution_policy()</code> twice with the same contradiction ID produces the same final state as applying it once</div>
+
+<div class="section-label">P2.6 — Staleness sweep (3 tests)</div>
+<div class="test-item">T16 · A belief with <code>recorded_at</code> older than <code>belief_ttl</code> is flagged as stale; <code>stale_flag_ratio</code> reflects this correctly</div>
+<div class="test-item">T17 · A belief whose source appears in <code>environment_change_log</code> with a newer timestamp is invalidated by the sweep</div>
+<div class="test-item">T18 · <code>staleness_sweep()</code> calls <code>apply_decay()</code> on the belief dep graph — edge confidence values decrease after the sweep completes</div>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Running Phase 2 tests</div>
+  <div class="card-body">
+    <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_p2.py -v</code><br><br>
+    Tests T01–T15 run without Postgres. Tests T16–T18 require a running Postgres instance with the migration applied. To run infrastructure-free tests only: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/test_harness_p2.py -v -k "not harness_state"</code>.
+  </div>
+</div>
+
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleTask(id){
+  const body=document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+['p21','p22','p23','p24','p25','p26'].forEach(id=>{
+  const b=document.getElementById('body-'+id);
+  if(b) b.classList.add('open');
+});
+</script>
+</body>
+</html>

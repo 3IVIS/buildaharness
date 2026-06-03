@@ -106,11 +106,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="hero">
   <h1>Its Harness — Full Implementation Plan</h1>
   <p>Complete phased roadmap from the current canvas-and-adapters foundation to the full harness defined in <em>full_harness_architecture.html</em>. Every node, layer, state structure, invariant, and deep-dive concept from the architecture is covered, assigned to a phase, and given acceptance tests.</p>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 0 Complete</span><br><br>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 0 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 1 Complete</span><br><br>
   <span class="badge badge-blue">11 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">1 phase complete</span> · <span style="color:#60a5fa">11 phases remaining</span> · 29/29 P0 acceptance tests pass · 470/470 existing tests pass · <strong style="color:#4ade80">P1 now unblocked</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">2 phases complete</span> · <span style="color:#60a5fa">10 phases remaining</span> · 58/58 acceptance tests pass (P0+P1) · <strong style="color:#4ade80">P2 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -146,7 +147,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="timeline-wrap">
 <div class="timeline">
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P0 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Foundation &amp; State Architecture</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P1</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name">Evidence &amp; Reasoning</div><div class="tl-weeks">4 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P1 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Evidence &amp; Reasoning</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P2</div><div class="tl-bar" style="background:#8b5cf6;width:100%"></div><div class="tl-name">World Model &amp; Contradiction</div><div class="tl-weeks">4 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P3</div><div class="tl-bar" style="background:#f0abfc;width:100%"></div><div class="tl-name">Diagnostics &amp; Control State</div><div class="tl-weeks">4 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P4</div><div class="tl-bar" style="background:#fbbf24;width:100%"></div><div class="tl-name">Planning &amp; Task Graph</div><div class="tl-weeks">4 wks</div></div>
@@ -217,9 +218,9 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phase 0 is complete.</strong> Phase 1 (Evidence &amp; Reasoning Layer) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0 and 1 are complete.</strong> Phase 2 (World Model &amp; Contradiction Layer) is the next work item.</div>
 
-<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
   <div style="font-size:12px;color:var(--t1);line-height:1.8">
     <strong style="color:var(--t0)">29/29</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">470/470</strong> existing tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
@@ -228,6 +229,24 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#4ade80">NEW</span>&nbsp; adapter/migrations/versions/0009_harness_run_state.py &nbsp;·&nbsp; spec/scripts/migrate-v0.2-to-v1.0.mjs &nbsp;·&nbsp; adapter/tests/test_harness_p0.py<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (v1.0.0 + 12 harness node stubs) &nbsp;·&nbsp; spec/package.json &nbsp;·&nbsp; spec/CHANGELOG.md<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/validate.py &nbsp;·&nbsp; adapter/db.py &nbsp;·&nbsp; adapter/run_api.py (GET/PUT /runs/{id}/harness-state) &nbsp;·&nbsp; pytest.ini
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 1 Complete — Evidence &amp; Reasoning Layer</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">26/26</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">58/58</strong> combined P0+P1 tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/evidence.py (Evidence · EvidenceStore · EvidenceType · ReliabilityClass)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/tool_reliability.py (ToolEnvelope · TOOL_RELIABILITY_ENVELOPES · apply_tool_reliability_envelope · get_envelope)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/tool_manifest.py (ToolAvailabilityManifest · FrozenManifestError · build_manifest)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/hypothesis.py (Hypothesis · HypothesisSet · EliminationPolicy · EliminationRecord · 4 generation sources · elimination + diversity enforcement)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/node_compilers.py (compile_gather_evidence · compile_apply_tool_reliability)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_p1.py (T01–T26)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (EvidenceStore · HypothesisSet · ToolAvailabilityManifest fields on HarnessRunState)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P1 types exported) &nbsp;·&nbsp; adapter/validate.py (gather_evidence + apply_tool_reliability validation)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (full harness_config shapes; z.discriminatedUnion → z.union fix) &nbsp;·&nbsp; spec/schema.json (regenerated)
     </div>
   </div>
 </div>
@@ -378,7 +397,7 @@ function showTab(id,btn){
 
 /* ─── PHASE DATA ─── */
 const phases=[
-  {id:'P0',title:'Foundation & State Architecture',weeks:'3 weeks',color:'#60a5fa',status:'complete',
+  {id:'P0',title:'Foundation & State Architecture',weeks:'3 weeks',color:'#60a5fa',status:'complete',completionNote:'29/29 tests · 470/470 existing tests',
    sub:'Extended FlowSpec schema · world_model data structures · generation_id infrastructure · caller state · output contract model · backend state store',
    tasks:[
      {id:'P0.1',name:'Extend FlowSpec schema for harness node types',body:'Add harness_meta block to FlowSpec v1.0.0 (backwards-compatible). Define JSON Schema for all new harness node types. Write migration tool from v0.2.0 flows. Version gate in adapter to reject unknown harness blocks gracefully.',tests:['FlowSpec v1.0.0 validates against all existing v0.2.0 reference flows','Migration tool round-trips all 5 reference flows without data loss','Adapter rejects unknown harness fields with clear error message, not silent ignore']},
@@ -388,7 +407,7 @@ const phases=[
      {id:'P0.5',name:'Output contract data model',body:'Implement output_contract: format_requirements, required_sections, required_interface_fields, interface_constraints, validation_rules, caller_specific_constraints. Stub validate_output_contract() and contract_shadow_check() (full logic in P5/P9).',tests:['output_contract serialises and deserialises cleanly from FlowSpec JSON','validate_output_contract() stub returns PASS on empty contract','contract_shadow_check() stub returns PASS on first call']},
      {id:'P0.6',name:'Backend state store for harness execution',body:'Implement HarnessRunState container (persisted to Postgres via existing db.py). Stores all 13 state structures per run_id. Enables pause/resume and cross-phase state access. Extend existing run_api.py with harness-state endpoints.',tests:['HarnessRunState round-trips all 13 structures to Postgres and back','Pausing and resuming a harness run restores identical state','run_api harness endpoints return 404 for non-harness flows (backward-compat)']},
    ]},
-  {id:'P1',title:'Evidence & Reasoning Layer',weeks:'4 weeks',color:'#4ade80',
+  {id:'P1',title:'Evidence & Reasoning Layer',weeks:'4 weeks',color:'#4ade80',status:'complete',completionNote:'26/26 tests · 58 tests pass P0+P1',
    sub:'Evidence data model · tool reliability envelopes · tool availability manifest · Gather Evidence node · Apply Tool Reliability node · hypothesis generation (4 sources) · elimination policy · diversity enforcement',
    tasks:[
      {id:'P1.1',name:'Evidence data model',body:'Implement Evidence dataclass: obs, reliability (H/M/L), source, evidence_type (OBSERVATION|INFERENCE|SYSTEM_ERROR), freshness. Implement evidence_store with append and query. Observation vs conclusion separation enforced: evidence_type=OBSERVATION is never auto-promoted to a belief.',tests:['Evidence with evidence_type=OBSERVATION cannot be referenced as derived_from[] of a belief without explicit inference step','Querying evidence_store by reliability class returns correct subsets','SYSTEM_ERROR evidence has reliability=HIGH by definition']},
@@ -509,7 +528,7 @@ phases.forEach((ph,i)=>{
     document.querySelectorAll('.phase-row').forEach(x=>x.classList.remove('active'));
     if(activePhase===i){activePhase=null;pd.innerHTML=`<div class="det-title">Click a phase to see tasks and tests</div><div class="det-body">Each phase produces a usable, independently-testable increment.</div>`;return;}
     activePhase=i;el.classList.add('active');
-    const detBadge=ph.status==='complete'?`<span style="font-family:var(--font-mono);font-size:11px;background:rgba(74,222,128,0.12);border:.5px solid rgba(74,222,128,0.3);color:#4ade80;padding:2px 10px;border-radius:3px;margin-left:8px;vertical-align:middle">✓ COMPLETE — 29/29 tests · 470/470 existing tests</span>`:'';
+    const detBadge=ph.status==='complete'?`<span style="font-family:var(--font-mono);font-size:11px;background:rgba(74,222,128,0.12);border:.5px solid rgba(74,222,128,0.3);color:#4ade80;padding:2px 10px;border-radius:3px;margin-left:8px;vertical-align:middle">✓ COMPLETE — ${ph.completionNote||''}</span>`:'';
     let html=`<div class="det-title" style="color:${ph.status==='complete'?'#4ade80':ph.color}">${ph.id}: ${ph.title}${detBadge} <span style="font-size:12px;color:var(--t1);font-weight:400">(${ph.weeks})</span></div>`;
     html+=`<div class="task-list">`;
     ph.tasks.forEach(t=>{
@@ -533,11 +552,11 @@ const nodeCoverage=[
   {id:2,name:'Warm Start',layer:'Learning',status:'planned',phase:'P8'},
   {id:3,name:'Check Caller Updates',layer:'Caller',status:'planned',phase:'P7'},
   {id:4,name:'Context Compression',layer:'Memory',status:'planned',phase:'P6'},
-  {id:5,name:'Gather Evidence',layer:'Reasoning',status:'planned',phase:'P1'},
-  {id:6,name:'Apply Tool Reliability',layer:'Reasoning',status:'planned',phase:'P1'},
+  {id:5,name:'Gather Evidence',layer:'Reasoning',status:'built',phase:'P1'},
+  {id:6,name:'Apply Tool Reliability',layer:'Reasoning',status:'built',phase:'P1'},
   {id:7,name:'Update World Model',layer:'World Model',status:'planned',phase:'P2'},
   {id:8,name:'Detect Contradictions',layer:'World Model',status:'planned',phase:'P2'},
-  {id:9,name:'Generate/Update Hypotheses',layer:'Reasoning',status:'planned',phase:'P1'},
+  {id:9,name:'Generate/Update Hypotheses',layer:'Reasoning',status:'built',phase:'P1'},
   {id:10,name:'Update Diagnostics',layer:'Control',status:'planned',phase:'P3'},
   {id:11,name:'Resolve Control State',layer:'Control',status:'planned',phase:'P3'},
   {id:12,name:'Update Task Graph',layer:'Planning',status:'planned',phase:'P4'},
@@ -563,7 +582,7 @@ nodeCoverage.forEach(n=>{
 const layerCoverage=[
   {name:'Caller State',resp:'Requirements, constraints, clarifications',status:'partial',phases:'P0✓,P7'},
   {name:'World Model',resp:'Observations, beliefs, assumptions, contradictions',status:'partial',phases:'P0✓,P2'},
-  {name:'Reasoning',resp:'Evidence handling, hypothesis generation, VOI',status:'planned',phases:'P1,P5'},
+  {name:'Reasoning',resp:'Evidence handling, hypothesis generation, VOI',status:'partial',phases:'P1✓,P5'},
   {name:'Planning',resp:'Task decomposition, scheduling, parallel concurrency',status:'partial',phases:'P4'},
   {name:'Control',resp:'Risk state management — NORMAL/CAUTIOUS/BLOCKED',status:'planned',phases:'P3'},
   {name:'Execution',resp:'Action selection and mutation',status:'partial',phases:'P5'},
@@ -585,9 +604,9 @@ const stateCoverage=[
   {name:'Belief Dependency Graph',fields:'belief_nodes · derived_from_edges · invalidation_frontier · propagation_queue · dep_graph_budget',status:'planned',phase:'P2'},
   {name:'Diagnostics',fields:'belief_health · coverage_health · verification_health · execution_health · dep_class_gap_annotation',status:'planned',phase:'P3'},
   {name:'Control State',fields:'generation_id · risk_state · escalation_reason · block_mask[] · notes[]',status:'planned',phase:'P3'},
-  {name:'Hypothesis Set',fields:'active[] · eliminated[] · elimination_policy · diversity_score',status:'planned',phase:'P1'},
+  {name:'Hypothesis Set',fields:'active[] · eliminated[] · elimination_policy · diversity_score',status:'built',phase:'P1'},
   {name:'Task Graph',fields:'tasks[6-state] · depends_on · parallel_write_domains · conflict_probability_cache',status:'partial',phase:'P4'},
-  {name:'Evidence Store',fields:'Evidence(obs·reliability·source·type·freshness) · tool_reliability_envelopes · tool_availability_manifest',status:'planned',phase:'P1'},
+  {name:'Evidence Store',fields:'Evidence(obs·reliability·source·type·freshness) · tool_reliability_envelopes · tool_availability_manifest',status:'built',phase:'P1'},
   {name:'Memory State',fields:'token_budget · max_steps · journal · journal_retention_policy · compression_risk(structured) · rollback_points[]',status:'partial',phase:'P6'},
   {name:'Strategy State',fields:'current_strategy · strategy_confidence · switch_triggers · prior_strategy_weights · recovery_strategy_order',status:'planned',phase:'P6'},
   {name:'Failure Diagnostics',fields:'failure_mode_library · matched_pattern(normalised confidence) · failure_history[]',status:'planned',phase:'P6'},
