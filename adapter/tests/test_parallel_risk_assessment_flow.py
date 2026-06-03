@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -244,9 +244,15 @@ def _fake_agent_response(text: str) -> MagicMock:
 
 def test_langgraph_parallel_branches_all_run(risk_spec):
     """All three agent branches execute and write their output_field into state."""
-    legal_resp = json.dumps({"risk_level": "high", "risks": ["Unlimited liability"], "recommendations": ["Cap liability"]})
-    financial_resp = json.dumps({"risk_level": "medium", "risks": ["Net 90 payment"], "recommendations": ["Negotiate terms"]})
-    technical_resp = json.dumps({"risk_level": "high", "risks": ["99.999% SLA unrealistic"], "recommendations": ["Revise SLA"]})
+    legal_resp = json.dumps(
+        {"risk_level": "high", "risks": ["Unlimited liability"], "recommendations": ["Cap liability"]}
+    )
+    financial_resp = json.dumps(
+        {"risk_level": "medium", "risks": ["Net 90 payment"], "recommendations": ["Negotiate terms"]}
+    )
+    technical_resp = json.dumps(
+        {"risk_level": "high", "risks": ["99.999% SLA unrealistic"], "recommendations": ["Revise SLA"]}
+    )
     synthesis_resp = "EXECUTIVE SUMMARY: High overall risk. Key findings: unlimited liability, unrealistic SLA."
 
     call_log: list[str] = []
@@ -293,7 +299,8 @@ def test_langgraph_synthesise_receives_all_branch_results(risk_spec):
         msgs = inputs.get("messages", [])
         content = msgs[0].content if msgs else ""
         suffix = "legal" if "Legal" in content else "financial" if "Financial" in content else "technical"
-        return {"messages": [MagicMock(content=json.dumps({"risk_level": "low", "risks": [], "recommendations": [], "from": suffix}))]}
+        result = json.dumps({"risk_level": "low", "risks": [], "recommendations": [], "from": suffix})
+        return {"messages": [MagicMock(content=result)]}
 
     def _mock_llm_invoke(messages):
         # Capture the rendered prompt that goes to synthesise
@@ -315,8 +322,7 @@ def test_langgraph_synthesise_receives_all_branch_results(risk_spec):
 
     # The synthesise node's HumanMessage content should contain the rendered risk fields
     all_prompts = " ".join(captured_prompts)
-    assert "legal" in all_prompts.lower() or "Legal" in all_prompts, \
-        "synthesise prompt must contain legal_risk content"
+    assert "legal" in all_prompts.lower() or "Legal" in all_prompts, "synthesise prompt must contain legal_risk content"
 
 
 # ── End-to-end: MAF exec (mocked SK) ─────────────────────────────────────────
@@ -347,7 +353,7 @@ def test_maf_parallel_branches_all_run(risk_spec):
         settings_obj = MagicMock()
         settings_obj.temperature = 0
         settings_obj.max_tokens = 1024
-        svc.get_prompt_execution_settings_class = lambda: (lambda: settings_obj)
+        svc.get_prompt_execution_settings_class = lambda: lambda: settings_obj
 
         # Cycle through responses for each agent/llm call
         responses_cycle = [legal_result, financial_result, technical_result, synthesis_result]
@@ -384,7 +390,7 @@ def test_maf_parallel_branches_all_run(risk_spec):
     # Patch svc inside the kernel that synthesise uses
     synth_kernel = MagicMock()
     synth_svc = MagicMock()
-    synth_svc.get_prompt_execution_settings_class = lambda: (lambda: MagicMock())
+    synth_svc.get_prompt_execution_settings_class = lambda: lambda: MagicMock()
     synth_svc.get_chat_message_contents = _fake_get_contents
     synth_kernel.get_service = lambda *a, **kw: synth_svc
 
@@ -399,6 +405,7 @@ def test_maf_parallel_branches_all_run(risk_spec):
 def test_maf_otel_setup_produces_correct_auth(risk_spec):
     """The generated OTel setup code must compute Basic auth from env vars at runtime."""
     import base64
+
     code, _ = compile_maf(risk_spec)
 
     # Exec the generated code but short-circuit the actual OTLP export
@@ -415,6 +422,7 @@ def test_maf_otel_setup_produces_correct_auth(risk_spec):
     ns: dict = {}
     # Inject fake OTel classes so exec doesn't need real OTel packages
     from unittest.mock import MagicMock as MM
+
     fake_provider = MM()
     fake_provider.add_span_processor = lambda *a: None
     ns["_TracerProvider"] = lambda: fake_provider
@@ -424,6 +432,7 @@ def test_maf_otel_setup_produces_correct_auth(risk_spec):
     ns["os"] = __import__("os")
 
     import os
+
     old = os.environ.copy()
     os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-test"
     os.environ["LANGFUSE_SECRET_KEY"] = "sk-test"
@@ -440,8 +449,9 @@ def test_maf_otel_setup_produces_correct_auth(risk_spec):
         os.environ.clear()
         os.environ.update(old)
 
-    assert "http://localhost:3001/api/public/otel/v1/traces" in captured.get("endpoint", ""), \
+    assert "http://localhost:3001/api/public/otel/v1/traces" in captured.get("endpoint", ""), (
         f"Unexpected endpoint: {captured.get('endpoint')}"
+    )
 
     auth_header = captured.get("headers", {}).get("Authorization", "")
     assert auth_header.startswith("Basic "), f"Missing Basic auth header: {auth_header}"
