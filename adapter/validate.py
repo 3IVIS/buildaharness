@@ -88,7 +88,67 @@ def validate_spec(spec: dict) -> None:
                 ),
             )
 
+    if harness_node_types_used:
+        _validate_harness_configs(spec)
+
     _validate_fn_refs(spec)
+
+
+_EVIDENCE_TYPES = {"OBSERVATION", "INFERENCE", "SYSTEM_ERROR"}
+_RELIABILITY_CLASSES = {"HIGH", "MEDIUM", "LOW"}
+_APPLY_TO_VALUES = {"inferences_only", "all"}
+
+
+def _validate_harness_configs(spec: dict) -> None:
+    """Validate harness_config for nodes that have full P1 config shapes."""
+    for node in spec.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        ntype = node.get("type")
+        cfg = node.get("harness_config") or {}
+
+        if ntype == "gather_evidence":
+            source_tool = cfg.get("source_tool")
+            if not source_tool or not isinstance(source_tool, str) or not source_tool.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"gather_evidence node '{node.get('id')}': "
+                        "harness_config.source_tool must be a non-empty string"
+                    ),
+                )
+            evidence_type = cfg.get("evidence_type")
+            if evidence_type not in _EVIDENCE_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"gather_evidence node '{node.get('id')}': "
+                        f"harness_config.evidence_type must be one of {sorted(_EVIDENCE_TYPES)}, "
+                        f"got {evidence_type!r}"
+                    ),
+                )
+            reliability_override = cfg.get("reliability_override")
+            if reliability_override is not None and reliability_override not in _RELIABILITY_CLASSES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"gather_evidence node '{node.get('id')}': "
+                        f"harness_config.reliability_override must be one of {sorted(_RELIABILITY_CLASSES)} "
+                        f"or null/absent, got {reliability_override!r}"
+                    ),
+                )
+
+        elif ntype == "apply_tool_reliability":
+            apply_to = cfg.get("apply_to", "inferences_only")
+            if apply_to not in _APPLY_TO_VALUES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"apply_tool_reliability node '{node.get('id')}': "
+                        f"harness_config.apply_to must be one of {sorted(_APPLY_TO_VALUES)}, "
+                        f"got {apply_to!r}"
+                    ),
+                )
 
 
 def _validate_fn_refs(spec: dict) -> None:

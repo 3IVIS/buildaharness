@@ -457,6 +457,7 @@ export type AgentDebateNode = z.infer<typeof AgentDebateNode>
 
 // ---------------------------------------------------------------------------
 // Harness node type stubs (Phase 0) — full harness_config shapes added per-phase
+// Phase 1 adds full harness_config for gather_evidence + apply_tool_reliability
 // ---------------------------------------------------------------------------
 
 const HarnessNodeBase = NodeBase.extend({
@@ -465,8 +466,24 @@ const HarnessNodeBase = NodeBase.extend({
 
 export const WorldModelNode = HarnessNodeBase.extend({ type: z.literal('world_model') })
 export const HypothesisSetNode = HarnessNodeBase.extend({ type: z.literal('hypothesis_set') })
-export const GatherEvidenceNode = HarnessNodeBase.extend({ type: z.literal('gather_evidence') })
-export const ApplyToolReliabilityNode = HarnessNodeBase.extend({ type: z.literal('apply_tool_reliability') })
+
+const GatherEvidenceConfig = z.object({
+  source_tool: z.string().min(1),
+  evidence_type: z.enum(['OBSERVATION', 'INFERENCE', 'SYSTEM_ERROR']),
+  reliability_override: z.enum(['HIGH', 'MEDIUM', 'LOW']).nullable().optional(),
+})
+export const GatherEvidenceNode = NodeBase.extend({
+  type: z.literal('gather_evidence'),
+  harness_config: GatherEvidenceConfig.optional(),
+})
+
+const ApplyToolReliabilityConfig = z.object({
+  apply_to: z.enum(['inferences_only', 'all']).default('inferences_only'),
+})
+export const ApplyToolReliabilityNode = NodeBase.extend({
+  type: z.literal('apply_tool_reliability'),
+  harness_config: ApplyToolReliabilityConfig.optional(),
+})
 export const UpdateWorldModelNode = HarnessNodeBase.extend({ type: z.literal('update_world_model') })
 export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
 export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
@@ -491,9 +508,13 @@ export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
 
 // ---------------------------------------------------------------------------
 // v0.2 Node discriminated union (14 types — unchanged)
+// Note: z.union is used here (not z.discriminatedUnion) because some node
+// types (ParallelJoinNode, MemoryReadNode, TransformNode) use .refine() which
+// wraps them in ZodEffects. ZodEffects is incompatible with discriminatedUnion
+// but works fine with union.
 // ---------------------------------------------------------------------------
 
-export const Node = z.discriminatedUnion('type', [
+export const Node = z.union([
   InputNode,
   OutputNode,
   LlmCallNode,
