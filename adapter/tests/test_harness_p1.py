@@ -10,7 +10,6 @@ Run all:     pytest adapter/tests/test_harness_p1.py -v
 
 import json
 import sys
-import textwrap
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,13 +23,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from harness.evidence import Evidence, EvidenceStore
 from harness.hypothesis import (
     EliminationPolicy,
-    EliminationRecord,
     Hypothesis,
     HypothesisSet,
     analogy_based_generation,
-    check_contradicting_evidence,
-    check_posterior_floor,
-    check_prediction_failure,
     compute_diversity_score,
     counterfactual_reasoning,
     eliminate,
@@ -39,9 +34,8 @@ from harness.hypothesis import (
     generate_hypotheses,
     symptom_inference,
 )
-from harness.tool_manifest import FrozenManifestError, ToolAvailabilityManifest, build_manifest
+from harness.tool_manifest import FrozenManifestError, build_manifest
 from harness.tool_reliability import (
-    TOOL_RELIABILITY_ENVELOPES,
     ToolEnvelope,
     apply_tool_reliability_envelope,
     get_envelope,

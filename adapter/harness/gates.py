@@ -1,57 +1,172 @@
 """
-Gate stubs — P0.3.
+Gate implementations — P3.5.
 
-decomposition_gate, action_gate, and post_exec_gate are wired with
-@assert_generation_fresh so staleness checking is exercised from Phase 0.
-All three raise NotImplementedError — they exist to fail loudly, not to
-silently pass. Full implementations are added in P3.
+Full implementations replacing the P0.3 NotImplementedError stubs.
+Each gate performs a staleness check, re-resolves control_state once if stale,
+then applies its phase-specific logic.
+
+StalenessError is re-exported from this module for backward compatibility.
+assert_generation_fresh is still importable and works as a general-purpose
+decorator — it is no longer applied to the gate functions themselves since
+gates handle staleness internally.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .staleness import StalenessError, assert_generation_fresh  # noqa: F401 — re-exported
+from .staleness import StalenessError, assert_generation_fresh, staleness_check
+
+__all__ = [
+    "StalenessError",
+    "action_gate",
+    "assert_generation_fresh",
+    "decomposition_gate",
+    "post_exec_gate",
+]
 
 
-@assert_generation_fresh
+def _maybe_resolve(
+    control_state: Any,
+    world_model: Any,
+    diagnostics: Any | None,
+    failure_diagnostics: Any | None,
+) -> Any:
+    """Re-resolve control_state if stale and diagnostics are available.
+
+    Returns a fresh control_state. Raises StalenessError if still stale
+    after resolution, or if diagnostics were not provided.
+    """
+    from .control_state import resolve_control_state
+
+    if not staleness_check(control_state, world_model):
+        return control_state
+
+    if diagnostics is None:
+        raise StalenessError(
+            f"control_state.generation_id={control_state.generation_id} is behind "
+            f"world_model.generation_id={world_model.generation_id}. "
+            "Provide diagnostics to allow automatic re-resolution."
+        )
+
+    fresh = resolve_control_state(
+        diagnostics,
+        world_model,
+        failure_diagnostics,
+        step=world_model.generation_id,
+    )
+
+    if staleness_check(fresh, world_model):
+        raise StalenessError(
+            "control_state is still stale after one re-resolution — "
+            f"generation_id={fresh.generation_id} vs world_model={world_model.generation_id}"
+        )
+    return fresh
+
+
 def decomposition_gate(
     task_graph: Any,
     *,
     control_state: Any,
     world_model: Any,
-) -> None:
-    """Assert generation_id freshness then gate task decomposition.
+    diagnostics: Any | None = None,
+    failure_diagnostics: Any | None = None,
+) -> bool:
+    """Gate task decomposition.
 
-    Full logic (PROCEED | GATHER_CLARIFICATION | ESCALATE) added in P3.
+    Returns False when control_state is BLOCKED (decomposition not allowed).
+    Returns True when NORMAL or CAUTIOUS.
+    Re-resolves control_state once if stale.
     """
-    raise NotImplementedError("decomposition_gate not implemented until P3")
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+
+    if control_state.risk_state == "BLOCKED":
+        return False
+
+    if control_state.risk_state == "CAUTIOUS":
+        # Allow decomposition with advisory note (logged via return value context)
+        return True
+
+    return True
 
 
-@assert_generation_fresh
 def action_gate(
     action: Any,
     *,
     control_state: Any,
     world_model: Any,
-) -> None:
-    """Assert generation_id freshness (sub-step A value) then gate action selection.
+    diagnostics: Any | None = None,
+    failure_diagnostics: Any | None = None,
+) -> bool:
+    """Gate action execution (sub-step A freshness check).
 
-    Full logic (BLOCK | ESCALATE | allow with exploration) added in P3.
+    Returns False when:
+    - control_state is BLOCKED, or
+    - action.required_resources overlap with any blocked dimension in block_mask.
+
+    Re-resolves control_state once if stale.
     """
-    raise NotImplementedError("action_gate not implemented until P3")
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+
+    if control_state.risk_state == "BLOCKED":
+        return False
+
+    blocked_dims = {entry.dimension for entry in control_state.block_mask}
+    if blocked_dims and action is not None:
+        required = _get_required_resources(action)
+        if required & blocked_dims:
+            return False
+
+    return True
 
 
-@assert_generation_fresh
 def post_exec_gate(
     result: Any,
-    verification: Any,
+    verification_result: Any,
     *,
     control_state: Any,
     world_model: Any,
-) -> None:
-    """Assert generation_id freshness (sub-step B value) then gate post-execution.
+    diagnostics: Any | None = None,
+    output_contract: Any | None = None,
+    failure_diagnostics: Any | None = None,
+) -> bool:
+    """Gate post-execution commit (sub-step B freshness check).
 
-    Full logic (COMMIT | ROLLBACK | FLAG_FOR_REVIEW | HALT) added in P3.
+    Returns False when:
+    - control_state is stale and cannot be re-resolved, or
+    - contract_shadow_check fails (when output_contract is provided), or
+    - verification_result.has_critical_failure is True.
+
+    Re-resolves control_state once if stale.
     """
-    raise NotImplementedError("post_exec_gate not implemented until P3")
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+
+    if output_contract is not None:
+        from .output_contract import contract_shadow_check
+        check = contract_shadow_check(result, output_contract)
+        if not check.passed:
+            return False
+
+    if _has_critical_failure(verification_result):
+        return False
+
+    return True
+
+
+def _get_required_resources(action: Any) -> set[str]:
+    """Extract required resource dimensions from an action descriptor."""
+    if isinstance(action, dict):
+        resources = action.get("required_resources", [])
+        if isinstance(resources, (list, set)):
+            return set(resources)
+    required = getattr(action, "required_resources", None)
+    if required is not None:
+        return set(required)
+    return set()
+
+
+def _has_critical_failure(verification_result: Any) -> bool:
+    """Check whether verification_result indicates a critical failure."""
+    if isinstance(verification_result, dict):
+        return bool(verification_result.get("has_critical_failure", False))
+    return bool(getattr(verification_result, "has_critical_failure", False))

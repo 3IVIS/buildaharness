@@ -107,11 +107,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <h1>Its Harness — Full Implementation Plan</h1>
   <p>Complete phased roadmap from the current canvas-and-adapters foundation to the full harness defined in <em>full_harness_architecture.html</em>. Every node, layer, state structure, invariant, and deep-dive concept from the architecture is covered, assigned to a phase, and given acceptance tests.</p>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 0 Complete</span>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 1 Complete</span><br><br>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 1 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 2 Complete</span><br><br>
   <span class="badge badge-blue">11 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">2 phases complete</span> · <span style="color:#60a5fa">10 phases remaining</span> · 58/58 acceptance tests pass (P0+P1) · <strong style="color:#4ade80">P2 now unblocked</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">3 phases complete</span> · <span style="color:#60a5fa">9 phases remaining</span> · 76/76 acceptance tests pass (P0+P1+P2) · <strong style="color:#4ade80">P3 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -148,7 +149,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="timeline">
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P0 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Foundation &amp; State Architecture</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P1 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Evidence &amp; Reasoning</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P2</div><div class="tl-bar" style="background:#8b5cf6;width:100%"></div><div class="tl-name">World Model &amp; Contradiction</div><div class="tl-weeks">4 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P2 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">World Model &amp; Contradiction</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P3</div><div class="tl-bar" style="background:#f0abfc;width:100%"></div><div class="tl-name">Diagnostics &amp; Control State</div><div class="tl-weeks">4 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P4</div><div class="tl-bar" style="background:#fbbf24;width:100%"></div><div class="tl-name">Planning &amp; Task Graph</div><div class="tl-weeks">4 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P5</div><div class="tl-bar" style="background:#f87171;width:100%"></div><div class="tl-name">Execution &amp; Verification</div><div class="tl-weeks">5 wks</div></div>
@@ -218,7 +219,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0 and 1 are complete.</strong> Phase 2 (World Model &amp; Contradiction Layer) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0, 1, and 2 are complete.</strong> Phase 3 (Diagnostics &amp; Control State) is the next work item.</div>
 
 <div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
@@ -233,7 +234,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   </div>
 </div>
 
-<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 1 Complete — Evidence &amp; Reasoning Layer</div>
   <div style="font-size:12px;color:var(--t1);line-height:1.8">
     <strong style="color:var(--t0)">26/26</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">58/58</strong> combined P0+P1 tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
@@ -247,6 +248,25 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (EvidenceStore · HypothesisSet · ToolAvailabilityManifest fields on HarnessRunState)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P1 types exported) &nbsp;·&nbsp; adapter/validate.py (gather_evidence + apply_tool_reliability validation)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (full harness_config shapes; z.discriminatedUnion → z.union fix) &nbsp;·&nbsp; spec/schema.json (regenerated)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 2 Complete — World Model &amp; Contradiction Layer</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">18/18</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">76/76</strong> combined P0+P1+P2 tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
+    Key invariants enforced: INV-05 (SYSTEM_BREAKING never raises inline) · INV-01 (observation/belief separation at integration) · INV-07 (dep_class_gap advisory-only)<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/world_model_ops.py (integrate_evidence · recompute_belief_health: freshness/consistency/support)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/belief_graph.py (BeliefEdge · BeliefDepGraph · DepGraphBudget · apply_decay · propagate_single_update · propagate_beliefs · compute_dep_graph_quality)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/contradiction.py (detect_pairwise · set_level · temporal · abstraction · detect_contradictions [INV-05] · apply_resolution_policy [idempotent])<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_p2.py (T01–T18 · all infrastructure-free · no Postgres required)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/staleness.py (staleness_sweep: TTL + env-change invalidation via derived_from/supporting_evidence · calls apply_decay at end)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/node_compilers.py (compile_update_world_model · registered as "update_world_model" in dispatch table)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (belief_dep_graph upgraded from raw dict to typed BeliefDepGraph · to_dict/from_dict wired)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P2 types + functions exported) &nbsp;·&nbsp; adapter/validate.py (update_world_model config validation)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (UpdateWorldModelConfig: integration_mode + reliability_threshold) &nbsp;·&nbsp; spec/schema.json (regenerated)
     </div>
   </div>
 </div>
@@ -418,7 +438,7 @@ const phases=[
      {id:'P1.6',name:'Hypothesis generation — 4 sources',body:'Implement four structurally distinct generators: (1) symptom_inference: infer explanation from symptom clusters in world_model. (2) counterfactual_reasoning: what condition explains the observed outcome. (3) failure_mode_library contribution: pattern-based hypothesis seeding (read-only advisory role). (4) analogy_based_generation: adapt from structurally similar past situations (requires experience_store; skipped if unavailable). All four produce Hypothesis(id, explanation, confidence, predicted_observations[], discriminating_evidence[], generation_sources[]).',tests:['Each generation source produces at least one hypothesis when triggered','Generation sources are recorded in hypothesis.generation_sources[]','analogy_based_generation is skipped gracefully when experience_store unavailable']},
      {id:'P1.7',name:'Hypothesis elimination policy',body:'Implement elimination_policy with three conditions: (a) contradicting_evidence, (b) prediction_failure_count ≥ K, (c) posterior < FLOOR. Implement K-retention of eliminated set (prevents unbounded growth). Implement diversity_score computation: Shannon entropy over generation_sources, normalised by log2(num_sources). Enforce 0.7 diversity threshold — additional generation passes if below.',tests:['Hypothesis with posterior < FLOOR is eliminated','Eliminated set never exceeds K entries (oldest dropped first)','diversity_score < 0.7 triggers additional generation passes until satisfied','All three elimination conditions independently trigger elimination']},
    ]},
-  {id:'P2',title:'World Model & Contradiction Layer',weeks:'4 weeks',color:'#8b5cf6',
+  {id:'P2',title:'World Model & Contradiction Layer',weeks:'4 weeks',color:'#8b5cf6',status:'complete',completionNote:'18/18 tests · 76/76 combined P0+P1+P2 tests pass',
    sub:'Update World Model node · belief dependency graph · dep_graph_budget · propagate_beliefs() · typed contradiction detection · resolution policy · staleness sweep · completeness_flags',
    tasks:[
      {id:'P2.1',name:'Update World Model node (node type: update_world_model)',body:'New node type. Implements reliability-weighted integration of Evidence into world_model. Observations stored raw in observations[]. Beliefs added only with explicit derived_from[] and supporting_evidence[]. Recomputes belief_health proxies: freshness=normalise(1−stale_flag_ratio), consistency=normalise(1−contradiction_density), support=normalise(mean_reliability_weight).',tests:['Evidence integration does not auto-create beliefs','belief_health.freshness is 1.0 when no beliefs are stale','belief_health.consistency decreases as contradictions are added']},
@@ -554,8 +574,8 @@ const nodeCoverage=[
   {id:4,name:'Context Compression',layer:'Memory',status:'planned',phase:'P6'},
   {id:5,name:'Gather Evidence',layer:'Reasoning',status:'built',phase:'P1'},
   {id:6,name:'Apply Tool Reliability',layer:'Reasoning',status:'built',phase:'P1'},
-  {id:7,name:'Update World Model',layer:'World Model',status:'planned',phase:'P2'},
-  {id:8,name:'Detect Contradictions',layer:'World Model',status:'planned',phase:'P2'},
+  {id:7,name:'Update World Model',layer:'World Model',status:'built',phase:'P2'},
+  {id:8,name:'Detect Contradictions',layer:'World Model',status:'built',phase:'P2'},
   {id:9,name:'Generate/Update Hypotheses',layer:'Reasoning',status:'built',phase:'P1'},
   {id:10,name:'Update Diagnostics',layer:'Control',status:'planned',phase:'P3'},
   {id:11,name:'Resolve Control State',layer:'Control',status:'planned',phase:'P3'},
@@ -581,7 +601,7 @@ nodeCoverage.forEach(n=>{
 /* ─── LAYER COVERAGE ─── */
 const layerCoverage=[
   {name:'Caller State',resp:'Requirements, constraints, clarifications',status:'partial',phases:'P0✓,P7'},
-  {name:'World Model',resp:'Observations, beliefs, assumptions, contradictions',status:'partial',phases:'P0✓,P2'},
+  {name:'World Model',resp:'Observations, beliefs, assumptions, contradictions',status:'built',phases:'P0✓,P2✓'},
   {name:'Reasoning',resp:'Evidence handling, hypothesis generation, VOI',status:'partial',phases:'P1✓,P5'},
   {name:'Planning',resp:'Task decomposition, scheduling, parallel concurrency',status:'partial',phases:'P4'},
   {name:'Control',resp:'Risk state management — NORMAL/CAUTIOUS/BLOCKED',status:'planned',phases:'P3'},
@@ -600,8 +620,8 @@ layerCoverage.forEach(l=>{
 
 /* ─── STATE COVERAGE ─── */
 const stateCoverage=[
-  {name:'World Model',fields:'generation_id · observations[] · beliefs[] · assumptions[] · contradictions[] · environment_change_log[] · completeness_flags{}',status:'partial',phase:'P0✓,P2'},
-  {name:'Belief Dependency Graph',fields:'belief_nodes · derived_from_edges · invalidation_frontier · propagation_queue · dep_graph_budget',status:'planned',phase:'P2'},
+  {name:'World Model',fields:'generation_id · observations[] · beliefs[] · assumptions[] · contradictions[] · environment_change_log[] · completeness_flags{}',status:'built',phase:'P0✓,P2✓'},
+  {name:'Belief Dependency Graph',fields:'belief_nodes · derived_from_edges · invalidation_frontier · propagation_queue · dep_graph_budget',status:'built',phase:'P2✓'},
   {name:'Diagnostics',fields:'belief_health · coverage_health · verification_health · execution_health · dep_class_gap_annotation',status:'planned',phase:'P3'},
   {name:'Control State',fields:'generation_id · risk_state · escalation_reason · block_mask[] · notes[]',status:'planned',phase:'P3'},
   {name:'Hypothesis Set',fields:'active[] · eliminated[] · elimination_policy · diversity_score',status:'built',phase:'P1'},

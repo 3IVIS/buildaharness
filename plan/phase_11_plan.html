@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Its Harness — Phase 11: E2E Integration &amp; Testing</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#a3e635;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --p11:#a3e635;
+  --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;--slate:#94a3b8;--pink:#fb7185;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(163,230,53,0.07);border-color:rgba(163,230,53,0.4);color:#a3e635;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+.card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem}
+.card-title{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.5rem}
+.card-body{font-size:13px;color:var(--t1);line-height:1.7}
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:26px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+.week-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1.2rem}
+.week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-title{font-size:13px;font-weight:600;color:var(--p11);margin-bottom:.4rem}
+.week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.week-item::before{content:'·';position:absolute;left:0;color:var(--p11)}
+.task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p11);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
+.task-header:hover{background:var(--bg2)}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
+.task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
+.task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
+.steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
+.step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step-num{font-family:var(--font-mono);font-size:10px;color:var(--p11);flex-shrink:0;width:22px}
+.step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
+.step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.step-body strong{color:var(--t0)}
+.test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
+.test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
+.f-new{color:var(--green)}
+.f-mod{color:var(--amber)}
+.f-dir{color:var(--p11);font-weight:600}
+.f-note{color:var(--t1);opacity:.6;font-size:10px}
+.dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
+.dep-table th,.dep-table td{padding:.5rem .75rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.dep-table th{background:var(--bg2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px}
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .85rem;font-size:12px;color:var(--t1);line-height:1.5}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:3px;font-size:12px}
+.inv-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(163,230,53,0.06);border:.5px solid rgba(163,230,53,0.2);color:var(--p11);margin-left:6px;vertical-align:middle}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.85rem;margin-bottom:.35rem}
+.desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
+.note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.note-block strong{color:var(--amber)}
+.gate-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--red);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.gate-block strong{color:var(--red)}
+.e2e-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:4px}
+.e2e-item strong{color:var(--t0)}
+.e2e-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(163,230,53,0.08);border:.5px solid rgba(163,230,53,0.2);color:var(--p11);margin-right:6px}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Phase 11 — E2E Integration &amp; Testing</h1>
+  <p>The final phase. Updates all four framework adapters (LangGraph, CrewAI, Mastra, MAF) to compile and run harness-capable flows, extends Langfuse traces with harness-specific spans, implements all eight end-to-end scenario tests, runs all ten architectural invariant tests against the full integrated system on every framework, and benchmarks harness loop overhead to confirm the sub-500ms target is met.</p>
+  <span class="badge badge-blue">5 Weeks</span>
+  <span class="badge badge-green">5 Tasks</span>
+  <span class="badge badge-amber">22 Steps</span>
+  <span class="badge badge-blue">16 Acceptance Tests</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P10 complete</span> · Gate: <span style="color:#f87171">all E2E + invariant tests pass on all four frameworks before this phase closes</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
+  <button class="tab" onclick="showTab('files',this)">File Map</button>
+  <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
+  <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
+  <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:var(--p11)">5</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">22</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">16</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">10</div><div class="sum-l">Invariants verified</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--p11)">5</div><div class="sum-l">Weeks</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What Phase 11 delivers</div>
+  <div class="card-body">
+    Phases 0–10 built all the harness logic and visual tooling in framework-agnostic Python and TypeScript modules. Phase 11 wires everything together: it makes the four existing framework adapters harness-aware, ensures all harness behaviour is observable in Langfuse, validates the full system against eight end-to-end scenario tests and all ten architectural invariants, and benchmarks the overhead to verify it stays within the defined budget.<br><br>
+    <strong style="color:var(--t0)">Framework adapter updates (P11.1)</strong> — The harness control layer (generation_id gates, diagnostics, resolve_control_state, verification, recovery, reviewer pass) runs in the adapter middleware layer, not in per-framework code. Each framework adapter needs to be updated to compile harness node types from FlowSpec and route their execution through the middleware. The key architectural constraint: no harness logic is duplicated in per-framework code. All four adapters call the same Python harness functions from <code>adapter/harness/</code>.<br><br>
+    <strong style="color:var(--t0)">Langfuse harness tracing (P11.2)</strong> — The existing Langfuse integration records per-node token counts and HITL trace links. Phase 11 extends it with harness-specific spans: generation_id per iteration, control_state risk level per iteration, diagnostic health vector values, and recovery strategy changes. These spans are queryable from the Langfuse dashboard and provide the primary debugging surface for calibrating threshold constants in production.<br><br>
+    <strong style="color:var(--t0)">E2E scenario tests (P11.3)</strong> — Implements the eight end-to-end scenarios defined in the Testing Strategy of the full implementation plan (E2E-01 through E2E-08). Each scenario is run on all four frameworks. The test gate for this phase is that all eight scenarios pass on all four frameworks before the phase is marked complete.<br><br>
+    <strong style="color:var(--t0)">Invariant tests (P11.4)</strong> — Implements the ten architectural invariant tests (INV-01 through INV-10) as a standalone test file that runs against the full integrated system. These tests become a permanent CI gate: any PR that regresses an invariant is blocked. The test file uses black-box assertions where possible — testing observable behaviour rather than internal implementation details.<br><br>
+    <strong style="color:var(--t0)">Performance benchmarks (P11.5)</strong> — Benchmarks harness loop overhead against a framework-only baseline. Target: &lt;500ms added overhead per iteration. Profiles the top three contributors (expected: hypothesis generation, belief propagation, contradiction detection) and documents accepted trade-offs in a benchmark report committed to the repository.
+  </div>
+</div>
+
+<div class="week-row">
+  <div class="week-card">
+    <div class="week-label">Week 1</div>
+    <div class="week-title">Adapter Updates</div>
+    <div class="week-item">P11.1 — Audit all four adapters</div>
+    <div class="week-item">P11.1 — LangGraph + CrewAI harness wiring</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 2</div>
+    <div class="week-title">Adapters + Tracing</div>
+    <div class="week-item">P11.1 — Mastra + MAF harness wiring</div>
+    <div class="week-item">P11.2 — Langfuse harness spans</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 3</div>
+    <div class="week-title">E2E Tests (batch 1)</div>
+    <div class="week-item">P11.3 — E2E-01, E2E-02, E2E-03</div>
+    <div class="week-item">P11.3 — E2E-04, E2E-05</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 4</div>
+    <div class="week-title">E2E Tests (batch 2)</div>
+    <div class="week-item">P11.3 — E2E-06, E2E-07, E2E-08</div>
+    <div class="week-item">P11.4 — INV-01 through INV-05</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 5</div>
+    <div class="week-title">Invariants &amp; Benchmarks</div>
+    <div class="week-item">P11.4 — INV-06 through INV-10</div>
+    <div class="week-item">P11.5 — Benchmarks + report</div>
+    <div class="week-item">CI gate wiring + release sign-off</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:.75rem">
+  <div class="card-title">Phase completion gates — hard requirements before Phase 11 closes</div>
+  <div class="gate-block"><strong>Gate 1 — All 4 adapters compile harness flows without error:</strong> Each of LangGraph, CrewAI, Mastra, and MAF must be able to compile a FlowSpec v1.0.0 flow with harness nodes enabled and execute it end-to-end. A framework that fails to compile a harness flow is a blocker.</div>
+  <div class="gate-block"><strong>Gate 2 — All 8 E2E scenarios pass on all 4 frameworks:</strong> E2E-01 through E2E-08 must each pass on LangGraph, CrewAI, Mastra, and MAF. A scenario that passes on 3 frameworks but not the 4th is a blocker. No partial credit.</div>
+  <div class="gate-block"><strong>Gate 3 — All 10 invariants pass on all 4 frameworks:</strong> INV-01 through INV-10 must pass when run against each framework. Invariant failures produce actionable error messages identifying which invariant was violated and at which step. An invariant failure is a blocker.</div>
+  <div class="note-block"><strong>Performance target is a warning, not a blocker:</strong> The &lt;500ms overhead target from P11.5 is aspirational. If the target is missed, the phase may still close — but the benchmark report must document which operations exceed budget, the measured overhead, and the accepted trade-off rationale. Closing Phase 11 with an unacknowledged performance regression is not acceptable.</div>
+</div>
+
+<div class="card">
+  <div class="card-title">End-to-end scenario reference</div>
+  <div class="card-body" style="margin-bottom:.5rem">Eight scenarios are required for the E2E gate. Each must pass on all four frameworks.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-01</span><strong>Happy path:</strong> Full 22-node harness loop completes, output passes validate_output_contract(), experience_store populated when available.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-02</span><strong>BLOCKED escalation:</strong> Inject SYSTEM_BREAKING contradiction. Assert Tier 1 fires, BLOCKED state set, escalation surfaces to HITL, caller response restarts loop.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-03</span><strong>Recovery cycle:</strong> Force verification failure three times on same task. Assert DIRECT_EDIT → TRACE_EXEC strategy progression. Assert global replan fires when replan_scope=GLOBAL.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-04</span><strong>Warm start benefit:</strong> Run harness twice on same task class. Assert second run's strategy_weights differ from flat priors. Assert warm_start loaded prior decomposition patterns.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-05</span><strong>Parallel branch merge:</strong> Run two parallel tasks with write-domain overlap. Assert optimistic path fires when conflict_prob ≤ PESSIMISTIC_THRESHOLD. Assert contradiction detection runs on merged world model at join.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-06</span><strong>Context compression:</strong> Force context_pressure.critical. Assert compress_memory() populates both compressed_structures[] and pruned_regions[]. Assert action_dep_overlap() fires correctly when HIGH-risk action depends on a pruned region.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-07</span><strong>Reviewer pass re-entry:</strong> Seed reviewer with findings that reopen a completed task. Assert drain_propagation_queue() triggers loop re-entry and task moves from COMPLETE to ACTIVE.</div>
+  <div class="e2e-item"><span class="e2e-tag">E2E-08</span><strong>max_steps budget:</strong> Set max_steps=5, run a task requiring 7 steps. Assert warning fires at step 4 (0.8×5), escalation fires at step 5 with "budget exhausted" reason.</div>
+</div>
+
+</div>
+
+<!-- TASKS & STEPS -->
+<div id="tasks" class="tab-content">
+
+<div class="desc-block">P11.1 (adapter updates) must complete before P11.3 (E2E tests) can run — you cannot test integration without working adapters. P11.2 (Langfuse tracing) can run in parallel with P11.1 from week 2. P11.3 and P11.4 have some overlap — invariant tests can begin once the first adapter is working, but all four must pass all invariants. P11.5 (benchmarks) runs last, after all tests pass, to avoid benchmarking broken code paths.</div>
+
+<!-- P11.1 -->
+<div class="task-block" id="tb-p111">
+  <div class="task-header" onclick="toggleTask('p111')">
+    <span class="task-id">P11.1</span>
+    <span class="task-name">Framework adapter updates for harness features</span>
+    <span class="task-meta">Weeks 1–2 · ~4 days</span>
+  </div>
+  <div class="task-body" id="body-p111">
+    <div class="desc-block">Updates all four framework adapters to compile and execute harness-capable FlowSpec v1.0.0 flows. The harness control layer (all harness modules from <code>adapter/harness/</code>) runs in the adapter middleware — not duplicated per framework. Each adapter adds a harness execution path that routes harness node types through the shared Python middleware while leaving the existing non-harness execution path unchanged.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Audit each framework adapter for harness integration points</strong>. For each of <code>adapter/langgraph_adapter.py</code>, <code>adapter/crewai_adapter.py</code>, <code>adapter/maf_adapter.py</code>, and the Mastra runner: identify where nodes are compiled and where the execution loop runs. Map each harness node type to its compiler function in <code>adapter/harness/node_compilers.py</code>. Document which parts of each adapter need a harness-aware code path and which can remain unchanged. This audit drives the implementation order for steps 2–4.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Update <code>adapter/langgraph_adapter.py</code> and <code>adapter/crewai_adapter.py</code></strong>. For each adapter: add a harness compilation path that checks <code>flow.harness_meta.enabled</code>. If true: compile harness node types via the dispatch table in <code>node_compilers.py</code>; wrap the execution loop with the harness middleware (initialise HarnessRunState, wire generation_id gates, route control_state checks through <code>resolve_control_state()</code>). If false: use the existing compilation path unchanged. The non-harness path must not be modified in any way that changes its existing behaviour.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Update <code>adapter/maf_adapter.py</code> and the Mastra runner</strong>. Apply the same harness compilation path from step 2. For the Mastra runner (TypeScript): the harness middleware calls are made via the Python adapter bridge already in place — Mastra nodes compile to TypeScript execution stubs that call back into the Python harness layer for all control decisions. Confirm the bridge correctly passes HarnessRunState across the language boundary via the existing JSON serialisation.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Add per-framework harness integration test files</strong>. Create <code>adapter/tests/test_harness_integration_LG.py</code>, <code>_CR.py</code>, <code>_MA.py</code>, <code>_MAF.py</code>. Each file runs a minimal harness flow (world_model + gather_evidence + update_world_model + control_state) on its framework and asserts: (a) the flow compiles without error, (b) HarnessRunState is populated after the run, (c) the generation_id has incremented at least twice (double-increment invariant), (d) no harness logic is executed from within per-framework code (verified by checking that harness module imports appear only in the adapter middleware, not in framework-specific files).</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Confirm the non-harness execution path is unaffected</strong>. Run the full existing test suite (<code>pytest adapter/tests/ -v -k "not harness"</code>) after each adapter update. All 470+ existing tests must continue to pass. A regression in a non-harness test caused by a harness code path change is a blocker — the harness and non-harness paths must be isolated from each other at the adapter level.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">All four framework adapters compile a FlowSpec v1.0.0 flow with <code>harness_meta.enabled=true</code> and three harness node types without error; the compiled output references only <code>adapter/harness/</code> functions, not framework-specific harness implementations</div>
+    <div class="test-item">After executing a minimal harness flow on each framework: <code>HarnessRunState</code> is populated with a non-zero generation_id and at least one observation in world_model — confirming the middleware wiring is active end-to-end</div>
+    <div class="test-item">All 470+ pre-existing non-harness adapter tests pass without modification after the adapter updates — the non-harness execution path is unaffected by the harness code path additions</div>
+  </div>
+</div>
+
+<!-- P11.2 -->
+<div class="task-block" id="tb-p112">
+  <div class="task-header" onclick="toggleTask('p112')">
+    <span class="task-id">P11.2</span>
+    <span class="task-name">Langfuse harness tracing</span>
+    <span class="task-meta">Week 2 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p112">
+    <div class="desc-block">Extends the existing Langfuse integration (which already records per-run traces, per-node token counts, and HITL trace links for all four frameworks) with harness-specific spans. After Phase 11, every harness run produces a queryable trace showing generation_id progression, control_state risk level, diagnostic health vectors, and any recovery strategy changes — the primary observability surface for tuning harness behaviour in production.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/langfuse_tracing.py</code></strong>. Define a <code>HarnessTraceContext</code> dataclass: <code>run_id: str</code>, <code>langfuse_trace_id: str</code>, <code>iteration: int</code>. Implement <code>start_harness_span(ctx, span_name) → LangfuseSpan</code> and <code>end_harness_span(span, attributes: dict) → None</code>. These wrap the existing Langfuse span API with harness-specific attribute conventions. If Langfuse is not configured: all functions are no-ops — harness tracing is optional instrumentation, not a required dependency.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Instrument the main harness loop in <code>adapter/harness/loop.py</code></strong>. At the start of each iteration: open a span named <code>"harness_iteration_{n}"</code> with attribute <code>generation_id: world_model.generation_id</code>. At the end of each iteration: close the span with attributes <code>control_state_risk: control_state.risk_state</code> and <code>iteration_duration_ms: elapsed</code>. The span wraps the entire iteration from generation_id pre-increment to post-exec gate.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Add diagnostic health vector attributes to each iteration span</strong>. Before closing the iteration span: attach the four health vector summaries as span attributes — <code>belief_health_freshness</code>, <code>belief_health_consistency</code>, <code>belief_health_support</code>, <code>coverage_symptom</code>, <code>coverage_explanation</code>, <code>verification_strength</code>, <code>verification_feasibility</code>, <code>execution_progress_rate</code>, <code>execution_failure_recurrence</code>, <code>execution_oscillation</code>. These attributes are queryable from the Langfuse dashboard to build health trend charts across a run.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Emit recovery strategy change events</strong>. In <code>adapter/harness/recovery.py</code>: whenever <code>switch_strategy()</code> is called, emit a Langfuse event (not a span) with attributes <code>from_strategy</code>, <code>to_strategy</code>, <code>trigger_reason</code>, <code>failure_class</code>, <code>iteration</code>. These events are distinct from iteration spans — they appear as point events on the trace timeline, making strategy progressions visible at a glance. Also emit an event when <code>escalate()</code> is called, with the escalation reason and surface_blocker summary.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">After running a minimal harness flow on LangGraph with Langfuse configured: each loop iteration produces a Langfuse span named <code>"harness_iteration_N"</code> with the correct generation_id attribute — verified by querying the Langfuse test instance</div>
+    <div class="test-item">A run that triggers a strategy switch from DIRECT_EDIT to TRACE_EXEC emits a Langfuse event with <code>from_strategy="DIRECT_EDIT"</code>, <code>to_strategy="TRACE_EXEC"</code>, and the trigger reason — event appears on the trace timeline at the correct iteration</div>
+    <div class="test-item">When Langfuse is not configured (no LANGFUSE_SECRET_KEY in environment): all harness tracing calls are no-ops and the harness run completes successfully — no exception raised, no missing-attribute error</div>
+  </div>
+</div>
+
+<!-- P11.3 -->
+<div class="task-block" id="tb-p113">
+  <div class="task-header" onclick="toggleTask('p113')">
+    <span class="task-id">P11.3</span>
+    <span class="task-name">End-to-end harness scenario tests (E2E-01 through E2E-08)</span>
+    <span class="task-meta">Weeks 3–4 · ~6 days</span>
+  </div>
+  <div class="task-body" id="body-p113">
+    <div class="desc-block">Implements all eight E2E scenario tests from the Testing Strategy in the full implementation plan. Each scenario must pass on all four frameworks (LangGraph, CrewAI, Mastra, MAF). The test suite is parameterised by framework so that adding a new framework in the future requires only a single registration. These tests run against a real Postgres instance and real adapters — they are not unit tests.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/tests/test_harness_e2e.py</code></strong> with a parameterised framework fixture. The fixture yields a running adapter client for each of the four frameworks. All eight E2E test functions are decorated with <code>@pytest.mark.parametrize("framework", ["langgraph","crewai","mastra","maf"])</code>. A shared helper <code>run_harness_scenario(framework, spec, initial_state) → HarnessRunState</code> executes a given FlowSpec on the specified framework and returns the final HarnessRunState.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement E2E-01 (happy path) and E2E-02 (BLOCKED escalation)</strong>. E2E-01: build a minimal 22-node harness flow spec, run it, assert <code>validate_output_contract()</code> passes and experience_store has at least one entry (when available). E2E-02: build a flow that injects a SYSTEM_BREAKING contradiction at iteration 2. Assert: contradiction enters <code>world_model.contradictions[]</code> without raising inline; Tier 1 of <code>resolve_control_state()</code> fires on the next call; <code>control_state.risk_state == "BLOCKED"</code>; escalation surfaces with a non-empty surface_blocker reason.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement E2E-03 (recovery cycle), E2E-04 (warm start), and E2E-05 (parallel branch merge)</strong>. E2E-03: force verification failure on the same task three times; assert strategy transitions DIRECT_EDIT → TRACE_EXEC and that a GLOBAL replan fires when scope is GLOBAL. E2E-04: run the harness twice on the same task class; assert that on the second run, <code>strategy_state.prior_strategy_weights</code> differ from flat priors. E2E-05: configure two parallel tasks with overlapping write domains; assert that when conflict_prob ≤ PESSIMISTIC_THRESHOLD the optimistic path is taken; assert <code>detect_contradictions()</code> runs on the merged world model at the parallel join.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement E2E-06 (context compression), E2E-07 (reviewer re-entry), and E2E-08 (max_steps budget)</strong>. E2E-06: force <code>context_pressure.critical</code>; assert <code>compress_memory()</code> produces non-empty <code>compressed_structures[]</code> and <code>pruned_regions[]</code>; assert <code>action_dep_overlap()</code> returns non-empty when a HIGH-risk action depends on a pruned region. E2E-07: seed the reviewer with a finding that invalidates a COMPLETE task's evidence; assert <code>drain_propagation_queue()</code> transitions the task to PENDING and the loop re-enters. E2E-08: set <code>max_steps=5</code>; assert a warning fires at step 4 and escalation fires at step 5 with "budget exhausted" as the escalation_reason.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Run the full E2E suite on all four frameworks and resolve blockers</strong>. Run <code>pytest adapter/tests/test_harness_e2e.py -v</code> and address any failures. Framework-specific failures that reveal a missing harness wiring in an adapter must be fixed in the adapter before the suite can pass. Document any framework-specific behaviour differences (e.g. timing-related differences in parallel execution) as test comments. All 32 parameterised test cases (8 scenarios × 4 frameworks) must pass for the E2E gate to clear.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">E2E-01 passes on all four frameworks: harness loop completes, output satisfies <code>validate_output_contract()</code>, and the run does not raise any exception — confirmed by 4 parameterised test runs each returning a passing HarnessRunState</div>
+    <div class="test-item">E2E-02 passes on all four frameworks: SYSTEM_BREAKING contradiction enters <code>contradictions[]</code> without raising inline, BLOCKED state is set on the subsequent <code>resolve_control_state()</code> call (not the current one), and escalation fires with a non-empty surface_blocker reason</div>
+    <div class="test-item">E2E-03 through E2E-08 pass on all four frameworks: all 24 remaining parameterised test cases return green — the full E2E gate clears and Phase 11 may proceed to the invariant tests</div>
+  </div>
+</div>
+
+<!-- P11.4 -->
+<div class="task-block" id="tb-p114">
+  <div class="task-header" onclick="toggleTask('p114')">
+    <span class="task-id">P11.4</span>
+    <span class="task-name">All 10 invariant tests pass</span>
+    <span class="task-meta">Weeks 4–5 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p114">
+    <div class="desc-block">Implements the ten architectural invariant tests as a standalone test file that runs against the full integrated system. Each invariant test uses the real harness modules — not mocks. The tests become a permanent CI gate: merging a PR that regresses any invariant is blocked. Invariant failures produce error messages that identify the specific invariant and which condition was violated.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/tests/test_harness_invariants.py</code></strong>. Structure: one test function per invariant, named <code>test_inv_01_observation_conclusion_separation</code> through <code>test_inv_10_experience_store_noop</code>. Each test constructs the minimal harness state required to exercise the invariant, runs the relevant harness operation, and asserts the invariant condition. Tests use in-memory fixtures where possible; tests that require integration (INV-03 double-increment, INV-04 deadlock) use the full loop infrastructure. Parameterise by framework where relevant (INV-03 and INV-04 run on all four).</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement INV-01 through INV-05</strong>. INV-01: inject a HIGH-reliability tool observation; assert it appears in <code>observations[]</code> not <code>beliefs[]</code>; assert no belief is derived from it without an explicit <code>derived_from[]</code> chain. INV-02: inject raw values at boundary conditions (0, 1, beyond-range) into each of the 10 sub-dimensions; assert all outputs are clamped [0,1]; assert all TIER 4 arithmetic inputs are normalised. INV-03: run one full loop iteration; assert <code>generation_id</code> incremented exactly twice. INV-04: construct a block_mask where two entries mutually block recovery; assert <code>escalation_reason == "HUMAN_REQUIRED"</code>. INV-05: inject a SYSTEM_BREAKING contradiction at three different loop positions; assert it enters <code>contradictions[]</code> each time and BLOCKED is set only on the next <code>resolve_control_state()</code> call.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement INV-06 through INV-10</strong>. INV-06: instrument <code>select_best_action()</code>; assert no write to <code>control_state</code> occurs from world_model, hypothesis_set, or task_graph; assert <code>block_mask</code> is the only suppression mechanism. INV-07: assert <code>dep_class_gap_annotation</code> does not appear as a parameter in any tier 1–4 computation inside <code>resolve_control_state()</code>; assert it is attached to <code>control_state.notes[]</code> only. INV-08: assert <code>failure_mode_library.match()</code> return value enters only Tier 4 and hypothesis generation sources — no write path to block_mask or escalation_reason. INV-09: run <code>reviewer_pass()</code>; assert no field of <code>HarnessRunState</code>, <code>world_model</code>, or <code>hypothesis_set</code> holds an <code>AdversarialPrior</code> instance after the call returns. INV-10: run the full harness loop with <code>experience_store.available=False</code>; assert the outcome is structurally identical to a run with it present; assert <code>warm_start()</code> returns immediately.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Add invariant tests to the CI gate</strong>. In the CI configuration: add <code>pytest adapter/tests/test_harness_invariants.py -v --tb=short</code> as a required check on every PR. Configure the check to emit a structured failure message that names the violated invariant: <code>"INV-03 FAILED: generation_id incremented {actual} times, expected exactly 2"</code>. This actionable output ensures developers can identify the root cause without needing to read the invariant specification from scratch.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">All ten invariant tests (INV-01 through INV-10) pass when run against the full integrated system: <code>pytest adapter/tests/test_harness_invariants.py -v</code> exits 0 with no failures or errors</div>
+    <div class="test-item">Deliberately breaking INV-03 (changing the loop to increment generation_id only once) causes the invariant test to fail with an error message containing "INV-03" and the actual vs expected increment count — confirming the tests detect regressions</div>
+    <div class="test-item">The invariant test CI check runs on a sample PR; a PR that would pass all existing unit tests but regress INV-05 (SYSTEM_BREAKING via Tier 1) is correctly blocked by the CI gate</div>
+  </div>
+</div>
+
+<!-- P11.5 -->
+<div class="task-block" id="tb-p115">
+  <div class="task-header" onclick="toggleTask('p115')">
+    <span class="task-id">P11.5</span>
+    <span class="task-name">Performance benchmarks</span>
+    <span class="task-meta">Week 5 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p115">
+    <div class="desc-block">Benchmarks the full harness loop overhead against a framework-only baseline. Target: &lt;500ms added overhead per iteration above the baseline (framework-only, no harness). Profiles the top three contributors and documents accepted trade-offs. A benchmark report is committed to the repository as <code>docs/harness_benchmark_report.md</code>.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/tests/benchmark_harness.py</code></strong>. Implements two benchmark scenarios: (a) framework-only baseline — run a FlowSpec v1.0.0 flow with <code>harness_meta.enabled=false</code> and measure iterations per second; (b) harness-enabled — run the same flow structure with <code>harness_meta.enabled=true</code> and all harness nodes active. The difference is the "harness overhead." Run each scenario 50 times and report mean, median, p95, and p99 latencies. Use <code>pytest-benchmark</code> or Python's <code>timeit</code> module (whichever is already in the project).</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Benchmark individual harness operations</strong>. Profile: (a) <code>generate_hypotheses()</code> — four-source generation for a representative world model with 10 beliefs; (b) <code>propagate_beliefs()</code> — full propagation pass for a belief dependency graph with 100 beliefs and 150 edges; (c) <code>detect_contradictions()</code> — pairwise detection pass for 20 beliefs; (d) <code>resolve_control_state()</code> — full five-tier resolution for a representative diagnostics state. Report mean latency for each. These isolate bottlenecks from the full-loop benchmark.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Identify and optimise the top-3 bottlenecks</strong>. Sort the individual operation benchmarks by mean latency. For the top three: (a) identify the specific code path causing the overhead using Python's <code>cProfile</code> or <code>line_profiler</code>; (b) implement the optimization if it does not increase code complexity significantly; (c) if the optimization is not straightforward, document the bottleneck and accepted trade-off rather than introducing a complex fix. The bar for optimization is: a simple change that reduces latency by ≥ 30% without adding new abstractions.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Write and commit the benchmark report</strong>. Create <code>docs/harness_benchmark_report.md</code>. Sections: (1) Benchmark methodology and environment (CPU, RAM, Python version, framework versions); (2) Full-loop overhead table (baseline vs harness-enabled, all four frameworks); (3) Individual operation latencies table; (4) Top-3 bottleneck analysis with profiler output excerpts; (5) Optimizations applied and their impact; (6) Accepted trade-offs for operations that miss the target with rationale. The report is a permanent repository artefact — it becomes the baseline for future performance regression tracking.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">Full harness loop overhead is &lt;500ms per iteration above the framework-only baseline on the benchmark task (reported as the mean across 50 runs on LangGraph); if the target is missed, the benchmark report documents the actual overhead and the accepted trade-off rationale</div>
+    <div class="test-item">Individual operation benchmarks: <code>generate_hypotheses()</code> completes in &lt;200ms for a 10-belief world model; <code>propagate_beliefs()</code> completes in &lt;100ms for 100 beliefs / 150 edges — both targets verified on the benchmark hardware</div>
+    <div class="test-item"><code>docs/harness_benchmark_report.md</code> exists in the repository and contains all four required sections (methodology, full-loop table, operation latencies, bottleneck analysis with trade-offs); the report is committed and reviewable before Phase 11 is closed</div>
+  </div>
+</div>
+
+</div>
+
+<!-- FILE MAP -->
+<div id="files" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Files created or modified in Phase 11</div>
+  <div class="card-body" style="margin-bottom:.7rem">Green = new file. Amber = existing file modified. Phase 11 is predominantly a testing and integration phase — most new files are test files. The adapter files are the most significant modifications.</div>
+
+  <div class="file-map">
+<span class="f-dir">adapter/</span>
+  langgraph_adapter.py                  <span class="f-mod">MOD</span>  <span class="f-note">add harness compilation path: check harness_meta.enabled, compile harness nodes via node_compilers.py dispatch, wrap execution loop with harness middleware</span>
+  crewai_adapter.py                     <span class="f-mod">MOD</span>  <span class="f-note">same harness path as langgraph_adapter; non-harness path unchanged</span>
+  maf_adapter.py                        <span class="f-mod">MOD</span>  <span class="f-note">same harness path; MAF-specific considerations for async execution wired to harness gates</span>
+
+<span class="f-dir">mastra-runner/</span>  <span class="f-note">(or adapter/mastra_adapter.py depending on repo structure)</span>
+  index.ts                              <span class="f-mod">MOD</span>  <span class="f-note">add harness compilation path; TypeScript stubs call back into Python harness middleware via existing bridge</span>
+
+<span class="f-dir">adapter/harness/</span>
+  langfuse_tracing.py                   <span class="f-new">NEW</span>  <span class="f-note">HarnessTraceContext, start_harness_span, end_harness_span, emit_recovery_event, emit_escalation_event — all no-ops when Langfuse not configured</span>
+  loop.py                               <span class="f-mod">MOD</span>  <span class="f-note">instrument main loop with Langfuse iteration spans; add diagnostic health attributes per iteration</span>
+  recovery.py                           <span class="f-mod">MOD</span>  <span class="f-note">emit Langfuse strategy change and escalation events from switch_strategy() and escalate()</span>
+  __init__.py                           <span class="f-mod">MOD</span>  <span class="f-note">export HarnessTraceContext and tracing helpers</span>
+
+<span class="f-dir">adapter/tests/</span>
+  test_harness_integration_LG.py        <span class="f-new">NEW</span>  <span class="f-note">LangGraph adapter harness integration tests (compile + run + invariant spot-checks)</span>
+  test_harness_integration_CR.py        <span class="f-new">NEW</span>  <span class="f-note">CrewAI adapter harness integration tests</span>
+  test_harness_integration_MA.py        <span class="f-new">NEW</span>  <span class="f-note">Mastra adapter harness integration tests</span>
+  test_harness_integration_MAF.py       <span class="f-new">NEW</span>  <span class="f-note">MAF adapter harness integration tests</span>
+  test_harness_e2e.py                   <span class="f-new">NEW</span>  <span class="f-note">all 8 E2E scenarios parameterised across all 4 frameworks (32 test cases total)</span>
+  test_harness_invariants.py            <span class="f-new">NEW</span>  <span class="f-note">INV-01 through INV-10, full integrated system assertions, CI gate entry point</span>
+  benchmark_harness.py                  <span class="f-new">NEW</span>  <span class="f-note">full-loop overhead benchmark, per-operation benchmarks, profiler integration</span>
+
+<span class="f-dir">docs/</span>
+  harness_benchmark_report.md           <span class="f-new">NEW</span>  <span class="f-note">methodology, full-loop latency table, operation latencies, bottleneck analysis, accepted trade-offs</span>
+
+<span class="f-dir">.ci/  (or .github/workflows/ depending on repo structure)</span>
+  harness.yml                           <span class="f-mod">MOD</span>  <span class="f-note">add test_harness_invariants.py as a required CI check on every PR</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Files NOT touched in Phase 11</div>
+  <div class="card-body">All harness logic modules are stable and are not modified in Phase 11 — only consumed:
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">world_model.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">contradiction.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">hypothesis.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">diagnostics.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">reviewer.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">experience_store.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">node_compilers.py</code> · All canvas React components from P10 (untouched). <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">spec/schema.ts</code> (untouched — no new node types in P11).</div>
+</div>
+
+</div>
+
+<!-- DEPENDENCIES -->
+<div id="deps" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Intra-phase task ordering</div>
+  <div class="card-body">P11.1 (adapter updates) must complete before P11.3 (E2E tests) can run — tests require working adapters. P11.2 (Langfuse tracing) can proceed in parallel with P11.1 from week 2 as it modifies different files. P11.4 (invariant tests) can begin on the first working adapter but all four must pass before the invariant gate clears. P11.5 (benchmarks) runs last — benchmarking should be done on a passing, stable system, not a work-in-progress.</div>
+</div>
+
+<table class="dep-table">
+<thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td style="color:var(--p11);font-family:var(--font-mono);font-size:11px;font-weight:600">P11.1 — Adapter updates</td><td><span class="dep-tag">P0–P10</span></td><td style="font-size:11.5px;color:var(--t1)">All harness logic must be complete and stable before wiring into adapters; partial harness logic would produce false adapter test failures</td></tr>
+<tr><td style="color:var(--p11);font-family:var(--font-mono);font-size:11px;font-weight:600">P11.2 — Langfuse tracing</td><td><span class="dep-tag">P11.1 partial</span></td><td style="font-size:11.5px;color:var(--t1)">Can start in parallel once <code>adapter/harness/loop.py</code> structure is confirmed; tracing calls are added to the same loop file being updated in P11.1</td></tr>
+<tr><td style="color:var(--p11);font-family:var(--font-mono);font-size:11px;font-weight:600">P11.3 — E2E tests</td><td><span class="dep-tag">P11.1</span></td><td style="font-size:11.5px;color:var(--t1)">All four adapters must be harness-capable before E2E tests can run on all four frameworks</td></tr>
+<tr><td style="color:var(--p11);font-family:var(--font-mono);font-size:11px;font-weight:600">P11.4 — Invariant tests</td><td><span class="dep-tag">P11.1</span></td><td style="font-size:11.5px;color:var(--t1)">INV-03 and INV-04 require the full loop wiring from P11.1; other invariants can run earlier on the harness library alone</td></tr>
+<tr><td style="color:var(--p11);font-family:var(--font-mono);font-size:11px;font-weight:600">P11.5 — Benchmarks</td><td><span class="dep-tag">P11.3</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">Benchmark a passing system, not a work-in-progress; performance measurements on broken code paths are meaningless</td></tr>
+</tbody>
+</table>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Cross-phase dependencies: what Phase 11 requires from all earlier phases</div>
+  <table class="dep-table" style="margin-top:.5rem;margin-bottom:0">
+  <thead><tr><th>Earlier phase</th><th>Used in P11</th><th>What is needed</th></tr></thead>
+  <tbody>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--blue)">P0 — Foundation</td><td><span class="dep-tag">P11.1</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">HarnessRunState, generation_id infrastructure, and gate stubs must all be stable — they are the base layer that every adapter integration test exercises</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--green)">P1 — Evidence</td><td><span class="dep-tag">P11.3</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-01 and INV-01 require the evidence pipeline (evidence_store, tool_reliability_envelopes, hypothesis generation) to be fully operational</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--purple)">P2 — World Model</td><td><span class="dep-tag">P11.3</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-02 (BLOCKED escalation) requires the full contradiction detection pipeline; INV-05 requires SYSTEM_BREAKING to enter contradictions[] without raising inline</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--pink)">P3 — Diagnostics</td><td><span class="dep-tag">P11.2</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">Langfuse tracing emits all 10 diagnostic sub-dimensions; INV-02 (normalisation) requires the full diagnostics normalisation implementation</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">P4 — Planning</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-05 (parallel branch merge) requires the conflict_probability_cache and reconcile_parallel_branches() from P4.2 and P4.3</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--red)">P5 — Execution</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">All E2E scenarios exercise the full execution path (VOI estimation, pre-exec review gate, 9-layer verification, contract shadow check) from P5</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">P6 — Recovery</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-03 (recovery cycle) and E2E-06 (context compression) require the full recovery strategies, compress_memory(), and action_dep_overlap() from P6</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--cyan)">P7 — Caller State</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-02 and E2E-08 exercise the escalation path; E2E-08 requires the max_steps budget cap and escalate() from P7 to fire at step 5</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--slate)">P8 — Experience Store</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-04 (warm start benefit) requires experience_store.available=True and two successive runs to verify strategy_weights differ from flat priors</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:#34d399">P9 — Reviewer Pass</td><td><span class="dep-tag">P11.3</span><span class="dep-tag">P11.4</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-07 (reviewer re-entry) requires drain_propagation_queue() and loop re-entry from P9.3; INV-09 requires the full reviewer_pass() implementation from P9.2</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--pink)">P10 — Canvas Nodes</td><td><span class="dep-tag">P11.3</span></td><td style="font-size:11.5px;color:var(--t1)">E2E-01 includes a visual assertion that the canvas node displays reflect the final harness state; canvas node types must be registered and functional</td></tr>
+  </tbody>
+  </table>
+</div>
+
+</div>
+
+<!-- INVARIANTS -->
+<div id="invariants" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 10 architectural invariants verified in Phase 11</div>
+  <div class="card-body">Phase 11 is the first phase where all ten invariants are tested against the full integrated system simultaneously. Earlier phases tested each invariant in isolation as each piece was built. Phase 11 verifies they all hold together in a running system, on each framework, with real data flowing through the full pipeline.</div>
+</div>
+
+<div class="inv-list">
+  <div class="inv-item">
+    <strong>INV-01 — Observation vs conclusion separation <span class="inv-tag">P11.4 full integrated test</span></strong>
+    Injecting a HIGH-reliability tool observation into the running system must not produce a belief without an explicit derived_from[] chain. Tested end-to-end: the observation goes through the adapter, through the evidence store, through update_world_model(), and the resulting world_model.beliefs[] must not contain the observation directly — only beliefs derived from it via the explicit integration step.
+  </div>
+  <div class="inv-item">
+    <strong>INV-02 — Normalisation contract <span class="inv-tag">P11.4 full integrated test</span></strong>
+    Every diagnostic sub-dimension entering resolve_control_state() must be normalised [0,1]. The integrated test injects raw values outside [0,1] into each sub-dimension source and asserts the normalised value at the Tier 4 arithmetic boundary is clamped. Also asserts that all 10 sub-dimensions produce valid [0,1] outputs when the harness runs on a representative task.
+  </div>
+  <div class="inv-item">
+    <strong>INV-03 — generation_id double-increment per iteration <span class="inv-tag">P11.4 all four frameworks</span></strong>
+    One full harness loop iteration must increment world_model.generation_id exactly twice: once after sub-step A (pre-execution) and once after sub-step B (post-execution). This invariant is tested on all four frameworks because the double-increment depends on the middleware wiring introduced in P11.1. A framework that increments only once is a bug in the adapter wiring.
+  </div>
+  <div class="inv-item">
+    <strong>INV-04 — Deadlock detection <span class="inv-tag">P11.4 full integrated test</span></strong>
+    When block_mask contains two entries whose recovery actions are mutually blocking: escalation_reason must be set to HUMAN_REQUIRED and no autonomous recovery must be attempted. The integrated test constructs a realistic deadlock scenario (dep_graph_quality critical and verification_strength critical with mutually blocking recovery actions) and verifies the HUMAN_REQUIRED path fires.
+  </div>
+  <div class="inv-item">
+    <strong>INV-05 — SYSTEM_BREAKING via Tier 1 only <span class="inv-tag">P11.4 full integrated test</span></strong>
+    A SYSTEM_BREAKING contradiction injected at any position in the loop must enter contradictions[] without raising inline, and BLOCKED must be set only on the next resolve_control_state() call. The integrated test injects the contradiction at three different positions within an iteration and verifies the invariant holds at all three positions on all four frameworks.
+  </div>
+  <div class="inv-item">
+    <strong>INV-06 — control_state as sole control input <span class="inv-tag">P11.4 full integrated test</span></strong>
+    select_best_action() may only read control_state for control decisions. world_model, hypothesis_set, and task_graph are read-only informational context. The integrated test instruments select_best_action() with a proxy object that tracks writes, then asserts the proxy records no write from any non-control_state parameter during a complete harness run.
+  </div>
+  <div class="inv-item">
+    <strong>INV-07 — dep_class_gap advisory only <span class="inv-tag">P11.4 full integrated test</span></strong>
+    dep_class_gap_annotation must not appear as a numeric parameter in any tier 1–4 computation inside resolve_control_state(). The integrated test adds a deliberate dep_class_gap value and then inspects the parameter list of each tier computation using Python introspection. It also verifies the annotation is attached to control_state.notes[] and visible in the Langfuse trace as an annotation attribute, not a diagnostic metric.
+  </div>
+  <div class="inv-item">
+    <strong>INV-08 — Failure mode library scope <span class="inv-tag">P11.4 full integrated test</span></strong>
+    failure_mode_library.match() return value must enter only Tier 4 of resolve_control_state() and the hypothesis generation sources. It must have no write path to block_mask or escalation_reason. The integrated test verifies this by running a full loop with a deliberate failure_mode match and asserting block_mask is not modified by the match result — only by the five-tier control flow.
+  </div>
+  <div class="inv-item">
+    <strong>INV-09 — Adversarial prior discarded after use <span class="inv-tag">P11.4 full integrated test</span></strong>
+    After reviewer_pass() returns, no field of the live harness state graph (HarnessRunState, world_model, hypothesis_set, evidence_store) may hold an AdversarialPrior reference. The integrated test uses Python gc.get_referrers() after a full reviewer pass to assert no live reference to the AdversarialPrior object exists outside the stack frame that created it.
+  </div>
+  <div class="inv-item">
+    <strong>INV-10 — experience_store is a no-op when absent <span class="inv-tag">P11.4 full integrated test</span></strong>
+    Running the full harness loop with experience_store.available=False must produce a structurally identical HarnessRunState to a run with it present (same keys, same field types, no missing fields, no exceptions). The integrated test runs the harness twice — once with experience_store available, once without — and performs a deep structural comparison of the output states, asserting they are structurally equivalent while expecting the experience-specific fields to differ in values.
+  </div>
+</div>
+
+</div>
+
+<!-- ALL TESTS -->
+<div id="tests" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 16 acceptance tests — across P11.1 through P11.5</div>
+  <div class="card-body">P11.1 and P11.2 tests run with <code>pytest adapter/tests/test_harness_integration_*.py -v</code>. P11.3 runs with <code>pytest adapter/tests/test_harness_e2e.py -v</code> (requires Postgres + running adapters). P11.4 runs with <code>pytest adapter/tests/test_harness_invariants.py -v</code>. P11.5 runs with <code>pytest adapter/tests/benchmark_harness.py -v</code> (or the project's benchmark runner).</div>
+</div>
+
+<div class="section-label">P11.1 — Framework adapter updates (3 tests)</div>
+<div class="test-item">T01 · All four framework adapters compile a FlowSpec v1.0.0 flow with harness_meta.enabled=true and three harness node types without error; compiled output references only adapter/harness/ functions, not framework-specific harness logic</div>
+<div class="test-item">T02 · After executing a minimal harness flow on each framework: HarnessRunState is populated with a non-zero generation_id and at least one observation in world_model — end-to-end middleware wiring confirmed on all four frameworks</div>
+<div class="test-item">T03 · All 470+ pre-existing non-harness adapter tests pass without modification after the adapter updates — the non-harness execution path is unaffected on all four frameworks</div>
+
+<div class="section-label">P11.2 — Langfuse harness tracing (3 tests)</div>
+<div class="test-item">T04 · After running a minimal harness flow with Langfuse configured: each loop iteration produces a Langfuse span named "harness_iteration_N" with the correct generation_id attribute</div>
+<div class="test-item">T05 · A run that triggers a strategy switch emits a Langfuse event with correct from_strategy, to_strategy, and trigger_reason attributes at the correct iteration</div>
+<div class="test-item">T06 · With Langfuse not configured: all harness tracing calls are no-ops and the harness run completes successfully without error</div>
+
+<div class="section-label">P11.3 — E2E scenario tests (4 tests)</div>
+<div class="test-item">T07 · E2E-01 (happy path) passes on all four frameworks: harness loop completes, validate_output_contract() returns passed=True, run exits cleanly — 4 parameterised test cases all green</div>
+<div class="test-item">T08 · E2E-02 (BLOCKED escalation) passes on all four frameworks: SYSTEM_BREAKING contradiction enters contradictions[] without raising inline, BLOCKED state set on next resolve_control_state() call, escalation fires — 4 parameterised test cases all green</div>
+<div class="test-item">T09 · E2E-03 through E2E-06 pass on all four frameworks: recovery cycle, warm start benefit, parallel branch merge, and context compression scenarios each pass — 16 parameterised test cases all green</div>
+<div class="test-item">T10 · E2E-07 (reviewer re-entry) and E2E-08 (max_steps budget) pass on all four frameworks: reviewer findings reopen a COMPLETE task and the loop re-enters; max_steps=5 triggers escalation at step 5 with "budget exhausted" — 8 parameterised test cases all green</div>
+
+<div class="section-label">P11.4 — Invariant tests (3 tests)</div>
+<div class="test-item">T11 · All ten invariant tests (INV-01 through INV-10) pass when run against the full integrated system: pytest adapter/tests/test_harness_invariants.py -v exits 0 with no failures</div>
+<div class="test-item">T12 · Deliberately breaking INV-03 (single increment instead of double) causes the test to fail with an error message containing "INV-03" and the actual vs expected increment count — regression detection confirmed</div>
+<div class="test-item">T13 · Invariant test CI check correctly blocks a sample PR that would regress INV-05 (SYSTEM_BREAKING via Tier 1) while passing all existing unit tests — CI gate confirmed operational</div>
+
+<div class="section-label">P11.5 — Performance benchmarks (3 tests)</div>
+<div class="test-item">T14 · Full harness loop overhead is &lt;500ms per iteration above the framework-only baseline on LangGraph (mean across 50 runs); if target is missed, benchmark report documents the actual overhead and accepted trade-off rationale</div>
+<div class="test-item">T15 · generate_hypotheses() completes in &lt;200ms for a 10-belief world model; propagate_beliefs() completes in &lt;100ms for 100 beliefs / 150 edges — individual operation targets verified on benchmark hardware</div>
+<div class="test-item">T16 · docs/harness_benchmark_report.md exists in the repository and contains all four required sections (methodology, full-loop table, operation latencies, bottleneck analysis with trade-offs) before Phase 11 is closed</div>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Running Phase 11 tests</div>
+  <div class="card-body">
+    Adapter integration tests (requires Postgres + running adapters): <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_integration_*.py -v</code><br><br>
+    E2E tests (requires all four adapters running): <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/test_harness_e2e.py -v</code><br><br>
+    Invariant tests (in-memory, no infrastructure): <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/test_harness_invariants.py -v</code><br><br>
+    Benchmarks: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/benchmark_harness.py -v --benchmark-only</code><br><br>
+    Full harness test suite (all phases, all tests): <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/ -v -k harness</code> — all tests across P0 through P11 must pass before Phase 11 is marked complete and the harness is considered production-ready.
+  </div>
+</div>
+
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleTask(id){
+  const body=document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+['p111','p112','p113','p114','p115'].forEach(id=>{
+  const b=document.getElementById('body-'+id);
+  if(b) b.classList.add('open');
+});
+</script>
+</body>
+</html>

@@ -2363,7 +2363,26 @@
                       },
                       "harness_config": {
                         "type": "object",
-                        "additionalProperties": {}
+                        "properties": {
+                          "integration_mode": {
+                            "type": "string",
+                            "enum": [
+                              "observations_only",
+                              "infer_beliefs"
+                            ],
+                            "default": "observations_only"
+                          },
+                          "reliability_threshold": {
+                            "type": "string",
+                            "enum": [
+                              "HIGH",
+                              "MEDIUM",
+                              "LOW"
+                            ],
+                            "default": "HIGH"
+                          }
+                        },
+                        "additionalProperties": false
                       },
                       "type": {
                         "type": "string",

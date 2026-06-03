@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Its Harness — Phase 9: Reviewer Pass &amp; Output Contract</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#34d399;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --p9:#34d399;
+  --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;--slate:#94a3b8;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(52,211,153,0.07);border-color:rgba(52,211,153,0.4);color:#34d399;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+.card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem}
+.card-title{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.5rem}
+.card-body{font-size:13px;color:var(--t1);line-height:1.7}
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:26px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+.week-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.2rem}
+.week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-title{font-size:13px;font-weight:600;color:var(--p9);margin-bottom:.4rem}
+.week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.week-item::before{content:'·';position:absolute;left:0;color:var(--p9)}
+.task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p9);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
+.task-header:hover{background:var(--bg2)}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
+.task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
+.task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
+.steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
+.step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step-num{font-family:var(--font-mono);font-size:10px;color:var(--p9);flex-shrink:0;width:22px}
+.step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
+.step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.step-body strong{color:var(--t0)}
+.test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
+.test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
+.f-new{color:var(--green)}
+.f-mod{color:var(--amber)}
+.f-dir{color:var(--p9);font-weight:600}
+.f-note{color:var(--t1);opacity:.6;font-size:10px}
+.dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
+.dep-table th,.dep-table td{padding:.5rem .75rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.dep-table th{background:var(--bg2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px}
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .85rem;font-size:12px;color:var(--t1);line-height:1.5}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:3px;font-size:12px}
+.inv-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(52,211,153,0.06);border:.5px solid rgba(52,211,153,0.2);color:var(--p9);margin-left:6px;vertical-align:middle}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.85rem;margin-bottom:.35rem}
+.desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
+.note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.note-block strong{color:var(--amber)}
+.next-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;display:flex;align-items:center;gap:.8rem;margin-bottom:6px}
+.next-badge{font-family:var(--font-mono);font-size:11px;background:rgba(52,211,153,0.07);border:.5px solid rgba(52,211,153,0.2);color:var(--p9);padding:2px 8px;border-radius:3px;flex-shrink:0}
+.next-body{font-size:12.5px;color:var(--t1);line-height:1.5}
+.next-body strong{color:var(--t0)}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Phase 9 — Reviewer Pass &amp; Output Contract</h1>
+  <p>Implements the three-lens reviewer pass that runs after each execution cycle, the adversarial prior mechanism that seeds the third lens with causal-proximity-filtered belief negations, the propagation drain that reopens completed tasks when reviewer findings invalidate them, and the full output contract validation that gates the harness return value.</p>
+  <span class="badge badge-blue">3 Weeks</span>
+  <span class="badge badge-green">4 Tasks</span>
+  <span class="badge badge-amber">17 Steps</span>
+  <span class="badge badge-blue">12 Acceptance Tests</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P8 complete</span> · Unlocks: <span style="color:#fb7185">P10 Canvas Node Types</span> · <span style="color:#a3e635">P11 E2E-07 reviewer re-entry test</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
+  <button class="tab" onclick="showTab('files',this)">File Map</button>
+  <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
+  <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
+  <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:var(--p9)">4</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">17</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">12</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">1</div><div class="sum-l">Stubs replaced</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--p9)">3</div><div class="sum-l">Weeks</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What Phase 9 delivers</div>
+  <div class="card-body">
+    Phase 9 adds the final quality layer before the harness returns a result: the three-lens reviewer pass and the full output contract validator. Both were stubbed in earlier phases — Phase 9 replaces those stubs with real implementations.<br><br>
+    <strong style="color:var(--t0)">Adversarial prior — causal proximity filter (P9.1)</strong> implements the seeding mechanism for the adversarial lens. The prior is built by selecting beliefs from the world model that are most causally close to the success_criteria dependency chain — not by selecting the highest-confidence beliefs. This means the adversarial lens challenges the beliefs the harness is most relying on to conclude success, not just the beliefs it is most certain about. The prior is ephemeral: created at the start of reviewer_pass(), consumed by adversarial_lens(), and discarded before the function returns. It never writes to world_model or hypothesis_set (INV-09).<br><br>
+    <strong style="color:var(--t0)">Three-lens reviewer pass (P9.2)</strong> runs three structurally independent review lenses. The implementer lens asks "did I do what I intended?" — checking that executed actions match task descriptions and that no task has been silently skipped. The reviewer lens asks "what would a PR reviewer criticise?" — checking output contract pre-conditions, interface consistency, and known code quality heuristics. The adversarial lens asks "what would fail if the adversarial prior were true?" — deliberately trying to break the harness's conclusions from a hostile starting point. Each lens produces ReviewFinding objects. After all three run, their findings are integrated into world_model, hypotheses are updated and eliminated, contradictions are re-detected, and abstraction_fit is recomputed unconditionally regardless of whether task_graph.changed is set.<br><br>
+    <strong style="color:var(--t0)">drain_propagation_queue() + loop re-entry (P9.3)</strong> handles the case where reviewer findings invalidate work that was already marked COMPLETE. When a finding propagates through the belief dependency graph and reaches a belief that a completed task depended on, that task is re-opened. The main loop re-enters for these tasks before the run can conclude.<br><br>
+    <strong style="color:var(--t0)">Full validate_output_contract() (P9.4)</strong> replaces the P0.5 stub with a complete implementation. It checks every dimension of the output contract — format, required sections, interface fields, caller-specific constraints — using the current caller_state, which may have been updated mid-run by the P7 constraint propagation path. It is the authoritative final gate before the harness returns.
+  </div>
+</div>
+
+<div class="week-row">
+  <div class="week-card">
+    <div class="week-label">Week 1</div>
+    <div class="week-title">Adversarial Prior &amp; Lenses</div>
+    <div class="week-item">P9.1 — ReviewFinding dataclass + reviewer.py</div>
+    <div class="week-item">P9.1 — compute_causal_proximity()</div>
+    <div class="week-item">P9.1 — seed_adversarial_prior()</div>
+    <div class="week-item">P9.2 — implementer_lens() + reviewer_lens()</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 2</div>
+    <div class="week-title">Reviewer Pass &amp; Re-entry</div>
+    <div class="week-item">P9.2 — adversarial_lens() + reviewer_pass()</div>
+    <div class="week-item">P9.2 — post-pass world model integration</div>
+    <div class="week-item">P9.3 — drain_propagation_queue()</div>
+    <div class="week-item">P9.3 — task re-open + loop re-entry signal</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 3</div>
+    <div class="week-title">Output Contract &amp; Integration</div>
+    <div class="week-item">P9.4 — full validate_output_contract()</div>
+    <div class="week-item">P9.4 — completion_check_final()</div>
+    <div class="week-item">Integration tests + E2E-07 reviewer re-entry</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:.75rem">
+  <div class="card-title">Key constraints to respect in Phase 9</div>
+  <div class="note-block"><strong>adversarial_prior is ephemeral — INV-09:</strong> The <code>adversarial_prior</code> object must be created as a local variable inside <code>reviewer_pass()</code> and must go out of scope after <code>adversarial_lens()</code> returns. It must never be assigned to <code>world_model</code>, <code>hypothesis_set</code>, <code>HarnessRunState</code>, or any persistent structure. After <code>reviewer_pass()</code> returns, no reference to the prior must exist anywhere in the live state graph. Tests must verify this by asserting the prior is not reachable from any field of <code>HarnessRunState</code>.</div>
+  <div class="note-block"><strong>abstraction_fit recomputed unconditionally in reviewer_pass():</strong> Unlike other checks that run conditionally on <code>task_graph.changed</code>, the abstraction_fit check inside <code>reviewer_pass()</code> runs unconditionally every time the reviewer pass executes. This is a deliberate architectural choice documented in the invariants. Do not add a <code>task_graph.changed</code> guard to this specific check in the reviewer pass.</div>
+  <div class="note-block"><strong>validate_output_contract() uses current caller_state, not original:</strong> The full output contract validator must read constraints from <code>caller_state.current_constraints</code> at the time it is called — not from the original constraints captured at run start. If the caller narrowed or expanded the scope mid-run via the P7 constraint propagation path, the final validation must reflect those changes. The P0.5 stub did not enforce this; the P9.4 implementation must.</div>
+</div>
+
+<div style="margin-bottom:1rem">
+  <div class="section-label">Unlocks after Phase 9 completes</div>
+  <div class="next-card">
+    <div class="next-badge">P10 unblocked</div>
+    <div class="next-body"><strong>Canvas Node Types &amp; UI</strong> — The <code>reviewer_pass</code> canvas node (P10.10) requires the full <code>reviewer_pass()</code> implementation to display real lens results, adversarial prior beliefs, and drain_propagation_queue outputs in the canvas UI.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P11 E2E-07</div>
+    <div class="next-body"><strong>Reviewer pass re-entry E2E test</strong> — E2E-07 (seed reviewer with findings that reopen a completed task; assert drain_propagation_queue() triggers loop re-entry and task moves from COMPLETE to ACTIVE) requires the full P9.2 and P9.3 implementations.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P11 INV-09</div>
+    <div class="next-body"><strong>Adversarial prior discard invariant test</strong> — INV-09 (adversarial_prior is not present in world_model or hypothesis_set after reviewer_pass() returns) is first testable after P9.1 and P9.2 are implemented.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- TASKS & STEPS -->
+<div id="tasks" class="tab-content">
+
+<div class="desc-block">Tasks are ordered by dependency: P9.1 provides the adversarial prior seeding used by P9.2. P9.2 implements the full reviewer pass which drives the propagation queue that P9.3 drains. P9.4 is independent of P9.1–P9.3 and can begin in parallel from week 2, but must complete before the phase is marked done.</div>
+
+<!-- P9.1 -->
+<div class="task-block" id="tb-p91">
+  <div class="task-header" onclick="toggleTask('p91')">
+    <span class="task-id">P9.1</span>
+    <span class="task-name">Adversarial prior — causal proximity filter</span>
+    <span class="task-meta">Week 1 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p91">
+    <div class="desc-block">Implement the seeding mechanism for the adversarial lens. Beliefs are selected for negation based on their causal proximity to the success_criteria dependency chain — not based on raw confidence. This ensures the adversarial lens attacks the beliefs the harness is most relying on to declare success, creating a genuine blind-spot break rather than a challenge to peripheral beliefs.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/reviewer.py</code></strong>. Define <code>ReviewFinding</code> dataclass: <code>lens: Literal["implementer","reviewer","adversarial"]</code>, <code>finding_type: Literal["contradiction","gap","regression","assumption_violation","contract_miss"]</code>, <code>description: str</code>, <code>affected_belief_ids: list[str]</code>, <code>affected_task_ids: list[str]</code>, <code>severity: Literal["LOW","MEDIUM","HIGH"]</code>. Define <code>AdversarialPrior</code> dataclass: <code>negated_beliefs: list[dict]</code> (each entry has <code>belief_id: str</code>, <code>negated_statement: str</code>, <code>causal_proximity: float</code>), <code>seeded_from_failure_history: bool</code>, <code>dep_class_gap_included: bool</code>.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>compute_causal_proximity(belief_id, success_criteria, belief_dep_graph) → float</code></strong>. Performs a reverse BFS from the success_criteria leaf nodes in the belief dependency graph back towards the root beliefs. Proximity score = 1.0 / (shortest_path_length + 1), normalised so direct dependencies of success_criteria beliefs score highest. Beliefs with no path to any success_criteria belief score 0.0. Returns a float in [0,1].</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>seed_adversarial_prior(world_model, success_criteria, failure_history, dep_class_gap_annotation=None) → AdversarialPrior</code></strong>. Steps: (1) compute causal_proximity for each belief in world_model.beliefs[]; (2) select top-K beliefs by proximity (K defaults to 5, configurable); (3) negate each selected belief's statement to form adversarial hypotheses; (4) supplement with beliefs implied by failure_history class priors (any failure class with base_rate &gt; 0.3 seeds additional negations); (5) if dep_class_gap_annotation is present, include the beliefs it references as additional seeds. Return AdversarialPrior with the assembled negated_beliefs list.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Enforce ephemeral scope</strong>. The <code>AdversarialPrior</code> returned by <code>seed_adversarial_prior()</code> must only ever be stored as a local variable in the calling scope. Add a type-level guard: <code>AdversarialPrior</code> does not implement <code>to_dict()</code> or <code>from_dict()</code> — making it structurally impossible to serialise to HarnessRunState. Add a test assertion (in P9.2) that after <code>reviewer_pass()</code> returns, no field of HarnessRunState holds an AdversarialPrior instance.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">Given two beliefs — one with direct causal path to a success criterion (proximity 1.0) and one with no path (proximity 0.0) — <code>seed_adversarial_prior()</code> selects the high-proximity belief for negation, not the high-confidence low-proximity one</div>
+    <div class="test-item">After <code>reviewer_pass()</code> completes: no field of <code>HarnessRunState</code> holds an <code>AdversarialPrior</code> instance — the prior has been discarded as required by INV-09</div>
+    <div class="test-item">When <code>dep_class_gap_annotation</code> is provided: the beliefs it references appear in <code>adversarial_prior.negated_beliefs</code> and <code>dep_class_gap_included</code> is True</div>
+  </div>
+</div>
+
+<!-- P9.2 -->
+<div class="task-block" id="tb-p92">
+  <div class="task-header" onclick="toggleTask('p92')">
+    <span class="task-id">P9.2</span>
+    <span class="task-name">Three-lens reviewer pass</span>
+    <span class="task-meta">Weeks 1–2 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p92">
+    <div class="desc-block">Implement the three reviewer lenses and the <code>reviewer_pass()</code> orchestrator that runs them in sequence. Each lens is structurally independent — implementer and reviewer lenses have no knowledge of what the adversarial lens will check. After all three lenses complete, their findings are integrated into world_model via the standard update path, and a full contradiction detection + belief propagation cycle runs. Abstraction fit is recomputed unconditionally regardless of task_graph.changed.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>implementer_lens(world_model, task_graph, success_criteria) → list[ReviewFinding]</code></strong>. Checks: (a) every task in COMPLETE status has at least one observation in world_model.observations[] that references it by task_id — silent task completion without evidence is a HIGH finding; (b) all success_criteria are covered by at least one COMPLETE task — uncovered criterion is a MEDIUM finding; (c) no task has contradicting COMPLETE status and an open contradiction in world_model.contradictions[] referencing its output — if found, finding_type is "contradiction" with HIGH severity.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>reviewer_lens(world_model, output_contract, task_graph, evidence_store) → list[ReviewFinding]</code></strong>. Checks: (a) any required_interface_fields from output_contract not yet produced by any COMPLETE task — finding_type "contract_miss", severity HIGH; (b) any assumption in world_model.assumptions[] that has not been validated by at least one HIGH-reliability observation — finding_type "assumption_violation", severity MEDIUM; (c) any HIGH-reliability evidence that contradicts a current belief but has not yet triggered a contradiction record — finding_type "gap", severity MEDIUM. The reviewer lens does not have access to the adversarial prior.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>adversarial_lens(world_model, adversarial_prior, hypothesis_set, task_graph) → list[ReviewFinding]</code></strong>. For each negated belief in <code>adversarial_prior.negated_beliefs</code>: check whether, if the negation were true, any COMPLETE task result would be invalidated. If yes: produce a ReviewFinding(lens="adversarial", finding_type="contradiction", severity=HIGH) listing the affected task_ids. Also check whether any active hypothesis in hypothesis_set is only supported by beliefs in the adversarial prior's negated set — if so, that hypothesis should be flagged as inadequately supported (severity MEDIUM).</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>reviewer_pass(world_model, task_graph, success_criteria, output_contract, hypothesis_set, evidence_store, caller_state, belief_dep_graph, failure_history, dep_class_gap_annotation=None) → list[ReviewFinding]</code></strong>. Sequence: (1) call <code>seed_adversarial_prior()</code> to build the local prior; (2) call all three lenses, collecting findings; (3) discard adversarial_prior (it goes out of scope after this block); (4) for each HIGH-severity finding: call <code>integrate_evidence()</code> to add a new observation reflecting the finding, then call <code>add_belief()</code> to record the corresponding corrective belief with appropriate derived_from[] links; (5) call <code>propagate_beliefs()</code> on the updated dep graph; (6) call <code>update_hypothesis_set()</code> and run the elimination policy; (7) call <code>detect_contradictions()</code>; (8) call <code>check_abstraction_alignment()</code> unconditionally.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Return the aggregated findings list and update diagnostics</strong>. After the full post-pass update: recompute <code>diagnostics.verification_health.strength</code> based on unresolved HIGH-severity findings (each unresolved HIGH finding reduces strength by a configurable delta). Recompute <code>diagnostics.coverage_health.explanation_coverage</code> from updated hypothesis coverage. Return the full list of all findings from all three lenses — callers use this list to populate the propagation queue (P9.3) and to feed the Langfuse trace (P11).</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">All three lenses execute when called via <code>reviewer_pass()</code> — each lens contributes at least one finding to the returned list when given a non-trivial world_model with an unvalidated assumption and an incomplete task</div>
+    <div class="test-item">Adversarial lens findings reference beliefs and tasks that are <em>not</em> flagged by the implementer or reviewer lenses — confirming the adversarial prior creates partial blind-spot coverage independent of the other two lenses</div>
+    <div class="test-item">After <code>reviewer_pass()</code> returns: <code>abstraction_fit</code> has been recomputed even when <code>task_graph.changed</code> is False — the unconditional recompute is verified by comparing the pre-pass and post-pass scores</div>
+  </div>
+</div>
+
+<!-- P9.3 -->
+<div class="task-block" id="tb-p93">
+  <div class="task-header" onclick="toggleTask('p93')">
+    <span class="task-id">P9.3</span>
+    <span class="task-name">drain_propagation_queue() + loop re-entry</span>
+    <span class="task-meta">Week 2 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p93">
+    <div class="desc-block">Implement the propagation drain that converts reviewer findings into task re-opens, and wire the loop re-entry signal that causes the main loop to process those tasks before the run can return. The drain runs as the final step of reviewer_pass() and is the mechanism by which a completed task can be moved back to PENDING when the reviewer discovers that its underlying beliefs have been invalidated.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>drain_propagation_queue(belief_dep_graph, task_graph) → list[str]</code></strong> in <code>reviewer.py</code>. The <code>belief_dep_graph.propagation_queue</code> contains belief IDs that have been updated or invalidated since the last drain. For each belief_id in the queue: look up all task_ids in task_graph that list this belief_id in their completed evidence. Collect the distinct set of affected task_ids. Clear the propagation_queue. Return the collected task_ids list (may be empty).</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement task re-open logic</strong>. For each task_id in the returned list from <code>drain_propagation_queue()</code>: if the task's current status is COMPLETE — transition it to PENDING and clear its completed_evidence list. If the task's status is FAILED, BLOCKED, or ACTIVE — leave it unchanged (it is already being processed or awaits processing). Log each re-open as a journal entry with reason "reviewer_finding_invalidated_evidence" and the relevant belief_ids.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Wire into <code>reviewer_pass()</code> as the final step</strong>. After the full post-pass update sequence from P9.2 step 4: call <code>drain_propagation_queue(belief_dep_graph, task_graph)</code>. If the returned list is non-empty: set a <code>tasks_reopened: bool = True</code> field on the WarmStartResult-equivalent return object (or use a dedicated <code>ReviewPassResult</code> dataclass). Callers check this flag to decide whether to re-enter the main loop.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Wire loop re-entry in <code>loop.py</code></strong>. After <code>reviewer_pass()</code> returns: if <code>review_result.tasks_reopened</code> is True — do not proceed to <code>completion_check_final()</code>. Instead, increment <code>world_model.generation_id</code>, call <code>resolve_control_state()</code>, and continue the main loop from the top of the next iteration. The loop will naturally pick up the reopened PENDING tasks via <code>select_unblocked_leaf()</code>. If <code>tasks_reopened</code> is False — proceed to <code>completion_check_final()</code> (P9.4).</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">When a HIGH-severity reviewer finding invalidates the evidence of a COMPLETE task: <code>drain_propagation_queue()</code> returns that task's ID, and the task's status is transitioned from COMPLETE to PENDING — the task will be re-executed in the next loop iteration</div>
+    <div class="test-item">When the propagation_queue is empty after reviewer_pass() (no invalidated evidence): <code>drain_propagation_queue()</code> returns an empty list and <code>review_result.tasks_reopened</code> is False — the loop does not re-enter and proceeds to completion_check_final()</div>
+    <div class="test-item">A task whose status is FAILED or BLOCKED at the time of the drain is not re-transitioned to PENDING — only COMPLETE tasks are subject to re-open; the drain does not interfere with tasks already in non-terminal states</div>
+  </div>
+</div>
+
+<!-- P9.4 -->
+<div class="task-block" id="tb-p94">
+  <div class="task-header" onclick="toggleTask('p94')">
+    <span class="task-id">P9.4</span>
+    <span class="task-name">Full validate_output_contract()</span>
+    <span class="task-meta">Weeks 2–3 · ~2.5 days</span>
+  </div>
+  <div class="task-body" id="body-p94">
+    <div class="desc-block">Replace the stub <code>validate_output_contract()</code> from P0.5 with a complete implementation. The full validator checks every dimension of the output contract and uses the current caller_state — which may have been updated mid-run by P7 constraint propagation. It is the authoritative final gate: the harness may not return a result that fails this check. A failure at this gate triggers escalation or a targeted re-run of the affected section, not a silent return.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Replace the stub in <code>adapter/harness/output_contract.py</code></strong>. Delete the stub body of <code>validate_output_contract(result, output_contract)</code>. Remove the <code>is_stub=True</code> flag from <code>ContractCheckResult</code> — it is no longer needed. The function now receives a third parameter: <code>caller_state: CallerState</code> for access to current constraints. Update all call sites in <code>loop.py</code> and tests to pass the current caller_state.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>check_format_requirements(result, output_contract) → list[str]</code></strong>. Validates <code>output_contract.format_requirements</code> against the result. Checks: response format matches (e.g. JSON, markdown, plain text as specified); if <code>max_length</code> is set in format_requirements, result length does not exceed it; if <code>required_fields</code> are listed at the top level, they are all present. Returns a list of violation strings (empty list = pass).</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>check_required_sections(result, output_contract) → list[str]</code></strong>. For each section name in <code>output_contract.required_sections</code>: verify the section is present and non-empty in the result. A section is "present" if a top-level key (for dict results) or a heading (for text results) matching the section name exists. Returns violation strings for each missing or empty section.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>check_interface_constraints(result, output_contract) → list[str]</code></strong>. For each field in <code>output_contract.required_interface_fields</code>: verify the field is present with the correct type as declared in <code>output_contract.interface_constraints</code>. Detects type regressions (field was previously a string, now returned as int). A missing required interface field is a HIGH violation. A type regression on a non-required field is a MEDIUM violation. Returns violation strings for each issue found.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement <code>check_caller_specific_constraints(result, caller_state) → list[str]</code></strong>. Reads <code>caller_state.current_constraints</code> — the live list that may have been updated by P7 constraint propagation during the run. For each constraint: evaluate whether the result satisfies it. Constraints are expressed as simple predicate strings (e.g. "output must not reference deleted files", "response must be in English") that are pattern-matched or evaluated as heuristics. Returns violation strings for each unmet constraint.</div></div>
+
+    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Assemble the full <code>validate_output_contract(result, output_contract, caller_state) → ContractCheckResult</code></strong>. Calls all four sub-checks in sequence. Collects all violation strings. Returns <code>ContractCheckResult(passed=len(violations)==0, violations=violations, is_stub=False)</code>. Then implement <code>completion_check_final(result, output_contract, caller_state, harness_run_state) → ContractCheckResult</code>: calls validate_output_contract(), and if passed=False: calls <code>escalate(SurfaceBlocker(reason="contract_violation", missing_info=violations, ...))</code> — the harness does not return a contract-failing result silently.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">A result missing a field from <code>output_contract.required_interface_fields</code> that was NOT caught by <code>contract_shadow_check()</code> (from P5.6) IS caught by the full <code>validate_output_contract()</code> — confirming the full validator is authoritative over the shadow check</div>
+    <div class="test-item">When <code>caller_state.current_constraints</code> was updated mid-run (via the P7 constraint propagation path) to add a new constraint: <code>check_caller_specific_constraints()</code> evaluates the result against the updated constraint — the original constraints at run-start are not used</div>
+    <div class="test-item"><code>validate_output_contract()</code> returns <code>ContractCheckResult(passed=True, violations=[])</code> only when all four sub-checks pass; a single missing required_section causes <code>passed=False</code> with a non-empty violations list naming the missing section</div>
+  </div>
+</div>
+
+</div>
+
+<!-- FILE MAP -->
+<div id="files" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Files created or modified in Phase 9</div>
+  <div class="card-body" style="margin-bottom:.7rem">Green = new file. Amber = existing file modified. Phase 9 introduces one new module (<code>reviewer.py</code>) and replaces the P0.5 stub in <code>output_contract.py</code> with a real implementation.</div>
+
+  <div class="file-map">
+<span class="f-dir">adapter/harness/</span>
+  reviewer.py                  <span class="f-new">NEW</span>  <span class="f-note">ReviewFinding, AdversarialPrior, ReviewPassResult, seed_adversarial_prior, compute_causal_proximity, implementer_lens, reviewer_lens, adversarial_lens, reviewer_pass, drain_propagation_queue</span>
+  output_contract.py           <span class="f-mod">MOD</span>  <span class="f-note">replace validate_output_contract() stub with full implementation; add check_format_requirements, check_required_sections, check_interface_constraints, check_caller_specific_constraints; add completion_check_final(); remove is_stub field from ContractCheckResult</span>
+  loop.py                      <span class="f-mod">MOD</span>  <span class="f-note">wire reviewer_pass() after post_exec_gate; check tasks_reopened flag for loop re-entry; call completion_check_final() as the final gate before return</span>
+  __init__.py                  <span class="f-mod">MOD</span>  <span class="f-note">export ReviewFinding, AdversarialPrior, ReviewPassResult, reviewer_pass, drain_propagation_queue, completion_check_final</span>
+
+<span class="f-dir">adapter/tests/</span>
+  test_harness_p9.py           <span class="f-new">NEW</span>  <span class="f-note">all 12 acceptance tests for Phase 9 (T01–T12)</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Files NOT touched in Phase 9</div>
+  <div class="card-body">The following harness modules are intentionally untouched — Phase 9 consumes them but does not change their interfaces:
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">world_model.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">belief_graph.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">contradiction.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">experience_store.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">escalation.py</code> ·
+  All canvas / React source in <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">src/</code> and <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">packages/canvas/</code> (P10). The <code>contract_shadow_check()</code> in <code>output_contract.py</code> is also untouched — it remains the lightweight post-execution gate; only <code>validate_output_contract()</code> is upgraded.</div>
+</div>
+
+</div>
+
+<!-- DEPENDENCIES -->
+<div id="deps" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Intra-phase task ordering</div>
+  <div class="card-body">P9.1 must complete before P9.2 begins — adversarial_lens() depends on AdversarialPrior from P9.1. P9.2 must complete before P9.3 — drain_propagation_queue() runs as the final step of reviewer_pass(). P9.4 can begin in week 2 in parallel with P9.3, but all four tasks must complete before the phase is closed.</div>
+</div>
+
+<table class="dep-table">
+<thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td style="color:var(--p9);font-family:var(--font-mono);font-size:11px;font-weight:600">P9.1 — Adversarial prior</td><td><span class="dep-tag">P2.2</span><span class="dep-tag">P3.1</span></td><td style="font-size:11.5px;color:var(--t1)">compute_causal_proximity() traverses belief_dep_graph (P2.2); dep_class_gap_annotation is read from diagnostics (P3.1)</td></tr>
+<tr><td style="color:var(--p9);font-family:var(--font-mono);font-size:11px;font-weight:600">P9.2 — Three-lens reviewer pass</td><td><span class="dep-tag">P9.1</span><span class="dep-tag">P2.3</span><span class="dep-tag">P4.4</span></td><td style="font-size:11.5px;color:var(--t1)">adversarial_lens() needs AdversarialPrior (P9.1); post-pass calls propagate_beliefs() (P2.3) and check_abstraction_alignment() (P4.4)</td></tr>
+<tr><td style="color:var(--p9);font-family:var(--font-mono);font-size:11px;font-weight:600">P9.3 — drain_propagation_queue()</td><td><span class="dep-tag">P9.2</span><span class="dep-tag">P4.1</span></td><td style="font-size:11.5px;color:var(--t1)">Runs as final step of reviewer_pass() (P9.2); transitions task status using the 6-state task model (P4.1)</td></tr>
+<tr><td style="color:var(--p9);font-family:var(--font-mono);font-size:11px;font-weight:600">P9.4 — Full validate_output_contract()</td><td><span class="dep-tag">P0.5</span><span class="dep-tag">P7.2</span><span class="dep-tag">P7.3</span></td><td style="font-size:11.5px;color:var(--t1)">Replaces P0.5 stub; uses current caller_state from P7 constraint propagation; calls escalate() (P7.3) on contract failure</td></tr>
+</tbody>
+</table>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Cross-phase dependencies: what Phase 9 requires from earlier phases</div>
+  <table class="dep-table" style="margin-top:.5rem;margin-bottom:0">
+  <thead><tr><th>Earlier task</th><th>Used in P9</th><th>What is needed</th></tr></thead>
+  <tbody>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--purple)">P2.2 — Belief dependency graph</td><td><span class="dep-tag">P9.1</span><span class="dep-tag">P9.3</span></td><td style="font-size:11.5px;color:var(--t1)">compute_causal_proximity() traverses belief_dep_graph edges; drain_propagation_queue() reads belief_dep_graph.propagation_queue</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--purple)">P2.3 — propagate_beliefs()</td><td><span class="dep-tag">P9.2</span></td><td style="font-size:11.5px;color:var(--t1)">reviewer_pass() calls propagate_beliefs() as part of post-pass world model integration</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">P4.4 — Abstraction fit check</td><td><span class="dep-tag">P9.2</span></td><td style="font-size:11.5px;color:var(--t1)">reviewer_pass() calls check_abstraction_alignment() unconditionally — the P4.4 implementation must be stable</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--red)">P5.6 — Contract shadow check</td><td><span class="dep-tag">P9.4</span></td><td style="font-size:11.5px;color:var(--t1)">P9.4 must be a strict superset of P5.6 — any violation the shadow check catches must also be caught by the full validator; tested explicitly</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--cyan)">P7.2 — Constraint propagation</td><td><span class="dep-tag">P9.4</span></td><td style="font-size:11.5px;color:var(--t1)">check_caller_specific_constraints() reads caller_state.current_constraints which may have been updated by P7.2 mid-run</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--cyan)">P7.3 — Escalation</td><td><span class="dep-tag">P9.4</span></td><td style="font-size:11.5px;color:var(--t1)">completion_check_final() calls escalate() when validate_output_contract() returns passed=False</td></tr>
+  </tbody>
+  </table>
+</div>
+
+</div>
+
+<!-- INVARIANTS -->
+<div id="invariants" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Architecture invariants engaged in Phase 9</div>
+</div>
+
+<div class="inv-list">
+  <div class="inv-item">
+    <strong>INV-09 — Adversarial prior discarded after use <span class="inv-tag">P9.1 + P9.2 full enforcement</span></strong>
+    <code>adversarial_prior</code> is seeded on causal proximity to success_criteria (P9.1) and must be discarded after <code>adversarial_lens()</code> completes (P9.2). The discard is structural: <code>AdversarialPrior</code> does not implement <code>to_dict()</code>, making it impossible to persist to HarnessRunState. The prior must never pollute <code>world_model</code>, <code>hypothesis_set</code>, or <code>evidence_store</code>. After <code>reviewer_pass()</code> returns, no field of the live harness state graph may hold an <code>AdversarialPrior</code> reference. The P9.1 acceptance test explicitly asserts this post-call state.
+  </div>
+  <div class="inv-item">
+    <strong>INV-07 — dep_class_gap advisory only (adversarial prior seeding) <span class="inv-tag">P9.1 scope</span></strong>
+    <code>dep_class_gap_annotation</code> is an advisory annotation, not a numeric control input. In P9.1 it contributes to the adversarial prior's belief selection pool — its referenced beliefs are added as additional seed candidates alongside the causal-proximity-selected beliefs. This is its only numeric influence pathway. It does not modify <code>control_state</code>, <code>block_mask</code>, or any diagnostic sub-dimension as a result of being referenced in the adversarial prior.
+  </div>
+  <div class="inv-item">
+    <strong>INV-01 — Observation vs conclusion separation (reviewer findings integration) <span class="inv-tag">P9.2 scope</span></strong>
+    When reviewer findings are integrated into world_model in P9.2 step 4: each finding produces an <code>Observation</code> (the finding itself is an observation of a review outcome) and, if the finding warrants a corrective action, a <code>Belief</code> with explicit <code>derived_from=[finding_observation_id]</code>. A HIGH-severity ReviewFinding never directly produces a Belief without an intermediate Observation — the same invariant that governs all other evidence integration paths applies here without exception.
+  </div>
+  <div class="inv-item">
+    <strong>INV-06 — control_state as sole control input (reviewer re-entry) <span class="inv-tag">P9.3 scope</span></strong>
+    The loop re-entry triggered by <code>tasks_reopened=True</code> from P9.3 must not modify <code>control_state</code> directly. After re-entry, the loop increments <code>world_model.generation_id</code> and calls <code>resolve_control_state()</code> — which is the sole mechanism that may produce a new control_state value. The reviewer findings that caused the re-entry are observable in world_model but do not write to control_state or block_mask directly.
+  </div>
+</div>
+
+</div>
+
+<!-- ALL TESTS -->
+<div id="tests" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 12 acceptance tests — <code>adapter/tests/test_harness_p9.py</code></div>
+  <div class="card-body">Run with <code>pytest adapter/tests/test_harness_p9.py -v</code>. All 12 tests are infrastructure-free — no Postgres required. Tests use in-memory WorldModel, HypothesisSet, BeliefDepGraph, and TaskGraph instances. The INV-09 test (T02) explicitly inspects the harness state graph after reviewer_pass() to assert no AdversarialPrior reference remains.</div>
+</div>
+
+<div class="section-label">P9.1 — Adversarial prior (3 tests)</div>
+<div class="test-item">T01 · Given belief A (confidence 0.95, no causal path to success criteria) and belief B (confidence 0.4, direct causal path to success criteria): <code>seed_adversarial_prior()</code> selects B for negation, not A — causal proximity overrides raw confidence</div>
+<div class="test-item">T02 · After <code>reviewer_pass()</code> completes: no attribute of <code>HarnessRunState</code>, <code>world_model</code>, or <code>hypothesis_set</code> holds an <code>AdversarialPrior</code> instance — the prior has gone out of scope as required by INV-09</div>
+<div class="test-item">T03 · When <code>dep_class_gap_annotation</code> references belief C: <code>seed_adversarial_prior()</code> includes a negated entry for belief C in its output and sets <code>dep_class_gap_included=True</code> in the returned AdversarialPrior</div>
+
+<div class="section-label">P9.2 — Three-lens reviewer pass (3 tests)</div>
+<div class="test-item">T04 · Given a world_model with an unvalidated assumption, a COMPLETE task with no supporting observation, and a non-trivial hypothesis set: <code>reviewer_pass()</code> returns findings from all three lenses — each lens contributes at least one finding; no lens is silently skipped</div>
+<div class="test-item">T05 · The adversarial lens produces at least one finding that is not present in the implementer or reviewer findings for the same input — confirming the adversarial prior identifies a distinct failure mode not caught by the first two lenses</div>
+<div class="test-item">T06 · After <code>reviewer_pass()</code>: <code>diagnostics.abstraction_fit</code> score differs from its pre-pass value even when <code>task_graph.changed=False</code> — the unconditional recompute is confirmed by a deliberate score delta introduced by a task abstraction mismatch</div>
+
+<div class="section-label">P9.3 — drain_propagation_queue() + loop re-entry (3 tests)</div>
+<div class="test-item">T07 · A HIGH-severity ReviewFinding that adds an invalidating observation for a COMPLETE task's evidence: after <code>drain_propagation_queue()</code>, the task's status transitions from COMPLETE to PENDING — it will be re-executed in the next loop iteration</div>
+<div class="test-item">T08 · When <code>belief_dep_graph.propagation_queue</code> is empty after reviewer_pass(): <code>drain_propagation_queue()</code> returns an empty list, <code>review_result.tasks_reopened=False</code>, and the loop proceeds to <code>completion_check_final()</code> without re-entering</div>
+<div class="test-item">T09 · A task with status FAILED at drain time is not transitioned to PENDING by <code>drain_propagation_queue()</code> — only COMPLETE tasks are subject to re-open; the drain leaves non-COMPLETE tasks in their current status</div>
+
+<div class="section-label">P9.4 — Full validate_output_contract() (3 tests)</div>
+<div class="test-item">T10 · A result with a missing required interface field that passed <code>contract_shadow_check()</code> (because shadow check only checks field presence, not completeness): full <code>validate_output_contract()</code> catches the violation and returns <code>ContractCheckResult(passed=False, violations=[...])</code> naming the field</div>
+<div class="test-item">T11 · When <code>caller_state.current_constraints</code> was updated mid-run (simulated by calling <code>inject_clarification()</code> and <code>apply_constraint_change_propagation()</code> before calling validate): <code>check_caller_specific_constraints()</code> evaluates the result against the updated constraint list — a result that satisfied the original constraints but violates the new ones returns <code>passed=False</code></div>
+<div class="test-item">T12 · A result that satisfies all four sub-checks (format, sections, interface, caller constraints): <code>validate_output_contract()</code> returns <code>ContractCheckResult(passed=True, violations=[], is_stub=False)</code> — the stub flag is gone and the real check confirms full compliance</div>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Running Phase 9 tests</div>
+  <div class="card-body">
+    <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_p9.py -v</code><br><br>
+    No database infrastructure required. All tests use in-memory fixture objects. Run the full harness test suite after Phase 9 to verify no regressions in P0–P8 tests: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/ -v -k harness</code>. The INV-09 test (T02) uses Python object identity checks to assert the adversarial prior is not reachable from any live state reference after reviewer_pass() returns.
+  </div>
+</div>
+
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleTask(id){
+  const body=document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+['p91','p92','p93','p94'].forEach(id=>{
+  const b=document.getElementById('body-'+id);
+  if(b) b.classList.add('open');
+});
+</script>
+</body>
+</html>

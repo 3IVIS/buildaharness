@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Its Harness — Phase 7: Caller State &amp; Escalation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#67e8f9;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --p7:#67e8f9;
+  --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(103,232,249,0.07);border-color:rgba(103,232,249,0.4);color:#67e8f9;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+.card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem}
+.card-title{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.5rem}
+.card-body{font-size:13px;color:var(--t1);line-height:1.7}
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:26px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+.week-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.2rem}
+.week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-title{font-size:13px;font-weight:600;color:var(--p7);margin-bottom:.4rem}
+.week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.week-item::before{content:'·';position:absolute;left:0;color:var(--p7)}
+.task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p7);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
+.task-header:hover{background:var(--bg2)}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
+.task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
+.task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
+.steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
+.step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step-num{font-family:var(--font-mono);font-size:10px;color:var(--p7);flex-shrink:0;width:22px}
+.step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
+.step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.step-body strong{color:var(--t0)}
+.test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
+.test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
+.f-new{color:var(--green)}
+.f-mod{color:var(--amber)}
+.f-dir{color:var(--p7);font-weight:600}
+.f-note{color:var(--t1);opacity:.6;font-size:10px}
+.dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
+.dep-table th,.dep-table td{padding:.5rem .75rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.dep-table th{background:var(--bg2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px}
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .85rem;font-size:12px;color:var(--t1);line-height:1.5}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:3px;font-size:12px}
+.inv-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(103,232,249,0.06);border:.5px solid rgba(103,232,249,0.2);color:var(--p7);margin-left:6px;vertical-align:middle}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.85rem;margin-bottom:.35rem}
+.desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
+.note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.note-block strong{color:var(--amber)}
+.next-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;display:flex;align-items:center;gap:.8rem;margin-bottom:6px}
+.next-badge{font-family:var(--font-mono);font-size:11px;background:rgba(103,232,249,0.07);border:.5px solid rgba(103,232,249,0.2);color:var(--p7);padding:2px 8px;border-radius:3px;flex-shrink:0}
+.next-body{font-size:12.5px;color:var(--t1);line-height:1.5}
+.next-body strong{color:var(--t0)}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Phase 7 — Caller State &amp; Escalation</h1>
+  <p>Implements the non-blocking external-update poll at the top of each iteration, the full constraint change propagation path shared between proactive updates and post-escalation responses, and the surface_blocker escalation mechanism that provides structured human-facing context when the harness cannot continue autonomously.</p>
+  <span class="badge badge-blue">3 Weeks</span>
+  <span class="badge badge-green">3 Tasks</span>
+  <span class="badge badge-amber">15 Steps</span>
+  <span class="badge badge-blue">9 Acceptance Tests</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P6 complete</span> · Unlocks: <span style="color:#94a3b8">P8 Experience Store</span> · <span style="color:#34d399">P9 Reviewer Pass (partial)</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
+  <button class="tab" onclick="showTab('files',this)">File Map</button>
+  <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
+  <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
+  <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:var(--p7)">3</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">15</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">9</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">1</div><div class="sum-l">State structures</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--cyan)">3</div><div class="sum-l">Weeks</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What Phase 7 delivers</div>
+  <div class="card-body">
+    Phase 7 completes the caller interaction loop. Prior phases treat caller_state as a static input to the run — they read constraints and success criteria but have no mechanism to respond to mid-run updates. Phase 7 closes that gap.<br><br>
+    <strong style="color:var(--t0)">check_external_updates() (P7.1)</strong> is a non-blocking poll inserted at the top of every main loop iteration. If the caller has posted a constraint update since the last iteration, the update is ingested immediately via inject_clarification() and the constraint change propagation path fires. If there is no update, the poll completes in under 10ms and the loop continues without any state mutation — no unnecessary staleness increments. <strong style="color:var(--t0)">Constraint change propagation path (P7.2)</strong> is the shared code path triggered by both proactive updates (from the poll) and reactive updates (from human responses after escalation). It runs: detect_contradictions(updated_success_criteria) → update_success_criteria → update_output_contract → revalidate_task_graph → generation_id increment → resolve_control_state. Having a single shared path ensures that both triggers produce identical state changes. <strong style="color:var(--t0)">Escalation with surface_blocker (P7.3)</strong> defines the structured escalation surface — the minimum information the harness surfaces to a human when it cannot continue autonomously. The surface_blocker includes a reason, missing_info, and current task context. After human response, the same constraint change propagation path from P7.2 handles the incoming clarification, ensuring consistent state transitions regardless of how the constraint change arrived.
+  </div>
+</div>
+
+<div class="week-row">
+  <div class="week-card">
+    <div class="week-label">Week 1</div>
+    <div class="week-title">External Updates Poll</div>
+    <div class="week-item">P7.1 — non-blocking poll mechanism</div>
+    <div class="week-item">P7.1 — wire at top of main loop</div>
+    <div class="week-item">P7.1 — generation_id increment on constraint change</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 2</div>
+    <div class="week-title">Constraint Propagation</div>
+    <div class="week-item">P7.2 — update_success_criteria + update_output_contract</div>
+    <div class="week-item">P7.2 — revalidate_task_graph</div>
+    <div class="week-item">P7.2 — single shared propagation path</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 3</div>
+    <div class="week-title">Escalation + Integration</div>
+    <div class="week-item">P7.3 — surface_blocker dataclass</div>
+    <div class="week-item">P7.3 — escalate() + await_clarification()</div>
+    <div class="week-item">Integration tests + loop wiring</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:.75rem">
+  <div class="card-title">Key constraints to respect in Phase 7</div>
+  <div class="note-block"><strong>check_external_updates() must be non-blocking:</strong> The poll must complete in under 10ms regardless of whether an update is available. It must not block the main loop waiting for a response. If the underlying transport (e.g., a Postgres notification channel, Redis pubsub, or webhook inbox) is unavailable, the poll returns no-update silently — it never raises. Test the 10ms bound explicitly.</div>
+  <div class="note-block"><strong>Both update paths must call the same propagation function:</strong> The constraint change triggered by check_external_updates() and the constraint change triggered by a human response after escalation must both call the same <code>apply_constraint_change_propagation()</code> function. Two separate implementations will drift. The propagation function is tested once — not twice for two code paths.</div>
+  <div class="note-block"><strong>surface_blocker presents minimum required information:</strong> escalate() must surface the reason (why the harness stopped), missing_info (what the human needs to provide), and current task context (what was being attempted). It must not dump raw world model state or hypothesis sets — those are for debugging, not for the caller. The structured format ensures the harness can be resumed without a restart.</div>
+</div>
+
+<div style="margin-bottom:1rem">
+  <div class="section-label">Unlocks after Phase 7 completes</div>
+  <div class="next-card">
+    <div class="next-badge">P8 unblocked</div>
+    <div class="next-body"><strong>Experience Store</strong> — P8 is not technically blocked on P7, but the full harness loop (including escalation and resume) must work end-to-end before experience_store warm_start() can be meaningfully tested across runs.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P11 E2E-02</div>
+    <div class="next-body"><strong>BLOCKED escalation E2E test</strong> — E2E-02 (inject SYSTEM_BREAKING contradiction, assert BLOCKED state, escalation fires, caller response restarts loop) requires the full P7 escalation path including await_clarification() and the propagation re-entry.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- TASKS & STEPS -->
+<div id="tasks" class="tab-content">
+
+<div class="desc-block">Tasks are ordered sequentially: P7.1 provides the poll infrastructure; P7.2 provides the shared propagation function that both P7.1 and P7.3 call; P7.3 completes the escalation surface.</div>
+
+<!-- P7.1 -->
+<div class="task-block" id="tb-p71">
+  <div class="task-header" onclick="toggleTask('p71')">
+    <span class="task-id">P7.1</span>
+    <span class="task-name">check_external_updates() — non-blocking poll</span>
+    <span class="task-meta">Week 1 · ~2.5 days</span>
+  </div>
+  <div class="task-body" id="body-p71">
+    <div class="desc-block">Implement the non-blocking external update poll inserted at the top of each main loop iteration. When no update is available, the function is a near-zero-cost no-op. When an update is available, it triggers the constraint change propagation path (P7.2) and refreshes control_state before the iteration proceeds.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/external_updates.py</code></strong>. Define <code>PendingUpdate</code> dataclass: <code>update_type: Literal["constraint","clarification","success_criteria"]</code>, <code>payload: dict</code>, <code>received_at: datetime</code>. Define <code>UpdateChannel</code> abstract interface with one method: <code>poll() → PendingUpdate | None</code>. Implement <code>NoOpUpdateChannel</code> that always returns None — used as the default when no external channel is configured.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>PostgresNotifyChannel</code></strong> as a concrete UpdateChannel. Uses a non-blocking <code>LISTEN / NOTIFY</code> approach via <code>psycopg2.connection.poll()</code>. Sets connection to non-blocking mode; if no notification is pending within 0ms, returns None immediately. Wraps all poll operations in try/except so a DB connectivity issue returns None rather than raising.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>check_external_updates(channel, caller_state, world_model, task_graph, diagnostics) → bool</code></strong>. Calls <code>channel.poll()</code>. If None: returns False immediately (no state mutation). If an update is returned: calls <code>inject_clarification(caller_state, update.payload)</code>, then calls <code>apply_constraint_change_propagation()</code> (from P7.2), then increments <code>world_model.generation_id</code>. Returns True to signal the loop to re-resolve control_state before proceeding.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Wire into <code>loop.py</code></strong>. At the very top of each main loop iteration — before staleness_sweep() and before update_diagnostics() — call <code>check_external_updates()</code>. If it returns True: refresh control_state via resolve_control_state() before continuing to the decomposition_gate. If False: continue normally.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Add configuration support</strong>. Accept an <code>update_channel</code> keyword argument in the HarnessRunState constructor. Default to <code>NoOpUpdateChannel()</code>. Document that any class implementing the UpdateChannel interface can be used — enables webhook channels, Redis pubsub, or mock channels for testing.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item"><code>check_external_updates()</code> with a NoOpUpdateChannel completes in under 10ms and returns False — no state mutation occurs, world_model.generation_id unchanged</div>
+    <div class="test-item">When a mock channel returns a PendingUpdate with a new constraint: <code>caller_state.constraints_changed</code> is True, <code>world_model.generation_id</code> is incremented, and the propagation path fires — verified by checking task_graph for re-validation</div>
+    <div class="test-item">No-update case: loop continues without state mutation — <code>caller_state.clarification_history</code> length is unchanged, control_state generation_id is not invalidated</div>
+  </div>
+</div>
+
+<!-- P7.2 -->
+<div class="task-block" id="tb-p72">
+  <div class="task-header" onclick="toggleTask('p72')">
+    <span class="task-id">P7.2</span>
+    <span class="task-name">Constraint change propagation path</span>
+    <span class="task-meta">Week 2 · ~2.5 days</span>
+  </div>
+  <div class="task-body" id="body-p72">
+    <div class="desc-block">Implement the shared constraint change propagation function. This is the canonical path called by both check_external_updates() when a proactive update arrives and by the escalation response handler when the human responds. Both callers use the same function — divergent implementations are not permitted.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>update_success_criteria(caller_state, world_model) → None</code></strong> in <code>caller_state.py</code>. Re-evaluates which current beliefs and observations are relevant given the new success_criteria. Marks beliefs that reference objectives outside the updated success_criteria scope as stale (adds them to world_model's stale_flags). Does not delete beliefs — only flags them.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>update_output_contract(caller_state, output_contract) → OutputContract</code></strong> in <code>output_contract.py</code>. Replaces <code>output_contract.caller_specific_constraints</code> with the new constraints from <code>caller_state.current_constraints</code>. Re-derives <code>required_interface_fields</code> where the constraint specifies mandatory output fields. Returns a new OutputContract (immutable update).</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>revalidate_task_graph(task_graph, caller_state, world_model) → TaskGraph</code></strong>. For each task in task_graph: check if the task's scope is still within the updated success_criteria. If a task's target falls outside the narrowed scope: set status to BLOCKED with reason "scope_eliminated". If the scope expanded and new work is needed: add new PENDING tasks derived from the new criteria.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>apply_constraint_change_propagation(caller_state, world_model, task_graph, output_contract, diagnostics) → tuple[TaskGraph, OutputContract]</code></strong>. Calls in sequence: (1) update_success_criteria(), (2) detect_contradictions() on updated belief set, (3) update_output_contract(), (4) revalidate_task_graph(). Returns updated (task_graph, output_contract). The caller (check_external_updates or escalation handler) then increments generation_id and calls resolve_control_state().</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Verify single code path</strong>. In <code>external_updates.py</code> (P7.1) and in the escalation handler (P7.3), both call <code>apply_constraint_change_propagation()</code> directly. Write a parametrised test that runs both trigger paths with the same input and asserts identical output state — this is the conformance test that prevents path drift.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">A scope-narrowing constraint update (removing a target from success_criteria) sets tasks targeting that scope to BLOCKED with reason "scope_eliminated" — tasks outside the narrowed scope are not affected</div>
+    <div class="test-item">A scope-expanding constraint update (adding a new success criterion) adds new PENDING tasks to the task_graph derived from the new criterion — existing tasks are not disturbed</div>
+    <div class="test-item">Both the check_external_updates() path and the escalation response path call <code>apply_constraint_change_propagation()</code> and produce identical task_graph and output_contract state for the same input — verified by the parametrised conformance test</div>
+  </div>
+</div>
+
+<!-- P7.3 -->
+<div class="task-block" id="tb-p73">
+  <div class="task-header" onclick="toggleTask('p73')">
+    <span class="task-id">P7.3</span>
+    <span class="task-name">Escalation with surface_blocker</span>
+    <span class="task-meta">Week 3 · ~2 days</span>
+  </div>
+  <div class="task-body" id="body-p73">
+    <div class="desc-block">Implement the escalation surface — the structured halt point at which the harness surfaces minimum required information to the human and awaits a response. After a response arrives, the same constraint change propagation path from P7.2 handles the update, ensuring a consistent resume path.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/escalation.py</code></strong>. Define <code>SurfaceBlocker</code> dataclass: <code>reason: str</code> (structured reason from a defined set: "blocked_state" | "cannot_make_progress" | "budget_exhausted" | "review_failure" | "action_requires_compressed_state"), <code>missing_info: list[str]</code> (what the human must provide), <code>current_task_summary: str</code> (brief description of what was being attempted), <code>escalated_at: datetime</code>. Design the type to carry only minimum required information — no raw world model dumps.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>escalate(surface_blocker, harness_run_state, run_id) → None</code></strong>. Steps: (1) set <code>harness_run_state.escalation_pending = True</code>; (2) persist the surface_blocker to HarnessRunState as <code>pending_escalation: SurfaceBlocker</code>; (3) emit a structured log entry to the execution_journal with <code>action_class="escalation"</code> and the blocker reason; (4) save HarnessRunState to Postgres; (5) halt the loop by raising <code>EscalationHalt(blocker)</code> — a non-error exception the loop runner catches and converts to a paused run state.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>await_clarification(run_id, db) → PendingUpdate | None</code></strong>. Checks if a human response has been posted to <code>harness_run_state.pending_clarification</code> for the given run_id. Returns None if no response yet — the caller (typically a resume endpoint) calls this function and exits if None. Returns PendingUpdate if a response is present, clears the pending_clarification field, and clears escalation_pending flag.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Add resume endpoint to <code>run_api.py</code></strong>. <code>POST /runs/{run_id}/escalation/respond</code>: accepts a JSON body with <code>{"clarification": {...}}</code>. Writes the payload to <code>harness_run_state.pending_clarification</code>. Returns 200 with the updated run state. The main loop on next execution calls await_clarification(), receives the update, and calls apply_constraint_change_propagation() to resume.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire escalation triggers in <code>loop.py</code></strong>. Two trigger points: (1) after resolve_control_state() when <code>risk_state == BLOCKED</code> — call <code>escalate(SurfaceBlocker(reason="blocked_state", ...))</code>; (2) after cannot_make_progress() returns True and all strategies are exhausted (current_strategy == ESCALATE) — call escalate with reason="cannot_make_progress". Both use the same escalate() function.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">BLOCKED risk_state triggers <code>escalate()</code>: harness_run_state.escalation_pending is True, pending_escalation.reason is "blocked_state", EscalationHalt is raised, loop halts cleanly</div>
+    <div class="test-item"><code>cannot_make_progress()==True</code> with current_strategy=ESCALATE triggers escalation with reason="cannot_make_progress"; the surface_blocker.missing_info list is non-empty</div>
+    <div class="test-item"><code>surface_blocker</code> contains reason and missing_info but does not contain raw world_model, hypothesis_set, or evidence_store data — the escalation is human-readable, not a debug dump</div>
+  </div>
+</div>
+
+</div>
+
+<!-- FILE MAP -->
+<div id="files" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Files created or modified in Phase 7</div>
+  <div class="file-map">
+<span class="f-dir">adapter/harness/</span>
+  external_updates.py               <span class="f-new">NEW</span>  <span class="f-note">PendingUpdate, UpdateChannel (abstract), NoOpUpdateChannel, PostgresNotifyChannel, check_external_updates</span>
+  escalation.py                     <span class="f-new">NEW</span>  <span class="f-note">SurfaceBlocker, EscalationHalt, escalate, await_clarification</span>
+  caller_state.py                   <span class="f-mod">MOD</span>  <span class="f-note">add update_success_criteria(); add escalation_pending and pending_clarification fields</span>
+  output_contract.py                <span class="f-mod">MOD</span>  <span class="f-note">add update_output_contract() that re-derives contract from updated caller_state constraints</span>
+  loop.py                           <span class="f-mod">MOD</span>  <span class="f-note">wire check_external_updates at loop top; wire escalate() triggers at BLOCKED and ESCALATE strategy</span>
+  state_store.py                    <span class="f-mod">MOD</span>  <span class="f-note">add escalation_pending: bool, pending_escalation: SurfaceBlocker | None, pending_clarification: dict | None to HarnessRunState</span>
+  __init__.py                       <span class="f-mod">MOD</span>  <span class="f-note">export SurfaceBlocker, EscalationHalt, escalate, await_clarification, UpdateChannel, check_external_updates</span>
+
+<span class="f-dir">adapter/</span>
+  run_api.py                        <span class="f-mod">MOD</span>  <span class="f-note">add POST /runs/{run_id}/escalation/respond endpoint</span>
+
+<span class="f-dir">adapter/tests/</span>
+  test_harness_p7.py                <span class="f-new">NEW</span>  <span class="f-note">all 9 acceptance tests for Phase 7</span>
+  </div>
+</div>
+
+</div>
+
+<!-- DEPENDENCIES -->
+<div id="deps" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Intra-phase task ordering</div>
+</div>
+
+<table class="dep-table">
+<thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td style="color:var(--p7);font-family:var(--font-mono);font-size:11px;font-weight:600">P7.1 — check_external_updates()</td><td><span class="dep-tag">P0.4</span><span class="dep-tag">P7.2</span></td><td style="font-size:11.5px;color:var(--t1)">Calls inject_clarification() from P0.4 and apply_constraint_change_propagation() from P7.2</td></tr>
+<tr><td style="color:var(--p7);font-family:var(--font-mono);font-size:11px;font-weight:600">P7.2 — Constraint propagation</td><td><span class="dep-tag">P2.4</span><span class="dep-tag">P4.1</span><span class="dep-tag">P0.5</span></td><td style="font-size:11.5px;color:var(--t1)">Calls detect_contradictions() (P2.4), revalidates task_graph (P4.1), updates output_contract (P0.5)</td></tr>
+<tr><td style="color:var(--p7);font-family:var(--font-mono);font-size:11px;font-weight:600">P7.3 — Escalation</td><td><span class="dep-tag">P6.1</span><span class="dep-tag">P6.2</span><span class="dep-tag">P7.2</span></td><td style="font-size:11.5px;color:var(--t1)">Triggered by cannot_make_progress() (P6.1) and ESCALATE strategy (P6.2); resume path uses P7.2 propagation</td></tr>
+</tbody>
+</table>
+
+</div>
+
+<!-- INVARIANTS -->
+<div id="invariants" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Architecture invariants engaged in Phase 7</div>
+</div>
+
+<div class="inv-list">
+  <div class="inv-item">
+    <strong>INV-03 — generation_id double-increment (constraint change path) <span class="inv-tag">P7.1 + P7.3 enforcement</span></strong>
+    When a constraint update arrives (either via the external poll or after escalation response), <code>world_model.generation_id</code> must be incremented after the constraint propagation completes and before any gate reads control_state. This is the same increment mechanism as the standard loop sub-steps — not a special-case increment. The generation_id staleness check (P0.3) will catch any gate that attempts to read stale control_state after a constraint change.
+  </div>
+  <div class="inv-item">
+    <strong>INV-06 — control_state as sole control input (escalation trigger) <span class="inv-tag">P7.3 enforcement</span></strong>
+    The escalation in P7.3 is triggered by <code>control_state.risk_state == BLOCKED</code> — not by reading world_model.contradictions[] directly or hypothesis_set state. The same invariant that governs select_best_action() applies here: control_state is the sole source of control decisions. The world_model state that caused BLOCKED is accessible only as context for surface_blocker content, not as the decision input.
+  </div>
+</div>
+
+</div>
+
+<!-- ALL TESTS -->
+<div id="tests" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 9 acceptance tests — <code>adapter/tests/test_harness_p7.py</code></div>
+  <div class="card-body">Run with <code>pytest adapter/tests/test_harness_p7.py -v</code>. Tests T01–T06 use mock channels and run without Postgres. Tests T07–T09 require HarnessRunState persistence and the escalation response endpoint (Postgres + running adapter).</div>
+</div>
+
+<div class="section-label">P7.1 — check_external_updates() (3 tests)</div>
+<div class="test-item">T01 · With a NoOpUpdateChannel, <code>check_external_updates()</code> completes in under 10ms and returns False — world_model.generation_id is unchanged, caller_state.clarification_history length is unchanged</div>
+<div class="test-item">T02 · With a mock channel that returns a constraint update: caller_state.constraints_changed=True, world_model.generation_id is incremented, and task_graph is revalidated — function returns True signalling loop to re-resolve control_state</div>
+<div class="test-item">T03 · If the channel raises an exception (simulated connectivity failure): check_external_updates() returns False silently — the loop continues without crashing</div>
+
+<div class="section-label">P7.2 — Constraint change propagation (3 tests)</div>
+<div class="test-item">T04 · Scope-narrowing: removing a target from success_criteria causes tasks scoped to that target to be set to BLOCKED with reason "scope_eliminated" — tasks with no relation to the removed target retain their status</div>
+<div class="test-item">T05 · Scope-expanding: adding a new success criterion causes new PENDING tasks to be added to task_graph reflecting the new requirement — existing tasks are not modified</div>
+<div class="test-item">T06 · Parametrised conformance test: running both the check_external_updates() path and the escalation response path with identical input produces identical task_graph and output_contract state — the shared propagation function is called in both cases</div>
+
+<div class="section-label">P7.3 — Escalation with surface_blocker (3 tests)</div>
+<div class="test-item">T07 · BLOCKED risk_state triggers escalation: harness_run_state.escalation_pending=True, pending_escalation.reason="blocked_state", EscalationHalt is raised, the loop runner marks the run as paused</div>
+<div class="test-item">T08 · cannot_make_progress()==True with current_strategy=ESCALATE triggers escalation: reason="cannot_make_progress", surface_blocker.missing_info is a non-empty list describing what is needed</div>
+<div class="test-item">T09 · SurfaceBlocker contains reason, missing_info, and current_task_summary; does not contain raw world_model JSON, hypothesis_set data, or evidence_store entries — human-readable structured output only</div>
+
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleTask(id){
+  const body=document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+['p71','p72','p73'].forEach(id=>{
+  const b=document.getElementById('body-'+id);
+  if(b) b.classList.add('open');
+});
+</script>
+</body>
+</html>

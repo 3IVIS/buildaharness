@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Its Harness — Phase 8: Experience Store &amp; Learning</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#94a3b8;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --p8:#94a3b8;
+  --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(148,163,184,0.07);border-color:rgba(148,163,184,0.4);color:#94a3b8;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+.card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem}
+.card-title{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.5rem}
+.card-body{font-size:13px;color:var(--t1);line-height:1.7}
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:26px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+.week-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.2rem}
+.week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-title{font-size:13px;font-weight:600;color:var(--p8);margin-bottom:.4rem}
+.week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.week-item::before{content:'·';position:absolute;left:0;color:var(--p8)}
+.task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p8);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
+.task-header:hover{background:var(--bg2)}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
+.task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
+.task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
+.steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
+.step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step-num{font-family:var(--font-mono);font-size:10px;color:var(--p8);flex-shrink:0;width:22px}
+.step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
+.step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.step-body strong{color:var(--t0)}
+.test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
+.test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
+.f-new{color:var(--green)}
+.f-mod{color:var(--amber)}
+.f-dir{color:var(--p8);font-weight:600}
+.f-note{color:var(--t1);opacity:.6;font-size:10px}
+.dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
+.dep-table th,.dep-table td{padding:.5rem .75rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.dep-table th{background:var(--bg2);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px}
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .85rem;font-size:12px;color:var(--t1);line-height:1.5}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:3px;font-size:12px}
+.inv-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(148,163,184,0.06);border:.5px solid rgba(148,163,184,0.2);color:var(--p8);margin-left:6px;vertical-align:middle}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.85rem;margin-bottom:.35rem}
+.desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
+.note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.note-block strong{color:var(--amber)}
+.next-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;display:flex;align-items:center;gap:.8rem;margin-bottom:6px}
+.next-badge{font-family:var(--font-mono);font-size:11px;background:rgba(148,163,184,0.07);border:.5px solid rgba(148,163,184,0.2);color:var(--p8);padding:2px 8px;border-radius:3px;flex-shrink:0}
+.next-body{font-size:12.5px;color:var(--t1);line-height:1.5}
+.next-body strong{color:var(--t0)}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Phase 8 — Experience Store &amp; Learning</h1>
+  <p>Adds cross-run learning to the harness. The experience store captures successful decompositions, tool workflows, verification plans, and recovery sequences from prior runs, then seeds the next run via warm_start(). When unavailable the entire system is a no-op — the harness runs correctly with flat priors. When available, strategy selection and task decomposition improve empirically.</p>
+  <span class="badge badge-blue">4 Weeks</span>
+  <span class="badge badge-green">4 Tasks</span>
+  <span class="badge badge-amber">18 Steps</span>
+  <span class="badge badge-blue">12 Acceptance Tests</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P7 complete</span> · Unlocks: <span style="color:#34d399">P9 Reviewer Pass</span> · <span style="color:#fb7185">P11 E2E-04 warm-start benefit test</span></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
+  <button class="tab" onclick="showTab('files',this)">File Map</button>
+  <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
+  <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
+  <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:var(--p8)">4</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">18</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">12</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">1</div><div class="sum-l">State structures</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--p8)">4</div><div class="sum-l">Weeks</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What Phase 8 delivers</div>
+  <div class="card-body">
+    Phase 8 adds optional cross-run learning to the harness. All prior phases operate with flat, stateless priors — every run starts from scratch with the same fixed recovery strategy order, the same default dep_graph_budget decay rates, and no structural hints about how to decompose the task. Phase 8 changes this by introducing an experience store that persists successful structural patterns and empirical strategy outcomes across runs.<br><br>
+    <strong style="color:var(--t0)">Experience store data model (P8.1)</strong> defines the Postgres-backed store and its <code>available</code> property. The available property is the single guard used by every other P8 function — when DB connectivity is absent, all operations are silent no-ops, preserving INV-10. <strong style="color:var(--t0)">warm_start() (P8.2)</strong> is called once at the very start of each harness run. It loads prior strategy weights, failure-class base rates, successful decomposition patterns, tool workflow templates, verification plan templates, and recovery sequence templates from the experience store. Each loaded artefact seeds the corresponding harness structure rather than replacing it — the run can still override anything warm_start provides. <strong style="color:var(--t0)">update_experience_store() (P8.3)</strong> is the write side: called after each successful task completion, it captures the completed tool_workflow, verification_plan, and — if a recovery was needed — the recovery_sequence, then re-normalises the empirical strategy weights. <strong style="color:var(--t0)">Adaptive strategy upgrade (P8.4)</strong> replaces the fixed recovery_strategy_order enum with a softmax policy over (strategy_type, failure_class) pairs when the experience store is available. The fixed enum remains the correct default for new deployments with no experience data.<br><br>
+    The critical architectural constraint throughout Phase 8 is INV-10: every code path that touches the experience store must guard with <code>experience_store.available</code>. A run without the experience store must be structurally identical to one with it — no missing keys, no exceptions, no different control paths.
+  </div>
+</div>
+
+<div class="week-row">
+  <div class="week-card">
+    <div class="week-label">Week 1</div>
+    <div class="week-title">Data Model &amp; Persistence</div>
+    <div class="week-item">P8.1 — Alembic migration for experience_store</div>
+    <div class="week-item">P8.1 — ExperienceEntry, ExperienceStore dataclasses</div>
+    <div class="week-item">P8.1 — available property + DB connectivity check</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 2</div>
+    <div class="week-title">warm_start() Structural Reuse</div>
+    <div class="week-item">P8.2 — load strategy priors + failure class base rates</div>
+    <div class="week-item">P8.2 — load structural decomposition patterns</div>
+    <div class="week-item">P8.2 — load tool workflow + verification plan seeds</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 3</div>
+    <div class="week-title">Write Side &amp; Normalisation</div>
+    <div class="week-item">P8.3 — success hook in loop.py</div>
+    <div class="week-item">P8.3 — capture + store tool_workflow, verification_plan</div>
+    <div class="week-item">P8.3 — strategy_weights re-normalisation</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 4</div>
+    <div class="week-title">Adaptive Strategy &amp; Integration</div>
+    <div class="week-item">P8.4 — softmax_strategy_policy() implementation</div>
+    <div class="week-item">P8.4 — wire into switch_strategy() in recovery.py</div>
+    <div class="week-item">Integration tests + E2E-04 warm-start test</div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:.75rem">
+  <div class="card-title">Key constraints to respect in Phase 8</div>
+  <div class="note-block"><strong>INV-10 must hold unconditionally:</strong> Every function that reads from or writes to the experience store — warm_start(), update_experience_store(), softmax_strategy_policy(), and any loader — must guard with <code>if not experience_store.available: return</code> as its first statement. This is not optional safety; it is a hard architectural invariant. Tests must verify that a run with <code>experience_store.available=False</code> produces a structurally identical output to one where the store is present.</div>
+  <div class="note-block"><strong>warm_start() seeds, it does not replace:</strong> Structural patterns loaded from the experience store initialise harness structures with a head start — they do not replace the harness's ability to override them. A decomposition loaded via warm_start() is a starting point for the task_graph, not a locked-in plan. The harness must be able to replan away from any warm-started structure during the run.</div>
+  <div class="note-block"><strong>Fixed enum remains the correct cold-start default:</strong> The adaptive softmax policy (P8.4) applies only when experience data exists for the specific (strategy_type, failure_class) pair. When the store is empty or when the queried pair has no entries, the fixed DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE order must be used unchanged. Document this explicitly so new deployments are not misconfigured.</div>
+</div>
+
+<div style="margin-bottom:1rem">
+  <div class="section-label">Unlocks after Phase 8 completes</div>
+  <div class="next-card">
+    <div class="next-badge">P9 unblocked</div>
+    <div class="next-body"><strong>Reviewer Pass &amp; Output Contract</strong> — P9 is not technically blocked on P8 at the code level, but the full harness loop including warm_start(), successful run recording, and adaptive strategy selection must function end-to-end before the reviewer pass can be meaningfully integration-tested across multi-run scenarios.</div>
+  </div>
+  <div class="next-card">
+    <div class="next-badge">P11 E2E-04</div>
+    <div class="next-body"><strong>Warm-start benefit E2E test</strong> — E2E-04 (run harness twice on same task class; assert second run's strategy_weights differ from flat priors; assert warm_start loaded prior decomposition patterns) requires the full P8 read and write paths to function correctly.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- TASKS & STEPS -->
+<div id="tasks" class="tab-content">
+
+<div class="desc-block">Tasks are ordered sequentially: P8.1 establishes the data model and persistence layer that all other P8 tasks depend on. P8.2 implements the read side (warm_start). P8.3 implements the write side (update_experience_store). P8.4 wires the adaptive policy that both read and write sides enable.</div>
+
+<!-- P8.1 -->
+<div class="task-block" id="tb-p81">
+  <div class="task-header" onclick="toggleTask('p81')">
+    <span class="task-id">P8.1</span>
+    <span class="task-name">Experience store data model</span>
+    <span class="task-meta">Week 1 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p81">
+    <div class="desc-block">Implement the Postgres-backed experience store, its data types, and the <code>available</code> property that guards all downstream usage. The store holds five structural entry types and one indexed table of empirical strategy weights. The <code>available</code> property must return False — never raise — when DB connectivity is absent, satisfying INV-10.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create Alembic migration in <code>adapter/migrations/versions/</code></strong>. Two tables: <code>experience_entries</code> (<code>id UUID PK</code>, <code>entry_type VARCHAR</code>, <code>failure_class VARCHAR</code>, <code>task_class VARCHAR</code>, <code>payload JSONB</code>, <code>run_id UUID</code>, <code>created_at TIMESTAMP DEFAULT NOW()</code>) and <code>experience_strategy_weights</code> (<code>id UUID PK</code>, <code>strategy_type VARCHAR</code>, <code>failure_class VARCHAR</code>, <code>success_count INT DEFAULT 0</code>, <code>attempt_count INT DEFAULT 0</code>, <code>rate FLOAT DEFAULT 0.5</code>, <code>updated_at TIMESTAMP DEFAULT NOW()</code>, <code>UNIQUE(strategy_type, failure_class)</code>). All columns non-nullable with documented defaults.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Create <code>adapter/harness/experience_store.py</code></strong>. Define <code>ExperienceType</code> enum: <code>DECOMPOSITION</code>, <code>TOOL_WORKFLOW</code>, <code>VERIFICATION_PLAN</code>, <code>RECOVERY_SEQUENCE</code>, <code>FAILURE_PATTERN</code>. Define <code>ExperienceEntry</code> dataclass: <code>id: str</code>, <code>entry_type: ExperienceType</code>, <code>failure_class: str | None</code>, <code>task_class: str | None</code>, <code>payload: dict</code>, <code>run_id: str</code>, <code>created_at: datetime</code>. Define <code>StrategyWeightKey</code> as a named tuple: <code>(strategy_type: str, failure_class: str)</code>.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Define <code>ExperienceStore</code> dataclass</strong> with fields: <code>db_session_factory: Callable | None</code>, <code>_cache: dict = field(default_factory=dict)</code>. Implement <code>available</code> property: attempts a lightweight <code>SELECT 1</code> ping via <code>db_session_factory</code> inside a <code>try/except</code>; returns <code>False</code> on any exception, <code>True</code> on success. The ping must complete in under 50ms — use a short connect timeout.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement query methods</strong>. <code>append(entry: ExperienceEntry) → None</code>: inserts into <code>experience_entries</code>; no-op if not available. <code>query_by_type(entry_type: ExperienceType, task_class: str | None = None, limit: int = 10) → list[ExperienceEntry]</code>: returns most recent matching entries ordered by <code>created_at DESC</code>; returns empty list if not available. <code>get_strategy_weights() → dict[StrategyWeightKey, float]</code>: returns all rows from <code>experience_strategy_weights</code> as a dict keyed by StrategyWeightKey; returns empty dict if not available.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire into <code>HarnessRunState</code> in <code>state_store.py</code></strong>. Replace the existing <code>experience_store_ref: dict</code> field with <code>experience_store: ExperienceStore | None = None</code>. Update <code>load()</code> to construct an <code>ExperienceStore</code> using the same db session factory when the <code>experience_store_ref</code> JSONB column is non-empty, or leave it as <code>None</code> when empty. Update <code>save()</code> to persist a marker (not the store contents — those are in their own tables) so the presence flag survives pause/resume.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item"><code>experience_store.available</code> returns <code>False</code> when the DB session factory raises a connection error — no exception propagates to the caller</div>
+    <div class="test-item">Calling <code>append(entry)</code> followed by <code>query_by_type(entry.entry_type)</code> returns the stored entry with identical payload and metadata — full round-trip without data loss</div>
+    <div class="test-item"><code>get_strategy_weights()</code> returns a dict keyed by <code>StrategyWeightKey(strategy_type, failure_class)</code> tuples — not plain strings — and values are floats in [0,1]</div>
+  </div>
+</div>
+
+<!-- P8.2 -->
+<div class="task-block" id="tb-p82">
+  <div class="task-header" onclick="toggleTask('p82')">
+    <span class="task-id">P8.2</span>
+    <span class="task-name">warm_start() — structural reuse</span>
+    <span class="task-meta">Week 2 · ~3 days</span>
+  </div>
+  <div class="task-body" id="body-p82">
+    <div class="desc-block">Implement <code>warm_start()</code> — the function called once at the very start of each harness run that loads prior empirical data and structural patterns into the current run's state structures. When the experience store is unavailable, <code>warm_start()</code> returns immediately without touching any state. When available, it seeds — but does not lock — the structures that benefit from prior knowledge.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Define <code>WarmStartResult</code> dataclass</strong> in <code>experience_store.py</code>: <code>loaded: bool</code> (True if experience store was available), <code>decompositions_seeded: int</code>, <code>tool_workflows_seeded: int</code>, <code>verification_plans_seeded: int</code>, <code>recovery_sequences_seeded: int</code>, <code>strategy_weights_loaded: bool</code>, <code>class_priors_loaded: bool</code>. This is a log record — it does not control execution, but surfaces to Langfuse tracing in P11.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>load_strategy_priors(experience_store, strategy_state) → None</code></strong>. Calls <code>experience_store.get_strategy_weights()</code>. If non-empty: write the returned dict into <code>strategy_state.prior_strategy_weights</code>. Load <code>failure_mode_library.class_priors</code> from the most recent <code>FAILURE_PATTERN</code> entries (aggregate by <code>failure_class</code>, compute base rates). Both are no-ops if the store returns empty results.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>load_structural_decompositions(experience_store, task_graph, task_class) → int</code></strong>. Queries <code>query_by_type(DECOMPOSITION, task_class=task_class, limit=3)</code>. For the highest-confidence entry: deserialise the payload into Task dataclasses and append as <code>PENDING</code> tasks to the task_graph. Returns the count of tasks seeded (0 if no entries found). The seeded tasks are subject to full task_graph validation — they may be removed or modified during decomposition_gate.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>load_tool_workflow_seeds(experience_store)</code> and <code>load_verification_plan_seeds(experience_store)</code></strong>. Both query their respective entry types and return a list of payload dicts. These are made available to <code>plan_tool_workflow()</code> (P5) and <code>verification_adequacy_critic()</code> (P5) via a seeds parameter — callers use them as starting points rather than building from scratch. Both return empty lists if the store is unavailable.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement the <code>warm_start(experience_store, strategy_state, failure_diagnostics, task_graph, task_class, dep_graph_budget) → WarmStartResult</code> entry point</strong>. First check: <code>if not experience_store.available: return WarmStartResult(loaded=False, ...all zeros...)</code>. Then call each loader in sequence: load_strategy_priors(), load_structural_decompositions(), load_tool_workflow_seeds(), load_verification_plan_seeds(). Also update <code>dep_graph_budget.confidence_decay_rate</code> from the median decay rate seen in successful runs. Populate and return WarmStartResult.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item"><code>warm_start()</code> with <code>experience_store.available=False</code> returns a <code>WarmStartResult(loaded=False)</code> immediately — no fields in strategy_state, task_graph, or dep_graph_budget are mutated</div>
+    <div class="test-item">After storing a successful decomposition via <code>append()</code>, calling <code>warm_start()</code> on a second run seeds the task_graph with PENDING tasks matching the stored payload — task count and descriptions match the prior decomposition</div>
+    <div class="test-item"><code>strategy_state.prior_strategy_weights</code> after <code>warm_start()</code> contains non-uniform rates that differ from the flat 0.5 default — confirming empirical data was loaded rather than defaults returned</div>
+  </div>
+</div>
+
+<!-- P8.3 -->
+<div class="task-block" id="tb-p83">
+  <div class="task-header" onclick="toggleTask('p83')">
+    <span class="task-id">P8.3</span>
+    <span class="task-name">update_experience_store() on successful run</span>
+    <span class="task-meta">Week 3 · ~2.5 days</span>
+  </div>
+  <div class="task-body" id="body-p83">
+    <div class="desc-block">Implement the write side of the experience store. After each successful task completion, the harness captures the concrete artefacts that made the run succeed — the tool workflow, the verification plan, and (if a recovery was executed) the recovery sequence — and stores them as reusable experience entries. Strategy weights are re-normalised with each new data point so the adaptive policy (P8.4) reflects the most current empirical rates.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Add a success hook in <code>loop.py</code></strong>. After a task transitions to <code>COMPLETE</code> status: call <code>update_experience_store(completed_task, strategy_state, execution_context, experience_store)</code>. The hook fires for every task completion — not just the final task. If <code>experience_store.available</code> is False, the call returns immediately with no side effects.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>update_experience_store(completed_task, strategy_state, execution_context, experience_store) → None</code></strong> in <code>experience_store.py</code>. First guard: <code>if not experience_store.available: return</code>. Then build an <code>ExperienceEntry</code> for the completed task's decomposition contribution (subset of tasks derived from this task). Use <code>execution_context.task_class</code> as the task_class tag for future retrieval.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Capture and store the tool workflow artefact</strong>. From <code>execution_context.completed_tool_workflow</code>: serialise the ordered list of (tool_name, call_params_schema, result_schema) tuples to a payload dict. Append as an <code>ExperienceEntry(entry_type=TOOL_WORKFLOW, task_class=..., payload=...)</code>. Also store the verification plan from <code>execution_context.verification_plan</code> as a <code>VERIFICATION_PLAN</code> entry.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Store the recovery sequence if one was used</strong>. Check <code>strategy_state.recovery_was_used</code>. If True: append a <code>RECOVERY_SEQUENCE</code> entry with payload containing the strategy name, failure_class, and the sequence of actions taken. This entry is used by <code>load_verification_plan_seeds()</code> in future warm_starts to prime the strategy ordering for the same failure class.</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Re-normalise strategy_weights</strong>. After storing all artefacts: call <code>upsert_strategy_weight(strategy_type, failure_class, success: bool, db_session)</code>. This function: increments the relevant <code>attempt_count</code>; increments <code>success_count</code> if <code>success=True</code>; updates <code>rate = success_count / attempt_count</code>. Use a database UPSERT (INSERT ... ON CONFLICT DO UPDATE) to avoid race conditions on concurrent runs.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">After a successful run using strategy DIRECT_EDIT on failure_class "type_error": <code>get_strategy_weights()[StrategyWeightKey("DIRECT_EDIT","type_error")]</code> returns a rate closer to 1.0 than the prior 0.5 default</div>
+    <div class="test-item">After a successful run that required a TRACE_EXEC recovery: <code>query_by_type(RECOVERY_SEQUENCE)</code> returns an entry with payload containing "TRACE_EXEC" and the correct failure_class — the recovery sequence is stored and retrievable</div>
+    <div class="test-item"><code>update_experience_store()</code> with <code>experience_store.available=False</code> returns immediately with no database calls, no mutations to strategy_state or execution_context, and no exceptions raised</div>
+  </div>
+</div>
+
+<!-- P8.4 -->
+<div class="task-block" id="tb-p84">
+  <div class="task-header" onclick="toggleTask('p84')">
+    <span class="task-id">P8.4</span>
+    <span class="task-name">Adaptive strategy upgrade</span>
+    <span class="task-meta">Week 4 · ~2.5 days</span>
+  </div>
+  <div class="task-body" id="body-p84">
+    <div class="desc-block">Replace the fixed <code>recovery_strategy_order</code> enum with a softmax-weighted policy when empirical data is available. The policy selects strategy ordering based on historical success rates for the current (strategy_type, failure_class) pair. When no empirical data exists for a pair, or when the experience store is unavailable, the fixed enum order is used unchanged.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Implement <code>softmax_strategy_policy(strategy_weights, failure_class, temperature=1.0) → list[str]</code></strong> in <code>experience_store.py</code>. Filters <code>strategy_weights</code> to entries matching the given <code>failure_class</code>. Applies softmax over the empirical rates: <code>score_i = exp(rate_i / temperature)</code>, then normalise to probabilities. Returns strategies sorted by descending softmax score. If no entries match <code>failure_class</code>: returns the fixed default order <code>["DIRECT_EDIT","TRACE_EXEC","BROADER_SEARCH","REIMPLEMENT","MINIMAL_FIX","ESCALATE"]</code>. Temperature of 1.0 is the default; higher values increase exploration of lower-probability strategies.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>build_strategy_ordering(failure_class, experience_store) → list[str]</code></strong>. This is the single call site used by the recovery system. Logic: if <code>not experience_store.available</code> → return fixed default order. Else: call <code>experience_store.get_strategy_weights()</code>, pass result to <code>softmax_strategy_policy(weights, failure_class)</code>, return the result. Document that callers must use this function — they must not read <code>strategy_state.recovery_strategy_order</code> directly when the experience store is available.</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Wire into <code>switch_strategy()</code> in <code>recovery.py</code></strong>. In <code>switch_strategy(strategy_state, failure_class, experience_store)</code>: replace the direct index advancement into the fixed enum with a call to <code>build_strategy_ordering(failure_class, experience_store)</code>. The returned list becomes the effective ordering for this switch. Update <code>strategy_state.current_strategy</code> to the next entry in the returned list after the current strategy.</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Document temperature parameter and cold-start behaviour</strong>. Add a module-level docstring to <code>experience_store.py</code> explaining: (a) temperature default of 1.0 — lower values concentrate ordering around the highest-rate strategy; higher values are more exploratory; (b) cold-start behaviour — when <code>attempt_count == 0</code> for all strategies in a failure class, the fixed default order is returned (not a random shuffle); (c) new deployments are expected to use the fixed default order for their first N runs. Expose <code>temperature</code> as a configurable field on <code>HarnessRunState</code> defaulting to 1.0.</div></div>
+
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-item">After 5 stored runs where DIRECT_EDIT failed (rate 0.0) and TRACE_EXEC succeeded (rate 1.0) for failure_class "import_error": <code>softmax_strategy_policy(weights, "import_error")</code> returns a list with "TRACE_EXEC" ranked first — ahead of "DIRECT_EDIT"</div>
+    <div class="test-item"><code>build_strategy_ordering("any_class", experience_store_with_available=False)</code> returns the fixed default order <code>["DIRECT_EDIT","TRACE_EXEC","BROADER_SEARCH","REIMPLEMENT","MINIMAL_FIX","ESCALATE"]</code> without database access</div>
+    <div class="test-item">Calling <code>build_strategy_ordering(failure_class, experience_store)</code> on run 1 (empty store) and run 10 (10 stored outcomes) returns different orderings for the same failure_class — confirming that empirical data changes the strategy ranking over time</div>
+  </div>
+</div>
+
+</div>
+
+<!-- FILE MAP -->
+<div id="files" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Files created or modified in Phase 8</div>
+  <div class="card-body" style="margin-bottom:.7rem">Green = new file. Amber = existing file modified. The experience store is self-contained — no harness module outside of <code>recovery.py</code> and <code>loop.py</code> is modified.</div>
+
+  <div class="file-map">
+<span class="f-dir">adapter/harness/</span>
+  experience_store.py          <span class="f-new">NEW</span>  <span class="f-note">ExperienceType, ExperienceEntry, StrategyWeightKey, ExperienceStore, WarmStartResult, warm_start, update_experience_store, softmax_strategy_policy, build_strategy_ordering, upsert_strategy_weight</span>
+  recovery.py                  <span class="f-mod">MOD</span>  <span class="f-note">switch_strategy() calls build_strategy_ordering() instead of direct enum index</span>
+  loop.py                      <span class="f-mod">MOD</span>  <span class="f-note">warm_start() called at run start; update_experience_store() hook on task COMPLETE</span>
+  state_store.py               <span class="f-mod">MOD</span>  <span class="f-note">experience_store_ref JSONB → experience_store: ExperienceStore | None; temperature field added</span>
+  __init__.py                  <span class="f-mod">MOD</span>  <span class="f-note">export ExperienceStore, ExperienceEntry, ExperienceType, WarmStartResult, warm_start, update_experience_store</span>
+
+<span class="f-dir">adapter/migrations/versions/</span>
+  0010_experience_store.py     <span class="f-new">NEW</span>  <span class="f-note">create experience_entries + experience_strategy_weights tables</span>
+
+<span class="f-dir">adapter/tests/</span>
+  test_harness_p8.py           <span class="f-new">NEW</span>  <span class="f-note">all 12 acceptance tests for Phase 8 (T01–T12)</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Files NOT touched in Phase 8</div>
+  <div class="card-body">The following harness modules are intentionally untouched — the experience store is consumed by them but does not require changes to their core logic:
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">world_model.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">hypothesis.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">contradiction.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">evidence.py</code>
+  <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">escalation.py</code> (P7) ·
+  All canvas / React source in <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">src/</code> and <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">packages/canvas/</code> (P10).</div>
+</div>
+
+</div>
+
+<!-- DEPENDENCIES -->
+<div id="deps" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Intra-phase task ordering</div>
+  <div class="card-body">P8.1 must complete before any other P8 task begins — all other tasks depend on <code>ExperienceStore</code> and its <code>available</code> property being stable.</div>
+</div>
+
+<table class="dep-table">
+<thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td style="color:var(--p8);font-family:var(--font-mono);font-size:11px;font-weight:600">P8.1 — Experience store data model</td><td><span class="dep-tag">P0.6</span></td><td style="font-size:11.5px;color:var(--t1)">Postgres tables and the session factory pattern from HarnessRunState (P0.6) are the infrastructure; P8.1 adds its own tables alongside</td></tr>
+<tr><td style="color:var(--p8);font-family:var(--font-mono);font-size:11px;font-weight:600">P8.2 — warm_start()</td><td><span class="dep-tag">P8.1</span><span class="dep-tag">P6.2</span><span class="dep-tag">P4.1</span></td><td style="font-size:11.5px;color:var(--t1)">Reads from ExperienceStore (P8.1); seeds strategy_state (P6.2) and task_graph (P4.1)</td></tr>
+<tr><td style="color:var(--p8);font-family:var(--font-mono);font-size:11px;font-weight:600">P8.3 — update_experience_store()</td><td><span class="dep-tag">P8.1</span><span class="dep-tag">P6.2</span><span class="dep-tag">P5.4</span></td><td style="font-size:11.5px;color:var(--t1)">Writes to ExperienceStore (P8.1); captures tool workflows from execute() (P5.4); reads strategy_state (P6.2)</td></tr>
+<tr><td style="color:var(--p8);font-family:var(--font-mono);font-size:11px;font-weight:600">P8.4 — Adaptive strategy upgrade</td><td><span class="dep-tag">P8.1</span><span class="dep-tag">P8.3</span><span class="dep-tag">P6.2</span></td><td style="font-size:11.5px;color:var(--t1)">Requires stored strategy weights from P8.3 runs; wires into switch_strategy() from P6.2</td></tr>
+</tbody>
+</table>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Cross-phase dependencies: what Phase 8 requires from earlier phases</div>
+  <table class="dep-table" style="margin-top:.5rem;margin-bottom:0">
+  <thead><tr><th>Earlier task</th><th>Used in P8</th><th>What is needed</th></tr></thead>
+  <tbody>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--blue)">P0.6 — HarnessRunState</td><td><span class="dep-tag">P8.1</span></td><td style="font-size:11.5px;color:var(--t1)">DB session factory and the JSONB persistence pattern for adding experience_store to HarnessRunState</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--amber)">P4.1 — Task graph</td><td><span class="dep-tag">P8.2</span></td><td style="font-size:11.5px;color:var(--t1)">warm_start() seeds PENDING tasks into the task_graph using the Task dataclass from P4.1</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--red)">P5.4 — execute() node</td><td><span class="dep-tag">P8.3</span></td><td style="font-size:11.5px;color:var(--t1)">execution_context.completed_tool_workflow produced by execute() is the artefact captured by update_experience_store()</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--red)">P6.2 — Recovery strategies</td><td><span class="dep-tag">P8.2</span><span class="dep-tag">P8.3</span><span class="dep-tag">P8.4</span></td><td style="font-size:11.5px;color:var(--t1)">strategy_state.prior_strategy_weights, recovery_strategy_order, and switch_strategy() are all defined in P6.2</td></tr>
+  <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--red)">P6.3 — Failure mode library</td><td><span class="dep-tag">P8.2</span></td><td style="font-size:11.5px;color:var(--t1)">warm_start() loads failure_class base rates into failure_mode_library.class_priors from stored FAILURE_PATTERN entries</td></tr>
+  </tbody>
+  </table>
+</div>
+
+</div>
+
+<!-- INVARIANTS -->
+<div id="invariants" class="tab-content">
+
+<div class="card">
+  <div class="card-title">Architecture invariants engaged in Phase 8</div>
+</div>
+
+<div class="inv-list">
+  <div class="inv-item">
+    <strong>INV-10 — experience_store is a no-op when absent <span class="inv-tag">P8.1–P8.4 full enforcement</span></strong>
+    Every function introduced in Phase 8 — <code>warm_start()</code>, <code>update_experience_store()</code>, <code>build_strategy_ordering()</code>, and all loader helpers — must begin with <code>if not experience_store.available: return</code> (or equivalent for functions returning a value). The run with <code>experience_store.available=False</code> must produce a structurally identical harness output to a run where the store is present: no missing keys in HarnessRunState, no exceptions, no empty list where a non-empty list is normally expected. This invariant is not advisory — it determines whether Phase 8 is safe to ship.
+  </div>
+  <div class="inv-item">
+    <strong>INV-06 — control_state as sole control input (strategy selection) <span class="inv-tag">P8.4 scope</span></strong>
+    The softmax policy (P8.4) produces a reordered list of recovery strategies — it does not write to <code>control_state</code>, <code>block_mask</code>, or <code>escalation_reason</code> directly. Strategy ordering is an advisory input to <code>switch_strategy()</code>; the decision to switch strategy is still driven by <code>cannot_make_progress()</code> and <code>control_state.risk_state</code>. The experience store shapes how strategies are ordered, not whether they are used.
+  </div>
+  <div class="inv-item">
+    <strong>INV-08 — Failure mode library scope (class_priors loading) <span class="inv-tag">P8.2 scope</span></strong>
+    <code>warm_start()</code> loads failure-class base rates into <code>failure_mode_library.class_priors</code>. These priors are an advisory input to Tier 4 of <code>resolve_control_state()</code> — they do not write to <code>block_mask</code> or <code>escalation_reason</code>. The same INV-08 constraint that governs the failure mode library's role in Tier 4 applies to the class priors loaded here: advisory normalised input only.
+  </div>
+</div>
+
+</div>
+
+<!-- ALL TESTS -->
+<div id="tests" class="tab-content">
+
+<div class="card">
+  <div class="card-title">All 12 acceptance tests — <code>adapter/tests/test_harness_p8.py</code></div>
+  <div class="card-body">Run with <code>pytest adapter/tests/test_harness_p8.py -v</code>. Tests T01–T03 require a running Postgres instance (Alembic migration 0010 applied). Tests T04–T09 require Postgres for store reads and writes. Tests T10–T12 can run without Postgres by mocking the session factory to raise a connection error.</div>
+</div>
+
+<div class="section-label">P8.1 — Experience store data model (3 tests)</div>
+<div class="test-item">T01 · <code>experience_store.available</code> returns <code>False</code> when the db session factory raises a connection error — no exception propagates; property returns gracefully</div>
+<div class="test-item">T02 · <code>append(ExperienceEntry(entry_type=DECOMPOSITION, payload={...}))</code> followed by <code>query_by_type(DECOMPOSITION)</code> returns the entry with identical payload — full persistence round-trip without data loss</div>
+<div class="test-item">T03 · <code>get_strategy_weights()</code> returns a dict keyed by <code>StrategyWeightKey</code> named tuples (not strings) with float values; an empty store returns an empty dict without raising</div>
+
+<div class="section-label">P8.2 — warm_start() (3 tests)</div>
+<div class="test-item">T04 · <code>warm_start(experience_store_unavailable, ...)</code> returns <code>WarmStartResult(loaded=False)</code> immediately — strategy_state.prior_strategy_weights is unchanged, task_graph has no new tasks, dep_graph_budget is unchanged</div>
+<div class="test-item">T05 · After storing a DECOMPOSITION entry for task_class "refactor": <code>warm_start()</code> on a new run with the same task_class seeds the task_graph with PENDING tasks matching the stored payload — task descriptions and count match</div>
+<div class="test-item">T06 · <code>strategy_state.prior_strategy_weights</code> after warm_start with stored data contains rates that differ from the flat 0.5 default for at least one (strategy_type, failure_class) pair</div>
+
+<div class="section-label">P8.3 — update_experience_store() (3 tests)</div>
+<div class="test-item">T07 · After a successful run using strategy "DIRECT_EDIT" on failure_class "syntax_error": <code>get_strategy_weights()[StrategyWeightKey("DIRECT_EDIT","syntax_error")]</code> returns a rate &gt; 0.5 (success incremented, rate updated)</div>
+<div class="test-item">T08 · After a successful TRACE_EXEC recovery: <code>query_by_type(RECOVERY_SEQUENCE)</code> returns an entry whose payload contains "TRACE_EXEC" and the correct failure_class — recovery was captured and stored</div>
+<div class="test-item">T09 · <code>update_experience_store()</code> with <code>experience_store.available=False</code> returns immediately — no DB calls made, no mutations to strategy_state or execution_context, no exceptions raised</div>
+
+<div class="section-label">P8.4 — Adaptive strategy upgrade (3 tests)</div>
+<div class="test-item">T10 · After storing 5 failed DIRECT_EDIT outcomes and 5 successful TRACE_EXEC outcomes for failure_class "import_error": <code>softmax_strategy_policy(weights, "import_error")</code> returns a list with "TRACE_EXEC" ranked first — empirical data drives the ordering</div>
+<div class="test-item">T11 · <code>build_strategy_ordering("any_class", experience_store_unavailable)</code> returns <code>["DIRECT_EDIT","TRACE_EXEC","BROADER_SEARCH","REIMPLEMENT","MINIMAL_FIX","ESCALATE"]</code> — the fixed default order is returned without DB access when store is unavailable</div>
+<div class="test-item">T12 · Running <code>build_strategy_ordering(failure_class, experience_store)</code> on an empty store (run 1) and a populated store (run 10, same failure_class) returns different ordered lists — empirical data from 10 runs changes the strategy ranking</div>
+
+<div class="card" style="margin-top:.75rem">
+  <div class="card-title">Running Phase 8 tests</div>
+  <div class="card-body">
+    <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_p8.py -v</code><br><br>
+    Tests T01–T09 require a running Postgres instance. Apply the migration before running: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">alembic upgrade head</code>. Tests T10–T12 use a mock session factory and run without infrastructure. Set <code>DATABASE_URL</code> to skip infrastructure-dependent tests gracefully.
+  </div>
+</div>
+
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+function toggleTask(id){
+  const body=document.getElementById('body-'+id);
+  body.classList.toggle('open');
+}
+['p81','p82','p83','p84'].forEach(id=>{
+  const b=document.getElementById('body-'+id);
+  if(b) b.classList.add('open');
+});
+</script>
+</body>
+</html>

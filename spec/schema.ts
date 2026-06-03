@@ -484,7 +484,14 @@ export const ApplyToolReliabilityNode = NodeBase.extend({
   type: z.literal('apply_tool_reliability'),
   harness_config: ApplyToolReliabilityConfig.optional(),
 })
-export const UpdateWorldModelNode = HarnessNodeBase.extend({ type: z.literal('update_world_model') })
+const UpdateWorldModelConfig = z.object({
+  integration_mode: z.enum(['observations_only', 'infer_beliefs']).default('observations_only'),
+  reliability_threshold: z.enum(['HIGH', 'MEDIUM', 'LOW']).default('HIGH'),
+})
+export const UpdateWorldModelNode = HarnessNodeBase.extend({
+  type: z.literal('update_world_model'),
+  harness_config: UpdateWorldModelConfig.optional(),
+})
 export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
 export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
 export const VerificationGateNode = HarnessNodeBase.extend({ type: z.literal('verification_gate') })

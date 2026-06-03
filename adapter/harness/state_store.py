@@ -17,10 +17,14 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from .belief_graph import BeliefDepGraph
 from .caller_state import CallerState
+from .control_state import ControlState
+from .diagnostics import Diagnostics
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
 from .output_contract import OutputContract
+from .task_graph import TaskGraph
 from .tool_manifest import ToolAvailabilityManifest
 from .world_model import WorldModel
 
@@ -55,15 +59,19 @@ class HarnessRunState:
     # P1.6 — hypothesis set
     hypothesis_set: HypothesisSet = field(default_factory=HypothesisSet)
 
-    # Phases P2–P9 — stored as raw dicts until typed dataclasses are added
-    task_graph: dict[str, Any] = field(default_factory=dict)
-    diagnostics: dict[str, Any] = field(default_factory=dict)
-    control_state: dict[str, Any] = field(default_factory=dict)
+    # P2.2 — typed belief dependency graph
+    belief_dep_graph: BeliefDepGraph = field(default_factory=BeliefDepGraph)
+    # P3.1 — typed diagnostics
+    diagnostics: Diagnostics = field(default_factory=Diagnostics)
+    # P3.3 — typed control state
+    control_state: ControlState = field(default_factory=ControlState)
+    # P4.1 — typed task graph
+    task_graph: TaskGraph = field(default_factory=TaskGraph)
+    # Remaining phases P5–P9 — stored as raw dicts until typed dataclasses are added
     memory_state: dict[str, Any] = field(default_factory=dict)
     strategy_state: dict[str, Any] = field(default_factory=dict)
     failure_diagnostics: dict[str, Any] = field(default_factory=dict)
     experience_store_ref: dict[str, Any] = field(default_factory=dict)
-    belief_dep_graph: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,14 +80,14 @@ class HarnessRunState:
             "output_contract": self.output_contract.to_dict(),
             "evidence_store": self.evidence_store.to_dict(),
             "hypothesis_set": self.hypothesis_set.to_dict(),
-            "task_graph": self.task_graph,
-            "diagnostics": self.diagnostics,
-            "control_state": self.control_state,
+            "belief_dep_graph": self.belief_dep_graph.to_dict(),
+            "diagnostics": self.diagnostics.to_dict(),
+            "control_state": self.control_state.to_dict(),
+            "task_graph": self.task_graph.to_dict(),
             "memory_state": self.memory_state,
             "strategy_state": self.strategy_state,
             "failure_diagnostics": self.failure_diagnostics,
             "experience_store_ref": self.experience_store_ref,
-            "belief_dep_graph": self.belief_dep_graph,
         }
 
     @classmethod
@@ -94,14 +102,14 @@ class HarnessRunState:
             # tool_manifest is always None on load — callers must call build_manifest()
             # on resume to reflect the current runtime environment.
             tool_manifest=None,
-            task_graph=d.get("task_graph") or {},
-            diagnostics=d.get("diagnostics") or {},
-            control_state=d.get("control_state") or {},
+            belief_dep_graph=BeliefDepGraph.from_dict(d.get("belief_dep_graph") or {}),
+            diagnostics=Diagnostics.from_dict(d.get("diagnostics") or {}),
+            control_state=ControlState.from_dict(d.get("control_state") or {}),
+            task_graph=TaskGraph.from_dict(d.get("task_graph") or {}),
             memory_state=d.get("memory_state") or {},
             strategy_state=d.get("strategy_state") or {},
             failure_diagnostics=d.get("failure_diagnostics") or {},
             experience_store_ref=d.get("experience_store_ref") or {},
-            belief_dep_graph=d.get("belief_dep_graph") or {},
         )
 
 
