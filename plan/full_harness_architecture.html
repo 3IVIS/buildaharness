@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Full AI agent harness</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#60a5fa;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --c-caller:#67e8f9;--c-world:#8b5cf6;--c-reasoning:#4ade80;
+  --c-planning:#60a5fa;--c-control:#f0abfc;--c-execution:#fbbf24;
+  --c-verify:#f87171;--c-recovery:#f97316;--c-memory:#a3e635;
+  --c-meta:#94a3b8;--c-output:#34d399;--c-contra:#fb7185;
+  --c-hypo:#f59e0b;--c-policy:#ec4899;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1200px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem;position:relative}
+.hero::before{content:'';position:absolute;top:-20px;left:50%;transform:translateX(-50%);width:600px;height:2px;background:linear-gradient(90deg,transparent,rgba(96,165,250,0.25),rgba(248,113,113,0.15),transparent)}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:760px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-warn{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.badge-dim{background:var(--bg1);color:var(--t1);border:.5px solid var(--bd1);font-weight:500}
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(96,165,250,0.07);border-color:rgba(96,165,250,0.4);color:#60a5fa;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+
+/* Node list */
+.node-list{width:100%;display:flex;flex-direction:column;gap:0}
+.node-conn{width:0;border-left:.5px dashed var(--bd1);height:10px;margin:0 auto 0 15px}
+.node-row{width:100%;background:var(--bg0);border:.5px solid var(--bd0);border-left:3px solid transparent;border-radius:var(--r-lg);padding:.5rem .8rem;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:2px}
+.node-row:hover{background:var(--bg1)}
+.node-row.active{background:rgba(96,165,250,0.05);border-color:rgba(96,165,250,0.4)!important}
+.node-row.active .node-title{color:#60a5fa!important}
+.node-header{display:flex;align-items:baseline;gap:.6rem}
+.node-num{font-size:10px;color:var(--t1);width:20px;flex-shrink:0}
+.node-title{font-size:12px;font-weight:600;color:var(--t0)}
+.node-sub{font-size:11px;color:var(--t1);margin-top:2px;margin-left:26px;line-height:1.35}
+.detail-panel{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.85rem 1.05rem;margin-top:.7rem;min-height:60px}
+.detail-panel .det-t{font-size:14px;font-weight:600;color:var(--t0);margin-bottom:.4rem}
+.detail-panel .det-b{font-size:13px;color:var(--t1);line-height:1.7}
+
+/* Legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:.85rem}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t1)}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* Deep dive grid */
+.dd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:9px;margin-bottom:1rem}
+.dd-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;cursor:pointer;transition:background .15s,border-color .15s}
+.dd-card:hover{background:var(--bg2)}
+.dd-card.active{border-color:rgba(96,165,250,0.4);background:rgba(96,165,250,0.05)}
+.dd-card.active .dd-title{color:#60a5fa}
+.dd-cat{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.28rem}
+.dd-title{font-size:13px;font-weight:600;color:var(--t0);margin-bottom:.18rem;line-height:1.3}
+.dd-sub{font-size:11px;color:var(--t1);line-height:1.35}
+
+/* Pseudocode */
+.codeblock{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:1rem 1.2rem;font-family:var(--font-mono);font-size:11.5px;color:var(--t1);line-height:1.85;overflow-x:auto;white-space:pre}
+.kw{color:#60a5fa;font-weight:500}
+.cm{color:#4b5563;opacity:.85}
+/* layer-colored tokens */
+.ccal{color:#67e8f9}.cb{color:#8b5cf6}.ce{color:#4ade80}
+.cp{color:#60a5fa}.carb{color:#f0abfc}.cx{color:#fbbf24}
+.cv{color:#f87171}.cr{color:#f97316}.cbg{color:#a3e635}
+.cm2{color:#94a3b8}.cout{color:#34d399}.cc{color:#fb7185}
+.ch{color:#f59e0b}.co{color:#ec4899}.ct{color:#22d3ee}
+.cdep{color:#84cc16}.ccs{color:#7dd3fc}
+
+/* State cards */
+.state-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-bottom:1rem}
+.sc{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.sc-t{font-size:13px;font-weight:600;margin-bottom:.5rem}
+.sc-pre{font-family:var(--font-mono);font-size:11px;color:var(--t1);line-height:1.65;white-space:pre}
+.sc-note{font-size:11px;font-style:italic;color:var(--t1);opacity:.7;margin-top:.4rem;line-height:1.4}
+
+/* Scope */
+.scope-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem}
+.scope-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1rem}
+.scope-title{font-size:13px;font-weight:600;margin-bottom:.5rem}
+.si{font-size:12px;color:var(--t1);padding:.2rem 0 .2rem .8rem;position:relative;line-height:1.4}
+.si::before{content:'✓';position:absolute;left:0;color:#4ade80;font-size:11px}
+.si-x::before{content:'—';color:#94a3b8}.si-opt::before{content:'↓';color:#fbbf24}.si-opt{color:#fbbf24}
+.scope-note{font-size:11.5px;color:var(--t1);line-height:1.6;margin-top:.5rem}
+.principle-box{margin-top:1rem;padding:.65rem .85rem;background:var(--bg2);border-radius:var(--r-md);font-size:12px;color:var(--t1);line-height:1.55}
+.principle-box strong{display:block;color:var(--t0);font-weight:600;margin-bottom:.3rem}
+
+/* Layer table */
+.layer-table{width:100%;border-collapse:collapse}
+.layer-table th,.layer-table td{padding:.6rem .85rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.layer-table th{background:var(--bg1);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.layer-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>Complete AI agent harness </h1>
+  <p>Diagnostic health vectors replace multi-axis signal bus. generation_id replaces computed_at staleness. NORMAL/CAUTIOUS/BLOCKED control surface with five-tier implementation detail. VOI-driven evidence gathering. Experience store reuses structures, not just priors. Two-substep model preserved via generation_id double-increment. All v15 invariants — normalisation contract, deadlock detection, elimination policy, parallel concurrency model, adversarial reviewer, pre-execution review gate — present as implementation detail inside their respective nodes.</p>
+  <span class="badge badge-warn">Architecture skeleton — implementation choices determine quality</span>
+  <span class="badge badge-dim">Infrastructure concerns out of scope</span>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('pseudo',this)">Pseudo Code</button>
+  <button class="tab" onclick="showTab('nodes',this)">Nodes</button>
+  <button class="tab" onclick="showTab('layers',this)">Layers</button>
+  <button class="tab" onclick="showTab('state',this)">State Model</button>
+  <button class="tab" onclick="showTab('dives',this)">Deep Dives</button>
+  <button class="tab" onclick="showTab('scope',this)">Scope</button>
+</div>
+
+<!-- ═══════════════════════════ PSEUDO ═══════════════════════════ -->
+<div id="pseudo" class="tab-content active">
+<div class="codeblock"><span class="kw">initialize</span>():
+  objective · success_criteria
+  <span class="cout">output_contract           </span><span class="cm"># format · interface · caller constraints — refreshed on constraint change</span>
+
+  <span class="ccal">caller_state              </span><span class="cm"># mutable first-class object — updated by inject_clarification() or check_external_updates()</span>
+  <span class="ccal">  current_constraints · clarification_history[] · last_update · output_preferences · success_criteria</span>
+
+  <span class="cb">world_model               </span><span class="cm"># generation_id increments on every significant update</span>
+  <span class="cb">  generation_id = 0</span>
+  <span class="cb">  observations[]            </span><span class="cm"># raw facts — never promoted to conclusions without explicit inference</span>
+  <span class="cb">  beliefs[]                 </span><span class="cm"># interpreted conclusions: {id, statement, confidence, derived_from[], supporting_evidence[]}</span>
+  <span class="cb">  assumptions[]             </span><span class="cm"># unverified dependencies</span>
+  <span class="cc">  contradictions[]          </span><span class="cm"># {type: pairwise|set-level|temporal|abstraction, severity: LOW|MEDIUM|HIGH|SYSTEM_BREAKING, scope: local|task|global}</span>
+  <span class="cb">  environment_change_log[]  </span><span class="cm"># for staleness invalidation</span>
+  <span class="cb">  completeness_flags{}      </span><span class="cm"># which regions were pruned during compression — "present" ≠ "complete"</span>
+
+  <span class="cdep">belief_dep_graph          </span><span class="cm"># derivation structure: nodes · derived_from edges · invalidation_frontier · propagation_queue</span>
+  <span class="cdep">dep_graph_budget          </span><span class="cm"># max_unverified_edge_ratio · refresh_policy · confidence_decay_rate</span>
+
+  <span class="ch">hypothesis_set</span>
+  <span class="ch">  active[]                  </span><span class="cm"># {id, explanation, confidence, predicted_observations[], discriminating_evidence[], generation_sources}</span>
+  <span class="ch">  eliminated[]              </span><span class="cm"># last K retained for reconsideration on world model update</span>
+  <span class="ch">  elimination_policy:       </span><span class="cm"># conditions: contradicting_evidence | prediction_failure_count ≥ K | posterior &lt; FLOOR</span>
+  <span class="ch">                            </span><span class="cm"># retention: last K eliminated — prevents unbounded growth</span>
+
+  <span class="ce">evidence_store            </span><span class="cm"># Evidence(obs, reliability, source, evidence_type, freshness)</span>
+  <span class="ce">  tool_reliability_envelopes</span><span class="cm"> # max conclusion reliability derivable per tool given known scope limits</span>
+  <span class="ct">  tool_availability_manifest</span><span class="cm"> # {tool: available, fallback_tool} — populated once at init</span>
+  <span class="cm">                            </span><span class="cm"># consulted by verification_adequacy_critic to prune unavailable 9-layer checks</span>
+
+  <span class="ccs">strategy_state            </span><span class="cm"># current_strategy · strategy_confidence · switch_triggers · strategy_history</span>
+  <span class="cm2">                          </span><span class="cm"># prior_strategy_weights — loaded by warm_start(); flat priors if experience_store unavailable</span>
+
+  <span class="cp">task_graph                </span><span class="cm"># objective → subgoals → tasks</span>
+  <span class="cp">  tasks[]:                  </span><span class="cm"># {id, description, status(6-state), depends_on[], risk_level, assigned_strategy,</span>
+  <span class="cm">                            </span><span class="cm">#  parallel_write_domains, abstraction_level}</span>
+  <span class="cp">  conflict_probability_cache</span><span class="cm"> # per write-domain pair; &gt; PESSIMISTIC_THRESHOLD → block; ≤ → optimistic concurrency</span>
+
+  <span class="carb">diagnostics               </span><span class="cm"># health vectors — informational; control_state is the sole consumer</span>
+  <span class="carb">  belief_health:            freshness · consistency · support              ∈ [0,1] each</span>
+  <span class="carb">  coverage_health:          symptom_coverage · explanation_coverage        ∈ [0,1] each</span>
+  <span class="carb">  verification_health:      strength · feasibility                         ∈ [0,1] each</span>
+  <span class="carb">  execution_health:         progress_rate · failure_recurrence · oscillation_score ∈ [0,1] each</span>
+  <span class="carb">  dep_class_gap_annotation  </span><span class="cm"># advisory only — never a numeric input to resolve_control_state()</span>
+
+  <span class="co">control_state             </span><span class="cm"># small surface area — easier to audit than a large arbitration vector</span>
+  <span class="co">  generation_id = 0         </span><span class="cm"># must match world_model.generation_id; stale if behind</span>
+  <span class="co">  risk_state: NORMAL|CAUTIOUS|BLOCKED</span>
+  <span class="co">  escalation_reason: NONE|CONTRADICTION|STALLED|VERIFICATION_FAILURE|HUMAN_REQUIRED</span>
+  <span class="co">  block_mask[]              </span><span class="cm"># which action_classes are suppressed</span>
+  <span class="co">  notes[]</span>
+
+  <span class="cbg">memory_state</span>
+  <span class="cbg">  token_budget · context_pressure · compression_policy · drop_priority_rules</span>
+  <span class="cbg">  max_steps · steps_used    </span><span class="cm"># hard cap; escalates to human if reached; warn at 0.8 × max_steps</span>
+  <span class="cbg">  journal · journal_retention_policy</span><span class="cm">  # last N passing verbatim; all failures indefinitely; compress older passing</span>
+  <span class="cbg">  compression_risk:         </span><span class="cm"># structured — not a boolean flag</span>
+  <span class="cbg">    compressed_structures[]  </span><span class="cm"># fully dropped</span>
+  <span class="cbg">    pruned_regions[]         </span><span class="cm"># partially truncated (e.g. old world_model belief entries)</span>
+  <span class="cbg">    dependent_tasks[]</span>
+  <span class="cbg">  rollback_points[]</span>
+
+  <span class="cr">failure_diagnostics       </span><span class="cm"># diagnostic memory — not a controller</span>
+  <span class="cr">  failure_mode_library      </span><span class="cm"># read-only; contributes as one of four hypothesis generation sources</span>
+  <span class="cr">  matched_pattern           </span><span class="cm"># confidence normalised [0,1] before entering resolve_control_state() tier 4</span>
+
+  <span class="cm2">experience_store          </span><span class="cm"># optional, external. Without it: warm_start is a no-op; strategy priors flat; no cross-run learning</span>
+  <span class="cx">reversibility_strategy    </span><span class="cm"># per-action: snapshot | git-revert | patch-rollback | ephemeral</span>
+  step = 0; steps_used = 0
+
+<span class="cm2">warm_start</span>(experience_store):
+  <span class="cm">  # no-op if experience_store unavailable</span>
+  <span class="cm">  # loads reusable structures — not just probability priors:</span>
+  <span class="cm">  # strategy_state.prior_strategy_weights ← empirical success rates by (strategy_type, failure_class)</span>
+  <span class="cm">  # failure_mode_library.class_priors      ← base rates from prior runs</span>
+  <span class="cm">  # dep_graph_budget.prior_decay_rates      ← calibrated decay rates if available</span>
+  <span class="cm">  # structural reuse: successful_decompositions → seed task_graph</span>
+  <span class="cm">  #                   successful_tool_workflows → seed plan_tool_workflow()</span>
+  <span class="cm">  #                   successful_verification_plans → seed verification_adequacy_critic</span>
+  <span class="cm">  #                   successful_recovery_sequences → seed strategy_state recovery ordering</span>
+  <span class="cm">  # without warm_start: can still detect recurrence mid-run via failure_history</span>
+  <span class="cm">  #   but cannot enter the run already biased toward better strategies for this task class</span>
+
+<span class="ccs">cannot_make_progress</span>():
+  <span class="cm">  # four measurable proxies — all thresholds are documented implementation constants</span>
+  <span class="cm">  # (1) completion_velocity:  task_graph.completed_count unchanged for STALL_WINDOW consecutive steps</span>
+  <span class="cm">  # (2) strategy_loop:        strategy_state.switch_count &gt; MAX_SWITCHES with no completed_count advance</span>
+  <span class="cm">  # (3) failure_recurrence:   same failure_mode matched in ≥ RECURRENCE_THRESHOLD consecutive entries</span>
+  <span class="cm">  # (4) arb_oscillation:      risk_state alternated above/below CAUTIOUS for OSCILLATION_WINDOW steps</span>
+  <span class="cm">  # any one condition → True</span>
+  <span class="kw">return</span> any(completion_velocity_stalled, strategy_loop, failure_recurrence, oscillation)
+
+<span class="carb">resolve_control_state</span>(diagnostics, world_model, failure_diagnostics, step):
+  <span class="cm">  # asserts control_state.generation_id == world_model.generation_id before reading</span>
+  <span class="cm">  # if stale: recompute diagnostics before calling — stale vector is a structural bug, not a runtime condition</span>
+  <span class="cm">  # all inputs normalised [0,1] via normalise(raw_value, dimension)</span>
+  <span class="cm">  # five implicit tiers applied in strict order:</span>
+  <span class="cm">  # TIER 1 (BLOCKED/HALT): any contradiction with severity=SYSTEM_BREAKING → escalation_reason=CONTRADICTION; return</span>
+  <span class="cm">  # TIER 2 (BLOCKED/block_mask): any diagnostic dimension &lt; CRITICAL_THRESHOLD</span>
+  <span class="cm">  #   → add dimension's action_class to block_mask</span>
+  <span class="cm">  #   DEADLOCK CHECK: if block_mask has two entries whose recovery actions are mutually blocked</span>
+  <span class="cm">  #     → escalation_reason=HUMAN_REQUIRED; do not attempt autonomous recovery</span>
+  <span class="cm">  # TIER 3 (CAUTIOUS/explore): symptom_coverage or explanation_coverage below threshold</span>
+  <span class="cm">  #   → risk_state=CAUTIOUS; conflict rule: allow exploration not requiring blocked dimension</span>
+  <span class="cm">  # TIER 4 (CAUTIOUS/proportional): belief_health sub-scores low OR matched_pattern.confidence high</span>
+  <span class="cm">  #   → proportional caution elevation (weights are documented constants)</span>
+  <span class="cm">  # TIER 5 (NORMAL): no signal above threshold</span>
+  <span class="cm">  # dep_class_gap_annotation attached to control_state.notes[] — NOT evaluated in any tier</span>
+  control_state.generation_id = world_model.generation_id
+  <span class="kw">return</span> control_state
+
+<span class="cm"># ---- INITIAL SETUP ----</span>
+<span class="cp">validate_task_graph()</span>
+<span class="carb">diagnostics.verification_health.feasibility = normalise(check_abstraction_alignment(task_graph, objective))</span>
+<span class="carb">diagnostics.coverage_health.symptom_coverage = normalise(init_coverage_estimate(world_model, hypothesis_set))</span>
+<span class="carb">diagnostics.coverage_health.explanation_coverage = normalise(compute_source_entropy(hypothesis_set))</span>
+<span class="carb">diagnostics.dep_class_gap_annotation = estimate_dep_class_gap(belief_dep_graph, world_model)</span><span class="cm">  # annotation only</span>
+<span class="cb">world_model.generation_id += 1</span>
+<span class="carb">control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step=0)</span>
+<span class="co">decomposition_gate(task_graph, control_state)</span><span class="cm">   # asserts generation_id; → PROCEED|GATHER_CLARIFICATION|ESCALATE</span>
+<span class="cm2">warm_start(experience_store)</span><span class="cm">                 # no-op if unavailable</span>
+
+<span class="kw">while</span> not done <span class="kw">and</span> steps_used &lt; max_steps:
+  step += 1; steps_used += 1    <span class="cm">    # ─── SUB-STEP A: observation → selection → execution ───</span>
+  <span class="kw">if</span> steps_used >= 0.8 * max_steps:
+    <span class="cbg">diagnostics.verification_health.feasibility = min(feasibility, BUDGET_WARNING_FLOOR)</span>
+    <span class="cm">  # approaching cap → next resolve_control_state raises caution proportionally</span>
+
+  <span class="ccal">check_external_updates()              </span><span class="cm"># non-blocking poll; runs before staleness sweep</span>
+  <span class="kw">if</span> <span class="ccal">external_update_available</span>:
+    <span class="ccal">inject_clarification(pending_update); caller_state.update(pending_update)</span>
+    <span class="kw">if</span> <span class="ccal">caller_state.constraints_changed</span>:
+      <span class="cm">  # full constraint change propagation — same path as escalation-triggered update</span>
+      <span class="cc">detect_contradictions(world_model, updated_success_criteria, hypothesis_set)</span>
+      <span class="ccal">update_success_criteria(caller_state); update_output_contract(caller_state)</span>
+      <span class="cp">revalidate_task_graph(task_graph, updated_success_criteria)</span>
+      <span class="cb">world_model.generation_id += 1</span>
+      <span class="carb">control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step)</span>
+      <span class="kw">continue</span>
+
+  <span class="cbg">manage_context_budget():
+    context_pressure = assess_context_pressure(token_budget)
+    if context_pressure.critical:
+      dropped, pruned = compress_memory(compression_policy,
+          preserve=[world_model, belief_dep_graph, hypothesis_set, task_graph,
+                    diagnostics, control_state, caller_state, open_failures])
+      memory_state.compression_risk.compressed_structures.extend(dropped)
+      memory_state.compression_risk.pruned_regions.extend(pruned)    </span><span class="cm"># partial truncations</span>
+  <span class="cbg">  </span><span class="cm">  # world_model may be "present" but incomplete if in pruned_regions</span>
+  <span class="cbg">    </span><span class="cm">  # action_dep_overlap() checks both lists — presence ≠ completeness</span>
+  <span class="cbg">  journal_retention_policy.apply(execution_journal)
+    </span><span class="cm">  # retain: all failures · last N passing verbatim; compress older passing → (action_class, outcome, step)</span>
+
+  <span class="cb">staleness_sweep(world_model, environment_change_log)</span><span class="cm">  # TTL-based + environment-change invalidation</span>
+  <span class="cdep">dep_graph_budget.apply_decay(belief_dep_graph)</span><span class="cm">        # edge confidence decay independently of content changes</span>
+
+  <span class="ce">gather_evidence()             </span><span class="cm"># Evidence(obs, reliability, source, evidence_type, freshness)</span>
+  <span class="ce">apply_tool_reliability_envelope(evidence, tool_reliability_envelopes)</span>
+  <span class="cm">  # tool reliability envelopes cap max conclusion reliability per tool — HIGH obs ≠ HIGH conclusion</span>
+
+  <span class="cb">update_world_model(evidence_store)</span>
+  <span class="cm">  # reliability-weighted integration; observations stored raw — never auto-promoted to conclusions</span>
+  <span class="cb">  diagnostics.belief_health.freshness     = normalise(1 - stale_flag_ratio,      'ratio')</span>
+  <span class="cb">  diagnostics.belief_health.consistency   = normalise(1 - contradiction_density,  'ratio')</span>
+  <span class="cb">  diagnostics.belief_health.support       = normalise(mean_reliability_weight,    'weight')</span>
+
+  <span class="cdep">propagate_beliefs(belief_dep_graph, dep_graph_budget)</span>
+  <span class="cm">  # low-confidence edges propagate with proportionally lower weight; budget breach → wider invalidation</span>
+
+  <span class="ch">update_hypothesis_set(world_model, evidence_store, hypothesis_gen_policy)</span>
+  <span class="cm">  # four structurally distinct generation sources: symptom_inference · counterfactual</span>
+  <span class="cm">  #   failure_mode_library (one of four — not a controller) · analogy_based_generation</span>
+  <span class="cm">  # diversity_score enforced; if below 0.7 threshold, additional passes forced</span>
+  <span class="ch">  elimination_policy.apply(hypothesis_set, evidence_store, world_model)</span>
+  <span class="cm">  # eliminates: contradicting evidence | prediction_failure_count ≥ K | posterior &lt; FLOOR</span>
+  <span class="cm">  # retains last K eliminated for reconsideration on world model update</span>
+
+  <span class="cc">detect_contradictions(world_model, evidence_store, hypothesis_set)</span>
+  <span class="cm">  # typed: pairwise|set-level|temporal|abstraction</span>
+  <span class="cm">  # SYSTEM_BREAKING: does NOT inline halt — enters world_model.contradictions[]</span>
+  <span class="cm">  # picked up by TIER 1 of next resolve_control_state() — same code path regardless of loop position</span>
+  <span class="kw">  for</span> c <span class="kw">in</span> contradictions: world_model.contradictions.add(c); apply_resolution_policy(c, world_model)
+
+  <span class="cr">failure_diagnostics.matched_pattern = failure_mode_library.match(world_model, hypothesis_set, task_graph)</span>
+  <span class="cm">  # confidence normalised [0,1] before entering tier 4</span>
+
+  <span class="carb">update_diagnostics():
+    diagnostics.coverage_health.symptom_coverage     = normalise(1 - uncovered_symptom_ratio,  'ratio')
+    diagnostics.coverage_health.explanation_coverage = normalise(hypothesis_source_entropy,     'entropy')
+    diagnostics.dep_class_gap_annotation             = estimate_dep_class_gap()  </span><span class="cm"># advisory annotation only</span>
+  <span class="carb">  diagnostics.verification_health.strength          = normalise(verification_strength,    'verify')
+    diagnostics.verification_health.feasibility       = normalise(tool_adequacy + evidence_adequacy, 'feasibility')
+    diagnostics.execution_health.progress_rate        = normalise(completion_velocity,       'velocity')
+    diagnostics.execution_health.failure_recurrence   = normalise(recurrence_rate,           'recurrence')
+    diagnostics.execution_health.oscillation_score    = normalise(oscillation_rate,          'oscillation')</span>
+
+  <span class="kw">if</span> task_graph.changed:
+    <span class="carb">diagnostics.verification_health.feasibility = normalise(check_abstraction_alignment(task_graph, world_model), 'fit')</span>
+    <span class="cm">  # mid-loop: recalculated only on task_graph.changed; reviewer pass recalculates unconditionally</span>
+
+  <span class="cb">world_model.generation_id += 1             </span><span class="cm"># sub-step A: mark world model updated pre-execution</span>
+  <span class="carb">control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step)</span>
+  <span class="cm">  # sub-step A control state — action_gate and select_best_action() assert generation_id against this value</span>
+
+  <span class="kw">if</span> <span class="cp">completion_check_inner(success_criteria)</span>: <span class="kw">break</span>
+
+  <span class="ccs">progress = evaluate_progress(success_criteria, task_graph, strategy_state)
+  if progress.stalled: strategy_state.signal_switch()</span>
+
+  <span class="cp">update_task_graph(objective, world_model, hypothesis_set)</span>
+
+  <span class="cp">current_task = select_unblocked_leaf(task_graph):</span>
+  <span class="cm">  # tasks with all depends_on COMPLETE are eligible</span>
+  <span class="cm">  # if control_state.escalation_reason == HUMAN_REQUIRED: do not select — escalate immediately</span>
+  <span class="kw">  if</span> current_task.parallel_eligible:
+    <span class="cp">    conflict_prob = conflict_probability_cache.estimate(current_task, active_parallel_tasks, task_graph)</span>
+    <span class="kw">    if</span> conflict_prob &gt; PESSIMISTIC_THRESHOLD:
+      <span class="cp">      check_parallel_write_conflicts(current_task, active_parallel_tasks, task_graph)</span><span class="cm">  # block on overlap</span>
+    <span class="cm">    # else: optimistic — both proceed; parallel branch merge detects via contradiction on merged world model</span>
+    <span class="cp">    check_parallel_belief_consistency(active_parallel_tasks, world_model)</span><span class="cm">  # divergence before execution</span>
+
+  <span class="ccs">strategy_state.update(world_model, control_state, progress, failure_diagnostics.matched_pattern)</span>
+
+  <span class="carb">voi = estimate_value_of_information():</span>
+  <span class="cm">  # VOI = expected_uncertainty_reduction × decision_impact</span>
+  <span class="cm">  # high VOI → gather additional targeted evidence before action selection</span>
+  <span class="cm">  # low VOI → proceed to action selection (favour action over information)</span>
+  <span class="cm">  # verification_adequacy_critic runs here:</span>
+  <span class="cm">  #   consults tool_availability_manifest to prune 9-layer checks whose tools are unavailable</span>
+  <span class="cm">  #   LOW adequacy forces evidence-gathering pass; HIGH risk requires adversarial verification pass</span>
+  <span class="cm">  #   if adequacy cannot be raised → updates verification_health.strength → feeds next control resolution</span>
+  <span class="cm">  #   does not loop forever — unresolvable inadequacy escalates via TIER 1/2</span>
+  <span class="kw">  if</span> voi &gt; threshold: gather_additional_evidence()
+
+  <span class="cx">risk = estimate_risk(current_task)</span><span class="cm">  # file centrality · change scope · module type</span>
+  <span class="kw">  if</span> risk == HIGH: reduce_edit_size(); increase_verification()
+
+  <span class="cb">action = select_best_action(current_task, world_model, belief_dep_graph, hypothesis_set,
+                               strategy_state, control_state, token_budget)
+  </span><span class="cm">  # control_state is the SOLE CONTROL input:</span>
+  <span class="cm">  #   block_mask suppresses action classes; risk_state==CAUTIOUS adjusts explore/exploit</span>
+  <span class="cm">  #   escalation_reason==HUMAN_REQUIRED → do not select — escalate immediately</span>
+  <span class="cm">  # all other parameters: read-only informational CONTEXT — scope the search space only</span>
+  <span class="cm">  # assert control_state.generation_id == world_model.generation_id (sub-step A value)</span>
+
+  <span class="cbg">dep_overlap = memory_state.compression_risk.action_dep_overlap(action)</span>
+  <span class="cm">  # checks intersection of action's required structures against compressed_structures[] AND pruned_regions[]</span>
+  <span class="cm">  # "structure present" ≠ "structure complete" — may fail on pruned belief regions</span>
+  <span class="kw">  if</span> dep_overlap <span class="kw">and</span> risk == HIGH:
+    <span class="cbg">  escalate(f"action depends on compressed/pruned state: {dep_overlap}")</span>
+
+  <span class="co">action_gate(action, control_state):</span><span class="cm">  # asserts generation_id; re-invoke resolve_control_state() if stale</span>
+  <span class="cm">  # block_mask → BLOCK; escalation_reason → ESCALATE; high caution → add exploration step</span>
+
+  <span class="ct">plan_tool_workflow(action, hypothesis_set, dep_graph_budget)</span>
+  <span class="cm">  # dep graph refresh step when unverified_edge_ratio exceeded</span>
+  <span class="cm">  # hypothesis discriminating_evidence guides tests toward differentiating remaining hypotheses</span>
+
+  <span class="co">review_proposed_change(proposed_change, current_task, world_model, output_contract, hypothesis_set):</span>
+  <span class="cm">  # five dimensions — MUST pass before any mutation applied:</span>
+  <span class="cm">  # (1) task requirements alignment — implements current_task, no more and no less</span>
+  <span class="cm">  # (2) world model consistency — no contradiction with HIGH-reliability beliefs</span>
+  <span class="cm">  # (3) output contract pre-check — required interface fields present, no type regressions</span>
+  <span class="cm">  # (4) code quality heuristics — if tool_availability_manifest.linter == available</span>
+  <span class="cm">  # (5) open hypothesis compatibility — change must not contradict uneliminated hypotheses</span>
+  <span class="cm">  # failed review: block → re-invoke select_best_action() for alternative action</span>
+  <span class="cm">  # second consecutive failure same task → escalate_to_human (structural decomposition fault)</span>
+
+  <span class="cx">prepare_reversibility(action, reversibility_strategy)</span><span class="cm">  # snapshot|git-revert|patch-rollback|ephemeral</span>
+  <span class="cx">result = execute(proposed_change, tool_workflow)</span>
+  <span class="cb">environment_change_log.record(result)</span>
+
+  <span class="kw">if</span> result.is_tool_error:
+    <span class="ce">  evidence = Evidence(result.error, reliability=HIGH, src=result.tool, evidence_type=SYSTEM_ERROR, freshness=NOW)</span>
+    <span class="cb">  update_world_model(evidence)</span>
+    <span class="ch">  update_hypothesis_set(); elimination_policy.apply()</span>
+    <span class="cc">  detect_contradictions(); </span><span class="cdep">propagate_beliefs(belief_dep_graph, dep_graph_budget)</span>
+  <span class="kw">else</span>:
+    <span class="ce">  evidence = calibrate_tool_output(result, tool_workflow, tool_reliability_envelopes, context)</span>
+  current_task.status = VERIFYING
+
+  <span class="cv">verification = verify(result, success_criteria, world_model.assumptions):</span>
+  <span class="cm">  # 9 layers: syntax · unit · integration · consistency · requirements · assumptions</span>
+  <span class="cm">  #           · goal correctness · evidence sufficiency (claim-scoped threshold) · output contract (partial)</span>
+  <span class="cm">  # layers pruned if tool_availability_manifest reports unavailability (already penalised in feasibility above)</span>
+  <span class="cm">  # HIGH risk → adversarial verification pass</span>
+
+  step += 1                                 <span class="cm"># ─── SUB-STEP B: post-execution → verification → gate ───</span>
+
+  <span class="cb">update_world_model(result, verification)</span>
+  <span class="cc">detect_contradictions(world_model, evidence_store, hypothesis_set)</span>
+  <span class="cdep">propagate_beliefs(belief_dep_graph, dep_graph_budget)</span>
+  <span class="ch">update_hypothesis_set(); elimination_policy.apply()</span>
+  <span class="carb">update_diagnostics()                      </span><span class="cm"># recompute all health vectors with post-execution state</span>
+
+  <span class="cb">world_model.generation_id += 1            </span><span class="cm"># sub-step B: mark world model updated post-execution</span>
+  <span class="carb">control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step)</span>
+  <span class="cm">  # sub-step B control state — post_exec_gate asserts generation_id against this value (distinct from sub-step A)</span>
+
+  <span class="co">post_exec_gate(result, verification, control_state):</span><span class="cm">  # asserts generation_id (sub-step B)</span>
+  <span class="cm">  # → COMMIT|ROLLBACK|FLAG_FOR_REVIEW|HALT</span>
+  <span class="cout">  contract_shadow_check(result, output_contract):    </span><span class="cm"># lightweight — interface-stability only</span>
+  <span class="cm">    # required interface fields present · no type signature regressions</span>
+  <span class="cm">    # catches contract violations before they propagate through further task graph steps</span>
+  <span class="cm">    # full validate_output_contract() at end remains the authoritative pass</span>
+
+  <span class="cb">update_world_model(result, verification)</span>
+  <span class="cm2">if experience_store.available:
+    update_experience_store(action, strategy_state.current_strategy, outcome)
+  </span><span class="cm">  # store structures: successful tool_workflows, verification plans, recovery sequences — not just priors</span>
+
+  <span class="cp">update_task_state(COMPLETE if verification.passed else FAILED)
+  log_journal(action, tool_workflow, result, evidence, verification)</span>
+
+  <span class="kw">if</span> verification.failed:
+    <span class="cr">rollback(reversibility_strategy); record_failure()</span>
+    <span class="kw">if</span> repeated_failure_pattern() <span class="kw">or</span> failure_diagnostics.matched_pattern:
+      <span class="cr">  switch_strategy(strategy_state, failure_history, failure_diagnostics, experience_store)</span>
+      <span class="cm">  # within-run only without experience_store: can detect recurrence but cannot weight by prior outcomes</span>
+    <span class="cr">replan_scope = assess_replan_scope()
+    if replan_scope == GLOBAL: rebuild_task_graph(world_model); validate_task_graph()
+    else: diagnose_and_replan(current_task)</span>
+    <span class="cm">    # recovery strategy order: DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE</span>
+    <span class="cm">    # adaptive upgrade: replace fixed heuristic with softmax policy if experience_store available</span>
+
+  <span class="kw">if</span> control_state.risk_state == BLOCKED <span class="kw">or</span> cannot_make_progress():
+    <span class="cr">escalate(surface_blocker(reason, missing_info))
+    human_response = await_clarification()
+    if human_response:
+        inject_clarification(human_response); caller_state.update(human_response)</span>
+        <span class="kw">        if</span> caller_state.constraints_changed:
+          <span class="cm">          # constraint change propagation — not just a contract refresh</span>
+          <span class="cc">          detect_contradictions(world_model, updated_success_criteria, hypothesis_set)</span>
+          <span class="ccal">          update_success_criteria(caller_state); update_output_contract(caller_state)</span>
+          <span class="cp">          revalidate_task_graph(task_graph, updated_success_criteria)</span>
+          <span class="cb">          world_model.generation_id += 1</span>
+          <span class="carb">          control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step)</span>
+      <span class="cr">      continue
+    else: halt()</span>
+
+  <span class="cbg">token_budget.update(tokens_used_this_turn)</span>
+
+  <span class="kw">if</span> joining_parallel_branches:
+    <span class="cp">reconcile_parallel_branches():</span>
+    <span class="cm">  # each branch incremented step + generation_id independently</span>
+    <span class="cm">  # at join: merge world models; run contradiction detection on merged model</span>
+    <span class="cm">  # re-invoke resolve_control_state() on merged world model</span>
+    <span class="cm">  # merged control_state.generation_id = merged world_model.generation_id</span>
+    <span class="cm">  # conflict_probability_cache updated from actual write overlap at merge</span>
+
+<span class="kw">if</span> steps_used >= max_steps <span class="kw">and not</span> done:
+  <span class="cr">escalate("step budget exhausted — success_criteria not satisfied"); halt()</span>
+
+<span class="cm"># ─── REVIEWER PASS ───</span>
+<span class="cv">adversarial_prior = seed_adversarial_prior(world_model, success_criteria, failure_history)</span>
+<span class="cm"># seed: negate beliefs with HIGH causal proximity to success_criteria dependency chain</span>
+<span class="cm"># NOT merely high confidence — "no circular imports" (high proximity) vs "file path X" (low proximity)</span>
+<span class="cm"># also seed from failure_history failure class priors and dep_class_gap_annotation</span>
+<span class="cm"># adversarial_prior discarded after adversarial_lens() — does not pollute world_model</span>
+<span class="cv">reviewer_pass():
+  implementer_lens()                         </span><span class="cm"># "did I do what I intended?" — shares world_model</span>
+<span class="cv">  reviewer_lens()                            </span><span class="cm"># "what would a PR reviewer criticise?" — shares world_model</span>
+<span class="cv">  adversarial_lens(prior=adversarial_prior)  </span><span class="cm"># seeded on causal proximity; partially breaks shared blind spot</span>
+<span class="cm">  # implementer + reviewer lenses share world_model — shared blind spots remain a structural limitation</span>
+<span class="cm">  # adversarial lens mitigates but does not eliminate: evidence store still shared</span>
+<span class="cv">  evaluate: abstraction_alignment · hidden_assumptions · unresolved_contradictions · contract_compliance</span>
+
+<span class="cb">update_world_model(reviewer_findings)</span>
+<span class="ch">update_hypothesis_set(); elimination_policy.apply()</span>
+<span class="cc">detect_contradictions(); </span><span class="cdep">propagate_beliefs(belief_dep_graph, dep_graph_budget)</span>
+<span class="carb">diagnostics.verification_health.feasibility = normalise(check_abstraction_alignment(task_graph, world_model))</span>
+<span class="cm"># intentionally unconditional here — reviewer pass has full execution history; not limited to task_graph.changed</span>
+<span class="cb">world_model.generation_id += 1</span>
+step += 1
+<span class="carb">control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics, step)</span>
+<span class="cp">reopen_tasks = drain_propagation_queue()
+if reopen_tasks: requeue(reopen_tasks)       </span><span class="cm"># re-enter loop if reviewer findings require additional work</span>
+
+<span class="cout">validate_output_contract(final_result, output_contract)  </span><span class="cm"># full authoritative contract validation</span>
+completion_check_final(success_criteria)
+<span class="kw">return</span> final_result</div>
+</div>
+
+<!-- ═══════════════════════════ NODES ═══════════════════════════ -->
+<div id="nodes" class="tab-content">
+<div class="legend" id="legend"></div>
+<div id="node-list" class="node-list"></div>
+<div class="detail-panel" id="node-detail">
+  <div class="det-t">Click any node to inspect</div>
+  <div class="det-b">NORMAL/CAUTIOUS/BLOCKED control surface with full five-tier implementation detail. Two sub-steps per iteration via generation_id double-increment. Diagnostic health vectors replace multi-axis signal bus. All v15 invariants present as node-level detail.</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════ LAYERS ═══════════════════════════ -->
+<div id="layers" class="tab-content">
+<table class="layer-table">
+<thead><tr><th>Layer</th><th>Responsibility</th><th>Key constructs</th></tr></thead>
+<tbody id="layer-tbody"></tbody>
+</table>
+</div>
+
+<!-- ═══════════════════════════ STATE ═══════════════════════════ -->
+<div id="state" class="tab-content">
+<div class="state-grid" id="state-grid"></div>
+</div>
+
+<!-- ═══════════════════════════ DEEP DIVES ═══════════════════════════ -->
+<div id="dives" class="tab-content">
+<div class="dd-grid" id="dd-grid"></div>
+<div class="detail-panel" id="dd-detail">
+  <div class="det-t">Select a concept</div>
+  <div class="det-b">Key design decisions with honest notes about what is settled vs what remains implementation-dependent.</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════ SCOPE ═══════════════════════════ -->
+<div id="scope" class="tab-content">
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">This diagram captures the <strong style="color:var(--t0)">reasoning and control architecture</strong> of a general-purpose agent. Infrastructure is largely out of scope.</div>
+<div class="scope-grid">
+  <div class="scope-card">
+    <div class="scope-title" style="color:#4ade80">In scope</div>
+    <div class="si">Objective + success criteria + output contract</div>
+    <div class="si">Caller state (mutable: constraints · clarification history · constraint change propagation)</div>
+    <div class="si">check_external_updates() — proactive mid-loop poll for caller constraint updates</div>
+    <div class="si">World model + belief updates + completeness_flags for pruned regions + generation_id staleness</div>
+    <div class="si">Belief staleness (TTL + environment-change invalidation)</div>
+    <div class="si">Belief dependency graph + propagation + dep_graph_budget (unverified edge ratio · decay · refresh)</div>
+    <div class="si">Contradiction detection — typed severity (pairwise · set-level · temporal · abstraction)</div>
+    <div class="si">Hypothesis generation (four sources) + elimination policy (conditions · retention) + diversity enforcement</div>
+    <div class="si">Diagnostic health vectors (belief · coverage · verification · execution) — all normalised [0,1]</div>
+    <div class="si">Diagnostic normalisation contract — method defined per dimension</div>
+    <div class="si">resolve_control_state() — five implicit tiers in strict order; NORMAL|CAUTIOUS|BLOCKED output</div>
+    <div class="si">Deadlock detection — two block_mask entries mutually blocking recovery → HUMAN_REQUIRED</div>
+    <div class="si">generation_id staleness tracking — world_model + control_state must match; gates assert before reading</div>
+    <div class="si">Two-substep iteration model: sub-step A (pre-execution) and sub-step B (post-execution) via generation_id double-increment</div>
+    <div class="si">Parallel branch arbitration merge (generation_id reconciliation at join)</div>
+    <div class="si">Evidence (reliability, type, freshness) + tool reliability envelopes</div>
+    <div class="si">Observation vs conclusion separation — core invariant</div>
+    <div class="si">Task graph + decomposition confidence + structural validation</div>
+    <div class="si">Abstraction fit check on task graph change and unconditionally in reviewer pass</div>
+    <div class="si">Parallel write-conflict detection (pessimistic or optimistic per conflict_probability_cache)</div>
+    <div class="si">conflict_probability_cache — per write-domain pair; drives pessimistic vs optimistic concurrency</div>
+    <div class="si">Strategy state + progress assessment + strategy switch on repeated failure</div>
+    <div class="si">control_state as sole control input to action selection — all others read-only context</div>
+    <div class="si">VOI (value of information) — evidence gathering gated on expected uncertainty reduction × decision impact</div>
+    <div class="si">Pre-execution review gate — five dimensions before any mutation</div>
+    <div class="si">dep_class_gap_annotation — advisory only, not a numeric control input; surfaces to adversarial reviewer</div>
+    <div class="si">Policy gates asserting generation_id freshness before reading</div>
+    <div class="si">Tool workflows + tool error → Evidence(HIGH, SYSTEM_ERROR) path</div>
+    <div class="si">tool_availability_manifest — populated at init; consulted by verification_adequacy_critic</div>
+    <div class="si">Risk estimation</div>
+    <div class="si">Compression dependency risk (structured: compressed_structures + pruned_regions)</div>
+    <div class="si">Reversible mutation strategy</div>
+    <div class="si">9-layer verification + verification adequacy critic (active gate with exit condition)</div>
+    <div class="si">Contract shadow check at post-execution gate</div>
+    <div class="si">Assumption validation + invalidation</div>
+    <div class="si">Local vs global replanning</div>
+    <div class="si">Named recovery strategies (6) + failure mode library (diagnostic memory)</div>
+    <div class="si">Escalation + caller state update + full constraint change propagation</div>
+    <div class="si">max_steps budget cap — escalates to human if reached without satisfying success_criteria</div>
+    <div class="si">journal_retention_policy — prevents unbounded execution_journal growth</div>
+    <div class="si">cannot_make_progress() — four measurable proxies with documented threshold constants</div>
+    <div class="si">Budget tracking + compression policy</div>
+    <div class="si">Reviewer pass: three lenses; adversarial prior seeded on causal proximity</div>
+    <div class="si">Output contract validation before return</div>
+    <div class="si si-opt">Experience store (optional) — structures reuse, not just probability priors</div>
+    <div class="si si-opt">warm_start() — loads empirical strategy priors, failure class base rates, structural patterns if available</div>
+  </div>
+  <div class="scope-card">
+    <div class="scope-title" style="color:#94a3b8">Out of scope</div>
+    <div class="si si-x">Latency optimisation</div>
+    <div class="si si-x">Caching layers</div>
+    <div class="si si-x">Tool retry policies</div>
+    <div class="si si-x">Tool timeout handling</div>
+    <div class="si si-x">Sandboxing + permissions</div>
+    <div class="si si-x">Model routing</div>
+    <div class="si si-x">Parallel execution scheduling</div>
+    <div class="si si-x">Resource scheduling</div>
+    <div class="si si-x">Network + I/O handling</div>
+    <div class="scope-note">Implementation-dependent gaps: (1) normalisation baselines per diagnostic axis — rolling window vs theoretical min/max; (2) CRITICAL_THRESHOLD values per health dimension; (3) CAUTION_THRESHOLD constants per tier; (4) recovery strategy selection heuristics and softmax weights; (5) evidence sufficiency thresholds by claim scope; (6) tool reliability envelope calibration; (7) dep_class_gap_estimate calibration — relegated to advisory until empirical validation; (8) cannot_make_progress() threshold constants (STALL_WINDOW, MAX_STRATEGY_SWITCHES, RECURRENCE_THRESHOLD, OSCILLATION_WINDOW); (9) PESSIMISTIC_THRESHOLD for conflict_probability_cache; (10) journal_retention N size; (11) elimination_policy K retention size and posterior FLOOR; (12) VOI threshold — expected uncertainty reduction × decision impact; (13) adversarial prior seed quality — causal proximity filter is directional but imperfect.</div>
+    <div class="principle-box">
+      <strong>The architectural principle</strong>
+      Diagnostic health vectors (belief · coverage · verification · execution) replace the multi-axis signal bus. resolve_control_state() outputs NORMAL/CAUTIOUS/BLOCKED — a small, auditable surface. The five-tier implementation detail lives inside that function, not at the top level. generation_id double-increment per iteration preserves the two-substep model without named sub-step counters. Experience store reuses structures (decompositions, workflows, plans, sequences) not just probability priors. VOI gates additional evidence gathering. All v15 invariants — normalisation contract, deadlock detection, elimination policy, parallel concurrency model, adversarial reviewer, pre-execution review gate — remain present as implementation detail inside their respective nodes. The hard problems — calibrating thresholds, choosing VOI weights, populating the failure mode library, seeding the adversarial prior — remain implementation-dependent and are honestly labelled.
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ─── TAB SWITCHING ─── */
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ─── LAYER DEFINITIONS ─── */
+const layers=[
+  {key:'caller',    label:'Caller State',    color:'#67e8f9', responsibility:'Requirements, constraints, clarifications.', constructs:'caller_state · current_constraints · clarification_history · check_external_updates() · inject_clarification() · constraint change propagation → task_graph + world_model + output_contract'},
+  {key:'world',     label:'World Model',     color:'#8b5cf6', responsibility:'Observations, beliefs, assumptions, contradictions.', constructs:'world_model · generation_id · observations (raw) · beliefs (interpreted) · assumptions (unverified) · contradictions (typed severity) · environment_change_log · completeness_flags · staleness_sweep() · belief_dep_graph · dep_graph_budget · propagate_beliefs()'},
+  {key:'reasoning', label:'Reasoning',       color:'#4ade80', responsibility:'Evidence handling, hypothesis generation, and information value.', constructs:'evidence_store · Evidence(obs,reliability,source,type,freshness) · tool_reliability_envelopes · hypothesis_set · elimination_policy · generation_sources (4) · diversity_score · voi = estimate_value_of_information()'},
+  {key:'planning',  label:'Planning',        color:'#60a5fa', responsibility:'Task decomposition, scheduling, and parallel concurrency.', constructs:'task_graph · goal→subgoals→tasks · depends_on · status (6-state) · parallel_write_domains · abstraction_level · conflict_probability_cache · pessimistic vs optimistic concurrency · validate_task_graph() · reconcile_parallel_branches()'},
+  {key:'control',   label:'Control',         color:'#f0abfc', responsibility:'Risk state management — interprets diagnostics; owns no state.', constructs:'diagnostics (belief_health · coverage_health · verification_health · execution_health) · resolve_control_state() → NORMAL|CAUTIOUS|BLOCKED · five implicit tiers · block_mask · escalation_reason · deadlock detection · generation_id gate assertion · dep_class_gap_annotation (advisory only)'},
+  {key:'execution', label:'Execution',       color:'#fbbf24', responsibility:'Action selection and mutation.', constructs:'select_best_action() (control_state sole CONTROL input) · estimate_risk() · plan_tool_workflow() · prepare_reversibility() · execute() · action_dep_overlap() compression check · reversibility_strategy'},
+  {key:'verify',    label:'Verification',    color:'#f87171', responsibility:'Testing and validation at every gate.', constructs:'9-layer verify() · verification_adequacy_critic · tool_availability_manifest · VOI-driven adequacy · adversarial verification pass · reviewer_pass (3 lenses) · adversarial_prior seeded on causal proximity · validate_output_contract()'},
+  {key:'policy',    label:'Policy',          color:'#ec4899', responsibility:'Gate enforcement at decomposition, action, and post-execution.', constructs:'decomposition_gate · action_gate · post_exec_gate · review_proposed_change() (5 dimensions) · contract_shadow_check() · all gates assert control_state.generation_id freshness'},
+  {key:'recovery',  label:'Recovery',        color:'#f97316', responsibility:'Rollback and replanning on failure.', constructs:'rollback() · record_failure() · switch_strategy() · replan_scope (LOCAL|GLOBAL) · named strategies: DIRECT_EDIT|TRACE_EXEC|BROADER_SEARCH|REIMPLEMENT|MINIMAL_FIX|ESCALATE · failure_mode_library (diagnostic memory) · cannot_make_progress() (4 proxies) · escalate()'},
+  {key:'memory',    label:'Memory',          color:'#a3e635', responsibility:'Compression, journals, and budget.', constructs:'token_budget · max_steps · steps_used · journal_retention_policy · compression_risk (compressed_structures[] + pruned_regions[]) · completeness_flags · action_dep_overlap()'},
+  {key:'meta',      label:'Learning (opt.)', color:'#94a3b8', responsibility:'Experience reuse across runs.', constructs:'experience_store · warm_start() · successful_decompositions · successful_tool_workflows · successful_verification_plans · successful_recovery_sequences · failure_patterns · strategy_weights · class_priors · no-op if unavailable'},
+];
+
+/* ─── LAYER TABLE ─── */
+const tbody=document.getElementById('layer-tbody');
+layers.forEach(l=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><span class="layer-dot" style="background:${l.color}"></span>${l.label}</td><td>${l.responsibility}</td><td style="font-size:11px;color:var(--t1)">${l.constructs}</td>`;
+  tbody.appendChild(tr);
+});
+
+/* ─── LEGEND ─── */
+const leg=document.getElementById('legend');
+layers.forEach(l=>{
+  const el=document.createElement('div');el.className='leg';
+  el.innerHTML=`<div class="leg-dot" style="background:${l.color}"></div><span>${l.label}</span>`;
+  leg.appendChild(el);
+});
+
+/* ─── NODE DEFINITIONS ─── */
+const nodes=[
+  {id:1,title:'Initialize',layer:'planning',color:'#60a5fa',
+   sub:'world_model (generation_id + completeness_flags) · belief_dep_graph + budget · hypothesis_set + elimination_policy · tool_availability_manifest · task_graph + conflict_probability_cache · diagnostics (health vectors) · control_state · memory_state (compression_risk structured) · max_steps + journal_retention · reversibility_strategy',
+   desc:'All persistent state initialized. Key design decisions: (1) world_model gains generation_id (increments on every significant update) and completeness_flags[] to record pruned regions — "structure present" ≠ "structure complete". (2) caller_state is a mutable first-class object: current_constraints, clarification_history, last_update — updated by inject_clarification() or check_external_updates(); if constraints_changed, full propagation follows. (3) Diagnostics organized as four health vectors (belief_health, coverage_health, verification_health, execution_health), each with 2–3 sub-dims normalised [0,1] — informational only; control_state is the sole consumer. (4) control_state has small surface: risk_state (NORMAL/CAUTIOUS/BLOCKED), escalation_reason, block_mask[], generation_id — must match world_model.generation_id. (5) compression_risk tracks both compressed_structures[] (fully dropped) and pruned_regions[] (partially truncated); action_dep_overlap() checks both. (6) tool_availability_manifest populated once at init — consulted by verification_adequacy_critic and review_change() before planning. (7) max_steps + steps_used: hard cap that escalates to human if reached; warn at 0.8×max_steps. (8) journal_retention_policy: last N passing verbatim, all failures indefinitely, compress older passing. (9) elimination_policy defined at init: conditions and K-retention size. (10) conflict_probability_cache per write-domain pair — drives pessimistic vs optimistic parallel concurrency. (11) reversibility_strategy per-action: snapshot | git-revert | patch-rollback | ephemeral.'},
+  {id:2,title:'Warm Start',layer:'meta',color:'#94a3b8',
+   sub:'optional · loads strategy priors + failure class base rates + structural patterns · flat priors if absent',
+   desc:'Runs only when experience_store.available; no-op otherwise. Key insight from v16: loads reusable structures, not just probability priors. Specifically: (a) strategy_state.prior_strategy_weights ← empirical success rates by (strategy_type, failure_class) from prior runs; (b) failure_mode_library.class_priors ← base rates from prior runs, biasing match confidence; (c) dep_graph_budget.prior_decay_rates ← calibrated rates if available; (d) structural reuse: successful_decompositions → seed task_graph patterns, successful_tool_workflows → seed plan_tool_workflow(), successful_verification_plans → seed verification_adequacy_critic, successful_recovery_sequences → seed strategy_state recovery ordering. A successful decomposition is often more valuable than a success-rate prior. Without warm_start, strategy selection begins flat — the agent can still detect recurrence mid-run via failure_history but cannot enter biased toward better strategies for this task class.'},
+  {id:3,title:'Check Caller Updates',layer:'caller',color:'#67e8f9',
+   sub:'non-blocking poll · proactive mid-loop caller input · full constraint propagation if constraints changed · generation_id increments',
+   desc:'Non-blocking poll for new caller input, runs at the top of each iteration before the staleness sweep. If an update is available: inject_clarification(pending_update), caller_state.update(pending_update). If constraints_changed — the full constraint change propagation path runs: detect_contradictions() against updated success_criteria; update_success_criteria(caller_state); update_output_contract(caller_state); revalidate_task_graph(). This is constraint change propagation, not just a contract refresh — scope narrowing may invalidate task subtrees; scope expansion may require new tasks. world_model.generation_id increments; control_state is refreshed; iteration restarts via continue. This path is identical to the escalation-triggered constraint propagation. Without this node, the architecture could only receive caller updates when stuck and escalating — proactive updates from a caller who sends new requirements mid-run would be ignored until an escalation point.'},
+  {id:4,title:'Context Compression',layer:'memory',color:'#a3e635',
+   sub:'compress_memory() → compressed_structures[] AND pruned_regions[] separately · completeness_flags · journal_retention · staleness_sweep + dep_graph decay',
+   desc:'When context_pressure is critical, compress_memory() returns two separate lists: dropped (fully removed structures) and pruned (partially truncated — e.g. old world_model belief entries). compression_risk tracks both. action_dep_overlap(action) checks the intersection against both lists — escalation fires only when the intersection is non-empty AND risk is HIGH. "world_model not in compressed_structures[]" does not mean world_model is complete — it may have pruned_regions[] that invalidate specific belief lookups. completeness_flags[] records which world_model regions were pruned. After compression: staleness_sweep(world_model, environment_change_log) — TTL-based + environment-change-based invalidation of beliefs. Then dep_graph_budget.apply_decay(belief_dep_graph) — edge confidence decay independently of content changes. journal_retention_policy runs every iteration: retain all failure entries and last N passing verbatim; compress older passing entries to (action_class, outcome, step) summary records.'},
+  {id:5,title:'Gather Evidence',layer:'reasoning',color:'#4ade80',
+   sub:'Evidence(obs, reliability, source, evidence_type, freshness) · observations raw — never auto-promoted to conclusions',
+   desc:'Evidence carries four explicit dimensions: reliability class (H/M/L) reflects source trust; evidence_type distinguishes SYSTEM_ERROR from OBSERVATION from INFERENCE; freshness tracks when acquired; source identifies the tool. Core invariant: a HIGH-reliability observation does not automatically produce a HIGH-reliability conclusion. Tool outputs generate observations — conclusions inherit additional uncertainty bounded by the tool reliability envelope. This separation (observation vs conclusion) is the structural invariant most easily eroded under execution pressure. Observations are stored separately from conclusions in world_model.observations[] and never promoted without explicit inference.'},
+  {id:6,title:'Apply Tool Reliability',layer:'reasoning',color:'#4ade80',
+   sub:'tool reliability envelopes · cap max conclusion reliability per tool · observation_coverage proxy updated · HIGH obs ≠ HIGH conclusion',
+   desc:'Tool reliability envelopes are applied after evidence is gathered. Each tool has known limitations bounding the maximum reliability of conclusions derivable from its output given known scope limits. Example: "grep returned no results" is a HIGH-reliability observation; "symbol is unused" is a LOW-reliability conclusion because the search scope may have been limited. tool_availability_manifest (populated at init) records which tools are available and what fallbacks exist — consulted by the verification_adequacy_critic before planning the 9-layer check. diagnostics.verification_health.feasibility is updated from evidence_freshness_mean and tool_envelope_gap count (normalised). This penalises verification plans that depend on unavailable or limited-envelope tools before execution begins.'},
+  {id:7,title:'Update World Model',layer:'world',color:'#8b5cf6',
+   sub:'reliability-weighted integration · belief_dep_graph propagation · belief_health proxies updated · completeness_flags updated',
+   desc:'New evidence integrated using reliability-weighted integration. Observations stored raw; conclusions only added when explicitly inferred with a documented source chain. belief_health proxies recomputed: freshness = normalise(1 − stale_flag_ratio), consistency = normalise(1 − contradiction_density), support = normalise(mean_reliability_weight). Three sub-proxies collapsed to one normalised scalar per dimension — this is a documented design trade-off (information loss vs interpretability). The upgrade path if the scalar proves too coarse: expose sub-proxies as separate named diagnostic fields and allow policy gates to inspect them directly. After integration: propagate_beliefs(belief_dep_graph, dep_graph_budget) — low-confidence edges propagate with proportionally lower weight; budget breach shifts to wider invalidation. dep_graph_quality recomputed from unverified_edge_ratio and rolling prediction_accuracy. completeness_flags[] updated if any regions are confirmed present or newly pruned.'},
+  {id:8,title:'Detect Contradictions',layer:'contra',color:'#fb7185',
+   sub:'typed: pairwise|set-level|temporal|abstraction · severity: LOW|MEDIUM|HIGH|SYSTEM_BREAKING · scope: local|task|global · SYSTEM_BREAKING does NOT inline halt',
+   desc:'Typed contradiction detection. Every contradiction is annotated with type (pairwise: two beliefs directly conflict; set-level: a set of beliefs is jointly inconsistent; temporal: a belief conflicts with its predecessor; abstraction: a belief at one abstraction level conflicts with one at another), severity, and scope (local: affects one task; task: affects a subgraph; global: affects the full objective). SYSTEM_BREAKING severity does NOT trigger an inline halt at the detection point — it enters world_model.contradictions[] and is picked up by TIER 1 of the next resolve_control_state() call. This ensures all system-breaking contradictions produce the same response through the same resolution path regardless of where in the loop they are detected. Lower severities feed TIER 2 and TIER 4 proportionally. Scope drives replan breadth: local → diagnose_and_replan(current_task); global → rebuild_task_graph().'},
+  {id:9,title:'Generate / Update Hypotheses',layer:'hypo',color:'#f59e0b',
+   sub:'four structurally distinct sources · diversity_score enforced (threshold 0.7) · elimination_policy.apply() · eliminated set capped at K',
+   desc:'Hypothesis generation enforces contributions from four structurally distinct sources: symptom_inference (infer explanation from symptom clusters), counterfactual_reasoning (what condition would explain the observed outcome), failure_mode_library (one of four sources — provides pattern-based hypotheses but does NOT control execution), and analogy_based_generation (adapt hypotheses from structurally similar past situations). diversity_score computed: if below 0.7 threshold, additional generation passes forced until structural diversity is satisfied. diagnostics.coverage_health.explanation_coverage updated from hypothesis_source_entropy (normalised Shannon entropy — divided by log2(num_sources) to bound to [0,1]). After generation: elimination_policy.apply() eliminates hypotheses satisfying any condition (contradicting evidence | prediction_failure_count ≥ K | posterior < FLOOR). The last K eliminated hypotheses are retained in eliminated[] for potential reconsideration on world model update — prevents unbounded growth of the eliminated set.'},
+  {id:10,title:'Update Diagnostics',layer:'control',color:'#f0abfc',
+   sub:'all health vectors recomputed · failure_mode_library.match() · dep_class_gap advisory annotation · abstraction_fit on task_graph change',
+   desc:'Diagnostic health vectors recomputed after world model, hypothesis, and contradiction updates: belief_health (freshness, consistency, support); coverage_health (symptom_coverage = normalise(1 − uncovered_symptom_ratio), explanation_coverage = normalise(hypothesis_source_entropy)); verification_health (strength from coverage_layer_count × adversarial_pass_rate, feasibility from tool adequacy + evidence adequacy); execution_health (progress_rate, failure_recurrence, oscillation_score). failure_diagnostics.matched_pattern updated: failure_mode_library.match() returns a named pattern and raw confidence; confidence normalised [0,1] before entering resolve_control_state() TIER 4 — ensures it is commensurable with belief_health sub-scores. dep_class_gap_annotation recomputed: attached to diagnostics as an advisory note only — NOT passed as a numeric input to any control tier; surfaces to the adversarial reviewer lens and human review on escalation. If task_graph.changed: abstraction_fit recomputed and fed into verification_health.feasibility.'},
+  {id:11,title:'Resolve Control State',layer:'control',color:'#f0abfc',
+   sub:'NORMAL|CAUTIOUS|BLOCKED · five implicit tiers in strict order · deadlock check in tier 2 · generation_id stamped · dep_class_gap advisory',
+   desc:'resolve_control_state() applies five implicit tiers in strict order. PRE: asserts control_state.generation_id == world_model.generation_id; if stale, recompute diagnostics first — stale control state is a structural bug, not a runtime condition. TIER 1 (BLOCKED/halt): any contradiction with severity=SYSTEM_BREAKING → escalation_reason=CONTRADICTION; return immediately. TIER 2 (BLOCKED/block_mask): any diagnostic dimension below CRITICAL_THRESHOLD (dimension-specific, documented at init) → add dimension\'s dependent action_class to block_mask. DEADLOCK CHECK: if block_mask contains two entries whose recovery actions are mutually blocked, set escalation_reason=HUMAN_REQUIRED — do not attempt autonomous recovery. TIER 3 (CAUTIOUS/explore): coverage_health.symptom_coverage < HIGH_THRESHOLD OR explanation_coverage < DIVERSITY_FLOOR → risk_state=CAUTIOUS. Conflict rule: if TIER 2 block_mask conflicts with exploration bias, allow exploration actions that do not require the blocked dimension. TIER 4 (CAUTIOUS/proportional): belief_health sub-scores below CAUTION_THRESHOLD OR matched_pattern.confidence > PATTERN_THRESHOLD → caution proportionally elevated (weights are documented implementation constants; all inputs normalised [0,1]). TIER 5 (NORMAL). dep_class_gap_annotation is NOT evaluated in any tier — attached to control_state.notes[] as a diagnostic annotation. control_state.generation_id stamped to world_model.generation_id.'},
+  {id:12,title:'Update Task Graph',layer:'planning',color:'#60a5fa',
+   sub:'decomposition confidence · structural validation · cycle detection · abstraction_fit check on change',
+   desc:'Task graph updated to reflect new world model state. Tasks gain or lose blocking conditions as depends_on completion status changes. New subtasks may be added if world model reveals additional necessary work. Structural checks run: cycle detection, consistency between depends_on declarations and status. abstraction_fit recomputed (normalised) and fed into diagnostics.verification_health.feasibility when task_graph.changed — mid-loop the recalculation is conditional on change; the reviewer pass recalculates unconditionally. parallel_write_domains updated for new or modified tasks. conflict_probability_cache estimated per write-domain pair from task_graph structure (supplemented by experience_store.write_conflict_history if available).'},
+  {id:13,title:'Select Task',layer:'planning',color:'#60a5fa',
+   sub:'depends_on · conflict_probability → pessimistic or optimistic · belief consistency · parallel branch merge on join',
+   desc:'Tasks with all depends_on COMPLETE are eligible. If control_state.escalation_reason == HUMAN_REQUIRED: do not select — escalate immediately. For parallel-eligible tasks: conflict_probability_cache.estimate() consulted first. If conflict_prob > PESSIMISTIC_THRESHOLD: pessimistic write-domain conflict detection blocks overlapping tasks. If conflict_prob ≤ PESSIMISTIC_THRESHOLD: optimistic concurrency — both tasks proceed; parallel branch merge handles conflict detection via contradiction detection on the merged world model. Inter-task belief consistency checked before execution regardless of concurrency model — belief divergence caught before execution, not after merge. Parallel branch merge procedure at join: (a) take max(generation_id) across all joining branches; (b) merge world model states, run contradiction detection on the merge; (c) invoke resolve_control_state() on merged world model; (d) merged control_state.generation_id = merged world_model.generation_id; (e) conflict_probability_cache updated from actual write overlap at merge.'},
+  {id:14,title:'Estimate Risk',layer:'execution',color:'#fbbf24',
+   sub:'LOW · MEDIUM · HIGH · HIGH → smaller edits + deeper verification · separate from compression overlap check',
+   desc:'Risk estimated from file centrality (is the file imported by many others?), change scope (how many lines, how many functions affected), and module type (test file vs business logic vs infrastructure). HIGH risk reduces edit size (prefer targeted patches over large rewrites) and raises verification depth (additional test layers, adversarial verification pass). The compression overlap check (action_dep_overlap()) handles the separate concern of whether the action depends on compressed or pruned state — that is an orthogonal risk dimension that can coexist with LOW structural risk.'},
+  {id:15,title:'Estimate VOI',layer:'reasoning',color:'#4ade80',
+   sub:'VOI = expected_uncertainty_reduction × decision_impact · high VOI → gather more · verification_adequacy_critic runs here',
+   desc:'Before committing to action selection, estimate the value of additional information. VOI = expected_uncertainty_reduction × decision_impact. High VOI: gathering more evidence is worth the cost — uncertainty reduction would materially change action selection. Low VOI: the agent already has enough information to act; further gathering is waste. Verification adequacy critic runs in this node: consults tool_availability_manifest to prune any 9-layer checks whose required tools are unavailable — unavailability already penalises verification_health.strength before execution. LOW adequacy forces an evidence-gathering pass. HIGH risk claims require an adversarial verification pass. If adequacy cannot be raised — evidence structurally unavailable or tools unavailable — the shortfall updates verification_health.strength (normalised), which feeds the next control resolution and may trigger TIER 2 blocking. Prevents the indefinite gather loop of an inadequacy that cannot be resolved with available tools.'},
+  {id:16,title:'Review Proposed Change',layer:'policy',color:'#ec4899',
+   sub:'five dimensions · failed review → action re-selection · second consecutive failure same task → escalate',
+   desc:'review_change() is a pre-execution quality gate that checks the proposed change before any mutation is applied. Five review dimensions: (1) task requirements alignment — the change implements what current_task specifies, no more and no less; (2) world model consistency — the change does not contradict any HIGH-reliability belief currently in world_model; (3) output contract pre-check — required interface fields are still present, no type signature regressions introduced; (4) code quality heuristics — linter-reachable checks if tool_availability_manifest confirms linter is available; (5) open hypothesis compatibility — the change must not contradict any currently uneliminated hypothesis in hypothesis_set. A failed review does not immediately escalate. The action is blocked and select_best_action() is re-invoked for the same task. A second consecutive review failure on the same task indicates the task decomposition or world model has a structural problem that action re-selection cannot resolve — this triggers escalation_to_human rather than further looping.'},
+  {id:17,title:'Execute',layer:'execution',color:'#fbbf24',
+   sub:'per-action reversibility · tool workflow · result logged to environment_change_log · tool error → Evidence(HIGH, SYSTEM_ERROR)',
+   desc:'Reversibility strategy selected per action: snapshot, git-revert, patch-rollback, or ephemeral (read-only actions). Result logged to environment_change_log for subsequent staleness sweeps. Tool errors are high-reliability observations about reality — not conclusions. Tool error path: Evidence(result.error, reliability=HIGH, evidence_type=SYSTEM_ERROR, freshness=NOW) fed directly to update_world_model(); hypothesis_set and failure_diagnostics updated; contradictions detected and propagated. The failure mode library does not redirect control here — it produces a diagnostic match that the next resolve_control_state() call reads via TIER 4. plan_tool_workflow() includes a dep graph refresh step when dep_graph_budget signals unverified edge ratio has been exceeded. Hypothesis set discriminating_evidence guides workflow design toward tests that differentiate remaining hypotheses.'},
+  {id:18,title:'Verify',layer:'verify',color:'#f87171',
+   sub:'9 layers (pruned by tool_availability_manifest) · evidence sufficiency claim-scoped · adversarial pass if HIGH risk',
+   desc:'Nine verification layers: syntax, unit, integration, consistency, requirements, assumptions, goal correctness, evidence sufficiency (claim-scoped threshold — not a single global bar; the threshold varies by claim scope: a local claim requires less evidence than a global claim), and partial output contract check. Layers whose required tools are reported unavailable by tool_availability_manifest are pruned — this shortfall was already penalised in verification_health.strength by the verification_adequacy_critic before execution; the adequacy penalty precedes the pruning so there is no double-counting. HIGH risk triggers an adversarial verification pass. Post-execution: post_exec_gate asserts control_state.generation_id (sub-step B value — distinct from the sub-step A value used by action_gate and select_best_action). After the gate decision: contract_shadow_check() runs a lightweight interface-stability check (required interface fields present, no type regressions). Not a full validation — full validate_output_contract() at loop end is authoritative.'},
+  {id:19,title:'Rollback + Replan',layer:'recovery',color:'#f97316',
+   sub:'rollback · failure_diagnostics advisory → strategy switch · local or global replan · six named recovery strategies',
+   desc:'On verification failure: rollback(reversibility_strategy); record_failure(); update failure_history. failure_diagnostics.matched_pattern (with normalised confidence) informs strategy switch as advisory input — it does not override; it biases. cannot_make_progress() is checked before escalation: its four proxies (completion velocity, strategy loop, failure recurrence, arbitration oscillation) are evaluated against documented threshold constants. Strategy switch decision lives in strategy_state; prior_strategy_weights from warm_start bias selection if available; without experience_store, strategy selection within-run is based on failure_history only. Replan scope: LOCAL → diagnose_and_replan(current_task); GLOBAL → rebuild_task_graph(world_model); validate_task_graph(). Six named recovery strategies in default order: DIRECT_EDIT (patch the specific failure point) → TRACE_EXEC (instrument and observe the execution path) → BROADER_SEARCH (widen evidence scope beyond immediate failure) → REIMPLEMENT (rebuild the failing component) → MINIMAL_FIX (smallest change that satisfies verification) → ESCALATE. Adaptive upgrade when experience_store available: replace fixed heuristic order with softmax policy over (strategy, failure_class) pairs weighted by empirical success rates.'},
+  {id:20,title:'Escalate',layer:'caller',color:'#67e8f9',
+   sub:'BLOCKED or cannot_make_progress() · surface_blocker with reason + missing_info · full constraint propagation on response',
+   desc:'Escalation fires when control_state.risk_state == BLOCKED OR cannot_make_progress() returns True. cannot_make_progress() is defined by four measurable proxies, not a black box: (1) completion_velocity: task_graph.completed_count unchanged for STALL_WINDOW consecutive steps; (2) strategy_loop: strategy_state.switch_count > MAX_SWITCHES with no completed_count advance; (3) failure_recurrence: same failure_mode matched in ≥ RECURRENCE_THRESHOLD consecutive entries; (4) arb_oscillation: risk_state alternated above/below CAUTIOUS for OSCILLATION_WINDOW steps. Any one condition → True. escalate(surface_blocker(reason, missing_info)) presents the minimum information needed for human resolution. On human_response: inject_clarification(); caller_state.update(). If constraints_changed: full constraint change propagation runs (same path as check_external_updates) — detect contradictions against updated success_criteria, refresh output_contract, re-validate task_graph, increment generation_id, refresh control_state — then continue. If no human_response: halt().'},
+  {id:21,title:'Reviewer Pass',layer:'verify',color:'#f87171',
+   sub:'three lenses · adversarial prior seeded on causal proximity to success_criteria · abstraction_fit unconditionally recomputed · adversarial_prior discarded after use',
+   desc:'Three lenses applied after main execution loop. implementer_lens(): "did I do what I intended?" — shares world_model. reviewer_lens(): "what would a PR reviewer criticise?" — shares world_model. Both lenses share the world_model — their blind spots are partially shared, which is an acknowledged structural limitation. adversarial_lens(): seeded with a contrarian prior selected by causal proximity to success_criteria, not by confidence. A belief is selected for negation if it appears in the dependency chain of at least one success criterion: "module A has no circular imports" has high causal proximity if success_criteria includes "tests pass"; "file path is /src/utils.py" has low proximity — negating it produces noise. The seed also includes known failure class priors from failure_history and dep_class_gap_annotation. The adversarial_prior is discarded after adversarial_lens() completes — does not pollute world_model. abstraction_fit intentionally recomputed unconditionally here (not limited to task_graph.changed as mid-loop) — reviewer pass has full execution history and may expose misalignment not apparent mid-loop. After pass: update_world_model(), propagate_beliefs(), update_hypothesis_set(), elimination_policy.apply(), detect_contradictions(). drain_propagation_queue() — if reviewer findings reopen tasks, re-enter loop.'},
+  {id:22,title:'Output Validation',layer:'output',color:'#34d399',
+   sub:'full contract check · format · interface · current caller constraints · authoritative pass',
+   desc:'Full output contract validation before return. A result can satisfy all success_criteria and still violate the output_contract — the contract captures external interface requirements from caller_state, which may have been updated by mid-run clarifications (via escalation or check_external_updates). Format, required fields, interface compatibility, and current caller constraints are all checked. The contract shadow check at the post-exec gate caught early interface-stability violations; this terminal check is the authoritative pass. validate_output_contract() supersedes the shadow check — any violations caught here that the shadow check missed indicate the shadow check is under-specified.'},
+];
+
+/* ─── NODE LIST ─── */
+const nl=document.getElementById('node-list');
+let activeNode=null;
+nodes.forEach((n,i)=>{
+  if(i>0){const c=document.createElement('div');c.className='node-conn';nl.appendChild(c);}
+  const el=document.createElement('div');
+  el.className='node-row';
+  el.style.borderLeftColor=n.color;
+  el.innerHTML=`<div class="node-header"><span class="node-num">${n.id}</span><span class="node-title" style="color:${n.color}">${n.title}</span></div><div class="node-sub">${n.sub}</div>`;
+  el.onclick=()=>{
+    document.querySelectorAll('.node-row').forEach(x=>x.classList.remove('active'));
+    if(activeNode===i){activeNode=null;document.getElementById('node-detail').querySelector('.det-t').textContent='Click any node to inspect';document.getElementById('node-detail').querySelector('.det-b').textContent='NORMAL/CAUTIOUS/BLOCKED control surface with full five-tier implementation detail. Two sub-steps per iteration via generation_id double-increment. Diagnostic health vectors replace multi-axis signal bus. All v15 invariants present as node-level detail.';return;}
+    activeNode=i;el.classList.add('active');
+    document.getElementById('node-detail').querySelector('.det-t').textContent=`${n.id}. ${n.title}`;
+    document.getElementById('node-detail').querySelector('.det-b').textContent=n.desc;
+  };
+  nl.appendChild(el);
+});
+
+/* ─── STATE MODEL ─── */
+const stateItems=[
+  {title:'World Model',color:'#8b5cf6',note:'generation_id increments on every significant update. "Present" ≠ "complete" — completeness_flags[] records pruned regions.',pre:`world_model:
+  generation_id
+  observations[]:       id · source · timestamp · reliability · content
+  beliefs[]:            id · statement · confidence · derived_from[] · supporting_evidence[]
+  assumptions[]:        id · statement · confidence
+  contradictions[]:     id · type(pairwise|set-level|temporal|abstraction)
+                            severity(LOW|MEDIUM|HIGH|SYSTEM_BREAKING)
+                            scope(local|task|global) · affected_beliefs[]
+  environment_change_log[]
+  completeness_flags{}`},
+  {title:'Belief Dependency Graph',color:'#84cc16',note:'Budgeted and fallible — not static truth. Propagation weighted by edge confidence.',pre:`belief_dep_graph:
+  belief_nodes[] · derived_from_edges[]
+  invalidation_frontier · propagation_queue
+  unverified_edge_ratio · confidence_decay_rate
+
+dep_graph_budget:
+  max_unverified_edge_ratio
+  refresh_policy
+  confidence_decay_rate
+  prior_decay_rates      # loaded by warm_start() if available`},
+  {title:'Diagnostics',color:'#f0abfc',note:'Informational only — never own execution. control_state interprets them. dep_class_gap_annotation attached as advisory, not a numeric axis.',pre:`diagnostics:
+  belief_health:
+    freshness:               0.0-1.0   # 1 − stale_flag_ratio
+    consistency:             0.0-1.0   # 1 − contradiction_density
+    support:                 0.0-1.0   # mean_reliability_weight
+  coverage_health:
+    symptom_coverage:        0.0-1.0   # 1 − uncovered_symptom_ratio
+    explanation_coverage:    0.0-1.0   # normalised hypothesis_source_entropy
+  verification_health:
+    strength:                0.0-1.0   # coverage_layer_count × adversarial_pass_rate
+    feasibility:             0.0-1.0   # tool_adequacy + evidence_adequacy + abstraction_fit
+  execution_health:
+    progress_rate:           0.0-1.0   # completion_velocity
+    failure_recurrence:      0.0-1.0   # inverted: high = many recurrences
+    oscillation_score:       0.0-1.0   # inverted: high = oscillating
+  dep_class_gap_annotation             # advisory only — not a numeric axis input`},
+  {title:'Control State',color:'#ec4899',note:'Small surface area — easier to audit than a large arbitration vector. generation_id must match world_model.generation_id; stale if behind.',pre:`control_state:
+  generation_id                        # matches world_model.generation_id
+  risk_state:     NORMAL | CAUTIOUS | BLOCKED
+  escalation_reason:
+    NONE | CONTRADICTION | STALLED
+    VERIFICATION_FAILURE | HUMAN_REQUIRED
+  block_mask[]                         # suppressed action_classes
+  notes[]                              # dep_class_gap_annotation attached here`},
+  {title:'Hypothesis Set',color:'#f59e0b',note:'Elimination_policy prevents unbounded growth. Eliminated set capped at K for reconsideration.',pre:`hypothesis_set:
+  active[]:
+    id · explanation · confidence
+    predicted_observations[]
+    discriminating_evidence[]
+    generation_sources[]               # four: symptom_inference|counterfactual
+                                       #       failure_mode_lib|analogy
+    diversity_score                    # structural diversity; threshold 0.7
+  eliminated[]:
+    id · reason · timestamp            # last K retained
+  elimination_policy:
+    conditions:
+      contradicting_evidence
+      prediction_failure_count >= K
+      posterior < FLOOR
+    retention: last K eliminated`},
+  {title:'Task Graph',color:'#60a5fa',note:'Control state should never perform planning. Task graph owns decomposition.',pre:`task_graph:
+  objective
+  tasks[]:
+    id · description · risk_level · assigned_strategy
+    status: PENDING|ACTIVE|VERIFYING|COMPLETE|FAILED|BLOCKED
+    depends_on[]
+    parallel_write_domains[]
+    abstraction_level
+  conflict_probability_cache           # per write-domain pair
+                                       # > PESSIMISTIC_THRESHOLD → block
+                                       # ≤ → optimistic (merge detects)
+  active_tasks[] · completed_tasks[]`},
+  {title:'Evidence Store',color:'#4ade80',note:'Observation vs conclusion separation maintained throughout all layers.',pre:`evidence_store:
+  Evidence:
+    obs · reliability(H|M|L) · source
+    evidence_type: OBSERVATION|INFERENCE|SYSTEM_ERROR
+    freshness
+  tool_reliability_envelopes           # max conclusion reliability per tool
+  tool_availability_manifest           # {tool: available, fallback_tool}
+                                       # populated once at init`},
+  {title:'Memory State',color:'#a3e635',note:'"Structure present" does not imply "structure complete" — check completeness_flags[].',pre:`memory_state:
+  token_budget · context_pressure
+  max_steps · steps_used
+  compression_policy · drop_priority_rules
+  journal
+  journal_retention_policy:
+    last N passing entries (verbatim)
+    all failure entries (indefinitely)
+    compress older passing → (action_class, outcome, step)
+  compression_risk:
+    compressed_structures[]            # fully dropped
+    pruned_regions[]                   # partially truncated
+    dependent_tasks[]
+  rollback_points[]
+  execution_history[]`},
+  {title:'Strategy State',color:'#7dd3fc',note:'With warm_start, prior_strategy_weights bias toward historically effective strategies. Without experience_store, begins flat.',pre:`strategy_state:
+  current_strategy · strategy_confidence
+  switch_triggers · strategy_history
+  prior_strategy_weights               # loaded by warm_start() if available
+                                       # flat priors otherwise
+  recovery_strategy_order:
+    DIRECT_EDIT | TRACE_EXEC
+    BROADER_SEARCH | REIMPLEMENT
+    MINIMAL_FIX | ESCALATE`},
+  {title:'Failure Diagnostics',color:'#fb7185',note:'Diagnostic memory — not a controller. Failure mode library contributes as one of four hypothesis generation sources.',pre:`failure_diagnostics:
+  failure_mode_library                 # read-only; diagnostic only
+  matched_pattern:
+    name · raw_confidence
+    confidence                         # normalised [0,1] before tier 4
+  failure_history[]`},
+  {title:'Experience Store',color:'#94a3b8',note:'Reuses structures, not just probabilities. Without it: warm_start is a no-op; strategy selection begins flat.',pre:`experience_store (optional):
+  successful_decompositions[]          # reusable task_graph patterns
+  successful_tool_workflows[]
+  successful_verification_plans[]
+  successful_recovery_sequences[]
+  failure_patterns[]
+  strategy_weights{}                   # by (strategy_type, failure_class)
+  class_priors{}                       # failure class base rates`},
+  {title:'Caller State',color:'#67e8f9',note:'Authoritative. Changes propagate through task_graph, output_contract, and world_model.',pre:`caller_state:
+  current_constraints
+  clarification_history[]
+  last_update
+  output_preferences
+  success_criteria`},
+  {title:'Output Contract',color:'#34d399',note:'Independent of task success. A task can satisfy success_criteria while violating the contract.',pre:`output_contract:
+  format_requirements
+  required_sections
+  interface_constraints
+  validation_rules
+  caller_specific_constraints`},
+];
+
+const sg=document.getElementById('state-grid');
+stateItems.forEach(s=>{
+  const el=document.createElement('div');el.className='sc';
+  el.innerHTML=`<div class="sc-t" style="color:${s.color}">${s.title}</div><div class="sc-pre">${s.pre}</div><div class="sc-note">${s.note}</div>`;
+  sg.appendChild(el);
+});
+
+/* ─── DEEP DIVES ─── */
+const dds=[
+  {cat:'World Model',catColor:'#8b5cf6',title:'Observation vs Conclusion — Core Invariant',sub:'HIGH-reliability observation ≠ HIGH-reliability conclusion · tool scope bounds max derivable confidence',
+   desc:'The most important structural invariant. A tool can produce a high-reliability observation that supports only a low-reliability conclusion. "grep returned no results" — HIGH-reliability observation. "Symbol is unused" — LOW-reliability conclusion, because the search scope may have been limited. Tool reliability envelopes specify the maximum conclusion reliability derivable from each tool\'s output given known scope limits. This separation is maintained throughout all architecture layers. It is the invariant most easily eroded under execution pressure — in a hurry to find an answer, agents promote observations to conclusions without explicit inference steps. The architecture guards against this at the world_model level: observations[] and beliefs[] are separate structures; beliefs require documented derived_from[] links to evidence.'},
+  {cat:'World Model',catColor:'#8b5cf6',title:'Belief Health Vector — Sub-proxy Composition',sub:'Three distinct signals collapsed to one scalar per dimension · information loss is a documented trade-off',
+   desc:'belief_health is normalised from three sub-proxies: freshness (fraction of beliefs past TTL, inverted), consistency (contradiction_density, inverted), and support (average reliability class H/M/L). Collapsing these to a single normalised scalar loses structural information. A low freshness + high consistency world model carries a different diagnostic signal than high freshness + low consistency — the first suggests stale but internally coherent state; the second suggests fresh but contradictory state. Policy gates cannot distinguish these from the scalar alone. The design accepts this loss for simplicity at the control boundary. The upgrade path: expose the three sub-proxies as separate named fields on the diagnostic bus, allow policy gates to inspect them directly, keep the scalar as a summary for resolve_control_state() TIER 4 arithmetic. The upgrade is warranted when the scalar proves too coarse in practice — documented as a future calibration decision.'},
+  {cat:'Control',catColor:'#f0abfc',title:'Diagnostic Normalisation Contract',sub:'All health sub-dimensions normalised [0,1] before entering resolve_control_state() · method defined per dimension',
+   desc:'resolve_control_state() requires all inputs to be on the same scale before TIER 4 can compute proportional caution elevation. Without a normalisation contract, adding belief_health.support (naturally [0,1]) and matched_pattern.confidence (library-defined scale) produces arbitrary results. The normalisation contract specifies the method per dimension: ratio proxies (stale_flag_ratio, uncovered_symptom_ratio) — already [0,1], pass through with clamp; composite proxies (dep_graph_quality, diversity_score) — weighted combination clamped to [0,1]; entropy proxies (hypothesis_source_entropy) — divide by log2(num_sources) to bound to [0,1]; match confidence — documented at library initialisation and clamped to [0,1]. Every signal entering resolve_control_state() passes through normalise(raw_value, dimension) with its dimension type. This makes the TIER 4 arithmetic well-defined: caution += weight_BH * (CAUTION_THRESHOLD - belief_health_score) + weight_FD * matched_pattern.confidence, where all terms are commensurable.'},
+  {cat:'Control',catColor:'#f0abfc',title:'Control State Resolution — Five-Tier Detail',sub:'Five implicit tiers in strict order · deadlock check in tier 2 · conflict rule for block+explore overlap',
+   desc:'Five tiers applied in strict order inside resolve_control_state(). TIER 1 (absolute halt): system-breaking contradiction → BLOCKED + CONTRADICTION reason; return immediately. TIER 2 (block_mask): structural diagnostic dimension below CRITICAL_THRESHOLD → add dimension\'s action_class to block_mask, continue to lower tiers. DEADLOCK CHECK: if block_mask contains two entries whose recovery actions are mutually blocked (e.g. dep_graph_quality critical → blocks COMMIT, verification_strength critical → blocks COMMIT, recovery path for each requires the other) → escalation_reason=HUMAN_REQUIRED; do not attempt autonomous recovery. TIER 3 (explore bias): coverage_health.symptom_coverage below HIGH_THRESHOLD OR explanation_coverage below DIVERSITY_FLOOR → risk_state=CAUTIOUS. Conflict rule: if TIER 2 block_mask and TIER 3 exploration bias conflict, allow exploration actions that do NOT require the blocked dimension. TIER 4 (proportional caution): belief_health sub-scores below CAUTION_THRESHOLD OR matched_pattern.confidence above PATTERN_THRESHOLD → caution_level += weight_BH * (threshold - score) + weight_FD * confidence. TIER 5 (nominal). dep_class_gap_annotation NOT evaluated in any tier — attached to control_state.notes[] as a diagnostic annotation only.'},
+  {cat:'Control',catColor:'#f0abfc',title:'Tiered Resolution vs Utility Function — Trade-off',sub:'Strict precedence chosen for auditability · unified utility function is a viable alternative',
+   desc:'The five-tier priority design was chosen over a unified utility/reward function combining all signals in a single weighted computation. A utility function handles multi-axis signal interactions naturally — moderate belief_health combined with moderate coverage_health produces a different output than either signal alone, without explicit tier rules. Trade-offs: the tier approach provides clear auditability (which tier fired, why, what it blocked) and avoids the parameter sensitivity of utility weights; the utility approach handles interaction effects without explicit conflict rules and is naturally extended to learned weights. If the utility approach were adopted, the normalisation contract becomes even more critical — all inputs must be commensurable, and the weighting coefficients become first-class calibration artefacts requiring the same honesty about implementation-dependence shown for the current threshold constants.'},
+  {cat:'Control',catColor:'#f0abfc',title:'Generation-ID Staleness Tracking',sub:'world_model.generation_id + control_state.generation_id must match · gates assert before reading · two increments per iteration = two-substep model',
+   desc:'world_model.generation_id increments on every significant update. control_state.generation_id is stamped to world_model.generation_id when resolve_control_state() is called. All policy gates (decomposition, action, post_exec) assert control_state.generation_id == world_model.generation_id before reading; if stale, the gate re-invokes resolve_control_state() before proceeding. A stale control state means a state-mutating operation occurred without a subsequent control resolution — a structural bug, not a runtime condition. Within each iteration, generation_id increments twice: (a) after observation/belief/hypothesis updates but before action selection — sub-step A; (b) after execution/verification updates — sub-step B. action_gate reads sub-step A control state; post_exec_gate reads sub-step B control state. The two control states are distinct by design — they reflect genuinely different world model states. In parallel execution, each branch increments its own generation_id; at join, the merged world_model gets a new generation_id; control_state is resolved fresh from the merged model.'},
+  {cat:'Caller',catColor:'#67e8f9',title:'Caller Constraint Propagation',sub:'Mutable constraints · check_external_updates() for proactive input · same propagation path as escalation',
+   desc:'caller_state is a mutable first-class object updated by two paths: (1) the escalation path (human_response via await_clarification); (2) check_external_updates() which polls non-blockingly at the top of each iteration before the staleness sweep. Both paths trigger identical constraint change propagation when constraints_changed: detect_contradictions() against updated success_criteria; refresh output_contract; re-validate task_graph (scope narrowing may invalidate subtrees; scope expansion may require new tasks); increment world_model.generation_id; refresh control_state; continue. Without check_external_updates(), the architecture can only receive caller constraint updates when already stuck and escalating — proactive updates from a caller who sends new requirements mid-run are ignored until an escalation point.'},
+  {cat:'Memory',catColor:'#a3e635',title:'Compression Dependency Risk — Structured',sub:'compressed_structures[] + pruned_regions[] · action_dep_overlap() · structure present ≠ complete',
+   desc:'compression_risk uses two lists, not a boolean flag. compressed_structures[]: fully dropped structures. pruned_regions[]: partially truncated structures (e.g. old world_model belief entries removed from a region). action_dep_overlap(action) checks the intersection of the action\'s required state structures against both lists. Escalation fires only when that intersection is non-empty AND risk is HIGH. World_model is added to compressed_structures[] only if fully dropped — but it may still appear in pruned_regions[] if partial truncation occurred. world_model.completeness_flags{} records which specific belief regions were pruned. This distinction matters: an action that depends on beliefs about a distant module may fail not because world_model was dropped, but because the relevant belief region was silently pruned. Compression is treated as a source of uncertainty — "structure present" ≠ "structure complete".'},
+  {cat:'Coverage',catColor:'#4ade80',title:'Coverage Health — Grounded Proxies + Advisory Annotation',sub:'symptom_coverage + explanation_coverage as numeric inputs · dep_class_gap advisory only · graduation path when calibrated',
+   desc:'Coverage health axis uses two grounded proxies as normalised numeric inputs. symptom_coverage = normalise(1 − uncovered_symptom_ratio): fraction of symptom clusters in world_model not covered by any active hypothesis — computable. explanation_coverage = normalise(hypothesis_source_entropy): normalised Shannon entropy over generation sources (divided by log2(num_sources) to bound [0,1]) — measurable. dep_class_gap_estimate is retained as an advisory annotation: computed, attached to diagnostics.dep_class_gap_annotation, and attached to control_state.notes[] as a diagnostic note — NOT passed into any tier as a numeric input. If included in TIER 3, it would introduce uncontrolled noise into risk_state because the estimate is too poorly calibrated. The annotation surfaces to the adversarial reviewer lens and to human review on escalation. When experience_store is available: a third coverage axis becomes viable — an empirically-calibrated dep_class_gap estimate derived from historical coverage failures on similar task graphs. dep_class_gap can graduate from advisory annotation to numeric input only once calibration on real run data has been validated. The annotation role is the correct default until that calibration evidence exists.'},
+  {cat:'Reasoning',catColor:'#4ade80',title:'Value of Information (VOI)',sub:'VOI = expected_uncertainty_reduction × decision_impact · high VOI → gather more · low VOI → act',
+   desc:'Before committing to action selection, estimate whether more information would materially change the action taken. VOI = expected_uncertainty_reduction × decision_impact. Expected uncertainty reduction: how much would the remaining diagnosis uncertainty shrink if we gathered a specific piece of evidence? Decision impact: would that uncertainty reduction change which action we select? If both are high: gather the evidence — the cost of gathering is less than the expected cost of acting on wrong information. If either is low: proceed to action — further gathering is waste. VOI subsumes the verification_adequacy_critic: adequacy assessment is the specific application of VOI to verification coverage. High VOI justifies a broader evidence pass; low VOI favors action. This replaces the implicit "gather until sufficient" policy with an explicit cost-benefit gate.'},
+  {cat:'Reasoning',catColor:'#4ade80',title:'Hypothesis Elimination Policy',sub:'conditions · K-retention of eliminated set · prevents unbounded growth',
+   desc:'Three elimination conditions: (a) contradicting_evidence — direct evidence refutes the hypothesis; (b) prediction_failure_count ≥ K — the hypothesis made K predictions that did not materialise; (c) posterior < FLOOR — Bayesian updating has pushed the posterior probability below a documented minimum floor. Elimination does not mean permanent removal. The last K eliminated hypotheses are retained in hypothesis_set.eliminated[] for potential reconsideration if world_model updates in a way that reinstates their plausibility. The K-retention cap prevents unbounded growth of the eliminated set during long runs. Without elimination policy: the active hypothesis set grows monotonically with new generation calls, consuming increasing computation and reducing diversity_score as the set fills with low-quality hypotheses. With elimination policy: the set stays bounded and focused on hypotheses with live explanatory value.'},
+  {cat:'Verification',catColor:'#f87171',title:'Adversarial Prior — Causal Proximity Filter',sub:'Negate beliefs in success_criteria dependency chain · not raw confidence · discard after use',
+   desc:'The adversarial reviewer lens is seeded with a contrarian prior to partially break the shared-world-model blind spot. Seed selection uses causal proximity to success_criteria, not confidence: a belief is selected for negation only if it appears in the dependency chain of at least one success criterion. "module A has no circular imports" has high causal proximity if success_criteria includes "tests pass" — negating it creates a structurally useful adversarial starting position. "file path is /src/utils.py" has low proximity — negating it produces noise without surfacing anything meaningful. The seed also includes known failure class priors from failure_history and dep_class_gap_annotation. The adversarial_prior is discarded after adversarial_lens() completes — does not pollute world_model. The viable alternative is entropy-maximising seed selection: choose beliefs to negate that maximise KL-divergence between the adversarial and main world models, regardless of success-criteria chain membership. The entropy approach covers more ground; the proximity approach is more targeted. Depth (proximity) vs breadth (entropy) — the trade-off is documented as an implementation choice.'},
+  {cat:'Policy',catColor:'#ec4899',title:'Contract Shadow Check at Post-Exec Gate',sub:'Interface-stability only · early detection · full validation at end remains authoritative',
+   desc:'Full output_contract validation runs at loop end. Multi-step execution can violate the contract through intermediate mutations — overwriting an interface, changing a required field type — that are expensive to roll back when caught only at the terminal check. contract_shadow_check() runs at the post-exec gate as a lightweight interface-stability check: required interface fields still present, no type signature regressions introduced by this execution result. It is not a full validation. The terminal validate_output_contract() remains authoritative and checks format, all required fields, interface compatibility, and current caller constraints. The shadow check\'s role is early detection of the interface-breaking class of violations before they propagate through further task graph steps.'},
+  {cat:'Policy',catColor:'#ec4899',title:'Pre-Execution Review Gate — Five Dimensions',sub:'Five checks before any mutation · failed review → action re-selection · second consecutive → escalate',
+   desc:'review_change() checks five explicit dimensions before any mutation is applied: (1) task requirements alignment — the change implements what current_task specifies, no more and no less; (2) world model consistency — the change does not contradict any HIGH-reliability belief in world_model; (3) output contract pre-check — required interface fields are still present, no type signature regressions introduced; (4) code quality heuristics — linter-reachable checks if tool_availability_manifest confirms linter is available; (5) open hypothesis compatibility — the change must not contradict any currently uneliminated hypothesis in hypothesis_set. A failed review does not immediately escalate. The action is blocked and select_best_action() is re-invoked for the same task. A second consecutive review failure on the same task indicates a structural problem with the task decomposition or world model that action re-selection cannot resolve — this triggers escalation_to_human rather than further looping.'},
+  {cat:'Policy',catColor:'#ec4899',title:'Generation-ID Gates — Freshness Enforcement',sub:'Three gates · assert generation_id matches world_model · re-invoke resolve_control_state() if stale',
+   desc:'All three gates (decomposition, action, post_exec) assert control_state.generation_id == world_model.generation_id before reading. Decomposition and action gates compare against the sub-step A value (post observation/belief updates, pre execution). The post_exec gate compares against the sub-step B value — a higher generation_id produced after execution and verification. If any gate reads a stale control state (generation_id < world_model.generation_id), it re-invokes resolve_control_state() before proceeding. This makes staleness a detectable structural condition rather than a silent error. The staleness property: within a single iteration, generation_id increments twice — control_state produced by the first resolve_control_state() call within an iteration is already stale from the second call\'s perspective. This is by design — the two control states reflect genuinely different world model states.'},
+  {cat:'World Model',catColor:'#8b5cf6',title:'Typed Contradiction Severity',sub:'type · severity · scope · SYSTEM_BREAKING → tier 1 via next control resolution — not inline halt',
+   desc:'Typed contradiction detection annotates every contradiction with type (pairwise, set-level, temporal, abstraction), severity (LOW, MEDIUM, HIGH, SYSTEM_BREAKING), and scope (local, task, global). SYSTEM_BREAKING severity does NOT trigger inline halts at the detection point — it enters world_model.contradictions[] and is picked up by TIER 1 of the next resolve_control_state() call. All system-breaking contradictions produce the same response through the same code path regardless of loop position. This ensures consistent handling: a SYSTEM_BREAKING contradiction detected mid-execution is handled identically to one detected during observation. Lower severities feed TIER 2 and TIER 4 proportionally: HIGH severity → higher block_mask priority; severity score contributes to belief_health.consistency.'},
+  {cat:'Recovery',catColor:'#f97316',title:'Failure Mode Library — Diagnostic Memory + One Generation Source',sub:'Normalised confidence → tier 4 · advisory only · one of four hypothesis sources · does not control execution',
+   desc:'failure_mode_library.match() returns a named pattern and raw confidence score. Confidence normalised [0,1] before entering resolve_control_state() TIER 4 — ensures it is commensurable with belief_health sub-scores in the caution elevation arithmetic. The library also contributes as one of four hypothesis generation sources (failure_mode_library source alongside symptom_inference, counterfactual, and analogy). These are its two scoped roles. The library does NOT independently veto, block, redirect, or override at any tier. It provides a diagnostic signal (confidence) and a generative resource (pattern-based hypothesis seeding). The confidence input is advisory in TIER 4 — it elevates caution proportionally; it does not add to block_mask or trigger TIER 1.'},
+  {cat:'Recovery',catColor:'#f97316',title:'Recovery Strategy — Named Strategies + Adaptive Upgrade',sub:'Six strategies in fixed order (interpretable baseline) · softmax policy when experience_store available',
+   desc:'Six named recovery strategies in default order: DIRECT_EDIT (patch the specific failure point) → TRACE_EXEC (instrument and observe the execution path) → BROADER_SEARCH (widen evidence scope beyond immediate failure site) → REIMPLEMENT (rebuild the failing component) → MINIMAL_FIX (smallest change that satisfies verification) → ESCALATE. Selection heuristic: failure_diagnostics.matched_pattern provides an advisory pattern-to-strategy mapping defined at library initialisation. This is interpretable and predictable — a given failure class will always try the same ordered sequence. Adaptive upgrade path when experience_store available: replace the fixed heuristic with a softmax policy over (strategy, failure_class) pairs weighted by empirical success rates loaded in warm_start(). The policy converges toward strategies that work for this class of problem over multiple runs. Trade-off: the adaptive policy becomes opaque without sufficient run history. The fixed enum is the recommended default for new deployments.'},
+  {cat:'Planning',catColor:'#60a5fa',title:'Parallel Execution — Pessimistic vs Optimistic Concurrency',sub:'conflict_probability_cache drives per-pair decision · PESSIMISTIC_THRESHOLD · optimistic merge via contradiction detection',
+   desc:'The base mode uses pessimistic write-domain conflict detection: if parallel_write_domains overlap between a candidate task and any active parallel task, the candidate is blocked. This is safe but potentially serialising on large loosely-coupled codebases where modules rarely interact. Optimistic upgrade: conflict_probability_cache maintains an estimated conflict probability per write-domain pair, derivable from task_graph structure (direct dependency edges, historical co-modification data if experience_store available). When conflict_prob ≤ PESSIMISTIC_THRESHOLD, optimistic concurrency is used — both tasks proceed and the parallel branch merge handles conflict detection via contradiction detection on the merged world model. When conflict_prob > PESSIMISTIC_THRESHOLD, pessimistic blocking is retained. conflict_probability_cache is initialised from task_graph structure at decomposition time and updated from experience_store.write_conflict_history if available. Refined at merge from actual write overlap observed.'},
+  {cat:'Reasoning',catColor:'#4ade80',title:'Experience Reuse — Structures, Not Just Priors',sub:'Successful decompositions · tool workflows · verification plans · recovery sequences · more valuable than success rates alone',
+   desc:'v16 insight: experience_store reuses structures, not just probability priors. A successful decomposition pattern (how a similar problem was broken into subgoals and tasks) is often more valuable than knowing which strategy had the highest success rate. Similarly, a successful tool workflow (which sequence of tools and checks resolved a particular failure class) can be replayed almost directly. It incorporates both: warm_start() loads empirical strategy weights (prior_strategy_weights) AND structural patterns (successful_decompositions → seed task_graph; successful_tool_workflows → seed plan_tool_workflow(); successful_verification_plans → seed verification_adequacy_critic; successful_recovery_sequences → seed strategy_state recovery ordering). This means experience_store provides value even before the run begins to accumulate run-specific failure history.'},
+  {cat:'World Model',catColor:'#8b5cf6',title:'Belief Staleness Tracking',sub:'TTL + environment-change invalidation · dep_graph edge decay · stale_flag_ratio feeds belief_health.freshness',
+   desc:'Two mechanisms govern belief staleness. TTL-based expiry: each belief has a belief_ttl; beliefs past TTL are flagged in stale_flags[] and swept by staleness_sweep(). Environment-change-based invalidation: environment_change_log records every execution result; staleness_sweep() cross-references beliefs with the log and flags beliefs whose source resources have changed since the belief was recorded. dep_graph_budget.apply_decay() adds edge confidence decay independently of content changes — edges that have not been re-verified lose confidence at rate confidence_decay_rate. stale_flag_ratio is one of three inputs to belief_health.freshness. The distinction: TTL staleness is clock-based; environment-change staleness is event-based; dep_graph decay is drift-based. All three feed the same freshness proxy but represent different failure modes of the belief system.'},
+];
+
+const dg=document.getElementById('dd-grid');
+let activeDd=null;
+dds.forEach((d,i)=>{
+  const el=document.createElement('div');el.className='dd-card';
+  el.innerHTML=`<div class="dd-cat" style="color:${d.catColor}">${d.cat}</div><div class="dd-title">${d.title}</div><div class="dd-sub">${d.sub}</div>`;
+  el.onclick=()=>{
+    if(activeDd!==null)dg.children[activeDd].classList.remove('active');
+    if(activeDd===i){activeDd=null;document.getElementById('dd-detail').querySelector('.det-t').textContent='Select a concept';document.getElementById('dd-detail').querySelector('.det-b').textContent='Key design decisions with honest notes about what is settled vs what remains implementation-dependent.';return;}
+    activeDd=i;el.classList.add('active');
+    document.getElementById('dd-detail').querySelector('.det-t').textContent=d.title;
+    document.getElementById('dd-detail').querySelector('.det-b').textContent=d.desc;
+  };
+  dg.appendChild(el);
+});
+</script>
+</div>
+</body>
+</html>
