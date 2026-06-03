@@ -29,7 +29,7 @@ class Observation:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Observation":
+    def from_dict(cls, d: dict[str, Any]) -> Observation:
         return cls(
             id=d["id"],
             content=d["content"],
@@ -58,7 +58,7 @@ class Belief:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Belief":
+    def from_dict(cls, d: dict[str, Any]) -> Belief:
         return cls(
             id=d["id"],
             statement=d["statement"],
@@ -92,7 +92,7 @@ class Contradiction:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Contradiction":
+    def from_dict(cls, d: dict[str, Any]) -> Contradiction:
         return cls(
             id=d["id"],
             type=d["type"],
@@ -142,7 +142,7 @@ class WorldModel:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "WorldModel":
+    def from_dict(cls, d: dict[str, Any]) -> WorldModel:
         wm = cls(
             generation_id=d.get("generation_id", 0),
             assumptions=d.get("assumptions", []),

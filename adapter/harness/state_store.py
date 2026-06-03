@@ -31,6 +31,7 @@ class HarnessRunState:
     are stored as raw dicts until their typed dataclasses are added in later
     phases.
     """
+
     run_id: str = ""
 
     # P0.2 — world model
@@ -72,7 +73,7 @@ class HarnessRunState:
         }
 
     @classmethod
-    def from_dict(cls, run_id: str, d: dict[str, Any]) -> "HarnessRunState":
+    def from_dict(cls, run_id: str, d: dict[str, Any]) -> HarnessRunState:
         return cls(
             run_id=run_id,
             world_model=WorldModel.from_dict(d.get("world_model") or {}),
@@ -91,7 +92,7 @@ class HarnessRunState:
         )
 
 
-async def save(run_id: str, state: HarnessRunState, db: "AsyncSession") -> None:
+async def save(run_id: str, state: HarnessRunState, db: AsyncSession) -> None:
     """Upsert all 13 state structures for run_id into harness_run_state table."""
     from sqlalchemy import text
 
@@ -144,16 +145,20 @@ async def save(run_id: str, state: HarnessRunState, db: "AsyncSession") -> None:
     await db.commit()
 
 
-async def load(run_id: str, db: "AsyncSession") -> HarnessRunState | None:
+async def load(run_id: str, db: AsyncSession) -> HarnessRunState | None:
     """Load state for run_id. Returns None if no harness state exists for this run."""
     from sqlalchemy import text
 
     row = (
-        await db.execute(
-            text("SELECT * FROM harness_run_state WHERE run_id = :run_id"),
-            {"run_id": run_id},
+        (
+            await db.execute(
+                text("SELECT * FROM harness_run_state WHERE run_id = :run_id"),
+                {"run_id": run_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
 
     if row is None:
         return None
@@ -164,6 +169,7 @@ async def load(run_id: str, db: "AsyncSession") -> HarnessRunState | None:
 def _serialise(value: Any) -> Any:
     """Convert a value for storage. Postgres JSONB handles dicts natively; SQLite needs JSON strings."""
     import json
+
     if isinstance(value, dict):
         return json.dumps(value)
     return value
@@ -172,6 +178,7 @@ def _serialise(value: Any) -> Any:
 def _deserialise(value: Any) -> Any:
     """Deserialise a stored value. Postgres JSONB returns dicts; SQLite returns JSON strings."""
     import json
+
     if isinstance(value, str):
         try:
             return json.loads(value)

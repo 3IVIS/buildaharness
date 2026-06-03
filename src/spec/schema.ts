@@ -15,7 +15,7 @@
  *   npm test
  * to verify all 5 example flows still validate.
  *
- * @version 0.2.0
+ * @version 1.0.0
  * @see spec/schema.ts — canonical Zod schema (source of truth for npm package)
  * @see spec/schema.json — derived JSON Schema (use for non-TS validation)
  * @see spec/CHANGELOG.md — version history
@@ -34,10 +34,10 @@ import { z } from 'zod'
 //   4. Update STORAGE_VERSION constant in store/index.ts.
 //   5. Regenerate spec/schema.json via: cd spec && npm run gen:json-schema
 //   6. Update spec/CHANGELOG.md.
-export const SpecVersion = z.literal('0.2.0')
+export const SpecVersion = z.union([z.literal('0.2.0'), z.literal('1.0.0')])
 
-/** The spec version string as a plain constant (avoids repeated z.literal('0.2.0') references). */
-export const CURRENT_SPEC_VERSION = '0.2.0' as const
+/** The spec version string as a plain constant (avoids repeated string references). */
+export const CURRENT_SPEC_VERSION = '1.0.0' as const
 
 export const FlowId = z
   .string()
@@ -369,8 +369,60 @@ export const Node = z.discriminatedUnion('type', [
 ])
 export type Node = z.infer<typeof Node>
 export type NodeType = Node['type']
-// Fix #25: AnyNode is imported by validation.ts — export it as an alias for Node.
-export type AnyNode = Node
+
+// ---------------------------------------------------------------------------
+// Harness node type stubs (Phase 0) — full harness_config shapes added per-phase
+// ---------------------------------------------------------------------------
+
+const HarnessNodeBase = NodeBase.extend({
+  harness_config: z.record(z.unknown()).optional(),
+})
+
+export const WorldModelNode = HarnessNodeBase.extend({ type: z.literal('world_model') })
+export const HypothesisSetNode = HarnessNodeBase.extend({ type: z.literal('hypothesis_set') })
+export const GatherEvidenceNode = HarnessNodeBase.extend({ type: z.literal('gather_evidence') })
+export const ApplyToolReliabilityNode = HarnessNodeBase.extend({ type: z.literal('apply_tool_reliability') })
+export const UpdateWorldModelNode = HarnessNodeBase.extend({ type: z.literal('update_world_model') })
+export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
+export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
+export const VerificationGateNode = HarnessNodeBase.extend({ type: z.literal('verification_gate') })
+export const RecoveryNode = HarnessNodeBase.extend({ type: z.literal('recovery_node') })
+export const EvidenceStoreNode = HarnessNodeBase.extend({ type: z.literal('evidence_store_node') })
+export const ExperienceStoreNode = HarnessNodeBase.extend({ type: z.literal('experience_store_node') })
+export const ReviewerPassNode = HarnessNodeBase.extend({ type: z.literal('reviewer_pass') })
+
+export type WorldModelNode = z.infer<typeof WorldModelNode>
+export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
+export type GatherEvidenceNode = z.infer<typeof GatherEvidenceNode>
+export type ApplyToolReliabilityNode = z.infer<typeof ApplyToolReliabilityNode>
+export type UpdateWorldModelNode = z.infer<typeof UpdateWorldModelNode>
+export type ControlStateNode = z.infer<typeof ControlStateNode>
+export type TaskGraphNode = z.infer<typeof TaskGraphNode>
+export type VerificationGateNode = z.infer<typeof VerificationGateNode>
+export type RecoveryNode = z.infer<typeof RecoveryNode>
+export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
+export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
+export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+
+export const HarnessNode = z.discriminatedUnion('type', [
+  WorldModelNode,
+  HypothesisSetNode,
+  GatherEvidenceNode,
+  ApplyToolReliabilityNode,
+  UpdateWorldModelNode,
+  ControlStateNode,
+  TaskGraphNode,
+  VerificationGateNode,
+  RecoveryNode,
+  EvidenceStoreNode,
+  ExperienceStoreNode,
+  ReviewerPassNode,
+])
+export type HarnessNode = z.infer<typeof HarnessNode>
+
+// Fix #25: AnyNode is imported by validation.ts — includes both v0.2 and harness nodes.
+export const AnyNode = z.union([Node, HarnessNode])
+export type AnyNode = z.infer<typeof AnyNode>
 
 // ---------------------------------------------------------------------------
 // Edges
@@ -502,6 +554,17 @@ export const FlowConfig = z.object({
 export type FlowConfig = z.infer<typeof FlowConfig>
 
 // ---------------------------------------------------------------------------
+// Harness meta block (v1.0.0+, optional)
+// ---------------------------------------------------------------------------
+
+export const HarnessMeta = z.object({
+  harness_version: z.string().optional(),
+  phase:           z.string().optional(),
+  enabled:         z.boolean().default(false),
+})
+export type HarnessMeta = z.infer<typeof HarnessMeta>
+
+// ---------------------------------------------------------------------------
 // Root FlowSpec
 // ---------------------------------------------------------------------------
 
@@ -513,12 +576,13 @@ export const FlowSpec = z.object({
   runtime_hints:  RuntimeHints.optional(),
   state_schema:   StateSchema.optional(),
   agents:         z.array(AgentDef).optional(),
-  nodes:          z.array(Node).min(1),
+  nodes:          z.array(AnyNode).min(1),
   edges:          z.array(Edge),
   tools:          z.record(ToolDef).optional(),
   memory_stores:  z.record(MemoryStoreDef).optional(),
   model_defaults: ModelDefaults.optional(),
   flow_config:    FlowConfig.optional(),
+  harness_meta:   HarnessMeta.optional(),
 })
 export type FlowSpec = z.infer<typeof FlowSpec>
 
@@ -541,6 +605,7 @@ export function assertFlowSpec(raw: unknown): FlowSpec {
  *
  * Version migration map:
  *   0.1.0 → 0.2.0: spec_version field added; inject it if missing.
+ *   0.2.0 → 1.0.0: harness_meta block added; existing flows remain valid (field is optional).
  */
 export function parseFlowSpecLenient(raw: unknown): ReturnType<typeof FlowSpec.safeParse> {
   if (raw !== null && typeof raw === 'object') {

@@ -37,7 +37,7 @@ class OutputContract:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "OutputContract":
+    def from_dict(cls, d: dict[str, Any]) -> OutputContract:
         return cls(
             format_requirements=d.get("format_requirements", {}),
             required_sections=d.get("required_sections", []),
@@ -62,7 +62,7 @@ class ContractCheckResult:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ContractCheckResult":
+    def from_dict(cls, d: dict[str, Any]) -> ContractCheckResult:
         return cls(
             passed=d["passed"],
             violations=d.get("violations", []),

@@ -45,6 +45,7 @@ MIGRATE_SCRIPT = SPEC_DIR / "scripts" / "migrate-v0.2-to-v1.0.mjs"
 # T01–T03  FlowSpec schema (P0.1)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _has_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, check=True, timeout=5)
@@ -113,11 +114,13 @@ def test_T02_migrated_flow_is_valid_json(tmp_path):
 def test_T03_adapter_rejects_harness_node_without_enabled_flag():
     """T03 — Adapter raises HTTP 400 when a harness node type is present but enabled=false."""
     import os
+
     os.environ.setdefault("JWT_SECRET", "test-secret-for-ci-only-not-production")
     os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     os.environ.setdefault("TESTING", "true")
 
     from fastapi import HTTPException
+
     from validate import validate_spec
 
     spec_with_harness_node = {
@@ -146,6 +149,7 @@ def test_T03_adapter_rejects_harness_node_without_enabled_flag():
 # ══════════════════════════════════════════════════════════════════════════════
 # T04–T07  World model structures (P0.2)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def test_T04_add_belief_requires_nonempty_derived_from():
     """T04 — add_belief with empty derived_from raises ValueError."""
@@ -207,6 +211,7 @@ def test_T07_world_model_round_trips_to_dict():
 # T08–T11  Staleness infrastructure (P0.3)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_T08_staleness_check_true_when_control_behind():
     """T08 — staleness_check returns True when cs.generation_id < wm.generation_id."""
     wm = WorldModel(generation_id=1)
@@ -223,6 +228,7 @@ def test_T09_staleness_check_false_when_ids_match():
 
 def test_T10_assert_generation_fresh_raises_on_stale_control_state():
     """T10 — @assert_generation_fresh raises StalenessError on a stale control_state."""
+
     @assert_generation_fresh
     def my_gate(control_state, world_model):
         return "ok"
@@ -245,6 +251,7 @@ def test_T11_increment_generation_id_is_monotonic():
 # ══════════════════════════════════════════════════════════════════════════════
 # T12–T15  Caller state (P0.4)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def test_T12_inject_clarification_appends_to_history():
     """T12 — inject_clarification appends both calls; history never truncated."""
@@ -294,6 +301,7 @@ def test_T15_caller_state_round_trips():
 # T16–T18  Output contract (P0.5)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def test_T16_output_contract_from_dict_populates_fields():
     """T16 — from_dict with required_sections populates the field; others default."""
     oc = OutputContract.from_dict({"required_sections": ["summary"]})
@@ -321,6 +329,7 @@ def test_T18_contract_shadow_check_stub_returns_pass():
 # T19–T21  Backend state store — requires DB (P0.6)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 @pytest.mark.harness_state_api
 async def test_T19_harness_state_round_trips_to_db(client, auth_headers):
@@ -329,7 +338,7 @@ async def test_T19_harness_state_round_trips_to_db(client, auth_headers):
     # This test confirms the HarnessRunState dataclass serialises correctly
     # without a database.
     from harness.state_store import HarnessRunState
-    from harness.world_model import WorldModel, Observation
+    from harness.world_model import Observation, WorldModel
 
     state = HarnessRunState(run_id="test-run-1")
     state.world_model = WorldModel(generation_id=3)
@@ -372,8 +381,15 @@ async def test_T20_harness_state_round_trips_generation_id(client, auth_headers)
         pytest.skip("No job_id returned — skipping DB state test")
 
     # PUT harness state with generation_id=7
-    wm_data = {"generation_id": 7, "observations": [], "beliefs": [], "assumptions": [],
-                "contradictions": [], "environment_change_log": [], "completeness_flags": {}}
+    wm_data = {
+        "generation_id": 7,
+        "observations": [],
+        "beliefs": [],
+        "assumptions": [],
+        "contradictions": [],
+        "environment_change_log": [],
+        "completeness_flags": {},
+    }
     put_resp = await client.put(
         f"/run/{job_id}/harness-state",
         json={"state": {"world_model": wm_data}},

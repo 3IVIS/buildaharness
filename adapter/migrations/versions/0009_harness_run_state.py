@@ -56,10 +56,7 @@ def upgrade() -> None:
     op.create_table(
         "harness_run_state",
         sa.Column("run_id", sa.Text, primary_key=True),
-        *[
-            sa.Column(col, jsonb_type, nullable=False, server_default=sa.text("'{}'" if is_postgres else "'{}'"))
-            for col in _STATE_COLUMNS
-        ],
+        *[sa.Column(col, jsonb_type, nullable=False, server_default=sa.text("'{}'")) for col in _STATE_COLUMNS],
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
