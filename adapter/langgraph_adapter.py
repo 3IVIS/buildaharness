@@ -28,6 +28,7 @@ Coverage:
 from __future__ import annotations
 
 import json
+import re as _re
 import textwrap
 from collections import defaultdict, deque
 
@@ -217,7 +218,7 @@ def gen_imports(spec: dict) -> str:
     # annotations are evaluated eagerly at class-definition time, when all
     # imports are already present in the exec namespace.
     lines = [
-        "import operator, os, re",
+        "import json, operator, os, re",
         "from typing import Any, TypedDict, Annotated",
         "from langchain_openai import ChatOpenAI",
         "from langchain_core.messages import HumanMessage, SystemMessage",
@@ -516,7 +517,20 @@ def gen_node_function(
                 f"llm_call '{nid}' has no output_key and no structured_output — result will be discarded (ADR-001)"
             )
 
-        ret = f"return {{{out_key!r}: response.content}}" if out_key else "return {}"
+        if out_key and struct:
+            # structured_output: parse the JSON string returned by the LLM into a dict
+            # so downstream _resolve() calls can traverse the nested fields.
+            ret = (
+                f"try:\n"
+                f"    _resp_val = json.loads(response.content) if isinstance(response.content, str) else response.content\n"
+                f"except Exception:\n"
+                f"    _resp_val = response.content\n"
+                f"return {{{out_key!r}: _resp_val}}"
+            )
+        elif out_key:
+            ret = f"return {{{out_key!r}: response.content}}"
+        else:
+            ret = "return {}"
 
         core_lines = [
             f"llm = _make_llm({model!r}, temperature={temp}, max_tokens={max_tok})",
@@ -623,7 +637,7 @@ def gen_node_function(
             f"# interrupt(): suspends execution; resumed via graph.update_state()\n"
             f"# timeout_seconds={timeout_s}, on_timeout={on_timeout!r}\n"
             f"resume_payload = interrupt({{\n"
-            f"    'prompt': {py_str(prompt)},\n"
+            f"    'prompt': _render({py_str(prompt)}, state),\n"
             f"    'resume_schema_fields': [{fields}],\n"
             f"}})\n"
             f"return {{{out_key!r}: resume_payload}}\n"
@@ -903,13 +917,21 @@ def gen_condition_router(node: dict, spec: dict) -> str:
         py_op = op_map.get(op, "==")
 
         if expr:
-            lhs = f"_resolve(state, {expr!r})"
-            if op == "exists":
-                py_cond = f"{lhs} is not None"
-            elif op == "contains":
-                py_cond = f"{value!r} in ({lhs} or '')"
+            # Detect inline expressions like "$.state.X == 'value'" (type=expr with no
+            # separate op/value fields). Split them so _resolve only gets the JSONPath part.
+            _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
+            if _inline and not value:
+                _path, _iop, _rhs = _inline.group(1), _inline.group(2), _inline.group(3).strip()
+                lhs = f"_resolve(state, {_path!r})"
+                py_cond = f"{lhs} {_iop} {_rhs}"
             else:
-                py_cond = f"{lhs} {py_op} {value!r}"
+                lhs = f"_resolve(state, {expr!r})"
+                if op == "exists":
+                    py_cond = f"{lhs} is not None"
+                elif op == "contains":
+                    py_cond = f"{value!r} in ({lhs} or '')"
+                else:
+                    py_cond = f"{lhs} {py_op} {value!r}"
         else:
             py_cond = "True"
 
@@ -1064,14 +1086,35 @@ def gen_entrypoint(spec: dict) -> str:
     state_schema = spec.get("state_schema") or {}
     required = state_schema.get("required") or []
     props = state_schema.get("properties") or {}
+    telemetry = (spec.get("flow_config") or {}).get("telemetry") or {}
 
     example = {f: f"<{props.get(f, {}).get('type', 'str')}>" for f in required}
     checkpoint = (spec.get("flow_config") or {}).get("checkpoint") or {}
     config_arg = ', config={"configurable": {"thread_id": "run-1"}}' if checkpoint.get("enabled") else ""
+    flow_name = spec.get("name", spec.get("id", "flow"))
 
-    return dedent0(f"""\
-        # ─── Entry point ──────────────────────────────────────────────────────────────
+    parts: list[str] = ["# ─── Entry point ──────────────────────────────────────────────────────────────", ""]
 
+    if telemetry.get("enabled") and telemetry.get("provider") == "langfuse":
+        parts.append(dedent0(f"""\
+            # ─── Langfuse tracing setup ───────────────────────────────────────────────────
+            try:
+                import os as _os
+                from langfuse import Langfuse as _Langfuse
+                from langfuse import observe as _lf_observe
+                _langfuse = _Langfuse(
+                    public_key=_os.environ.get("LANGFUSE_PUBLIC_KEY", ""),
+                    secret_key=_os.environ.get("LANGFUSE_SECRET_KEY", ""),
+                    host=_os.environ.get("LANGFUSE_HOST", "http://localhost:3001"),
+                )
+                _LF_ENABLED = True
+            except Exception:
+                _lf_observe = lambda *a, **kw: (lambda f: f)
+                _LF_ENABLED = False
+        """))
+        parts.append(f"\n@_lf_observe(name={flow_name!r})")
+
+    parts.append(dedent0(f"""\
         def run_flow(inputs: dict) -> dict:
             \"\"\"Execute the compiled flow and return the final state.\"\"\"
             final: dict = {{}}
@@ -1088,7 +1131,9 @@ def gen_entrypoint(spec: dict) -> str:
             print("Running flow with inputs:", _inputs)
             _result = run_flow(_inputs)
             print("Final state:", _json.dumps(_result, default=str, indent=2))
-    """)
+    """))
+
+    return "\n".join(parts)
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────

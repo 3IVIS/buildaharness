@@ -142,6 +142,40 @@ def build_context_map(edges: list[dict]) -> dict[str, list[str]]:
     return ctx
 
 
+def build_output_key_to_node(nodes: list[dict]) -> dict[str, str]:
+    """output_key/output_field → node_id for every node that produces a named state key."""
+    mapping: dict[str, str] = {}
+    for n in nodes:
+        key = None
+        if n.get("type") == "agent_role":
+            key = (n.get("config") or {}).get("output_field")
+        else:
+            key = n.get("output_key")
+        if key:
+            mapping[key] = n["id"]
+    return mapping
+
+
+def infer_context_from_templates(node: dict, output_key_to_node: dict[str, str]) -> list[str]:
+    """Return node IDs whose output_key is referenced via {{$.state.key}} in this node's templates."""
+    texts: list[str] = []
+    if node.get("type") == "llm_call":
+        texts += [node.get("prompt_template", ""), node.get("system_prompt", "")]
+    elif node.get("type") == "agent_role":
+        cfg = node.get("config") or {}
+        texts.append(cfg.get("task_description", ""))
+
+    refs: list[str] = []
+    for text in texts:
+        for m in _re.finditer(r"\{\{\$\.state\.(\w+)", text):
+            key = m.group(1)
+            if key in output_key_to_node and output_key_to_node[key] != node["id"]:
+                nid = output_key_to_node[key]
+                if nid not in refs:
+                    refs.append(nid)
+    return refs
+
+
 # ─── Section generators ───────────────────────────────────────────────────────
 
 
@@ -372,6 +406,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
     agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
     parallel_tgts = find_parallel_targets(spec)
     ctx_map = build_context_map(spec.get("edges", []))
+    output_key_to_node = build_output_key_to_node(spec.get("nodes", []))
 
     lines: list[str] = [
         "# ─── Tasks ──────────────────────────────────────────────────────────────────",
@@ -400,6 +435,10 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             continue
 
         # ── Build task kwargs shared across types ────────────────────────────
+        # Merge explicit context_from edges with template-inferred dependencies.
+        inferred_ctx = infer_context_from_templates(node, output_key_to_node)
+        merged_ctx = list(dict.fromkeys(ctx + [c for c in inferred_ctx if c not in ctx]))
+
         def emit_task(
             description: str,
             expected_output: str,
@@ -409,7 +448,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             _lines: list[str] = lines,
             _vid: str = vid,
             _is_parallel: bool = is_parallel,
-            _ctx: list[str] = ctx,
+            _ctx: list[str] = merged_ctx,
         ) -> None:
             _lines.append(f"task_{_vid} = Task(")
             desc_expr = f"_sub({description!r})" if "{" in description else repr(description)
@@ -420,7 +459,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 _lines.append("    async_execution=True,  # parallel_fork branch")
             if extra_lines:
                 _lines.extend(f"    {ln}" for ln in extra_lines)
-            # ADR-001 RFC-1: context_from → Task.context=[task_a, task_b]
+            # ADR-001 RFC-1: context_from edges + inferred template deps → Task.context
             if _ctx:
                 ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in _ctx)
                 _lines.append(f"    context=[{ctx_vars}],")
@@ -688,7 +727,10 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
 
     if telemetry.get("enabled"):
         provider = telemetry.get("provider", "")
-        lines.append(f"    # telemetry.provider={provider} — configure via env vars")
+        lines.append(f"    # telemetry.provider={provider!r}")
+        if provider == "langfuse":
+            lines.append("    # set CREWAI_TRACING_ENABLED=true or tracing=True below for Langfuse traces")
+        lines.append("    tracing=True,  # telemetry.enabled=true in spec")
     lines += ["    verbose=True,", ")", ""]
 
     # Derive example kickoff inputs from state_schema.required

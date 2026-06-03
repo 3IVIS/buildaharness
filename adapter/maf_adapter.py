@@ -35,6 +35,7 @@ HITL note (Q9 resolution):
 
 from __future__ import annotations
 
+import re as _re
 import textwrap
 from collections import defaultdict, deque
 
@@ -261,17 +262,38 @@ def gen_otel_setup(spec: dict) -> str:
     if not telemetry.get("enabled"):
         return ""
 
-    endpoint = telemetry.get("otlp_endpoint", "http://langfuse:3000/api/public/otel/v1/traces")
+    # If the spec hard-codes an endpoint, use it; otherwise resolve from env at runtime.
+    static_endpoint = telemetry.get("otlp_endpoint", "")
+    project = telemetry.get("project", "itsharness")
+
+    if static_endpoint:
+        endpoint_expr = repr(static_endpoint)
+    else:
+        endpoint_expr = (
+            "os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT') or "
+            "(os.environ.get('LANGFUSE_HOST', 'http://localhost:3001').rstrip('/') "
+            "+ '/api/public/otel/v1/traces')"
+        )
+
     return dedent0(f"""\
         # ─── OTel setup (SK built-in, routes to Langfuse OTLP) ──────────────────────
 
         def _setup_telemetry() -> None:
+            import base64 as _b64
             provider = _TracerProvider()
-            exporter = _OTLPExp(endpoint={endpoint!r})
+            _endpoint = {endpoint_expr}
+            _headers: dict = {{}}
+            _lf_pk = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+            _lf_sk = os.environ.get("LANGFUSE_SECRET_KEY", "")
+            if _lf_pk and _lf_sk:
+                _auth = _b64.b64encode(f"{{_lf_pk}}:{{_lf_sk}}".encode()).decode()
+                _headers["Authorization"] = f"Basic {{_auth}}"
+            exporter = _OTLPExp(endpoint=_endpoint, headers=_headers)
             provider.add_span_processor(_BSP(exporter))
             _otel_trace.set_tracer_provider(provider)
             # semantic-kernel ≥1.0 picks up the ambient TracerProvider automatically
             # via UseOpenTelemetry() on IChatClient equivalents.
+            # project: {project}
 
         _setup_telemetry()
 
@@ -603,10 +625,24 @@ def gen_node_function(
         fb_target = fail_branch.get("target", "")
         fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
+        struct = node.get("structured_output")
+
         if not out_key:
             warnings.append(f"llm_call '{nid}' has no output_key — result will be discarded (ADR-001)")
 
-        ret = f"return {{{out_key!r}: response}}" if out_key else "return {}"
+        if out_key and struct:
+            ret = (
+                "try:\n"
+                "    import json as _json\n"
+                "    _resp_val = _json.loads(response) if isinstance(response, str) else response\n"
+                "except Exception:\n"
+                "    _resp_val = response\n"
+                f"return {{{out_key!r}: _resp_val}}"
+            )
+        elif out_key:
+            ret = f"return {{{out_key!r}: response}}"
+        else:
+            ret = "return {}"
 
         core_lines = [
             f"kernel = _make_kernel({model!r})",
@@ -731,7 +767,7 @@ def gen_node_function(
             f"    return {{}}\n"
             f"raise _HitlPause(\n"
             f"    node_id={nid!r},\n"
-            f"    prompt={py_str(prompt)},\n"
+            f"    prompt=_render({py_str(prompt)}, state),\n"
             f"    fields={fields!r},\n"
             f")\n"
             f"return {{}}\n"
@@ -1049,15 +1085,23 @@ def gen_condition_router(node: dict) -> str:
         py_op = op_map.get(op, "==")
 
         if expr:
-            lhs = f"_resolve(state, {expr!r})"
-            if op == "exists":
-                py_cond = f"{lhs} is not None"
-            elif op == "contains":
-                py_cond = f"{value!r} in ({lhs} or '')"
-            elif op in ("gt", "gte", "lt", "lte"):
-                py_cond = f"(lambda _v: _v is not None and _v {py_op} {value!r})({lhs})"
+            # Detect inline expressions like "$.state.X == 'value'" (type=expr with no
+            # separate op/value fields). Split them so _resolve only gets the JSONPath part.
+            _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
+            if _inline and not value:
+                _path, _iop, _rhs = _inline.group(1), _inline.group(2), _inline.group(3).strip()
+                lhs = f"_resolve(state, {_path!r})"
+                py_cond = f"{lhs} {_iop} {_rhs}"
             else:
-                py_cond = f"{lhs} {py_op} {value!r}"
+                lhs = f"_resolve(state, {expr!r})"
+                if op == "exists":
+                    py_cond = f"{lhs} is not None"
+                elif op == "contains":
+                    py_cond = f"{value!r} in ({lhs} or '')"
+                elif op in ("gt", "gte", "lt", "lte"):
+                    py_cond = f"(lambda _v: _v is not None and _v {py_op} {value!r})({lhs})"
+                else:
+                    py_cond = f"{lhs} {py_op} {value!r}"
         else:
             py_cond = "True"
 
