@@ -76,6 +76,10 @@ class HarnessRunState:
     failure_diagnostics: FailureDiagnostics = field(default_factory=FailureDiagnostics)
     # P8 — experience store reference (raw dict until P8 defines the typed dataclass)
     experience_store_ref: dict[str, Any] = field(default_factory=dict)
+    # P7 — escalation state
+    escalation_pending: bool = False
+    pending_escalation: Any | None = None  # SurfaceBlocker | None
+    pending_clarification: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,6 +96,9 @@ class HarnessRunState:
             "strategy_state": self.strategy_state.to_dict(),
             "failure_diagnostics": self.failure_diagnostics.to_dict(),
             "experience_store_ref": self.experience_store_ref,
+            "escalation_pending": self.escalation_pending,
+            "pending_escalation": self.pending_escalation.to_dict() if self.pending_escalation is not None else None,
+            "pending_clarification": self.pending_clarification,
         }
 
     @classmethod
@@ -114,6 +121,9 @@ class HarnessRunState:
             strategy_state=StrategyState.from_dict(d.get("strategy_state") or {}),
             failure_diagnostics=FailureDiagnostics.from_dict(d.get("failure_diagnostics") or {}),
             experience_store_ref=d.get("experience_store_ref") or {},
+            escalation_pending=d.get("escalation_pending", False),
+            pending_escalation=_deserialise_surface_blocker(d.get("pending_escalation")),
+            pending_clarification=d.get("pending_clarification"),
         )
 
 
@@ -132,29 +142,34 @@ async def save(run_id: str, state: HarnessRunState, db: AsyncSession) -> None:
                 hypothesis_set, evidence_store, task_graph,
                 diagnostics, control_state, memory_state,
                 strategy_state, failure_diagnostics, experience_store_ref,
-                belief_dep_graph
+                belief_dep_graph,
+                escalation_pending, pending_escalation, pending_clarification
             ) VALUES (
                 :run_id, :world_model, :caller_state, :output_contract,
                 :hypothesis_set, :evidence_store, :task_graph,
                 :diagnostics, :control_state, :memory_state,
                 :strategy_state, :failure_diagnostics, :experience_store_ref,
-                :belief_dep_graph
+                :belief_dep_graph,
+                :escalation_pending, :pending_escalation, :pending_clarification
             )
             ON CONFLICT (run_id) DO UPDATE SET
-                world_model          = EXCLUDED.world_model,
-                caller_state         = EXCLUDED.caller_state,
-                output_contract      = EXCLUDED.output_contract,
-                hypothesis_set       = EXCLUDED.hypothesis_set,
-                evidence_store       = EXCLUDED.evidence_store,
-                task_graph           = EXCLUDED.task_graph,
-                diagnostics          = EXCLUDED.diagnostics,
-                control_state        = EXCLUDED.control_state,
-                memory_state         = EXCLUDED.memory_state,
-                strategy_state       = EXCLUDED.strategy_state,
-                failure_diagnostics  = EXCLUDED.failure_diagnostics,
-                experience_store_ref = EXCLUDED.experience_store_ref,
-                belief_dep_graph     = EXCLUDED.belief_dep_graph,
-                updated_at           = CURRENT_TIMESTAMP
+                world_model            = EXCLUDED.world_model,
+                caller_state           = EXCLUDED.caller_state,
+                output_contract        = EXCLUDED.output_contract,
+                hypothesis_set         = EXCLUDED.hypothesis_set,
+                evidence_store         = EXCLUDED.evidence_store,
+                task_graph             = EXCLUDED.task_graph,
+                diagnostics            = EXCLUDED.diagnostics,
+                control_state          = EXCLUDED.control_state,
+                memory_state           = EXCLUDED.memory_state,
+                strategy_state         = EXCLUDED.strategy_state,
+                failure_diagnostics    = EXCLUDED.failure_diagnostics,
+                experience_store_ref   = EXCLUDED.experience_store_ref,
+                belief_dep_graph       = EXCLUDED.belief_dep_graph,
+                escalation_pending     = EXCLUDED.escalation_pending,
+                pending_escalation     = EXCLUDED.pending_escalation,
+                pending_clarification  = EXCLUDED.pending_clarification,
+                updated_at             = CURRENT_TIMESTAMP
             """
         ),
         {
@@ -189,6 +204,17 @@ async def load(run_id: str, db: AsyncSession) -> HarnessRunState | None:
         return None
 
     return HarnessRunState.from_dict(run_id, {k: _deserialise(row[k]) for k in row.keys() if k != "run_id"})
+
+
+def _deserialise_surface_blocker(data: Any) -> Any:
+    """Deserialise a persisted SurfaceBlocker dict back to a SurfaceBlocker, or None."""
+    if not data:
+        return None
+    try:
+        from .escalation import SurfaceBlocker
+        return SurfaceBlocker.from_dict(data)
+    except Exception:
+        return None
 
 
 def _serialise(value: Any) -> Any:
