@@ -89,10 +89,7 @@ class HypothesisSet:
     def to_dict(self) -> dict[str, Any]:
         return {
             "active": [h.to_dict() for h in self.active],
-            "eliminated": [
-                {"hypothesis": h.to_dict(), "record": r.to_dict()}
-                for h, r in self.eliminated
-            ],
+            "eliminated": [{"hypothesis": h.to_dict(), "record": r.to_dict()} for h, r in self.eliminated],
             "diversity_score": self.diversity_score,
         }
 
@@ -426,10 +423,7 @@ def enforce_diversity(
     """Trigger additional generation passes until diversity meets threshold or cap is hit."""
     compute_diversity_score(hypothesis_set)
     pass_count = 0
-    while (
-        hypothesis_set.diversity_score < policy.diversity_threshold
-        and pass_count < policy.max_diversity_passes
-    ):
+    while hypothesis_set.diversity_score < policy.diversity_threshold and pass_count < policy.max_diversity_passes:
         new_hypotheses = generate_hypotheses(world_model, evidence_store, fml_stub, experience_store)
         hypothesis_set.active.extend(new_hypotheses)
         compute_diversity_score(hypothesis_set)

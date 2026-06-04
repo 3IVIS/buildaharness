@@ -33,7 +33,7 @@ from harness.contradiction import (
     detect_set_level_contradictions,
     detect_temporal_contradictions,
 )
-from harness.evidence import Evidence, EvidenceStore
+from harness.evidence import Evidence, EvidenceStore, ReliabilityClass
 from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.staleness import staleness_sweep
 from harness.world_model import Belief, Contradiction, WorldModel
@@ -51,7 +51,7 @@ def _belief(statement: str, confidence: float = 0.8, derived_from: list[str] | N
     )
 
 
-def _evidence(obs: str = "test obs", reliability: str = "HIGH", source: str = "tool") -> Evidence:
+def _evidence(obs: str = "test obs", reliability: ReliabilityClass = "HIGH", source: str = "tool") -> Evidence:
     return Evidence(
         id=str(uuid.uuid4()),
         obs=obs,
@@ -99,9 +99,7 @@ def test_t03_consistency_decreases_with_contradictions():
     for i in range(6):
         wm.beliefs.append(_belief(f"belief {i}", derived_from=["obs-1"]))
     for _i in range(3):
-        wm.add_contradiction(
-            Contradiction(id=str(uuid.uuid4()), type="pairwise", severity="LOW", scope="local")
-        )
+        wm.add_contradiction(Contradiction(id=str(uuid.uuid4()), type="pairwise", severity="LOW", scope="local"))
 
     proxies = recompute_belief_health(wm)
     assert proxies["consistency"] < 1.0

@@ -14,12 +14,12 @@ TaskRisk = Literal["LOW", "MEDIUM", "HIGH"]
 # COMPLETE is terminal — only the P9 reviewer pass may reset to PENDING.
 # FAILED tasks may be requeued (PENDING) or blocked.
 _VALID_TRANSITIONS: dict[str, set[str]] = {
-    "PENDING":    {"ACTIVE", "BLOCKED"},
-    "ACTIVE":     {"VERIFYING", "FAILED", "BLOCKED"},
-    "VERIFYING":  {"COMPLETE", "FAILED", "BLOCKED"},
-    "COMPLETE":   set(),
-    "FAILED":     {"PENDING", "BLOCKED"},
-    "BLOCKED":    {"PENDING", "ACTIVE"},
+    "PENDING": {"ACTIVE", "BLOCKED"},
+    "ACTIVE": {"VERIFYING", "FAILED", "BLOCKED"},
+    "VERIFYING": {"COMPLETE", "FAILED", "BLOCKED"},
+    "COMPLETE": set(),
+    "FAILED": {"PENDING", "BLOCKED"},
+    "BLOCKED": {"PENDING", "ACTIVE"},
 }
 
 _RISK_ORDER: dict[str, int] = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
@@ -93,10 +93,7 @@ class TaskGraph:
             raise ValueError(f"Task {task_id!r} not found in graph")
         allowed = _VALID_TRANSITIONS.get(task.status, set())
         if new_status not in allowed:
-            raise ValueError(
-                f"Invalid task status transition: {task.status} → {new_status}"
-                f" for task {task_id!r}"
-            )
+            raise ValueError(f"Invalid task status transition: {task.status} → {new_status} for task {task_id!r}")
         task.status = new_status
         task.block_reason = block_reason
         self.changed = True
@@ -133,9 +130,7 @@ def validate_task_graph(task_graph: TaskGraph) -> list[str]:
     for t in task_graph.tasks:
         for dep_id in t.depends_on:
             if dep_id not in ids:
-                errors.append(
-                    f"Task {t.id!r} depends_on unknown task {dep_id!r}"
-                )
+                errors.append(f"Task {t.id!r} depends_on unknown task {dep_id!r}")
 
     # (2) Cycle detection via iterative DFS (WHITE=0, GRAY=1, BLACK=2)
     WHITE, GRAY, BLACK = 0, 1, 2
@@ -176,8 +171,7 @@ def validate_task_graph(task_graph: TaskGraph) -> list[str]:
                 dep = task_by_id.get(dep_id)
                 if dep is not None and dep.status != "COMPLETE":
                     errors.append(
-                        f"COMPLETE task {t.id!r} has non-COMPLETE dependency"
-                        f" {dep_id!r} (status={dep.status!r})"
+                        f"COMPLETE task {t.id!r} has non-COMPLETE dependency {dep_id!r} (status={dep.status!r})"
                     )
 
     return errors
@@ -197,9 +191,7 @@ def select_unblocked_leaf(task_graph: TaskGraph) -> Task | None:
         if t.status != "PENDING":
             continue
         all_done = all(
-            task_by_id.get(dep_id) is not None
-            and task_by_id[dep_id].status == "COMPLETE"
-            for dep_id in t.depends_on
+            task_by_id.get(dep_id) is not None and task_by_id[dep_id].status == "COMPLETE" for dep_id in t.depends_on
         )
         if all_done:
             candidates.append(t)
@@ -257,7 +249,7 @@ def compute_initial_conflict_probabilities(
     dep_sets: dict[str, set[str]] = {t.id: set(t.depends_on) for t in pending}
 
     for i, ta in enumerate(pending):
-        for tb in pending[i + 1:]:
+        for tb in pending[i + 1 :]:
             # Skip tasks with a direct dependency on each other
             if tb.id in dep_sets.get(ta.id, set()):
                 continue
@@ -285,9 +277,7 @@ def compute_initial_conflict_probabilities(
             for da in ta.parallel_write_domains:
                 for db in tb.parallel_write_domains:
                     key = cache._key(da, db)
-                    cache.probabilities[key] = max(
-                        cache.probabilities.get(key, 0.0), pair_prob
-                    )
+                    cache.probabilities[key] = max(cache.probabilities.get(key, 0.0), pair_prob)
 
     return cache
 
@@ -417,10 +407,6 @@ def check_abstraction_alignment(
     if total == 0:
         return 1.0
 
-    mismatched = sum(
-        1
-        for t in task_graph.tasks
-        if t.abstraction_level > wm_granularity + 1
-    )
+    mismatched = sum(1 for t in task_graph.tasks if t.abstraction_level > wm_granularity + 1)
     score = 1.0 - (mismatched / total)
     return max(0.0, min(1.0, score))

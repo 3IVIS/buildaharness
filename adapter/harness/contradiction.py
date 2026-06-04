@@ -14,11 +14,11 @@ contradiction ID produce the same final state.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
-from .world_model import Belief, Contradiction, WorldModel
+from .world_model import Belief, Contradiction, ContradictionSeverity, WorldModel
 
 _NEGATION_PAIRS = [
     ("present", "absent"),
@@ -91,7 +91,7 @@ def detect_pairwise_contradictions(beliefs: list[Belief]) -> list[Contradiction]
                 Contradiction(
                     id=str(uuid.uuid4()),
                     type="pairwise",
-                    severity=severity,
+                    severity=cast(ContradictionSeverity, severity),
                     scope="local",
                     involved_belief_ids=[b_a.id, b_b.id],
                 )
@@ -187,7 +187,7 @@ def detect_temporal_contradictions(
                 Contradiction(
                     id=str(uuid.uuid4()),
                     type="temporal",
-                    severity=severity,
+                    severity=cast(ContradictionSeverity, severity),
                     scope="local",
                     involved_belief_ids=[belief.id],
                 )
@@ -259,6 +259,7 @@ def assign_system_breaking_severity(
         involved_pair = frozenset(c.involved_belief_ids)
         if involved_pair in hypothesis_conflict_pairs:
             from dataclasses import replace
+
             upgraded.append(replace(c, severity="SYSTEM_BREAKING"))
         else:
             upgraded.append(c)
