@@ -51,3 +51,6 @@ packages/canvas/node_modules/
 
 # Yjs collab offline persistence (IndexedDB snapshots are local, not shared)
 .yjs-*
+
+# Claude Code local state (worktrees, session data — not project code)
+.claude/
