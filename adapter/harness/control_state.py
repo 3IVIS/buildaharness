@@ -28,17 +28,17 @@ CAUTION_THRESHOLD: float = 0.4
 # A recovery action must NOT depend on the dimension it is recovering — otherwise
 # a single blocked dimension would always detect as a deadlock (self-loop).
 RECOVERY_ACTION_DEPENDENCIES: dict[str, set[str]] = {
-    "dep_graph_refresh":   {"verification_strength"},    # refresh dep graph → needs verification
-    "verification_pass":   {"dep_graph_quality"},        # run verification → needs dep graph
-    "belief_refresh":      {"verification_feasibility"}, # refresh beliefs → needs feasibility
-    "coverage_expand":     {"verification_strength"},    # expand coverage → needs verification
-    "execution_retry":     {"dep_graph_quality"},        # retry execution → needs dep graph
-    "oscillation_stabilise": {"belief_freshness"},       # stabilise → needs fresh beliefs
-    "failure_recovery":    {"dep_graph_quality"},        # recover from failure → needs dep graph
-    "consistency_repair":  {"verification_strength"},    # repair consistency → needs verification
-    "support_augment":     {"belief_freshness"},         # augment support → needs fresh beliefs
-    "feasibility_check":   {"dep_graph_quality"},        # check feasibility → needs dep graph
-    "explanation_expand":  {"belief_freshness"},         # expand explanations → needs fresh beliefs
+    "dep_graph_refresh": {"verification_strength"},  # refresh dep graph → needs verification
+    "verification_pass": {"dep_graph_quality"},  # run verification → needs dep graph
+    "belief_refresh": {"verification_feasibility"},  # refresh beliefs → needs feasibility
+    "coverage_expand": {"verification_strength"},  # expand coverage → needs verification
+    "execution_retry": {"dep_graph_quality"},  # retry execution → needs dep graph
+    "oscillation_stabilise": {"belief_freshness"},  # stabilise → needs fresh beliefs
+    "failure_recovery": {"dep_graph_quality"},  # recover from failure → needs dep graph
+    "consistency_repair": {"verification_strength"},  # repair consistency → needs verification
+    "support_augment": {"belief_freshness"},  # augment support → needs fresh beliefs
+    "feasibility_check": {"dep_graph_quality"},  # check feasibility → needs dep graph
+    "explanation_expand": {"belief_freshness"},  # expand explanations → needs fresh beliefs
 }
 
 _DIMENSION_RECOVERY: dict[str, str] = {
@@ -168,17 +168,17 @@ def _extract_sub_dimensions(diagnostics: Diagnostics) -> list[tuple[str, float, 
     vh = diagnostics.verification_health
     eh = diagnostics.execution_health
     return [
-        ("belief_freshness",        bh.freshness,                "ratio"),
-        ("belief_consistency",      bh.consistency,              "ratio"),
-        ("belief_support",          bh.support,                  "ratio"),
-        ("symptom_coverage",        ch.symptom_coverage,         "ratio"),
-        ("explanation_coverage",    ch.explanation_coverage,     "ratio"),
-        ("verification_strength",   vh.strength,                 "ratio"),
-        ("verification_feasibility",vh.feasibility,              "ratio"),
-        ("progress_rate",           eh.progress_rate,            "ratio"),
+        ("belief_freshness", bh.freshness, "ratio"),
+        ("belief_consistency", bh.consistency, "ratio"),
+        ("belief_support", bh.support, "ratio"),
+        ("symptom_coverage", ch.symptom_coverage, "ratio"),
+        ("explanation_coverage", ch.explanation_coverage, "ratio"),
+        ("verification_strength", vh.strength, "ratio"),
+        ("verification_feasibility", vh.feasibility, "ratio"),
+        ("progress_rate", eh.progress_rate, "ratio"),
         # failure_recurrence and oscillation_score: 0=healthy, so invert for threshold logic
-        ("failure_recurrence",      1.0 - eh.failure_recurrence, "ratio"),
-        ("oscillation_score",       1.0 - eh.oscillation_score,  "ratio"),
+        ("failure_recurrence", 1.0 - eh.failure_recurrence, "ratio"),
+        ("oscillation_score", 1.0 - eh.oscillation_score, "ratio"),
     ]
 
 
@@ -220,9 +220,7 @@ def resolve_control_state(
     from .staleness import StalenessError  # avoid circular at module level
 
     if step is not None and world_model.generation_id != step:
-        raise StalenessError(
-            f"world_model.generation_id={world_model.generation_id} != step={step}"
-        )
+        raise StalenessError(f"world_model.generation_id={world_model.generation_id} != step={step}")
 
     cs = ControlState(generation_id=world_model.generation_id)
     sub_dims = _extract_sub_dimensions(diagnostics)
@@ -265,7 +263,7 @@ def resolve_control_state(
 
     # ── Tier 3: Coverage gaps → CAUTIOUS ──────────────────────────────────────
     coverage_dims = [
-        ("symptom_coverage",     diagnostics.coverage_health.symptom_coverage),
+        ("symptom_coverage", diagnostics.coverage_health.symptom_coverage),
         ("explanation_coverage", diagnostics.coverage_health.explanation_coverage),
     ]
     for dim_name, raw_value in coverage_dims:
@@ -273,10 +271,7 @@ def resolve_control_state(
         assert_normalised(norm_value, dim_name)
         if CRITICAL_THRESHOLD <= norm_value < CAUTION_THRESHOLD:
             cs.risk_state = "CAUTIOUS"
-            cs.notes.append(
-                f"Coverage gap in {dim_name} ({norm_value:.3f}): "
-                "exploration actions allowed"
-            )
+            cs.notes.append(f"Coverage gap in {dim_name} ({norm_value:.3f}): exploration actions allowed")
 
     # ── Tier 4: Proportional caution elevation ────────────────────────────────
     elevation_factor = compute_elevation_factor(sub_dims)  # type: ignore[arg-type]

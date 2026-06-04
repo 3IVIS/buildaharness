@@ -25,9 +25,9 @@ class NormalisationError(Exception):
 
 @dataclass
 class BeliefHealth:
-    freshness: float = 1.0       # ratio: 1 - stale_flag_ratio
-    consistency: float = 1.0     # ratio: 1 - contradiction_density
-    support: float = 1.0         # ratio: mean reliability weight over beliefs
+    freshness: float = 1.0  # ratio: 1 - stale_flag_ratio
+    consistency: float = 1.0  # ratio: 1 - contradiction_density
+    support: float = 1.0  # ratio: mean reliability weight over beliefs
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,7 +47,7 @@ class BeliefHealth:
 
 @dataclass
 class CoverageHealth:
-    symptom_coverage: float = 1.0      # entropy: fraction of symptoms with a hypothesis
+    symptom_coverage: float = 1.0  # entropy: fraction of symptoms with a hypothesis
     explanation_coverage: float = 1.0  # entropy: fraction of hypotheses with discriminating evidence
 
     def to_dict(self) -> dict[str, Any]:
@@ -66,7 +66,7 @@ class CoverageHealth:
 
 @dataclass
 class VerificationHealth:
-    strength: float = 1.0     # ratio: fraction of 9 verification layers passing (P5.5)
+    strength: float = 1.0  # ratio: fraction of 9 verification layers passing (P5.5)
     feasibility: float = 1.0  # composite: abstraction alignment + tool availability + VOI (P4.4/P5.2)
 
     def to_dict(self) -> dict[str, Any]:
@@ -85,9 +85,9 @@ class VerificationHealth:
 
 @dataclass
 class ExecutionHealth:
-    progress_rate: float = 1.0        # ratio: tasks_completed / total_tasks this iteration
-    failure_recurrence: float = 0.0   # composite: fraction of iterations ending in same failure
-    oscillation_score: float = 0.0    # composite: fraction of risk_state transitions that are reversals
+    progress_rate: float = 1.0  # ratio: tasks_completed / total_tasks this iteration
+    failure_recurrence: float = 0.0  # composite: fraction of iterations ending in same failure
+    oscillation_score: float = 0.0  # composite: fraction of risk_state transitions that are reversals
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -176,16 +176,13 @@ def update_diagnostics(
             if tag:
                 all_symptoms.add(tag)
 
-    diagnostics.coverage_health.symptom_coverage = (
-        len(explained_symptoms) / len(all_symptoms) if all_symptoms else 1.0
-    )
+    diagnostics.coverage_health.symptom_coverage = len(explained_symptoms) / len(all_symptoms) if all_symptoms else 1.0
 
     if hypotheses:
         covered = sum(
             1
             for h in hypotheses
-            if getattr(h, "discriminating_evidence", None)
-            or getattr(h, "supporting_evidence", [])
+            if getattr(h, "discriminating_evidence", None) or getattr(h, "supporting_evidence", [])
         )
         diagnostics.coverage_health.explanation_coverage = covered / len(hypotheses)
     else:
@@ -196,11 +193,12 @@ def update_diagnostics(
     # from abstraction alignment (P4.4) when the task graph has changed.
     if task_graph is not None and (force or getattr(task_graph, "changed", False)):
         from .task_graph import check_abstraction_alignment  # avoid circular import
+
         alignment_score = check_abstraction_alignment(task_graph, world_model, force=True)
         current_feasibility = diagnostics.verification_health.feasibility
-        diagnostics.verification_health.feasibility = max(0.0, min(1.0,
-            0.3 * alignment_score + 0.7 * current_feasibility
-        ))
+        diagnostics.verification_health.feasibility = max(
+            0.0, min(1.0, 0.3 * alignment_score + 0.7 * current_feasibility)
+        )
 
     # ── execution_health ─────────────────────────────────────────────────────
     if execution_journal:

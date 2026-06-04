@@ -143,6 +143,7 @@ def post_exec_gate(
 
     if output_contract is not None:
         from .output_contract import contract_shadow_check
+
         check = contract_shadow_check(result, output_contract)
         if not check.passed:
             return False

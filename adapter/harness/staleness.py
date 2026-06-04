@@ -46,7 +46,7 @@ def increment_generation_id(world_model: WorldModel) -> None:
     world_model.generation_id += 1
 
 
-def staleness_check(control_state: ControlStateStub, world_model: WorldModel) -> bool:
+def staleness_check(control_state: Any, world_model: WorldModel) -> bool:
     """Return True when control_state.generation_id is behind world_model.generation_id."""
     return control_state.generation_id < world_model.generation_id
 
@@ -148,6 +148,7 @@ def staleness_sweep(
     # Edge decay — runs on the same schedule but is independent of belief staleness
     if belief_dep_graph is not None and dep_graph_budget is not None:
         from .belief_graph import apply_decay
+
         apply_decay(belief_dep_graph, dep_graph_budget)
 
     return ratio

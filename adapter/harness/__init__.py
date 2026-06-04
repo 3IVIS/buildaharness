@@ -113,6 +113,7 @@ from .world_model import Belief, Contradiction, Observation, WorldModel
 from .world_model_ops import integrate_evidence, recompute_belief_health
 
 __all__ = [
+    "TOOL_RELIABILITY_ENVELOPES",
     "Belief",
     "BeliefDepGraph",
     "BeliefEdge",
@@ -121,8 +122,8 @@ __all__ = [
     "CallerState",
     "ConflictProbabilityCache",
     "ContractCheckResult",
-    "ControlState",
     "Contradiction",
+    "ControlState",
     "CoverageHealth",
     "DepGraphBudget",
     "Diagnostics",
@@ -143,7 +144,6 @@ __all__ = [
     "ReliabilityClass",
     "RiskState",
     "StalenessError",
-    "TOOL_RELIABILITY_ENVELOPES",
     "Task",
     "TaskGraph",
     "TaskRisk",

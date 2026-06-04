@@ -121,11 +121,13 @@ def build_manifest(
             available = False
 
         fallback = _DEFAULT_FALLBACKS.get(tool_name)
-        manifest._register(ToolEntry(
-            tool_name=tool_name,
-            available=available,
-            fallback_tool=fallback,
-        ))
+        manifest._register(
+            ToolEntry(
+                tool_name=tool_name,
+                available=available,
+                fallback_tool=fallback,
+            )
+        )
 
     manifest._freeze()
     return manifest

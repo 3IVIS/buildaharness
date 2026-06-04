@@ -71,11 +71,7 @@ def compile_apply_tool_reliability(
     # When inferences_only: skip non-INFERENCE entries without capping.
     # When all: process every entry.
     if apply_to == "inferences_only":
-        type_filter = (
-            '    if _e.evidence_type != "INFERENCE":\n'
-            "        _new_entries.append(_e)\n"
-            "        continue\n"
-        )
+        type_filter = '    if _e.evidence_type != "INFERENCE":\n        _new_entries.append(_e)\n        continue\n'
     else:
         type_filter = ""
 

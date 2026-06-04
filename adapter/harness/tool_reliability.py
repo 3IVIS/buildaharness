@@ -81,6 +81,7 @@ def apply_tool_reliability_envelope(evidence: Evidence, envelope: ToolEnvelope) 
         return evidence
 
     from dataclasses import replace
+
     capped: ReliabilityClass = _RELIABILITY_FROM_ORDER[capped_order]  # type: ignore[assignment]
     return replace(evidence, reliability=capped)
 

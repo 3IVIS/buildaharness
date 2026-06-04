@@ -113,7 +113,7 @@ def reconcile_parallel_branches(
 
     # Steps 4 & 5 — update cache from actual write-domain overlap
     for i, task_a in enumerate(branch_tasks):
-        for task_b in branch_tasks[i + 1:]:
+        for task_b in branch_tasks[i + 1 :]:
             for da in task_a.parallel_write_domains:
                 for db in task_b.parallel_write_domains:
                     # Conflict when both branches wrote to the same domain

@@ -187,9 +187,7 @@ def test_T08_optimistic_contradiction_detected_at_merge() -> None:
     hypothesis_set = HypothesisSet()
     detect_contradictions(merged, evidence_store, hypothesis_set)
 
-    assert len(merged.contradictions) > 0, (
-        "expected at least one contradiction in merged model from opposed beliefs"
-    )
+    assert len(merged.contradictions) > 0, "expected at least one contradiction in merged model from opposed beliefs"
 
 
 def test_T09_conflict_cache_updated_at_merge() -> None:
@@ -329,6 +327,4 @@ def test_T13_force_true_computes_regardless_of_changed_flag() -> None:
 
     # With force: should compute the real alignment score (which should be < 1.0)
     score_forced = check_abstraction_alignment(graph, wm, force=True)
-    assert score_forced < 1.0, (
-        f"expected score < 1.0 when force=True with misaligned tasks, got {score_forced}"
-    )
+    assert score_forced < 1.0, f"expected score < 1.0 when force=True with misaligned tasks, got {score_forced}"

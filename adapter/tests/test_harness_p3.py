@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -114,7 +114,6 @@ def test_T02_dep_class_gap_annotation_is_str_not_numeric():
 def test_T03_update_diagnostics_reduces_freshness_with_stale_beliefs():
     """T03 — Adding 5 stale beliefs to a 10-belief world model reduces freshness below 1.0."""
     wm = WorldModel()
-    now = datetime.now(UTC).replace(tzinfo=None)
 
     for i in range(10):
         b = Belief(id=f"b{i}", statement=f"belief {i}", confidence=0.8, derived_from=["src"])
@@ -124,7 +123,7 @@ def test_T03_update_diagnostics_reduces_freshness_with_stale_beliefs():
     for i in range(5):
         stale_flags[f"b{i}"] = True
     wm.stale_flags = stale_flags  # type: ignore[attr-defined]
-    wm.stale_flag_ratio = 0.5     # type: ignore[attr-defined]
+    wm.stale_flag_ratio = 0.5  # type: ignore[attr-defined]
 
     d = Diagnostics()
     update_diagnostics(d, wm, HypothesisSet(), EvidenceStore())
@@ -201,12 +200,14 @@ def test_T08_assert_normalised_raises_normalisation_error():
 def test_T09_tier1_fires_before_lower_tiers_on_system_breaking():
     """T09 — Tier 1 fires before other tiers when a SYSTEM_BREAKING contradiction exists."""
     wm = _fresh_world_model()
-    wm.add_contradiction(Contradiction(
-        id="c1",
-        type="pairwise",
-        severity="SYSTEM_BREAKING",
-        scope="global",
-    ))
+    wm.add_contradiction(
+        Contradiction(
+            id="c1",
+            type="pairwise",
+            severity="SYSTEM_BREAKING",
+            scope="global",
+        )
+    )
 
     # Set up diagnostics that would trigger Tier 3/4 if evaluated — to confirm they are NOT
     d = Diagnostics()
@@ -250,8 +251,7 @@ def test_T11_tier4_elevation_higher_for_lower_dimension():
     factor_mid = compute_elevation_factor(dims_mid)
 
     assert factor_low > factor_mid, (
-        f"Expected elevation_factor for 0.05 ({factor_low:.4f}) "
-        f"> factor for 0.35 ({factor_mid:.4f})"
+        f"Expected elevation_factor for 0.05 ({factor_low:.4f}) > factor for 0.35 ({factor_mid:.4f})"
     )
     # Both are below CAUTION_THRESHOLD so both should produce positive factors
     assert factor_low > 0.0
@@ -305,7 +305,7 @@ def test_T13_mutual_block_triggers_deadlock_and_human_required():
     wm = _fresh_world_model()
     d = _healthy_diagnostics()
     d.verification_health.strength = 0.05  # below CRITICAL → Tier 2 blocks verification_strength
-    d.belief_health.freshness = 0.05       # below CRITICAL → Tier 2 blocks belief_freshness
+    d.belief_health.freshness = 0.05  # below CRITICAL → Tier 2 blocks belief_freshness
 
     cs = resolve_control_state(d, wm)
     assert cs.risk_state == "BLOCKED"
@@ -433,9 +433,7 @@ def test_T20_dep_class_gap_annotation_only_in_notes_not_arithmetic():
     cs = resolve_control_state(d, wm)
 
     # Annotation must appear in notes
-    assert any("dep-class-gap" in note for note in cs.notes), (
-        f"Annotation not found in notes: {cs.notes}"
-    )
+    assert any("dep-class-gap" in note for note in cs.notes), f"Annotation not found in notes: {cs.notes}"
 
     # NORMAL state confirms no tier was influenced by the annotation value as a number
     assert cs.risk_state == "NORMAL"

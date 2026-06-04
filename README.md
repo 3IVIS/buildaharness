@@ -32,7 +32,7 @@ flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
            →  [ A2A agent ]          →  any A2A-compatible runtime
 ```
 
-**Current version:** v0.8.0 — canvas, four framework adapters, and Langfuse observability complete.
+**Current version:** v0.8.0 — canvas, four framework adapters, and Langfuse observability complete. Harness phases P0–P4 done · 106 tests passing · P5 (Execution & Verification) unblocked.
 
 ---
 
@@ -49,8 +49,10 @@ The difference is not a matter of degree — it is architectural. A workflow rou
 | Canvas | 14 node types | 24 node types (10 new harness nodes in P10) |
 | Frameworks | LangGraph · CrewAI · Mastra · MAF | All four + harness-layer adapters |
 | Observability | Langfuse traces for all 4 runtimes | Harness spans: world model, control state, verification, recovery |
-| Reasoning | Prompt in → answer out | World model · beliefs · hypotheses · VOI-gated evidence |
-| Control | None | 5-tier resolver · NORMAL / CAUTIOUS / BLOCKED |
+| Reasoning | Evidence store · tool reliability envelopes · VOI · hypothesis system *(P1 ✓)* | Full integration with execution loop |
+| World Model | Belief dep graph · typed contradictions · staleness sweep *(P2 ✓)* | Full integration with harness spans |
+| Control | 5-tier resolver · NORMAL / CAUTIOUS / BLOCKED · 106 tests *(P3 ✓)* | Harness control spans across all frameworks |
+| Planning | Task graph (6-state) · parallel concurrency · `conflict_probability_cache` *(P4 ✓)* | Full adapter integration |
 | Verification | None | 9 layers · adversarial reviewer pass · pre-execution gate |
 | Recovery | None | 6 named strategies · typed failure library · local/global replan |
 | Memory | None | Budget tracking · journal · compression risk |
@@ -109,12 +111,12 @@ The repository ships today as a working canvas-and-adapters tool. Every subseque
 
 | Phase | Name | Focus |
 |---|---|---|
-| **P0** *(in progress)* | Foundation & State Architecture | FlowSpec extension, harness state model, `generation_id`, `completeness_flags`, health vectors |
-| **P1** | Evidence & Reasoning | Evidence store, tool reliability envelopes, VOI estimation, hypothesis system |
-| **P2** | World Model & Contradiction | Belief dep graph, typed contradiction detection, staleness sweep |
-| **P3** | Diagnostics & Control State | Health vector computation, five-tier `resolve_control_state()`, deadlock detection |
-| **P4** | Planning & Task Graph | Task graph (6-state), parallel write-domain conflict detection, `conflict_probability_cache` |
-| **P5** | Execution & Verification | Pre-execution review gate, 9-layer verification, adversarial pass, reversibility strategy |
+| **P0** ✓ | Foundation & State Architecture | FlowSpec extension, harness state model, `generation_id`, `completeness_flags`, health vectors |
+| **P1** ✓ | Evidence & Reasoning | Evidence store, tool reliability envelopes, VOI estimation, hypothesis system |
+| **P2** ✓ | World Model & Contradiction | Belief dep graph, typed contradiction detection, staleness sweep |
+| **P3** ✓ | Diagnostics & Control State | Health vector computation, five-tier `resolve_control_state()`, deadlock detection |
+| **P4** ✓ | Planning & Task Graph | Task graph (6-state), parallel write-domain conflict detection, `conflict_probability_cache` |
+| **P5** *(in progress)* | Execution & Verification | Pre-execution review gate, 9-layer verification, adversarial pass, reversibility strategy |
 | **P6** | Recovery & Memory | Six named recovery strategies, typed failure library, context compression, journal retention |
 | **P7** | Caller State & Escalation | Proactive mid-loop caller updates, `cannot_make_progress()`, constraint change propagation |
 | **P8** | Experience Store | Cross-run structural reuse — decompositions, workflows, recovery sequences, strategy weights |

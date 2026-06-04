@@ -411,19 +411,28 @@ def test_t19_enforce_diversity_triggers_additional_passes():
 def test_t20_each_elimination_condition_independently_works():
     """T20 · Each elimination condition independently triggers elimination at its threshold."""
     # Test 1: POSTERIOR_BELOW_FLOOR
-    h1 = Hypothesis(id="h1", explanation="h1", confidence=0.01,
-                    predicted_observations=[], discriminating_evidence=[],
-                    generation_sources=["symptom_inference"])
+    h1 = Hypothesis(
+        id="h1",
+        explanation="h1",
+        confidence=0.01,
+        predicted_observations=[],
+        discriminating_evidence=[],
+        generation_sources=["symptom_inference"],
+    )
     hs1 = HypothesisSet(active=[h1])
     result1 = eliminate(hs1, EvidenceStore(), {}, EliminationPolicy(posterior_floor=0.05))
     assert len(result1.eliminated) == 1
     assert result1.eliminated[0][1].reason == "POSTERIOR_BELOW_FLOOR"
 
     # Test 2: PREDICTION_FAILURE (threshold=1)
-    h2 = Hypothesis(id="h2", explanation="h2", confidence=0.5,
-                    predicted_observations=["X should be present"],
-                    discriminating_evidence=[],
-                    generation_sources=["symptom_inference"])
+    h2 = Hypothesis(
+        id="h2",
+        explanation="h2",
+        confidence=0.5,
+        predicted_observations=["X should be present"],
+        discriminating_evidence=[],
+        generation_sources=["symptom_inference"],
+    )
     hs2 = HypothesisSet(active=[h2])
     policy2 = EliminationPolicy(prediction_failure_threshold=1)
     result2 = eliminate(hs2, EvidenceStore(), {"h2": 1}, policy2)
@@ -431,19 +440,25 @@ def test_t20_each_elimination_condition_independently_works():
     assert result2.eliminated[0][1].reason == "PREDICTION_FAILURE"
 
     # Test 3: CONTRADICTING_EVIDENCE
-    h3 = Hypothesis(id="h3", explanation="h3", confidence=0.5,
-                    predicted_observations=["module X present"],
-                    discriminating_evidence=[],
-                    generation_sources=["symptom_inference"])
+    h3 = Hypothesis(
+        id="h3",
+        explanation="h3",
+        confidence=0.5,
+        predicted_observations=["module X present"],
+        discriminating_evidence=[],
+        generation_sources=["symptom_inference"],
+    )
     store3 = EvidenceStore()
-    store3.append(Evidence(
-        id="e1",
-        obs="no module X found",
-        reliability="HIGH",
-        source="grep",
-        evidence_type="OBSERVATION",
-        freshness=1.0,
-    ))
+    store3.append(
+        Evidence(
+            id="e1",
+            obs="no module X found",
+            reliability="HIGH",
+            source="grep",
+            evidence_type="OBSERVATION",
+            freshness=1.0,
+        )
+    )
     hs3 = HypothesisSet(active=[h3])
     result3 = eliminate(hs3, store3, {}, EliminationPolicy())
     assert len(result3.eliminated) == 1
