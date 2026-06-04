@@ -113,11 +113,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 4 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 5 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 6 Complete</span>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 7 Complete</span><br><br>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 7 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 8 Complete</span><br><br>
   <span class="badge badge-blue">11 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">8 phases complete</span> · <span style="color:#60a5fa">4 phases remaining</span> · 177/177 acceptance tests pass (P0–P7) · <strong style="color:#4ade80">P8 now unblocked</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">9 phases complete</span> · <span style="color:#60a5fa">3 phases remaining</span> · 193/193 acceptance tests pass (P0–P8) · <strong style="color:#4ade80">P9 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -160,7 +161,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P5 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Execution &amp; Verification</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P6 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Recovery &amp; Memory</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P7 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Caller State &amp; Escalation</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P8</div><div class="tl-bar" style="background:#94a3b8;width:100%"></div><div class="tl-name">Experience Store</div><div class="tl-weeks">4 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P8 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Experience Store</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P9</div><div class="tl-bar" style="background:#34d399;width:100%"></div><div class="tl-name">Reviewer Pass &amp; Output</div><div class="tl-weeks">3 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P10</div><div class="tl-bar" style="background:#fb7185;width:100%"></div><div class="tl-name">Canvas Integration</div><div class="tl-weeks">5 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P11</div><div class="tl-bar" style="background:#a3e635;width:100%"></div><div class="tl-name">E2E Integration &amp; Testing</div><div class="tl-weeks">5 wks</div></div>
@@ -224,7 +225,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–7 are complete.</strong> Phase 8 (Experience Store &amp; Learning) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–8 are complete.</strong> Phase 9 (Reviewer Pass &amp; Output Contract) is the next work item.</div>
 
 <div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
@@ -348,6 +349,23 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (belief_dep_graph upgraded from raw dict to typed BeliefDepGraph · to_dict/from_dict wired)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P2 types + functions exported) &nbsp;·&nbsp; adapter/validate.py (update_world_model config validation)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (UpdateWorldModelConfig: integration_mode + reliability_threshold) &nbsp;·&nbsp; spec/schema.json (regenerated)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 8 Complete — Experience Store &amp; Learning</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">16/16</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">193/193</strong> combined P0–P8 tests pass &nbsp;·&nbsp; Completed 2026-06-04<br>
+    Key invariant enforced: INV-10 (experience_store no-op when absent — structurally identical run with or without it)<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/experience_store.py (ExperienceStore · ExperienceEntry · ExperienceType · StrategyWeightKey · ExecutionContext · WarmStartResult · warm_start · update_experience_store · softmax_strategy_policy · build_strategy_ordering · upsert_strategy_weight · load_* helpers)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/migrations/versions/0011_experience_store.py (experience_entries · experience_strategy_weights tables)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_p8.py (T01–T16 · in-memory session · no Postgres required)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/recovery.py (StrategyState: recovery_was_used · last_failure_class fields; switch_strategy() experience_store-aware path)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (experience_store: ExperienceStore|None field · temperature float field)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/loop.py (P8 hooks: warm_start at step_count==0 · update_experience_store on completed_task)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P8 exports)
     </div>
   </div>
 </div>
@@ -574,7 +592,7 @@ const phases=[
      {id:'P7.2',name:'Constraint change propagation path',body:'Implement full constraint propagation: detect_contradictions(updated_success_criteria) → update_success_criteria(caller_state) → update_output_contract(caller_state) → revalidate_task_graph() → generation_id increment → resolve_control_state() → continue. Same code path called from both check_external_updates() and human response after escalation.',tests:['Scope-narrowing constraint update invalidates tasks outside new scope','Scope-expanding constraint update adds new tasks to task_graph','Both paths (check_external_updates and escalation) call the same propagation function']},
      {id:'P7.3',name:'Escalation with surface_blocker',body:'Implement escalate(surface_blocker(reason, missing_info)). Fires when risk_state==BLOCKED OR cannot_make_progress()==True. surface_blocker() presents minimum information needed for human resolution: reason, missing_info, current task context.',tests:['BLOCKED state triggers escalation','cannot_make_progress()==True triggers escalation','surface_blocker() includes reason and missing_info — not just an exception']},
    ]},
-  {id:'P8',title:'Experience Store & Learning',weeks:'4 weeks',color:'#94a3b8',
+  {id:'P8',title:'Experience Store & Learning',weeks:'4 weeks',color:'#94a3b8',status:'complete',completionNote:'16/16 tests · branch claude/phase-8-implementation-2kTwq',
    sub:'Experience store data model · warm_start() structural reuse · update_experience_store() · adaptive strategy upgrade (softmax) · cross-run learning',
    tasks:[
      {id:'P8.1',name:'Experience store data model',body:'Implement experience_store: successful_decompositions[], successful_tool_workflows[], successful_verification_plans[], successful_recovery_sequences[], failure_patterns[], strategy_weights{(strategy_type,failure_class): rate}, class_priors{failure_class: base_rate}. Backed by Postgres. available property checks DB connectivity.',tests:['experience_store.available=False when DB unreachable — no exception raised','Storing and retrieving a successful decomposition round-trips correctly','strategy_weights keyed by (strategy_type, failure_class) tuple']},
@@ -650,7 +668,7 @@ phases.forEach((ph,i)=>{
 /* ─── NODE COVERAGE ─── */
 const nodeCoverage=[
   {id:1,name:'Initialize',layer:'Planning',status:'built',phase:'P0'},
-  {id:2,name:'Warm Start',layer:'Learning',status:'planned',phase:'P8'},
+  {id:2,name:'Warm Start',layer:'Learning',status:'built',phase:'P8✓'},
   {id:3,name:'Check Caller Updates',layer:'Caller',status:'built',phase:'P7✓'},
   {id:4,name:'Context Compression',layer:'Memory',status:'built',phase:'P6✓'},
   {id:5,name:'Gather Evidence',layer:'Reasoning',status:'built',phase:'P1'},
@@ -691,7 +709,7 @@ const layerCoverage=[
   {name:'Policy',resp:'Gate enforcement at decomposition, action, post-execution',status:'planned',phases:'P3,P5'},
   {name:'Recovery',resp:'Rollback and replanning on failure',status:'built',phases:'P6✓'},
   {name:'Memory',resp:'Compression, journals, budget',status:'built',phases:'P6✓'},
-  {name:'Learning (opt.)',resp:'Experience reuse across runs',status:'planned',phases:'P8'},
+  {name:'Learning (opt.)',resp:'Experience reuse across runs',status:'built',phases:'P8✓'},
 ];
 const lcTbody=document.getElementById('layer-coverage-tbody');
 layerCoverage.forEach(l=>{
@@ -711,7 +729,7 @@ const stateCoverage=[
   {name:'Memory State',fields:'token_budget · max_steps · journal · journal_retention_policy · compression_risk(structured) · rollback_points[]',status:'built',phase:'P6✓'},
   {name:'Strategy State',fields:'current_strategy · strategy_confidence · switch_triggers · prior_strategy_weights · recovery_strategy_order',status:'built',phase:'P6✓'},
   {name:'Failure Diagnostics',fields:'failure_mode_library · matched_pattern(normalised confidence) · failure_history[]',status:'built',phase:'P6✓'},
-  {name:'Experience Store (opt.)',fields:'successful_decompositions[] · successful_tool_workflows[] · strategy_weights{} · class_priors{}',status:'planned',phase:'P8'},
+  {name:'Experience Store (opt.)',fields:'successful_decompositions[] · successful_tool_workflows[] · strategy_weights{} · class_priors{}',status:'built',phase:'P8✓'},
   {name:'Caller State',fields:'current_constraints · clarification_history[] · last_update · output_preferences · success_criteria · escalation_pending',status:'built',phase:'P0✓,P7✓'},
   {name:'Output Contract',fields:'format_requirements · required_sections · interface_constraints · validation_rules · caller_specific_constraints',status:'partial',phase:'P0✓,P9'},
 ];
