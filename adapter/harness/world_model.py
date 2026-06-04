@@ -111,6 +111,8 @@ class WorldModel:
     contradictions: list[Contradiction] = field(default_factory=list)
     environment_change_log: list[dict[str, Any]] = field(default_factory=list)
     completeness_flags: dict[str, bool] = field(default_factory=dict)
+    # Belief IDs flagged as stale after a constraint/criteria change (P7)
+    stale_flags: dict[str, bool] = field(default_factory=dict)
 
     def add_observation(self, obs: Observation) -> None:
         self.observations.append(obs)
@@ -139,6 +141,7 @@ class WorldModel:
             "contradictions": [c.to_dict() for c in self.contradictions],
             "environment_change_log": list(self.environment_change_log),
             "completeness_flags": dict(self.completeness_flags),
+            "stale_flags": dict(self.stale_flags),
         }
 
     @classmethod
@@ -148,6 +151,7 @@ class WorldModel:
             assumptions=d.get("assumptions", []),
             environment_change_log=d.get("environment_change_log", []),
             completeness_flags=d.get("completeness_flags", {}),
+            stale_flags=d.get("stale_flags", {}),
         )
         for o in d.get("observations", []):
             wm.observations.append(Observation.from_dict(o))
