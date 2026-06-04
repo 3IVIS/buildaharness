@@ -22,6 +22,7 @@ from .caller_state import CallerState
 from .control_state import ControlState
 from .diagnostics import Diagnostics
 from .evidence import EvidenceStore
+from .experience_store import ExperienceStore
 from .failure_modes import FailureDiagnostics
 from .hypothesis import HypothesisSet
 from .memory import MemoryState
@@ -74,14 +75,19 @@ class HarnessRunState:
     memory_state: MemoryState = field(default_factory=MemoryState)
     strategy_state: StrategyState = field(default_factory=StrategyState)
     failure_diagnostics: FailureDiagnostics = field(default_factory=FailureDiagnostics)
-    # P8 — experience store reference (raw dict until P8 defines the typed dataclass)
-    experience_store_ref: dict[str, Any] = field(default_factory=dict)
+    # P8 — experience store (typed; None when no DB factory is configured)
+    experience_store: ExperienceStore | None = None
+    # P8 — softmax temperature for adaptive strategy selection (default 1.0)
+    temperature: float = 1.0
     # P7 — escalation state
     escalation_pending: bool = False
     pending_escalation: Any | None = None  # SurfaceBlocker | None
     pending_clarification: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        # Persist a presence marker rather than the store contents — actual
+        # experience data lives in its own tables and is not serialised here.
+        experience_store_marker = {"configured": True} if self.experience_store is not None else {}
         return {
             "world_model": self.world_model.to_dict(),
             "caller_state": self.caller_state.to_dict(),
@@ -95,7 +101,7 @@ class HarnessRunState:
             "memory_state": self.memory_state.to_dict(),
             "strategy_state": self.strategy_state.to_dict(),
             "failure_diagnostics": self.failure_diagnostics.to_dict(),
-            "experience_store_ref": self.experience_store_ref,
+            "experience_store_ref": experience_store_marker,
             "escalation_pending": self.escalation_pending,
             "pending_escalation": self.pending_escalation.to_dict() if self.pending_escalation is not None else None,
             "pending_clarification": self.pending_clarification,
@@ -103,6 +109,8 @@ class HarnessRunState:
 
     @classmethod
     def from_dict(cls, run_id: str, d: dict[str, Any]) -> HarnessRunState:
+        # experience_store cannot be reconstructed from the marker alone —
+        # callers must re-attach a session factory after loading.
         return cls(
             run_id=run_id,
             world_model=WorldModel.from_dict(d.get("world_model") or {}),
@@ -120,7 +128,8 @@ class HarnessRunState:
             memory_state=MemoryState.from_dict(d.get("memory_state") or {}),
             strategy_state=StrategyState.from_dict(d.get("strategy_state") or {}),
             failure_diagnostics=FailureDiagnostics.from_dict(d.get("failure_diagnostics") or {}),
-            experience_store_ref=d.get("experience_store_ref") or {},
+            experience_store=None,
+            temperature=float(d.get("temperature", 1.0)),
             escalation_pending=d.get("escalation_pending", False),
             pending_escalation=_deserialise_surface_blocker(d.get("pending_escalation")),
             pending_clarification=d.get("pending_clarification"),
