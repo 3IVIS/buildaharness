@@ -40,6 +40,10 @@ class StrategyState:
     completion_history: list[int] = field(default_factory=list)
     risk_state_history: list[str] = field(default_factory=list)
     stall_reason: str = ""
+    # P8 — tracks whether a recovery strategy was used in the current run
+    recovery_was_used: bool = False
+    # P8 — the failure class that triggered the most recent strategy switch
+    last_failure_class: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +54,8 @@ class StrategyState:
             "completion_history": list(self.completion_history),
             "risk_state_history": list(self.risk_state_history),
             "stall_reason": self.stall_reason,
+            "recovery_was_used": self.recovery_was_used,
+            "last_failure_class": self.last_failure_class,
         }
 
     @classmethod
@@ -62,6 +68,8 @@ class StrategyState:
             completion_history=list(d.get("completion_history", [])),
             risk_state_history=list(d.get("risk_state_history", [])),
             stall_reason=d.get("stall_reason", ""),
+            recovery_was_used=d.get("recovery_was_used", False),
+            last_failure_class=d.get("last_failure_class", ""),
         )
 
 
@@ -75,16 +83,40 @@ def get_next_strategy(strategy_state: StrategyState) -> StrategyType:
     return STRATEGY_ORDER[next_idx]
 
 
-def switch_strategy(strategy_state: StrategyState, reason: str) -> StrategyState:
-    """Return a new StrategyState advanced to the next strategy (immutable update)."""
+def switch_strategy(
+    strategy_state: StrategyState,
+    reason: str,
+    failure_class: str = "",
+    experience_store: Any | None = None,
+) -> StrategyState:
+    """Return a new StrategyState advanced to the next strategy (immutable update).
+
+    When experience_store is available and failure_class is provided, uses
+    build_strategy_ordering() to select the next strategy empirically (P8.4).
+    Falls back to fixed STRATEGY_ORDER when the store is unavailable (INV-10).
+    """
+    if experience_store is not None and failure_class and getattr(experience_store, "available", False):
+        from .experience_store import build_strategy_ordering
+        ordering = build_strategy_ordering(failure_class, experience_store)
+        try:
+            idx = ordering.index(strategy_state.current_strategy)
+        except ValueError:
+            idx = 0
+        next_idx = min(idx + 1, len(ordering) - 1)
+        next_strategy: StrategyType = ordering[next_idx]  # type: ignore[assignment]
+    else:
+        next_strategy = get_next_strategy(strategy_state)
+
     return StrategyState(
-        current_strategy=get_next_strategy(strategy_state),
+        current_strategy=next_strategy,
         switch_count=strategy_state.switch_count + 1,
         switch_triggers=list(strategy_state.switch_triggers) + [reason],
         prior_strategy_weights=dict(strategy_state.prior_strategy_weights),
         completion_history=list(strategy_state.completion_history),
         risk_state_history=list(strategy_state.risk_state_history),
         stall_reason=strategy_state.stall_reason,
+        recovery_was_used=True,
+        last_failure_class=failure_class,
     )
 
 

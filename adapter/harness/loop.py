@@ -1,6 +1,6 @@
 """
-Main loop — P3.5 skeleton extended with P6 recovery & memory wiring and P7
-external update poll + escalation triggers.
+Main loop — P3.5 skeleton extended with P6 recovery & memory wiring, P7
+external update poll + escalation triggers, and P8 experience store hooks.
 
 Two-substep double-increment model (INV-03):
   Sub-step A: increment_generation_id → resolve control_state → action_gate
@@ -17,6 +17,10 @@ P7 additions (wired per-iteration):
   - check_external_updates at very top of each iteration (P7.1)
   - escalate() when risk_state == BLOCKED (P7.3)
   - escalate() when strategy == ESCALATE (P7.3)
+
+P8 additions:
+  - warm_start() called once on step_count == 0 (P8.2)
+  - update_experience_store() hook when a completed_task is passed (P8.3)
 """
 
 from __future__ import annotations
@@ -108,6 +112,11 @@ def run_one_iteration(
     output_contract: Any | None = None,
     harness_run_state: Any | None = None,
     run_id: str = "",
+    experience_store: Any | None = None,
+    task_class: str = "",
+    dep_graph_budget: Any | None = None,
+    completed_task: Any | None = None,
+    execution_context: Any | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -125,6 +134,28 @@ def run_one_iteration(
 
     escalation: dict[str, Any] | None = None
     channel = update_channel if update_channel is not None else NoOpUpdateChannel()
+
+    # ── P8 — warm_start on first iteration ───────────────────────────────────
+    if step_count == 0 and experience_store is not None:
+        from .experience_store import warm_start
+        warm_start(
+            experience_store=experience_store,
+            strategy_state=strategy_state,
+            failure_diagnostics=failure_diagnostics,
+            task_graph=task_graph,
+            task_class=task_class or None,
+            dep_graph_budget=dep_graph_budget,
+        )
+
+    # ── P8 — update_experience_store hook on task completion ─────────────────
+    if completed_task is not None and experience_store is not None:
+        from .experience_store import update_experience_store
+        update_experience_store(
+            completed_task=completed_task,
+            strategy_state=strategy_state,
+            execution_context=execution_context,
+            experience_store=experience_store,
+        )
 
     # ── P7.1 — external updates poll (must be first, before any state mutation) ─
     if caller_state is not None:
