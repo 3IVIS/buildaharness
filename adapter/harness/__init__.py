@@ -12,6 +12,9 @@ Phase 3 exports: diagnostic health vectors, normalisation contract,
                  full gate implementations, main loop skeleton.
 Phase 4 exports: task graph (P4.1), conflict probability cache (P4.2),
                  parallel branch merge (P4.3), abstraction fit check (P4.4).
+Phase 5 exports: risk estimation (P5.1), VOI & adequacy critic (P5.2),
+                 review gate (P5.3), execution engine (P5.4),
+                 verification layer runner (P5.5).
 """
 
 from .belief_graph import (
@@ -112,6 +115,48 @@ from .tool_reliability import (
 from .world_model import Belief, Contradiction, Observation, WorldModel
 from .world_model_ops import integrate_evidence, recompute_belief_health
 
+# Phase 5
+from .risk import RiskFactors, RiskLevel, classify_module_type, compute_change_scope, compute_file_centrality, estimate_risk
+from .voi import (
+    AdequacyResult,
+    VOIResult,
+    estimate_value_of_information,
+    update_verification_strength,
+    verification_adequacy_critic,
+)
+from .review_gate import (
+    DimensionResult,
+    ReviewResult,
+    check_code_quality,
+    check_hypothesis_compatibility,
+    check_output_contract,
+    check_task_alignment,
+    check_world_model_consistency,
+    review_proposed_change,
+)
+from .execution import (
+    ExecutionResult,
+    ReversibilityStrategy,
+    action_dep_overlap,
+    execute,
+    select_reversibility_strategy,
+)
+from .verification import (
+    LayerResult,
+    VerificationLayer,
+    VerificationResult,
+    verify,
+    verify_evidence_sufficiency,
+    verify_syntax,
+    verify_unit,
+    verify_integration,
+    verify_consistency,
+    verify_requirements,
+    verify_assumptions,
+    verify_goal_correctness,
+    verify_output_contract_partial,
+)
+
 __all__ = [
     "Belief",
     "BeliefDepGraph",
@@ -209,4 +254,42 @@ __all__ = [
     "update_from_experience_store",
     "validate_output_contract",
     "validate_task_graph",
+    # Phase 5
+    "AdequacyResult",
+    "DimensionResult",
+    "ExecutionResult",
+    "LayerResult",
+    "ReviewResult",
+    "RiskFactors",
+    "RiskLevel",
+    "ReversibilityStrategy",
+    "VOIResult",
+    "VerificationLayer",
+    "VerificationResult",
+    "action_dep_overlap",
+    "check_code_quality",
+    "check_hypothesis_compatibility",
+    "check_output_contract",
+    "check_task_alignment",
+    "check_world_model_consistency",
+    "classify_module_type",
+    "compute_change_scope",
+    "compute_file_centrality",
+    "estimate_risk",
+    "estimate_value_of_information",
+    "execute",
+    "review_proposed_change",
+    "select_reversibility_strategy",
+    "update_verification_strength",
+    "verification_adequacy_critic",
+    "verify",
+    "verify_assumptions",
+    "verify_consistency",
+    "verify_evidence_sufficiency",
+    "verify_goal_correctness",
+    "verify_integration",
+    "verify_output_contract_partial",
+    "verify_requirements",
+    "verify_syntax",
+    "verify_unit",
 ]
