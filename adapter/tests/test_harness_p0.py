@@ -318,11 +318,11 @@ def test_T17_validate_output_contract_stub_returns_pass():
     assert result.violations == []
 
 
-def test_T18_contract_shadow_check_stub_returns_pass():
-    """T18 — contract_shadow_check stub returns ContractCheckResult(passed=True, is_stub=True)."""
+def test_T18_contract_shadow_check_real_returns_pass():
+    """T18 — contract_shadow_check (P5 real impl) returns ContractCheckResult(passed=True, is_stub=False)."""
     result = contract_shadow_check({}, OutputContract())
     assert result.passed is True
-    assert result.is_stub is True
+    assert result.is_stub is False
 
 
 # ══════════════════════════════════════════════════════════════════════════════

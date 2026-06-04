@@ -108,11 +108,14 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <p>Complete phased roadmap from the current canvas-and-adapters foundation to the full harness defined in <em>full_harness_architecture.html</em>. Every node, layer, state structure, invariant, and deep-dive concept from the architecture is covered, assigned to a phase, and given acceptance tests.</p>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 0 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 1 Complete</span>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 2 Complete</span><br><br>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 2 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 3 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 4 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 5 Complete</span><br><br>
   <span class="badge badge-blue">11 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">3 phases complete</span> · <span style="color:#60a5fa">9 phases remaining</span> · 76/76 acceptance tests pass (P0+P1+P2) · <strong style="color:#4ade80">P3 now unblocked</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">6 phases complete</span> · <span style="color:#60a5fa">6 phases remaining</span> · 150/150 acceptance tests pass (P0–P5) · <strong style="color:#4ade80">P6 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -150,9 +153,9 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P0 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Foundation &amp; State Architecture</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P1 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Evidence &amp; Reasoning</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P2 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">World Model &amp; Contradiction</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P3</div><div class="tl-bar" style="background:#f0abfc;width:100%"></div><div class="tl-name">Diagnostics &amp; Control State</div><div class="tl-weeks">4 wks</div></div>
-  <div class="tl-phase"><div class="tl-label">P4</div><div class="tl-bar" style="background:#fbbf24;width:100%"></div><div class="tl-name">Planning &amp; Task Graph</div><div class="tl-weeks">4 wks</div></div>
-  <div class="tl-phase"><div class="tl-label">P5</div><div class="tl-bar" style="background:#f87171;width:100%"></div><div class="tl-name">Execution &amp; Verification</div><div class="tl-weeks">5 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P3 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Diagnostics &amp; Control State</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P4 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Planning &amp; Task Graph</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P5 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Execution &amp; Verification</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P6</div><div class="tl-bar" style="background:#f97316;width:100%"></div><div class="tl-name">Recovery &amp; Memory</div><div class="tl-weeks">4 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P7</div><div class="tl-bar" style="background:#67e8f9;width:100%"></div><div class="tl-name">Caller State &amp; Escalation</div><div class="tl-weeks">3 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P8</div><div class="tl-bar" style="background:#94a3b8;width:100%"></div><div class="tl-name">Experience Store</div><div class="tl-weeks">4 wks</div></div>
@@ -219,7 +222,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0, 1, and 2 are complete.</strong> Phase 3 (Diagnostics &amp; Control State) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–5 are complete.</strong> Phase 6 (Recovery &amp; Memory Management) is the next work item.</div>
 
 <div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
@@ -248,6 +251,47 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (EvidenceStore · HypothesisSet · ToolAvailabilityManifest fields on HarnessRunState)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P1 types exported) &nbsp;·&nbsp; adapter/validate.py (gather_evidence + apply_tool_reliability validation)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (full harness_config shapes; z.discriminatedUnion → z.union fix) &nbsp;·&nbsp; spec/schema.json (regenerated)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 3 Complete — Diagnostics &amp; Control State</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">20/20</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">96/96</strong> combined P0–P3 tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/diagnostics.py (BeliefHealth · CoverageHealth · VerificationHealth · ExecutionHealth · Diagnostics · update_diagnostics · normalise · assert_normalised)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/control_state.py (ControlState · RiskState · BlockEntry · resolve_control_state 5-tier · detect_deadlock · compute_elevation_factor)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/loop.py (select_best_action [INV-06] · run_one_iteration [INV-03])<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/gates.py (full decomposition_gate · action_gate · post_exec_gate · _maybe_resolve) &nbsp;·&nbsp; adapter/harness/state_store.py (typed diagnostics+control_state fields)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 4 Complete — Planning &amp; Task Graph</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">13/13</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">109/109</strong> combined P0–P4 tests pass &nbsp;·&nbsp; Completed 2026-06-03<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/task_graph.py (Task · TaskGraph · 6-state status · validate_task_graph · ConflictProbabilityCache · select_unblocked_leaf · check_abstraction_alignment)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/parallel_merge.py (reconcile_parallel_branches · merge_world_models · generation_id reconciliation)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/diagnostics.py (feasibility feed from abstraction fit) &nbsp;·&nbsp; adapter/harness/state_store.py (task_graph field)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 5 Complete — Execution, VOI &amp; Verification</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">45/45</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">150/150</strong> combined P0–P5 tests pass &nbsp;·&nbsp; Completed 2026-06-04<br>
+    Key invariants enforced: INV-01 (SYSTEM_ERROR evidence never auto-creates belief) · INV-06 (execute reads control_state exclusively for go/no-go)<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/risk.py (RiskLevel · RiskFactors · estimate_risk · compute_file_centrality · classify_module_type)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/voi.py (VOIResult · AdequacyResult · estimate_value_of_information · verification_adequacy_critic · update_verification_strength)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/review_gate.py (5 review dimensions · ReviewResult · consecutive-failure escalation)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/execution.py (ReversibilityStrategy · ExecutionResult · execute · SYSTEM_ERROR path · action_dep_overlap)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/verification.py (9 VerificationLayers · verify · adversarial pass for HIGH risk · claim-scoped evidence_sufficiency)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/output_contract.py (contract_shadow_check real impl; is_stub=False) &nbsp;·&nbsp; adapter/harness/__init__.py (35 new P5 exports)
     </div>
   </div>
 </div>
@@ -448,7 +492,7 @@ const phases=[
      {id:'P2.5',name:'Resolution policy',body:'Implement apply_resolution_policy(contradiction, world_model). Routes by severity and scope. LOW/MEDIUM: update belief confidence, mark for next staleness sweep. HIGH: flag dependent tasks for re-evaluation. SYSTEM_BREAKING: enter contradictions[] for Tier 1 pickup.',tests:['Resolution policy correctly routes each severity level','HIGH-severity contradiction flags downstream task_graph tasks as BLOCKED','Resolution policy is idempotent — applying twice has same effect as once']},
      {id:'P2.6',name:'Staleness sweep',body:'Implement staleness_sweep(world_model, environment_change_log). TTL-based: beliefs past belief_ttl are flagged in stale_flags[]. Environment-change-based: beliefs whose source resources changed since recording are invalidated. Updates stale_flag_ratio for belief_health.freshness. dep_graph_budget.apply_decay() runs separately (edge confidence decay, independent of content).',tests:['Belief past TTL is correctly flagged as stale','Belief whose source file changed in environment_change_log is invalidated','stale_flag_ratio reflects current stale count / total beliefs']},
    ]},
-  {id:'P3',title:'Diagnostics & Control State',weeks:'4 weeks',color:'#f0abfc',
+  {id:'P3',title:'Diagnostics & Control State',weeks:'4 weeks',color:'#f0abfc',status:'complete',completionNote:'20/20 tests · 96/96 prior tests unaffected',
    sub:'4 health vectors (10 sub-dimensions) · normalisation contract · resolve_control_state() 5-tier · deadlock detection · dep_class_gap advisory · generation_id gates · two-substep model',
    tasks:[
      {id:'P3.1',name:'Diagnostic health vectors',body:'Implement all 4 health vectors with sub-dimensions. belief_health: freshness·consistency·support. coverage_health: symptom_coverage·explanation_coverage. verification_health: strength·feasibility. execution_health: progress_rate·failure_recurrence·oscillation_score. dep_class_gap_annotation as advisory annotation (not a numeric axis).',tests:['All 10 sub-dimensions produce values in [0,1]','dep_class_gap_annotation is stored in notes[], never as a numeric field','update_diagnostics() correctly recomputes all vectors after state change']},
@@ -457,7 +501,7 @@ const phases=[
      {id:'P3.4',name:'Deadlock detection',body:'In Tier 2: check if block_mask entries have mutually blocking recovery actions. If block_mask entry A\'s recovery requires action class B, and B is also in block_mask with recovery requiring A → HUMAN_REQUIRED. Implemented as directed recovery-action graph cycle detection.',tests:['Mutual block correctly sets escalation_reason=HUMAN_REQUIRED','Single blocked dimension does not trigger deadlock','Three-way mutual block also detected correctly']},
      {id:'P3.5',name:'Generation-ID gates (full implementation)',body:'Complete decomposition_gate, action_gate, post_exec_gate. Each asserts control_state.generation_id == world_model.generation_id before reading. If stale: re-invoke resolve_control_state() before proceeding. action_gate asserts sub-step A value; post_exec_gate asserts sub-step B value.',tests:['action_gate raises on stale sub-step A control_state and re-resolves','post_exec_gate raises on stale sub-step B control_state and re-resolves','decomposition_gate blocks if generation_id mismatch — not silent ignore']},
    ]},
-  {id:'P4',title:'Planning & Task Graph',weeks:'4 weeks',color:'#fbbf24',
+  {id:'P4',title:'Planning & Task Graph',weeks:'4 weeks',color:'#fbbf24',status:'complete',completionNote:'13/13 tests · 109/109 prior tests unaffected',
    sub:'Task graph with 6-state status · decomposition confidence · conflict_probability_cache · parallel write-domain tracking · pessimistic/optimistic concurrency · abstraction fit · parallel branch merge',
    tasks:[
      {id:'P4.1',name:'Task graph with 6-state status',body:'Implement task_graph with Task dataclass: id·description·status(PENDING|ACTIVE|VERIFYING|COMPLETE|FAILED|BLOCKED)·depends_on[]·risk_level·assigned_strategy·parallel_write_domains[]·abstraction_level. validate_task_graph() checks cycles, consistent depends_on status, abstraction alignment.',tests:['Task status transitions are valid (PENDING→ACTIVE→VERIFYING→COMPLETE only via defined transitions)','validate_task_graph() detects dependency cycles','select_unblocked_leaf() returns only tasks with all depends_on COMPLETE']},
@@ -465,7 +509,7 @@ const phases=[
      {id:'P4.3',name:'Parallel branch merge (generation_id reconciliation)',body:'Implement reconcile_parallel_branches(). At join: take max(generation_id) across branches, merge world models, run detect_contradictions() on merged model, invoke resolve_control_state() on merged model, update conflict_probability_cache from actual write overlap.',tests:['Merged world model has generation_id > either branch world model','Contradiction on merged model (not present in either branch) is detected','conflict_probability_cache updated from actual overlap at merge']},
      {id:'P4.4',name:'Abstraction fit checking',body:'Implement check_abstraction_alignment(task_graph, world_model) → [0,1]. Checks whether task abstraction_levels align with current world model granularity. Fed into diagnostics.verification_health.feasibility. Runs conditionally on task_graph.changed mid-loop; unconditionally in reviewer_pass.',tests:['Tasks with abstraction_level mismatched to world_model granularity reduce feasibility score','Feasibility = 1.0 when all task abstraction levels match world_model','Reviewer pass recalculates unconditionally regardless of task_graph.changed flag']},
    ]},
-  {id:'P5',title:'Execution, VOI & Verification',weeks:'5 weeks',color:'#f87171',
+  {id:'P5',title:'Execution, VOI & Verification',weeks:'5 weeks',color:'#f87171',status:'complete',completionNote:'45/45 tests · 150/150 prior tests unaffected',
    sub:'Risk estimation · VOI estimation · verification_adequacy_critic · pre-execution review gate (5 dimensions) · reversibility strategy · execute node · 9-layer verification · contract shadow check · action_dep_overlap()',
    tasks:[
      {id:'P5.1',name:'Risk estimation',body:'Implement estimate_risk(current_task) → LOW|MEDIUM|HIGH. Factors: file_centrality (import count), change_scope (lines, function count), module_type (test vs business logic vs infrastructure). HIGH risk: reduce edit_size, increase verification depth, trigger adversarial verification pass.',tests:['Core business logic file with many imports → HIGH risk','Test-only file with narrow scope → LOW risk','HIGH risk task invokes adversarial verification pass in verify()']},
@@ -577,15 +621,15 @@ const nodeCoverage=[
   {id:7,name:'Update World Model',layer:'World Model',status:'built',phase:'P2'},
   {id:8,name:'Detect Contradictions',layer:'World Model',status:'built',phase:'P2'},
   {id:9,name:'Generate/Update Hypotheses',layer:'Reasoning',status:'built',phase:'P1'},
-  {id:10,name:'Update Diagnostics',layer:'Control',status:'planned',phase:'P3'},
-  {id:11,name:'Resolve Control State',layer:'Control',status:'planned',phase:'P3'},
-  {id:12,name:'Update Task Graph',layer:'Planning',status:'planned',phase:'P4'},
-  {id:13,name:'Select Task',layer:'Planning',status:'partial',phase:'P4'},
-  {id:14,name:'Estimate Risk',layer:'Execution',status:'planned',phase:'P5'},
-  {id:15,name:'Estimate VOI',layer:'Reasoning',status:'planned',phase:'P5'},
-  {id:16,name:'Review Proposed Change',layer:'Policy',status:'planned',phase:'P5'},
-  {id:17,name:'Execute',layer:'Execution',status:'partial',phase:'P5'},
-  {id:18,name:'Verify',layer:'Verification',status:'planned',phase:'P5'},
+  {id:10,name:'Update Diagnostics',layer:'Control',status:'built',phase:'P3✓'},
+  {id:11,name:'Resolve Control State',layer:'Control',status:'built',phase:'P3✓'},
+  {id:12,name:'Update Task Graph',layer:'Planning',status:'built',phase:'P4✓'},
+  {id:13,name:'Select Task',layer:'Planning',status:'built',phase:'P4✓'},
+  {id:14,name:'Estimate Risk',layer:'Execution',status:'built',phase:'P5✓'},
+  {id:15,name:'Estimate VOI',layer:'Reasoning',status:'built',phase:'P5✓'},
+  {id:16,name:'Review Proposed Change',layer:'Policy',status:'built',phase:'P5✓'},
+  {id:17,name:'Execute',layer:'Execution',status:'built',phase:'P5✓'},
+  {id:18,name:'Verify',layer:'Verification',status:'built',phase:'P5✓'},
   {id:19,name:'Rollback + Replan',layer:'Recovery',status:'planned',phase:'P6'},
   {id:20,name:'Escalate',layer:'Caller',status:'partial',phase:'P7'},
   {id:21,name:'Reviewer Pass',layer:'Verification',status:'planned',phase:'P9'},
