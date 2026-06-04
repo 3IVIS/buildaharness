@@ -70,6 +70,37 @@ class ContractCheckResult:
         )
 
 
+def update_output_contract(caller_state: Any, output_contract: OutputContract) -> OutputContract:
+    """Re-derive output contract from updated caller_state constraints — P7.2.
+
+    Replaces caller_specific_constraints with the current constraints from
+    caller_state. Re-derives required_interface_fields where a constraint
+    specifies a mandatory output field via "required: <field>" syntax.
+    Returns a new OutputContract (immutable update).
+    """
+    new_constraints = list(caller_state.current_constraints)
+
+    # Re-derive required_interface_fields from constraints
+    required_fields = list(output_contract.required_interface_fields)
+    for constraint in new_constraints:
+        lower = constraint.lower()
+        if "required:" in lower:
+            parts = constraint.split(":", 1)
+            if len(parts) > 1:
+                field_candidate = parts[1].strip().split()[0].strip("\"'")
+                if field_candidate and field_candidate not in required_fields:
+                    required_fields.append(field_candidate)
+
+    return OutputContract(
+        format_requirements=dict(output_contract.format_requirements),
+        required_sections=list(output_contract.required_sections),
+        required_interface_fields=required_fields,
+        interface_constraints=dict(output_contract.interface_constraints),
+        validation_rules=list(output_contract.validation_rules),
+        caller_specific_constraints=new_constraints,
+    )
+
+
 def validate_output_contract(result: Any, output_contract: OutputContract) -> ContractCheckResult:
     """Full authoritative contract validation — stub until P9."""
     return ContractCheckResult(passed=True, violations=[], is_stub=True)

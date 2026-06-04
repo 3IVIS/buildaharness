@@ -1,5 +1,6 @@
 """
-Main loop — P3.5 skeleton extended with P6 recovery & memory wiring.
+Main loop — P3.5 skeleton extended with P6 recovery & memory wiring and P7
+external update poll + escalation triggers.
 
 Two-substep double-increment model (INV-03):
   Sub-step A: increment_generation_id → resolve control_state → action_gate
@@ -11,6 +12,11 @@ P6 additions (wired per-iteration):
   - cannot_make_progress + switch_strategy (P6.1/P6.2)
   - apply_replan on stall or global contradiction (P6.4)
   - apply_retention_policy on journal at end of each step (P6.6)
+
+P7 additions (wired per-iteration):
+  - check_external_updates at very top of each iteration (P7.1)
+  - escalate() when risk_state == BLOCKED (P7.3)
+  - escalate() when strategy == ESCALATE (P7.3)
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from typing import Any
 
 from .control_state import ControlState, resolve_control_state
 from .diagnostics import Diagnostics
+from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .progress import cannot_make_progress
@@ -44,13 +51,47 @@ def select_best_action(
     return {"type": "noop", "exploration": True}
 
 
-def _escalate_budget_exhausted() -> dict[str, Any]:
-    """Stub escalation for budget exhaustion — replaced by P7's surface_blocker."""
-    return {
-        "escalated": True,
-        "reason": "budget_exhausted",
-        "missing_info": ["step_count", "max_steps"],
-    }
+def _build_surface_blocker(reason: str, control_state: ControlState, task_graph: Any) -> Any:
+    """Build a SurfaceBlocker from current control_state context."""
+    from .escalation import SurfaceBlocker
+
+    missing_info: list[str] = []
+
+    # Derive missing_info from block_mask entries
+    if hasattr(control_state, "block_mask"):
+        for entry in control_state.block_mask:
+            if hasattr(entry, "recovery_action"):
+                missing_info.append(entry.recovery_action)
+    if not missing_info and reason == "cannot_make_progress":
+        missing_info = ["clarification on how to proceed", "revised success criteria"]
+    if not missing_info and reason == "budget_exhausted":
+        missing_info = ["increased step budget", "revised scope"]
+    if not missing_info:
+        missing_info = ["human clarification required"]
+
+    # Brief current task summary
+    current_task_summary = "No active task"
+    if task_graph is not None and hasattr(task_graph, "tasks"):
+        for t in task_graph.tasks:
+            if getattr(t, "status", None) == "ACTIVE":
+                current_task_summary = f"Task {t.id}: {t.description}"
+                break
+        if current_task_summary == "No active task":
+            for t in task_graph.tasks:
+                if getattr(t, "status", None) == "PENDING":
+                    current_task_summary = f"Next pending: {t.id}: {t.description}"
+                    break
+
+    # escalation_reason from control_state if available
+    escalation_reason = getattr(control_state, "escalation_reason", None)
+    if escalation_reason:
+        current_task_summary = f"{current_task_summary} | reason: {escalation_reason}"
+
+    return SurfaceBlocker(
+        reason=reason,
+        missing_info=missing_info,
+        current_task_summary=current_task_summary,
+    )
 
 
 def run_one_iteration(
@@ -63,16 +104,40 @@ def run_one_iteration(
     strategy_state: StrategyState | None = None,
     caller_state: Any | None = None,
     step_count: int = 0,
+    update_channel: UpdateChannel | None = None,
+    output_contract: Any | None = None,
+    harness_run_state: Any | None = None,
+    run_id: str = "",
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
     Sub-step A: pre-execution increment → resolve → action_gate
     Sub-step B: post-execution increment → resolve → post_exec_gate
 
-    P6 hooks fire at the top of Sub-step A (compression, budget check, stall detection)
-    and at the end of Sub-step B (journal retention).
+    P6 hooks fire at the top of Sub-step A (compression, budget check, stall
+    detection) and at the end of Sub-step B (journal retention).
+
+    P7 hook: check_external_updates fires before all P6 hooks. Escalation
+    triggers fire after resolve_control_state() in Sub-step A when
+    risk_state==BLOCKED, and after stall detection when strategy==ESCALATE.
     """
+    from .escalation import EscalationHalt, SurfaceBlocker, escalate
+
     escalation: dict[str, Any] | None = None
+    channel = update_channel if update_channel is not None else NoOpUpdateChannel()
+
+    # ── P7.1 — external updates poll (must be first, before any state mutation) ─
+    if caller_state is not None:
+        check_external_updates(
+            channel,
+            caller_state,
+            world_model,
+            task_graph,
+            diagnostics,
+            output_contract=output_contract,
+        )
+        # If an update was applied, control_state will be re-resolved in Sub-step A
+        # (generation_id was already incremented by check_external_updates)
 
     # ── P6 pre-iteration hooks ────────────────────────────────────────────────
 
@@ -88,10 +153,24 @@ def run_one_iteration(
         # P6.6 — budget check
         budget_status = check_max_steps(step_count, memory_state, diagnostics)
         if budget_status == "escalate":
-            escalation = _escalate_budget_exhausted()
+            # P7.3 — replace stub escalation with structured surface_blocker
+            if harness_run_state is not None:
+                ctrl_stub = ControlState()
+                blocker = _build_surface_blocker("budget_exhausted", ctrl_stub, task_graph)
+                try:
+                    escalate(blocker, harness_run_state, run_id)
+                except EscalationHalt as exc:
+                    return {
+                        "escalated": True,
+                        "escalation": exc.blocker.to_dict(),
+                        "step_count": step_count,
+                    }
             return {
                 "escalated": True,
-                "escalation": escalation,
+                "escalation": {
+                    "reason": "budget_exhausted",
+                    "missing_info": ["step_count", "max_steps"],
+                },
                 "step_count": step_count,
             }
         if budget_status == "warn":
@@ -104,6 +183,22 @@ def run_one_iteration(
         if cannot_make_progress(strategy_state, failure_diagnostics, task_graph):
             reason = getattr(strategy_state, "stall_reason", "stall_detected")
             strategy_state = switch_strategy(strategy_state, reason)
+
+            # P7.3 — escalate when strategy reaches ESCALATE
+            if strategy_state.current_strategy == "ESCALATE":
+                if harness_run_state is not None:
+                    ctrl_stub = ControlState()
+                    blocker = _build_surface_blocker(
+                        "cannot_make_progress", ctrl_stub, task_graph
+                    )
+                    try:
+                        escalate(blocker, harness_run_state, run_id)
+                    except EscalationHalt as exc:
+                        return {
+                            "escalated": True,
+                            "escalation": exc.blocker.to_dict(),
+                            "step_count": step_count,
+                        }
 
             # P6.4 — replan on stall (treat as local scope with no specific contradiction)
             if caller_state is not None:
@@ -130,6 +225,20 @@ def run_one_iteration(
         failure_diagnostics,
         step=world_model.generation_id,
     )
+
+    # P7.3 — escalate when risk_state is BLOCKED (INV-06: triggered by control_state)
+    if control_state.risk_state == "BLOCKED":
+        if harness_run_state is not None:
+            blocker = _build_surface_blocker("blocked_state", control_state, task_graph)
+            try:
+                escalate(blocker, harness_run_state, run_id)
+            except EscalationHalt as exc:
+                return {
+                    "escalated": True,
+                    "escalation": exc.blocker.to_dict(),
+                    "step_count": step_count,
+                    "control_state_a": control_state,
+                }
 
     action = select_best_action(control_state, world_model, hypothesis_set, task_graph)
 

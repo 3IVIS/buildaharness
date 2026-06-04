@@ -18,6 +18,8 @@ Phase 5 exports: risk estimation (P5.1), VOI & adequacy critic (P5.2),
 Phase 6 exports: stall detection (P6.1), recovery strategies (P6.2),
                  failure mode library (P6.3), local/global replanning (P6.4),
                  context compression (P6.5), journal retention + max_steps (P6.6).
+Phase 7 exports: external update poll (P7.1), constraint change propagation
+                 (P7.2), escalation with surface_blocker (P7.3).
 """
 
 from .belief_graph import (
@@ -29,7 +31,7 @@ from .belief_graph import (
     propagate_beliefs,
     propagate_single_update,
 )
-from .caller_state import CallerState, inject_clarification, reset_constraints_changed
+from .caller_state import CallerState, inject_clarification, reset_constraints_changed, update_success_criteria
 from .contradiction import (
     apply_resolution_policy,
     assign_system_breaking_severity,
@@ -89,6 +91,15 @@ from .hypothesis import (
     generate_hypotheses,
     symptom_inference,
 )
+from .constraint_propagation import apply_constraint_change_propagation, revalidate_task_graph
+from .escalation import EscalationHalt, SurfaceBlocker, await_clarification, escalate
+from .external_updates import (
+    NoOpUpdateChannel,
+    PendingUpdate,
+    PostgresNotifyChannel,
+    UpdateChannel,
+    check_external_updates,
+)
 from .loop import run_one_iteration, select_best_action
 from .memory import (
     CompressionRisk,
@@ -121,6 +132,7 @@ from .output_contract import (
     ContractCheckResult,
     OutputContract,
     contract_shadow_check,
+    update_output_contract,
     validate_output_contract,
 )
 from .parallel_merge import merge_world_models, reconcile_parallel_branches
@@ -294,6 +306,8 @@ __all__ = [
     "update_from_experience_store",
     "validate_output_contract",
     "validate_task_graph",
+    "update_output_contract",
+    "update_success_criteria",
     # Phase 6
     "CompressionRisk",
     "FailureDiagnostics",
@@ -322,6 +336,18 @@ __all__ = [
     "rebuild_task_graph",
     "should_compress",
     "switch_strategy",
+    # Phase 7
+    "EscalationHalt",
+    "NoOpUpdateChannel",
+    "PendingUpdate",
+    "PostgresNotifyChannel",
+    "SurfaceBlocker",
+    "UpdateChannel",
+    "apply_constraint_change_propagation",
+    "await_clarification",
+    "check_external_updates",
+    "escalate",
+    "revalidate_task_graph",
     # Phase 5
     "AdequacyResult",
     "DimensionResult",

@@ -1415,3 +1415,50 @@ async def put_harness_state(
     await _harness_save(job_id, merged, db)
 
     return {"job_id": job_id, "saved": True}
+
+
+# ─── Escalation endpoints (P7.3) ─────────────────────────────────────────────
+
+
+class EscalationRespondRequest(BaseModel):
+    clarification: dict = {}
+
+
+@router.post("/{job_id}/escalation/respond", status_code=200)
+async def respond_to_escalation(
+    job_id: str,
+    req: EscalationRespondRequest,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Post a human clarification response to a paused (escalated) harness run.
+
+    Writes the clarification payload to harness_run_state.pending_clarification.
+    On the next run_one_iteration() call, await_clarification() retrieves it and
+    the constraint change propagation path (P7.2) handles the update, resuming
+    the run without a restart.
+
+    Returns 404 if no harness state exists for the job.
+    Returns 409 if the run is not currently in an escalated state.
+    """
+    from harness.state_store import load as _harness_load
+    from harness.state_store import save as _harness_save
+
+    job = await _jobs_get_owned(job_id, str(user.id), db)
+    if not job.is_harness_run:
+        raise HTTPException(status_code=404, detail="No harness state for this run")
+
+    state = await _harness_load(job_id, db)
+    if state is None:
+        raise HTTPException(status_code=404, detail="No harness state for this run")
+
+    if not state.escalation_pending:
+        raise HTTPException(status_code=409, detail="Run is not currently escalated")
+
+    payload = dict(req.clarification)
+    payload.setdefault("update_type", "clarification")
+    state.pending_clarification = payload
+
+    await _harness_save(job_id, state, db)
+
+    return {"job_id": job_id, "clarification_posted": True}
