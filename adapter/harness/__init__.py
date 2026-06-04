@@ -20,6 +20,8 @@ Phase 6 exports: stall detection (P6.1), recovery strategies (P6.2),
                  context compression (P6.5), journal retention + max_steps (P6.6).
 Phase 7 exports: external update poll (P7.1), constraint change propagation
                  (P7.2), escalation with surface_blocker (P7.3).
+Phase 8 exports: experience store data model (P8.1), warm_start (P8.2),
+                 update_experience_store (P8.3), adaptive strategy policy (P8.4).
 """
 
 from .belief_graph import (
@@ -93,6 +95,25 @@ from .hypothesis import (
 )
 from .constraint_propagation import apply_constraint_change_propagation, revalidate_task_graph
 from .escalation import EscalationHalt, SurfaceBlocker, await_clarification, escalate
+# Phase 8
+from .experience_store import (
+    DEFAULT_STRATEGY_ORDER,
+    ExecutionContext,
+    ExperienceEntry,
+    ExperienceStore,
+    ExperienceType,
+    StrategyWeightKey,
+    WarmStartResult,
+    build_strategy_ordering,
+    load_structural_decompositions,
+    load_strategy_priors,
+    load_tool_workflow_seeds,
+    load_verification_plan_seeds,
+    softmax_strategy_policy,
+    update_experience_store,
+    upsert_strategy_weight,
+    warm_start,
+)
 from .external_updates import (
     NoOpUpdateChannel,
     PendingUpdate,
@@ -348,6 +369,23 @@ __all__ = [
     "check_external_updates",
     "escalate",
     "revalidate_task_graph",
+    # Phase 8
+    "DEFAULT_STRATEGY_ORDER",
+    "ExecutionContext",
+    "ExperienceEntry",
+    "ExperienceStore",
+    "ExperienceType",
+    "StrategyWeightKey",
+    "WarmStartResult",
+    "build_strategy_ordering",
+    "load_strategy_priors",
+    "load_structural_decompositions",
+    "load_tool_workflow_seeds",
+    "load_verification_plan_seeds",
+    "softmax_strategy_policy",
+    "update_experience_store",
+    "upsert_strategy_weight",
+    "warm_start",
     # Phase 5
     "AdequacyResult",
     "DimensionResult",
