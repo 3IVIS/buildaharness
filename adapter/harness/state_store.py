@@ -22,8 +22,11 @@ from .caller_state import CallerState
 from .control_state import ControlState
 from .diagnostics import Diagnostics
 from .evidence import EvidenceStore
+from .failure_modes import FailureDiagnostics
 from .hypothesis import HypothesisSet
+from .memory import MemoryState
 from .output_contract import OutputContract
+from .recovery import StrategyState
 from .task_graph import TaskGraph
 from .tool_manifest import ToolAvailabilityManifest
 from .world_model import WorldModel
@@ -67,10 +70,11 @@ class HarnessRunState:
     control_state: ControlState = field(default_factory=ControlState)
     # P4.1 — typed task graph
     task_graph: TaskGraph = field(default_factory=TaskGraph)
-    # Remaining phases P5–P9 — stored as raw dicts until typed dataclasses are added
-    memory_state: dict[str, Any] = field(default_factory=dict)
-    strategy_state: dict[str, Any] = field(default_factory=dict)
-    failure_diagnostics: dict[str, Any] = field(default_factory=dict)
+    # P6 — typed replacements for the raw-dict fields
+    memory_state: MemoryState = field(default_factory=MemoryState)
+    strategy_state: StrategyState = field(default_factory=StrategyState)
+    failure_diagnostics: FailureDiagnostics = field(default_factory=FailureDiagnostics)
+    # P8 — experience store reference (raw dict until P8 defines the typed dataclass)
     experience_store_ref: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -84,9 +88,9 @@ class HarnessRunState:
             "diagnostics": self.diagnostics.to_dict(),
             "control_state": self.control_state.to_dict(),
             "task_graph": self.task_graph.to_dict(),
-            "memory_state": self.memory_state,
-            "strategy_state": self.strategy_state,
-            "failure_diagnostics": self.failure_diagnostics,
+            "memory_state": self.memory_state.to_dict(),
+            "strategy_state": self.strategy_state.to_dict(),
+            "failure_diagnostics": self.failure_diagnostics.to_dict(),
             "experience_store_ref": self.experience_store_ref,
         }
 
@@ -106,9 +110,9 @@ class HarnessRunState:
             diagnostics=Diagnostics.from_dict(d.get("diagnostics") or {}),
             control_state=ControlState.from_dict(d.get("control_state") or {}),
             task_graph=TaskGraph.from_dict(d.get("task_graph") or {}),
-            memory_state=d.get("memory_state") or {},
-            strategy_state=d.get("strategy_state") or {},
-            failure_diagnostics=d.get("failure_diagnostics") or {},
+            memory_state=MemoryState.from_dict(d.get("memory_state") or {}),
+            strategy_state=StrategyState.from_dict(d.get("strategy_state") or {}),
+            failure_diagnostics=FailureDiagnostics.from_dict(d.get("failure_diagnostics") or {}),
             experience_store_ref=d.get("experience_store_ref") or {},
         )
 

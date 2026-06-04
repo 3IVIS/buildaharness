@@ -1,12 +1,16 @@
 """
-Main loop skeleton stub — P3.5.
+Main loop — P3.5 skeleton extended with P6 recovery & memory wiring.
 
 Two-substep double-increment model (INV-03):
   Sub-step A: increment_generation_id → resolve control_state → action_gate
   Sub-step B: execute action → increment_generation_id → post_exec_gate
 
-Full execution logic (action execution, verification) is populated in P5.
-select_best_action() reads control_state exclusively for control decisions (INV-06).
+P6 additions (wired per-iteration):
+  - should_compress / compress_memory (P6.5)
+  - check_max_steps with warn/escalate routing (P6.6)
+  - cannot_make_progress + switch_strategy (P6.1/P6.2)
+  - apply_replan on stall or global contradiction (P6.4)
+  - apply_retention_policy on journal at end of each step (P6.6)
 """
 
 from __future__ import annotations
@@ -16,6 +20,10 @@ from typing import Any
 from .control_state import ControlState, resolve_control_state
 from .diagnostics import Diagnostics
 from .gates import action_gate, post_exec_gate
+from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
+from .progress import cannot_make_progress
+from .recovery import StrategyState, switch_strategy
+from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
 
 
@@ -33,8 +41,16 @@ def select_best_action(
     """
     if control_state.risk_state == "BLOCKED":
         return None
-    # P5 will populate real action selection logic here
     return {"type": "noop", "exploration": True}
+
+
+def _escalate_budget_exhausted() -> dict[str, Any]:
+    """Stub escalation for budget exhaustion — replaced by P7's surface_blocker."""
+    return {
+        "escalated": True,
+        "reason": "budget_exhausted",
+        "missing_info": ["step_count", "max_steps"],
+    }
 
 
 def run_one_iteration(
@@ -43,13 +59,70 @@ def run_one_iteration(
     hypothesis_set: Any,
     task_graph: Any,
     failure_diagnostics: Any | None = None,
+    memory_state: MemoryState | None = None,
+    strategy_state: StrategyState | None = None,
+    caller_state: Any | None = None,
+    step_count: int = 0,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
     Sub-step A: pre-execution increment → resolve → action_gate
     Sub-step B: post-execution increment → resolve → post_exec_gate
+
+    P6 hooks fire at the top of Sub-step A (compression, budget check, stall detection)
+    and at the end of Sub-step B (journal retention).
     """
-    # Sub-step A
+    escalation: dict[str, Any] | None = None
+
+    # ── P6 pre-iteration hooks ────────────────────────────────────────────────
+
+    if memory_state is not None:
+        # P6.5 — compression trigger
+        if should_compress(world_model, memory_state):
+            compress_memory(world_model, memory_state)
+            increment_generation_id(world_model)
+            memory_state.journal.append(
+                {"event": "compression", "step": step_count, "outcome": "pass"}
+            )
+
+        # P6.6 — budget check
+        budget_status = check_max_steps(step_count, memory_state, diagnostics)
+        if budget_status == "escalate":
+            escalation = _escalate_budget_exhausted()
+            return {
+                "escalated": True,
+                "escalation": escalation,
+                "step_count": step_count,
+            }
+        if budget_status == "warn":
+            memory_state.journal.append(
+                {"event": "budget_warn", "step": step_count, "outcome": "pass"}
+            )
+
+    # P6.1/P6.2 — stall detection and strategy switch
+    if strategy_state is not None and failure_diagnostics is not None and task_graph is not None:
+        if cannot_make_progress(strategy_state, failure_diagnostics, task_graph):
+            reason = getattr(strategy_state, "stall_reason", "stall_detected")
+            strategy_state = switch_strategy(strategy_state, reason)
+
+            # P6.4 — replan on stall (treat as local scope with no specific contradiction)
+            if caller_state is not None:
+                contradiction = type("_C", (), {"scope": "local"})()
+                current_task = None
+                try:
+                    from .task_graph import select_unblocked_leaf
+
+                    current_task = select_unblocked_leaf(task_graph)
+                except Exception:
+                    pass
+                if current_task is not None:
+                    scope: ReplanScope = assess_replan_scope(contradiction, task_graph)
+                    task_graph = apply_replan(
+                        scope, contradiction, current_task, task_graph, world_model, caller_state
+                    )
+                    increment_generation_id(world_model)
+
+    # ── Sub-step A ────────────────────────────────────────────────────────────
     increment_generation_id(world_model)
     control_state = resolve_control_state(
         diagnostics,
@@ -68,7 +141,7 @@ def run_one_iteration(
         failure_diagnostics=failure_diagnostics,
     )
 
-    # Sub-step B (action execution goes here in P5)
+    # ── Sub-step B ────────────────────────────────────────────────────────────
     result: dict[str, Any] = {"action": action, "gate_a": gate_a_result}
     verification_result: dict[str, Any] = {"has_critical_failure": False}
 
@@ -89,10 +162,23 @@ def run_one_iteration(
         failure_diagnostics=failure_diagnostics,
     )
 
+    # P6.6 — journal retention at end of step
+    if memory_state is not None:
+        memory_state.journal = apply_retention_policy(
+            memory_state.journal, memory_state.journal_retention_policy
+        )
+
+    # Track risk state history for oscillation proxy
+    if strategy_state is not None:
+        strategy_state.risk_state_history.append(control_state_b.risk_state)
+
     return {
         "control_state_a": control_state,
         "control_state_b": control_state_b,
         "gate_a": gate_a_result,
         "gate_b": gate_b_result,
         "action": action,
+        "strategy_state": strategy_state,
+        "task_graph": task_graph,
+        "escalation": escalation,
     }
