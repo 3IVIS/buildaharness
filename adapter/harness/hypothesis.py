@@ -231,6 +231,44 @@ def failure_mode_library_contribution(fml_stub: dict | None) -> list[Hypothesis]
     ]
 
 
+def generate_from_failure_library(
+    world_model: WorldModel,
+    failure_mode_library: Any,
+) -> list[Hypothesis]:
+    """Generate hypotheses from the typed FailureModeLibrary (generation source 3 — P6.3).
+
+    Returns an empty list if the library is None or no pattern matches.
+    The returned hypothesis records generation_sources=["failure_mode_library"] so
+    diversity enforcement can account for this source independently.
+    """
+    if failure_mode_library is None:
+        return []
+
+    match_result = failure_mode_library.match(world_model, None, None)
+    if not getattr(match_result, "matched", False):
+        return []
+
+    template = ""
+    for pattern in getattr(failure_mode_library, "patterns", ()):
+        if getattr(pattern, "name", "") == getattr(match_result, "pattern_name", ""):
+            template = getattr(pattern, "hypothesis_template", "")
+            break
+
+    if not template:
+        return []
+
+    return [
+        Hypothesis(
+            id=str(uuid.uuid4()),
+            explanation=template,
+            confidence=getattr(match_result, "normalised_confidence", 0.2),
+            predicted_observations=[],
+            discriminating_evidence=[],
+            generation_sources=["failure_mode_library"],
+        )
+    ]
+
+
 def analogy_based_generation(experience_store: Any) -> list[Hypothesis]:
     """Generate hypotheses from past experience analogies.
 

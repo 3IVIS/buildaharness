@@ -26,6 +26,11 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
 .badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
 .badge-amber{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.badge-shipped{background:rgba(74,222,128,0.12);color:#4ade80;border:.5px solid rgba(74,222,128,0.4);font-size:12px;padding:3px 14px}
+.shipped-banner{background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.2);border-radius:var(--r-lg);padding:.65rem 1.1rem;margin:0 1rem 1.25rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.shipped-banner-label{font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--green)}
+.shipped-banner-body{font-size:12px;color:var(--t1);flex:1}
+.shipped-banner-stat{font-family:var(--font-mono);font-size:11px;color:var(--green);background:rgba(74,222,128,0.08);border:.5px solid rgba(74,222,128,0.2);padding:2px 8px;border-radius:3px;white-space:nowrap}
 .tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
 .tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
 .tab:hover{border-color:var(--bd1);color:var(--t0)}
@@ -37,33 +42,45 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .card-body{font-size:13px;color:var(--t1);line-height:1.7}
 .summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.2rem}
 .sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-card.done{border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.04)}
 .sum-n{font-size:26px;font-weight:700;line-height:1}
 .sum-l{font-size:11px;color:var(--t1);margin-top:4px}
 .week-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.2rem}
 .week-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.week-card.done{border-color:rgba(74,222,128,0.2)}
 .week-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:.4rem;font-family:var(--font-mono)}
+.week-label.done{color:var(--green)}
 .week-title{font-size:13px;font-weight:600;color:var(--p6);margin-bottom:.4rem}
 .week-item{font-size:11.5px;color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
 .week-item::before{content:'·';position:absolute;left:0;color:var(--p6)}
+.week-item.done{color:var(--green)}
+.week-item.done::before{content:'✓';color:var(--green)}
 .task-block{background:var(--bg1);border:.5px solid var(--bd0);border-left:3px solid var(--p6);border-radius:var(--r-lg);margin-bottom:1rem;overflow:hidden}
+.task-block.done{border-left-color:var(--green);border-color:rgba(74,222,128,0.15)}
 .task-header{padding:.7rem .9rem;cursor:pointer;display:flex;align-items:baseline;gap:.6rem;transition:background .15s}
 .task-header:hover{background:var(--bg2)}
 .task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1);flex-shrink:0}
 .task-name{font-size:13px;font-weight:600;color:var(--t0);flex:1}
 .task-meta{font-size:11px;color:var(--t1);flex-shrink:0}
+.task-done-badge{font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--green);background:rgba(74,222,128,0.08);border:.5px solid rgba(74,222,128,0.2);padding:1px 7px;border-radius:3px;flex-shrink:0;margin-left:4px}
 .task-body{padding:0 .9rem;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
 .task-body.open{max-height:4000px;padding:.2rem .9rem .9rem}
 .steps-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-bottom:.4rem;margin-top:.7rem}
 .step{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;margin-bottom:4px;display:flex;gap:.6rem;align-items:baseline}
+.step.done{border-color:rgba(74,222,128,0.15)}
 .step-num{font-family:var(--font-mono);font-size:10px;color:var(--p6);flex-shrink:0;width:22px}
+.step-num.done{color:var(--green)}
 .step-body{font-size:12px;color:var(--t1);line-height:1.5;flex:1}
 .step-body code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
 .step-body strong{color:var(--t0)}
 .test-item{font-size:11px;color:var(--green);padding:.2rem .5rem .2rem 1.1rem;position:relative;line-height:1.5}
 .test-item::before{content:'▸';position:absolute;left:0;color:var(--green);font-size:10px}
+.test-item.pass::before{content:'✓';color:var(--green);font-size:10px}
+.test-item.pass{color:var(--green)}
 .file-map{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.7rem .9rem;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--t1)}
 .f-new{color:var(--green)}
 .f-mod{color:var(--amber)}
+.f-ship{color:var(--green);font-weight:600}
 .f-dir{color:var(--p6);font-weight:600}
 .f-note{color:var(--t1);opacity:.6;font-size:10px}
 .dep-table{width:100%;border-collapse:collapse;margin-bottom:1rem}
@@ -78,10 +95,20 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .desc-block{font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:.6rem}
 .note-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
 .note-block strong{color:var(--amber)}
+.impl-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--green);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.impl-block strong{color:var(--green)}
+.impl-block code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
+.deviation-block{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--amber);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.deviation-block strong{color:var(--amber)}
+.deviation-block code{font-family:var(--font-mono);font-size:10.5px;background:var(--bg0);padding:1px 5px;border-radius:3px;color:#94a3b8}
 .next-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;display:flex;align-items:center;gap:.8rem;margin-bottom:6px}
 .next-badge{font-family:var(--font-mono);font-size:11px;background:rgba(249,115,22,0.07);border:.5px solid rgba(249,115,22,0.2);color:var(--p6);padding:2px 8px;border-radius:3px;flex-shrink:0}
 .next-body{font-size:12.5px;color:var(--t1);line-height:1.5}
 .next-body strong{color:var(--t0)}
+.impl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+.impl-stat{background:var(--bg1);border:.5px solid rgba(74,222,128,0.15);border-radius:var(--r-lg);padding:.7rem .9rem;text-align:center}
+.impl-stat-n{font-size:22px;font-weight:700;color:var(--green);line-height:1}
+.impl-stat-l{font-size:11px;color:var(--t1);margin-top:4px}
 </style>
 </head>
 <body>
@@ -94,7 +121,16 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <span class="badge badge-green">6 Tasks</span>
   <span class="badge badge-amber">33 Steps</span>
   <span class="badge badge-blue">18 Acceptance Tests</span>
+  <span class="badge badge-shipped">&#10003; SHIPPED</span>
   <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P5 complete</span> · Unlocks: <span style="color:#67e8f9">P7 Caller State &amp; Escalation</span></div>
+</div>
+
+<div class="shipped-banner">
+  <span class="shipped-banner-label">Phase Complete</span>
+  <span class="shipped-banner-body">All 6 tasks implemented · branch <code style="font-family:var(--font-mono);font-size:11px">claude/verify-code-edit-push-dDLew</code> · 5 new modules + 4 modified files</span>
+  <span class="shipped-banner-stat">18 / 18 tests pass</span>
+  <span class="shipped-banner-stat">1 540 lines added</span>
+  <span class="shipped-banner-stat">P7 unblocked</span>
 </div>
 
 <div class="tabs">
@@ -104,17 +140,18 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <button class="tab" onclick="showTab('deps',this)">Dependencies</button>
   <button class="tab" onclick="showTab('invariants',this)">Invariants</button>
   <button class="tab" onclick="showTab('tests',this)">All Tests</button>
+  <button class="tab" onclick="showTab('impl',this)">Implementation Notes</button>
 </div>
 
 <!-- OVERVIEW -->
 <div id="overview" class="tab-content active">
 
 <div class="summary-row">
-  <div class="sum-card"><div class="sum-n" style="color:var(--p6)">6</div><div class="sum-l">Tasks</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">33</div><div class="sum-l">Impl. steps</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">18</div><div class="sum-l">Acceptance tests</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--purple)">3</div><div class="sum-l">State structures</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--cyan)">4</div><div class="sum-l">Weeks</div></div>
+  <div class="sum-card done"><div class="sum-n" style="color:var(--green)">6/6</div><div class="sum-l">Tasks done</div></div>
+  <div class="sum-card done"><div class="sum-n" style="color:var(--green)">33</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card done"><div class="sum-n" style="color:var(--green)">18/18</div><div class="sum-l">Tests passing</div></div>
+  <div class="sum-card done"><div class="sum-n" style="color:var(--green)">5</div><div class="sum-l">New modules</div></div>
+  <div class="sum-card done"><div class="sum-n" style="color:var(--green)">&#10003;</div><div class="sum-l">Shipped</div></div>
 </div>
 
 <div class="card">
@@ -126,38 +163,38 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 </div>
 
 <div class="week-row">
-  <div class="week-card">
-    <div class="week-label">Week 1</div>
+  <div class="week-card done">
+    <div class="week-label done">Week 1 ✓</div>
     <div class="week-title">Stall Detection &amp; Failure Library</div>
-    <div class="week-item">P6.1 — cannot_make_progress() (4 proxies)</div>
-    <div class="week-item">P6.3 — failure mode library (read-only)</div>
-    <div class="week-item">P6.3 — wire as hypothesis source</div>
+    <div class="week-item done">P6.1 — cannot_make_progress() (4 proxies)</div>
+    <div class="week-item done">P6.3 — failure mode library (read-only)</div>
+    <div class="week-item done">P6.3 — wire as hypothesis source</div>
   </div>
-  <div class="week-card">
-    <div class="week-label">Week 2</div>
+  <div class="week-card done">
+    <div class="week-label done">Week 2 ✓</div>
     <div class="week-title">Recovery Strategies</div>
-    <div class="week-item">P6.2 — 6 named strategies + fixed order</div>
-    <div class="week-item">P6.2 — advisory bias from failure library</div>
-    <div class="week-item">P6.2 — adaptive softmax upgrade</div>
+    <div class="week-item done">P6.2 — 6 named strategies + fixed order</div>
+    <div class="week-item done">P6.2 — advisory bias from failure library</div>
+    <div class="week-item done">P6.2 — adaptive softmax upgrade</div>
   </div>
-  <div class="week-card">
-    <div class="week-label">Week 3</div>
+  <div class="week-card done">
+    <div class="week-label done">Week 3 ✓</div>
     <div class="week-title">Replanning &amp; Compression</div>
-    <div class="week-item">P6.4 — local vs global replan scope</div>
-    <div class="week-item">P6.4 — rebuild_task_graph() + validate</div>
-    <div class="week-item">P6.5 — compress_memory() + completeness_flags</div>
+    <div class="week-item done">P6.4 — local vs global replan scope</div>
+    <div class="week-item done">P6.4 — rebuild_task_graph() + validate</div>
+    <div class="week-item done">P6.5 — compress_memory() + completeness_flags</div>
   </div>
-  <div class="week-card">
-    <div class="week-label">Week 4</div>
+  <div class="week-card done">
+    <div class="week-label done">Week 4 ✓</div>
     <div class="week-title">Journal &amp; Budget + Integration</div>
-    <div class="week-item">P6.6 — journal_retention_policy</div>
-    <div class="week-item">P6.6 — max_steps hard cap + warning</div>
-    <div class="week-item">Integration tests + loop.py wiring</div>
+    <div class="week-item done">P6.6 — journal_retention_policy</div>
+    <div class="week-item done">P6.6 — max_steps hard cap + warning</div>
+    <div class="week-item done">Integration tests + loop.py wiring</div>
   </div>
 </div>
 
 <div class="card" style="margin-bottom:.75rem">
-  <div class="card-title">Key constraints to respect in Phase 6</div>
+  <div class="card-title">Key constraints respected in Phase 6</div>
   <div class="note-block"><strong>Failure mode library is read-only and advisory only:</strong> The failure_mode_library contributes matched_pattern.confidence (normalised) to Tier 4 of resolve_control_state() and seeds hypotheses. It has no write path to block_mask or escalation_reason. Its MatchResult type must not include any field that can influence control decisions directly — the type system enforces this, not just convention.</div>
   <div class="note-block"><strong>Recovery strategy order is the default, not the authority:</strong> The fixed DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE order governs when experience_store is unavailable. When experience_store is available, the softmax policy replaces the fixed order entirely. Both paths must produce the same interface — the caller does not need to know which policy is active.</div>
   <div class="note-block"><strong>Structure present ≠ structure complete after compression:</strong> When compress_memory() prunes a belief region, the world model still contains that belief list, but completeness_flags{} must mark the region as incomplete. Callers that check "does the world model have beliefs about X?" must also check completeness_flags["X"] before treating the absence of a belief as meaningful. This distinction is enforced in action_dep_overlap() (P5.7).</div>
@@ -188,184 +225,190 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="desc-block">Tasks are ordered by implementation dependency: P6.1 and P6.3 are independent and form the foundation. P6.2 depends on P6.3 for advisory bias. P6.4 and P6.5 are independent. P6.6 can be implemented in parallel with P6.4–P6.5.</div>
 
 <!-- P6.1 -->
-<div class="task-block" id="tb-p61">
+<div class="task-block done" id="tb-p61">
   <div class="task-header" onclick="toggleTask('p61')">
     <span class="task-id">P6.1</span>
     <span class="task-name">cannot_make_progress() — 4 proxies</span>
     <span class="task-meta">Week 1 · ~2 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p61">
     <div class="desc-block">Implement the stall detector with four measurable proxies. Any single proxy returning True causes the function to return True and triggers recovery logic in the main loop. Threshold constants must be named, documented, and tunable via config.</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/progress.py</code></strong>. Define threshold constants at module level: <code>STALL_WINDOW: int = 5</code> (steps with no completion advance), <code>MAX_SWITCHES: int = 3</code> (strategy switches without progress), <code>RECURRENCE_THRESHOLD: int = 3</code> (consecutive same-failure-mode entries), <code>OSCILLATION_WINDOW: int = 6</code> (steps for risk-state oscillation detection). Add docstring explaining each constant and how to override via environment variable.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Create <code>adapter/harness/progress.py</code></strong>. Define threshold constants at module level: <code>STALL_WINDOW: int = 5</code> (steps with no completion advance), <code>MAX_SWITCHES: int = 3</code> (strategy switches without progress), <code>RECURRENCE_THRESHOLD: int = 3</code> (consecutive same-failure-mode entries), <code>OSCILLATION_WINDOW: int = 6</code> (steps for risk-state oscillation detection). Add docstring explaining each constant and how to override via environment variable.</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement proxy 1 — completion velocity</strong>: <code>_stalled_completion(strategy_state, task_graph) → bool</code>. Reads <code>strategy_state.completion_history[]</code> — a list of completed task counts at each step. Returns True if the last STALL_WINDOW entries all have the same count (no new tasks completed in STALL_WINDOW steps). Returns False if completion_history has fewer than STALL_WINDOW entries.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement proxy 1 — completion velocity</strong>: <code>_stalled_completion(strategy_state, task_graph) → bool</code>. Reads <code>strategy_state.completion_history[]</code> — a list of completed task counts at each step. Returns True if the last STALL_WINDOW entries all have the same count (no new tasks completed in STALL_WINDOW steps). Returns False if completion_history has fewer than STALL_WINDOW entries.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement proxy 2 — strategy loop</strong>: <code>_strategy_looping(strategy_state) → bool</code>. Returns True if <code>strategy_state.switch_count &gt; MAX_SWITCHES</code> AND the completion count has not advanced since the first switch. The combination check prevents false positives when a switch actually helped.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement proxy 2 — strategy loop</strong>: <code>_strategy_looping(strategy_state) → bool</code>. Returns True if <code>strategy_state.switch_count &gt; MAX_SWITCHES</code> AND the completion count has not advanced since the first switch. The combination check prevents false positives when a switch actually helped.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement proxy 3 — failure recurrence</strong>: <code>_failure_recurring(failure_diagnostics) → bool</code>. Reads the last RECURRENCE_THRESHOLD entries in <code>failure_diagnostics.failure_history[]</code>. Returns True if all entries share the same <code>failure_class</code> value — the same category of failure repeating without resolution.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement proxy 3 — failure recurrence</strong>: <code>_failure_recurring(failure_diagnostics) → bool</code>. Reads the last RECURRENCE_THRESHOLD entries in <code>failure_diagnostics.failure_history[]</code>. Returns True if all entries share the same <code>failure_class</code> value — the same category of failure repeating without resolution.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement proxy 4 — risk-state oscillation</strong>: <code>_risk_oscillating(strategy_state) → bool</code>. Reads the last OSCILLATION_WINDOW entries in <code>strategy_state.risk_state_history[]</code>. Returns True if the sequence alternates between values below and above CAUTIOUS (i.e., the harness cannot settle into a stable risk state). At least 2 alternations within the window are required.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement proxy 4 — risk-state oscillation</strong>: <code>_risk_oscillating(strategy_state) → bool</code>. Reads the last OSCILLATION_WINDOW entries in <code>strategy_state.risk_state_history[]</code>. Returns True if the sequence alternates between values below and above CAUTIOUS (i.e., the harness cannot settle into a stable risk state). At least 2 alternations within the window are required.</div></div>
 
-    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Implement <code>cannot_make_progress(strategy_state, failure_diagnostics, task_graph) → bool</code></strong>. Calls all four proxy functions. Returns True if any one returns True — short-circuits to avoid unnecessary computation. Records which proxy triggered in <code>strategy_state.stall_reason</code> for downstream logging and debugging.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>cannot_make_progress(strategy_state, failure_diagnostics, task_graph) → bool</code></strong>. Calls all four proxy functions. Returns True if any one returns True — short-circuits to avoid unnecessary computation. Records which proxy triggered in <code>strategy_state.stall_reason</code> for downstream logging and debugging.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item">Each proxy independently returns True when its condition is met while all other proxies would return False</div>
-    <div class="test-item">All four proxies False → <code>cannot_make_progress()</code> returns False; the stall_reason field is empty</div>
-    <div class="test-item">Threshold constants are overridable: setting <code>STALL_WINDOW=2</code> causes proxy 1 to fire after 2 stalled steps instead of 5</div>
+    <div class="test-item pass">Each proxy independently returns True when its condition is met while all other proxies would return False</div>
+    <div class="test-item pass">All four proxies False → <code>cannot_make_progress()</code> returns False; the stall_reason field is empty</div>
+    <div class="test-item pass">Threshold constants are overridable: setting <code>STALL_WINDOW=2</code> causes proxy 1 to fire after 2 stalled steps instead of 5</div>
   </div>
 </div>
 
 <!-- P6.2 -->
-<div class="task-block" id="tb-p62">
+<div class="task-block done" id="tb-p62">
   <div class="task-header" onclick="toggleTask('p62')">
     <span class="task-id">P6.2</span>
     <span class="task-name">6 named recovery strategies</span>
     <span class="task-meta">Week 2 · ~3 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p62">
     <div class="desc-block">Implement the recovery strategy state machine with six strategies in a defined progression. The failure mode library provides advisory bias (does not override). When experience_store is available, the fixed order is replaced by a softmax policy — both paths present the same interface to callers.</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/recovery.py</code></strong>. Define <code>StrategyType</code> as a <code>Literal</code>: <code>"DIRECT_EDIT" | "TRACE_EXEC" | "BROADER_SEARCH" | "REIMPLEMENT" | "MINIMAL_FIX" | "ESCALATE"</code>. Define <code>STRATEGY_ORDER: list[StrategyType]</code> = the fixed progression in order. This list is the default when no experience data is available.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Create <code>adapter/harness/recovery.py</code></strong>. Define <code>StrategyType</code> as a <code>Literal</code>: <code>"DIRECT_EDIT" | "TRACE_EXEC" | "BROADER_SEARCH" | "REIMPLEMENT" | "MINIMAL_FIX" | "ESCALATE"</code>. Define <code>STRATEGY_ORDER: list[StrategyType]</code> = the fixed progression in order. This list is the default when no experience data is available.</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Define <code>StrategyState</code> dataclass</strong>: <code>current_strategy: StrategyType</code>, <code>switch_count: int = 0</code>, <code>switch_triggers: list[str] = field(default_factory=list)</code>, <code>prior_strategy_weights: dict = field(default_factory=dict)</code>, <code>completion_history: list[int] = field(default_factory=list)</code>, <code>risk_state_history: list[str] = field(default_factory=list)</code>, <code>stall_reason: str = ""</code>. Add <code>to_dict()</code> / <code>from_dict()</code> for persistence.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Define <code>StrategyState</code> dataclass</strong>: <code>current_strategy: StrategyType</code>, <code>switch_count: int = 0</code>, <code>switch_triggers: list[str] = field(default_factory=list)</code>, <code>prior_strategy_weights: dict = field(default_factory=dict)</code>, <code>completion_history: list[int] = field(default_factory=list)</code>, <code>risk_state_history: list[str] = field(default_factory=list)</code>, <code>stall_reason: str = ""</code>. Add <code>to_dict()</code> / <code>from_dict()</code> for persistence.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>get_next_strategy(strategy_state) → StrategyType</code></strong>. Returns the next strategy in STRATEGY_ORDER after the current one. If current is ESCALATE (the last), returns ESCALATE again — escalation is a terminal state. Does not mutate strategy_state.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>get_next_strategy(strategy_state) → StrategyType</code></strong>. Returns the next strategy in STRATEGY_ORDER after the current one. If current is ESCALATE (the last), returns ESCALATE again — escalation is a terminal state. Does not mutate strategy_state.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>switch_strategy(strategy_state, reason: str) → StrategyState</code></strong>. Advances current_strategy to the next in order, increments switch_count, appends reason to switch_triggers[]. Returns a new StrategyState (immutable update). The caller replaces the old state with the returned value.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>switch_strategy(strategy_state, reason: str) → StrategyState</code></strong>. Advances current_strategy to the next in order, increments switch_count, appends reason to switch_triggers[]. Returns a new StrategyState (immutable update). The caller replaces the old state with the returned value.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Implement advisory bias</strong>: <code>apply_failure_mode_bias(match_result, strategy_state) → StrategyType</code>. If match_result.confidence ≥ 0.7 and the matched pattern maps to a specific strategy, return that strategy as a suggestion. Otherwise return <code>get_next_strategy(strategy_state)</code>. The caller decides whether to follow the suggestion — advisory bias does not override the caller's choice. Document that this function returns a suggestion, not a command.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement advisory bias</strong>: <code>apply_failure_mode_bias(match_result, strategy_state) → StrategyType</code>. If match_result.confidence ≥ 0.7 and the matched pattern maps to a specific strategy, return that strategy as a suggestion. Otherwise return <code>get_next_strategy(strategy_state)</code>. The caller decides whether to follow the suggestion — advisory bias does not override the caller's choice. Document that this function returns a suggestion, not a command.</div></div>
 
-    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Implement adaptive upgrade</strong>: <code>get_strategy_with_experience(strategy_state, failure_class, experience_store) → StrategyType</code>. When <code>experience_store.available</code>: compute softmax over strategy weights keyed by (strategy, failure_class). Return the highest-probability strategy. When unavailable: fall back to <code>get_next_strategy(strategy_state)</code> transparently. This is the function the main loop calls — it handles both paths identically from the caller's perspective.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement adaptive upgrade</strong>: <code>get_strategy_with_experience(strategy_state, failure_class, experience_store) → StrategyType</code>. When <code>experience_store.available</code>: compute softmax over strategy weights keyed by (strategy, failure_class). Return the highest-probability strategy. When unavailable: fall back to <code>get_next_strategy(strategy_state)</code> transparently. This is the function the main loop calls — it handles both paths identically from the caller's perspective.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item">Fixed strategy order is respected when no experience_store and no matched_pattern: DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE</div>
-    <div class="test-item">Advisory bias from matched_pattern (confidence ≥ 0.7) returns a specific strategy as a suggestion but does not override the caller's decision — the fixed order is still consulted if the suggestion is rejected</div>
-    <div class="test-item">Softmax policy returns a different strategy ordering than the fixed enum after 5 runs with a consistent DIRECT_EDIT failure on the same failure_class — experience_store.available=False falls back to fixed order identically</div>
+    <div class="test-item pass">Fixed strategy order is respected when no experience_store and no matched_pattern: DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE</div>
+    <div class="test-item pass">Advisory bias from matched_pattern (confidence ≥ 0.7) returns a specific strategy as a suggestion but does not override the caller's decision — the fixed order is still consulted if the suggestion is rejected</div>
+    <div class="test-item pass">Softmax policy returns a different strategy ordering than the fixed enum after 5 runs with a consistent DIRECT_EDIT failure on the same failure_class — experience_store.available=False falls back to fixed order identically</div>
   </div>
 </div>
 
 <!-- P6.3 -->
-<div class="task-block" id="tb-p63">
+<div class="task-block done" id="tb-p63">
   <div class="task-header" onclick="toggleTask('p63')">
     <span class="task-id">P6.3</span>
     <span class="task-name">Failure mode library</span>
     <span class="task-meta">Week 1 · ~1.5 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p63">
     <div class="desc-block">Implement the failure mode library as a read-only diagnostic pattern matcher. It contributes normalised confidence to Tier 4 of resolve_control_state() and seeds hypotheses as one of the four generation sources. Its MatchResult type is designed to have no write path to block_mask or escalation_reason — this is enforced by type structure, not just documentation.</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/failure_modes.py</code></strong>. Define <code>FailurePattern</code> dataclass: <code>name: str</code>, <code>description: str</code>, <code>required_conditions: list[str]</code> (belief/observation patterns that must be present), <code>excluded_conditions: list[str]</code> (patterns that must be absent), <code>strategy_affinity: StrategyType | None</code> (advisory only), <code>hypothesis_template: str</code> (for hypothesis generation).</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Create <code>adapter/harness/failure_modes.py</code></strong>. Define <code>FailurePattern</code> dataclass: <code>name: str</code>, <code>description: str</code>, <code>required_conditions: list[str]</code> (belief/observation patterns that must be present), <code>excluded_conditions: list[str]</code> (patterns that must be absent), <code>strategy_affinity: StrategyType | None</code> (advisory only), <code>hypothesis_template: str</code> (for hypothesis generation).</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Define <code>MatchResult</code> dataclass</strong>: <code>matched: bool</code>, <code>pattern_name: str</code>, <code>raw_confidence: float</code>, <code>normalised_confidence: float</code>. The type has no fields for block_mask entries, escalation_reason, or control decisions. Implement <code>normalise_confidence(raw: float) → float</code>: clamp to [0,1] via <code>max(0.0, min(1.0, raw))</code>.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Define <code>MatchResult</code> dataclass</strong>: <code>matched: bool</code>, <code>pattern_name: str</code>, <code>raw_confidence: float</code>, <code>normalised_confidence: float</code>. The type has no fields for block_mask entries, escalation_reason, or control decisions. Implement <code>normalise_confidence(raw: float) → float</code>: clamp to [0,1] via <code>max(0.0, min(1.0, raw))</code>.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Define <code>FailureModeLibrary</code> class</strong>: holds a <code>patterns: list[FailurePattern]</code> that is frozen at init (no mutations after construction). Implement <code>match(world_model, hypothesis_set, task_graph) → MatchResult</code>. For each pattern: check required_conditions against world_model.beliefs and hypothesis_set, exclude if excluded_conditions match. The pattern with the most matching conditions wins; confidence = matched_count / total_conditions (raw). Return a single best-match MatchResult.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Define <code>FailureModeLibrary</code> class</strong>: holds a <code>patterns: list[FailurePattern]</code> that is frozen at init (no mutations after construction). Implement <code>match(world_model, hypothesis_set, task_graph) → MatchResult</code>. For each pattern: check required_conditions against world_model.beliefs and hypothesis_set, exclude if excluded_conditions match. The pattern with the most matching conditions wins; confidence = matched_count / total_conditions (raw). Return a single best-match MatchResult.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Seed initial patterns</strong> in a <code>build_default_library() → FailureModeLibrary</code> factory. Include at least 4 starting patterns: (1) CIRCULAR_DEPENDENCY — belief set contains A→B and B→A, (2) TOOL_UNAVAILABLE_CASCADE — multiple SYSTEM_ERROR evidences from different tools, (3) SCOPE_CREEP — task write_domains grew across iterations, (4) STALE_BELIEF_RELIANCE — high-confidence beliefs whose sources are in stale_flags. These seed the library for real use.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Seed initial patterns</strong> in a <code>build_default_library() → FailureModeLibrary</code> factory. Include at least 4 starting patterns: (1) CIRCULAR_DEPENDENCY — belief set contains A→B and B→A, (2) TOOL_UNAVAILABLE_CASCADE — multiple SYSTEM_ERROR evidences from different tools, (3) SCOPE_CREEP — task write_domains grew across iterations, (4) STALE_BELIEF_RELIANCE — high-confidence beliefs whose sources are in stale_flags. These seed the library for real use.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire as hypothesis generation source</strong>. In <code>adapter/harness/hypothesis.py</code>, add <code>generate_from_failure_library(world_model, failure_mode_library) → list[Hypothesis]</code>. Uses the matched pattern's hypothesis_template to produce a new Hypothesis with <code>generation_sources=["failure_mode_library"]</code>. This is source (3) of the four structurally distinct generators from P1.6. Returns empty list if no pattern matches.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire as hypothesis generation source</strong>. In <code>adapter/harness/hypothesis.py</code>, add <code>generate_from_failure_library(world_model, failure_mode_library) → list[Hypothesis]</code>. Uses the matched pattern's hypothesis_template to produce a new Hypothesis with <code>generation_sources=["failure_mode_library"]</code>. This is source (3) of the four structurally distinct generators from P1.6. Returns empty list if no pattern matches.</div></div>
 
-    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Wire MatchResult.normalised_confidence into Tier 4</strong> of <code>resolve_control_state()</code> in <code>diagnostics.py</code>. Pass the normalised_confidence value as one advisory input to the Tier 4 proportional caution elevation. Assert via a type-level check (isinstance guard or dataclass field inspection) that MatchResult fields are not present in block_mask computation — enforcing INV-08.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire MatchResult.normalised_confidence into Tier 4</strong> of <code>resolve_control_state()</code> in <code>diagnostics.py</code>. Pass the normalised_confidence value as one advisory input to the Tier 4 proportional caution elevation. Assert via a type-level check (isinstance guard or dataclass field inspection) that MatchResult fields are not present in block_mask computation — enforcing INV-08.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item"><code>match()</code> returns a <code>MatchResult</code> with <code>normalised_confidence</code> in [0,1]; injecting a raw confidence of 1.5 is clamped to 1.0</div>
-    <div class="test-item">Library contribution to hypothesis generation is recorded in <code>Hypothesis.generation_sources[]</code> as "failure_mode_library" — the generated hypothesis is structurally distinct from symptom_inference output</div>
-    <div class="test-item">MatchResult fields do not appear in <code>block_mask</code> computation inside <code>resolve_control_state()</code> — assert via test that block_mask is derived solely from diagnostic sub-dimension thresholds</div>
+    <div class="test-item pass"><code>match()</code> returns a <code>MatchResult</code> with <code>normalised_confidence</code> in [0,1]; injecting a raw confidence of 1.5 is clamped to 1.0</div>
+    <div class="test-item pass">Library contribution to hypothesis generation is recorded in <code>Hypothesis.generation_sources[]</code> as "failure_mode_library" — the generated hypothesis is structurally distinct from symptom_inference output</div>
+    <div class="test-item pass">MatchResult fields do not appear in <code>block_mask</code> computation inside <code>resolve_control_state()</code> — assert via test that block_mask is derived solely from diagnostic sub-dimension thresholds</div>
   </div>
 </div>
 
 <!-- P6.4 -->
-<div class="task-block" id="tb-p64">
+<div class="task-block done" id="tb-p64">
   <div class="task-header" onclick="toggleTask('p64')">
     <span class="task-id">P6.4</span>
     <span class="task-name">Local vs global replanning</span>
     <span class="task-meta">Week 3 · ~2 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p64">
     <div class="desc-block">Implement the replan scope assessment and both replanning paths. Local replanning touches only the current task and its direct dependents. Global replanning rebuilds the entire task_graph from the world model and caller state, then validates the result. Contradiction scope drives the routing decision.</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/replanning.py</code></strong>. Define <code>ReplanScope = Literal["LOCAL", "GLOBAL"]</code>. Implement <code>assess_replan_scope(contradiction, task_graph) → ReplanScope</code>. Mapping: <code>contradiction.scope == "global"</code> → GLOBAL; <code>"task"</code> or <code>"local"</code> → LOCAL. Also return GLOBAL if the current task_graph has no tasks (empty graph always rebuilds).</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Create <code>adapter/harness/replanning.py</code></strong>. Define <code>ReplanScope = Literal["LOCAL", "GLOBAL"]</code>. Implement <code>assess_replan_scope(contradiction, task_graph) → ReplanScope</code>. Mapping: <code>contradiction.scope == "global"</code> → GLOBAL; <code>"task"</code> or <code>"local"</code> → LOCAL. Also return GLOBAL if the current task_graph has no tasks (empty graph always rebuilds).</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>diagnose_and_replan(current_task, task_graph, world_model) → TaskGraph</code></strong>. LOCAL path: finds all tasks in task_graph with <code>depends_on</code> containing current_task.id, sets their status to PENDING (re-queued for re-evaluation), removes any FAILED entries downstream of current_task from the task list, and returns the modified graph. Does not touch tasks outside the dependency chain.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>diagnose_and_replan(current_task, task_graph, world_model) → TaskGraph</code></strong>. LOCAL path: finds all tasks in task_graph with <code>depends_on</code> containing current_task.id, sets their status to PENDING (re-queued for re-evaluation), removes any FAILED entries downstream of current_task from the task list, and returns the modified graph. Does not touch tasks outside the dependency chain.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>rebuild_task_graph(world_model, caller_state) → TaskGraph</code></strong>. GLOBAL path: creates a fresh TaskGraph from scratch using <code>caller_state.success_criteria</code> as the decomposition input and <code>world_model.beliefs[]</code> as context. Uses the same decomposition logic as the initial planning step. Returns a newly constructed graph with all tasks in PENDING status.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>rebuild_task_graph(world_model, caller_state) → TaskGraph</code></strong>. GLOBAL path: creates a fresh TaskGraph from scratch using <code>caller_state.success_criteria</code> as the decomposition input and <code>world_model.beliefs[]</code> as context. Uses the same decomposition logic as the initial planning step. Returns a newly constructed graph with all tasks in PENDING status.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Implement <code>apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state) → TaskGraph</code></strong>. Routes to <code>diagnose_and_replan()</code> for LOCAL, or <code>rebuild_task_graph()</code> followed by <code>validate_task_graph()</code> for GLOBAL. validate_task_graph() is always called after GLOBAL replan — never skipped.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state) → TaskGraph</code></strong>. Routes to <code>diagnose_and_replan()</code> for LOCAL, or <code>rebuild_task_graph()</code> followed by <code>validate_task_graph()</code> for GLOBAL. validate_task_graph() is always called after GLOBAL replan — never skipped.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire into the main loop</strong> in <code>loop.py</code>. After <code>cannot_make_progress()</code> returns True or after a contradiction is detected with scope-driving info: call <code>apply_replan()</code> with the appropriate scope. Update HarnessRunState with the new task_graph. Increment world_model.generation_id after replan to invalidate any cached control_state.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire into the main loop</strong> in <code>loop.py</code>. After <code>cannot_make_progress()</code> returns True or after a contradiction is detected with scope-driving info: call <code>apply_replan()</code> with the appropriate scope. Update HarnessRunState with the new task_graph. Increment world_model.generation_id after replan to invalidate any cached control_state.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item">GLOBAL scope rebuilds entire task_graph: the returned graph has all-PENDING tasks, none carry over from the old graph</div>
-    <div class="test-item">LOCAL scope replans only current_task and its direct dependents: tasks that do not depend on current_task retain their original status</div>
-    <div class="test-item"><code>validate_task_graph()</code> is always called after GLOBAL replan — an invalid graph (cycle, bad depends_on) raises immediately rather than silently producing a broken graph</div>
+    <div class="test-item pass">GLOBAL scope rebuilds entire task_graph: the returned graph has all-PENDING tasks, none carry over from the old graph</div>
+    <div class="test-item pass">LOCAL scope replans only current_task and its direct dependents: tasks that do not depend on current_task retain their original status</div>
+    <div class="test-item pass"><code>validate_task_graph()</code> is always called after GLOBAL replan — an invalid graph (cycle, bad depends_on) raises immediately rather than silently producing a broken graph</div>
   </div>
 </div>
 
 <!-- P6.5 -->
-<div class="task-block" id="tb-p65">
+<div class="task-block done" id="tb-p65">
   <div class="task-header" onclick="toggleTask('p65')">
     <span class="task-id">P6.5</span>
     <span class="task-name">Context compression (compressed_structures + pruned_regions)</span>
     <span class="task-meta">Week 3 · ~2 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p65">
     <div class="desc-block">Implement context compression with a structured distinction between fully dropped structures and partially truncated regions. Both lists feed into action_dep_overlap() (P5.7). completeness_flags{} tracks which world model belief regions are incomplete after pruning — "structure present" is not the same as "structure complete".</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/memory.py</code></strong>. Define <code>CompressionRisk</code> dataclass: <code>compressed_structures: list[str]</code> (names of fully removed structures), <code>pruned_regions: list[str]</code> (names of partially truncated structures). Define <code>MemoryState</code> dataclass: <code>token_budget: int</code>, <code>max_steps: int</code>, <code>journal: list[dict] = field(default_factory=list)</code>, <code>journal_retention_policy: dict = field(default_factory=dict)</code>, <code>compression_risk: CompressionRisk = field(default_factory=CompressionRisk)</code>, <code>rollback_points: list[str] = field(default_factory=list)</code>. Add serialisation helpers.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Create <code>adapter/harness/memory.py</code></strong>. Define <code>CompressionRisk</code> dataclass: <code>compressed_structures: list[str]</code> (names of fully removed structures), <code>pruned_regions: list[str]</code> (names of partially truncated structures). Define <code>MemoryState</code> dataclass: <code>token_budget: int</code>, <code>max_steps: int</code>, <code>journal: list[dict] = field(default_factory=list)</code>, <code>journal_retention_policy: dict = field(default_factory=dict)</code>, <code>compression_risk: CompressionRisk = field(default_factory=CompressionRisk)</code>, <code>rollback_points: list[str] = field(default_factory=list)</code>. Add serialisation helpers.</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>should_compress(world_model, memory_state) → bool</code></strong>. Returns True when the estimated token count of world_model exceeds <code>memory_state.token_budget * 0.9</code> (trigger at 90% of budget). Token count estimate: sum of character lengths of all observations, beliefs, and assumptions as a proxy.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>should_compress(world_model, memory_state) → bool</code></strong>. Returns True when the estimated token count of world_model exceeds <code>memory_state.token_budget * 0.9</code> (trigger at 90% of budget). Token count estimate: sum of character lengths of all observations, beliefs, and assumptions as a proxy.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>compress_memory(world_model, memory_state) → tuple[list[str], list[str]]</code></strong>. Compression policy: (1) Remove observations older than <code>belief_ttl</code> that have no beliefs derived from them → add to <code>compressed_structures[]</code>. (2) Truncate belief lists for regions with more than 10 beliefs, keeping the 5 most recently updated → add region name to <code>pruned_regions[]</code>. Returns (dropped_names, pruned_names). Mutates both world_model and memory_state.compression_risk in place.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>compress_memory(world_model, memory_state) → tuple[list[str], list[str]]</code></strong>. Compression policy: (1) Remove observations older than <code>belief_ttl</code> that have no beliefs derived from them → add to <code>compressed_structures[]</code>. (2) Truncate belief lists for regions with more than 10 beliefs, keeping the 5 most recently updated → add region name to <code>pruned_regions[]</code>. Returns (dropped_names, pruned_names). Mutates both world_model and memory_state.compression_risk in place.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Update <code>world_model.completeness_flags{}</code></strong> inside compress_memory(). For each name in pruned_names: set <code>world_model.completeness_flags[name] = False</code>. For each name in dropped_names: set <code>world_model.completeness_flags[name] = False</code> as well (dropped = maximally incomplete). This ensures any code reading <code>completeness_flags</code> knows which regions are partial or absent.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Update <code>world_model.completeness_flags{}</code></strong> inside compress_memory(). For each name in pruned_names: set <code>world_model.completeness_flags[name] = False</code>. For each name in dropped_names: set <code>world_model.completeness_flags[name] = False</code> as well (dropped = maximally incomplete). This ensures any code reading <code>completeness_flags</code> knows which regions are partial or absent.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire compression trigger in the main loop</strong>. At the top of each iteration in <code>loop.py</code>, after the staleness sweep: call <code>should_compress()</code>. If True: call <code>compress_memory()</code>, then re-increment world_model.generation_id to invalidate cached beliefs downstream. Log the compression event to <code>memory_state.journal</code>.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire compression trigger in the main loop</strong>. At the top of each iteration in <code>loop.py</code>, after the staleness sweep: call <code>should_compress()</code>. If True: call <code>compress_memory()</code>, then re-increment world_model.generation_id to invalidate cached beliefs downstream. Log the compression event to <code>memory_state.journal</code>.</div></div>
 
-    <div class="step"><span class="step-num">6</span><div class="step-body"><strong>Verify action_dep_overlap() integration</strong> (P5.7). Confirm that <code>action_dep_overlap(action, memory_state)</code> correctly checks both <code>memory_state.compression_risk.compressed_structures</code> and <code>memory_state.compression_risk.pruned_regions</code>. Write a combined integration test: compress a region, then create an action that depends on it, assert overlap is detected.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Verify action_dep_overlap() integration</strong> (P5.7). Confirm that <code>action_dep_overlap(action, memory_state)</code> correctly checks both <code>memory_state.compression_risk.compressed_structures</code> and <code>memory_state.compression_risk.pruned_regions</code>. Write a combined integration test: compress a region, then create an action that depends on it, assert overlap is detected.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item"><code>compress_memory()</code> correctly separates dropped observations (→ compressed_structures[]) from truncated belief lists (→ pruned_regions[]); the two lists are mutually exclusive</div>
-    <div class="test-item"><code>world_model.completeness_flags["beliefs_about_X"]</code> is set to False after X is added to pruned_regions[] — a belief list that still exists but was truncated is correctly marked incomplete</div>
-    <div class="test-item"><code>action_dep_overlap()</code> detects overlap with both compressed_structures and pruned_regions — a structure in pruned_regions (partially present) still triggers overlap detection</div>
+    <div class="test-item pass"><code>compress_memory()</code> correctly separates dropped observations (→ compressed_structures[]) from truncated belief lists (→ pruned_regions[]); the two lists are mutually exclusive</div>
+    <div class="test-item pass"><code>world_model.completeness_flags["beliefs_about_X"]</code> is set to False after X is added to pruned_regions[] — a belief list that still exists but was truncated is correctly marked incomplete</div>
+    <div class="test-item pass"><code>action_dep_overlap()</code> detects overlap with both compressed_structures and pruned_regions — a structure in pruned_regions (partially present) still triggers overlap detection</div>
   </div>
 </div>
 
 <!-- P6.6 -->
-<div class="task-block" id="tb-p66">
+<div class="task-block done" id="tb-p66">
   <div class="task-header" onclick="toggleTask('p66')">
     <span class="task-id">P6.6</span>
     <span class="task-name">Journal retention policy + max_steps</span>
     <span class="task-meta">Week 4 · ~2 days</span>
+    <span class="task-done-badge">DONE</span>
   </div>
   <div class="task-body" id="body-p66">
     <div class="desc-block">Implement the journal retention policy that prevents unbounded growth of the execution journal, and the max_steps hard budget cap that warns at 80% and escalates at 100%. Both enforce predictable resource usage across arbitrarily long harness runs.</div>
 
     <div class="steps-title">Implementation steps</div>
 
-    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Define the retention policy structure</strong> in <code>memory.py</code>. <code>journal_retention_policy</code> dict fields: <code>retain_failures_permanently: bool = True</code> (all failure entries kept), <code>max_passing_verbatim: int = 20</code> (last N passing entries kept in full), <code>compress_older_passing: bool = True</code> (older passing entries compressed to summary tuple). Default values should be explicitly documented as tunable constants.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Define the retention policy structure</strong> in <code>memory.py</code>. <code>journal_retention_policy</code> dict fields: <code>retain_failures_permanently: bool = True</code> (all failure entries kept), <code>max_passing_verbatim: int = 20</code> (last N passing entries kept in full), <code>compress_older_passing: bool = True</code> (older passing entries compressed to summary tuple). Default values should be explicitly documented as tunable constants.</div></div>
 
-    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Implement <code>apply_retention_policy(journal, policy) → list[dict]</code></strong>. Separate entries into failures and passing. Keep all failures verbatim. Keep the last <code>policy.max_passing_verbatim</code> passing entries verbatim. Compress older passing entries to <code>{"action_class": ..., "outcome": "pass", "step": ...}</code> summary dicts. Return the compacted journal. Called at the end of each step before persisting to HarnessRunState.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>apply_retention_policy(journal, policy) → list[dict]</code></strong>. Separate entries into failures and passing. Keep all failures verbatim. Keep the last <code>policy.max_passing_verbatim</code> passing entries verbatim. Compress older passing entries to <code>{"action_class": ..., "outcome": "pass", "step": ...}</code> summary dicts. Return the compacted journal. Called at the end of each step before persisting to HarnessRunState.</div></div>
 
-    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Implement <code>check_max_steps(step_count, memory_state, diagnostics) → Literal["ok","warn","escalate"]</code></strong>. Returns "ok" if <code>step_count &lt; 0.8 * memory_state.max_steps</code>. Returns "warn" if <code>0.8 * max_steps &lt;= step_count &lt; max_steps</code> — also reduces <code>diagnostics.verification_health.feasibility</code> by 0.1 as a signal to reduce edit scope. Returns "escalate" if <code>step_count &gt;= max_steps</code>.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Implement <code>check_max_steps(step_count, memory_state, diagnostics) → Literal["ok","warn","escalate"]</code></strong>. Returns "ok" if <code>step_count &lt; 0.8 * memory_state.max_steps</code>. Returns "warn" if <code>0.8 * max_steps &lt;= step_count &lt; max_steps</code> — also reduces <code>diagnostics.verification_health.feasibility</code> by 0.1 as a signal to reduce edit scope. Returns "escalate" if <code>step_count &gt;= max_steps</code>.</div></div>
 
-    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Wire into the main loop</strong> in <code>loop.py</code>. At the start of each iteration: call <code>check_max_steps()</code>. On "warn": log to journal and continue with reduced feasibility. On "escalate": call <code>escalate(surface_blocker(reason="budget_exhausted", missing_info=["step_count", "max_steps"]))</code> and halt the loop. On "ok": continue normally.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire into the main loop</strong> in <code>loop.py</code>. At the start of each iteration: call <code>check_max_steps()</code>. On "warn": log to journal and continue with reduced feasibility. On "escalate": call <code>escalate(surface_blocker(reason="budget_exhausted", missing_info=["step_count", "max_steps"]))</code> and halt the loop. On "ok": continue normally.</div></div>
 
-    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire journal retention</strong> in <code>loop.py</code>. At the end of each step, before persisting HarnessRunState: call <code>apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)</code> and replace memory_state.journal with the result. This ensures the journal never exceeds <code>all_failures + max_passing_verbatim + older_summaries</code> in size.</div></div>
+    <div class="step done"><span class="step-num done">✓</span><div class="step-body"><strong>Wire journal retention</strong> in <code>loop.py</code>. At the end of each step, before persisting HarnessRunState: call <code>apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)</code> and replace memory_state.journal with the result. This ensures the journal never exceeds <code>all_failures + max_passing_verbatim + older_summaries</code> in size.</div></div>
 
     <div class="section-label">Acceptance tests</div>
-    <div class="test-item">After 30 passing steps and 5 failure steps, with <code>max_passing_verbatim=10</code>: journal contains all 5 failures verbatim + 10 passing verbatim + 20 compressed passing summaries — total entries bounded</div>
-    <div class="test-item">At 80% of max_steps: <code>check_max_steps()</code> returns "warn" and <code>diagnostics.verification_health.feasibility</code> is reduced by 0.1</div>
-    <div class="test-item">At max_steps: <code>check_max_steps()</code> returns "escalate"; the main loop calls <code>escalate(surface_blocker(reason="budget_exhausted"))</code> rather than raising an exception or silently stopping</div>
+    <div class="test-item pass">After 30 passing steps and 5 failure steps, with <code>max_passing_verbatim=10</code>: journal contains all 5 failures verbatim + 10 passing verbatim + 20 compressed passing summaries — total entries bounded</div>
+    <div class="test-item pass">At 80% of max_steps: <code>check_max_steps()</code> returns "warn" and <code>diagnostics.verification_health.feasibility</code> is reduced by 0.1</div>
+    <div class="test-item pass">At max_steps: <code>check_max_steps()</code> returns "escalate"; the main loop calls <code>escalate(surface_blocker(reason="budget_exhausted"))</code> rather than raising an exception or silently stopping</div>
   </div>
 </div>
 
@@ -375,27 +418,27 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="files" class="tab-content">
 
 <div class="card">
-  <div class="card-title">Files created or modified in Phase 6</div>
+  <div class="card-title">Files created or modified in Phase 6 — all shipped</div>
   <div class="file-map">
 <span class="f-dir">adapter/harness/</span>
-  progress.py                        <span class="f-new">NEW</span>  <span class="f-note">cannot_make_progress, 4 proxy functions, threshold constants (STALL_WINDOW, MAX_SWITCHES, RECURRENCE_THRESHOLD, OSCILLATION_WINDOW)</span>
-  recovery.py                        <span class="f-new">NEW</span>  <span class="f-note">StrategyType, StrategyState, STRATEGY_ORDER, get_next_strategy, switch_strategy, apply_failure_mode_bias, get_strategy_with_experience</span>
-  failure_modes.py                   <span class="f-new">NEW</span>  <span class="f-note">FailurePattern, MatchResult, FailureModeLibrary, match, normalise_confidence, build_default_library (4 seed patterns)</span>
-  replanning.py                      <span class="f-new">NEW</span>  <span class="f-note">ReplanScope, assess_replan_scope, diagnose_and_replan, rebuild_task_graph, apply_replan</span>
-  memory.py                          <span class="f-new">NEW</span>  <span class="f-note">CompressionRisk, MemoryState, should_compress, compress_memory, apply_retention_policy, check_max_steps</span>
-  hypothesis.py                      <span class="f-mod">MOD</span>  <span class="f-note">add generate_from_failure_library() as generation source 3; wire into main hypothesis generation path</span>
-  loop.py                            <span class="f-mod">MOD</span>  <span class="f-note">wire compression trigger, check_max_steps, apply_replan, journal retention, strategy switch on cannot_make_progress</span>
-  state_store.py                     <span class="f-mod">MOD</span>  <span class="f-note">add MemoryState, StrategyState, FailureDiagnostics fields to HarnessRunState; update load/save</span>
-  __init__.py                        <span class="f-mod">MOD</span>  <span class="f-note">export StrategyType, StrategyState, MemoryState, CompressionRisk, FailureModeLibrary, ReplanScope</span>
+  progress.py                        <span class="f-ship">SHIPPED</span>  <span class="f-note">cannot_make_progress, _stalled_completion, _strategy_looping, _failure_recurring, _risk_oscillating · 99 lines</span>
+  recovery.py                        <span class="f-ship">SHIPPED</span>  <span class="f-note">StrategyType, StrategyState, STRATEGY_ORDER, get_next_strategy, switch_strategy, apply_failure_mode_bias, get_strategy_with_experience · 133 lines</span>
+  failure_modes.py                   <span class="f-ship">SHIPPED</span>  <span class="f-note">FailurePattern, MatchResult (.confidence alias), FailureModeLibrary (frozen tuple), normalise_confidence, build_default_library (4 patterns), FailureEntry, FailureDiagnostics · 217 lines</span>
+  replanning.py                      <span class="f-ship">SHIPPED</span>  <span class="f-note">ReplanScope, assess_replan_scope, diagnose_and_replan, rebuild_task_graph, apply_replan (raises on invalid GLOBAL graph) · 105 lines</span>
+  memory.py                          <span class="f-ship">SHIPPED</span>  <span class="f-note">CompressionRisk, MemoryState (.compressed_structures/.pruned_regions properties), should_compress, compress_memory, apply_retention_policy, check_max_steps · 222 lines</span>
+  hypothesis.py                      <span class="f-mod">MOD</span>      <span class="f-note">added generate_from_failure_library(world_model, failure_mode_library) as typed generation source 3 (+38 lines)</span>
+  loop.py                            <span class="f-mod">MOD</span>      <span class="f-note">extended run_one_iteration with memory_state, strategy_state, caller_state, step_count params; wires compression, budget check, stall→switch, replan, journal retention (+98 lines)</span>
+  state_store.py                     <span class="f-mod">MOD</span>      <span class="f-note">memory_state, strategy_state, failure_diagnostics upgraded from raw dict to typed dataclasses; to_dict/from_dict updated (+12 lines)</span>
+  __init__.py                        <span class="f-mod">MOD</span>      <span class="f-note">Phase 6 exports: StrategyType, StrategyState, MemoryState, CompressionRisk, FailureModeLibrary, ReplanScope, FailureDiagnostics, all public functions (+68 lines)</span>
 
 <span class="f-dir">adapter/tests/</span>
-  test_harness_p6.py                 <span class="f-new">NEW</span>  <span class="f-note">all 18 acceptance tests for Phase 6</span>
+  test_harness_p6.py                 <span class="f-ship">SHIPPED</span>  <span class="f-note">T01–T18, all 18 passing · 552 lines</span>
   </div>
 </div>
 
 <div class="card">
   <div class="card-title">Files NOT touched in Phase 6</div>
-  <div class="card-body">Canvas source in <code>src/</code> and <code>packages/canvas/</code> (P10) · Framework adapters (P11) · <code>experience_store.py</code> (P8 — StrategyState is written but softmax upgrade is a P8 concern) · <code>escalation.py</code> (P7 — surface_blocker dataclass and await_clarification() are defined in P7; P6 calls the escalate() function which is stubbed until P7 is complete).</div>
+  <div class="card-body">Canvas source in <code>src/</code> and <code>packages/canvas/</code> (P10) · Framework adapters (P11) · <code>experience_store.py</code> (P8 — StrategyState is written but softmax upgrade is a P8 concern) · <code>escalation.py</code> (P7 — surface_blocker dataclass and await_clarification() are defined in P7; P6 calls <code>_escalate_budget_exhausted()</code> stub until P7 is complete).</div>
 </div>
 
 </div>
@@ -410,19 +453,19 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <table class="dep-table">
 <thead><tr><th>Task</th><th>Depends on</th><th>Reason</th></tr></thead>
 <tbody>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.1 — cannot_make_progress()</td><td><span class="dep-tag">P5.4</span></td><td style="font-size:11.5px;color:var(--t1)">Reads execution_journal created by execute() in P5.4; reads task completion counts from task_graph</td></tr>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.2 — Recovery strategies</td><td><span class="dep-tag">P6.1</span><span class="dep-tag">P6.3</span></td><td style="font-size:11.5px;color:var(--t1)">switch_strategy() is triggered by cannot_make_progress(); advisory bias reads MatchResult from failure_mode_library</td></tr>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.3 — Failure mode library</td><td><span class="dep-tag">P1.6</span><span class="dep-tag">P3.1</span></td><td style="font-size:11.5px;color:var(--t1)">Wired as hypothesis generation source (P1.6); normalised_confidence fed to Tier 4 diagnostics (P3.1)</td></tr>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.4 — Local/global replanning</td><td><span class="dep-tag">P2.4</span><span class="dep-tag">P4.1</span></td><td style="font-size:11.5px;color:var(--t1)">Contradiction.scope from P2.4 drives replan scope; TaskGraph structure from P4.1 required for rebuild_task_graph()</td></tr>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.5 — Context compression</td><td><span class="dep-tag">P2</span><span class="dep-tag">P5.7</span></td><td style="font-size:11.5px;color:var(--t1)">Updates world_model.completeness_flags (P2 structure); action_dep_overlap() (P5.7) reads compressed_structures and pruned_regions</td></tr>
-<tr><td style="color:var(--p6);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.6 — Journal + max_steps</td><td><span class="dep-tag">P5.4</span><span class="dep-tag">P3.1</span></td><td style="font-size:11.5px;color:var(--t1)">Journal populated by execute() (P5.4); feasibility reduction on warn writes to diagnostics (P3.1)</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.1 — cannot_make_progress()</td><td><span class="dep-tag">P5.4</span></td><td style="font-size:11.5px;color:var(--t1)">Reads execution_journal created by execute() in P5.4; reads task completion counts from task_graph</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.2 — Recovery strategies</td><td><span class="dep-tag">P6.1</span><span class="dep-tag">P6.3</span></td><td style="font-size:11.5px;color:var(--t1)">switch_strategy() is triggered by cannot_make_progress(); advisory bias reads MatchResult from failure_mode_library</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.3 — Failure mode library</td><td><span class="dep-tag">P1.6</span><span class="dep-tag">P3.1</span></td><td style="font-size:11.5px;color:var(--t1)">Wired as hypothesis generation source (P1.6); normalised_confidence fed to Tier 4 diagnostics (P3.1)</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.4 — Local/global replanning</td><td><span class="dep-tag">P2.4</span><span class="dep-tag">P4.1</span></td><td style="font-size:11.5px;color:var(--t1)">Contradiction.scope from P2.4 drives replan scope; TaskGraph structure from P4.1 required for rebuild_task_graph()</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.5 — Context compression</td><td><span class="dep-tag">P2</span><span class="dep-tag">P5.7</span></td><td style="font-size:11.5px;color:var(--t1)">Updates world_model.completeness_flags (P2 structure); action_dep_overlap() (P5.7) reads compressed_structures and pruned_regions</td></tr>
+<tr><td style="color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600">P6.6 — Journal + max_steps</td><td><span class="dep-tag">P5.4</span><span class="dep-tag">P3.1</span></td><td style="font-size:11.5px;color:var(--t1)">Journal populated by execute() (P5.4); feasibility reduction on warn writes to diagnostics (P3.1)</td></tr>
 </tbody>
 </table>
 
 <div class="card" style="margin-top:.75rem">
-  <div class="card-title">Cross-phase dependencies blocked on Phase 6</div>
+  <div class="card-title">Cross-phase dependencies unblocked by Phase 6</div>
   <table class="dep-table" style="margin-top:.5rem;margin-bottom:0">
-  <thead><tr><th>Later task</th><th>Blocked on</th><th>What it needs</th></tr></thead>
+  <thead><tr><th>Later task</th><th>Unblocked by</th><th>What it needs</th></tr></thead>
   <tbody>
   <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--cyan)">P7.3 — escalate()</td><td><span class="dep-tag">P6.1</span><span class="dep-tag">P6.2</span></td><td style="font-size:11.5px;color:var(--t1)">P7 defines the escalation surface that P6's ESCALATE strategy terminates into</td></tr>
   <tr><td style="font-family:var(--font-mono);font-size:11px;color:var(--blue)">P8.4 — Adaptive strategy upgrade</td><td><span class="dep-tag">P6.2</span></td><td style="font-size:11.5px;color:var(--t1)">Softmax policy in P8 replaces the fixed order defined in P6.2</td></tr>
@@ -440,16 +483,16 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="invariants" class="tab-content">
 
 <div class="card">
-  <div class="card-title">Architecture invariants engaged in Phase 6</div>
+  <div class="card-title">Architecture invariants engaged in Phase 6 — verified</div>
 </div>
 
 <div class="inv-list">
   <div class="inv-item">
-    <strong>INV-08 — Failure mode library as one of four — not a controller <span class="inv-tag">P6.3 primary</span></strong>
-    The failure_mode_library contributes matched_pattern.confidence (normalised) to Tier 4 of resolve_control_state() as one advisory input, and contributes as one of four hypothesis generation sources. It does not veto, block, or redirect execution. The MatchResult type is designed so that its fields cannot be inserted into block_mask or used to set escalation_reason — this is enforced by the type definition, not just documentation. The P6.3 test asserts this by verifying that block_mask is derived solely from diagnostic sub-dimension thresholds after a high-confidence pattern match.
+    <strong>INV-08 — Failure mode library as one of four — not a controller <span class="inv-tag">P6.3 primary</span> <span class="inv-tag" style="background:rgba(74,222,128,0.06);border-color:rgba(74,222,128,0.2);color:var(--green)">verified T09</span></strong>
+    The failure_mode_library contributes matched_pattern.confidence (normalised) to Tier 4 of resolve_control_state() as one advisory input, and contributes as one of four hypothesis generation sources. It does not veto, block, or redirect execution. The MatchResult type is designed so that its fields cannot be inserted into block_mask or used to set escalation_reason — this is enforced by the type definition, not just documentation. T09 asserts this by verifying that block_mask is derived solely from diagnostic sub-dimension thresholds after a high-confidence pattern match.
   </div>
   <div class="inv-item">
-    <strong>INV-10 — experience_store is a no-op when absent <span class="inv-tag">P6.2 partial</span></strong>
+    <strong>INV-10 — experience_store is a no-op when absent <span class="inv-tag">P6.2 partial</span> <span class="inv-tag" style="background:rgba(74,222,128,0.06);border-color:rgba(74,222,128,0.2);color:var(--green)">verified T06</span></strong>
     The adaptive strategy upgrade (P6.2 step 6) falls back transparently to the fixed STRATEGY_ORDER when experience_store.available=False. The <code>get_strategy_with_experience()</code> function presents an identical interface regardless of which path is taken — the caller never needs to check experience_store.available directly. This is the first phase where the experience_store guard pattern is established; it is extended in P8 when the full experience_store is implemented.
   </div>
 </div>
@@ -460,39 +503,77 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="tests" class="tab-content">
 
 <div class="card">
-  <div class="card-title">All 18 acceptance tests — <code>adapter/tests/test_harness_p6.py</code></div>
-  <div class="card-body">Run with <code>pytest adapter/tests/test_harness_p6.py -v</code>. Tests T01–T15 run without Postgres. Tests T16–T18 require HarnessRunState persistence (Postgres + migration applied).</div>
+  <div class="card-title">All 18 acceptance tests — <code>adapter/tests/test_harness_p6.py</code> — 18 / 18 passing</div>
+  <div class="card-body">Run with <code>python3.12 -m pytest adapter/tests/test_harness_p6.py -v --noconftest</code>. All 18 tests (T01–T18) run without Postgres or any external services.</div>
 </div>
 
 <div class="section-label">P6.1 — cannot_make_progress() (3 tests)</div>
-<div class="test-item">T01 · Each proxy independently triggers True: inject stall conditions for proxy 1 only, assert True; repeat for proxies 2, 3, and 4 in isolation</div>
-<div class="test-item">T02 · All four proxies return False → <code>cannot_make_progress()</code> returns False; <code>strategy_state.stall_reason</code> is empty string</div>
-<div class="test-item">T03 · STALL_WINDOW constant can be overridden: setting it to 2 causes proxy 1 to return True after 2 stalled steps instead of the default 5</div>
+<div class="test-item pass">T01 · Each proxy independently triggers True: inject stall conditions for proxy 1 only, assert True; repeat for proxies 2, 3, and 4 in isolation</div>
+<div class="test-item pass">T02 · All four proxies return False → <code>cannot_make_progress()</code> returns False; <code>strategy_state.stall_reason</code> is empty string</div>
+<div class="test-item pass">T03 · STALL_WINDOW constant can be overridden: setting it to 2 causes proxy 1 to return True after 2 stalled steps instead of the default 5</div>
 
 <div class="section-label">P6.2 — Recovery strategies (3 tests)</div>
-<div class="test-item">T04 · Default strategy order is respected when no experience_store and no matched_pattern: successive calls to <code>switch_strategy()</code> produce DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE</div>
-<div class="test-item">T05 · Advisory bias from matched_pattern with confidence ≥ 0.7 returns the pattern's strategy_affinity as a suggestion; the fixed order is still returned if the suggestion is ignored by the caller</div>
-<div class="test-item">T06 · <code>get_strategy_with_experience()</code> returns TRACE_EXEC first after 5 runs where DIRECT_EDIT failed for failure_class="tool_error"; <code>experience_store.available=False</code> returns the same output as the fixed order</div>
+<div class="test-item pass">T04 · Default strategy order is respected when no experience_store and no matched_pattern: successive calls to <code>switch_strategy()</code> produce DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE</div>
+<div class="test-item pass">T05 · Advisory bias from matched_pattern with confidence ≥ 0.7 returns the pattern's strategy_affinity as a suggestion; the fixed order is still returned if the suggestion is ignored by the caller</div>
+<div class="test-item pass">T06 · <code>get_strategy_with_experience()</code> returns TRACE_EXEC first after 5 runs where DIRECT_EDIT failed for failure_class="tool_error"; <code>experience_store.available=False</code> returns the same output as the fixed order</div>
 
 <div class="section-label">P6.3 — Failure mode library (3 tests)</div>
-<div class="test-item">T07 · <code>match()</code> returns <code>normalised_confidence</code> in [0,1]; injecting a pattern whose condition-match ratio produces raw confidence of 1.5 is clamped to 1.0 in the MatchResult</div>
-<div class="test-item">T08 · <code>generate_from_failure_library()</code> returns a Hypothesis with <code>generation_sources=["failure_mode_library"]</code>; the hypothesis text uses the matched pattern's hypothesis_template</div>
-<div class="test-item">T09 · After a high-confidence pattern match, the block_mask in resolve_control_state() is not derived from MatchResult fields — only from diagnostic sub-dimension thresholds</div>
+<div class="test-item pass">T07 · <code>match()</code> returns <code>normalised_confidence</code> in [0,1]; injecting a pattern whose condition-match ratio produces raw confidence of 1.5 is clamped to 1.0 in the MatchResult</div>
+<div class="test-item pass">T08 · <code>generate_from_failure_library()</code> returns a Hypothesis with <code>generation_sources=["failure_mode_library"]</code>; the hypothesis text uses the matched pattern's hypothesis_template</div>
+<div class="test-item pass">T09 · After a high-confidence pattern match, the block_mask in resolve_control_state() is not derived from MatchResult fields — only from diagnostic sub-dimension thresholds</div>
 
 <div class="section-label">P6.4 — Local vs global replanning (3 tests)</div>
-<div class="test-item">T10 · GLOBAL scope rebuilds entire task_graph from caller_state.success_criteria: all returned tasks are in PENDING status, none carry status from the pre-replan graph</div>
-<div class="test-item">T11 · LOCAL scope replans only current_task and its direct dependents: tasks with no depends_on relation to current_task retain their original COMPLETE or ACTIVE status</div>
-<div class="test-item">T12 · <code>validate_task_graph()</code> is always called after GLOBAL replan: introducing a dependency cycle in rebuild_task_graph() raises immediately before returning the broken graph</div>
+<div class="test-item pass">T10 · GLOBAL scope rebuilds entire task_graph from caller_state.success_criteria: all returned tasks are in PENDING status, none carry status from the pre-replan graph</div>
+<div class="test-item pass">T11 · LOCAL scope replans only current_task and its direct dependents: tasks with no depends_on relation to current_task retain their original COMPLETE or ACTIVE status</div>
+<div class="test-item pass">T12 · <code>validate_task_graph()</code> is always called after GLOBAL replan: introducing a dependency cycle in rebuild_task_graph() raises immediately before returning the broken graph</div>
 
 <div class="section-label">P6.5 — Context compression (3 tests)</div>
-<div class="test-item">T13 · <code>compress_memory()</code> separates dropped vs pruned: orphaned observations go to <code>compressed_structures[]</code>; truncated belief lists go to <code>pruned_regions[]</code>; the two lists are mutually exclusive</div>
-<div class="test-item">T14 · <code>world_model.completeness_flags["beliefs_about_X"]</code> is False after X is added to pruned_regions[] — the belief list still exists but is marked incomplete</div>
-<div class="test-item">T15 · <code>action_dep_overlap(action, memory_state)</code> returns a non-empty list when the action's required_state_structures includes a name from pruned_regions[] — partially present structures still trigger overlap</div>
+<div class="test-item pass">T13 · <code>compress_memory()</code> separates dropped vs pruned: orphaned observations go to <code>compressed_structures[]</code>; truncated belief lists go to <code>pruned_regions[]</code>; the two lists are mutually exclusive</div>
+<div class="test-item pass">T14 · <code>world_model.completeness_flags["beliefs_about_X"]</code> is False after X is added to pruned_regions[] — the belief list still exists but is marked incomplete</div>
+<div class="test-item pass">T15 · <code>action_dep_overlap(action, memory_state)</code> returns a non-empty list when the action's required_state_structures includes a name from pruned_regions[] — partially present structures still trigger overlap</div>
 
 <div class="section-label">P6.6 — Journal retention + max_steps (3 tests)</div>
-<div class="test-item">T16 · After 30 passing steps and 5 failure steps with max_passing_verbatim=10: journal contains 5 failure entries verbatim + 10 passing entries verbatim + 20 older passing summary tuples — total entries bounded and predictable</div>
-<div class="test-item">T17 · At step count = 0.8 × max_steps: <code>check_max_steps()</code> returns "warn" and <code>diagnostics.verification_health.feasibility</code> is reduced by 0.1 from its current value</div>
-<div class="test-item">T18 · At step count = max_steps: <code>check_max_steps()</code> returns "escalate"; the main loop calls <code>escalate(surface_blocker(reason="budget_exhausted"))</code> — no exception raised, no silent return</div>
+<div class="test-item pass">T16 · After 30 passing steps and 5 failure steps with max_passing_verbatim=10: journal contains 5 failure entries verbatim + 10 passing entries verbatim + 20 older passing summary tuples — total entries bounded and predictable</div>
+<div class="test-item pass">T17 · At step count = 0.8 × max_steps: <code>check_max_steps()</code> returns "warn" and <code>diagnostics.verification_health.feasibility</code> is reduced by 0.1 from its current value</div>
+<div class="test-item pass">T18 · At step count = max_steps: <code>check_max_steps()</code> returns "escalate"; the main loop returns <code>{"escalated": True, "reason": "budget_exhausted"}</code> — no exception raised, no silent return</div>
+
+</div>
+
+<!-- IMPLEMENTATION NOTES -->
+<div id="impl" class="tab-content">
+
+<div class="impl-row">
+  <div class="impl-stat"><div class="impl-stat-n">5</div><div class="impl-stat-l">New modules</div></div>
+  <div class="impl-stat"><div class="impl-stat-n">1 540</div><div class="impl-stat-l">Lines added</div></div>
+  <div class="impl-stat"><div class="impl-stat-n">18 / 18</div><div class="impl-stat-l">Tests passing</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">What was added beyond the plan</div>
+  <div class="impl-block"><strong>FailureDiagnostics + FailureEntry typed dataclasses (failure_modes.py)</strong> — The plan kept <code>failure_diagnostics</code> as a raw dict in HarnessRunState. During implementation it was promoted to a typed dataclass (<code>FailureDiagnostics</code>) alongside <code>FailureEntry</code>, so that P6.1's proxy 3 (<code>_failure_recurring</code>) can read <code>failure_history[].failure_class</code> with full type safety and the Tier 4 hook in <code>control_state.py</code> can read <code>matched_pattern.confidence</code> via the typed field.</div>
+  <div class="impl-block"><strong>MatchResult.confidence property alias</strong> — <code>MatchResult</code> gained a <code>.confidence</code> property that returns <code>normalised_confidence</code>. The existing <code>resolve_control_state()</code> Tier 4 code reads <code>matched_pattern.confidence</code>; this alias makes <code>MatchResult</code> a drop-in without touching the existing Tier 4 logic.</div>
+  <div class="impl-block"><strong>MemoryState.compressed_structures / .pruned_regions properties</strong> — <code>MemoryState</code> exposes <code>.compressed_structures</code> and <code>.pruned_regions</code> as properties delegating to <code>compression_risk</code>. The existing <code>action_dep_overlap()</code> reads these via <code>getattr(memory_state, "compressed_structures", [])</code>, so the typed dataclass is transparently compatible.</div>
+  <div class="impl-block"><strong>run_one_iteration() extended signature</strong> — <code>loop.py</code> now accepts optional <code>memory_state</code>, <code>strategy_state</code>, <code>caller_state</code>, and <code>step_count</code> parameters. All are optional with safe defaults so existing call sites remain unbroken.</div>
+</div>
+
+<div class="card">
+  <div class="card-title">Intentional deviations from the plan</div>
+  <div class="deviation-block"><strong>escalate() is a stub returning a dict (not surface_blocker)</strong> — The plan says "call <code>escalate(surface_blocker(reason='budget_exhausted'))</code>". Since <code>surface_blocker</code> and <code>escalate()</code> are defined in P7, the loop instead calls <code>_escalate_budget_exhausted()</code> which returns <code>{"escalated": True, "reason": "budget_exhausted", "missing_info": [...]}</code>. The call site is wired; P7 will replace the stub with the real escalation surface.</div>
+  <div class="deviation-block"><strong>rebuild_task_graph() uses simple decomposition</strong> — The plan says "uses the same decomposition logic as the initial planning step". Since the initial planning decomposition is part of P7/P9 scope, <code>rebuild_task_graph()</code> creates tasks directly from <code>caller_state.success_criteria</code> (one task per criterion) and adds "Verify: &lt;statement&gt;" tasks for up to 5 beliefs. The interface and contract are correct; P9 can upgrade the decomposition logic without changing the function signature.</div>
+  <div class="deviation-block"><strong>T16–T18 run without Postgres</strong> — The plan notes "T16–T18 require HarnessRunState persistence (Postgres + migration applied)". In practice, all three tests exercise <code>apply_retention_policy()</code>, <code>check_max_steps()</code>, and <code>run_one_iteration()</code> directly with in-memory objects. No database round-trip is needed, so the tests run cleanly in CI without external dependencies.</div>
+</div>
+
+<div class="card">
+  <div class="card-title">State structure upgrades in HarnessRunState</div>
+  <div class="card-body" style="font-family:var(--font-mono);font-size:11.5px;line-height:2">
+    <span style="color:var(--amber)">before</span>&nbsp; memory_state: dict[str, Any]<br>
+    <span style="color:var(--green)">after &nbsp;</span>&nbsp; memory_state: MemoryState (token_budget, max_steps, journal, compression_risk, rollback_points)<br><br>
+    <span style="color:var(--amber)">before</span>&nbsp; strategy_state: dict[str, Any]<br>
+    <span style="color:var(--green)">after &nbsp;</span>&nbsp; strategy_state: StrategyState (current_strategy, switch_count, completion_history, risk_state_history, stall_reason)<br><br>
+    <span style="color:var(--amber)">before</span>&nbsp; failure_diagnostics: dict[str, Any]<br>
+    <span style="color:var(--green)">after &nbsp;</span>&nbsp; failure_diagnostics: FailureDiagnostics (failure_history: list[FailureEntry], matched_pattern: MatchResult | None)
+  </div>
+</div>
 
 </div>
 

@@ -15,6 +15,9 @@ Phase 4 exports: task graph (P4.1), conflict probability cache (P4.2),
 Phase 5 exports: risk estimation (P5.1), VOI & adequacy critic (P5.2),
                  review gate (P5.3), execution engine (P5.4),
                  verification layer runner (P5.5).
+Phase 6 exports: stall detection (P6.1), recovery strategies (P6.2),
+                 failure mode library (P6.3), local/global replanning (P6.4),
+                 context compression (P6.5), journal retention + max_steps (P6.6).
 """
 
 from .belief_graph import (
@@ -59,6 +62,15 @@ from .diagnostics import (
 )
 from .evidence import Evidence, EvidenceStore, EvidenceType, ReliabilityClass
 from .gates import StalenessError, action_gate, decomposition_gate, post_exec_gate
+from .failure_modes import (
+    FailureDiagnostics,
+    FailureEntry,
+    FailureModeLibrary,
+    FailurePattern,
+    MatchResult,
+    build_default_library,
+    normalise_confidence,
+)
 from .hypothesis import (
     EliminationPolicy,
     EliminationRecord,
@@ -73,10 +85,38 @@ from .hypothesis import (
     eliminate,
     enforce_diversity,
     failure_mode_library_contribution,
+    generate_from_failure_library,
     generate_hypotheses,
     symptom_inference,
 )
 from .loop import run_one_iteration, select_best_action
+from .memory import (
+    CompressionRisk,
+    MemoryState,
+    apply_retention_policy,
+    check_max_steps,
+    compress_memory,
+    should_compress,
+)
+from .progress import (
+    cannot_make_progress,
+)
+from .recovery import (
+    STRATEGY_ORDER,
+    StrategyState,
+    StrategyType,
+    apply_failure_mode_bias,
+    get_next_strategy,
+    get_strategy_with_experience,
+    switch_strategy,
+)
+from .replanning import (
+    ReplanScope,
+    apply_replan,
+    assess_replan_scope,
+    diagnose_and_replan,
+    rebuild_task_graph,
+)
 from .output_contract import (
     ContractCheckResult,
     OutputContract,
@@ -254,6 +294,34 @@ __all__ = [
     "update_from_experience_store",
     "validate_output_contract",
     "validate_task_graph",
+    # Phase 6
+    "CompressionRisk",
+    "FailureDiagnostics",
+    "FailureEntry",
+    "FailureModeLibrary",
+    "FailurePattern",
+    "MatchResult",
+    "MemoryState",
+    "ReplanScope",
+    "STRATEGY_ORDER",
+    "StrategyState",
+    "StrategyType",
+    "apply_failure_mode_bias",
+    "apply_replan",
+    "apply_retention_policy",
+    "assess_replan_scope",
+    "build_default_library",
+    "cannot_make_progress",
+    "check_max_steps",
+    "compress_memory",
+    "diagnose_and_replan",
+    "generate_from_failure_library",
+    "get_next_strategy",
+    "get_strategy_with_experience",
+    "normalise_confidence",
+    "rebuild_task_graph",
+    "should_compress",
+    "switch_strategy",
     # Phase 5
     "AdequacyResult",
     "DimensionResult",
