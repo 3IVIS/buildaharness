@@ -100,8 +100,9 @@ jobs:
 
       # mypy catches async typing issues, FastAPI dependency injection errors,
       # and SQLAlchemy model mismatches that ruff cannot detect.
+      # Run from adapter/ so harness/ resolves as "harness.*" not "adapter.harness.*"
       - name: Type-check (mypy)
-        run: mypy adapter/ --ignore-missing-imports --python-version 3.12
+        run: cd adapter && mypy . --ignore-missing-imports --python-version 3.12
 
       - name: Test (adapter)
         run: pytest adapter/tests/ -v
