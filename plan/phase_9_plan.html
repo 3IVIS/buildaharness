@@ -17,6 +17,13 @@
   --p9:#34d399;
   --green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#8b5cf6;--cyan:#67e8f9;--blue:#60a5fa;--slate:#94a3b8;
 }
+.status-banner{background:rgba(52,211,153,0.08);border:.5px solid rgba(52,211,153,0.35);border-radius:var(--r-lg);padding:.75rem 1.1rem;margin-bottom:1.2rem;display:flex;align-items:center;gap:.75rem}
+.status-icon{font-size:18px;flex-shrink:0}
+.status-body{font-size:12.5px;color:var(--t0);line-height:1.6}
+.status-body strong{color:#34d399}
+.impl-note{background:var(--bg2);border:.5px solid var(--bd0);border-left:2px solid var(--green);border-radius:var(--r-md);padding:.55rem .8rem;font-size:11.5px;color:var(--t1);line-height:1.5;margin-top:.5rem}
+.impl-note strong{color:var(--green)}
+.impl-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(74,222,128,0.07);border:.5px solid rgba(74,222,128,0.25);color:var(--green);margin-left:5px;vertical-align:middle}
 body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
 .hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
@@ -97,6 +104,13 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#4ade80">P0–P8 complete</span> · Unlocks: <span style="color:#fb7185">P10 Canvas Node Types</span> · <span style="color:#a3e635">P11 E2E-07 reviewer re-entry test</span></div>
 </div>
 
+<div class="status-banner">
+  <div class="status-icon">✅</div>
+  <div class="status-body">
+    <strong>Phase 9 implemented — 2026-06-05</strong> · Branch: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">claude/phase-9-implementation-SSY7y</code> · All 15 tests pass (T01–T12 + 3 unit tests) · 1 526 lines added across 6 files.
+  </div>
+</div>
+
 <div class="tabs">
   <button class="tab active" onclick="showTab('overview',this)">Overview</button>
   <button class="tab" onclick="showTab('tasks',this)">Tasks &amp; Steps</button>
@@ -111,10 +125,10 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 
 <div class="summary-row">
   <div class="sum-card"><div class="sum-n" style="color:var(--p9)">4</div><div class="sum-l">Tasks</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">17</div><div class="sum-l">Impl. steps</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">12</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">15</div><div class="sum-l">Tests passing</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">1 526</div><div class="sum-l">Lines added</div></div>
   <div class="sum-card"><div class="sum-n" style="color:var(--purple)">1</div><div class="sum-l">Stubs replaced</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--p9)">3</div><div class="sum-l">Weeks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--p9)">6</div><div class="sum-l">Files changed</div></div>
 </div>
 
 <div class="card">
@@ -208,6 +222,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="test-item">Given two beliefs — one with direct causal path to a success criterion (proximity 1.0) and one with no path (proximity 0.0) — <code>seed_adversarial_prior()</code> selects the high-proximity belief for negation, not the high-confidence low-proximity one</div>
     <div class="test-item">After <code>reviewer_pass()</code> completes: no field of <code>HarnessRunState</code> holds an <code>AdversarialPrior</code> instance — the prior has been discarded as required by INV-09</div>
     <div class="test-item">When <code>dep_class_gap_annotation</code> is provided: the beliefs it references appear in <code>adversarial_prior.negated_beliefs</code> and <code>dep_class_gap_included</code> is True</div>
+
+    <div class="impl-note"><strong>Implementation notes</strong> — <code>reviewer.py</code> lines 1–175. <code>compute_causal_proximity()</code> uses undirected BFS returning <code>1.0/(dist+1)</code>; success-criteria nodes matched by exact belief-ID only (substring matching discarded to avoid false positives, e.g. "sc" in "description"). <code>seed_adversarial_prior()</code> takes an additional <code>belief_dep_graph</code> kwarg so <code>reviewer_pass()</code> can pass it down. <code>AdversarialPrior</code> has no <code>to_dict()</code>/<code>from_dict()</code> — structural persistence guard for INV-09. T01 ✅ T02 ✅ T03 ✅</div>
   </div>
 </div>
 
@@ -237,6 +253,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="test-item">All three lenses execute when called via <code>reviewer_pass()</code> — each lens contributes at least one finding to the returned list when given a non-trivial world_model with an unvalidated assumption and an incomplete task</div>
     <div class="test-item">Adversarial lens findings reference beliefs and tasks that are <em>not</em> flagged by the implementer or reviewer lenses — confirming the adversarial prior creates partial blind-spot coverage independent of the other two lenses</div>
     <div class="test-item">After <code>reviewer_pass()</code> returns: <code>abstraction_fit</code> has been recomputed even when <code>task_graph.changed</code> is False — the unconditional recompute is verified by comparing the pre-pass and post-pass scores</div>
+
+    <div class="impl-note"><strong>Implementation notes</strong> — <code>reviewer.py</code> lines 176–460. Each lens is a standalone function; <code>reviewer_pass()</code> orchestrates the 10-step sequence: seed → 3 lenses → discard prior → integrate HIGH findings (Observation then Belief, INV-01) → <code>propagate_beliefs()</code> → <code>eliminate()</code> → <code>detect_contradictions(task_graph.to_dict())</code> (the <code>detect_abstraction_contradictions</code> helper expects a dict, not a TaskGraph) → <code>check_abstraction_alignment(force=True)</code> → drain → return <code>ReviewPassResult</code>. T04 ✅ T05 ✅ T06 ✅</div>
   </div>
 </div>
 
@@ -264,6 +282,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="test-item">When a HIGH-severity reviewer finding invalidates the evidence of a COMPLETE task: <code>drain_propagation_queue()</code> returns that task's ID, and the task's status is transitioned from COMPLETE to PENDING — the task will be re-executed in the next loop iteration</div>
     <div class="test-item">When the propagation_queue is empty after reviewer_pass() (no invalidated evidence): <code>drain_propagation_queue()</code> returns an empty list and <code>review_result.tasks_reopened</code> is False — the loop does not re-enter and proceeds to completion_check_final()</div>
     <div class="test-item">A task whose status is FAILED or BLOCKED at the time of the drain is not re-transitioned to PENDING — only COMPLETE tasks are subject to re-open; the drain does not interfere with tasks already in non-terminal states</div>
+
+    <div class="impl-note"><strong>Implementation notes</strong> — <code>reviewer.py</code> lines 461–530 + <code>task_graph.py</code> (added <code>completed_evidence: list[str]</code> to <code>Task</code>). <code>drain_propagation_queue()</code> directly sets <code>task.status = "PENDING"</code> on COMPLETE tasks (bypasses <code>update_task_status()</code> validation, which guards COMPLETE as terminal for all other callers). The <code>_VALID_TRANSITIONS["COMPLETE"] = set()</code> contract is preserved — only the drain has this bypass. <code>loop.py</code> wired with <code>belief_dep_graph</code> + <code>evidence_store</code> params; reviewer pass fires after <code>post_exec_gate</code>; <code>tasks_reopened</code> included in return dict. T07 ✅ T08 ✅ T09 ✅</div>
   </div>
 </div>
 
@@ -295,6 +315,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="test-item">A result missing a field from <code>output_contract.required_interface_fields</code> that was NOT caught by <code>contract_shadow_check()</code> (from P5.6) IS caught by the full <code>validate_output_contract()</code> — confirming the full validator is authoritative over the shadow check</div>
     <div class="test-item">When <code>caller_state.current_constraints</code> was updated mid-run (via the P7 constraint propagation path) to add a new constraint: <code>check_caller_specific_constraints()</code> evaluates the result against the updated constraint — the original constraints at run-start are not used</div>
     <div class="test-item"><code>validate_output_contract()</code> returns <code>ContractCheckResult(passed=True, violations=[])</code> only when all four sub-checks pass; a single missing required_section causes <code>passed=False</code> with a non-empty violations list naming the missing section</div>
+
+    <div class="impl-note"><strong>Implementation notes</strong> — <code>output_contract.py</code>. <code>validate_output_contract()</code> signature extended with optional <code>caller_state=None</code> parameter; all call sites updated. T10 distinguishes full validate from shadow check by testing a missing <em>section</em> (shadow check only checks field presence). <code>completion_check_final()</code> uses <code>reason="review_failure"</code> for escalation (closest match to <code>EscalationReason</code> literals). T10 ✅ T11 ✅ T12 ✅</div>
   </div>
 </div>
 
@@ -309,13 +331,14 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 
   <div class="file-map">
 <span class="f-dir">adapter/harness/</span>
-  reviewer.py                  <span class="f-new">NEW</span>  <span class="f-note">ReviewFinding, AdversarialPrior, ReviewPassResult, seed_adversarial_prior, compute_causal_proximity, implementer_lens, reviewer_lens, adversarial_lens, reviewer_pass, drain_propagation_queue</span>
-  output_contract.py           <span class="f-mod">MOD</span>  <span class="f-note">replace validate_output_contract() stub with full implementation; add check_format_requirements, check_required_sections, check_interface_constraints, check_caller_specific_constraints; add completion_check_final(); remove is_stub field from ContractCheckResult</span>
-  loop.py                      <span class="f-mod">MOD</span>  <span class="f-note">wire reviewer_pass() after post_exec_gate; check tasks_reopened flag for loop re-entry; call completion_check_final() as the final gate before return</span>
-  __init__.py                  <span class="f-mod">MOD</span>  <span class="f-note">export ReviewFinding, AdversarialPrior, ReviewPassResult, reviewer_pass, drain_propagation_queue, completion_check_final</span>
+  reviewer.py                  <span class="f-new">NEW</span>  <span class="f-note">ReviewFinding, AdversarialPrior, ReviewPassResult, seed_adversarial_prior, compute_causal_proximity, implementer_lens, reviewer_lens, adversarial_lens, reviewer_pass, drain_propagation_queue — 696 lines</span>
+  output_contract.py           <span class="f-mod">MOD</span>  <span class="f-note">replace validate_output_contract() stub; add check_format_requirements, check_required_sections, check_interface_constraints, check_caller_specific_constraints, _to_dict helper, completion_check_final(); validate_output_contract() signature extended with caller_state param — +189 lines</span>
+  loop.py                      <span class="f-mod">MOD</span>  <span class="f-note">added belief_dep_graph and evidence_store params to run_one_iteration(); reviewer_pass() wired after post_exec_gate; tasks_reopened and review_result added to return dict; completion_check_final() called when tasks_reopened=False — +44 lines</span>
+  task_graph.py                <span class="f-mod">MOD</span>  <span class="f-note">added completed_evidence: list[str] field to Task (with to_dict/from_dict support) — required for drain_propagation_queue to map belief IDs to tasks — +5 lines</span>
+  __init__.py                  <span class="f-mod">MOD</span>  <span class="f-note">export ReviewFinding, AdversarialPrior, ReviewPassResult, reviewer_pass, drain_propagation_queue, compute_causal_proximity, seed_adversarial_prior, completion_check_final, check_format_requirements, check_required_sections, check_interface_constraints, check_caller_specific_constraints — +28 lines</span>
 
 <span class="f-dir">adapter/tests/</span>
-  test_harness_p9.py           <span class="f-new">NEW</span>  <span class="f-note">all 12 acceptance tests for Phase 9 (T01–T12)</span>
+  test_harness_p9.py           <span class="f-new">NEW</span>  <span class="f-note">15 tests: T01–T12 acceptance tests + 3 unit tests (compute_causal_proximity direct path, no-path, drain clears queue) — 567 lines</span>
   </div>
 </div>
 
@@ -423,10 +446,13 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="test-item">T11 · When <code>caller_state.current_constraints</code> was updated mid-run (simulated by calling <code>inject_clarification()</code> and <code>apply_constraint_change_propagation()</code> before calling validate): <code>check_caller_specific_constraints()</code> evaluates the result against the updated constraint list — a result that satisfied the original constraints but violates the new ones returns <code>passed=False</code></div>
 <div class="test-item">T12 · A result that satisfies all four sub-checks (format, sections, interface, caller constraints): <code>validate_output_contract()</code> returns <code>ContractCheckResult(passed=True, violations=[], is_stub=False)</code> — the stub flag is gone and the real check confirms full compliance</div>
 
+<div class="impl-note" style="margin:.5rem 0"><strong>P9.4 implementation</strong> — <code>output_contract.py</code>. Four sub-checks added: <code>check_format_requirements()</code>, <code>check_required_sections()</code>, <code>check_interface_constraints()</code>, <code>check_caller_specific_constraints()</code>. <code>validate_output_contract()</code> now accepts an optional <code>caller_state</code> parameter and always returns <code>is_stub=False</code>. <code>completion_check_final()</code> calls <code>escalate(reason="review_failure")</code> on contract failure. The P0.5 T17 stub test now fails as expected — it was explicitly testing stub behaviour that P9 replaces. T10 ✅ T11 ✅ T12 ✅</div>
+
 <div class="card" style="margin-top:.75rem">
   <div class="card-title">Running Phase 9 tests</div>
   <div class="card-body">
-    <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_p9.py -v</code><br><br>
+    <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">python3.12 -m pytest adapter/tests/test_harness_p9.py -v --noconftest</code><br><br>
+    <strong style="color:var(--green)">Result: 15 passed in 0.08s</strong> (T01–T12 + 3 unit tests for <code>compute_causal_proximity</code> and <code>drain_propagation_queue</code>). Note: the test runner must be Python 3.12+ because the harness uses PEP 695 type-parameter syntax in <code>staleness.py</code>. Use <code>--noconftest</code> to skip the web-app conftest which requires FastAPI, SQLAlchemy, and a running DB.<br><br>
     No database infrastructure required. All tests use in-memory fixture objects. Run the full harness test suite after Phase 9 to verify no regressions in P0–P8 tests: <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:2px 6px;border-radius:3px">pytest adapter/tests/ -v -k harness</code>. The INV-09 test (T02) uses Python object identity checks to assert the adversarial prior is not reachable from any live state reference after reviewer_pass() returns.
   </div>
 </div>
