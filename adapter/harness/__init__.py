@@ -152,9 +152,24 @@ from .replanning import (
 from .output_contract import (
     ContractCheckResult,
     OutputContract,
+    check_caller_specific_constraints,
+    check_format_requirements,
+    check_interface_constraints,
+    check_required_sections,
+    completion_check_final,
     contract_shadow_check,
     update_output_contract,
     validate_output_contract,
+)
+# Phase 9
+from .reviewer import (
+    AdversarialPrior,
+    ReviewFinding,
+    ReviewPassResult,
+    compute_causal_proximity,
+    drain_propagation_queue,
+    reviewer_pass,
+    seed_adversarial_prior,
 )
 from .parallel_merge import merge_world_models, reconcile_parallel_branches
 from .staleness import assert_generation_fresh, increment_generation_id, staleness_check, staleness_sweep
@@ -288,6 +303,11 @@ __all__ = [
     "compute_diversity_score",
     "compute_elevation_factor",
     "compute_initial_conflict_probabilities",
+    "check_caller_specific_constraints",
+    "check_format_requirements",
+    "check_interface_constraints",
+    "check_required_sections",
+    "completion_check_final",
     "contract_shadow_check",
     "counterfactual_reasoning",
     "decomposition_gate",
@@ -386,6 +406,14 @@ __all__ = [
     "update_experience_store",
     "upsert_strategy_weight",
     "warm_start",
+    # Phase 9
+    "AdversarialPrior",
+    "ReviewFinding",
+    "ReviewPassResult",
+    "compute_causal_proximity",
+    "drain_propagation_queue",
+    "reviewer_pass",
+    "seed_adversarial_prior",
     # Phase 5
     "AdequacyResult",
     "DimensionResult",

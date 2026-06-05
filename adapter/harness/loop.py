@@ -117,6 +117,8 @@ def run_one_iteration(
     dep_graph_budget: Any | None = None,
     completed_task: Any | None = None,
     execution_context: Any | None = None,
+    belief_dep_graph: Any | None = None,
+    evidence_store: Any | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -312,6 +314,46 @@ def run_one_iteration(
     if strategy_state is not None:
         strategy_state.risk_state_history.append(control_state_b.risk_state)
 
+    # ── P9 — reviewer pass after post_exec_gate ───────────────────────────────
+    review_result: Any = None
+    tasks_reopened = False
+
+    if belief_dep_graph is not None and output_contract is not None:
+        from .reviewer import reviewer_pass
+
+        sc_list = getattr(caller_state, "success_criteria", []) if caller_state else []
+        review_result = reviewer_pass(
+            world_model=world_model,
+            task_graph=task_graph,
+            success_criteria=sc_list,
+            output_contract=output_contract,
+            hypothesis_set=hypothesis_set,
+            evidence_store=evidence_store,
+            caller_state=caller_state,
+            belief_dep_graph=belief_dep_graph,
+            failure_history=failure_diagnostics,
+        )
+        tasks_reopened = review_result.tasks_reopened
+
+        # If no tasks were reopened, run the final output contract gate
+        if not tasks_reopened and harness_run_state is not None:
+            from .output_contract import completion_check_final
+            result_payload = getattr(gate_b_result, "payload", None) or result
+            try:
+                completion_check_final(
+                    result=result_payload,
+                    output_contract=output_contract,
+                    caller_state=caller_state,
+                    harness_run_state=harness_run_state,
+                )
+            except EscalationHalt as exc:
+                return {
+                    "escalated": True,
+                    "escalation": exc.blocker.to_dict(),
+                    "step_count": step_count,
+                    "review_result": review_result.to_dict() if review_result else None,
+                }
+
     return {
         "control_state_a": control_state,
         "control_state_b": control_state_b,
@@ -321,4 +363,6 @@ def run_one_iteration(
         "strategy_state": strategy_state,
         "task_graph": task_graph,
         "escalation": escalation,
+        "review_result": review_result.to_dict() if review_result else None,
+        "tasks_reopened": tasks_reopened,
     }
