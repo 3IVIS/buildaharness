@@ -15,6 +15,7 @@ Run all: pytest adapter/tests/test_harness_p7.py -v
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -34,7 +35,7 @@ from harness.external_updates import (
 )
 from harness.memory import MemoryState
 from harness.output_contract import OutputContract
-from harness.task_graph import Task, TaskGraph
+from harness.task_graph import Task, TaskGraph, TaskStatus
 from harness.world_model import WorldModel
 
 # ─── Helper factories ────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ def _make_task_graph(*tasks: Task) -> TaskGraph:
 
 
 def _make_task(id_: str, description: str, status: str = "PENDING") -> Task:
-    return Task(id=id_, description=description, status=status)
+    return Task(id=id_, description=description, status=cast(TaskStatus, status))
 
 
 class _MockChannel(UpdateChannel):

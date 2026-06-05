@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.belief_graph import BeliefDepGraph, BeliefEdge
 from harness.caller_state import CallerState
-from harness.evidence import Evidence, EvidenceStore, EvidenceType
+from harness.evidence import Evidence, EvidenceStore, EvidenceType, ReliabilityClass
 from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.output_contract import (
     OutputContract,
@@ -34,7 +34,7 @@ from harness.reviewer import (
     reviewer_pass,
     seed_adversarial_prior,
 )
-from harness.task_graph import Task, TaskGraph
+from harness.task_graph import Task, TaskGraph, TaskStatus
 from harness.world_model import Belief, Observation, WorldModel
 
 # ─── Fixtures / helpers ───────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ def _task(
     return Task(
         id=tid,
         description=description,
-        status=status,
+        status=cast(TaskStatus, status),
         completed_evidence=completed_evidence or [],
         abstraction_level=abstraction_level,
     )
@@ -95,13 +95,14 @@ def _evidence_store(*entries: Evidence) -> EvidenceStore:
     return es
 
 
-def _evidence(obs: str, reliability: str = "HIGH", ev_id: str | None = None) -> Evidence:
+def _evidence(obs: str, reliability: str = "HIGH", ev_id: str | None = None, freshness: float = 1.0) -> Evidence:
     return Evidence(
         id=ev_id or str(uuid.uuid4()),
         obs=obs,
         source="test",
-        reliability=reliability,
-        evidence_type=EvidenceType.OBSERVATION,
+        reliability=cast(ReliabilityClass, reliability),
+        evidence_type=cast(EvidenceType, "OBSERVATION"),
+        freshness=freshness,
     )
 
 

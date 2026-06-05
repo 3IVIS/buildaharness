@@ -45,6 +45,7 @@ class Belief:
     confidence: float
     derived_from: list[str]
     supporting_evidence: list[str] = field(default_factory=list)
+    reliability: str = ""
     recorded_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:

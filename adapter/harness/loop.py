@@ -25,10 +25,11 @@ P8 additions:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from .control_state import ControlState, resolve_control_state
 from .diagnostics import Diagnostics
+from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
@@ -92,7 +93,7 @@ def _build_surface_blocker(reason: str, control_state: ControlState, task_graph:
         current_task_summary = f"{current_task_summary} | reason: {escalation_reason}"
 
     return SurfaceBlocker(
-        reason=reason,
+        reason=cast(EscalationReason, reason),
         missing_info=missing_info,
         current_task_summary=current_task_summary,
     )
