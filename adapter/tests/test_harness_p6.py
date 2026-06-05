@@ -124,7 +124,7 @@ class TestCannotMakeProgress:
 
     def test_T03_stall_window_constant_overridable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """T03: Setting STALL_WINDOW=2 causes proxy 1 to fire after 2 stalled steps."""
-        import adapter.harness.progress as prog_module
+        import harness.progress as prog_module
 
         monkeypatch.setattr(prog_module, "STALL_WINDOW", 2)
 
@@ -229,7 +229,7 @@ class TestFailureModeLibrary:
         # Inject context via a belief
         import uuid
 
-        from adapter.harness.world_model import Belief
+        from harness.world_model import Belief
 
         b = Belief(
             id=str(uuid.uuid4()),
@@ -262,7 +262,7 @@ class TestFailureModeLibrary:
         wm = WorldModel()
         import uuid
 
-        from adapter.harness.world_model import Belief
+        from harness.world_model import Belief
 
         b = Belief(
             id=str(uuid.uuid4()),
@@ -281,9 +281,9 @@ class TestFailureModeLibrary:
     def test_T09_block_mask_not_derived_from_match_result(self) -> None:
         """T09: block_mask in resolve_control_state is derived solely from diagnostic
         sub-dimension thresholds — MatchResult fields do not appear in it."""
-        from adapter.harness.control_state import resolve_control_state
-        from adapter.harness.diagnostics import Diagnostics
-        from adapter.harness.world_model import WorldModel
+        from harness.control_state import resolve_control_state
+        from harness.diagnostics import Diagnostics
+        from harness.world_model import WorldModel
 
         wm = WorldModel()
         wm.generation_id = 1
@@ -382,7 +382,7 @@ class TestReplanning:
     def test_T12_validate_always_called_after_global_replan(self) -> None:
         """T12: Invalid graph (cycle) from rebuild raises immediately — never returned silently."""
 
-        from adapter.harness import replanning as replan_mod
+        from harness import replanning as replan_mod
 
         original_rebuild = replan_mod.rebuild_task_graph
 
@@ -463,7 +463,7 @@ class TestContextCompression:
 
     def test_T15_action_dep_overlap_detects_pruned_regions(self) -> None:
         """T15: action_dep_overlap returns non-empty when action depends on a pruned region."""
-        from adapter.harness.execution import action_dep_overlap
+        from harness.execution import action_dep_overlap
 
         ms = MemoryState()
         ms.compression_risk.pruned_regions.append("beliefs")
@@ -537,8 +537,8 @@ class TestJournalAndBudget:
         assert result == "escalate"
 
         # Verify loop wires escalation correctly
-        from adapter.harness.loop import run_one_iteration
-        from adapter.harness.world_model import WorldModel
+        from harness.loop import run_one_iteration
+        from harness.world_model import WorldModel
 
         wm = WorldModel()
         wm.generation_id = 0
