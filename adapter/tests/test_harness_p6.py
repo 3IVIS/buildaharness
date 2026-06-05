@@ -14,8 +14,9 @@ from __future__ import annotations
 from typing import ClassVar
 
 import pytest
-from adapter.harness.diagnostics import Diagnostics
-from adapter.harness.failure_modes import (
+
+from harness.diagnostics import Diagnostics
+from harness.failure_modes import (
     FailureDiagnostics,
     FailureEntry,
     FailureModeLibrary,
@@ -23,8 +24,8 @@ from adapter.harness.failure_modes import (
     MatchResult,
     normalise_confidence,
 )
-from adapter.harness.hypothesis import generate_from_failure_library
-from adapter.harness.memory import (
+from harness.hypothesis import generate_from_failure_library
+from harness.memory import (
     MemoryState,
     apply_retention_policy,
     check_max_steps,
@@ -32,22 +33,22 @@ from adapter.harness.memory import (
 )
 
 # ── Harness imports ───────────────────────────────────────────────────────────
-from adapter.harness.progress import (
+from harness.progress import (
     STALL_WINDOW,
     cannot_make_progress,
 )
-from adapter.harness.recovery import (
+from harness.recovery import (
     StrategyState,
     apply_failure_mode_bias,
     get_next_strategy,
     get_strategy_with_experience,
     switch_strategy,
 )
-from adapter.harness.replanning import (
+from harness.replanning import (
     apply_replan,
 )
-from adapter.harness.task_graph import Task, TaskGraph
-from adapter.harness.world_model import Belief, Observation, WorldModel
+from harness.task_graph import Task, TaskGraph
+from harness.world_model import Belief, Observation, WorldModel
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
