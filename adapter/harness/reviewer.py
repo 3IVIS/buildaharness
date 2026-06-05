@@ -194,7 +194,7 @@ def seed_adversarial_prior(
 
     # Step 3: supplement from failure_history class priors (base_rate heuristic)
     seeded_from_failure = False
-    fh_entries = []
+    fh_entries: list[Any] = []
     if failure_history is not None:
         fh_entries = getattr(failure_history, "failure_history", [])
 

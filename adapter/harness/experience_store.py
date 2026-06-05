@@ -154,6 +154,7 @@ class ExperienceStore:
 
             from sqlalchemy import text
 
+            assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 payload_str = json.dumps(entry.payload)
                 session.execute(
@@ -196,6 +197,7 @@ class ExperienceStore:
             from sqlalchemy import text
 
             type_val = entry_type.value if isinstance(entry_type, ExperienceType) else entry_type
+            assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 if task_class is not None:
                     rows = session.execute(
@@ -251,6 +253,7 @@ class ExperienceStore:
         try:
             from sqlalchemy import text
 
+            assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 rows = session.execute(
                     text("SELECT strategy_type, failure_class, rate FROM experience_strategy_weights")
