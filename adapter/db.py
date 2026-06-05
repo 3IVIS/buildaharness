@@ -514,6 +514,9 @@ class HarnessRunStateRow(Base):
     failure_diagnostics: Mapped[Any] = mapped_column(_JSONBType, default=dict)
     experience_store_ref: Mapped[Any] = mapped_column(_JSONBType, default=dict)
     belief_dep_graph: Mapped[Any] = mapped_column(_JSONBType, default=dict)
+    escalation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    pending_escalation: Mapped[Any] = mapped_column(_JSONBType, nullable=True)
+    pending_clarification: Mapped[Any] = mapped_column(_JSONBType, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
