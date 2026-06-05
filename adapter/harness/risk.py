@@ -1,4 +1,5 @@
 """Risk estimation — P5.1."""
+
 from __future__ import annotations
 
 import re
@@ -10,8 +11,8 @@ RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
 
 @dataclass
 class RiskFactors:
-    file_centrality: float   # normalised [0,1]
-    change_scope: float      # normalised [0,1]
+    file_centrality: float  # normalised [0,1]
+    change_scope: float  # normalised [0,1]
     module_type_score: float  # 0.0=test, 0.5=utility, 1.0=core/infra
 
 

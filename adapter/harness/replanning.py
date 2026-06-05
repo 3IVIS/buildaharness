@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from .task_graph import Task, TaskGraph, validate_task_graph
 
 if TYPE_CHECKING:
-    from .caller_state import CallerState
-    from .world_model import WorldModel
+    pass
 
 ReplanScope = Literal["LOCAL", "GLOBAL"]
 
@@ -45,9 +44,7 @@ def diagnose_and_replan(
             task.block_reason = None
 
     task_graph.tasks = [
-        t
-        for t in task_graph.tasks
-        if not (t.status == "FAILED" and current_id in getattr(t, "depends_on", []))
+        t for t in task_graph.tasks if not (t.status == "FAILED" and current_id in getattr(t, "depends_on", []))
     ]
     task_graph.changed = True
     return task_graph

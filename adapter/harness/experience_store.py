@@ -22,10 +22,11 @@ from __future__ import annotations
 import math
 import uuid
 from collections import namedtuple
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
-from typing import Any, Callable
+from enum import StrEnum
+from typing import Any
 
 # Fixed default strategy order — used when experience store is unavailable
 # or when no empirical data exists for a given failure_class.
@@ -39,7 +40,7 @@ DEFAULT_STRATEGY_ORDER: list[str] = [
 ]
 
 
-class ExperienceType(str, Enum):
+class ExperienceType(StrEnum):
     DECOMPOSITION = "DECOMPOSITION"
     TOOL_WORKFLOW = "TOOL_WORKFLOW"
     VERIFICATION_PLAN = "VERIFICATION_PLAN"
@@ -166,7 +167,9 @@ class ExperienceStore:
                     ),
                     {
                         "id": entry.id,
-                        "entry_type": entry.entry_type.value if isinstance(entry.entry_type, ExperienceType) else entry.entry_type,
+                        "entry_type": (
+                            entry.entry_type.value if isinstance(entry.entry_type, ExperienceType) else entry.entry_type
+                        ),
                         "failure_class": entry.failure_class,
                         "task_class": entry.task_class,
                         "payload": payload_str,
@@ -250,14 +253,9 @@ class ExperienceStore:
 
             with self.db_session_factory() as session:
                 rows = session.execute(
-                    text(
-                        "SELECT strategy_type, failure_class, rate FROM experience_strategy_weights"
-                    )
+                    text("SELECT strategy_type, failure_class, rate FROM experience_strategy_weights")
                 ).fetchall()
-            return {
-                StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): float(row[2])
-                for row in rows
-            }
+            return {StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): float(row[2]) for row in rows}
         except Exception:
             return {}
 
@@ -306,9 +304,7 @@ def load_structural_decompositions(
     """
     if not experience_store.available:
         return 0
-    entries = experience_store.query_by_type(
-        ExperienceType.DECOMPOSITION, task_class=task_class, limit=3
-    )
+    entries = experience_store.query_by_type(ExperienceType.DECOMPOSITION, task_class=task_class, limit=3)
     if not entries:
         return 0
     best = entries[0]
@@ -366,9 +362,7 @@ def warm_start(
         return WarmStartResult(loaded=False)
 
     weights_loaded = load_strategy_priors(experience_store, strategy_state)
-    decompositions_seeded = load_structural_decompositions(
-        experience_store, task_graph, task_class
-    )
+    decompositions_seeded = load_structural_decompositions(experience_store, task_graph, task_class)
     tool_workflows = load_tool_workflow_seeds(experience_store)
     verification_plans = load_verification_plan_seeds(experience_store)
 
@@ -563,9 +557,7 @@ def softmax_strategy_policy(
     higher → more uniform distribution across strategies.
     """
     class_weights = {
-        key.strategy_type: rate
-        for key, rate in strategy_weights.items()
-        if key.failure_class == failure_class
+        key.strategy_type: rate for key, rate in strategy_weights.items() if key.failure_class == failure_class
     }
     if not class_weights:
         return list(DEFAULT_STRATEGY_ORDER)

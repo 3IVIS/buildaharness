@@ -18,36 +18,24 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.belief_graph import BeliefDepGraph, BeliefEdge, DepGraphBudget
-from harness.caller_state import CallerState, inject_clarification
-from harness.constraint_propagation import apply_constraint_change_propagation
+from harness.belief_graph import BeliefDepGraph, BeliefEdge
+from harness.caller_state import CallerState
 from harness.evidence import Evidence, EvidenceStore, EvidenceType
-from harness.failure_modes import FailureDiagnostics, FailureEntry
 from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.output_contract import (
-    ContractCheckResult,
     OutputContract,
-    check_caller_specific_constraints,
-    check_format_requirements,
-    check_interface_constraints,
-    check_required_sections,
     validate_output_contract,
 )
 from harness.reviewer import (
     AdversarialPrior,
-    ReviewFinding,
     ReviewPassResult,
-    adversarial_lens,
     compute_causal_proximity,
     drain_propagation_queue,
-    implementer_lens,
-    reviewer_lens,
     reviewer_pass,
     seed_adversarial_prior,
 )
 from harness.task_graph import Task, TaskGraph
 from harness.world_model import Belief, Observation, WorldModel
-
 
 # ─── Fixtures / helpers ───────────────────────────────────────────────────────
 
@@ -247,8 +235,7 @@ def test_T04_all_three_lenses_produce_findings():
     wm.assumptions.append("all dependencies installed")  # unvalidated
 
     # COMPLETE task with NO supporting observation → implementer finding
-    t1 = _task("T1", status="COMPLETE", description="implement feature",
-               completed_evidence=[b_id])
+    t1 = _task("T1", status="COMPLETE", description="implement feature", completed_evidence=[b_id])
     tg = TaskGraph(tasks=[t1])
 
     dep_graph = _dep_graph(
@@ -307,8 +294,7 @@ def test_T05_adversarial_lens_finds_distinct_finding():
     # COMPLETE task WITH a supporting observation (so implementer_lens won't flag it)
     obs = _observation(content="T1 executed successfully", source="T1")
     wm.observations.append(obs)
-    t1 = _task("T1", status="COMPLETE", description="done",
-               completed_evidence=[b_id])
+    t1 = _task("T1", status="COMPLETE", description="done", completed_evidence=[b_id])
     tg = TaskGraph(tasks=[t1])
 
     dep_graph = _dep_graph(
@@ -344,11 +330,7 @@ def test_T05_adversarial_lens_finds_distinct_finding():
         failure_history=None,
     )
 
-    impl_and_rev_descriptions = {
-        f.description
-        for f in result.findings
-        if f.lens in ("implementer", "reviewer")
-    }
+    impl_and_rev_descriptions = {f.description for f in result.findings if f.lens in ("implementer", "reviewer")}
     adv_findings = [f for f in result.findings if f.lens == "adversarial"]
 
     assert len(adv_findings) >= 1, "adversarial lens must produce at least one finding"
@@ -366,8 +348,7 @@ def test_T06_abstraction_fit_recomputed_when_task_graph_not_changed():
 
     wm = WorldModel()
     # High-granularity task: abstraction_level=2 but world model has no statement-level beliefs
-    t1 = _task("T1", status="COMPLETE", description="edit line 42",
-               abstraction_level=2)  # statement level
+    t1 = _task("T1", status="COMPLETE", description="edit line 42", abstraction_level=2)  # statement level
     tg = TaskGraph(tasks=[t1])
     tg.changed = False  # explicitly mark as not changed
 
