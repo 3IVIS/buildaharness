@@ -114,11 +114,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 5 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 6 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 7 Complete</span>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 8 Complete</span><br><br>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 8 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 9 Complete</span><br><br>
   <span class="badge badge-blue">11 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">9 phases complete</span> · <span style="color:#60a5fa">3 phases remaining</span> · 193/193 acceptance tests pass (P0–P8) · <strong style="color:#4ade80">P9 now unblocked</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">10 phases complete</span> · <span style="color:#60a5fa">2 phases remaining</span> · 208/208 acceptance tests pass (P0–P9) · <strong style="color:#4ade80">P10 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -162,7 +163,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P6 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Recovery &amp; Memory</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P7 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Caller State &amp; Escalation</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P8 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Experience Store</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P9</div><div class="tl-bar" style="background:#34d399;width:100%"></div><div class="tl-name">Reviewer Pass &amp; Output</div><div class="tl-weeks">3 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P9 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Reviewer Pass &amp; Output</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P10</div><div class="tl-bar" style="background:#fb7185;width:100%"></div><div class="tl-name">Canvas Integration</div><div class="tl-weeks">5 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P11</div><div class="tl-bar" style="background:#a3e635;width:100%"></div><div class="tl-name">E2E Integration &amp; Testing</div><div class="tl-weeks">5 wks</div></div>
 </div>
@@ -225,7 +226,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–8 are complete.</strong> Phase 9 (Reviewer Pass &amp; Output Contract) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–9 are complete.</strong> Phase 10 (Canvas Node Types &amp; UI) is the next work item.</div>
 
 <div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
@@ -366,6 +367,22 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/state_store.py (experience_store: ExperienceStore|None field · temperature float field)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/loop.py (P8 hooks: warm_start at step_count==0 · update_experience_store on completed_task)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (all P8 exports)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 9 Complete — Reviewer Pass &amp; Output Contract</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">15/15</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">208/208</strong> combined P0–P9 tests pass &nbsp;·&nbsp; Completed 2026-06-05 &nbsp;·&nbsp; Branch <code style="font-size:10px">claude/phase-9-implementation-SSY7y</code><br>
+    Key invariants enforced: INV-09 (adversarial_prior discarded after use — verified by recursive object-graph inspection in T02) · INV-01 (HIGH findings integrated via Observation→Belief chain, never auto-promoted)<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/reviewer.py (~696 lines · AdversarialPrior [no to_dict/from_dict per INV-09] · ReviewFinding · ReviewPassResult · seed_adversarial_prior · compute_causal_proximity [BFS, exact-ID match only] · reviewer_pass [10-step: seed → 3 lenses → del prior → integrate → propagate → eliminate → detect_contradictions → abstraction_fit → drain → return])<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_p9.py (T01–T15 · --noconftest · infrastructure-free · python3.12 -m pytest)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/output_contract.py (validate_output_contract full impl: 4 sub-checks [format_requirements · required_sections · interface_constraints · caller_specific_constraints] · is_stub=False · completion_check_final escalates on violation)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/task_graph.py (Task.completed_evidence: list[str] field added · to_dict/from_dict updated · used by drain_propagation_queue to map belief IDs to dependent tasks)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/loop.py (belief_dep_graph + evidence_store params added · P9 reviewer_pass wired after post_exec_gate · completion_check_final called when no tasks reopened · review_result + tasks_reopened in return dict)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (Phase 9 exports: AdversarialPrior · ReviewFinding · ReviewPassResult · compute_causal_proximity · drain_propagation_queue · reviewer_pass · seed_adversarial_prior · completion_check_final · check_format_requirements · check_required_sections · check_interface_constraints · check_caller_specific_constraints)
     </div>
   </div>
 </div>
@@ -600,7 +617,7 @@ const phases=[
      {id:'P8.3',name:'update_experience_store() on successful run',body:'After each successful task completion: update_experience_store(action, strategy, outcome). Store successful tool_workflows, verification_plans, recovery_sequences as reusable structures. Normalise strategy_weights with each new data point.',tests:['Successful run increments correct (strategy_type, failure_class) weight','Recovery sequence stored after successful TRACE_EXEC recovery','update_experience_store is a no-op when experience_store.available=False']},
      {id:'P8.4',name:'Adaptive strategy upgrade',body:'When experience_store available: replace fixed recovery_strategy_order heuristic with softmax policy over (strategy, failure_class) pairs weighted by empirical success rates from warm_start(). Document that fixed enum is correct default for new deployments.',tests:['Softmax policy selects TRACE_EXEC first after 5 runs where DIRECT_EDIT failed for this failure_class','Fixed enum still used when experience_store.available=False','Strategy ordering changes between runs 1 and 10 on same failure class']},
    ]},
-  {id:'P9',title:'Reviewer Pass & Output Contract',weeks:'3 weeks',color:'#34d399',
+  {id:'P9',title:'Reviewer Pass & Output Contract',weeks:'3 weeks',color:'#34d399',status:'complete',completionNote:'15/15 tests · 208/208 combined P0–P9 · branch claude/phase-9-implementation-SSY7y',
    sub:'Adversarial prior seeded on causal proximity · 3-lens reviewer pass · drain_propagation_queue() re-entry · full validate_output_contract() · completion_check_final()',
    tasks:[
      {id:'P9.1',name:'Adversarial prior — causal proximity filter',body:'Implement seed_adversarial_prior(world_model, success_criteria, failure_history). Select beliefs for negation by causal proximity to success_criteria dependency chain — not raw confidence. Also seed from failure_history class priors and dep_class_gap_annotation. adversarial_prior discarded after adversarial_lens() completes.',tests:['High-causal-proximity belief selected for negation over high-confidence low-proximity belief','adversarial_prior not present in world_model or hypothesis_set after reviewer_pass() returns','dep_class_gap_annotation contributes to seed selection']},
