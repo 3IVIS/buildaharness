@@ -221,6 +221,7 @@ def _deserialise_surface_blocker(data: Any) -> Any:
         return None
     try:
         from .escalation import SurfaceBlocker
+
         return SurfaceBlocker.from_dict(data)
     except Exception:
         return None

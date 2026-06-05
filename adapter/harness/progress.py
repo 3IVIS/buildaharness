@@ -61,9 +61,7 @@ def _risk_oscillating(strategy_state: Any) -> bool:
     window = history[-OSCILLATION_WINDOW:]
     levels = [_RISK_ORDER.get(r, 0) for r in window]
     alternations = sum(
-        1
-        for i in range(1, len(levels))
-        if (levels[i - 1] < _CAUTIOUS_LEVEL) != (levels[i] < _CAUTIOUS_LEVEL)
+        1 for i in range(1, len(levels)) if (levels[i - 1] < _CAUTIOUS_LEVEL) != (levels[i] < _CAUTIOUS_LEVEL)
     )
     return alternations >= 2
 

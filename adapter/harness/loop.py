@@ -132,7 +132,7 @@ def run_one_iteration(
     triggers fire after resolve_control_state() in Sub-step A when
     risk_state==BLOCKED, and after stall detection when strategy==ESCALATE.
     """
-    from .escalation import EscalationHalt, SurfaceBlocker, escalate
+    from .escalation import EscalationHalt, escalate
 
     escalation: dict[str, Any] | None = None
     channel = update_channel if update_channel is not None else NoOpUpdateChannel()
@@ -140,6 +140,7 @@ def run_one_iteration(
     # ── P8 — warm_start on first iteration ───────────────────────────────────
     if step_count == 0 and experience_store is not None:
         from .experience_store import warm_start
+
         warm_start(
             experience_store=experience_store,
             strategy_state=strategy_state,
@@ -152,6 +153,7 @@ def run_one_iteration(
     # ── P8 — update_experience_store hook on task completion ─────────────────
     if completed_task is not None and experience_store is not None:
         from .experience_store import update_experience_store
+
         update_experience_store(
             completed_task=completed_task,
             strategy_state=strategy_state,
@@ -179,9 +181,7 @@ def run_one_iteration(
         if should_compress(world_model, memory_state):
             compress_memory(world_model, memory_state)
             increment_generation_id(world_model)
-            memory_state.journal.append(
-                {"event": "compression", "step": step_count, "outcome": "pass"}
-            )
+            memory_state.journal.append({"event": "compression", "step": step_count, "outcome": "pass"})
 
         # P6.6 — budget check
         budget_status = check_max_steps(step_count, memory_state, diagnostics)
@@ -207,9 +207,7 @@ def run_one_iteration(
                 "step_count": step_count,
             }
         if budget_status == "warn":
-            memory_state.journal.append(
-                {"event": "budget_warn", "step": step_count, "outcome": "pass"}
-            )
+            memory_state.journal.append({"event": "budget_warn", "step": step_count, "outcome": "pass"})
 
     # P6.1/P6.2 — stall detection and strategy switch
     if strategy_state is not None and failure_diagnostics is not None and task_graph is not None:
@@ -221,9 +219,7 @@ def run_one_iteration(
             if strategy_state.current_strategy == "ESCALATE":
                 if harness_run_state is not None:
                     ctrl_stub = ControlState()
-                    blocker = _build_surface_blocker(
-                        "cannot_make_progress", ctrl_stub, task_graph
-                    )
+                    blocker = _build_surface_blocker("cannot_make_progress", ctrl_stub, task_graph)
                     try:
                         escalate(blocker, harness_run_state, run_id)
                     except EscalationHalt as exc:
@@ -245,9 +241,7 @@ def run_one_iteration(
                     pass
                 if current_task is not None:
                     scope: ReplanScope = assess_replan_scope(contradiction, task_graph)
-                    task_graph = apply_replan(
-                        scope, contradiction, current_task, task_graph, world_model, caller_state
-                    )
+                    task_graph = apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state)
                     increment_generation_id(world_model)
 
     # ── Sub-step A ────────────────────────────────────────────────────────────
@@ -306,9 +300,7 @@ def run_one_iteration(
 
     # P6.6 — journal retention at end of step
     if memory_state is not None:
-        memory_state.journal = apply_retention_policy(
-            memory_state.journal, memory_state.journal_retention_policy
-        )
+        memory_state.journal = apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)
 
     # Track risk state history for oscillation proxy
     if strategy_state is not None:
@@ -338,6 +330,7 @@ def run_one_iteration(
         # If no tasks were reopened, run the final output contract gate
         if not tasks_reopened and harness_run_state is not None:
             from .output_contract import completion_check_final
+
             result_payload = getattr(gate_b_result, "payload", None) or result
             try:
                 completion_check_final(

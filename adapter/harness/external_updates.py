@@ -71,6 +71,7 @@ class PostgresNotifyChannel(UpdateChannel):
             if self._conn.notifies:
                 notify = self._conn.notifies.pop(0)
                 import json
+
                 raw = json.loads(notify.payload) if notify.payload else {}
                 update_type: UpdateType = raw.pop("update_type", "clarification")
                 return PendingUpdate(update_type=update_type, payload=raw)
@@ -115,9 +116,7 @@ def check_external_updates(
     inject_clarification(caller_state, update.payload)
 
     oc = output_contract if output_contract is not None else OutputContract()
-    apply_constraint_change_propagation(
-        caller_state, world_model, task_graph, oc, diagnostics
-    )
+    apply_constraint_change_propagation(caller_state, world_model, task_graph, oc, diagnostics)
 
     increment_generation_id(world_model)
 

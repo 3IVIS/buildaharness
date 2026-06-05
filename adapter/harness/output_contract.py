@@ -120,9 +120,7 @@ def check_format_requirements(result: Any, output_contract: OutputContract) -> l
     max_len = fmt.get("max_length")
     if max_len is not None:
         if result_str and len(result_str) > max_len:
-            violations.append(
-                f"format_requirements: result length {len(result_str)} exceeds max_length {max_len}"
-            )
+            violations.append(f"format_requirements: result length {len(result_str)} exceeds max_length {max_len}")
 
     # Check format type
     expected_format = fmt.get("format")
@@ -266,6 +264,7 @@ def completion_check_final(
     check = validate_output_contract(result, output_contract, caller_state)
     if not check.passed:
         from .escalation import SurfaceBlocker, escalate
+
         blocker = SurfaceBlocker(
             reason="review_failure",
             missing_info=check.violations,
@@ -312,9 +311,7 @@ def contract_shadow_check(result: Any, output_contract: OutputContract) -> Contr
         value = result_dict[field_name]
         if not _check_type(value, expected_type):
             actual_type = type(value).__name__
-            violations.append(
-                f"Type mismatch for {field_name!r}: expected {expected_type!r}, got {actual_type!r}"
-            )
+            violations.append(f"Type mismatch for {field_name!r}: expected {expected_type!r}, got {actual_type!r}")
 
     return ContractCheckResult(
         passed=len(violations) == 0,
@@ -348,8 +345,12 @@ def _check_type(value: Any, expected_type: Any) -> bool:
         return isinstance(value, expected_type)
     if isinstance(expected_type, str):
         type_map: dict[str, type] = {
-            "str": str, "int": int, "float": float,
-            "bool": bool, "list": list, "dict": dict,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
         }
         py_type = type_map.get(expected_type.lower())
         if py_type is None:

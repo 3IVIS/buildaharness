@@ -19,7 +19,6 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 ReviewFindingLens = Literal["implementer", "reviewer", "adversarial"]
@@ -182,7 +181,6 @@ def seed_adversarial_prior(
 
     # Step 2: sort by proximity descending, take top-K
     proximity_pairs.sort(key=lambda p: p[1], reverse=True)
-    top_beliefs = [b for b, prox in proximity_pairs[:top_k] if prox > 0.0]
 
     negated_beliefs: list[dict[str, Any]] = [
         {
@@ -219,11 +217,13 @@ def seed_adversarial_prior(
                 for fc in high_rate_classes:
                     fc_tokens = fc.lower().split("_")
                     if fc.lower() in stmt or any(tok in stmt for tok in fc_tokens):
-                        negated_beliefs.append({
-                            "belief_id": belief.id,
-                            "negated_statement": _negate_statement(belief.statement),
-                            "causal_proximity": 0.0,
-                        })
+                        negated_beliefs.append(
+                            {
+                                "belief_id": belief.id,
+                                "negated_statement": _negate_statement(belief.statement),
+                                "causal_proximity": 0.0,
+                            }
+                        )
                         already_seeded.add(belief.id)
                         seeded_from_failure = True
                         break
@@ -245,11 +245,13 @@ def seed_adversarial_prior(
                     continue
                 belief = next((b for b in beliefs if b.id == bid), None)
                 stmt = belief.statement if belief else f"belief {bid}"
-                negated_beliefs.append({
-                    "belief_id": bid,
-                    "negated_statement": _negate_statement(stmt),
-                    "causal_proximity": 0.0,
-                })
+                negated_beliefs.append(
+                    {
+                        "belief_id": bid,
+                        "negated_statement": _negate_statement(stmt),
+                        "causal_proximity": 0.0,
+                    }
+                )
 
     return AdversarialPrior(
         negated_beliefs=negated_beliefs,
@@ -280,8 +282,7 @@ def implementer_lens(
 
     # Build set of observation content/source strings for fast lookup
     obs_content: list[str] = [
-        (getattr(o, "content", "") + " " + getattr(o, "source", "")).lower()
-        for o in observations
+        (getattr(o, "content", "") + " " + getattr(o, "source", "")).lower() for o in observations
     ]
 
     for task in tasks:
@@ -292,13 +293,15 @@ def implementer_lens(
         # (a) No supporting observation
         has_obs = any(tid.lower() in oc for oc in obs_content)
         if not has_obs:
-            findings.append(ReviewFinding(
-                lens="implementer",
-                finding_type="gap",
-                description=f"Task {tid!r} is COMPLETE but has no observation referencing it",
-                affected_task_ids=[tid],
-                severity="HIGH",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="implementer",
+                    finding_type="gap",
+                    description=f"Task {tid!r} is COMPLETE but has no observation referencing it",
+                    affected_task_ids=[tid],
+                    severity="HIGH",
+                )
+            )
 
         # (c) Open HIGH contradiction referencing this task's output beliefs
         task_belief_ids: set[str] = set(getattr(task, "completed_evidence", []))
@@ -306,34 +309,36 @@ def implementer_lens(
             if getattr(contra, "severity", "") == "HIGH":
                 involved = set(getattr(contra, "involved_belief_ids", []))
                 if task_belief_ids & involved:
-                    findings.append(ReviewFinding(
-                        lens="implementer",
-                        finding_type="contradiction",
-                        description=(
-                            f"COMPLETE task {tid!r} has an open HIGH contradiction "
-                            f"({contra.id}) referencing its evidence beliefs"
-                        ),
-                        affected_belief_ids=list(task_belief_ids & involved),
-                        affected_task_ids=[tid],
-                        severity="HIGH",
-                    ))
+                    findings.append(
+                        ReviewFinding(
+                            lens="implementer",
+                            finding_type="contradiction",
+                            description=(
+                                f"COMPLETE task {tid!r} has an open HIGH contradiction "
+                                f"({contra.id}) referencing its evidence beliefs"
+                            ),
+                            affected_belief_ids=list(task_belief_ids & involved),
+                            affected_task_ids=[tid],
+                            severity="HIGH",
+                        )
+                    )
 
     # (b) success_criteria coverage
     complete_task_descriptions = " ".join(
-        getattr(t, "description", "").lower()
-        for t in tasks
-        if getattr(t, "status", "") == "COMPLETE"
+        getattr(t, "description", "").lower() for t in tasks if getattr(t, "status", "") == "COMPLETE"
     )
     for criterion in success_criteria:
         criterion_tokens = set(criterion.lower().split())
         covered = bool(criterion_tokens & set(complete_task_descriptions.split()))
         if not covered:
-            findings.append(ReviewFinding(
-                lens="implementer",
-                finding_type="gap",
-                description=f"Success criterion {criterion!r} is not covered by any COMPLETE task",
-                severity="MEDIUM",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="implementer",
+                    finding_type="gap",
+                    description=f"Success criterion {criterion!r} is not covered by any COMPLETE task",
+                    severity="MEDIUM",
+                )
+            )
 
     return findings
 
@@ -356,33 +361,24 @@ def reviewer_lens(
     beliefs = getattr(world_model, "beliefs", [])
     assumptions = getattr(world_model, "assumptions", [])
     contradictions = getattr(world_model, "contradictions", [])
-    tasks = getattr(task_graph, "tasks", [])
     required_fields = getattr(output_contract, "required_interface_fields", []) if output_contract else []
 
     # (a) Required interface fields
-    complete_obs_content = " ".join(
-        getattr(o, "content", "").lower()
-        for o in observations
-        if any(
-            getattr(t, "status", "") == "COMPLETE"
-            and t.id.lower() in getattr(o, "source", "").lower()
-            for t in tasks
-        )
-    )
     # Also include all observations for field presence check
     all_obs_content = " ".join(getattr(o, "content", "").lower() for o in observations)
 
     for field_name in required_fields:
         if field_name.lower() not in all_obs_content:
-            findings.append(ReviewFinding(
-                lens="reviewer",
-                finding_type="contract_miss",
-                description=f"Required interface field {field_name!r} not found in any observation",
-                severity="HIGH",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="reviewer",
+                    finding_type="contract_miss",
+                    description=f"Required interface field {field_name!r} not found in any observation",
+                    severity="HIGH",
+                )
+            )
 
     # (b) Unvalidated assumptions
-    obs_texts = [getattr(o, "content", "").lower() for o in observations]
     high_rel_obs = [
         getattr(o, "content", "").lower()
         for o in observations
@@ -398,17 +394,16 @@ def reviewer_lens(
     for assumption in assumptions:
         assumption_lower = assumption.lower()
         assumption_tokens = set(assumption_lower.split())
-        validated = any(
-            bool(assumption_tokens & set(obs.split()))
-            for obs in high_rel_obs
-        )
+        validated = any(bool(assumption_tokens & set(obs.split())) for obs in high_rel_obs)
         if not validated:
-            findings.append(ReviewFinding(
-                lens="reviewer",
-                finding_type="assumption_violation",
-                description=f"Assumption {assumption!r} has no validating HIGH-reliability observation",
-                severity="MEDIUM",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="reviewer",
+                    finding_type="assumption_violation",
+                    description=f"Assumption {assumption!r} has no validating HIGH-reliability observation",
+                    severity="MEDIUM",
+                )
+            )
 
     # (c) HIGH-reliability evidence contradicting beliefs without a contradiction record
     involved_in_contradictions: set[str] = set()
@@ -428,16 +423,18 @@ def reviewer_lens(
                 stmt_words = set(belief.statement.lower().split())
                 common = obs_words & stmt_words
                 if common and (obs_words & negation_keywords):
-                    findings.append(ReviewFinding(
-                        lens="reviewer",
-                        finding_type="gap",
-                        description=(
-                            f"HIGH-reliability evidence contradicts belief {belief.id!r} "
-                            "but no contradiction record exists"
-                        ),
-                        affected_belief_ids=[belief.id],
-                        severity="MEDIUM",
-                    ))
+                    findings.append(
+                        ReviewFinding(
+                            lens="reviewer",
+                            finding_type="gap",
+                            description=(
+                                f"HIGH-reliability evidence contradicts belief {belief.id!r} "
+                                "but no contradiction record exists"
+                            ),
+                            affected_belief_ids=[belief.id],
+                            severity="MEDIUM",
+                        )
+                    )
 
     return findings
 
@@ -471,17 +468,19 @@ def adversarial_lens(
         evidence_ids = set(getattr(task, "completed_evidence", []))
         invalidated = evidence_ids & negated_ids
         if invalidated:
-            findings.append(ReviewFinding(
-                lens="adversarial",
-                finding_type="contradiction",
-                description=(
-                    f"If adversarial prior holds, COMPLETE task {task.id!r} result "
-                    f"is invalidated by negation of beliefs {sorted(invalidated)}"
-                ),
-                affected_belief_ids=list(invalidated),
-                affected_task_ids=[task.id],
-                severity="HIGH",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="adversarial",
+                    finding_type="contradiction",
+                    description=(
+                        f"If adversarial prior holds, COMPLETE task {task.id!r} result "
+                        f"is invalidated by negation of beliefs {sorted(invalidated)}"
+                    ),
+                    affected_belief_ids=list(invalidated),
+                    affected_task_ids=[task.id],
+                    severity="HIGH",
+                )
+            )
 
     # Check hypotheses only supported by negated beliefs
     all_beliefs = getattr(world_model, "beliefs", [])
@@ -492,16 +491,18 @@ def adversarial_lens(
         # Only consider belief-id references (not observation ids)
         belief_support = discrim & all_belief_ids
         if belief_support and belief_support.issubset(negated_ids):
-            findings.append(ReviewFinding(
-                lens="adversarial",
-                finding_type="assumption_violation",
-                description=(
-                    f"Hypothesis {hyp.id!r} is only supported by beliefs in the "
-                    "adversarial negation set — inadequately supported"
-                ),
-                affected_belief_ids=list(belief_support),
-                severity="MEDIUM",
-            ))
+            findings.append(
+                ReviewFinding(
+                    lens="adversarial",
+                    finding_type="assumption_violation",
+                    description=(
+                        f"Hypothesis {hyp.id!r} is only supported by beliefs in the "
+                        "adversarial negation set — inadequately supported"
+                    ),
+                    affected_belief_ids=list(belief_support),
+                    severity="MEDIUM",
+                )
+            )
 
     return findings
 
@@ -535,7 +536,6 @@ def reviewer_pass(
     """
     from .belief_graph import propagate_beliefs
     from .contradiction import detect_contradictions
-    from .evidence import EvidenceStore
     from .hypothesis import EliminationPolicy, eliminate
     from .task_graph import check_abstraction_alignment
     from .world_model import Belief, Observation
@@ -598,6 +598,7 @@ def reviewer_pass(
     # ── Step 5: propagate_beliefs ─────────────────────────────────────────────
     if belief_dep_graph is not None:
         from .belief_graph import DepGraphBudget
+
         budget = DepGraphBudget()
         propagate_beliefs(belief_dep_graph, budget, world_model)
 
@@ -688,9 +689,11 @@ def drain_propagation_queue(
 
 def _make_empty_evidence_store() -> Any:
     from .evidence import EvidenceStore
+
     return EvidenceStore()
 
 
 def _make_empty_hypothesis_set() -> Any:
     from .hypothesis import HypothesisSet
+
     return HypothesisSet()

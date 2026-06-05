@@ -1,4 +1,5 @@
 """Review gate — pre-execution proposed change gating — P5.3."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

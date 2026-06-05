@@ -1,4 +1,5 @@
 """Verification layer runner — P5.5."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -168,10 +169,7 @@ def verify_evidence_sufficiency(
 
     if scope == "global":
         # Global scope: >= 5 items with HIGH or MEDIUM reliability
-        qualifying = [
-            e for e in entries
-            if getattr(e, "reliability", "") in ("HIGH", "MEDIUM")
-        ]
+        qualifying = [e for e in entries if getattr(e, "reliability", "") in ("HIGH", "MEDIUM")]
         if len(qualifying) < 5:
             return LayerResult(
                 layer="evidence_sufficiency",
@@ -212,6 +210,7 @@ def verify_output_contract_partial(
 
     # Use the shadow check
     from .output_contract import contract_shadow_check
+
     check = contract_shadow_check(result, output_contract)
     if not check.passed:
         return LayerResult(
