@@ -371,25 +371,140 @@ export type Node = z.infer<typeof Node>
 export type NodeType = Node['type']
 
 // ---------------------------------------------------------------------------
-// Harness node type stubs (Phase 0) — full harness_config shapes added per-phase
+// Harness node types — Phase 10 adds full harness_config shapes for all 9
+// canvas-observable node types. Phase 1 configs (gather_evidence etc.) unchanged.
 // ---------------------------------------------------------------------------
 
-const HarnessNodeBase = NodeBase.extend({
-  harness_config: z.record(z.unknown()).optional(),
+// Phase 10 harness_config shapes
+const WorldModelNodeConfig = z.object({
+  display_mode: z.enum(['summary', 'expanded']).default('summary').optional(),
+  show_observations: z.boolean().default(false).optional(),
+  show_contradictions: z.boolean().default(true).optional(),
+  max_beliefs_shown: z.number().int().min(1).default(10).optional(),
+})
+export const WorldModelNode = NodeBase.extend({
+  type: z.literal('world_model'),
+  harness_config: WorldModelNodeConfig.optional(),
 })
 
-export const WorldModelNode = HarnessNodeBase.extend({ type: z.literal('world_model') })
-export const HypothesisSetNode = HarnessNodeBase.extend({ type: z.literal('hypothesis_set') })
-export const GatherEvidenceNode = HarnessNodeBase.extend({ type: z.literal('gather_evidence') })
-export const ApplyToolReliabilityNode = HarnessNodeBase.extend({ type: z.literal('apply_tool_reliability') })
-export const UpdateWorldModelNode = HarnessNodeBase.extend({ type: z.literal('update_world_model') })
-export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
-export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
-export const VerificationGateNode = HarnessNodeBase.extend({ type: z.literal('verification_gate') })
-export const RecoveryNode = HarnessNodeBase.extend({ type: z.literal('recovery_node') })
-export const EvidenceStoreNode = HarnessNodeBase.extend({ type: z.literal('evidence_store_node') })
-export const ExperienceStoreNode = HarnessNodeBase.extend({ type: z.literal('experience_store_node') })
-export const ReviewerPassNode = HarnessNodeBase.extend({ type: z.literal('reviewer_pass') })
+const HypothesisSetNodeConfig = z.object({
+  show_eliminated: z.boolean().default(false).optional(),
+  max_hypotheses_shown: z.number().int().min(1).default(5).optional(),
+})
+export const HypothesisSetNode = NodeBase.extend({
+  type: z.literal('hypothesis_set'),
+  harness_config: HypothesisSetNodeConfig.optional(),
+})
+
+const GatherEvidenceConfig = z.object({
+  source_tool: z.string().min(1),
+  evidence_type: z.enum(['OBSERVATION', 'INFERENCE', 'SYSTEM_ERROR']),
+  reliability_override: z.enum(['HIGH', 'MEDIUM', 'LOW']).nullable().optional(),
+})
+export const GatherEvidenceNode = NodeBase.extend({
+  type: z.literal('gather_evidence'),
+  harness_config: GatherEvidenceConfig.optional(),
+})
+
+const ApplyToolReliabilityConfig = z.object({
+  apply_to: z.enum(['inferences_only', 'all']).default('inferences_only'),
+})
+export const ApplyToolReliabilityNode = NodeBase.extend({
+  type: z.literal('apply_tool_reliability'),
+  harness_config: ApplyToolReliabilityConfig.optional(),
+})
+
+const UpdateWorldModelConfig = z.object({
+  integration_mode: z.enum(['observations_only', 'infer_beliefs']).default('observations_only'),
+  reliability_threshold: z.enum(['HIGH', 'MEDIUM', 'LOW']).default('HIGH'),
+})
+export const UpdateWorldModelNode = NodeBase.extend({
+  type: z.literal('update_world_model'),
+  harness_config: UpdateWorldModelConfig.optional(),
+})
+
+const ControlStateNodeConfig = z.object({
+  show_block_mask: z.boolean().default(true).optional(),
+  show_notes: z.boolean().default(false).optional(),
+})
+export const ControlStateNode = NodeBase.extend({
+  type: z.literal('control_state'),
+  harness_config: ControlStateNodeConfig.optional(),
+})
+
+const TaskGraphNodeConfig = z.object({
+  show_write_domains: z.boolean().default(false).optional(),
+  show_abstraction_level: z.boolean().default(false).optional(),
+  max_tasks_shown: z.number().int().min(1).default(20).optional(),
+})
+export const TaskGraphNode = NodeBase.extend({
+  type: z.literal('task_graph_node'),
+  harness_config: TaskGraphNodeConfig.optional(),
+})
+
+const VERIFICATION_LAYER_NAMES = [
+  'syntax', 'unit', 'integration', 'consistency', 'requirements',
+  'assumptions', 'goal_correctness', 'evidence_sufficiency', 'output_contract_partial',
+] as const
+const VerificationGateNodeConfig = z.object({
+  enabled_layers: z.array(z.enum(VERIFICATION_LAYER_NAMES)).optional(),
+  require_adversarial_on_high_risk: z.boolean().default(true).optional(),
+})
+export const VerificationGateNode = NodeBase.extend({
+  type: z.literal('verification_gate'),
+  harness_config: VerificationGateNodeConfig.optional(),
+})
+
+const RECOVERY_STRATEGY_NAMES = [
+  'DIRECT_EDIT', 'TRACE_EXEC', 'BROADER_SEARCH', 'REIMPLEMENT', 'MINIMAL_FIX', 'ESCALATE',
+] as const
+const RecoveryNodeConfig = z.object({
+  strategy_order_override: z.array(z.enum(RECOVERY_STRATEGY_NAMES)).optional(),
+  show_pattern_confidence: z.boolean().default(true).optional(),
+})
+export const RecoveryNode = NodeBase.extend({
+  type: z.literal('recovery_node'),
+  harness_config: RecoveryNodeConfig.optional(),
+})
+
+const EvidenceStoreNodeConfig = z.object({
+  show_envelopes: z.boolean().default(true).optional(),
+  show_manifest: z.boolean().default(true).optional(),
+  max_evidence_shown: z.number().int().min(1).default(20).optional(),
+})
+export const EvidenceStoreNode = NodeBase.extend({
+  type: z.literal('evidence_store_node'),
+  harness_config: EvidenceStoreNodeConfig.optional(),
+})
+
+const ExperienceStoreNodeConfig = z.object({
+  show_weights_heatmap: z.boolean().default(true).optional(),
+  show_run_count: z.boolean().default(true).optional(),
+})
+export const ExperienceStoreNode = NodeBase.extend({
+  type: z.literal('experience_store_node'),
+  harness_config: ExperienceStoreNodeConfig.optional(),
+})
+
+const ReviewerPassNodeConfig = z.object({
+  show_adversarial_prior: z.boolean().default(true).optional(),
+  show_findings_detail: z.boolean().default(true).optional(),
+  show_reopened_tasks: z.boolean().default(true).optional(),
+})
+export const ReviewerPassNode = NodeBase.extend({
+  type: z.literal('reviewer_pass'),
+  harness_config: ReviewerPassNodeConfig.optional(),
+})
+
+const ProcessConceptNodeConfig = z.object({
+  concept_id: z.string().min(1),
+  show_steps: z.boolean().default(true).optional(),
+  show_success_criteria: z.boolean().default(false).optional(),
+})
+export const ProcessConceptNode = NodeBase.extend({
+  type: z.literal('process_concept'),
+  harness_config: ProcessConceptNodeConfig,
+})
 
 export type WorldModelNode = z.infer<typeof WorldModelNode>
 export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
@@ -403,6 +518,18 @@ export type RecoveryNode = z.infer<typeof RecoveryNode>
 export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
 export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
 export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+export type ProcessConceptNode = z.infer<typeof ProcessConceptNode>
+
+export type WorldModelNodeConfig = z.infer<typeof WorldModelNodeConfig>
+export type HypothesisSetNodeConfig = z.infer<typeof HypothesisSetNodeConfig>
+export type ControlStateNodeConfig = z.infer<typeof ControlStateNodeConfig>
+export type TaskGraphNodeConfig = z.infer<typeof TaskGraphNodeConfig>
+export type VerificationGateNodeConfig = z.infer<typeof VerificationGateNodeConfig>
+export type RecoveryNodeConfig = z.infer<typeof RecoveryNodeConfig>
+export type EvidenceStoreNodeConfig = z.infer<typeof EvidenceStoreNodeConfig>
+export type ExperienceStoreNodeConfig = z.infer<typeof ExperienceStoreNodeConfig>
+export type ReviewerPassNodeConfig = z.infer<typeof ReviewerPassNodeConfig>
+export type ProcessConceptNodeConfig = z.infer<typeof ProcessConceptNodeConfig>
 
 export const HarnessNode = z.discriminatedUnion('type', [
   WorldModelNode,
@@ -417,8 +544,16 @@ export const HarnessNode = z.discriminatedUnion('type', [
   EvidenceStoreNode,
   ExperienceStoreNode,
   ReviewerPassNode,
+  ProcessConceptNode,
 ])
 export type HarnessNode = z.infer<typeof HarnessNode>
+
+// HarnessNodeType — the discriminator type for all harness node types
+export type HarnessNodeType = HarnessNode['type']
+
+// AnyNodeType — union of standard v0.2 node types + all harness node types.
+// Used by BaseNode and NODE_SUPPORT_MATRIX to cover all renderable node kinds.
+export type AnyNodeType = NodeType | HarnessNodeType
 
 // Fix #25: AnyNode is imported by validation.ts — includes both v0.2 and harness nodes.
 export const AnyNode = z.union([Node, HarnessNode])
@@ -638,19 +773,34 @@ export const ADAPTER_LABELS: Record<AdapterName, string> = {
 // Fix #56: microsoft_agent_framework has no adapter implementation.
 // All node types marked 'missing' until the adapter is built.
 // The enum value is kept for forward-compatibility with saved specs.
-export const NODE_SUPPORT_MATRIX: Record<NodeType, Record<AdapterName, SupportLevel>> = {
-  input:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  output:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  llm_call:         { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  tool_invoke:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  condition:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  parallel_fork:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  parallel_join:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  hitl_breakpoint:  { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
-  memory_read:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  memory_write:     { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  subgraph:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
-  transform:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  agent_role:       { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'missing' },
-  agent_debate:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+// Harness nodes are 'partial' across all adapters until P11 E2E integration completes.
+export const NODE_SUPPORT_MATRIX: Record<AnyNodeType, Record<AdapterName, SupportLevel>> = {
+  input:                   { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  output:                  { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  llm_call:                { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  tool_invoke:             { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  condition:               { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_fork:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_join:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  hitl_breakpoint:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_read:             { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_write:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  subgraph:                { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  transform:               { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  agent_role:              { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  agent_debate:            { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  // Harness nodes — P10 canvas UI; full adapter wiring deferred to P11.
+  world_model:             { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  hypothesis_set:          { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  gather_evidence:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  apply_tool_reliability:  { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  update_world_model:      { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  control_state:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  task_graph_node:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  verification_gate:       { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  recovery_node:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  evidence_store_node:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  experience_store_node:   { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  reviewer_pass:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  process_concept:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
 }

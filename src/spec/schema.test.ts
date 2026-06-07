@@ -748,6 +748,55 @@ describe('Cross-ref validation', () => {
     expect(validateCrossRefs(spec).some((e) => e.field === 'branches.target' && e.message.includes('nowhere'))).toBe(true)
   })
 
+  // ── ProcessConceptNode ───────────────────────────────────────────────────────
+  it('accepts process_concept node with a valid concept_id', () => {
+    const result = parseFlowSpec({
+      ...BASE,
+      nodes: [
+        { id: 'start',   type: 'input' },
+        { id: 'concept', type: 'process_concept', harness_config: { concept_id: 'debug_test_failure' } },
+        { id: 'done',    type: 'output' },
+      ],
+      edges: [
+        { type: 'direct', from: 'start',   to: 'concept' },
+        { type: 'direct', from: 'concept', to: 'done'    },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects process_concept node with empty concept_id', () => {
+    const result = parseFlowSpec({
+      ...BASE,
+      nodes: [
+        { id: 'start',   type: 'input' },
+        { id: 'concept', type: 'process_concept', harness_config: { concept_id: '' } },
+        { id: 'done',    type: 'output' },
+      ],
+      edges: [
+        { type: 'direct', from: 'start',   to: 'concept' },
+        { type: 'direct', from: 'concept', to: 'done'    },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects process_concept node with missing harness_config', () => {
+    const result = parseFlowSpec({
+      ...BASE,
+      nodes: [
+        { id: 'start',   type: 'input' },
+        { id: 'concept', type: 'process_concept' },
+        { id: 'done',    type: 'output' },
+      ],
+      edges: [
+        { type: 'direct', from: 'start',   to: 'concept' },
+        { type: 'direct', from: 'concept', to: 'done'    },
+      ],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('does not flag empty-string branch targets (in-progress condition node)', () => {
     // Empty string = user hasn't filled in the form yet — should not produce an error
     const spec = assertFlowSpec({

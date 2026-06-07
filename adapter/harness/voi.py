@@ -1,4 +1,5 @@
 """VOI estimation and verification adequacy critic — P5.2."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,9 +10,15 @@ MIN_ADEQUATE_LAYERS = 3
 MIN_RESOLVABLE_LAYERS = 2
 
 VERIFICATION_LAYERS = [
-    "syntax", "unit", "integration", "consistency",
-    "requirements", "assumptions", "goal_correctness",
-    "evidence_sufficiency", "output_contract_partial",
+    "syntax",
+    "unit",
+    "integration",
+    "consistency",
+    "requirements",
+    "assumptions",
+    "goal_correctness",
+    "evidence_sufficiency",
+    "output_contract_partial",
 ]
 
 

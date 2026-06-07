@@ -70,9 +70,10 @@ jobs:
           echo "TESTING=true" >> $GITHUB_ENV
           echo "DATABASE_URL=sqlite+aiosqlite:///:memory:" >> $GITHUB_ENV
           echo "JWT_SECRET=ci-eval-secret-not-for-production" >> $GITHUB_ENV
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true" ]]; then
+          OPENAI_KEY="${{ secrets.OPENAI_API_KEY }}"
+          if [[ ("${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true") && -n "$OPENAI_KEY" ]]; then
             echo "EVAL_USE_REAL_LLM=true" >> $GITHUB_ENV
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=$OPENAI_KEY" >> $GITHUB_ENV
           fi
       - name: Run RAG quality metrics
         run: pytest eval/test_rag_quality.py -v --tb=short
@@ -108,9 +109,10 @@ jobs:
           echo "TESTING=true" >> $GITHUB_ENV
           echo "DATABASE_URL=sqlite+aiosqlite:///:memory:" >> $GITHUB_ENV
           echo "JWT_SECRET=ci-eval-secret-not-for-production" >> $GITHUB_ENV
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true" ]]; then
+          OPENAI_KEY="${{ secrets.OPENAI_API_KEY }}"
+          if [[ ("${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true") && -n "$OPENAI_KEY" ]]; then
             echo "EVAL_USE_REAL_LLM=true" >> $GITHUB_ENV
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=$OPENAI_KEY" >> $GITHUB_ENV
           fi
       - name: Run moderation quality metrics
         run: pytest eval/test_moderation_quality.py -v --tb=short
@@ -144,9 +146,10 @@ jobs:
           echo "TESTING=true" >> $GITHUB_ENV
           echo "DATABASE_URL=sqlite+aiosqlite:///:memory:" >> $GITHUB_ENV
           echo "JWT_SECRET=ci-eval-secret-not-for-production" >> $GITHUB_ENV
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true" ]]; then
+          OPENAI_KEY="${{ secrets.OPENAI_API_KEY }}"
+          if [[ ("${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true") && -n "$OPENAI_KEY" ]]; then
             echo "EVAL_USE_REAL_LLM=true" >> $GITHUB_ENV
-            echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=$OPENAI_KEY" >> $GITHUB_ENV
           fi
       # Phase 4: debate flow quality metrics (flow 05 — the MAF showcase).
       # Gated by EVAL_USE_REAL_LLM; cheap structural checks always run.

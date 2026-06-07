@@ -2,13 +2,14 @@ import { Handle, Position } from '@xyflow/react'
 import {
   LogIn, LogOut, Sparkles, Wrench, GitBranch, GitFork, GitMerge,
   UserCheck, BookOpen, BookMarked, Layers, Shuffle, Bot, Users,
-  AlertTriangle,
+  AlertTriangle, Brain, Lightbulb, Shield, Network, CheckCircle2,
+  RefreshCw, Database, BarChart3, Eye, Compass,
   type LucideIcon,
 } from 'lucide-react'
 import { useCanvasStore, type NodeExecStat } from '../../store'
 import {
   ADAPTER_LABELS, NODE_SUPPORT_MATRIX,
-  type NodeType, type AdapterName, type SupportLevel, type RuntimeSupportOverride,
+  type AnyNodeType, type AdapterName, type SupportLevel, type RuntimeSupportOverride,
 } from '../../spec/schema'
 
 const ADAPTERS: AdapterName[] = ['langgraph', 'crewai', 'mastra', 'microsoft_agent_framework']
@@ -18,33 +19,55 @@ const ADAPTERS: AdapterName[] = ['langgraph', 'crewai', 'mastra', 'microsoft_age
 // memory_read/memory_write → one cyan + ↑/↓
 // parallel_fork/parallel_join → one green + ⊕/⊖
 // agent_role/agent_debate → one magenta + ◉/⋯
-// transform shifted to amber so it no longer collides with llm_call (violet).
+// Harness nodes → rose/pink family (#fb7185) with per-node variation.
 // ──────────────────────────────────────────────────────────────────────────
-export const NODE_HEX: Record<NodeType, string> = {
-  input:            '#3b82f6',
-  output:           '#6b7280',
-  llm_call:         '#8b5cf6',
-  tool_invoke:      '#14b8a6',
-  condition:        '#f59e0b',
-  parallel_fork:    '#22c55e',
-  parallel_join:    '#22c55e',
-  hitl_breakpoint:  '#f97316',
-  memory_read:      '#06b6d4',
-  memory_write:     '#06b6d4',
-  subgraph:         '#64748b',
-  transform:        '#facc15',
-  agent_role:       '#ec4899',
-  agent_debate:     '#ec4899',
+export const NODE_HEX: Record<AnyNodeType, string> = {
+  input:                  '#3b82f6',
+  output:                 '#6b7280',
+  llm_call:               '#8b5cf6',
+  tool_invoke:            '#14b8a6',
+  condition:              '#f59e0b',
+  parallel_fork:          '#22c55e',
+  parallel_join:          '#22c55e',
+  hitl_breakpoint:        '#f97316',
+  memory_read:            '#06b6d4',
+  memory_write:           '#06b6d4',
+  subgraph:               '#64748b',
+  transform:              '#facc15',
+  agent_role:             '#ec4899',
+  agent_debate:           '#ec4899',
+  // Harness nodes
+  world_model:            '#fb7185',
+  hypothesis_set:         '#c084fc',
+  gather_evidence:        '#34d399',
+  apply_tool_reliability: '#2dd4bf',
+  update_world_model:     '#60a5fa',
+  control_state:          '#f87171',
+  task_graph_node:        '#60a5fa',
+  verification_gate:      '#4ade80',
+  recovery_node:          '#fb923c',
+  evidence_store_node:    '#67e8f9',
+  experience_store_node:  '#a78bfa',
+  reviewer_pass:          '#fb7185',
+  process_concept:        '#22d3ee',
 }
 
-export const NODE_ICONS: Record<NodeType, LucideIcon> = {
+export const NODE_ICONS: Record<AnyNodeType, LucideIcon> = {
   input: LogIn, output: LogOut, llm_call: Sparkles, tool_invoke: Wrench,
   condition: GitBranch, parallel_fork: GitFork, parallel_join: GitMerge,
   hitl_breakpoint: UserCheck, memory_read: BookOpen, memory_write: BookMarked,
   subgraph: Layers, transform: Shuffle, agent_role: Bot, agent_debate: Users,
+  // Harness nodes
+  world_model: Brain, hypothesis_set: Lightbulb,
+  gather_evidence: Database, apply_tool_reliability: Wrench,
+  update_world_model: Brain,
+  control_state: Shield, task_graph_node: Network,
+  verification_gate: CheckCircle2, recovery_node: RefreshCw,
+  evidence_store_node: Database, experience_store_node: BarChart3,
+  reviewer_pass: Eye, process_concept: Compass,
 }
 
-export const NODE_GLYPH_MOD: Partial<Record<NodeType, string>> = {
+export const NODE_GLYPH_MOD: Partial<Record<AnyNodeType, string>> = {
   memory_read:   '↑',
   memory_write:  '↓',
   parallel_fork: '⊕',
@@ -53,15 +76,23 @@ export const NODE_GLYPH_MOD: Partial<Record<NodeType, string>> = {
   agent_debate:  '⋯',
 }
 
-export const NODE_TYPE_LABELS: Record<NodeType, string> = {
+export const NODE_TYPE_LABELS: Record<AnyNodeType, string> = {
   input: 'input', output: 'output', llm_call: 'llm_call', tool_invoke: 'tool_invoke',
   condition: 'condition', parallel_fork: 'parallel_fork', parallel_join: 'parallel_join',
   hitl_breakpoint: 'hitl', memory_read: 'memory_read', memory_write: 'memory_write',
   subgraph: 'subgraph', transform: 'transform', agent_role: 'agent_role', agent_debate: 'agent_debate',
+  // Harness nodes
+  world_model: 'world_model', hypothesis_set: 'hypothesis_set',
+  gather_evidence: 'gather_evidence', apply_tool_reliability: 'apply_tool_rel',
+  update_world_model: 'update_wm',
+  control_state: 'control_state', task_graph_node: 'task_graph',
+  verification_gate: 'verify_gate', recovery_node: 'recovery',
+  evidence_store_node: 'evidence_store', experience_store_node: 'exp_store',
+  reviewer_pass: 'reviewer_pass', process_concept: 'process_concept',
 }
 
 function getSupportLevel(
-  type: NodeType,
+  type: AnyNodeType,
   adapter: AdapterName,
   override?: RuntimeSupportOverride,
 ): SupportLevel {
@@ -71,7 +102,7 @@ function getSupportLevel(
 
 interface BaseNodeProps {
   id:         string
-  type:       NodeType
+  type:       AnyNodeType
   selected:   boolean
   data:       Record<string, unknown>
   preview?:   string

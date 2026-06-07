@@ -10,51 +10,34 @@ Run: pytest adapter/tests/test_harness_p5.py -v -k "not harness_state_api"
 from __future__ import annotations
 
 import sys
-import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.diagnostics import Diagnostics
 from harness.evidence import Evidence, EvidenceStore
-from harness.execution import ExecutionResult, action_dep_overlap, execute, select_reversibility_strategy
-from harness.hypothesis import Hypothesis, HypothesisSet
+from harness.execution import action_dep_overlap, execute, select_reversibility_strategy
 from harness.output_contract import OutputContract, contract_shadow_check
 from harness.review_gate import (
-    DimensionResult,
-    ReviewResult,
     check_output_contract,
     check_world_model_consistency,
     review_proposed_change,
 )
 from harness.risk import (
-    RiskFactors,
-    classify_module_type,
-    compute_change_scope,
-    compute_file_centrality,
     estimate_risk,
 )
 from harness.task_graph import Task, TaskGraph
-from harness.tool_manifest import ToolAvailabilityManifest, ToolEntry, build_manifest
+from harness.tool_manifest import ToolAvailabilityManifest, ToolEntry
 from harness.verification import (
-    LayerResult,
-    VerificationResult,
     verify,
     verify_evidence_sufficiency,
 )
 from harness.voi import (
-    AdequacyResult,
-    VOIResult,
     estimate_value_of_information,
     update_verification_strength,
     verification_adequacy_critic,
 )
 from harness.world_model import Belief, Observation, WorldModel
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +54,7 @@ def _task(
         id=tid,
         description=description,
         risk_level=risk_level,  # type: ignore[arg-type]
-        status=status,          # type: ignore[arg-type]
+        status=status,  # type: ignore[arg-type]
     )
     if file_path:
         # Attach file_path as extra attribute
@@ -83,11 +66,13 @@ def _world_model_with_refs(file_path: str, n_refs: int) -> WorldModel:
     """Create a world model with n_refs observations referencing file_path."""
     wm = WorldModel(generation_id=1)
     for i in range(n_refs):
-        wm.observations.append(Observation(
-            id=f"obs-{i}",
-            content=f"reference to {file_path} in line {i}",
-            source="test",
-        ))
+        wm.observations.append(
+            Observation(
+                id=f"obs-{i}",
+                content=f"reference to {file_path} in line {i}",
+                source="test",
+            )
+        )
     return wm
 
 
@@ -99,7 +84,7 @@ def _belief(bid: str, statement: str, reliability: str = "", confidence: float =
         derived_from=["obs-1"],
     )
     # Attach reliability as extra attribute
-    setattr(b, "reliability", reliability)
+    b.reliability = reliability
     return b
 
 
@@ -108,7 +93,7 @@ def _make_manifest(available: list[str], unavailable: list[str] | None = None) -
     manifest = ToolAvailabilityManifest()
     for tool in available:
         manifest._entries[tool] = ToolEntry(tool_name=tool, available=True, fallback_tool=None)
-    for tool in (unavailable or []):
+    for tool in unavailable or []:
         manifest._entries[tool] = ToolEntry(tool_name=tool, available=False, fallback_tool=None)
     manifest._freeze()
     return manifest
@@ -117,9 +102,15 @@ def _make_manifest(available: list[str], unavailable: list[str] | None = None) -
 def _make_all_unavailable_manifest() -> ToolAvailabilityManifest:
     """Build a manifest with all verification tools unavailable."""
     all_tools = [
-        "linter", "pytest", "integration_runner", "consistency_checker",
-        "requirements_checker", "assumption_checker", "goal_checker",
-        "evidence_checker", "contract_checker",
+        "linter",
+        "pytest",
+        "integration_runner",
+        "consistency_checker",
+        "requirements_checker",
+        "assumption_checker",
+        "goal_checker",
+        "evidence_checker",
+        "contract_checker",
     ]
     return _make_manifest(available=[], unavailable=all_tools)
 
@@ -127,20 +118,38 @@ def _make_all_unavailable_manifest() -> ToolAvailabilityManifest:
 def _make_evidence_store(n_high: int = 0, n_medium: int = 0, n_low: int = 0) -> EvidenceStore:
     store = EvidenceStore()
     for i in range(n_high):
-        store.append(Evidence(
-            id=f"h-{i}", obs=f"high obs {i}", reliability="HIGH",
-            source="test", evidence_type="OBSERVATION", freshness=1.0,
-        ))
+        store.append(
+            Evidence(
+                id=f"h-{i}",
+                obs=f"high obs {i}",
+                reliability="HIGH",
+                source="test",
+                evidence_type="OBSERVATION",
+                freshness=1.0,
+            )
+        )
     for i in range(n_medium):
-        store.append(Evidence(
-            id=f"m-{i}", obs=f"medium obs {i}", reliability="MEDIUM",
-            source="test", evidence_type="OBSERVATION", freshness=1.0,
-        ))
+        store.append(
+            Evidence(
+                id=f"m-{i}",
+                obs=f"medium obs {i}",
+                reliability="MEDIUM",
+                source="test",
+                evidence_type="OBSERVATION",
+                freshness=1.0,
+            )
+        )
     for i in range(n_low):
-        store.append(Evidence(
-            id=f"l-{i}", obs=f"low obs {i}", reliability="LOW",
-            source="test", evidence_type="OBSERVATION", freshness=0.5,
-        ))
+        store.append(
+            Evidence(
+                id=f"l-{i}",
+                obs=f"low obs {i}",
+                reliability="LOW",
+                source="test",
+                evidence_type="OBSERVATION",
+                freshness=0.5,
+            )
+        )
     return store
 
 
@@ -266,8 +275,13 @@ def test_T05_fewer_than_3_layers_gather_evidence():
     manifest = _make_manifest(
         available=["linter", "pytest"],
         unavailable=[
-            "integration_runner", "consistency_checker", "requirements_checker",
-            "assumption_checker", "goal_checker", "evidence_checker", "contract_checker",
+            "integration_runner",
+            "consistency_checker",
+            "requirements_checker",
+            "assumption_checker",
+            "goal_checker",
+            "evidence_checker",
+            "contract_checker",
         ],
     )
     result = verification_adequacy_critic(manifest, "LOW", evidence_store=None)
@@ -287,8 +301,14 @@ def test_T06_fewer_than_2_layers_escalate():
     manifest = _make_manifest(
         available=["linter"],
         unavailable=[
-            "pytest", "integration_runner", "consistency_checker", "requirements_checker",
-            "assumption_checker", "goal_checker", "evidence_checker", "contract_checker",
+            "pytest",
+            "integration_runner",
+            "consistency_checker",
+            "requirements_checker",
+            "assumption_checker",
+            "goal_checker",
+            "evidence_checker",
+            "contract_checker",
         ],
     )
     result = verification_adequacy_critic(manifest, "LOW", evidence_store=None)
@@ -315,9 +335,15 @@ def test_T06_no_loop_on_escalate():
     manifest = _make_manifest(
         available=[],  # zero layers
         unavailable=[
-            "linter", "pytest", "integration_runner", "consistency_checker",
-            "requirements_checker", "assumption_checker", "goal_checker",
-            "evidence_checker", "contract_checker",
+            "linter",
+            "pytest",
+            "integration_runner",
+            "consistency_checker",
+            "requirements_checker",
+            "assumption_checker",
+            "goal_checker",
+            "evidence_checker",
+            "contract_checker",
         ],
     )
     # This call must complete without looping/hanging
@@ -459,6 +485,7 @@ def test_T09_success_resets_consecutive_count():
 
 def test_T10_tool_error_creates_system_error_evidence():
     """T10 — failing tool_workflow creates SYSTEM_ERROR Evidence(reliability=HIGH)."""
+
     def failing_workflow():
         raise RuntimeError("tool failed")
 
@@ -487,6 +514,7 @@ def test_T10_tool_error_creates_system_error_evidence():
 
 def test_T10_tool_error_adds_to_observations_not_beliefs():
     """T10b — error evidence goes to observations list, not beliefs."""
+
     def failing_workflow():
         raise RuntimeError("tool failed")
 
@@ -518,6 +546,7 @@ def test_T10_tool_error_adds_to_observations_not_beliefs():
 
 def test_T11_successful_execution_records_change_log():
     """T11 — successful execution records entry in world_model.environment_change_log."""
+
     def ok_workflow():
         return {"status": "done"}
 
@@ -584,7 +613,6 @@ def test_T13_file_mutation_high_risk_git_repo():
     """T13 — file mutation + HIGH risk in git repo → 'git-revert' strategy."""
     import os
     import tempfile
-    import subprocess
 
     # Create a temp directory with a .git dir to simulate a git repo
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -678,9 +706,15 @@ def test_T15_all_9_layers_present_when_all_tools_available():
     """T15 — all 9 verification layers run when all tools available."""
     # Build manifest with all tools available
     all_tools = [
-        "linter", "pytest", "integration_runner", "consistency_checker",
-        "requirements_checker", "assumption_checker", "goal_checker",
-        "evidence_checker", "contract_checker",
+        "linter",
+        "pytest",
+        "integration_runner",
+        "consistency_checker",
+        "requirements_checker",
+        "assumption_checker",
+        "goal_checker",
+        "evidence_checker",
+        "contract_checker",
     ]
     manifest = _make_manifest(available=all_tools)
 
@@ -701,8 +735,15 @@ def test_T15_all_9_layers_present_when_all_tools_available():
     layer_names = [lr.layer for lr in vr.layer_results]
     assert len(vr.layer_results) == 9
     for expected_layer in [
-        "syntax", "unit", "integration", "consistency", "requirements",
-        "assumptions", "goal_correctness", "evidence_sufficiency", "output_contract_partial",
+        "syntax",
+        "unit",
+        "integration",
+        "consistency",
+        "requirements",
+        "assumptions",
+        "goal_correctness",
+        "evidence_sufficiency",
+        "output_contract_partial",
     ]:
         assert expected_layer in layer_names
 
@@ -712,8 +753,14 @@ def test_T15_unavailable_tool_gives_skipped_not_failed():
     # Make only linter unavailable
     manifest = _make_manifest(
         available=[
-            "pytest", "integration_runner", "consistency_checker", "requirements_checker",
-            "assumption_checker", "goal_checker", "evidence_checker", "contract_checker",
+            "pytest",
+            "integration_runner",
+            "consistency_checker",
+            "requirements_checker",
+            "assumption_checker",
+            "goal_checker",
+            "evidence_checker",
+            "contract_checker",
         ],
         unavailable=["linter"],
     )
@@ -811,8 +858,11 @@ def test_T17_high_risk_sets_adversarial_passed():
     manifest = _make_manifest(
         available=["linter", "pytest", "integration_runner", "evidence_checker"],
         unavailable=[
-            "consistency_checker", "requirements_checker", "assumption_checker",
-            "goal_checker", "contract_checker",
+            "consistency_checker",
+            "requirements_checker",
+            "assumption_checker",
+            "goal_checker",
+            "contract_checker",
         ],
     )
     evidence_store = _make_evidence_store(n_high=2)
