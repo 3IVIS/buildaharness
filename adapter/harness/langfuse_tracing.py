@@ -52,7 +52,7 @@ class HarnessTraceContext:
         if not _LF_ENABLED or _langfuse is None:
             return
         try:
-            self._trace = _langfuse.trace(
+            self._trace = _langfuse.trace(  # type: ignore[attr-defined]
                 name=name,
                 id=self.run_id,
                 metadata={"run_id": self.run_id},
