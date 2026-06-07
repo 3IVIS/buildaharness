@@ -129,7 +129,7 @@ from .hypothesis import (
     generate_hypotheses,
     symptom_inference,
 )
-from .loop import run_one_iteration, select_best_action
+from .loop import initialize_harness, run_one_iteration, select_best_action
 from .memory import (
     CompressionRisk,
     MemoryState,
@@ -201,6 +201,13 @@ from .risk import (
     compute_file_centrality,
     estimate_risk,
 )
+from .process_concept import (
+    ProcessConcept,
+    ProcessConceptNotFoundError,
+    ProcessConceptStep,
+    ProcessConceptValidationError,
+)
+from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
 from .staleness import assert_generation_fresh, increment_generation_id, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
 from .task_graph import (
@@ -286,6 +293,7 @@ __all__ = [
     "compile_world_model_node",
     # Phase 8
     "DEFAULT_STRATEGY_ORDER",
+    "DEFAULT_REGISTRY",
     "STRATEGY_ORDER",
     "TOOL_RELIABILITY_ENVELOPES",
     # Phase 5
@@ -328,6 +336,7 @@ __all__ = [
     "FailurePattern",
     "FrozenManifestError",
     "HarnessRunState",
+    "initialize_harness",
     "Hypothesis",
     "HypothesisSet",
     "LayerResult",
@@ -338,6 +347,11 @@ __all__ = [
     "Observation",
     "OutputContract",
     "PendingUpdate",
+    "ProcessConcept",
+    "ProcessConceptNotFoundError",
+    "ProcessConceptStep",
+    "ProcessConceptValidationError",
+    "ProcessRegistry",
     "PostgresNotifyChannel",
     "ReliabilityClass",
     "ReplanScope",

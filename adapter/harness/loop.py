@@ -31,12 +31,70 @@ from .control_state import ControlState, resolve_control_state
 from .diagnostics import Diagnostics
 from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
-from .gates import action_gate, post_exec_gate
+from .gates import action_gate, decomposition_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .progress import cannot_make_progress
 from .recovery import StrategyState, switch_strategy
 from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
+
+
+def initialize_harness(
+    world_model: Any,
+    diagnostics: Diagnostics,
+    task_graph: Any,
+    process_concept: Any | None = None,
+    experience_store: Any | None = None,
+    strategy_state: StrategyState | None = None,
+    failure_diagnostics: Any | None = None,
+    task_class: str = "",
+    dep_graph_budget: Any | None = None,
+) -> dict[str, Any]:
+    """Initialise the harness for a new run — P-PC.4.
+
+    If process_concept is provided its steps are seeded into task_graph before
+    validate_task_graph() runs. The model-driven decomposition_gate() is never
+    bypassed (INV-PC-01). When experience_store is provided warm_start() is
+    called after concept seeding so the two signals are additive (INV-PC-05).
+
+    Returns a dict with keys:
+      valid (bool), errors (list[str]), decomposition_gate (bool),
+      process_concept_id (str | None).
+    """
+    from .task_graph import validate_task_graph
+
+    if process_concept is not None:
+        process_concept.seed_task_graph(task_graph)
+
+    errors = validate_task_graph(task_graph)
+    if errors:
+        return {
+            "valid": False,
+            "errors": errors,
+            "decomposition_gate": False,
+            "process_concept_id": getattr(process_concept, "id", None),
+        }
+
+    if experience_store is not None:
+        from .experience_store import warm_start
+
+        warm_start(
+            experience_store=experience_store,
+            strategy_state=strategy_state,
+            failure_diagnostics=failure_diagnostics,
+            task_graph=task_graph,
+            task_class=task_class or None,
+            dep_graph_budget=dep_graph_budget,
+        )
+
+    gate_result = decomposition_gate(world_model, diagnostics, task_graph)
+
+    return {
+        "valid": True,
+        "errors": [],
+        "decomposition_gate": gate_result,
+        "process_concept_id": getattr(process_concept, "id", None),
+    }
 
 
 def select_best_action(
