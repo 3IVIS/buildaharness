@@ -251,10 +251,39 @@ from .voi import (
     update_verification_strength,
     verification_adequacy_critic,
 )
+from .node_compilers import (
+    HARNESS_NODE_COMPILERS,
+    compile_apply_tool_reliability,
+    compile_control_state_node,
+    compile_evidence_store_node,
+    compile_experience_store_node,
+    compile_gather_evidence,
+    compile_hypothesis_set_node,
+    compile_recovery_node,
+    compile_reviewer_pass_node,
+    compile_task_graph_node,
+    compile_update_world_model,
+    compile_verification_gate_node,
+    compile_world_model_node,
+)
 from .world_model import Belief, Contradiction, Observation, WorldModel
 from .world_model_ops import integrate_evidence, recompute_belief_health
 
 __all__ = [
+    # Phase 10 node compilers
+    "HARNESS_NODE_COMPILERS",
+    "compile_apply_tool_reliability",
+    "compile_control_state_node",
+    "compile_evidence_store_node",
+    "compile_experience_store_node",
+    "compile_gather_evidence",
+    "compile_hypothesis_set_node",
+    "compile_recovery_node",
+    "compile_reviewer_pass_node",
+    "compile_task_graph_node",
+    "compile_update_world_model",
+    "compile_verification_gate_node",
+    "compile_world_model_node",
     # Phase 8
     "DEFAULT_STRATEGY_ORDER",
     "STRATEGY_ORDER",
