@@ -99,6 +99,17 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .inv-list{display:flex;flex-direction:column;gap:6px}
 .inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.4}
 .inv-item strong{color:var(--t0);display:block;margin-bottom:2px;font-size:12px}
+
+.done-tag{display:inline-block;padding:1px 8px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(74,222,128,0.12);border:.5px solid rgba(74,222,128,0.35);color:#4ade80;margin-left:6px;font-weight:600;vertical-align:middle}
+.phase-row.done{background:rgba(74,222,128,0.03)}
+.impl-block{margin-top:.55rem;background:rgba(74,222,128,0.05);border:.5px solid rgba(74,222,128,0.15);border-left:2px solid rgba(74,222,128,0.5);border-radius:var(--r-md);padding:.45rem .65rem;font-size:11px;color:var(--t1);line-height:1.55}
+.impl-block strong{color:#4ade80;display:block;margin-bottom:2px;font-size:11px}
+.test-pass{color:#4ade80}.test-pass::before{content:'✓ ';color:#4ade80;font-weight:600}
+.test-partial{color:#fbbf24}.test-partial::before{content:'~ ';color:#fbbf24;font-weight:600}
+.test-skip{color:var(--t1);opacity:.45}.test-skip::before{content:'– ';color:var(--t1)}
+.test-extra{color:#818cf8}.test-extra::before{content:'+ ';color:#818cf8}
+.test-status-bar{display:flex;gap:14px;margin:.35rem 0 .65rem;font-size:11px;color:var(--t1);flex-wrap:wrap}
+.test-status-bar .tsb-item{font-family:var(--font-mono);font-size:10px}
 </style>
 </head>
 <body>
@@ -524,17 +535,32 @@ function showTab(id,btn){
 const PHASES = [
   {
     id:'P0', color:'var(--c-p0)', weeks:'~1 week', mvp:true,
+    completed:true, completedDate:'2026-06-07',
+    testSummary:'37 tests passing — 25 runtime (13 EventBus · 12 LLMClient) · 12 proxy · canvas 19 unchanged',
     title:'Scaffold & LLM Proxy',
     sub:'Three package skeletons + working proxy on day 1',
     summary:'Stand up the three packages (runtime, react, proxy) with correct tsconfig, vite lib builds, and workspace wiring. Get the LLM proxy fully working before any runtime code exists — this lets you test LLM calls independently and gives the team a concrete deliverable immediately.',
     tasks:[
-      {id:'P0.1',name:'Package scaffolds',body:'Create packages/runtime/, packages/react/, packages/proxy/ with package.json (name, type:module, exports map: <code>{".":{import:"./dist/index.js",types:"./dist/index.d.ts"}}</code>), tsconfig.json (target:ES2022, moduleResolution:bundler, strict:true), vite.config.lib.ts (lib mode: entry=src/index.ts, formats:[es], fileName:index). Wire all three into root pnpm/npm workspace. Add scripts build:runtime, build:react, build:proxy to root. Confirm tsc --noEmit passes on empty src/index.ts for each. Also scaffold packages/harness/ with same structure — required by P7.'},
-      {id:'P0.2',name:'Proxy: Hono app + CORS',body:'Hono v4 server. Entry: packages/proxy/src/index.ts exports <code>export default app</code> — this single export pattern serves both CF Workers (Hono adapter reads it) and Node.js (node-server adapter wraps it). CORS middleware: <code>cors({ origin: Env.ALLOWED_ORIGIN, allowHeaders: [\'Authorization\',\'Content-Type\'] })</code>. POST /llm/chat and POST /auth/token stubbed with 501. GET /health returns 200 + {status:\'ok\'}. wrangler.toml: compatibility_date, [vars].ALLOWED_ORIGIN, [secrets] listing ANTHROPIC_API_KEY, OPENAI_API_KEY, PROXY_SECRET.'},
-      {id:'P0.3',name:'Proxy: JWT auth middleware',body:'Package: jose (ESM-native, CF Workers compatible). POST /auth/token: reads PROXY_SECRET from env, signs HS256 JWT with payload {sub:\'runtime\',jti:crypto.randomUUID()} and expiry 1h using jose SignJWT. Auth middleware: extracts Bearer token from Authorization header; verifies with jwtVerify(token, secret); rejects expired, malformed, or missing tokens with 401 + JSON body {error:\'unauthorized\'}. Attach verified payload to Hono context (c.set(\'jwtPayload\', payload)) for downstream handlers.'},
-      {id:'P0.4',name:'Proxy: LLM forwarding + streaming',body:'POST /llm/chat: read body as JSON. Route by model prefix: starts with "claude-" → Anthropic (https://api.anthropic.com/v1/messages); starts with "gpt-" or "o1-" or "o3-" → OpenAI (https://api.openai.com/v1/chat/completions). Unknown prefix → 400 {error:"unsupported_model"}. Strip any Authorization header from the incoming body, inject API key from env (ANTHROPIC_API_KEY or OPENAI_API_KEY). Set stream:true in forwarded body. Return <code>new Response(upstreamResponse.body, {headers:{\'Content-Type\':\'text/event-stream\'}})</code> — no buffering. Forward non-2xx status from upstream verbatim with body intact.'},
-      {id:'P0.5',name:'LLMClient in runtime',body:'packages/runtime/src/llm-client.ts. Export interface ILLMClient { callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string>; callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string>; }. LLMClient class implements ILLMClient — takes {proxyUrl, authToken} in constructor. callChat: POST /llm/chat with {model, messages, stream:true}, reads SSE response, yields each data: chunk as a string token. callChatSync: accumulates callChat tokens and returns full string. Non-2xx: throw FlowExecutionError({nodeId:\'llm-client\', message:\'proxy error\', cause:{status}}). ExecutionContext (P1.3) holds an ILLMClient — tests inject a stub implementation.'},
-      {id:'P0.6',name:'RuntimeEvent types',body:'packages/runtime/src/events.ts. RuntimeEvent discriminated union — each variant carries a type field for discrimination: NodeStart({type:\'node:start\', nodeId, nodeType}), NodeComplete({type:\'node:complete\', nodeId, nodeType, durationMs, tokenCount?}), NodeError({type:\'node:error\', nodeId, error:FlowExecutionError}), TokenChunk({type:\'token:chunk\', nodeId, token:string}), FlowPaused({type:\'flow:paused\', nodeId, prompt:string, resumeSchema:object}), FlowComplete({type:\'flow:complete\', finalState:Record<string,unknown>}), FlowError({type:\'flow:error\', error:FlowExecutionError}). EventBus: typed subscribe<T extends RuntimeEvent>(type:T[\'type\'], handler:(e:T)=>void):()=>void (returns unsubscribe fn); emit(event:RuntimeEvent):void. No external dep. Used by all phases P1+.'},
+      {id:'P0.1',name:'Package scaffolds',
+       body:'Create packages/runtime/, packages/react/, packages/proxy/ with package.json (name, type:module, exports map: <code>{".":{import:"./dist/index.js",types:"./dist/index.d.ts"}}</code>), tsconfig.json (target:ES2022, moduleResolution:bundler, strict:true), vite.config.lib.ts (lib mode: entry=src/index.ts, formats:[es], fileName:index). Wire all three into root pnpm/npm workspace. Add scripts build:runtime, build:react, build:proxy to root. Confirm tsc --noEmit passes on empty src/index.ts for each. Also scaffold packages/harness/ with same structure — required by P7.',
+       implNote:'All four packages created (runtime, react, proxy, harness). Each has package.json, tsconfig.json, and vite.config.lib.ts (runtime/react/harness — proxy is a server, no lib build). Root package.json updated with build:runtime, build:react, build:proxy, build:harness, test:runtime, test:react, test:harness, deploy:proxy scripts. @types/node added to devDeps in all packages. <em>Addition:</em> vitest.config.ts added to proxy setting <code>environment:\'node\'</code> — required to fix jose Uint8Array cross-realm issue when jsdom is the default test env. react/ and harness/ src/index.ts are minimal placeholders; they are filled out in P5 and P7 respectively.'},
+      {id:'P0.2',name:'Proxy: Hono app + CORS',
+       body:'Hono v4 server. Entry: packages/proxy/src/index.ts exports <code>export default app</code> — this single export pattern serves both CF Workers (Hono adapter reads it) and Node.js (node-server adapter wraps it). CORS middleware: <code>cors({ origin: Env.ALLOWED_ORIGIN, allowHeaders: [\'Authorization\',\'Content-Type\'] })</code>. POST /llm/chat and POST /auth/token stubbed with 501. GET /health returns 200 + {status:\'ok\'}. wrangler.toml: compatibility_date, [vars].ALLOWED_ORIGIN, [secrets] listing ANTHROPIC_API_KEY, OPENAI_API_KEY, PROXY_SECRET.',
+       implNote:'packages/proxy/src/index.ts — Hono v4, export default app. CORS middleware reads origin from <code>c.env?.ALLOWED_ORIGIN ?? process.env.ALLOWED_ORIGIN</code>, supporting both CF Workers (env binding) and Node.js (process.env). allowMethods: [\'POST\',\'GET\',\'OPTIONS\'] added (plan did not specify methods). wrangler.toml created. <em>Deviation:</em> /llm/chat and /auth/token were fully implemented immediately (not 501 stubs) since P0.3/P0.4 were done in the same implementation pass.'},
+      {id:'P0.3',name:'Proxy: JWT auth middleware',
+       body:'Package: jose (ESM-native, CF Workers compatible). POST /auth/token: reads PROXY_SECRET from env, signs HS256 JWT with payload {sub:\'runtime\',jti:crypto.randomUUID()} and expiry 1h using jose SignJWT. Auth middleware: extracts Bearer token from Authorization header; verifies with jwtVerify(token, secret); rejects expired, malformed, or missing tokens with 401 + JSON body {error:\'unauthorized\'}. Attach verified payload to Hono context (c.set(\'jwtPayload\', payload)) for downstream handlers.',
+       implNote:'packages/proxy/src/auth.ts — jose SignJWT + jwtVerify. Auth middleware via <code>createMiddleware()</code> from hono/factory. JWT payload: <code>{ sub: \'runtime\', jti: crypto.randomUUID() }</code>, HS256, 1h expiry. <em>Deviation:</em> /auth/token validates a <code>{ secret }</code> field in the POST body against PROXY_SECRET — callers POST their secret to receive a token. This is intentional: it gives the server a way to issue tokens to known clients without a full OAuth flow. Verified payload stored via <code>c.set(\'jwtPayload\', payload)</code>.'},
+      {id:'P0.4',name:'Proxy: LLM forwarding + streaming',
+       body:'POST /llm/chat: read body as JSON. Route by model prefix: starts with "claude-" → Anthropic (https://api.anthropic.com/v1/messages); starts with "gpt-" or "o1-" or "o3-" → OpenAI (https://api.openai.com/v1/chat/completions). Unknown prefix → 400 {error:"unsupported_model"}. Strip any Authorization header from the incoming body, inject API key from env (ANTHROPIC_API_KEY or OPENAI_API_KEY). Set stream:true in forwarded body. Return <code>new Response(upstreamResponse.body, {headers:{\'Content-Type\':\'text/event-stream\'}})</code> — no buffering. Forward non-2xx status from upstream verbatim with body intact.',
+       implNote:'packages/proxy/src/providers.ts (detectProvider, getProviderUrl, getApiKey) + packages/proxy/src/forward.ts (forwardToProvider). Routing and streaming match spec exactly. <em>Addition:</em> <code>anthropic-version: \'2023-06-01\'</code> header injected for all Anthropic requests (required by the Anthropic API). Extra error handling beyond the plan: missing model field → 400 <code>{ error: "missing model field" }</code>; API key env not set → 500 <code>{ error: "api key not configured" }</code>. Cache-Control: no-cache added to streaming response headers.'},
+      {id:'P0.5',name:'LLMClient in runtime',
+       body:'packages/runtime/src/llm-client.ts. Export interface ILLMClient { callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string>; callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string>; }. LLMClient class implements ILLMClient — takes {proxyUrl, authToken} in constructor. callChat: POST /llm/chat with {model, messages, stream:true}, reads SSE response, yields each data: chunk as a string token. callChatSync: accumulates callChat tokens and returns full string. Non-2xx: throw FlowExecutionError({nodeId:\'llm-client\', message:\'proxy error\', cause:{status}}). ExecutionContext (P1.3) holds an ILLMClient — tests inject a stub implementation.',
+       implNote:'packages/runtime/src/llm-client.ts + packages/runtime/src/errors.ts. ILLMClient interface and LLMClient class match spec. SSE parser uses a line-buffer approach handling chunk boundaries correctly. Parses both Anthropic (<code>delta.text</code>) and OpenAI (<code>choices[0].delta.content</code>) delta formats. Default model: <code>claude-3-5-sonnet-20241022</code>. <em>Deviation:</em> FlowExecutionError base class (nodeId, message, cause) was created here in errors.ts — the plan placed it in P2.5, but LLMClient needs it immediately. P2.5 will add the subclass hierarchy (NodeExecutionError, GraphCycleError, UnknownNodeTypeError, AbortedError) on top of this base.'},
+      {id:'P0.6',name:'RuntimeEvent types',
+       body:'packages/runtime/src/events.ts. RuntimeEvent discriminated union — each variant carries a type field for discrimination: NodeStart({type:\'node:start\', nodeId, nodeType}), NodeComplete({type:\'node:complete\', nodeId, nodeType, durationMs, tokenCount?}), NodeError({type:\'node:error\', nodeId, error:FlowExecutionError}), TokenChunk({type:\'token:chunk\', nodeId, token:string}), FlowPaused({type:\'flow:paused\', nodeId, prompt:string, resumeSchema:object}), FlowComplete({type:\'flow:complete\', finalState:Record<string,unknown>}), FlowError({type:\'flow:error\', error:FlowExecutionError}). EventBus: typed subscribe<T extends RuntimeEvent>(type:T[\'type\'], handler:(e:T)=>void):()=>void (returns unsubscribe fn); emit(event:RuntimeEvent):void. No external dep. Used by all phases P1+.',
+       implNote:'packages/runtime/src/events.ts — 7 event type variants, all matching spec. EventBus uses <code>Map&lt;string, Set&lt;handler&gt;&gt;</code>. subscribe() returns an unsubscribe closure over <code>Set.delete()</code>. No external dependency. Matches spec exactly — no deviations.'},
     ],
+    testStatus:['pass','pass','partial','pass','partial','pass','pass','skip','pass','skip','skip','partial','skip','skip','pass','pass','pass','pass','pass','pass','pass'],
     tests:[
       'Proxy: GET /health returns 200 with no auth required',
       'Proxy: POST /llm/chat without Bearer token → 401 with no provider call',
@@ -557,6 +583,27 @@ const PHASES = [
       'EventBus: unsubscribe → subsequent emit does not invoke handler',
       'EventBus: multiple handlers for same event type all receive the event',
       'Runtime package: tsc --noEmit passes on scaffolded empty src/index.ts'
+    ],
+    extraTests:[
+      'LLMClient: stops at [DONE] sentinel — tokens after it are never yielded',
+      'LLMClient: skips non-data SSE lines (comment lines, blank lines) without error',
+      'LLMClient: skips malformed JSON chunks and continues streaming remaining tokens',
+      'LLMClient: FlowExecutionError.cause carries the exact HTTP status code',
+      'LLMClient: request headers include Authorization Bearer and Content-Type application/json',
+      'LLMClient: request body includes model, stream:true, max_tokens, and temperature when provided',
+      'LLMClient: uses claude-3-5-sonnet-20241022 as default model when none specified',
+      'LLMClient: callChatSync returns empty string when no tokens emitted before [DONE]',
+      'LLMClient: callChatSync propagates FlowExecutionError from callChat on non-2xx',
+      'LLMClient: parses OpenAI choices[0].delta.content SSE delta format',
+      'Proxy: returns 500 + { error: "server misconfigured" } when PROXY_SECRET env not set',
+      'Proxy: returns 400 + { error: "missing model field" } when model absent from body',
+      'Proxy: returns 400 + { error: "unsupported_model" } for unknown model prefix',
+      'Proxy: returns 500 + { error: "api key not configured" } when API key env not set',
+      'EventBus: does not invoke handlers subscribed to a different event type',
+      'EventBus: emitting with no subscribers does not throw',
+      'EventBus: calling unsubscribe multiple times does not throw',
+      'EventBus: routes distinct event types to their respective handlers simultaneously',
+      'EventBus: emits and receives all 7 event type variants'
     ]
   },
   {
@@ -1076,9 +1123,10 @@ function renderPhases(){
   const list=document.getElementById('phase-list');
   PHASES.forEach((p,i)=>{
     const row=document.createElement('div');
-    row.className='phase-row';
-    row.style.borderLeftColor=p.color;
-    row.innerHTML=`<div class="phase-header"><span class="phase-num" style="color:${p.color}">${p.id}</span><span class="phase-title" style="color:${p.color}">${p.title}</span>${p.mvp?'<span class="mvp-tag">MVP</span>':''}<span class="phase-meta">${p.weeks}</span></div><div class="phase-sub">${p.sub}</div>`;
+    row.className='phase-row'+(p.completed?' done':'');
+    row.style.borderLeftColor=p.completed?'rgba(74,222,128,0.6)':p.color;
+    const doneBadge=p.completed?`<span class="done-tag">✓ DONE ${p.completedDate||''}</span>`:'';
+    row.innerHTML=`<div class="phase-header"><span class="phase-num" style="color:${p.color}">${p.id}</span><span class="phase-title" style="color:${p.color}">${p.title}</span>${p.mvp?'<span class="mvp-tag">MVP</span>':''}${doneBadge}<span class="phase-meta">${p.weeks}</span></div><div class="phase-sub">${p.sub}</div>`;
     row.onclick=()=>showPhase(p,row);
     list.appendChild(row);
   });
@@ -1088,19 +1136,31 @@ function showPhase(p,row){
   document.querySelectorAll('.phase-row').forEach(r=>r.classList.remove('active'));
   row.classList.add('active');
   const panel=document.getElementById('phase-detail');
-  const taskHtml=p.tasks.map(t=>`
-    <div class="task-item">
+  const taskHtml=p.tasks.map(t=>{
+    const implBlock=t.implNote?`<div class="impl-block"><strong>Implemented</strong>${t.implNote}</div>`:'';
+    return `<div class="task-item">
       <div class="task-header"><span class="task-id">${t.id}</span><span class="task-name">${t.name}</span></div>
-      <div class="task-body">${t.body}</div>
-    </div>`).join('');
-  const testHtml=p.tests.map(t=>`<div class="test-item">${t}</div>`).join('');
+      <div class="task-body">${t.body}</div>${implBlock}
+    </div>`;
+  }).join('');
+  const statusMap={pass:'test-pass',partial:'test-partial',skip:'test-skip'};
+  const testHtml=p.tests.map((t,i)=>{
+    const cls=p.testStatus?(statusMap[p.testStatus[i]]||'test-item'):'test-item';
+    return `<div class="test-item ${cls}">${t}</div>`;
+  }).join('');
+  const extraHtml=p.extraTests?`<div class="section-label" style="margin-top:.8rem">Additional tests written (beyond plan)</div><div class="test-list">${p.extraTests.map(t=>`<div class="test-item test-extra">${t}</div>`).join('')}</div>`:'';
+  const statusBar=p.completed?`<div class="test-status-bar"><span class="tsb-item" style="color:#4ade80">✓ pass</span><span style="color:var(--t1)"> = written &amp; passing &nbsp;</span><span class="tsb-item" style="color:#fbbf24">~ partial</span><span style="color:var(--t1)"> = scenario covered but not all edge cases &nbsp;</span><span class="tsb-item" style="color:var(--t1);opacity:.45">– skip</span><span style="color:var(--t1)"> = planned but not yet written &nbsp;</span><span class="tsb-item" style="color:#818cf8">+ extra</span><span style="color:var(--t1)"> = written beyond plan</span></div>`:'';
+  const completionBanner=p.completed?`<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.2);border-radius:var(--r-md);padding:.5rem .8rem;margin:.5rem 0;font-size:12px;color:var(--t1)"><strong style="color:#4ade80">✓ Complete — ${p.completedDate}</strong> &nbsp;·&nbsp; ${p.testSummary}</div>`:'';
   panel.innerHTML=`
     <div class="det-title" style="color:${p.color}">${p.id} — ${p.title} <span style="font-size:12px;font-weight:400;color:var(--t1)">${p.weeks}</span></div>
+    ${completionBanner}
     <div class="det-body">${p.summary}</div>
     <div class="section-label">Tasks</div>
     <div class="task-list">${taskHtml}</div>
     <div class="section-label">Acceptance tests</div>
-    <div class="test-list">${testHtml}</div>`;
+    ${statusBar}
+    <div class="test-list">${testHtml}</div>
+    ${extraHtml}`;
 }
 
 renderPhases();
