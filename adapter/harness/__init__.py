@@ -214,6 +214,14 @@ from .reviewer import (
     seed_adversarial_prior,
 )
 
+# Phase 11
+from .langfuse_tracing import (
+    HarnessTraceContext,
+    emit_escalation_event,
+    emit_iteration_span,
+    emit_strategy_change_event,
+)
+
 # Phase 5
 from .risk import (
     RiskFactors,
@@ -318,6 +326,7 @@ __all__ = [
     "FailurePattern",
     "FrozenManifestError",
     "HarnessRunState",
+    "HarnessTraceContext",
     "Hypothesis",
     "HypothesisSet",
     "LayerResult",

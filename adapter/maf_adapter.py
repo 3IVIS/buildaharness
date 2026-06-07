@@ -55,6 +55,13 @@ _log = get_adapter_logger("maf")
 ADAPTER_VERSION = "0.1.0"
 SK_MIN = ">=1.0.0"
 
+try:
+    from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+    _HARNESS_AVAILABLE = True
+except (ImportError, SyntaxError, Exception):  # pragma: no cover
+    _HARNESS_NODE_COMPILERS = {}
+    _HARNESS_AVAILABLE = False
+
 
 # ─── Utilities (same as langgraph_adapter) ───────────────────────────────────
 
@@ -142,6 +149,113 @@ def find_parallel_groups(nodes: list[dict], edges: list[dict]) -> dict[str, list
         if n["type"] == "parallel_fork":
             groups[n["id"]] = fwd.get(n["id"], [])
     return groups
+
+
+# ─── Harness code generators ─────────────────────────────────────────────────
+
+
+def gen_harness_preamble() -> str:
+    """Emit HarnessRunState initialisation into the generated MAF flow code."""
+    import textwrap
+    return textwrap.dedent("""\
+
+        # ─── Harness state ───────────────────────────────────────────────────────────
+        import sys as _sys, pathlib as _pl, os as _os
+        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        from harness.state_store import HarnessRunState as _HarnessRunState
+        from harness.world_model import WorldModel as _WorldModel
+        from harness.diagnostics import Diagnostics as _Diagnostics
+        from harness.task_graph import TaskGraph as _TaskGraph
+        from harness.hypothesis import HypothesisSet as _HypothesisSet
+        from harness.evidence import EvidenceStore as _EvidenceStore
+        from harness.recovery import StrategyState as _StrategyState
+        from harness.memory import MemoryState as _MemoryState
+        from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics
+
+        _harness_state = _HarnessRunState(
+            run_id=_os.environ.get("HARNESS_RUN_ID", "run-1"),
+            world_model=_WorldModel(),
+            diagnostics=_Diagnostics(),
+            task_graph=_TaskGraph(),
+            hypothesis_set=_HypothesisSet(),
+            evidence_store=_EvidenceStore(),
+            strategy_state=_StrategyState(),
+            memory_state=_MemoryState(),
+            failure_diagnostics=_FailureDiagnostics(),
+        )
+
+    """).lstrip("\n")
+
+
+def _gen_maf_harness_step(node: dict) -> str:
+    """Generate MAF step body for a harness node type."""
+    ntype = node["type"]
+    nid = node["id"]
+
+    preamble = (
+        "    # Harness node — shared state from _harness_state\n"
+        "    world_model = _harness_state.world_model\n"
+        "    evidence_store = _harness_state.evidence_store\n"
+        "    hypothesis_set = _harness_state.hypothesis_set\n"
+        "    diagnostics = _harness_state.diagnostics\n"
+        "    task_graph = _harness_state.task_graph\n"
+        "    strategy_state = _harness_state.strategy_state\n"
+        "    tool_manifest = _harness_state.tool_manifest\n"
+        "    tool_output = inputs.get('tool_output', '')\n"
+        "    result = inputs.get('result', {})\n"
+        "    success_criteria = []\n"
+        "    assumptions = []\n"
+        "    task_risk = None\n"
+    )
+
+    compiler = _HARNESS_NODE_COMPILERS.get(ntype)
+    if compiler is None:
+        core = f"    # Harness node type {ntype!r} has no compiler\n"
+    else:
+        if ntype == "gather_evidence":
+            core = compiler(node, "evidence_store")
+        elif ntype == "apply_tool_reliability":
+            core = compiler(node, "evidence_store", "diagnostics")
+        elif ntype == "update_world_model":
+            core = compiler(node, "world_model", "evidence_store")
+        elif ntype == "world_model":
+            core = compiler(node, "world_model")
+        elif ntype == "hypothesis_set":
+            core = compiler(node, "world_model", "evidence_store", "hypothesis_set")
+        elif ntype == "control_state":
+            core = compiler(node, "diagnostics", "world_model")
+        elif ntype == "task_graph_node":
+            core = compiler(node, "task_graph")
+        elif ntype == "verification_gate":
+            core = compiler(node, "result", "tool_manifest")
+        elif ntype == "recovery_node":
+            core = compiler(node, "strategy_state")
+        elif ntype == "evidence_store_node":
+            core = compiler(node, "evidence_store", "tool_manifest")
+        elif ntype == "experience_store_node":
+            core = compiler(node, "_harness_state.experience_store", "strategy_state")
+        elif ntype == "reviewer_pass":
+            core = compiler(node, "world_model", "task_graph", "hypothesis_set")
+        elif ntype == "process_concept":
+            core = compiler(node, "_harness_state")
+        else:
+            core = f"    # no compiler wired for {ntype!r}\n"
+        # Indent the compiler output by 4 spaces for the function body
+        core_lines = ["    " + ln if ln.strip() else "" for ln in core.splitlines()]
+        core = "\n".join(core_lines) + "\n"
+
+    postamble = (
+        "    # Write back mutated harness structures\n"
+        "    _harness_state.evidence_store = evidence_store\n"
+        "    _harness_state.hypothesis_set = hypothesis_set\n"
+        "    _harness_state.strategy_state = strategy_state\n"
+        "    _harness_state.world_model = world_model\n"
+        "    _harness_state.task_graph = task_graph\n"
+        "    _harness_state.diagnostics = diagnostics\n"
+        "    return {}\n"
+    )
+
+    return preamble + core + postamble
 
 
 # ─── Code section generators ─────────────────────────────────────────────────
@@ -1048,6 +1162,11 @@ def gen_node_function(
         )
         return _async_fn(label, vid, body)
 
+    # ── harness node types ────────────────────────────────────────────────────
+    if _HARNESS_AVAILABLE and ntype in _HARNESS_NODE_COMPILERS:
+        body = f"{ctx}# harness node: {ntype}\n" + _gen_maf_harness_step(node)
+        return _async_fn(f"Harness: {label} ({ntype})", vid, body)
+
     # ── fallback ──────────────────────────────────────────────────────────────
     warnings.append(f"Unknown node type '{ntype}' for '{nid}' — stub node emitted")
     body = f"{ctx}return {{}}  # stub for unsupported type '{ntype}'\n"
@@ -1358,6 +1477,8 @@ def compile_maf(spec: dict) -> tuple[str, list[str]]:
         sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
         ctx_map = build_context_map(edges)
 
+        harness_enabled = bool((spec.get("harness_meta") or {}).get("enabled"))
+
         log_section(_log, "header+imports+otel+helpers", flow_id=flow_id)
         parts: list[str] = [
             gen_header(spec),
@@ -1367,6 +1488,7 @@ def compile_maf(spec: dict) -> tuple[str, list[str]]:
             gen_kernel_factory(spec),
             gen_memory_stores(spec),
             gen_tools(spec),
+            gen_harness_preamble() if harness_enabled else "",
         ]
 
         # Condition routers + node functions
