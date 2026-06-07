@@ -129,6 +129,14 @@ from .hypothesis import (
     generate_hypotheses,
     symptom_inference,
 )
+
+# Phase 11
+from .langfuse_tracing import (
+    HarnessTraceContext,
+    emit_escalation_event,  # noqa: F401
+    emit_iteration_span,  # noqa: F401
+    emit_strategy_change_event,  # noqa: F401
+)
 from .loop import initialize_harness, run_one_iteration, select_best_action
 from .memory import (
     CompressionRisk,
@@ -212,14 +220,6 @@ from .reviewer import (
     drain_propagation_queue,
     reviewer_pass,
     seed_adversarial_prior,
-)
-
-# Phase 11
-from .langfuse_tracing import (
-    HarnessTraceContext,
-    emit_escalation_event,
-    emit_iteration_span,
-    emit_strategy_change_event,
 )
 
 # Phase 5

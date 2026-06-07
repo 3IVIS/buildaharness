@@ -190,7 +190,6 @@ def gen_harness_preamble() -> str:
 def _gen_maf_harness_step(node: dict) -> str:
     """Generate MAF step body for a harness node type."""
     ntype = node["type"]
-    nid = node["id"]
 
     preamble = (
         "    # Harness node — shared state from _harness_state\n"

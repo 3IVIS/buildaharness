@@ -84,7 +84,7 @@ def test_ig_lg_01_harness_spec_compiles():
         "id": "ev-1", "type": "gather_evidence", "position": {"x": 100, "y": 0},
         "harness_config": {"source_tool": "linter", "evidence_type": "OBSERVATION"},
     }])
-    code, warnings = compile_langgraph(spec)
+    code, _warnings = compile_langgraph(spec)
     assert isinstance(code, str)
     assert len(code) > 0
 
@@ -120,7 +120,7 @@ def test_ig_lg_03_harness_nodes_produce_node_functions():
 def test_ig_lg_04_non_harness_path_unaffected():
     """IG-LG-04: Non-harness path is unaffected when harness_meta is absent."""
     spec = _plain_spec()
-    code, warnings = compile_langgraph(spec)
+    code, _warnings = compile_langgraph(spec)
     assert isinstance(code, str)
     assert "_harness_state" not in code
     assert "HarnessRunState" not in code

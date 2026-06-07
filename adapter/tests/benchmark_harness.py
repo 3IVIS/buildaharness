@@ -33,7 +33,7 @@ from harness.control_state import resolve_control_state
 from harness.diagnostics import BeliefHealth, CoverageHealth, Diagnostics, ExecutionHealth, VerificationHealth
 from harness.evidence import Evidence, EvidenceStore
 from harness.failure_modes import FailureDiagnostics
-from harness.hypothesis import HypothesisSet, Hypothesis, generate_hypotheses
+from harness.hypothesis import HypothesisSet, generate_hypotheses
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState
 from harness.recovery import StrategyState
@@ -146,7 +146,7 @@ def benchmark_generate_hypotheses() -> tuple[float, float, float]:
 
 def benchmark_propagate_beliefs() -> tuple[float, float, float]:
     """propagate_beliefs(dep_graph, budget, world_model) — target <100ms."""
-    from harness.belief_graph import propagate_beliefs, DepGraphBudget
+    from harness.belief_graph import DepGraphBudget, propagate_beliefs
 
     wm = _make_world_model(10)
     dep_graph = BeliefDepGraph()
