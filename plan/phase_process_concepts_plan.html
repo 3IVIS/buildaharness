@@ -90,12 +90,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="hero">
   <h1>Process Concepts Phase — Static Step Templates for Harness Runs</h1>
   <p>Introduces process concepts: human-authored, domain-specific task graph templates that seed the harness task graph at run initialisation. A concept is a static JSON file that defines an ordered sequence of typed steps, their dependencies, expected tools, per-step success criteria, and optional strategy hints. The harness uses it as a strong prior on decomposition — the model can still adapt, add, or remove tasks during execution via the existing replanning machinery.</p>
-  <span class="badge badge-blue">4 Weeks</span>
-  <span class="badge badge-green">7 Tasks</span>
-  <span class="badge badge-amber">35 Steps</span>
-  <span class="badge badge-blue">28 Acceptance Tests</span>
+  <span class="badge badge-blue">5 Weeks</span>
+  <span class="badge badge-green">8 Tasks</span>
+  <span class="badge badge-amber">40 Steps</span>
+  <span class="badge badge-blue">36 Acceptance Tests</span>
   <span class="badge" style="background:rgba(34,211,238,0.08);color:#22d3ee;border:.5px solid rgba(34,211,238,0.25)">4 Bundled Concepts</span>
-  <span class="badge" style="background:rgba(74,222,128,0.12);color:#4ade80;border:.5px solid rgba(74,222,128,0.4);font-weight:700">✓ IMPLEMENTED</span>
+  <span class="badge" style="background:rgba(251,191,36,0.12);color:#fbbf24;border:.5px solid rgba(251,191,36,0.4);font-weight:700">⚡ P-PC.8 PENDING</span>
   <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <span style="color:#fb7185">P10 Canvas complete</span> · Inserts before: <span style="color:#a3e635">P11 E2E Integration &amp; Testing</span></div>
 </div>
 
@@ -112,11 +112,11 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="overview" class="tab-content active">
 
 <div class="summary-row">
-  <div class="sum-card"><div class="sum-n" style="color:var(--ppc)">7</div><div class="sum-l">Tasks</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">35</div><div class="sum-l">Impl. steps</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--green)">28</div><div class="sum-l">Acceptance tests</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--ppc)">8</div><div class="sum-l">Tasks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">40</div><div class="sum-l">Impl. steps</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--green)">36</div><div class="sum-l">Acceptance tests</div></div>
   <div class="sum-card"><div class="sum-n" style="color:var(--ppc)">4</div><div class="sum-l">Bundled concepts</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:var(--ppc)">4</div><div class="sum-l">Weeks</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:var(--ppc)">5</div><div class="sum-l">Weeks</div></div>
 </div>
 
 <div class="card">
@@ -156,6 +156,13 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="week-item">P-PC.7 — End-to-end integration tests</div>
     <div class="week-item">Full P0–P10 regression suite</div>
     <div class="week-item">Cross-component wiring verification</div>
+  </div>
+  <div class="week-card">
+    <div class="week-label">Week 5</div>
+    <div class="week-title">Agent-Driven Process Tools</div>
+    <div class="week-item">P-PC.8 — process_tools.py (list, load, step, complete)</div>
+    <div class="week-item">Adapter wiring in LangGraph + CrewAI + MAF preambles</div>
+    <div class="week-item">8 acceptance tests (T29–T36)</div>
   </div>
 </div>
 
@@ -454,6 +461,42 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   </div>
 </div>
 
+<!-- P-PC.8 -->
+<div class="task-block" id="tb-ppc8">
+  <div class="task-header" onclick="toggleTask('ppc8')">
+    <span class="task-id">P-PC.8</span>
+    <span class="task-name">Agent-driven process tools — runtime process selection by the agent</span>
+    <span class="task-meta">Week 5 · ~2.5 days · <span style="color:#fbbf24">○ pending</span></span>
+  </div>
+  <div class="task-body" id="body-ppc8">
+    <div class="desc-block">Process concepts are a library of structured plans. Rather than a canvas designer pre-wiring a concept at design time, the agent itself decides at runtime — based on its current goal and state — which concept to load and follow. This task creates <code>adapter/harness/process_tools.py</code> with four harness tool functions and wires them into the adapter preambles so the agent can call them during its normal tool-use loop.</div>
+
+    <div class="note-block"><strong>Design intent:</strong> The existing canvas <code>process_concept</code> node (P-PC.6) remains valid for flows where a designer knows in advance which concept applies. P-PC.8 adds a complementary path where the agent inspects the concept catalog, selects the best match for its goal, and loads it dynamically. Both paths seed the same <code>task_graph</code> via <code>seed_task_graph()</code> — the difference is who decides and when.</div>
+
+    <div class="steps-title">Implementation steps</div>
+
+    <div class="step"><span class="step-num">1</span><div class="step-body"><strong>Create <code>adapter/harness/process_tools.py</code> and define <code>list_processes(registry) → list[dict]</code>.</strong> Returns <code>[{"id": …, "name": …, "description": …, "step_count": N}]</code> for every concept in the registry, sorted by ID. The agent calls this to survey available plans and find a match for its current goal. Each entry contains enough metadata for the agent to decide without loading the full concept.</div></div>
+
+    <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Define <code>load_process(concept_id, task_graph, registry) → dict</code>.</strong> Loads the named concept from the registry (raises <code>ProcessConceptNotFoundError</code> for unknown IDs), calls <code>concept.seed_task_graph(task_graph)</code>, and returns <code>{"concept_id": …, "seeded_steps": N, "first_step": …}</code> where <code>first_step</code> is the result of <code>get_current_step(task_graph)</code>. Idempotent: if tasks with the concept's namespace already exist in the graph, skip seeding and return the current first step without adding duplicates (INV-PC-05).</div></div>
+
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Define <code>get_current_step(task_graph) → dict | None</code>.</strong> Calls <code>select_unblocked_leaf(task_graph)</code> and returns the task serialised as <code>{"id": …, "description": …, "risk_level": …, "expected_tools": […], "success_criteria": […]}</code>. Returns <code>None</code> when no PENDING task remains — i.e., all concept steps are COMPLETE or the graph is blocked. The agent treats <code>None</code> as the process-complete signal (INV-PC-06).</div></div>
+
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Define <code>complete_step(step_id, task_graph) → dict</code>.</strong> Looks up the task by ID in <code>task_graph.tasks</code>. Validates it exists and is not already COMPLETE (raises <code>ValueError</code> otherwise). Transitions status to COMPLETE. Returns <code>{"completed": step_id, "next_step": get_current_step(task_graph)}</code>. Does not touch any other task's status — dependency unlocking is handled by <code>select_unblocked_leaf()</code> reading the updated graph (INV-PC-07).</div></div>
+
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Wire the four tools into adapter preambles.</strong> In <code>gen_harness_preamble()</code> in <code>langgraph_adapter.py</code>: when harness is enabled, emit imports and create bound wrappers that close over <code>_harness_state.task_graph</code> and <code>_concept_registry</code>. Apply the same pattern to <code>crewai_adapter.py</code> and <code>maf_adapter.py</code>. The tools appear in the agent's available tool list alongside its other harness tools. Export all four from <code>harness/__init__.py</code>.</div></div>
+
+    <div class="section-label">Acceptance tests (T29–T36)</div>
+    <div class="test-item">T29 · <code>list_processes()</code> returns a list of dicts; each entry has <code>id</code>, <code>name</code>, <code>description</code>, and <code>step_count</code> fields</div>
+    <div class="test-item">T30 · <code>list_processes()</code> returns one entry for every concept in <code>DEFAULT_REGISTRY</code>; IDs are sorted alphabetically</div>
+    <div class="test-item">T31 · <code>load_process("implement_feature", task_graph, registry)</code> seeds the task graph and returns <code>first_step</code> pointing to the first PENDING task</div>
+    <div class="test-item">T32 · <code>load_process()</code> called twice with the same concept_id is idempotent — task count does not increase on the second call (INV-PC-05)</div>
+    <div class="test-item">T33 · <code>load_process()</code> with an unregistered concept_id raises <code>ProcessConceptNotFoundError</code></div>
+    <div class="test-item">T34 · <code>get_current_step()</code> returns <code>None</code> when all tasks in the graph are COMPLETE (INV-PC-06)</div>
+    <div class="test-item">T35 · <code>complete_step(step_id, task_graph)</code> sets the task to COMPLETE and returns <code>next_step</code> pointing to the now-unblocked dependent task</div>
+    <div class="test-item">T36 · <code>complete_step()</code> with a step_id that does not exist in the task graph raises <code>ValueError</code></div>
+  </div>
+</div>
+
 </div>
 
 <!-- FILE MAP -->
@@ -467,7 +510,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <span class="f-dir">adapter/harness/</span>
   process_concept.py                    <span class="f-new">NEW</span>  <span class="f-note">ProcessConceptStep · ProcessConcept · ProcessConceptValidationError · from_dict · from_file · seed_task_graph · to_dict · validate</span>
   process_registry.py                   <span class="f-new">NEW</span>  <span class="f-note">ProcessRegistry · register · load · list_available · scan_directory · DEFAULT_REGISTRY module instance (ProcessConceptNotFoundError lives in process_concept.py)</span>
-  __init__.py                           <span class="f-mod">MOD</span>  <span class="f-note">export ProcessConcept · ProcessConceptStep · ProcessConceptValidationError · ProcessConceptNotFoundError · ProcessRegistry · DEFAULT_REGISTRY · initialize_harness</span>
+  process_tools.py                      <span class="f-new">NEW</span>  <span class="f-note">list_processes(registry) · load_process(concept_id, task_graph, registry) · get_current_step(task_graph) · complete_step(step_id, task_graph) — agent-callable harness tools for runtime process selection</span>
+  __init__.py                           <span class="f-mod">MOD</span>  <span class="f-note">export ProcessConcept · ProcessConceptStep · ProcessConceptValidationError · ProcessConceptNotFoundError · ProcessRegistry · DEFAULT_REGISTRY · initialize_harness · list_processes · load_process · get_current_step · complete_step</span>
   loop.py                               <span class="f-mod">MOD</span>  <span class="f-note">add initialize_harness() function (new, alongside run_one_iteration) · seeds task graph, runs validate_task_graph, calls decomposition_gate · returns dict with valid/errors/decomposition_gate/process_concept_id</span>
   state_store.py                        <span class="f-mod">MOD</span>  <span class="f-note">add process_concept_id: str | None field to HarnessRunState · update to_dict/from_dict</span>
   node_compilers.py                     <span class="f-mod">MOD</span>  <span class="f-note">add compile_process_concept_node — emits concept_id into harness_meta, no standalone adapter calls</span>
@@ -490,6 +534,9 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   index.ts                              <span class="f-mod">MOD</span>  <span class="f-note">add ProcessConceptNode import · add process_concept: ProcessConceptNode to node type map</span>
 
 <span class="f-dir">adapter/</span>
+  langgraph_adapter.py                  <span class="f-mod">MOD</span>  <span class="f-note">gen_harness_preamble() — import and bind list_processes / load_process / get_current_step / complete_step when harness is enabled; tools close over _harness_state.task_graph and DEFAULT_REGISTRY</span>
+  crewai_adapter.py                     <span class="f-mod">MOD</span>  <span class="f-note">same tool wiring as langgraph_adapter.py</span>
+  maf_adapter.py                        <span class="f-mod">MOD</span>  <span class="f-note">same tool wiring as langgraph_adapter.py</span>
   validate.py                           <span class="f-mod">MOD</span>  <span class="f-note">accept process_concept_id in harness_meta (non-empty string if present) · add ProcessConceptNodeConfig shape validation</span>
   run_api.py                            <span class="f-mod">MOD</span>  <span class="f-note">try/except import guard for registry · concept existence check at run start (400 on missing) · GET /run/concepts endpoint returning IDs only · imports guarded to avoid breakage when harness unavailable</span>
 
@@ -531,6 +578,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <tr><td style="color:var(--ppc);font-family:var(--font-mono);font-size:11px;font-weight:600">P-PC.5 — Schema + run_api.py wiring</td><td><span class="dep-tag">P-PC.2</span><span class="dep-tag">P-PC.4</span></td><td style="font-size:11.5px;color:var(--t1)"><code>run_api.py</code> calls <code>registry.load()</code> (P-PC.2) for existence check; <code>initialize_harness()</code> (P-PC.4) is called by the run handler with the loaded concept</td></tr>
 <tr><td style="color:var(--ppc);font-family:var(--font-mono);font-size:11px;font-weight:600">P-PC.6 — Canvas node</td><td><span class="dep-tag">P-PC.5</span></td><td style="font-size:11.5px;color:var(--t1)"><code>ProcessConceptNodeConfig</code> is defined in the schema step (P-PC.5.1); <code>GET /concepts</code> endpoint (P-PC.5.5) must exist for the picker</td></tr>
 <tr><td style="color:var(--ppc);font-family:var(--font-mono);font-size:11px;font-weight:600">P-PC.7 — Integration tests</td><td><span class="dep-tag">P-PC.1</span><span class="dep-tag">P-PC.2</span><span class="dep-tag">P-PC.3</span><span class="dep-tag">P-PC.4</span><span class="dep-tag">P-PC.5</span></td><td style="font-size:11.5px;color:var(--t1)">End-to-end tests exercise the full path across all prior tasks; P-PC.6 canvas tests are frontend-only and not required for the backend integration tests</td></tr>
+<tr><td style="color:var(--amber);font-family:var(--font-mono);font-size:11px;font-weight:600">P-PC.8 — Agent-driven process tools</td><td><span class="dep-tag">P-PC.1</span><span class="dep-tag">P-PC.2</span><span class="dep-tag">P-PC.3</span></td><td style="font-size:11.5px;color:var(--t1)"><code>list_processes()</code> calls <code>registry.list_available()</code> (P-PC.2); <code>load_process()</code> calls <code>seed_task_graph()</code> (P-PC.1); bundled concept files must be present for T29–T31 (P-PC.3). Does not depend on P-PC.4–P-PC.7 — the tool layer sits beside, not on top of, the loop wiring.</td></tr>
 </tbody>
 </table>
 
@@ -577,6 +625,18 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="inv-item">
     <strong>INV-PC-04 — explicitly-specified missing concept is a hard error <span class="inv-tag">P-PC.5 scope</span></strong>
     When <code>harness_meta.process_concept_id</code> is set in the FlowSpec but the named concept cannot be found in the registry, the run must fail with a <code>ProcessConceptNotFoundError</code> — it must not silently fall back to model-driven decomposition. An explicitly specified concept that is missing is a configuration error: the operator intended a specific guided run and silent fallback would produce an unexpectedly unguided run with no indication of the failure. The error response must include the missing concept ID. Verified by P-PC.5 acceptance test 3.
+  </div>
+  <div class="inv-item">
+    <strong>INV-PC-05 — <code>load_process()</code> is idempotent <span class="inv-tag">P-PC.8 scope</span></strong>
+    Calling <code>load_process(concept_id, task_graph, registry)</code> a second time with the same concept_id must not add duplicate tasks to the task graph. The function detects existing tasks whose IDs carry the concept's namespace prefix and skips seeding, returning the current first step instead. This allows the agent to safely call <code>load_process()</code> again after a pause or context reload without corrupting the task graph. Verified by T32.
+  </div>
+  <div class="inv-item">
+    <strong>INV-PC-06 — <code>get_current_step()</code> returns None when the process is complete <span class="inv-tag">P-PC.8 scope</span></strong>
+    <code>get_current_step(task_graph)</code> delegates to <code>select_unblocked_leaf()</code>. When all concept tasks in the graph are COMPLETE (or no PENDING task has all its dependencies COMPLETE), the function returns <code>None</code>. The agent must treat a <code>None</code> return as the signal that the process has finished and stop calling <code>complete_step()</code>. No separate "is_done" predicate is needed — <code>None</code> is the terminal signal. Verified by T34.
+  </div>
+  <div class="inv-item">
+    <strong>INV-PC-07 — <code>complete_step()</code> only touches the named task <span class="inv-tag">P-PC.8 scope</span></strong>
+    <code>complete_step(step_id, task_graph)</code> transitions exactly one task (the one matching <code>step_id</code>) to COMPLETE. It does not automatically advance any other task's status. Dependency unlocking is an emergent property: on the next call to <code>get_current_step()</code>, <code>select_unblocked_leaf()</code> will naturally return any task whose <code>depends_on</code> list is now fully COMPLETE. This keeps status transitions explicit and auditable — the task graph never mutates beyond the single named task per <code>complete_step()</code> call. Verified by T35 and T36.
   </div>
 </div>
 
@@ -644,6 +704,16 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="test-item"><code>test_bundled_concepts_valid</code> — all 4 bundled concept files load via <code>from_file()</code> and <code>validate()</code> returns <code>[]</code>; asserts at least 4 files were found</div>
 <div class="test-item"><code>test_default_registry_populated</code> — <code>DEFAULT_REGISTRY</code> contains all 4 bundled concept IDs after module import (debug_test_failure, implement_feature, code_review, refactor_module)</div>
 
+<div class="section-label">Agent-driven process tools (T29–T36) — P-PC.8 · <code>adapter/harness/process_tools.py</code></div>
+<div class="test-item">T29 · <code>test_t29_list_processes_shape</code> — <code>list_processes(registry)</code> returns a list of dicts; each entry has <code>id</code>, <code>name</code>, <code>description</code>, and <code>step_count</code> fields</div>
+<div class="test-item">T30 · <code>test_t30_list_processes_sorted</code> — returned entries are sorted alphabetically by <code>id</code>; count matches <code>len(DEFAULT_REGISTRY.list_available())</code></div>
+<div class="test-item">T31 · <code>test_t31_load_process_seeds_and_returns_first_step</code> — <code>load_process("implement_feature", task_graph, registry)</code> seeds the task graph and returns <code>first_step</code> pointing to the first PENDING task with no unmet dependencies</div>
+<div class="test-item">T32 · <code>test_t32_load_process_idempotent</code> — calling <code>load_process()</code> twice with the same concept_id leaves task count unchanged on the second call (INV-PC-05)</div>
+<div class="test-item">T33 · <code>test_t33_load_process_unknown_id_raises</code> — <code>load_process("nonexistent", …)</code> raises <code>ProcessConceptNotFoundError</code></div>
+<div class="test-item">T34 · <code>test_t34_get_current_step_returns_none_when_complete</code> — after all tasks in the graph are marked COMPLETE, <code>get_current_step(task_graph)</code> returns <code>None</code> (INV-PC-06)</div>
+<div class="test-item">T35 · <code>test_t35_complete_step_advances_to_next</code> — <code>complete_step(step_id, task_graph)</code> sets the named task to COMPLETE and returns <code>next_step</code> pointing to the now-unblocked dependent task</div>
+<div class="test-item">T36 · <code>test_t36_complete_step_unknown_id_raises</code> — <code>complete_step("nonexistent:step", task_graph)</code> raises <code>ValueError</code> with the missing step_id in the message (INV-PC-07)</div>
+
 <div class="card" style="margin-top:.75rem">
   <div class="card-title">Running process concepts tests</div>
   <div class="card-body">
@@ -668,7 +738,7 @@ function toggleTask(id){
   const body=document.getElementById('body-'+id);
   body.classList.toggle('open');
 }
-['ppc1','ppc2','ppc3','ppc4','ppc5','ppc6','ppc7'].forEach(id=>{
+['ppc1','ppc2','ppc3','ppc4','ppc5','ppc6','ppc7','ppc8'].forEach(id=>{
   const b=document.getElementById('body-'+id);
   if(b) b.classList.add('open');
 });
