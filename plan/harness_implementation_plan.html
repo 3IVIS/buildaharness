@@ -117,11 +117,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 8 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 9 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Process Concepts Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 10 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 11 Complete</span><br><br>
   <span class="badge badge-blue">12 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
   <span class="badge badge-warn">~40–50 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">12 phases complete</span> · <span style="color:#60a5fa">1 phase remaining (P10 Canvas UI)</span> · 349/349 acceptance tests pass (P0–P9, P-PC, P11) · <strong style="color:#4ade80">P11 complete 2026-06-07</strong></div>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">all 12 phases complete</span> · 379/379 acceptance tests pass (P0–P11, P-PC) · <strong style="color:#4ade80">P10 complete 2026-06-07 · P11 complete 2026-06-07</strong></div>
 </div>
 
 <div class="tabs">
@@ -167,7 +168,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P8 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Experience Store</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P9 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Reviewer Pass &amp; Output</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P-PC ✓</div><div class="tl-bar" style="background:#22d3ee;width:100%"></div><div class="tl-name" style="color:#4ade80">Process Concepts</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
-  <div class="tl-phase"><div class="tl-label">P10</div><div class="tl-bar" style="background:#fb7185;width:100%"></div><div class="tl-name">Canvas Integration</div><div class="tl-weeks">5 wks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P10 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Canvas Integration</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P11 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">E2E Integration &amp; Testing</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
 </div>
 </div>
@@ -234,7 +235,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <!-- ═══════════════ CURRENT STATE ═══════════════ -->
 <div id="current" class="tab-content">
 
-<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">Phases 0–9 are complete.</strong> Phase 10 (Canvas Node Types &amp; UI) is the next work item.</div>
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Assessment of what the repository delivers today relative to the full harness target. <strong style="color:#4ade80">All 12 phases complete — P0 through P11 and P-PC. The full harness is fully implemented.</strong></div>
 
 <div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
   <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 0 Complete — Foundation &amp; State Architecture</div>
@@ -410,6 +411,21 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/validate.py (process_concept node type + harness_meta.process_concept_id validation) &nbsp;·&nbsp; adapter/run_api.py (concept existence check + GET /run/concepts endpoint)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (process_concept_id: z.string().optional() in harness_meta · ProcessConceptNodeConfig shape) &nbsp;·&nbsp; spec/schema.json (regenerated)<br>
       <span style="color:#f97316">DEFER</span>&nbsp; src/components/nodes/harness/ProcessConceptNode.tsx · packages/canvas/nodeTypes.ts · live run overlay — deferred to P11
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:.5rem">✓ Phase 10 Complete — Canvas Node Types &amp; UI</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">30/30</strong> acceptance tests pass &nbsp;·&nbsp; <strong style="color:var(--t0)">9 harness canvas node types + DiagnosticsPanel</strong> &nbsp;·&nbsp; Completed 2026-06-07 &nbsp;·&nbsp; Branch <code style="font-size:10px">claude/phase-10-implementation-ahP7K</code><br>
+    Backend node compilers (adapter layer) and all React canvas components delivered together. HARNESS_NODE_COMPILERS dispatch table expanded from 3 to 12 entries.<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/node_compilers.py (9 new compile functions: compile_world_model_node · compile_hypothesis_set_node · compile_control_state_node · compile_task_graph_node · compile_verification_gate_node · compile_recovery_node · compile_evidence_store_node · compile_experience_store_node · compile_reviewer_pass_node)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (13 new exports: 12 compile functions + updated HARNESS_NODE_COMPILERS dispatch table)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; src/canvas/nodes/harness/WorldModelNode.tsx · HypothesisSetNode.tsx · ControlStateNode.tsx · TaskGraphNode.tsx · VerificationGateNode.tsx · RecoveryNode.tsx · EvidenceStoreNode.tsx · ExperienceStoreNode.tsx · ReviewerPassNode.tsx · index.tsx<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; src/components/panels/DiagnosticsPanel.tsx (all 10 sub-dimensions as [0,1] bar charts; dep_class_gap_annotation as text note per INV-07)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_p10.py (T01–T30: schema validation + exec() correctness for all 9 node types; all infrastructure-free)
     </div>
   </div>
 </div>
@@ -687,7 +703,7 @@ const phases=[
      {id:'P-PC.6',name:'Canvas process_concept node type (backend only — frontend deferred to P11)',body:'compile_process_concept_node() added to node_compilers.py: emits code setting harness_meta.process_concept_id = concept_id; no standalone adapter function call. "process_concept" added to _HARNESS_NODE_TYPES in validate.py with concept_id config validation. React canvas component (ProcessConceptNode.tsx), canvas node registration in nodeTypes.ts, concept picker, and live run overlay are all deferred to P11.',tests:['compile_process_concept_node({harness_config:{concept_id:"debug_test_failure"}}, "meta") emits code setting meta.process_concept_id = "debug_test_failure"','Spec with process_concept node and concept_id="" fails validate.py with message referencing "non-empty"','Canvas UI component, live overlay — deferred to P11']},
      {id:'P-PC.7',name:'Integration tests and cross-component wiring verification',body:'Creates adapter/tests/test_harness_process_concepts.py with 28 named tests (T01–T28) plus two bonus tests. All tests are infrastructure-free — no Postgres, no live adapter. Organised by feature layer: serialisation (T01–T02), validate() errors (T03–T08), seed_task_graph() mechanics (T09–T14), initialize_harness() integration (T15–T18), ProcessRegistry operations (T19–T23), from_file() caching + thread safety (T24–T28). Bonus tests: test_bundled_concepts_valid and test_default_registry_populated.',tests:['T13: seeded TaskGraph passes validate_task_graph() with no errors — INV-PC-02 verified','T16: initialize_harness(process_concept=None) returns process_concept_id=None and valid=True — INV-PC-03 verified','test_bundled_concepts_valid: all 4 bundled concept files pass validate() — schema integrity confirmed on every test run','test_default_registry_populated: DEFAULT_REGISTRY contains all 4 bundled concept IDs after module import']},
    ]},
-  {id:'P10',title:'Canvas Node Types & UI',weeks:'5 weeks',color:'#fb7185',
+  {id:'P10',title:'Canvas Node Types & UI',weeks:'5 weeks',color:'#4ade80',status:'complete',completionNote:'30/30 tests · 9 canvas node types + DiagnosticsPanel · branch claude/phase-10-implementation-ahP7K · 2026-06-07',
    sub:'10 new harness canvas node types · diagnostic health dashboard · world model inspector · control state visual panel · task graph visualization',
    tasks:[
      {id:'P10.1',name:'World Model canvas node (node type: world_model)',body:'Canvas node rendering world_model state: generation_id, belief count, observation count, contradiction count, staleness ratio. Expand to see individual beliefs with confidence and derived_from[] links. Connect to update_world_model and detect_contradictions nodes.',tests:['world_model node renders in canvas','generation_id updates visually on each increment','Expanded view shows individual beliefs with correct confidence values']},
