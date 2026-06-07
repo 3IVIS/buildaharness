@@ -1,0 +1,11 @@
+name = "itsharness-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "http://localhost:5173"
+
+# Secrets (set via: wrangler secret put <NAME>)
+# ANTHROPIC_API_KEY
+# OPENAI_API_KEY
+# PROXY_SECRET

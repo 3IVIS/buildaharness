@@ -56,9 +56,7 @@ class SurfaceBlocker:
             reason=d["reason"],
             missing_info=d.get("missing_info", []),
             current_task_summary=d.get("current_task_summary", ""),
-            escalated_at=datetime.fromisoformat(d["escalated_at"])
-            if d.get("escalated_at")
-            else datetime.now(UTC),
+            escalated_at=datetime.fromisoformat(d["escalated_at"]) if d.get("escalated_at") else datetime.now(UTC),
         )
 
 

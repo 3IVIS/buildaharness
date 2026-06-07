@@ -311,10 +311,10 @@ def test_T16_output_contract_from_dict_populates_fields():
 
 
 def test_T17_validate_output_contract_stub_returns_pass():
-    """T17 — validate_output_contract stub returns ContractCheckResult(passed=True, is_stub=True)."""
+    """T17 — validate_output_contract returns ContractCheckResult(passed=True, is_stub=False) (real impl)."""
     result = validate_output_contract({}, OutputContract())
     assert result.passed is True
-    assert result.is_stub is True
+    assert result.is_stub is False
     assert result.violations == []
 
 

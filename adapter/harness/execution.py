@@ -1,9 +1,10 @@
 """Execution engine with reversibility strategies — P5.4."""
+
 from __future__ import annotations
 
 import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -105,6 +106,7 @@ def execute(
         # Update world model with error observation
         if world_model is not None:
             from .world_model import Observation
+
             err_obs = Observation(
                 id=f"err-obs-{uuid.uuid4().hex[:8]}",
                 content=f"SYSTEM_ERROR: {error_msg}",
@@ -132,13 +134,15 @@ def execute(
 
     # Success path — record in environment_change_log
     if world_model is not None and hasattr(world_model, "environment_change_log"):
-        world_model.environment_change_log.append({
-            "task_id": task_id,
-            "strategy": strategy,
-            "rollback_ref": rollback_ref,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "status": "completed",
-        })
+        world_model.environment_change_log.append(
+            {
+                "task_id": task_id,
+                "strategy": strategy,
+                "rollback_ref": rollback_ref,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "status": "completed",
+            }
+        )
 
     # Transition task to VERIFYING
     if task_graph is not None and task_id:

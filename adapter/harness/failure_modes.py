@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from .recovery import StrategyType
 
 if TYPE_CHECKING:
-    from .world_model import WorldModel
+    pass
 
 
 @dataclass
@@ -92,9 +92,7 @@ class FailureModeLibrary:
                 continue
 
             total = len(pattern.required_conditions) if pattern.required_conditions else 1
-            matched_count = sum(
-                1 for cond in pattern.required_conditions if cond.lower() in context_text
-            )
+            matched_count = sum(1 for cond in pattern.required_conditions if cond.lower() in context_text)
             raw = matched_count / total
 
             if raw > best_raw:
