@@ -181,6 +181,7 @@ from .process_concept import (
     ProcessConceptValidationError,
 )
 from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
+from .process_tools import complete_step, get_current_step, list_processes, load_process
 from .progress import (
     cannot_make_progress,
 )
@@ -343,6 +344,10 @@ __all__ = [
     "ProcessConceptStep",
     "ProcessConceptValidationError",
     "ProcessRegistry",
+    "complete_step",
+    "get_current_step",
+    "list_processes",
+    "load_process",
     "ReliabilityClass",
     "ReplanScope",
     "ReversibilityStrategy",

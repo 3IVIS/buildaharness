@@ -189,6 +189,19 @@ def gen_harness_preamble() -> str:
             failure_diagnostics=_FailureDiagnostics(),
         )
 
+        try:
+            from harness.process_tools import list_processes as _list_processes
+            from harness.process_tools import load_process as _load_process
+            from harness.process_tools import get_current_step as _get_current_step
+            from harness.process_tools import complete_step as _complete_step
+            from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
+            def list_processes(): return _list_processes(_concept_registry)
+            def load_process(concept_id): return _load_process(concept_id, _harness_state.task_graph, _concept_registry)
+            def get_current_step(): return _get_current_step(_harness_state.task_graph)
+            def complete_step(step_id): return _complete_step(step_id, _harness_state.task_graph)
+        except ImportError:
+            pass
+
     """)
 
 
