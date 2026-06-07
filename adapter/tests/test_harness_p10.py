@@ -614,7 +614,7 @@ def test_t27_compile_reviewer_pass_runs_in_namespace():
 
 
 def test_t28_harness_node_compilers_has_all_p10_keys():
-    """T28 · HARNESS_NODE_COMPILERS dispatch table contains all 12 expected keys (3 P1 + 9 P10)."""
+    """T28 · HARNESS_NODE_COMPILERS dispatch table contains all 13 expected keys (3 P1 + 9 P10 + 1 PC)."""
     from harness.node_compilers import HARNESS_NODE_COMPILERS
 
     expected = {
@@ -632,6 +632,8 @@ def test_t28_harness_node_compilers_has_all_p10_keys():
         "evidence_store_node",
         "experience_store_node",
         "reviewer_pass",
+        # Process concept (PC)
+        "process_concept",
     }
     assert set(HARNESS_NODE_COMPILERS.keys()) == expected
 
