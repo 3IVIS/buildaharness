@@ -45,6 +45,7 @@ _HARNESS_NODE_TYPES = {
     "verification_gate",
     "recovery_node",
     "evidence_store_node",
+    "process_concept",
     "experience_store_node",
     "reviewer_pass",
 }
@@ -278,6 +279,29 @@ def _validate_harness_configs(spec: dict) -> None:
                         "harness_config.max_evidence_shown must be a positive integer"
                     ),
                 )
+
+        elif ntype == "process_concept":
+            concept_id = cfg.get("concept_id")
+            if concept_id is not None and (not isinstance(concept_id, str) or not concept_id.strip()):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"process_concept node '{node.get('id')}': "
+                        "harness_config.concept_id must be a non-empty string when present"
+                    ),
+                )
+
+    # Validate harness_meta.process_concept_id when present
+    harness_meta = spec.get("harness_meta") or {}
+    pc_id = harness_meta.get("process_concept_id")
+    if pc_id is not None and (not isinstance(pc_id, str) or not pc_id.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "harness_meta.process_concept_id must be a non-empty string when present, "
+                f"got {pc_id!r}"
+            ),
+        )
 
 
 def _validate_fn_refs(spec: dict) -> None:

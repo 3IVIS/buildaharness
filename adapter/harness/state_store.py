@@ -83,6 +83,8 @@ class HarnessRunState:
     escalation_pending: bool = False
     pending_escalation: Any | None = None  # SurfaceBlocker | None
     pending_clarification: dict[str, Any] | None = None
+    # P-PC — process concept ID that seeded this run's task graph (None for model-driven runs)
+    process_concept_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # Persist a presence marker rather than the store contents — actual
@@ -105,6 +107,7 @@ class HarnessRunState:
             "escalation_pending": self.escalation_pending,
             "pending_escalation": self.pending_escalation.to_dict() if self.pending_escalation is not None else None,
             "pending_clarification": self.pending_clarification,
+            "process_concept_id": self.process_concept_id,
         }
 
     @classmethod
@@ -133,6 +136,7 @@ class HarnessRunState:
             escalation_pending=d.get("escalation_pending", False),
             pending_escalation=_deserialise_surface_blocker(d.get("pending_escalation")),
             pending_clarification=d.get("pending_clarification"),
+            process_concept_id=d.get("process_concept_id"),
         )
 
 

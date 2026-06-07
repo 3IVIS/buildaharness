@@ -842,9 +842,11 @@ export type FlowConfig = z.infer<typeof FlowConfig>
 // ---------------------------------------------------------------------------
 
 export const HarnessMeta = z.object({
-  harness_version: z.string().optional(),
-  phase:           z.string().optional(),
-  enabled:         z.boolean().default(false),
+  harness_version:    z.string().optional(),
+  phase:              z.string().optional(),
+  enabled:            z.boolean().default(false),
+  process_concept_id: z.string().optional()
+    .describe('ID of the process concept that seeds the task graph for this run. Must reference a registered concept. When absent the model performs its own decomposition.'),
 }).describe(
   'Marks a flow as harness-capable. When enabled is false (default), the adapter rejects harness node types. ' +
   'Set enabled: true only on flows that have been migrated and use harness nodes.'

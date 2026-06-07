@@ -1,0 +1,78 @@
+{
+  "schema_version": "1",
+  "id": "debug_test_failure",
+  "name": "Debug Test Failure",
+  "description": "Canonical decomposition for diagnosing and fixing a failing test. Guides the model from symptom gathering through root-cause isolation to minimal fix and verification.",
+  "success_criteria": [
+    "All previously failing tests pass",
+    "No previously passing tests are broken",
+    "Root cause is documented in completed_evidence"
+  ],
+  "steps": [
+    {
+      "id": "gather_context",
+      "description": "Read the failing test file and the module under test. Understand what the test asserts and what the code is supposed to do.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Test body and assertion logic understood",
+        "Module under test located and read"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "reproduce_failure",
+      "description": "Run the failing test in isolation to confirm the failure and capture the exact error message and traceback.",
+      "depends_on": ["gather_context"],
+      "risk_level": "LOW",
+      "abstraction_level": "function",
+      "expected_tools": ["run_tests", "read_file"],
+      "success_criteria": [
+        "Failure confirmed reproducible",
+        "Exact error message and traceback captured"
+      ],
+      "strategy_hint": "TRACE_EXEC"
+    },
+    {
+      "id": "isolate_root_cause",
+      "description": "Trace the failure to its root cause. Distinguish between test bug, implementation bug, and environmental issue.",
+      "depends_on": ["reproduce_failure"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": "function",
+      "expected_tools": ["search_code", "read_file"],
+      "success_criteria": [
+        "Root cause identified as one of: test bug, implementation bug, or environment",
+        "Affected code location pinpointed to a specific function or method"
+      ],
+      "strategy_hint": "TRACE_EXEC"
+    },
+    {
+      "id": "apply_fix",
+      "description": "Apply the minimal fix to resolve the root cause without changing unrelated behaviour.",
+      "depends_on": ["isolate_root_cause"],
+      "risk_level": "HIGH",
+      "abstraction_level": "leaf",
+      "expected_tools": ["edit_file", "write_file"],
+      "success_criteria": [
+        "Fix is minimal — only changes required lines",
+        "No unrelated code modified"
+      ],
+      "strategy_hint": "MINIMAL_FIX"
+    },
+    {
+      "id": "verify_fix",
+      "description": "Re-run the full test suite (or at minimum the affected test file) to confirm the fix passes and no regressions are introduced.",
+      "depends_on": ["apply_fix"],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["run_tests"],
+      "success_criteria": [
+        "Target test passes",
+        "No new failures in other tests"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    }
+  ]
+}

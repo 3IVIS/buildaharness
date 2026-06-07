@@ -1,0 +1,91 @@
+{
+  "schema_version": "1",
+  "id": "code_review",
+  "name": "Code Review",
+  "description": "Canonical decomposition for reviewing a code change (PR, diff, or file set). Guides the model through structured analysis covering correctness, security, style, and test coverage.",
+  "success_criteria": [
+    "All review dimensions covered (correctness, security, style, tests)",
+    "Findings are specific — each has a location and a suggested action",
+    "Summary distinguishes blocking issues from advisory suggestions"
+  ],
+  "steps": [
+    {
+      "id": "understand_change",
+      "description": "Read the diff or the changed files. Understand what the change is trying to do and what the intended outcome is.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Change purpose understood",
+        "Changed files and functions identified"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "check_correctness",
+      "description": "Verify that the logic is correct: check edge cases, boundary conditions, error handling, and potential off-by-one errors.",
+      "depends_on": ["understand_change"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": "function",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Logic traced through at least one happy path",
+        "Key edge cases considered"
+      ],
+      "strategy_hint": "TRACE_EXEC"
+    },
+    {
+      "id": "check_security",
+      "description": "Identify security risks: injection vectors, authentication bypasses, insecure defaults, sensitive data exposure, and input validation gaps.",
+      "depends_on": ["understand_change"],
+      "risk_level": "HIGH",
+      "abstraction_level": "function",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "OWASP Top-10 categories relevant to this change reviewed",
+        "No unreviewed user-controlled data paths"
+      ],
+      "strategy_hint": "TRACE_EXEC"
+    },
+    {
+      "id": "check_style_conventions",
+      "description": "Verify that the change follows the project's naming conventions, formatting rules, and documentation standards.",
+      "depends_on": ["understand_change"],
+      "risk_level": "LOW",
+      "abstraction_level": "leaf",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Naming consistent with surrounding code",
+        "No missing or misleading comments"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "check_test_coverage",
+      "description": "Assess whether the change is adequately tested: check that new behaviour is covered by tests and no existing tests are silently broken.",
+      "depends_on": ["check_correctness"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": "function",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Test coverage for new behaviour verified",
+        "No test deletions or skips without justification"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "summarise_findings",
+      "description": "Produce a structured review summary: separate blocking issues from advisory suggestions, and provide specific line references for each finding.",
+      "depends_on": ["check_correctness", "check_security", "check_style_conventions", "check_test_coverage"],
+      "risk_level": "LOW",
+      "abstraction_level": "goal",
+      "expected_tools": [],
+      "success_criteria": [
+        "Blocking issues listed with locations",
+        "Advisory suggestions separated from blocking issues"
+      ],
+      "strategy_hint": null
+    }
+  ]
+}

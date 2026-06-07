@@ -367,6 +367,24 @@ def compile_reviewer_pass_node(
     )
 
 
+
+def compile_process_concept_node(node: dict, harness_meta_var: str) -> str:
+    """Generate Python code for a process_concept canvas node.
+
+    Emits the concept_id into harness_meta.process_concept_id so that the run
+    handler can load and seed the task graph before the first iteration fires.
+    """
+    config = node.get("harness_config") or {}
+    concept_id: str = config.get("concept_id", "")
+
+    return (
+        f"if hasattr({harness_meta_var}, 'process_concept_id'):\n"
+        f"    {harness_meta_var}.process_concept_id = {concept_id!r}\n"
+        f"elif isinstance({harness_meta_var}, dict):\n"
+        f"    {harness_meta_var}['process_concept_id'] = {concept_id!r}\n"
+    )
+
+
 # Dispatch table — shared across all framework adapters.
 # Framework-specific wiring is deferred to P11; this ensures the node types
 # are not silently skipped during compilation.
@@ -385,4 +403,6 @@ HARNESS_NODE_COMPILERS: dict[str, object] = {
     "evidence_store_node": compile_evidence_store_node,
     "experience_store_node": compile_experience_store_node,
     "reviewer_pass": compile_reviewer_pass_node,
+    # Process concepts
+    "process_concept": compile_process_concept_node,
 }
