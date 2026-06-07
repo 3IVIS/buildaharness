@@ -64,9 +64,7 @@ def _make_world_model(n_beliefs: int = 2) -> WorldModel:
     wm = WorldModel()
     for i in range(n_beliefs):
         wm.add_observation(Observation(id=f"obs-{i}", content=f"observation {i}", source="test"))
-        wm.add_belief(
-            Belief(id=f"b-{i}", statement=f"belief {i}", confidence=0.8, derived_from=[f"obs-{i}"])
-        )
+        wm.add_belief(Belief(id=f"b-{i}", statement=f"belief {i}", confidence=0.8, derived_from=[f"obs-{i}"]))
     return wm
 
 
@@ -86,9 +84,11 @@ def _make_run_state() -> HarnessRunState:
         run_id=str(uuid.uuid4()),
         world_model=_make_world_model(),
         diagnostics=_make_diagnostics(),
-        task_graph=TaskGraph(tasks=[
-            Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
-        ]),
+        task_graph=TaskGraph(
+            tasks=[
+                Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+            ]
+        ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
         evidence_store=EvidenceStore(),
         strategy_state=StrategyState(),
@@ -124,8 +124,7 @@ def test_inv_01_belief_requires_derived_from_chain():
     # Every belief in the world model must have a non-empty derived_from
     for belief in wm.beliefs:
         assert belief.derived_from, (
-            f"INV-01 violated: belief {belief.id!r} has empty derived_from — "
-            "beliefs must be derived from observations."
+            f"INV-01 violated: belief {belief.id!r} has empty derived_from — beliefs must be derived from observations."
         )
 
     # A belief with empty derived_from is detectable
@@ -185,8 +184,7 @@ def test_inv_03_generation_id_incremented_exactly_twice():
 
     after = state.world_model.generation_id
     assert after == before + 2, (
-        f"INV-03 violated: generation_id went from {before} to {after} "
-        f"(expected +2, got +{after - before})"
+        f"INV-03 violated: generation_id went from {before} to {after} (expected +2, got +{after - before})"
     )
 
 
@@ -303,9 +301,7 @@ def test_inv_06_blocked_control_state_prevents_action():
     tg = TaskGraph()
 
     action = select_best_action(blocked, wm, hs, tg)
-    assert action is None, (
-        "INV-06 violated: select_best_action should return None when risk_state is BLOCKED"
-    )
+    assert action is None, "INV-06 violated: select_best_action should return None when risk_state is BLOCKED"
 
 
 def test_inv_06_clear_control_state_permits_action():
@@ -316,9 +312,7 @@ def test_inv_06_clear_control_state_permits_action():
     tg = TaskGraph()
 
     action = select_best_action(clear, wm, hs, tg)
-    assert action is not None, (
-        "INV-06 violated: select_best_action should return an action when risk_state is CLEAR"
-    )
+    assert action is not None, "INV-06 violated: select_best_action should return an action when risk_state is CLEAR"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -366,9 +360,7 @@ def test_inv_08_failure_mode_library_only_used_in_tier4_and_hypothesis():
     # (structural invariant: same world_model after library use)
     obs_count_before = len(wm.observations)
     _ = generate_from_failure_library(wm, lib)
-    assert len(wm.observations) == obs_count_before, (
-        "INV-08 violated: failure library mutated the world model"
-    )
+    assert len(wm.observations) == obs_count_before, "INV-08 violated: failure library mutated the world model"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -380,9 +372,11 @@ def test_inv_09_adversarial_prior_not_live_after_reviewer_pass():
     """INV-09: reviewer_pass result has no live references to the adversarial prior."""
 
     wm = _make_world_model(2)
-    task_graph = TaskGraph(tasks=[
-        Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
-    ])
+    task_graph = TaskGraph(
+        tasks=[
+            Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+        ]
+    )
     hypothesis_set = HypothesisSet(
         active=[
             Hypothesis(
@@ -440,15 +434,17 @@ def test_inv_10_experience_store_absent_produces_noop():
 
 def test_inv_10_run_one_iteration_identical_without_experience_store():
     """INV-10: run_one_iteration with and without experience_store gives structurally equivalent output."""
+
     def _make_state():
         return HarnessRunState(
             run_id="inv10-test",
             world_model=_make_world_model(),
             diagnostics=_make_diagnostics(),
-            task_graph=TaskGraph(tasks=[
-                Task(id="t1", description="task", status="ACTIVE",
-                     completed_evidence=[], abstraction_level=0),
-            ]),
+            task_graph=TaskGraph(
+                tasks=[
+                    Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+                ]
+            ),
             hypothesis_set=HypothesisSet(active=[], eliminated=[]),
             evidence_store=EvidenceStore(),
             strategy_state=StrategyState(),

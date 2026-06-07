@@ -53,9 +53,7 @@ def _make_world_model(n_beliefs: int = 2) -> WorldModel:
     wm = WorldModel()
     for i in range(n_beliefs):
         wm.add_observation(Observation(id=f"obs-{i}", content=f"observation {i}", source="test"))
-        wm.add_belief(
-            Belief(id=f"b-{i}", statement=f"belief {i}", confidence=0.8, derived_from=[f"obs-{i}"])
-        )
+        wm.add_belief(Belief(id=f"b-{i}", statement=f"belief {i}", confidence=0.8, derived_from=[f"obs-{i}"]))
     return wm
 
 
@@ -73,9 +71,7 @@ def _make_diagnostics(
 ) -> Diagnostics:
     return Diagnostics(
         belief_health=BeliefHealth(freshness=freshness, consistency=consistency, support=support),
-        coverage_health=CoverageHealth(
-            symptom_coverage=symptom_coverage, explanation_coverage=explanation_coverage
-        ),
+        coverage_health=CoverageHealth(symptom_coverage=symptom_coverage, explanation_coverage=explanation_coverage),
         verification_health=VerificationHealth(strength=strength, feasibility=feasibility),
         execution_health=ExecutionHealth(
             progress_rate=progress_rate,
@@ -90,15 +86,17 @@ def _make_harness_run_state(run_id: str = "") -> HarnessRunState:
         run_id=run_id or str(uuid.uuid4()),
         world_model=_make_world_model(),
         diagnostics=_make_diagnostics(),
-        task_graph=TaskGraph(tasks=[
-            Task(
-                id="t1",
-                description="primary task",
-                status="ACTIVE",
-                completed_evidence=[],
-                abstraction_level=0,
-            ),
-        ]),
+        task_graph=TaskGraph(
+            tasks=[
+                Task(
+                    id="t1",
+                    description="primary task",
+                    status="ACTIVE",
+                    completed_evidence=[],
+                    abstraction_level=0,
+                ),
+            ]
+        ),
         hypothesis_set=HypothesisSet(
             active=[
                 Hypothesis(
@@ -249,9 +247,7 @@ def test_e2e_05_parallel_branch_merge(framework: str):
     """E2E-05: reconcile_parallel_branches merges two world models and detects contradictions."""
     wm_a = _make_world_model(2)
     wm_b = _make_world_model(2)
-    wm_b.add_observation(
-        Observation(id="obs-conflict", content="conflicts with belief 0", source="test")
-    )
+    wm_b.add_observation(Observation(id="obs-conflict", content="conflicts with belief 0", source="test"))
     wm_b.add_belief(
         Belief(
             id="b-conflict",
@@ -341,22 +337,24 @@ def test_e2e_06_context_compression(framework: str):
 def test_e2e_07_reviewer_reentry(framework: str):
     """E2E-07: drain_propagation_queue reopens a COMPLETE task whose evidence is invalidated."""
     _wm = _make_world_model(2)
-    task_graph = TaskGraph(tasks=[
-        Task(
-            id="t1",
-            description="completed task",
-            status="COMPLETE",
-            completed_evidence=["b-0"],
-            abstraction_level=0,
-        ),
-        Task(
-            id="t2",
-            description="pending task",
-            status="PENDING",
-            completed_evidence=[],
-            abstraction_level=0,
-        ),
-    ])
+    task_graph = TaskGraph(
+        tasks=[
+            Task(
+                id="t1",
+                description="completed task",
+                status="COMPLETE",
+                completed_evidence=["b-0"],
+                abstraction_level=0,
+            ),
+            Task(
+                id="t2",
+                description="pending task",
+                status="PENDING",
+                completed_evidence=[],
+                abstraction_level=0,
+            ),
+        ]
+    )
 
     # Seed the propagation queue with b-0, which t1 depends on
     belief_dep_graph = BeliefDepGraph()

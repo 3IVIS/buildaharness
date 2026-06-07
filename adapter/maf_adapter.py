@@ -57,6 +57,7 @@ SK_MIN = ">=1.0.0"
 
 try:
     from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+
     _HARNESS_AVAILABLE = True
 except (ImportError, SyntaxError, Exception):  # pragma: no cover
     _HARNESS_NODE_COMPILERS = {}
@@ -157,6 +158,7 @@ def find_parallel_groups(nodes: list[dict], edges: list[dict]) -> dict[str, list
 def gen_harness_preamble() -> str:
     """Emit HarnessRunState initialisation into the generated MAF flow code."""
     import textwrap
+
     return textwrap.dedent("""\
 
         # ─── Harness state ───────────────────────────────────────────────────────────

@@ -70,9 +70,11 @@ def _make_run_state() -> HarnessRunState:
         run_id=str(uuid.uuid4()),
         world_model=_make_world_model(),
         diagnostics=_make_diagnostics(),
-        task_graph=TaskGraph(tasks=[
-            Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
-        ]),
+        task_graph=TaskGraph(
+            tasks=[
+                Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+            ]
+        ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
         evidence_store=EvidenceStore(),
         strategy_state=StrategyState(),
@@ -96,9 +98,11 @@ def _timeit(fn, n: int = N_RUNS) -> tuple[float, float, float]:
 
 def benchmark_baseline_noop() -> tuple[float, float, float]:
     """Baseline: minimal Python work (state creation + dict return)."""
+
     def noop():
         wm = WorldModel()
         return {"world_model": wm}
+
     return _timeit(noop)
 
 
@@ -107,6 +111,7 @@ def benchmark_baseline_noop() -> tuple[float, float, float]:
 
 def benchmark_full_loop() -> tuple[float, float, float]:
     """Full run_one_iteration() — the primary overhead metric."""
+
     def one_iteration():
         state = _make_run_state()
         return run_one_iteration(
@@ -119,6 +124,7 @@ def benchmark_full_loop() -> tuple[float, float, float]:
             strategy_state=state.strategy_state,
             step_count=0,
         )
+
     return _timeit(one_iteration)
 
 
@@ -130,17 +136,20 @@ def benchmark_generate_hypotheses() -> tuple[float, float, float]:
     wm = _make_world_model(10)
     store = EvidenceStore()
     for i in range(5):
-        store.append(Evidence(
-            id=str(uuid.uuid4()),
-            obs=f"observation {i}",
-            reliability="HIGH",
-            source="test",
-            evidence_type="OBSERVATION",
-            freshness=1.0,
-        ))
+        store.append(
+            Evidence(
+                id=str(uuid.uuid4()),
+                obs=f"observation {i}",
+                reliability="HIGH",
+                source="test",
+                evidence_type="OBSERVATION",
+                freshness=1.0,
+            )
+        )
 
     def gen():
         return generate_hypotheses(wm, store)
+
     return _timeit(gen)
 
 
@@ -154,6 +163,7 @@ def benchmark_propagate_beliefs() -> tuple[float, float, float]:
 
     def prop():
         return propagate_beliefs(dep_graph, budget, wm)
+
     return _timeit(prop)
 
 
@@ -165,6 +175,7 @@ def benchmark_detect_contradictions() -> tuple[float, float, float]:
 
     def det():
         return detect_contradictions(wm, store, hs)
+
     return _timeit(det)
 
 
@@ -175,6 +186,7 @@ def benchmark_resolve_control_state() -> tuple[float, float, float]:
 
     def res():
         return resolve_control_state(diag, wm)
+
     return _timeit(res)
 
 

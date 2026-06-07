@@ -49,6 +49,7 @@ ADAPTER_VERSION = "0.1.0"
 
 try:
     from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+
     _HARNESS_AVAILABLE = True
 except (ImportError, SyntaxError):  # pragma: no cover
     _HARNESS_NODE_COMPILERS = {}
