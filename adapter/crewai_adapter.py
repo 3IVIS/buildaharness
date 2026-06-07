@@ -45,6 +45,7 @@ ADAPTER_VERSION = "0.2.0"
 
 try:
     from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+
     _HARNESS_AVAILABLE = True
 except (ImportError, SyntaxError):  # pragma: no cover
     _HARNESS_NODE_COMPILERS = {}
@@ -868,11 +869,9 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
         log_section(_log, "crew_and_kickoff", flow_id=flow_id)
         _crew = gen_crew_and_kickoff(spec, sorted_nodes)
 
-        code = "\n\n".join(filter(None, [
-            _header,
-            gen_harness_preamble() if harness_enabled else "",
-            _tools, _agents, _tasks, _crew
-        ]))
+        code = "\n\n".join(
+            filter(None, [_header, gen_harness_preamble() if harness_enabled else "", _tools, _agents, _tasks, _crew])
+        )
         log_compile_end(_log, start_ts, code, warnings, spec)
         return code, warnings
 
