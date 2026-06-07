@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProcessConcept",
+  "description": "Schema for Its Harness process concept files (schema_version 1).",
+  "type": "object",
+  "required": ["schema_version", "id", "name", "description", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1"],
+      "description": "Concept file format version. Must be '1'."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "description": "Unique identifier for this concept (snake_case)."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable name for this concept."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this concept guides the model to accomplish."
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level criteria that define successful concept completion."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/ProcessConceptStep" },
+      "description": "Ordered or partially-ordered sequence of steps."
+    }
+  },
+  "definitions": {
+    "ProcessConceptStep": {
+      "type": "object",
+      "required": ["id", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$",
+          "description": "Step ID (snake_case). Must be unique within the concept."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the model should do in this step."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Step IDs (within this concept) that must complete before this step."
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH"],
+          "default": "LOW",
+          "description": "Risk classification used for task prioritisation."
+        },
+        "abstraction_level": {
+          "type": "string",
+          "enum": ["module", "goal", "subgoal", "function", "leaf", "statement"],
+          "default": "module",
+          "description": "Granularity: module/goal=0, subgoal/function=1, leaf/statement=2."
+        },
+        "expected_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Tool names the model is expected to call in this step."
+        },
+        "success_criteria": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Criteria that define successful completion of this step."
+        },
+        "strategy_hint": {
+          "type": ["string", "null"],
+          "enum": ["DIRECT_EDIT", "TRACE_EXEC", "BROADER_SEARCH", "REIMPLEMENT", "MINIMAL_FIX", "ESCALATE", null],
+          "default": null,
+          "description": "Preferred recovery strategy for this step."
+        }
+      }
+    }
+  }
+}

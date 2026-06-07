@@ -1,0 +1,92 @@
+{
+  "schema_version": "1",
+  "id": "implement_feature",
+  "name": "Implement Feature",
+  "description": "Canonical decomposition for adding a new feature to an existing codebase. Guides the model from requirements clarification through design, implementation, testing, and integration.",
+  "success_criteria": [
+    "Feature behaves as specified in requirements",
+    "Tests cover the happy path and key edge cases",
+    "Existing tests continue to pass",
+    "Code follows the project's conventions"
+  ],
+  "steps": [
+    {
+      "id": "clarify_requirements",
+      "description": "Parse the feature request and identify ambiguities. Confirm scope, edge cases, and acceptance criteria before writing any code.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": "goal",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Acceptance criteria documented",
+        "Scope boundaries clear — what is in and out of scope"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "survey_codebase",
+      "description": "Identify all existing code that the new feature must integrate with: interfaces, data models, entry points, and test infrastructure.",
+      "depends_on": ["clarify_requirements"],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["search_code", "read_file"],
+      "success_criteria": [
+        "Integration points identified",
+        "Data flow from caller to new code understood"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "design_interface",
+      "description": "Define the public interface (function signatures, data classes, API endpoints) for the new feature. Confirm it is consistent with existing conventions.",
+      "depends_on": ["survey_codebase"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": "subgoal",
+      "expected_tools": ["read_file"],
+      "success_criteria": [
+        "Public interface defined",
+        "Naming follows existing conventions"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "implement_core",
+      "description": "Write the core implementation. Keep changes minimal and focused on the new feature; do not refactor existing code unless required.",
+      "depends_on": ["design_interface"],
+      "risk_level": "HIGH",
+      "abstraction_level": "leaf",
+      "expected_tools": ["write_file", "edit_file"],
+      "success_criteria": [
+        "Core logic implemented",
+        "No unrelated files modified"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "write_tests",
+      "description": "Write tests that exercise the happy path, at least one edge case, and any error conditions relevant to the feature.",
+      "depends_on": ["implement_core"],
+      "risk_level": "LOW",
+      "abstraction_level": "function",
+      "expected_tools": ["write_file", "edit_file"],
+      "success_criteria": [
+        "Happy path test written",
+        "At least one edge-case test written"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "run_and_verify",
+      "description": "Run the full test suite and confirm the new tests pass and no regressions are introduced.",
+      "depends_on": ["write_tests"],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["run_tests"],
+      "success_criteria": [
+        "All new tests pass",
+        "No regressions in existing tests"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    }
+  ]
+}
