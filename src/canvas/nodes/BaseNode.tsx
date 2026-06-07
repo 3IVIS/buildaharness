@@ -3,7 +3,7 @@ import {
   LogIn, LogOut, Sparkles, Wrench, GitBranch, GitFork, GitMerge,
   UserCheck, BookOpen, BookMarked, Layers, Shuffle, Bot, Users,
   AlertTriangle, Brain, Lightbulb, Shield, Network, CheckCircle2,
-  RefreshCw, Database, BarChart3, Eye,
+  RefreshCw, Database, BarChart3, Eye, Compass,
   type LucideIcon,
 } from 'lucide-react'
 import { useCanvasStore, type NodeExecStat } from '../../store'
@@ -49,6 +49,7 @@ export const NODE_HEX: Record<AnyNodeType, string> = {
   evidence_store_node:    '#67e8f9',
   experience_store_node:  '#a78bfa',
   reviewer_pass:          '#fb7185',
+  process_concept:        '#22d3ee',
 }
 
 export const NODE_ICONS: Record<AnyNodeType, LucideIcon> = {
@@ -63,7 +64,7 @@ export const NODE_ICONS: Record<AnyNodeType, LucideIcon> = {
   control_state: Shield, task_graph_node: Network,
   verification_gate: CheckCircle2, recovery_node: RefreshCw,
   evidence_store_node: Database, experience_store_node: BarChart3,
-  reviewer_pass: Eye,
+  reviewer_pass: Eye, process_concept: Compass,
 }
 
 export const NODE_GLYPH_MOD: Partial<Record<AnyNodeType, string>> = {
@@ -87,7 +88,7 @@ export const NODE_TYPE_LABELS: Record<AnyNodeType, string> = {
   control_state: 'control_state', task_graph_node: 'task_graph',
   verification_gate: 'verify_gate', recovery_node: 'recovery',
   evidence_store_node: 'evidence_store', experience_store_node: 'exp_store',
-  reviewer_pass: 'reviewer_pass',
+  reviewer_pass: 'reviewer_pass', process_concept: 'process_concept',
 }
 
 function getSupportLevel(

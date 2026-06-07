@@ -11,6 +11,7 @@ import {
   WorldModelNode, HypothesisSetNode, ControlStateNode,
   TaskGraphNode, VerificationGateNode, RecoveryNode,
   EvidenceStoreNode, ExperienceStoreNode, ReviewerPassNode,
+  ProcessConceptNode,
 } from './harness'
 
 export const nodeTypes: NodeTypes = {
@@ -44,4 +45,6 @@ export const nodeTypes: NodeTypes = {
   evidence_store_node:     EvidenceStoreNode,
   experience_store_node:   ExperienceStoreNode,
   reviewer_pass:           ReviewerPassNode,
+  // Process Concepts (P-PC)
+  process_concept:         ProcessConceptNode,
 }
