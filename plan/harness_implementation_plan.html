@@ -83,7 +83,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .sev-l{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.2)}
 
 .timeline-wrap{overflow-x:auto;padding-bottom:8px}
-.timeline{display:flex;gap:0;min-width:900px}
+.timeline{display:flex;gap:0;min-width:1050px}
 .tl-phase{flex:1;padding:.5rem .4rem;border-right:.5px solid var(--bd0);last-child{border-right:none}}
 .tl-label{font-size:9px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:4px}
 .tl-bar{height:14px;border-radius:3px;margin-bottom:3px}
@@ -115,11 +115,12 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 6 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 7 Complete</span>
   <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 8 Complete</span>
-  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 9 Complete</span><br><br>
-  <span class="badge badge-blue">11 Phases</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Phase 9 Complete</span>
+  <span class="badge badge-green" style="font-size:13px;padding:4px 16px">Process Concepts Complete</span><br><br>
+  <span class="badge badge-blue">12 Phases</span>
   <span class="badge badge-green">22 Nodes to implement</span>
-  <span class="badge badge-warn">~36–46 weeks total estimate</span>
-  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">10 phases complete</span> · <span style="color:#60a5fa">2 phases remaining</span> · 208/208 acceptance tests pass (P0–P9) · <strong style="color:#4ade80">P10 now unblocked</strong></div>
+  <span class="badge badge-warn">~40–50 weeks total estimate</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)"><span style="color:#4ade80">11 phases complete</span> · <span style="color:#60a5fa">2 phases remaining</span> · 238/238 acceptance tests pass (P0–P9, P-PC) · <strong style="color:#4ade80">P10 now unblocked</strong></div>
 </div>
 
 <div class="tabs">
@@ -135,10 +136,10 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="overview" class="tab-content active">
 
 <div class="summary-row">
-  <div class="sum-card"><div class="sum-n" style="color:#60a5fa">11</div><div class="sum-l">Phases</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#60a5fa">12</div><div class="sum-l">Phases</div></div>
   <div class="sum-card"><div class="sum-n" style="color:#4ade80">22</div><div class="sum-l">Harness nodes</div></div>
   <div class="sum-card"><div class="sum-n" style="color:#f0abfc">11</div><div class="sum-l">Architecture layers</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:#fbbf24">~42</div><div class="sum-l">Weeks estimated</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#fbbf24">~46</div><div class="sum-l">Weeks estimated</div></div>
 </div>
 
 <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
@@ -164,6 +165,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P7 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Caller State &amp; Escalation</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P8 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Experience Store</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P9 ✓</div><div class="tl-bar" style="background:#4ade80;width:100%"></div><div class="tl-name" style="color:#4ade80">Reviewer Pass &amp; Output</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:#4ade80">P-PC ✓</div><div class="tl-bar" style="background:#22d3ee;width:100%"></div><div class="tl-name" style="color:#4ade80">Process Concepts</div><div class="tl-weeks" style="color:#4ade80;font-weight:600">DONE</div></div>
   <div class="tl-phase"><div class="tl-label">P10</div><div class="tl-bar" style="background:#fb7185;width:100%"></div><div class="tl-name">Canvas Integration</div><div class="tl-weeks">5 wks</div></div>
   <div class="tl-phase"><div class="tl-label">P11</div><div class="tl-bar" style="background:#a3e635;width:100%"></div><div class="tl-name">E2E Integration &amp; Testing</div><div class="tl-weeks">5 wks</div></div>
 </div>
@@ -181,6 +183,11 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="inv-item"><strong>Failure mode library as one of four — not a controller</strong>failure_mode_library contributes matched_pattern.confidence (normalised) to Tier 4 as one advisory input. It does not veto, block, or redirect execution. It is also one of four hypothesis generation sources.</div>
   <div class="inv-item"><strong>Adversarial prior discarded after use</strong>adversarial_prior is seeded on causal proximity to success_criteria (not raw confidence) and discarded after adversarial_lens() completes. It never pollutes world_model.</div>
   <div class="inv-item"><strong>experience_store is a no-op when absent</strong>Every code path that uses experience_store guards with experience_store.available. Without it: warm_start is a no-op, strategy priors are flat, no cross-run learning — but the agent runs correctly.</div>
+  <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:#22d3ee;margin-top:.75rem;padding:.35rem 0 .2rem;border-top:.5px solid rgba(34,211,238,0.2)">Process Concept Invariants (P-PC)</div>
+  <div class="inv-item"><strong>INV-PC-01 Process concept is a strong prior, not a constraint</strong>seed_task_graph() pre-populates the task graph but does not lock it. The existing replanning machinery (diagnose_and_replan(), rebuild_task_graph()) can add, remove, or modify tasks during the run without restriction. A concept provides the starting scaffold; the harness reasoning and recovery layers own the graph from that point forward.</div>
+  <div class="inv-item"><strong>INV-PC-02 Concept-seeded graphs pass the same validate_task_graph() gate</strong>After seed_task_graph() populates the graph, validate_task_graph() and decomposition_gate() run exactly as they would for a model-driven graph. decomposition_gate() is never bypassed for concept-seeded runs. A concept whose step structure is incompatible with the objective is caught and reported via the gate response.</div>
+  <div class="inv-item"><strong>INV-PC-03 process_concept=None path is structurally unchanged</strong>When initialize_harness() is called without a process_concept (or with None), the function returns valid=True, errors=[], process_concept_id=None. No tasks are seeded. The optional field on HarnessRunState is None and does not affect any downstream logic. All pre-P-PC runs are structurally identical.</div>
+  <div class="inv-item"><strong>INV-PC-04 Explicitly-specified missing concept is a hard error</strong>When harness_meta.process_concept_id is set in the FlowSpec but the named concept cannot be found in the registry, the run fails with ProcessConceptNotFoundError — it does not silently fall back to model-driven decomposition. An explicitly specified missing concept is a configuration error; the error response includes the missing concept ID.</div>
 </div>
 </div>
 
@@ -383,6 +390,25 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/task_graph.py (Task.completed_evidence: list[str] field added · to_dict/from_dict updated · used by drain_propagation_queue to map belief IDs to dependent tasks)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/loop.py (belief_dep_graph + evidence_store params added · P9 reviewer_pass wired after post_exec_gate · completion_check_final called when no tasks reopened · review_result + tasks_reopened in return dict)<br>
       <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/__init__.py (Phase 9 exports: AdversarialPrior · ReviewFinding · ReviewPassResult · compute_causal_proximity · drain_propagation_queue · reviewer_pass · seed_adversarial_prior · completion_check_final · check_format_requirements · check_required_sections · check_interface_constraints · check_caller_specific_constraints)
+    </div>
+  </div>
+</div>
+
+<div style="background:rgba(74,222,128,0.06);border:.5px solid rgba(34,211,238,0.25);border-left:3px solid #22d3ee;border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:.75rem">
+  <div style="font-size:13px;font-weight:600;color:#22d3ee;margin-bottom:.5rem">✓ Process Concepts Complete — Static Task Graph Templates</div>
+  <div style="font-size:12px;color:var(--t1);line-height:1.8">
+    <strong style="color:var(--t0)">28/28</strong> acceptance tests pass + 2 bonus &nbsp;·&nbsp; <strong style="color:var(--t0)">238/238</strong> combined P0–P9+P-PC tests pass &nbsp;·&nbsp; Completed after P9<br>
+    Key invariants enforced: INV-PC-01 (process concept is a strong prior, not a constraint) · INV-PC-02 (seeded graphs pass same validate_task_graph() gate) · INV-PC-03 (process_concept=None path structurally unchanged) · INV-PC-04 (missing concept_id is a hard 400 error)<br>
+    <div style="margin-top:.5rem;font-size:11px;font-family:var(--font-mono);color:var(--t1)">
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/process_concept.py (ProcessConcept · ProcessConceptStep · ProcessConceptValidationError · ProcessConceptNotFoundError · from_file · seed_task_graph · validate · _FILE_CACHE)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/harness/process_registry.py (ProcessRegistry · register · load · list_available · scan_directory · DEFAULT_REGISTRY module instance)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; concepts/ directory (concept_schema.json · debug_test_failure.json · implement_feature.json · code_review.json · refactor_module.json)<br>
+      <span style="color:#4ade80">NEW</span>&nbsp; adapter/tests/test_harness_process_concepts.py (T01–T28 + 2 bonus · all in-memory · no Postgres required)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/loop.py (initialize_harness() added alongside run_one_iteration()) &nbsp;·&nbsp; adapter/harness/state_store.py (process_concept_id: str|None field added to HarnessRunState)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/harness/node_compilers.py (compile_process_concept_node) &nbsp;·&nbsp; adapter/harness/__init__.py (ProcessConcept · ProcessConceptStep · ProcessConceptValidationError · ProcessConceptNotFoundError · ProcessRegistry · DEFAULT_REGISTRY · initialize_harness exported)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; adapter/validate.py (process_concept node type + harness_meta.process_concept_id validation) &nbsp;·&nbsp; adapter/run_api.py (concept existence check + GET /run/concepts endpoint)<br>
+      <span style="color:#fbbf24">MOD</span>&nbsp; spec/schema.ts (process_concept_id: z.string().optional() in harness_meta · ProcessConceptNodeConfig shape) &nbsp;·&nbsp; spec/schema.json (regenerated)<br>
+      <span style="color:#f97316">DEFER</span>&nbsp; src/components/nodes/harness/ProcessConceptNode.tsx · packages/canvas/nodeTypes.ts · live run overlay — deferred to P11
     </div>
   </div>
 </div>
@@ -625,6 +651,17 @@ const phases=[
      {id:'P9.3',name:'drain_propagation_queue() + loop re-entry',body:'After reviewer_pass(): drain_propagation_queue() → list of reopened tasks. If non-empty: requeue tasks, set status back to PENDING/ACTIVE, re-enter main loop.',tests:['Reviewer finding that invalidates a completed task causes it to be reopened','Empty propagation_queue → loop does not re-enter','Re-entered loop correctly processes reopened tasks']},
      {id:'P9.4',name:'Full validate_output_contract()',body:'Full implementation of validate_output_contract(final_result, output_contract). Checks format_requirements, required sections, interface_constraints, current caller_state constraints (may have been updated mid-run). validate_output_contract() supersedes contract_shadow_check() — any violation missed by shadow check is flagged here.',tests:['Contract violation missed by shadow check is caught here','Contract updated mid-run via constraint propagation is reflected in final check','PASS only when all contract fields satisfied']},
    ]},
+  {id:'P-PC',title:'Process Concepts',weeks:'4 weeks',color:'#22d3ee',status:'complete',completionNote:'28/28 tests + 2 bonus · 238/238 combined P0–P9+P-PC',
+   sub:'ProcessConcept + ProcessConceptStep dataclasses · ProcessRegistry with scan_directory auto-population · 4 bundled concept JSON files · initialize_harness() seeding · FlowSpec harness_meta extension · process_concept canvas node (backend) · 30 integration tests',
+   tasks:[
+     {id:'P-PC.1',name:'ProcessConcept and ProcessConceptStep dataclasses',body:'Creates adapter/harness/process_concept.py with the core data model. ProcessConceptStep maps to a single Task in the task graph. ProcessConcept is the container holding all steps for a given task class. seed_task_graph() appends concept steps as Tasks into an existing TaskGraph in-place, namespacing IDs as {concept_id}:{step_id}. validate() returns list[str] (empty = valid). _FILE_CACHE provides mtime-keyed file-level caching. ProcessConceptValidationError and ProcessConceptNotFoundError are both defined here.',tests:['ProcessConceptStep.to_dict()/from_dict() round-trip preserves all 8 fields including strategy_hint','ProcessConcept.to_dict()/from_dict() round-trip preserves concept ID, name, schema_version, and full step list','validate() returns [] for a well-formed 2-step concept','validate() returns error containing "Duplicate" when two steps share the same ID','validate() returns error referencing unknown ID when depends_on names a non-existent step','validate() detects a two-step cycle (A→B, B→A) — error contains "cycle"','validate() returns error referencing "risk_level" for unknown value like "CRITICAL"','validate() returns error referencing "abstraction_level" for unknown value like "granular"']},
+     {id:'P-PC.2',name:'ProcessRegistry — file-backed concept registry',body:'Creates adapter/harness/process_registry.py. The registry maps concept IDs to file path strings. ProcessConceptNotFoundError is imported from process_concept.py. register() stores the path without checking file existence — errors surface at load() time via from_file(). scan_directory() globs *.json, skips concept_schema.json, silently skips failures, and returns the count of successfully registered concepts. Module-level DEFAULT_REGISTRY is auto-populated from concepts/ at import time.',tests:['register()/load() round-trip returns a ProcessConcept with the correct ID','load() raises ProcessConceptNotFoundError for an ID that was never registered','list_available() returns alphabetically sorted IDs','scan_directory() registers all valid concept files and skips concept_schema.json; returns correct count','scan_directory() on absent path returns 0 without raising','50 concurrent register() calls from separate threads complete without error (threading.Lock)']},
+     {id:'P-PC.3',name:'Bundled concept JSON files and JSON schema',body:'Creates the concepts/ directory with concept_schema.json (JSON Schema draft-07) and four domain concept files. debug_test_failure (5 steps, linear): gather_context → reproduce_failure → isolate_root_cause → apply_fix (HIGH risk, MINIMAL_FIX hint) → verify_fix. implement_feature (6 steps, linear): clarify_requirements → survey_codebase → design_interface → implement_core (HIGH risk) → write_tests → run_and_verify. code_review (6 steps): understand_change → check_correctness → check_security (HIGH risk) → check_style_conventions → check_test_coverage → summarise_findings. refactor_module (5 steps, linear): understand_current_behaviour → identify_refactor_targets → plan_changes → apply_refactor (HIGH risk, MINIMAL_FIX hint) → verify_equivalence.',tests:['All 4 bundled concept files parse via from_file() and validate() returns [] (test_bundled_concepts_valid)','validate() returns error for risk_level="CRITICAL"','seed_task_graph() maps abstraction_level strings to correct ints: module/goal→0, subgoal/function→1, leaf/statement→2','seed_task_graph() preserves risk_level — HIGH step produces task with risk_level="HIGH"']},
+     {id:'P-PC.4',name:'loop.py initialize_harness() — new initialisation function',body:'Adds initialize_harness() to loop.py alongside run_one_iteration(). When process_concept is provided: calls concept.seed_task_graph(task_graph) in-place, calls validate_task_graph(), calls warm_start() if experience_store present, calls decomposition_gate(). Returns {"valid": bool, "errors": list[str], "decomposition_gate": bool, "process_concept_id": str|None}. Adds optional process_concept_id: str|None = None field to HarnessRunState in state_store.py.',tests:['initialize_harness() with a concept returns dict with decomposition_gate bool key and valid=True for well-formed graph','initialize_harness(process_concept=None) returns process_concept_id=None and valid=True — INV-PC-03 verified','concept ID appears as result["process_concept_id"] after seeded init','Orphaned dependency task causes valid=False and non-empty errors list in returned dict']},
+     {id:'P-PC.5',name:'FlowSpec harness_meta extension and run-start wiring',body:'Extends FlowSpec harness_meta with optional process_concept_id field (existing flows parse unchanged). Updates validate.py: adds "process_concept" to _HARNESS_NODE_TYPES and validates concept_id is non-empty string when present. Adds guarded DEFAULT_REGISTRY import to run_api.py. POST /run handler validates concept existence at run start — returns 400 with ProcessConceptNotFoundError if named concept not found (INV-PC-04). Adds GET /run/concepts endpoint returning sorted list of registered concept IDs.',tests:['validate.py accepts harness_meta.process_concept_id="debug_test_failure"; rejects empty string with "non-empty" in message','Run start with unknown process_concept_id triggers ProcessConceptNotFoundError caught as 400 (INV-PC-04)','GET /run/concepts returns {"concepts":["code_review","debug_test_failure","implement_feature","refactor_module"]}','compile_process_concept_node emits code setting harness_meta.process_concept_id = concept_id']},
+     {id:'P-PC.6',name:'Canvas process_concept node type (backend only — frontend deferred to P11)',body:'compile_process_concept_node() added to node_compilers.py: emits code setting harness_meta.process_concept_id = concept_id; no standalone adapter function call. "process_concept" added to _HARNESS_NODE_TYPES in validate.py with concept_id config validation. React canvas component (ProcessConceptNode.tsx), canvas node registration in nodeTypes.ts, concept picker, and live run overlay are all deferred to P11.',tests:['compile_process_concept_node({harness_config:{concept_id:"debug_test_failure"}}, "meta") emits code setting meta.process_concept_id = "debug_test_failure"','Spec with process_concept node and concept_id="" fails validate.py with message referencing "non-empty"','Canvas UI component, live overlay — deferred to P11']},
+     {id:'P-PC.7',name:'Integration tests and cross-component wiring verification',body:'Creates adapter/tests/test_harness_process_concepts.py with 28 named tests (T01–T28) plus two bonus tests. All tests are infrastructure-free — no Postgres, no live adapter. Organised by feature layer: serialisation (T01–T02), validate() errors (T03–T08), seed_task_graph() mechanics (T09–T14), initialize_harness() integration (T15–T18), ProcessRegistry operations (T19–T23), from_file() caching + thread safety (T24–T28). Bonus tests: test_bundled_concepts_valid and test_default_registry_populated.',tests:['T13: seeded TaskGraph passes validate_task_graph() with no errors — INV-PC-02 verified','T16: initialize_harness(process_concept=None) returns process_concept_id=None and valid=True — INV-PC-03 verified','test_bundled_concepts_valid: all 4 bundled concept files pass validate() — schema integrity confirmed on every test run','test_default_registry_populated: DEFAULT_REGISTRY contains all 4 bundled concept IDs after module import']},
+   ]},
   {id:'P10',title:'Canvas Node Types & UI',weeks:'5 weeks',color:'#fb7185',
    sub:'10 new harness canvas node types · diagnostic health dashboard · world model inspector · control state visual panel · task graph visualization',
    tasks:[
@@ -804,6 +841,10 @@ const scopeItems=[
   {text:'Output contract validation before return',phase:'P9'},
   {text:'Experience store (optional) — structures reuse, not just probability priors',phase:'P8'},
   {text:'warm_start() — loads empirical strategy priors, failure class base rates, structural patterns if available',phase:'P8'},
+  {text:'Process concepts — static task graph templates for known task classes (debug_test_failure · implement_feature · code_review · refactor_module); strong priors, not constraints',phase:'P-PC'},
+  {text:'ProcessRegistry — file-backed concept loading with mtime cache; scan_directory() auto-populates from concepts/ directory at import time',phase:'P-PC'},
+  {text:'initialize_harness() — seeds task graph from concept before first iteration, validates via same decomposition_gate(), layers warm_start() on top; process_concept=None path structurally unchanged (INV-PC-03)',phase:'P-PC'},
+  {text:'Explicitly-specified missing concept_id is a hard configuration error — no silent fallback to model-driven decomposition (INV-PC-04)',phase:'P-PC'},
 ];
 const sc2=document.getElementById('scope-checklist');
 scopeItems.forEach(s=>{
