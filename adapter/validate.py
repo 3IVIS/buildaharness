@@ -98,10 +98,18 @@ _EVIDENCE_TYPES = {"OBSERVATION", "INFERENCE", "SYSTEM_ERROR"}
 _RELIABILITY_CLASSES = {"HIGH", "MEDIUM", "LOW"}
 _APPLY_TO_VALUES = {"inferences_only", "all"}
 _INTEGRATION_MODES = {"observations_only", "infer_beliefs"}
+_DISPLAY_MODES = {"summary", "expanded"}
+_VERIFICATION_LAYERS = {
+    "syntax", "unit", "integration", "consistency", "requirements",
+    "assumptions", "goal_correctness", "evidence_sufficiency", "output_contract_partial",
+}
+_RECOVERY_STRATEGIES = {
+    "DIRECT_EDIT", "TRACE_EXEC", "BROADER_SEARCH", "REIMPLEMENT", "MINIMAL_FIX", "ESCALATE",
+}
 
 
 def _validate_harness_configs(spec: dict) -> None:
-    """Validate harness_config for nodes that have full P1 config shapes."""
+    """Validate harness_config for all harness node types with full P10 config shapes."""
     for node in spec.get("nodes", []):
         if not isinstance(node, dict):
             continue
@@ -170,6 +178,104 @@ def _validate_harness_configs(spec: dict) -> None:
                         f"update_world_model node '{node.get('id')}': "
                         f"harness_config.reliability_threshold must be one of {sorted(_RELIABILITY_CLASSES)}, "
                         f"got {reliability_threshold!r}"
+                    ),
+                )
+
+        elif ntype == "world_model":
+            display_mode = cfg.get("display_mode", "summary")
+            if display_mode not in _DISPLAY_MODES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"world_model node '{node.get('id')}': "
+                        f"harness_config.display_mode must be one of {sorted(_DISPLAY_MODES)}, "
+                        f"got {display_mode!r}"
+                    ),
+                )
+            max_beliefs = cfg.get("max_beliefs_shown", 10)
+            if not isinstance(max_beliefs, int) or max_beliefs < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"world_model node '{node.get('id')}': "
+                        "harness_config.max_beliefs_shown must be a positive integer"
+                    ),
+                )
+
+        elif ntype == "hypothesis_set":
+            max_hyps = cfg.get("max_hypotheses_shown", 5)
+            if not isinstance(max_hyps, int) or max_hyps < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"hypothesis_set node '{node.get('id')}': "
+                        "harness_config.max_hypotheses_shown must be a positive integer"
+                    ),
+                )
+
+        elif ntype == "task_graph_node":
+            max_tasks = cfg.get("max_tasks_shown", 20)
+            if not isinstance(max_tasks, int) or max_tasks < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"task_graph_node node '{node.get('id')}': "
+                        "harness_config.max_tasks_shown must be a positive integer"
+                    ),
+                )
+
+        elif ntype == "verification_gate":
+            enabled_layers = cfg.get("enabled_layers")
+            if enabled_layers is not None:
+                if not isinstance(enabled_layers, list):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"verification_gate node '{node.get('id')}': "
+                            "harness_config.enabled_layers must be a list"
+                        ),
+                    )
+                invalid = [l for l in enabled_layers if l not in _VERIFICATION_LAYERS]
+                if invalid:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"verification_gate node '{node.get('id')}': "
+                            f"harness_config.enabled_layers contains unknown layers: {sorted(invalid)}. "
+                            f"Valid layers: {sorted(_VERIFICATION_LAYERS)}"
+                        ),
+                    )
+
+        elif ntype == "recovery_node":
+            strategy_order = cfg.get("strategy_order_override")
+            if strategy_order is not None:
+                if not isinstance(strategy_order, list) or len(strategy_order) == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"recovery_node node '{node.get('id')}': "
+                            "harness_config.strategy_order_override must be a non-empty list"
+                        ),
+                    )
+                invalid = [s for s in strategy_order if s not in _RECOVERY_STRATEGIES]
+                if invalid:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"recovery_node node '{node.get('id')}': "
+                            f"harness_config.strategy_order_override contains unknown strategies: {sorted(invalid)}. "
+                            f"Valid strategies: {sorted(_RECOVERY_STRATEGIES)}"
+                        ),
+                    )
+
+        elif ntype == "evidence_store_node":
+            max_ev = cfg.get("max_evidence_shown", 20)
+            if not isinstance(max_ev, int) or max_ev < 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"evidence_store_node node '{node.get('id')}': "
+                        "harness_config.max_evidence_shown must be a positive integer"
                     ),
                 )
 

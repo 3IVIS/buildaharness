@@ -185,3 +185,29 @@ export function AgentDebateNode({ id, selected, data }: NodeProps & { data: Node
       preview={`${agents.length} agents · ${rounds} rounds`} />
   )
 }
+
+// ─── Phase 1 harness nodes (simple wrappers) ───────────────────────────────
+
+export function GatherEvidenceNode({ id, selected, data }: NodeProps & { data: NodeData }) {
+  const cfg = (data.harness_config as { source_tool?: string }) ?? {}
+  return (
+    <BaseNode id={id} type="gather_evidence" selected={selected} data={data}
+      preview={cfg.source_tool ? `tool: ${cfg.source_tool}` : '— no tool —'} />
+  )
+}
+
+export function ApplyToolReliabilityNode({ id, selected, data }: NodeProps & { data: NodeData }) {
+  const cfg = (data.harness_config as { apply_to?: string }) ?? {}
+  return (
+    <BaseNode id={id} type="apply_tool_reliability" selected={selected} data={data}
+      preview={cfg.apply_to ?? 'inferences_only'} />
+  )
+}
+
+export function UpdateWorldModelNode({ id, selected, data }: NodeProps & { data: NodeData }) {
+  const cfg = (data.harness_config as { integration_mode?: string; reliability_threshold?: string }) ?? {}
+  return (
+    <BaseNode id={id} type="update_world_model" selected={selected} data={data}
+      preview={`${cfg.integration_mode ?? 'observations_only'} · ${cfg.reliability_threshold ?? 'HIGH'}`} />
+  )
+}
