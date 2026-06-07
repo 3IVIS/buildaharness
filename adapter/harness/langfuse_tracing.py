@@ -18,7 +18,7 @@ from typing import Any
 
 try:
     from langfuse import Langfuse
-    from langfuse.decorators import observe as _lf_observe
+    from langfuse.decorators import observe as _lf_observe  # noqa: F401
 
     _LF_ENABLED = bool(os.environ.get("LANGFUSE_PUBLIC_KEY", ""))
     if _LF_ENABLED:

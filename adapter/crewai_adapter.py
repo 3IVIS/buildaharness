@@ -445,18 +445,18 @@ def _gen_harness_task_description(node: dict) -> str:
     ntype = node["type"]
     nid = node["id"]
     descriptions = {
-        "gather_evidence": f"Execute gather_evidence harness node '{nid}': collect tool output into the evidence store.",
-        "apply_tool_reliability": f"Execute apply_tool_reliability harness node '{nid}': cap evidence reliability by tool envelope.",
-        "update_world_model": f"Execute update_world_model harness node '{nid}': integrate evidence and recompute belief health.",
+        "gather_evidence": f"Execute gather_evidence harness node '{nid}': collect tool output into the evidence store.",  # noqa: E501
+        "apply_tool_reliability": f"Execute apply_tool_reliability harness node '{nid}': cap evidence reliability by tool envelope.",  # noqa: E501
+        "update_world_model": f"Execute update_world_model harness node '{nid}': integrate evidence and recompute belief health.",  # noqa: E501
         "world_model": f"Execute world_model harness node '{nid}': snapshot current world model for canvas display.",
         "hypothesis_set": f"Execute hypothesis_set harness node '{nid}': generate and score hypotheses from evidence.",
         "control_state": f"Execute control_state harness node '{nid}': resolve control state from diagnostics.",
         "task_graph_node": f"Execute task_graph_node harness node '{nid}': validate task graph and select next task.",
-        "verification_gate": f"Execute verification_gate harness node '{nid}': run multi-layer verification on the result.",
+        "verification_gate": f"Execute verification_gate harness node '{nid}': run multi-layer verification on the result.",  # noqa: E501
         "recovery_node": f"Execute recovery_node harness node '{nid}': initialise recovery strategy state.",
-        "evidence_store_node": f"Execute evidence_store_node harness node '{nid}': initialise evidence store and tool manifest.",
-        "experience_store_node": f"Execute experience_store_node harness node '{nid}': warm-start from prior experience.",
-        "reviewer_pass": f"Execute reviewer_pass harness node '{nid}': adversarial reviewer pass and propagation queue drain.",
+        "evidence_store_node": f"Execute evidence_store_node harness node '{nid}': initialise evidence store and tool manifest.",  # noqa: E501
+        "experience_store_node": f"Execute experience_store_node harness node '{nid}': warm-start from prior experience.",  # noqa: E501
+        "reviewer_pass": f"Execute reviewer_pass harness node '{nid}': adversarial reviewer pass and propagation queue drain.",  # noqa: E501
         "process_concept": f"Execute process_concept harness node '{nid}': seed task graph from process concept.",
     }
     return descriptions.get(ntype, f"Execute harness node '{nid}' (type={ntype!r}).")

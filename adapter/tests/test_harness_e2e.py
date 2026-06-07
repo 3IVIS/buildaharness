@@ -29,23 +29,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.belief_graph import BeliefDepGraph
-from harness.contradiction import assign_system_breaking_severity
-from harness.control_state import ControlState, resolve_control_state
 from harness.diagnostics import BeliefHealth, CoverageHealth, Diagnostics, ExecutionHealth, VerificationHealth
 from harness.evidence import EvidenceStore
-from harness.experience_store import ExperienceStore, WarmStartResult, warm_start
+from harness.experience_store import WarmStartResult, warm_start
 from harness.failure_modes import FailureDiagnostics
-from harness.hypothesis import HypothesisSet, Hypothesis
+from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState, check_max_steps, compress_memory, should_compress
-from harness.output_contract import OutputContract
 from harness.parallel_merge import reconcile_parallel_branches
 from harness.recovery import StrategyState, switch_strategy
-from harness.reviewer import drain_propagation_queue, reviewer_pass
+from harness.reviewer import drain_propagation_queue
 from harness.state_store import HarnessRunState
-from harness.staleness import increment_generation_id
 from harness.task_graph import ConflictProbabilityCache, Task, TaskGraph
-from harness.world_model import Belief, Contradiction, Observation, WorldModel
+from harness.world_model import Belief, Observation, WorldModel
 
 FRAMEWORKS = ["langgraph", "crewai", "mastra", "maf"]
 
@@ -344,7 +340,7 @@ def test_e2e_06_context_compression(framework: str):
 @pytest.mark.parametrize("framework", FRAMEWORKS)
 def test_e2e_07_reviewer_reentry(framework: str):
     """E2E-07: drain_propagation_queue reopens a COMPLETE task whose evidence is invalidated."""
-    wm = _make_world_model(2)
+    _wm = _make_world_model(2)
     task_graph = TaskGraph(tasks=[
         Task(
             id="t1",

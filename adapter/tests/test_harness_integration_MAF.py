@@ -67,7 +67,7 @@ def test_ig_maf_01_harness_spec_compiles():
         "id": "ev-1", "type": "gather_evidence", "position": {"x": 100, "y": 0},
         "harness_config": {"source_tool": "linter", "evidence_type": "OBSERVATION"},
     }])
-    code, warnings = compile_maf(spec)
+    code, _warnings = compile_maf(spec)
     assert isinstance(code, str)
     assert len(code) > 0
 
@@ -97,7 +97,7 @@ def test_ig_maf_03_harness_nodes_produce_step_functions():
 def test_ig_maf_04_non_harness_path_unaffected():
     """IG-MAF-04: Non-harness path is unaffected when harness_meta is absent."""
     spec = _plain_spec()
-    code, warnings = compile_maf(spec)
+    code, _warnings = compile_maf(spec)
     assert isinstance(code, str)
     assert "_harness_state" not in code
     assert "HarnessRunState" not in code

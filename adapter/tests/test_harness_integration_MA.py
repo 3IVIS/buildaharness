@@ -67,7 +67,7 @@ def test_ig_ma_01_harness_spec_compiles():
         "id": "ev-1", "type": "gather_evidence", "position": {"x": 100, "y": 0},
         "harness_config": {"source_tool": "linter", "evidence_type": "OBSERVATION"},
     }])
-    code, warnings = compile_mastra(spec)
+    code, _warnings = compile_mastra(spec)
     assert isinstance(code, str)
     assert len(code) > 0
 
@@ -96,7 +96,7 @@ def test_ig_ma_03_harness_nodes_produce_ts_stubs():
 def test_ig_ma_04_non_harness_path_unaffected():
     """IG-MA-04: Non-harness path is unaffected when harness_meta is absent."""
     spec = _plain_spec()
-    code, warnings = compile_mastra(spec)
+    code, _warnings = compile_mastra(spec)
     assert isinstance(code, str)
     assert "HARNESS_API_URL" not in code
 

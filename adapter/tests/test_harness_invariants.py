@@ -30,12 +30,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.belief_graph import BeliefDepGraph
 from harness.contradiction import (
     assign_system_breaking_severity,
     detect_contradictions,
 )
-from harness.control_state import BlockEntry, ControlState, detect_deadlock, resolve_control_state
+from harness.control_state import BlockEntry, ControlState, detect_deadlock
 from harness.diagnostics import (
     BeliefHealth,
     CoverageHealth,
@@ -46,18 +45,17 @@ from harness.diagnostics import (
     normalise,
 )
 from harness.evidence import EvidenceStore
-from harness.experience_store import ExperienceStore, WarmStartResult, warm_start
+from harness.experience_store import WarmStartResult, warm_start
 from harness.failure_modes import FailureDiagnostics
-from harness.hypothesis import HypothesisSet, Hypothesis, generate_hypotheses
+from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.loop import run_one_iteration, select_best_action
 from harness.memory import MemoryState
 from harness.output_contract import OutputContract
 from harness.recovery import StrategyState
-from harness.reviewer import reviewer_pass, ReviewPassResult
+from harness.reviewer import ReviewPassResult, reviewer_pass
 from harness.state_store import HarnessRunState
 from harness.task_graph import Task, TaskGraph
 from harness.world_model import Belief, Contradiction, Observation, WorldModel
-
 
 # ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -219,7 +217,6 @@ def test_inv_03_multiple_iterations_each_add_two():
 
 def test_inv_04_detect_deadlock_with_cycle_in_block_mask():
     """INV-04: detect_deadlock returns True when block_mask entries form a cycle."""
-    from harness.control_state import detect_deadlock, BlockEntry
 
     # Create two block entries with recovery actions that reference each other
     entry_a = BlockEntry(
@@ -240,7 +237,6 @@ def test_inv_04_detect_deadlock_with_cycle_in_block_mask():
 
 def test_inv_04_deadlock_detection_empty_block_mask():
     """INV-04: detect_deadlock returns False for an empty block_mask (no recovery actions)."""
-    from harness.control_state import detect_deadlock
 
     assert detect_deadlock([]) is False
 
@@ -354,7 +350,7 @@ def test_inv_07_dep_class_gap_does_not_block_tiers_1_to_4():
 
 def test_inv_08_failure_mode_library_only_used_in_tier4_and_hypothesis():
     """INV-08: Failure mode library is consumed by hypothesis generation and Tier 4 only."""
-    from harness.failure_modes import build_default_library, FailureModeLibrary
+    from harness.failure_modes import FailureModeLibrary, build_default_library
     from harness.hypothesis import generate_from_failure_library
 
     lib = build_default_library()
@@ -382,7 +378,6 @@ def test_inv_08_failure_mode_library_only_used_in_tier4_and_hypothesis():
 
 def test_inv_09_adversarial_prior_not_live_after_reviewer_pass():
     """INV-09: reviewer_pass result has no live references to the adversarial prior."""
-    from harness.reviewer import seed_adversarial_prior, reviewer_pass
 
     wm = _make_world_model(2)
     task_graph = TaskGraph(tasks=[
