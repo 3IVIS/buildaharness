@@ -10,6 +10,8 @@ named variables (evidence_store_var, diagnostics_var) are in scope.
 
 from __future__ import annotations
 
+from typing import Any
+
 
 def compile_gather_evidence(node: dict, evidence_store_var: str) -> str:
     """Generate Python code for a gather_evidence canvas node.
@@ -387,7 +389,7 @@ def compile_process_concept_node(node: dict, harness_meta_var: str) -> str:
 # Dispatch table — shared across all framework adapters.
 # Framework-specific wiring is deferred to P11; this ensures the node types
 # are not silently skipped during compilation.
-HARNESS_NODE_COMPILERS: dict[str, object] = {
+HARNESS_NODE_COMPILERS: dict[str, Any] = {
     # Phase 1
     "gather_evidence": compile_gather_evidence,
     "apply_tool_reliability": compile_apply_tool_reliability,
