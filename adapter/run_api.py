@@ -63,7 +63,7 @@ try:
     from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
 except ImportError:
     _concept_registry = None  # type: ignore[assignment]
-    _ProcessConceptNotFoundError = None  # type: ignore[assignment]
+    _ProcessConceptNotFoundError = None  # type: ignore[assignment,misc]
 
 try:
     from langgraph.errors import GraphInterrupt as _GraphInterrupt
