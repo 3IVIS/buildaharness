@@ -1,2 +1,0 @@
-can you read the harness_implementation_plan and the phase_0_plan in the plans folder to understand what was done in phase 0 and what is phase 1 about. Then please build a  
-  phase_1_plan file similar to phase_0_plan file with all the details. please ensure that the tasks and steps in phase_1_plan are ordered in a sensible manner. 
