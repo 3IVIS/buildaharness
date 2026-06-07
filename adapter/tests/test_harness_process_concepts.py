@@ -1,5 +1,5 @@
 """
-Process Concepts acceptance tests — T01–T28.
+Process Concepts acceptance tests — T01–T28 + T29–T36.
 
 Tests as specified in plan/phase_process_concepts_plan.html.
 All tests are infrastructure-free (no Postgres required).
@@ -593,3 +593,116 @@ def test_default_registry_populated():
     assert "implement_feature" in available
     assert "code_review" in available
     assert "refactor_module" in available
+
+
+# ─── T29–T36: Agent-driven process tools (P-PC.8) ────────────────────────────
+
+
+from harness.process_tools import complete_step, get_current_step, list_processes, load_process  # noqa: E402
+
+
+
+def test_t29_list_processes_shape():
+    """T29: list_processes() returns dicts with id/name/description/step_count."""
+    registry = ProcessRegistry()
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        cpath = d / "my_concept.json"
+        concept = _make_concept("my_concept")
+        _write_concept_file(cpath, concept.to_dict())
+        registry.register("my_concept", cpath)
+
+        result = list_processes(registry)
+
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["id"] == "my_concept"
+    assert "name" in entry
+    assert "description" in entry
+    assert "step_count" in entry
+    assert entry["step_count"] == 2
+
+
+def test_t30_list_processes_sorted():
+    """T30: list_processes() returns entries sorted alphabetically by id."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    result = list_processes(DEFAULT_REGISTRY)
+    ids = [e["id"] for e in result]
+    assert ids == sorted(ids)
+    assert len(ids) == len(DEFAULT_REGISTRY.list_available())
+
+
+def test_t31_load_process_seeds_and_returns_first_step():
+    """T31: load_process() seeds the task graph and returns first_step."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    tg = TaskGraph()
+    result = load_process("implement_feature", tg, DEFAULT_REGISTRY)
+
+    assert result["concept_id"] == "implement_feature"
+    assert result["seeded_steps"] > 0
+    assert len(tg.tasks) == result["seeded_steps"]
+    first_step = result["first_step"]
+    assert first_step is not None
+    assert "id" in first_step
+    assert "description" in first_step
+    assert "risk_level" in first_step
+
+
+def test_t32_load_process_idempotent():
+    """T32: calling load_process() twice does not add duplicate tasks (INV-PC-05)."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    tg = TaskGraph()
+    load_process("debug_test_failure", tg, DEFAULT_REGISTRY)
+    count_after_first = len(tg.tasks)
+
+    load_process("debug_test_failure", tg, DEFAULT_REGISTRY)
+    assert len(tg.tasks) == count_after_first
+
+
+def test_t33_load_process_unknown_id_raises():
+    """T33: load_process() raises ProcessConceptNotFoundError for unknown IDs."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    tg = TaskGraph()
+    with pytest.raises(ProcessConceptNotFoundError):
+        load_process("nonexistent_concept_xyz", tg, DEFAULT_REGISTRY)
+
+
+def test_t34_get_current_step_returns_none_when_complete():
+    """T34: get_current_step() returns None when all tasks are COMPLETE (INV-PC-06)."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    tg = TaskGraph()
+    load_process("debug_test_failure", tg, DEFAULT_REGISTRY)
+    for task in tg.tasks:
+        task.status = "COMPLETE"
+
+    assert get_current_step(tg) is None
+
+
+def test_t35_complete_step_advances_to_next():
+    """T35: complete_step() marks a task COMPLETE and returns the next unblocked step."""
+    from harness.process_registry import DEFAULT_REGISTRY
+
+    tg = TaskGraph()
+    load_process("debug_test_failure", tg, DEFAULT_REGISTRY)
+
+    first = get_current_step(tg)
+    assert first is not None
+    result = complete_step(first["id"], tg)
+
+    assert result["completed"] == first["id"]
+    completed_task = next(t for t in tg.tasks if t.id == first["id"])
+    assert completed_task.status == "COMPLETE"
+    # next_step may be another step or None if graph is done
+    assert "next_step" in result
+
+
+def test_t36_complete_step_unknown_id_raises():
+    """T36: complete_step() raises ValueError for a nonexistent step_id (INV-PC-07)."""
+    tg = TaskGraph()
+    with pytest.raises(ValueError, match="nonexistent:step"):
+        complete_step("nonexistent:step", tg)
