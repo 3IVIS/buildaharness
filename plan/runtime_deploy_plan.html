@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>itsharness Deploy — Client-Side Runtime Plan</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#0f1117;--bg1:#161b27;--bg2:#1e2535;
+  --t0:#e2e8f0;--t1:#94a3b8;
+  --bd0:rgba(255,255,255,0.07);--bd1:rgba(255,255,255,0.14);
+  --accent:#60a5fa;
+  --r-md:6px;--r-lg:10px;
+  --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
+  --c-p0:#60a5fa;--c-p1:#4ade80;--c-p2:#8b5cf6;--c-p3:#fbbf24;
+  --c-p4:#f0abfc;--c-p5:#67e8f9;--c-p6:#34d399;
+  --c-p7:#fb7185;--c-p8:#a3e635;--c-p9:#f97316;--c-p10:#e879f9;--c-p11:#22d3ee;
+}
+body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
+.root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
+.hero{text-align:center;margin-bottom:1.75rem;padding:0 1rem}
+.hero h1{font-size:22px;font-weight:700;color:var(--t0);margin-bottom:.35rem;letter-spacing:-.02em}
+.hero p{font-size:13px;color:var(--t1);max-width:820px;margin:0 auto .6rem;line-height:1.6}
+.badge{display:inline-block;padding:2px 11px;border-radius:20px;font-size:11px;font-weight:600;margin-right:5px}
+.badge-blue{background:rgba(96,165,250,0.08);color:#60a5fa;border:.5px solid rgba(96,165,250,0.25)}
+.badge-green{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.25)}
+.badge-warn{background:rgba(251,191,36,0.08);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.badge-purple{background:rgba(139,92,246,0.08);color:#8b5cf6;border:.5px solid rgba(139,92,246,0.25)}
+
+.tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap;padding:0 1rem}
+.tab{background:none;border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.35rem .85rem;font-size:12px;font-family:var(--font-ui);font-weight:500;color:var(--t1);cursor:pointer;transition:all .15s}
+.tab:hover{border-color:var(--bd1);color:var(--t0)}
+.tab.active{background:rgba(96,165,250,0.07);border-color:rgba(96,165,250,0.4);color:#60a5fa;font-weight:600}
+.tab-content{display:none;padding:0 1rem}
+.tab-content.active{display:block}
+
+.phase-grid{display:flex;flex-direction:column;gap:0}
+.phase-row{background:var(--bg0);border:.5px solid var(--bd0);border-left:3px solid transparent;border-radius:var(--r-lg);padding:.6rem .9rem;cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:4px}
+.phase-row:hover{background:var(--bg1)}
+.phase-row.active{background:rgba(96,165,250,0.05);border-left-color:var(--accent)!important}
+.phase-header{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.phase-num{font-size:10px;color:var(--t1);width:24px;flex-shrink:0;font-family:var(--font-mono)}
+.phase-title{font-size:13px;font-weight:600}
+.phase-meta{font-size:11px;color:var(--t1);margin-left:auto}
+.phase-sub{font-size:11px;color:var(--t1);margin-top:3px;margin-left:30px;line-height:1.4}
+.detail-panel{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-top:.8rem}
+.det-title{font-size:15px;font-weight:600;color:var(--t0);margin-bottom:.6rem}
+.det-body{font-size:13px;color:var(--t1);line-height:1.7}
+.task-list{display:flex;flex-direction:column;gap:8px;margin-top:.7rem}
+.task-item{background:var(--bg2);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.6rem .8rem}
+.task-header{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.task-id{font-family:var(--font-mono);font-size:10px;color:var(--t1)}
+.task-name{font-size:12px;font-weight:600;color:var(--t0)}
+.task-body{font-size:11.5px;color:var(--t1);line-height:1.55}
+.test-list{margin-top:.6rem;display:flex;flex-direction:column;gap:4px}
+.test-item{font-size:11px;color:#4ade80;padding:.2rem .5rem .2rem 1.1rem;position:relative}
+.test-item::before{content:'▸';position:absolute;left:0;color:#4ade80;font-size:10px}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t1);margin-top:.8rem;margin-bottom:.3rem}
+.dep-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:var(--bg0);border:.5px solid var(--bd1);color:var(--t1);margin-right:3px;margin-top:2px}
+.mvp-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;font-family:var(--font-mono);background:rgba(74,222,128,0.08);border:.5px solid rgba(74,222,128,0.3);color:#4ade80;margin-left:6px}
+
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.2rem}
+.sum-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem;text-align:center}
+.sum-n{font-size:28px;font-weight:700;line-height:1}
+.sum-l{font-size:11px;color:var(--t1);margin-top:4px}
+
+.timeline-wrap{overflow-x:auto;padding-bottom:8px}
+.timeline{display:flex;gap:0;min-width:900px}
+.tl-phase{flex:1;padding:.5rem .4rem;border-right:.5px solid var(--bd0)}
+.tl-label{font-size:9px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:4px}
+.tl-bar{height:14px;border-radius:3px;margin-bottom:3px}
+.tl-name{font-size:9px;color:var(--t1);line-height:1.3}
+.tl-weeks{font-size:8px;font-family:var(--font-mono);color:var(--t1);opacity:.65;margin-top:2px}
+
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:1rem}
+.risk-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.75rem .9rem}
+.risk-title{font-size:12px;font-weight:600;margin-bottom:.3rem}
+.risk-body{font-size:11.5px;color:var(--t1);line-height:1.5}
+.risk-sev{font-size:10px;font-family:var(--font-mono);padding:1px 7px;border-radius:3px;margin-bottom:.4rem;display:inline-block}
+.sev-h{background:rgba(248,113,113,0.12);color:#f87171;border:.5px solid rgba(248,113,113,0.3)}
+.sev-m{background:rgba(251,191,36,0.10);color:#fbbf24;border:.5px solid rgba(251,191,36,0.25)}
+.sev-l{background:rgba(74,222,128,0.08);color:#4ade80;border:.5px solid rgba(74,222,128,0.2)}
+
+.node-table{width:100%;border-collapse:collapse}
+.node-table th,.node-table td{padding:.55rem .8rem;text-align:left;border-bottom:.5px solid var(--bd0);font-size:12px}
+.node-table th{background:var(--bg1);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--t1)}
+.phase-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+.pkg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;margin-bottom:1rem}
+.pkg-card{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.8rem 1rem}
+.pkg-title{font-size:13px;font-weight:600;color:var(--t0);margin-bottom:.4rem;font-family:var(--font-mono)}
+.pkg-desc{font-size:12px;color:var(--t1);line-height:1.5;margin-bottom:.5rem}
+.file-item{font-size:11px;font-family:var(--font-mono);color:var(--t1);padding:.15rem 0 .15rem .8rem;position:relative;line-height:1.4}
+.file-item::before{content:'·';position:absolute;left:0;color:var(--t1)}
+.file-new{color:#4ade80}.file-new::before{color:#4ade80}
+
+.inv-list{display:flex;flex-direction:column;gap:6px}
+.inv-item{background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1);line-height:1.4}
+.inv-item strong{color:var(--t0);display:block;margin-bottom:2px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="root">
+
+<div class="hero">
+  <h1>itsharness Deploy — Client-Side Runtime</h1>
+  <p>Phased implementation plan for two complementary TypeScript packages: (1) a <strong style="color:var(--t0)">FlowSpec runtime</strong> that executes a compiled canvas flow directly in the browser, paired with a thin authenticated LLM proxy; and (2) a <strong style="color:var(--t0)">Harness reasoning engine</strong> implementing the full 22-node agent reasoning/control architecture from the harness architecture spec. Together these give any React app both flow execution and the full agent loop — world model, hypothesis tracking, control-state resolution, verification, and reviewer pass.</p>
+  <span class="badge badge-blue">12 Phases</span>
+  <span class="badge badge-green">14 FlowSpec + 22 Harness node types</span>
+  <span class="badge badge-warn">~14–15 weeks total</span>
+  <span class="badge badge-purple">MVP ~4 weeks</span>
+  <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <code style="font-size:10px">@itsharness/canvas</code> spec types (already published) · Python adapter not required at runtime · harness arch spec (full_harness_architecture.html)</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview',this)">Overview</button>
+  <button class="tab" onclick="showTab('phases',this)">Phase Details</button>
+  <button class="tab" onclick="showTab('packages',this)">Package Structure</button>
+  <button class="tab" onclick="showTab('nodes',this)">Node Coverage</button>
+  <button class="tab" onclick="showTab('testing',this)">Testing Strategy</button>
+  <button class="tab" onclick="showTab('risks',this)">Risks</button>
+</div>
+
+<!-- ═══════════════ OVERVIEW ═══════════════ -->
+<div id="overview" class="tab-content active">
+
+<div class="summary-row">
+  <div class="sum-card"><div class="sum-n" style="color:#60a5fa">12</div><div class="sum-l">Phases</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#4ade80">36</div><div class="sum-l">Node types (14+22)</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#f0abfc">4</div><div class="sum-l">New packages</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#fbbf24">~15</div><div class="sum-l">Weeks estimated</div></div>
+</div>
+
+<div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.9rem 1.1rem;margin-bottom:1.2rem">
+  <div style="font-size:13px;font-weight:600;color:var(--t0);margin-bottom:.5rem">What this plan delivers</div>
+  <div style="font-size:13px;color:var(--t1);line-height:1.7">
+    The itsharness canvas authors a <strong style="color:var(--t0)">FlowSpec</strong> — a neutral JSON intermediate representation. Today that spec is compiled by a Python adapter into LangGraph, CrewAI, Mastra, or MAF, then executed server-side. This plan builds a second execution path: a pure TypeScript runtime that interprets the FlowSpec directly in the browser.<br><br>
+    <strong style="color:var(--t0)">Track 1 (P0–P6) — FlowSpec Runtime:</strong> The client-side runtime handles the complete flow execution lifecycle — graph traversal, state management, all 14 FlowSpec node types, streaming, memory, tools, HITL pausing, and agent loops. The only server component is a <strong style="color:var(--t0)">~100-line LLM proxy</strong> that holds API keys and forwards requests. No job queue, no Postgres, no Redis, no Python adapter at runtime. A <code style="font-size:11px">useHarness(flowSpec)</code> React hook wraps the runtime.<br><br>
+    <strong style="color:var(--t0)">Track 2 (P7–P11) — Harness Reasoning Engine:</strong> A full TypeScript port of the 22-node agent reasoning/control architecture. This includes all state objects (WorldModel, CallerState, HypothesisSet, ControlState, Diagnostics, TaskGraph, EvidenceStore, MemoryState, StrategyState, FailureDiagnostics, ExperienceStore), all node implementations (gather_evidence, detect_contradictions, resolve_control_state, verify, reviewer_pass, etc.), and a <code style="font-size:11px">HarnessRuntime</code> class that runs the full agent loop. The FlowSpec runtime (Track 1) is usable as the execution layer inside harness tasks via the <code style="font-size:11px">subgraph</code> node pattern.
+  </div>
+</div>
+
+<div style="background:rgba(96,165,250,0.05);border:.5px solid rgba(96,165,250,0.2);border-left:3px solid #60a5fa;border-radius:var(--r-lg);padding:.8rem 1rem;margin-bottom:1.2rem;font-size:12.5px;color:var(--t1);line-height:1.6">
+  <strong style="color:#60a5fa">MVP scope (Phases 0–2 + 5, ~4 weeks):</strong> Proxy working on day 1. Graph engine + core node types (input, output, llm_call, transform, condition) by end of P1. Parallel fork/join + full flow control by end of P2. <code style="font-size:10px">useHarness</code> hook in P5. This covers ~80% of real-world flows built in the canvas — including the RAG Agent, Content Moderation+HITL (except HITL pause), and Parallel Risk Assessment examples in the spec.<br><br>
+  <strong style="color:#fb7185">Harness engine scope (Phases 7–11, ~6 weeks):</strong> Full TypeScript port of the 22-node reasoning architecture. P7 lays all state types. P8 adds world-model + evidence nodes. P9 adds control + planning nodes. P10 adds policy, execution, and recovery nodes. P11 closes the lifecycle (Initialize, WarmStart, ContextCompression, ReviewerPass, OutputValidation) and wires HarnessRuntime. ExperienceStore ships as a stub interface — production adapters are out of scope.
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--t0);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.08em">Phase roadmap</div>
+
+<div class="timeline-wrap">
+<div class="timeline">
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p0)">P0</div><div class="tl-bar" style="background:var(--c-p0);opacity:.7;width:100%"></div><div class="tl-name">Scaffold &amp; LLM Proxy</div><div class="tl-weeks">~1 week · MVP</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p1)">P1</div><div class="tl-bar" style="background:var(--c-p1);opacity:.7;width:100%"></div><div class="tl-name">Graph Engine &amp; Core Nodes</div><div class="tl-weeks">~1.5 weeks · MVP</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p2)">P2</div><div class="tl-bar" style="background:var(--c-p2);opacity:.7;width:100%"></div><div class="tl-name">Parallel &amp; Flow Control</div><div class="tl-weeks">~1 week · MVP</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p3)">P3</div><div class="tl-bar" style="background:var(--c-p3);opacity:.7;width:100%"></div><div class="tl-name">Memory &amp; Tool Registry</div><div class="tl-weeks">~1 week</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p4)">P4</div><div class="tl-bar" style="background:var(--c-p4);opacity:.7;width:100%"></div><div class="tl-name">HITL &amp; Agent Nodes</div><div class="tl-weeks">~1.5 weeks</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p5)">P5</div><div class="tl-bar" style="background:var(--c-p5);opacity:.7;width:100%"></div><div class="tl-name">React Hook &amp; Streaming</div><div class="tl-weeks">~1 week · MVP</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p6)">P6</div><div class="tl-bar" style="background:var(--c-p6);opacity:.7;width:100%"></div><div class="tl-name">Deploy Templates</div><div class="tl-weeks">~0.5 weeks</div></div>
+  <div class="tl-phase" style="border-top:1px solid rgba(251,113,133,0.3)"><div class="tl-label" style="color:var(--c-p7)">P7</div><div class="tl-bar" style="background:var(--c-p7);opacity:.7;width:100%"></div><div class="tl-name">Harness State Layer</div><div class="tl-weeks">~1 week · harness</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p8)">P8</div><div class="tl-bar" style="background:var(--c-p8);opacity:.7;width:100%"></div><div class="tl-name">World Model &amp; Evidence</div><div class="tl-weeks">~1.5 weeks · harness</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p9)">P9</div><div class="tl-bar" style="background:var(--c-p9);opacity:.7;width:100%"></div><div class="tl-name">Control &amp; Planning</div><div class="tl-weeks">~1 week · harness</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p10)">P10</div><div class="tl-bar" style="background:var(--c-p10);opacity:.7;width:100%"></div><div class="tl-name">Policy, Execution &amp; Recovery</div><div class="tl-weeks">~1.5 weeks · harness</div></div>
+  <div class="tl-phase"><div class="tl-label" style="color:var(--c-p11)">P11</div><div class="tl-bar" style="background:var(--c-p11);opacity:.7;width:100%"></div><div class="tl-name">Harness Lifecycle</div><div class="tl-weeks">~1 week · harness</div></div>
+</div>
+</div>
+
+<div style="margin-top:1.2rem;font-size:12px;font-weight:600;color:var(--t0);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.08em">design invariants — must hold throughout all phases</div>
+<div class="inv-list">
+  <div class="inv-item"><strong>FlowSpec is consumed read-only</strong>The runtime never mutates the FlowSpec it receives. All mutable state lives in the FlowState object created at run time. This keeps the spec reusable across multiple parallel runs in the same app.</div>
+  <div class="inv-item"><strong>No server state at runtime</strong>The proxy is stateless. It holds no session, no run history, no flow metadata. All run state lives in the client. A proxy restart has zero effect on in-flight runs.</div>
+  <div class="inv-item"><strong>Node executors are pure functions of (node, state, context)</strong>Each executor takes a node definition, the current FlowState, and an ExecutionContext. It returns a new partial state update. No executor writes to global or module-level state.</div>
+  <div class="inv-item"><strong>Streaming is opt-in, not required</strong>Every LLM call works in both streaming and non-streaming modes. If the host app doesn't subscribe to the event bus, execution proceeds normally and the final state is returned. Streaming adds no new failure modes.</div>
+  <div class="inv-item"><strong>HITL pause is a Promise, not a callback</strong>The HITLBreakpointExecutor suspends by holding an unresolved Promise. resume(payload) resolves it. This makes the execution model straightforward: the async/await chain is never broken, it simply waits.</div>
+  <div class="inv-item"><strong>Memory adapters are swappable without changing node executors</strong>MemoryReadExecutor and MemoryWriteExecutor call through a MemoryAdapter interface. The in-memory, IndexedDB, and any future external adapters are interchangeable. The FlowSpec memory_stores config selects the adapter at init time.</div>
+  <div class="inv-item"><strong>The proxy is the only place API keys appear</strong>LLMClient sends requests to the proxy URL — never directly to Anthropic or OpenAI. API keys are env vars on the proxy only. A host app cannot exfiltrate keys even with full access to the runtime source.</div>
+  <div class="inv-item"><strong>Harness: generation_id must match before any gate reads control_state</strong>All three harness policy gates (decomposition, action, post_exec) assert control_state.generation_id === world_model.generation_id before reading. If stale, the gate re-invokes resolveControlState() via _maybeResolve() before proceeding. A stale control state is a structural bug, not a runtime condition — gates must never silently proceed with a stale value.</div>
+  <div class="inv-item"><strong>Harness: SYSTEM_BREAKING contradictions do not inline-halt</strong>detectContradictions() never throws on a SYSTEM_BREAKING contradiction. It pushes the contradiction into world_model.contradictions[] and returns. The next resolveControlState() call picks it up via TIER 1. This ensures all system-breaking conditions produce the same response through the same code path regardless of where in the loop they are detected.</div>
+</div>
+
+</div>
+
+<!-- ═══════════════ PHASE DETAILS ═══════════════ -->
+<div id="phases" class="tab-content">
+<div class="phase-grid" id="phase-list"></div>
+<div class="detail-panel" id="phase-detail">
+  <div class="det-title">Click a phase to see tasks and tests</div>
+  <div class="det-body">Phases P0–P2 and P5 form the FlowSpec runtime MVP. Phases P3–P4 add the full FlowSpec node type surface. Phase P6 provides deployment templates. Phases P7–P11 implement the 22-node harness reasoning/control architecture as a second TypeScript package (@itsharness/harness).</div>
+</div>
+</div>
+
+<!-- ═══════════════ PACKAGE STRUCTURE ═══════════════ -->
+<div id="packages" class="tab-content">
+
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Four new packages added to the existing monorepo. No changes to <code style="font-size:11px">packages/canvas</code> or the Python adapter layer — both tracks are additive.</div>
+
+<div class="pkg-grid">
+  <div class="pkg-card">
+    <div class="pkg-title">packages/runtime/</div>
+    <div class="pkg-desc">Core FlowSpec interpreter. Pure TypeScript, no framework dependency. Importable as <code style="font-size:10px">@itsharness/runtime</code>.</div>
+    <div class="file-item file-new">src/runtime.ts — FlowRuntime class (main entry point)</div>
+    <div class="file-item file-new">src/graph.ts — FlowGraph: topo sort, edge traversal</div>
+    <div class="file-item file-new">src/state.ts — FlowState: typed mutable run state</div>
+    <div class="file-item file-new">src/context.ts — ExecutionContext: LLM client, tool registry, memory stores</div>
+    <div class="file-item file-new">src/llm-client.ts — LLMClient: proxy calls + streaming</div>
+    <div class="file-item file-new">src/events.ts — RuntimeEvent types + EventBus</div>
+    <div class="file-item file-new">src/executors/index.ts — executor registry</div>
+    <div class="file-item file-new">src/executors/input.ts</div>
+    <div class="file-item file-new">src/executors/output.ts</div>
+    <div class="file-item file-new">src/executors/llm-call.ts</div>
+    <div class="file-item file-new">src/executors/transform.ts</div>
+    <div class="file-item file-new">src/executors/condition.ts</div>
+    <div class="file-item file-new">src/executors/parallel-fork.ts</div>
+    <div class="file-item file-new">src/executors/parallel-join.ts</div>
+    <div class="file-item file-new">src/executors/memory-read.ts</div>
+    <div class="file-item file-new">src/executors/memory-write.ts</div>
+    <div class="file-item file-new">src/executors/hitl-breakpoint.ts</div>
+    <div class="file-item file-new">src/executors/agent-role.ts</div>
+    <div class="file-item file-new">src/executors/agent-debate.ts</div>
+    <div class="file-item file-new">src/executors/subgraph.ts</div>
+    <div class="file-item file-new">src/memory/adapter.ts — MemoryAdapter interface</div>
+    <div class="file-item file-new">src/memory/in-memory.ts — InMemoryAdapter</div>
+    <div class="file-item file-new">src/memory/indexeddb.ts — IndexedDBAdapter</div>
+    <div class="file-item file-new">src/tools/registry.ts — ToolRegistry</div>
+    <div class="file-item file-new">src/tools/built-ins.ts — fetch, search stubs</div>
+    <div class="file-item file-new">src/template.ts — Handlebars → template literal resolver</div>
+    <div class="file-item file-new">src/expr.ts — safe expression evaluator (condition branches)</div>
+    <div class="file-item file-new">src/errors.ts — FlowExecutionError, HITLTimeoutError</div>
+    <div class="file-item file-new">src/index.ts — public API exports</div>
+    <div class="file-item file-new">package.json · tsconfig.json · vite.config.lib.ts</div>
+  </div>
+
+  <div class="pkg-card">
+    <div class="pkg-title">packages/react/</div>
+    <div class="pkg-desc">React hook wrapping the runtime. Peer dep on React 18+. Importable as <code style="font-size:10px">@itsharness/react</code>.</div>
+    <div class="file-item file-new">src/use-harness.ts — useHarness(flowSpec, options) hook</div>
+    <div class="file-item file-new">src/types.ts — HarnessOptions, HarnessHandle</div>
+    <div class="file-item file-new">src/index.ts — exports</div>
+    <div class="file-item file-new">package.json · tsconfig.json</div>
+    <div style="margin-top:.6rem;font-size:11px;color:var(--t1);line-height:1.4">Hook API:<br>
+      <code style="font-size:10px;color:var(--t0)">const { run, resume, abort, state, nodeStats, status, events } = useHarness(flowSpec, options)</code><br><br>
+      <code style="font-size:10px">status</code>: <code style="font-size:10px">idle | running | paused | complete | error</code><br>
+      <code style="font-size:10px">nodeStats</code>: <code style="font-size:10px">Record&lt;nodeId, NodeExecStat&gt;</code> — compatible with <code style="font-size:10px">ItsHarnessCanvas execStats</code> prop if canvas is embedded
+    </div>
+  </div>
+
+  <div class="pkg-card">
+    <div class="pkg-title">packages/proxy/</div>
+    <div class="pkg-desc">Thin authenticated LLM proxy. ~100 lines. Deployable to Cloudflare Workers, Node.js, or any Hono-compatible runtime.</div>
+    <div class="file-item file-new">src/index.ts — Hono app: POST /llm/chat · POST /auth/token</div>
+    <div class="file-item file-new">src/auth.ts — JWT verify middleware</div>
+    <div class="file-item file-new">src/forward.ts — stream-through to Anthropic/OpenAI</div>
+    <div class="file-item file-new">src/providers.ts — provider routing (anthropic | openai)</div>
+    <div class="file-item file-new">wrangler.toml — CF Workers deploy config</div>
+    <div class="file-item file-new">package.json · tsconfig.json</div>
+    <div style="margin-top:.6rem;font-size:11px;color:var(--t1);line-height:1.5">
+      <strong style="color:var(--t0)">POST /llm/chat</strong> — requires Bearer token · injects API key · forwards body to provider · streams response back<br><br>
+      <strong style="color:var(--t0)">POST /auth/token</strong> — exchanges PROXY_SECRET for a short-lived JWT (optional; can also use static tokens)
+    </div>
+  </div>
+</div>
+
+<div class="pkg-card" style="border-color:rgba(251,113,133,0.25)">
+    <div class="pkg-title" style="color:var(--c-p7)">packages/harness/</div>
+    <div class="pkg-desc">Full TypeScript port of the 22-node agent reasoning/control architecture. Pure TypeScript, no framework dependency. Importable as <code style="font-size:10px">@itsharness/harness</code>. Added in P7–P11.</div>
+    <div class="file-item file-new">src/harness-runtime.ts — HarnessRuntime class (main agent loop)</div>
+    <div class="file-item file-new">src/normalise.ts — normalise(raw, DimensionType): ratio|composite|entropy|match_confidence</div>
+    <div class="file-item file-new">src/generation-id.ts — _maybeResolve(), assertNormalised() helpers</div>
+    <div class="file-item file-new">src/state/world-model.ts — WorldModel: generation_id, observations, beliefs, assumptions, contradictions, completeness_flags</div>
+    <div class="file-item file-new">src/state/caller-state.ts — CallerState: constraints, clarification_history, constraints_changed</div>
+    <div class="file-item file-new">src/state/control-state.ts — ControlState: risk_state, escalation_reason, block_mask, generation_id</div>
+    <div class="file-item file-new">src/state/task-graph.ts — TaskGraph: tasks (6-state), depends_on, parallel_write_domains, conflict_probability_cache</div>
+    <div class="file-item file-new">src/state/diagnostics.ts — Diagnostics: belief_health, coverage_health, verification_health, execution_health + dep_class_gap_annotation</div>
+    <div class="file-item file-new">src/state/hypothesis-set.ts — HypothesisSet: active[], eliminated[], elimination_policy</div>
+    <div class="file-item file-new">src/state/evidence-store.ts — EvidenceStore: Evidence type, tool_reliability_envelopes, tool_availability_manifest</div>
+    <div class="file-item file-new">src/state/memory-state.ts — MemoryState: token_budget, compression_risk (compressed_structures[] + pruned_regions[]), journal_retention_policy</div>
+    <div class="file-item file-new">src/state/strategy-state.ts — StrategyState: current_strategy, switch_triggers, prior_strategy_weights, recovery_strategy_order</div>
+    <div class="file-item file-new">src/state/failure-diagnostics.ts — FailureDiagnostics: failure_mode_library, matched_pattern, failure_history</div>
+    <div class="file-item file-new">src/state/experience-store.ts — ExperienceStore interface + InMemoryExperienceStore stub</div>
+    <div class="file-item file-new">src/state/output-contract.ts — OutputContract: format, required_sections, interface_constraints</div>
+    <div class="file-item file-new">src/nodes/gather-evidence.ts</div>
+    <div class="file-item file-new">src/nodes/apply-tool-reliability.ts</div>
+    <div class="file-item file-new">src/nodes/update-world-model.ts</div>
+    <div class="file-item file-new">src/nodes/detect-contradictions.ts</div>
+    <div class="file-item file-new">src/nodes/generate-update-hypotheses.ts</div>
+    <div class="file-item file-new">src/nodes/update-diagnostics.ts</div>
+    <div class="file-item file-new">src/nodes/resolve-control-state.ts</div>
+    <div class="file-item file-new">src/nodes/check-caller-updates.ts</div>
+    <div class="file-item file-new">src/nodes/update-task-graph.ts</div>
+    <div class="file-item file-new">src/nodes/select-task.ts</div>
+    <div class="file-item file-new">src/nodes/estimate-risk.ts</div>
+    <div class="file-item file-new">src/nodes/estimate-voi.ts</div>
+    <div class="file-item file-new">src/nodes/review-proposed-change.ts</div>
+    <div class="file-item file-new">src/nodes/execute.ts</div>
+    <div class="file-item file-new">src/nodes/verify.ts</div>
+    <div class="file-item file-new">src/nodes/rollback-replan.ts</div>
+    <div class="file-item file-new">src/nodes/escalate.ts</div>
+    <div class="file-item file-new">src/nodes/initialize.ts</div>
+    <div class="file-item file-new">src/nodes/warm-start.ts</div>
+    <div class="file-item file-new">src/nodes/context-compression.ts</div>
+    <div class="file-item file-new">src/nodes/reviewer-pass.ts</div>
+    <div class="file-item file-new">src/nodes/output-validation.ts</div>
+    <div class="file-item file-new">src/index.ts — public API exports</div>
+    <div class="file-item file-new">package.json · tsconfig.json · vite.config.lib.ts</div>
+  </div>
+</div>
+
+<div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.8rem 1rem;font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:1rem">
+  <strong style="color:var(--t0)">Root package.json additions</strong><br>
+  Four new workspace entries: <code style="font-size:11px">"packages/runtime"</code>, <code style="font-size:11px">"packages/react"</code>, <code style="font-size:11px">"packages/proxy"</code>, <code style="font-size:11px">"packages/harness"</code><br>
+  New scripts: <code style="font-size:11px">build:runtime</code> · <code style="font-size:11px">build:react</code> · <code style="font-size:11px">build:proxy</code> · <code style="font-size:11px">build:harness</code> · <code style="font-size:11px">test:runtime</code> · <code style="font-size:11px">test:react</code> · <code style="font-size:11px">test:harness</code> · <code style="font-size:11px">deploy:proxy</code><br>
+  No changes to existing canvas or adapter packages.
+</div>
+
+</div>
+
+<!-- ═══════════════ NODE COVERAGE ═══════════════ -->
+<div id="nodes" class="tab-content">
+
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">Two sets of node types. <strong style="color:var(--t0)">14 FlowSpec nodes</strong> (the canvas-authored flow nodes, P0–P6) and <strong style="color:var(--t0)">22 Harness nodes</strong> (the agent reasoning/control architecture, P7–P11). MVP (P0–P2, P5) covers the 9 FlowSpec node types that appear in the three built-in example flows.</div>
+
+<table class="node-table">
+<thead><tr><th>#</th><th>Node type</th><th>Phase</th><th>MVP?</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>01</td><td><code>input</code></td><td><span class="phase-dot" style="background:var(--c-p1)"></span>P1</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Copies trigger data into FlowState. Validates against output_schema if defined.</td></tr>
+<tr><td>02</td><td><code>output</code></td><td><span class="phase-dot" style="background:var(--c-p1)"></span>P1</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Returns final FlowState. Terminates execution graph.</td></tr>
+<tr><td>03</td><td><code>llm_call</code></td><td><span class="phase-dot" style="background:var(--c-p1)"></span>P1</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Resolves prompt_template (Handlebars → value), calls LLMClient, writes output_key. Supports structured_output schema.</td></tr>
+<tr><td>04</td><td><code>transform</code></td><td><span class="phase-dot" style="background:var(--c-p1)"></span>P1</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">fn_ref: dynamic import from a registered function registry. mapping mode: key remapping inline. No eval().</td></tr>
+<tr><td>05</td><td><code>condition</code></td><td><span class="phase-dot" style="background:var(--c-p1)"></span>P1</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Evaluates branch conditions via safe expr evaluator (no eval()). Routes to first matching branch or default_target.</td></tr>
+<tr><td>06</td><td><code>parallel_fork</code></td><td><span class="phase-dot" style="background:var(--c-p2)"></span>P2</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Dispatches all targets concurrently via Promise.all. Each branch gets a state snapshot.</td></tr>
+<tr><td>07</td><td><code>parallel_join</code></td><td><span class="phase-dot" style="background:var(--c-p2)"></span>P2</td><td><span style="color:#4ade80;font-size:11px">✓ MVP</span></td><td style="color:var(--t1);font-size:11px">Waits for all fork branches. Merges branch states: per-key reducer from state_schema (replace default, append for array reducer).</td></tr>
+<tr><td>08</td><td><code>memory_read</code></td><td><span class="phase-dot" style="background:var(--c-p3)"></span>P3</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Resolves query_expr from state. Calls MemoryAdapter.search() (semantic) or .get() (key-value). Writes to output_key.</td></tr>
+<tr><td>09</td><td><code>memory_write</code></td><td><span class="phase-dot" style="background:var(--c-p3)"></span>P3</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Resolves key_expr and value_expr from state. Calls MemoryAdapter.set() with write_mode (upsert | append | overwrite).</td></tr>
+<tr><td>10</td><td><code>tool_invoke</code></td><td><span class="phase-dot" style="background:var(--c-p3)"></span>P3</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Looks up tool by name in ToolRegistry. Resolves args from state. Calls tool.execute(args). Writes result to output_key.</td></tr>
+<tr><td>11</td><td><code>hitl_breakpoint</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Pauses execution via unresolved Promise. Emits 'paused' event with prompt + resume_schema. resume(payload) validates and resolves. Timeout fires on_timeout policy.</td></tr>
+<tr><td>12</td><td><code>agent_role</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Runs LLM tool-use loop: call LLM → if tool_call → invoke tool → repeat until no tool_call or max_iter. Writes final answer to output_field.</td></tr>
+<tr><td>13</td><td><code>agent_debate</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Multi-agent turn-taking. Each agent sees prior turns. Terminates on convergence condition or max_iter. Most complex node.</td></tr>
+<tr><td>14</td><td><code>subgraph</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Recursively instantiates FlowRuntime with nested FlowSpec. Parent state fields mapped to trigger data. Result written back to parent state.</td></tr>
+</tbody>
+</table>
+
+<div style="margin-top:1.4rem;font-size:12px;font-weight:600;color:var(--c-p7);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Harness reasoning/control node types (P7–P11)</div>
+
+<table class="node-table">
+<thead><tr><th>#</th><th>Harness node</th><th>Phase</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>H01</td><td><code>initialize</code></td><td><span class="phase-dot" style="background:var(--c-p11)"></span>P11</td><td style="color:var(--t1);font-size:11px">Creates all 13 state objects. Populates tool_availability_manifest once. Sets max_steps, journal_retention_policy, elimination_policy, reversibility_strategy.</td></tr>
+<tr><td>H02</td><td><code>warm_start</code></td><td><span class="phase-dot" style="background:var(--c-p11)"></span>P11</td><td style="color:var(--t1);font-size:11px">No-op if ExperienceStore unavailable. Six loaders: strategy priors, failure class priors, dep_graph decay rates, decompositions, tool workflows, verification plans.</td></tr>
+<tr><td>H03</td><td><code>check_caller_updates</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">Non-blocking poll at top of each iteration. Full constraint propagation path if constraints_changed: detect_contradictions → update_success_criteria → revalidate_task_graph → generation_id++ → resolve_control_state → continue.</td></tr>
+<tr><td>H04</td><td><code>context_compression</code></td><td><span class="phase-dot" style="background:var(--c-p11)"></span>P11</td><td style="color:var(--t1);font-size:11px">compress_memory() → compressed_structures[] + pruned_regions[] separately. staleness_sweep() + dep_graph decay. journal_retention_policy runs every iteration.</td></tr>
+<tr><td>H05</td><td><code>gather_evidence</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">Evidence(obs, reliability, source, evidence_type, freshness). Observations stored raw — never auto-promoted to conclusions. Core observation vs conclusion invariant.</td></tr>
+<tr><td>H06</td><td><code>apply_tool_reliability</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">Applies tool reliability envelopes: caps max conclusion reliability per tool. Updates verification_health.feasibility. HIGH obs ≠ HIGH conclusion.</td></tr>
+<tr><td>H07</td><td><code>update_world_model</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">Reliability-weighted integration. propagate_beliefs() with dep_graph_budget (confidence decay, unverified_edge_ratio). Updates belief_health proxies. generation_id++.</td></tr>
+<tr><td>H08</td><td><code>detect_contradictions</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">4 types: pairwise|set-level|temporal|abstraction. 4 severities: LOW|MEDIUM|HIGH|SYSTEM_BREAKING. SYSTEM_BREAKING enters contradictions[] — does NOT inline-halt. Next resolve_control_state() TIER 1 picks it up.</td></tr>
+<tr><td>H09</td><td><code>generate_update_hypotheses</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">4 structurally distinct sources: symptom_inference, counterfactual, failure_mode_library, analogy. diversity_score ≥ 0.7 enforced. elimination_policy.apply(): contradicting evidence | prediction_failure_count ≥ K | posterior &lt; FLOOR. Last K eliminated retained.</td></tr>
+<tr><td>H10</td><td><code>update_diagnostics</code></td><td><span class="phase-dot" style="background:var(--c-p8)"></span>P8</td><td style="color:var(--t1);font-size:11px">All 4 health vectors recomputed. failure_mode_library.match() → normalised confidence. dep_class_gap_annotation advisory only (not a numeric axis input). abstraction_fit recalculated if task_graph.changed.</td></tr>
+<tr><td>H11</td><td><code>resolve_control_state</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">5 tiers strict order: TIER1 SYSTEM_BREAKING→BLOCKED, TIER2 &lt;CRITICAL_THRESHOLD(0.2)→block_mask + deadlock check, TIER3 coverage low→CAUTIOUS, TIER4 proportional caution (compute_elevation_factor), TIER5 NORMAL. generation_id stamped.</td></tr>
+<tr><td>H12</td><td><code>update_task_graph</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">6-state task status machine. conflict_probability_cache per write-domain pair. abstraction_fit check on change. cycle detection. parallel_write_domains updated.</td></tr>
+<tr><td>H13</td><td><code>select_task</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">depends_on COMPLETE check. HUMAN_REQUIRED → escalate immediately. conflict_prob > 0.5 → pessimistic; ≤ 0.5 → optimistic (merge detects). Parallel branch merge: max generation_id, merged world model, fresh control_state.</td></tr>
+<tr><td>H14</td><td><code>estimate_risk</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">LOW|MEDIUM|HIGH from file centrality + change scope + module type. HIGH → smaller edits + adversarial verification pass. Orthogonal to compression overlap check.</td></tr>
+<tr><td>H15</td><td><code>estimate_voi</code></td><td><span class="phase-dot" style="background:var(--c-p9)"></span>P9</td><td style="color:var(--t1);font-size:11px">VOI = expected_uncertainty_reduction × decision_impact. Includes verification_adequacy_critic: consults tool_availability_manifest, forces evidence pass if LOW adequacy. If adequacy unresolvable → updates verification_health.strength → feeds TIER 2.</td></tr>
+<tr><td>H16</td><td><code>review_proposed_change</code></td><td><span class="phase-dot" style="background:var(--c-p10)"></span>P10</td><td style="color:var(--t1);font-size:11px">5 dimensions: task alignment, world model consistency, output contract pre-check, code quality (if linter available), open hypothesis compatibility. Failed → re-select action. 2nd consecutive failure same task → escalate.</td></tr>
+<tr><td>H17</td><td><code>execute</code></td><td><span class="phase-dot" style="background:var(--c-p10)"></span>P10</td><td style="color:var(--t1);font-size:11px">Per-action reversibility (snapshot|git-revert|patch-rollback|ephemeral). Tool error → Evidence(HIGH, SYSTEM_ERROR) → update_world_model path. plan_tool_workflow() dep graph refresh if unverified_edge_ratio exceeded.</td></tr>
+<tr><td>H18</td><td><code>verify</code></td><td><span class="phase-dot" style="background:var(--c-p10)"></span>P10</td><td style="color:var(--t1);font-size:11px">9 layers: syntax, unit, integration, consistency, requirements, assumptions, goal correctness, evidence sufficiency (claim-scoped), partial contract check. tool_availability_manifest pruning. HIGH risk → adversarial pass. contract_shadow_check() at post_exec_gate.</td></tr>
+<tr><td>H19</td><td><code>rollback_replan</code></td><td><span class="phase-dot" style="background:var(--c-p10)"></span>P10</td><td style="color:var(--t1);font-size:11px">rollback + record_failure. cannot_make_progress() (4 proxies). 6 named strategies: DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE. Softmax policy if ExperienceStore available. LOCAL or GLOBAL replan scope.</td></tr>
+<tr><td>H20</td><td><code>escalate</code></td><td><span class="phase-dot" style="background:var(--c-p10)"></span>P10</td><td style="color:var(--t1);font-size:11px">Fires on BLOCKED or cannot_make_progress(). surface_blocker(reason, missing_info). On human response: inject_clarification → full constraint propagation path (same as H03). On no response: halt().</td></tr>
+<tr><td>H21</td><td><code>reviewer_pass</code></td><td><span class="phase-dot" style="background:var(--c-p11)"></span>P11</td><td style="color:var(--t1);font-size:11px">3 lenses: implementer, reviewer, adversarial. adversarial_prior seeded on causal proximity to success_criteria (not confidence) — BFS 3-hop depth limit. adversarial_prior discarded after use (never stored in world_model). abstraction_fit unconditionally recomputed. drain_propagation_queue() → re-enter loop if tasks reopened.</td></tr>
+<tr><td>H22</td><td><code>output_validation</code></td><td><span class="phase-dot" style="background:var(--c-p11)"></span>P11</td><td style="color:var(--t1);font-size:11px">Full contract check vs output_contract + current caller_state constraints. Authoritative pass — supersedes contract_shadow_check(). A result can satisfy success_criteria while violating the contract if caller constraints changed mid-run.</td></tr>
+</tbody>
+</table>
+
+<div style="margin-top:1.4rem;font-size:12px;font-weight:600;color:var(--t0);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Browser constraints on FlowSpec node types</div>
+<div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.8rem 1rem;font-size:12px;color:var(--t1);line-height:1.7">
+  <strong style="color:var(--t0)">transform fn_ref:</strong> Cannot use Node.js <code>require()</code> or file paths. fn_ref values must be registered in a FunctionRegistry passed to ExecutionContext at init. The proxy can optionally serve a fn_ref bundle endpoint, but this is optional — the common case is that transforms are registered by the host app.<br><br>
+  <strong style="color:var(--t0)">memory_read semantic mode:</strong> Vector search cannot run in-browser (no WASM embedding model in MVP). Semantic memory_read in browser delegates to a /memory/search endpoint on the proxy, or falls back to a full in-memory linear scan. IndexedDB adapter supports key-value reads natively.<br><br>
+  <strong style="color:var(--t0)">condition expr evaluation:</strong> Cannot use eval(). Conditions use a restricted expression parser (jsonpath-plus for <code>$.state.*</code> paths + comparison operators). Complex conditions requiring arbitrary code are fn_ref transforms instead.
+</div>
+
+</div>
+
+<!-- ═══════════════ TESTING STRATEGY ═══════════════ -->
+<div id="testing" class="tab-content">
+
+<div style="font-size:13px;color:var(--t1);line-height:1.6;margin-bottom:1rem">All tests run without a live proxy, without a running LLM, and without a browser. LLM calls are mocked via an injectable LLMClient interface. Memory adapters use the in-memory implementation. Browser APIs (IndexedDB) are shimmed via vitest's jsdom environment.</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--t0);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 1 — Unit tests (per executor, per module)</div>
+<div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.8rem 1rem;font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:1rem">
+  Each executor gets its own test file: <code style="font-size:11px">packages/runtime/src/executors/*.test.ts</code>. Tests inject a mock LLMClient and assert state transitions. Coverage target: 90%+ for all executor modules. Run via <code style="font-size:11px">npm test --workspace=packages/runtime</code>.
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--t0);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 2 — Flow integration tests (full FlowSpec execution)</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:1rem">
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">RAG Agent flow:</strong> Run the canonical RAG Agent FlowSpec from <code>EXAMPLE_FLOWS[0]</code> in <code>packages/canvas/src/spec/examples.ts</code> end-to-end with a mock LLM and a mock vector memory adapter. Assert final state has <code>answer</code> field populated. Assert <code>cache_qa</code> write was called. (Import: <code style="font-size:10px">import { EXAMPLE_FLOWS } from '@itsharness/canvas'</code>)</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Content Moderation flow (auto path):</strong> Run with severity=low. Assert routing skips human_review, hits auto_respond, reaches output. Assert HITL node was not paused.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Content Moderation flow (HITL path):</strong> Run with severity=high. Assert status becomes 'paused'. Call resume({decision: 'reject', reviewer_note: 'spam'}). Assert execution reaches output with reviewer_outcome populated.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Parallel Risk Assessment flow:</strong> Assert all three agent branches start concurrently (mock LLM called 3 times before any resolves). Assert join merges legal_risk, financial_risk, technical_risk fields correctly. Assert risk_report is populated after synthesise step.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Condition routing:</strong> Run a flow with condition node where no branch matches. Assert routing falls through to default_target, not an error.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Subgraph nesting:</strong> Run a parent flow containing a subgraph node. Assert nested FlowRuntime is instantiated. Assert parent state is updated with subgraph output after completion.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Abort mid-run:</strong> Call abort() during an in-flight LLM call. Assert status becomes 'error'. Assert no further executors are called after abort.</div>
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--t0);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 3 — React hook tests</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:1rem">
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Status transitions:</strong> idle → running → complete on happy path. idle → running → paused → running → complete through HITL. idle → running → error on executor throw.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">nodeStats populated:</strong> After flow completes, assert every node has a corresponding NodeExecStat with status and durationMs.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Streaming tokens:</strong> Mock LLM returns tokens in chunks. Assert events emitted include token events. Assert final state contains full concatenated response.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Multiple runs:</strong> Call run() twice on the same hook instance. Assert second run uses fresh FlowState. Assert first run's state is not visible in second run.</div>
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--c-p7);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 5 — Harness node unit tests (per node, P7–P11)</div>
+<div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-lg);padding:.8rem 1rem;font-size:12.5px;color:var(--t1);line-height:1.7;margin-bottom:1rem">
+  Each harness node gets its own test file: <code style="font-size:11px">packages/harness/src/nodes/*.test.ts</code>. All tests inject stub state objects; no external I/O. normalise() and assertNormalised() helpers tested exhaustively (boundary values, all DimensionTypes). generation_id staleness helpers tested in isolation. Run via <code style="font-size:11px">npm test --workspace=packages/harness</code>.
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--c-p7);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 6 — Harness integration tests (full loop)</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:1rem">
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">SYSTEM_BREAKING contradiction:</strong> Inject a SYSTEM_BREAKING contradiction mid-loop. Assert it enters worldModel.contradictions[] without throwing. Assert next resolve_control_state() returns BLOCKED with escalation_reason=CONTRADICTION without evaluating TIER 2+.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Deadlock detection:</strong> Configure block_mask with two entries whose recovery actions are mutually blocked. Assert escalation_reason=HUMAN_REQUIRED and no autonomous recovery attempted.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Constraint propagation:</strong> Inject a caller constraint update mid-run via checkCallerUpdates(). Assert full propagation path fires (same code as escalation path). Assert iteration restarts via RESTART_ITERATION signal. Assert reset_constraints_changed() called.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">cannot_make_progress():</strong> Simulate STALL_WINDOW=5 iterations with no completed_count advance. Assert cannot_make_progress() returns True. Assert stall_reason recorded. Assert escalation fires rather than continuing loop.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">ReviewerPass re-opens tasks:</strong> Stub reviewer_pass to return non-empty reopened_task_ids. Assert HarnessRuntime re-enters the main loop. Assert re-entered tasks execute to completion. Assert output_validation runs after second loop completion.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Budget exhaustion:</strong> Set max_steps=3, run a 5-task objective. Assert steps_used ≥ 0.8×max_steps lowers feasibility floor. Assert steps_used==max_steps escalates with "budget_exhausted" reason. Assert halt() fires rather than continuing.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Parallel branch merge:</strong> Two parallel tasks writing to overlapping state keys. Assert conflict detected at merge via contradiction detection on merged world model. Assert conflict_probability_cache updated from actual write overlap. Assert merged control_state.generation_id matches merged worldModel.generation_id.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Observation vs conclusion invariant:</strong> Full loop run. Assert no belief in worldModel.beliefs[] is missing a derived_from[] chain. Assert no tool output is directly stored as a belief without an explicit inference step.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">FlowSpec runtime integration:</strong> HarnessRuntime executes a task whose action invokes FlowRuntime.execute(flowSpec). Assert subgraph node within the flow runs correctly. Assert FlowRuntime shares the same LLMClient (via ExecutionContext) as the harness. Assert harness state updated with subgraph output after FlowRuntime completes.</div>
+</div>
+
+<div style="font-size:12px;font-weight:600;color:var(--t0);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tier 4 — Proxy tests</div>
+<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:1rem">
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Auth rejection:</strong> POST /llm/chat without Bearer token returns 401. POST with invalid JWT returns 401. POST with expired JWT returns 401.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">API key injection:</strong> Assert request forwarded to mock provider includes Authorization header from env, not from client request.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Stream pass-through:</strong> Mock provider returns SSE chunks. Assert proxy streams chunks to client without buffering. Assert final chunk includes [DONE] sentinel.</div>
+  <div style="background:var(--bg1);border:.5px solid var(--bd0);border-radius:var(--r-md);padding:.55rem .8rem;font-size:12px;color:var(--t1)"><strong style="color:var(--t0)">Provider error forwarding:</strong> Mock provider returns 429. Assert proxy forwards 429 to client with provider error body intact.</div>
+</div>
+
+</div>
+
+<!-- ═══════════════ RISKS ═══════════════ -->
+<div id="risks" class="tab-content">
+<div class="risk-grid">
+  <div class="risk-card">
+    <div class="risk-sev sev-h">HIGH</div>
+    <div class="risk-title">CORS on the proxy</div>
+    <div class="risk-body">Browser fetch to the proxy requires CORS headers. If the proxy is misconfigured, every LLM call fails silently in production. Mitigation: CORS headers are set in P0 and tested explicitly. Default config allows the configured host app origin only — not *. Document required env var (ALLOWED_ORIGIN) prominently.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-h">HIGH</div>
+    <div class="risk-title">Streaming across CF Worker limits</div>
+    <div class="risk-body">Cloudflare Workers have a 30-second CPU limit and a response streaming buffer. Long LLM generations may hit this. Mitigation: use streaming pass-through (ReadableStream, not buffered) from P0. Proxy never accumulates the full response. Document CF Workers as the recommended deployment target specifically because it has no memory limit on streaming.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-h">HIGH</div>
+    <div class="risk-title">fn_ref transform security</div>
+    <div class="risk-body">The transform node uses fn_ref to call registered functions. If the host app registers unsafe functions (e.g., eval wrappers), the runtime can be weaponised. Mitigation: FunctionRegistry has an explicit allowlist — functions must be registered by the host app at init time, not resolved dynamically from the FlowSpec string. The FlowSpec fn_ref value is a key into the registry, not a code path.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-m">MEDIUM</div>
+    <div class="risk-title">HITL session persistence</div>
+    <div class="risk-body">If the user closes the browser while a flow is paused at a HITL breakpoint, the in-memory Promise is lost. Mitigation: P4 persists HITL pause state to IndexedDB before emitting the 'paused' event. On next mount, useHarness detects persisted HITL state and restores the paused status. Full recovery of in-flight execution is deferred to a future phase — for now, the run must be restarted.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-m">MEDIUM</div>
+    <div class="risk-title">Parallel branch state merge conflicts</div>
+    <div class="risk-body">Two parallel branches writing to the same state key produce a conflict at join. The merge strategy (last-write-wins by default, append for array reducer) is documented but may surprise flow authors. Mitigation: P2 logs a console.warn for each conflict. P3 adds a per-key conflict_resolver option in FlowSpec. The canvas can surface conflict annotations visually in a future phase.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-m">MEDIUM</div>
+    <div class="risk-title">agent_role max_iter not respected by LLM</div>
+    <div class="risk-body">If the LLM keeps emitting tool_calls, the agent loop could run significantly longer than expected before max_iter fires. Mitigation: max_iter is enforced as a hard counter before calling the LLM, not after. If max_iter is reached, the agent returns the best partial answer accumulated so far and emits a warning event.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-l">LOW</div>
+    <div class="risk-title">IndexedDB unavailability</div>
+    <div class="risk-body">IndexedDB is unavailable in some environments (private browsing on Safari, WebWorkers without storage access). Mitigation: IndexedDBAdapter constructor checks availability and falls back to InMemoryAdapter with a console.warn. The fallback is transparent to the executor layer.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-l">LOW</div>
+    <div class="risk-title">FlowSpec version drift</div>
+    <div class="risk-body">If the canvas upgrades FlowSpec to v1.1 and the runtime still targets v1.0, new node types or field shapes will cause silent failures or runtime errors. Mitigation: the runtime validates FlowSpec via the same Zod schema from @itsharness/canvas at init time. An unsupported spec_version throws immediately with a clear error message rather than failing mid-execution.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-h">HIGH</div>
+    <div class="risk-title">generation_id staleness propagation bugs</div>
+    <div class="risk-body">The harness has two generation_id increments per iteration (sub-step A and sub-step B). If any gate reads the wrong sub-step value, control decisions are made on a stale world model — silently wrong, not a thrown error. Mitigation: GateContext type carries both sub-step A and sub-step B values explicitly; gates declare which value they assert against. _maybeResolve() re-resolves when stale (confirmed P3 pattern from Python implementation). Integration test asserts sub-step A and B generation_ids are distinct every iteration.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-h">HIGH</div>
+    <div class="risk-title">Self-referential RECOVERY_ACTION_DEPENDENCIES causing false deadlock</div>
+    <div class="risk-body">If RECOVERY_ACTION_DEPENDENCIES are wired self-referentially (a dimension's recovery action depends on itself), every single-dimension block appears as a deadlock and HUMAN_REQUIRED fires for every minor diagnostic dip. The architecture requires cross-dimension dependencies — recovery action for dimension D must depend on a different dimension than D. Mitigation: _validate_recovery_action_dependencies() at HarnessRuntime init asserts no self-referential dependencies. A failing dependency validation throws at init time with a clear message identifying the conflicting pair.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-m">MEDIUM</div>
+    <div class="risk-title">Observation vs conclusion invariant erosion</div>
+    <div class="risk-body">The most important invariant in the architecture is that a HIGH-reliability observation does not automatically become a HIGH-reliability conclusion. Under time pressure, node implementations may add beliefs to worldModel.beliefs[] without a derived_from[] chain, silently promoting observations to conclusions. Mitigation: addBelief() in WorldModel class validates that derived_from[] is non-empty before insertion, throwing if missing. Integration tests assert no belief is missing its derivation chain after a full loop run.</div>
+  </div>
+  <div class="risk-card">
+    <div class="risk-sev sev-m">MEDIUM</div>
+    <div class="risk-title">dep_class_gap_annotation leaking into numeric control</div>
+    <div class="risk-body">dep_class_gap_annotation is advisory only — it must never become a numeric input to any resolve_control_state() tier. If a future change passes it to TIER 3 or TIER 4 arithmetic, uncontrolled noise is injected into risk_state. Mitigation: resolveControlState() accepts a Diagnostics object that intentionally does not expose dep_class_gap_annotation as a numeric field — it is typed as string (the annotation text) and assertNormalised() will throw if it is ever passed to the tier arithmetic accidentally.</div>
+  </div>
+</div>
+</div>
+
+</div><!-- root -->
+
+<script>
+function showTab(id,btn){
+  document.querySelectorAll('.tab-content').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+const PHASES = [
+  {
+    id:'P0', color:'var(--c-p0)', weeks:'~1 week', mvp:true,
+    title:'Scaffold & LLM Proxy',
+    sub:'Three package skeletons + working proxy on day 1',
+    summary:'Stand up the three packages (runtime, react, proxy) with correct tsconfig, vite lib builds, and workspace wiring. Get the LLM proxy fully working before any runtime code exists — this lets you test LLM calls independently and gives the team a concrete deliverable immediately.',
+    tasks:[
+      {id:'P0.1',name:'Package scaffolds',body:'Create packages/runtime/, packages/react/, packages/proxy/ with package.json (name, type:module, exports map: <code>{".":{import:"./dist/index.js",types:"./dist/index.d.ts"}}</code>), tsconfig.json (target:ES2022, moduleResolution:bundler, strict:true), vite.config.lib.ts (lib mode: entry=src/index.ts, formats:[es], fileName:index). Wire all three into root pnpm/npm workspace. Add scripts build:runtime, build:react, build:proxy to root. Confirm tsc --noEmit passes on empty src/index.ts for each. Also scaffold packages/harness/ with same structure — required by P7.'},
+      {id:'P0.2',name:'Proxy: Hono app + CORS',body:'Hono v4 server. Entry: packages/proxy/src/index.ts exports <code>export default app</code> — this single export pattern serves both CF Workers (Hono adapter reads it) and Node.js (node-server adapter wraps it). CORS middleware: <code>cors({ origin: Env.ALLOWED_ORIGIN, allowHeaders: [\'Authorization\',\'Content-Type\'] })</code>. POST /llm/chat and POST /auth/token stubbed with 501. GET /health returns 200 + {status:\'ok\'}. wrangler.toml: compatibility_date, [vars].ALLOWED_ORIGIN, [secrets] listing ANTHROPIC_API_KEY, OPENAI_API_KEY, PROXY_SECRET.'},
+      {id:'P0.3',name:'Proxy: JWT auth middleware',body:'Package: jose (ESM-native, CF Workers compatible). POST /auth/token: reads PROXY_SECRET from env, signs HS256 JWT with payload {sub:\'runtime\',jti:crypto.randomUUID()} and expiry 1h using jose SignJWT. Auth middleware: extracts Bearer token from Authorization header; verifies with jwtVerify(token, secret); rejects expired, malformed, or missing tokens with 401 + JSON body {error:\'unauthorized\'}. Attach verified payload to Hono context (c.set(\'jwtPayload\', payload)) for downstream handlers.'},
+      {id:'P0.4',name:'Proxy: LLM forwarding + streaming',body:'POST /llm/chat: read body as JSON. Route by model prefix: starts with "claude-" → Anthropic (https://api.anthropic.com/v1/messages); starts with "gpt-" or "o1-" or "o3-" → OpenAI (https://api.openai.com/v1/chat/completions). Unknown prefix → 400 {error:"unsupported_model"}. Strip any Authorization header from the incoming body, inject API key from env (ANTHROPIC_API_KEY or OPENAI_API_KEY). Set stream:true in forwarded body. Return <code>new Response(upstreamResponse.body, {headers:{\'Content-Type\':\'text/event-stream\'}})</code> — no buffering. Forward non-2xx status from upstream verbatim with body intact.'},
+      {id:'P0.5',name:'LLMClient in runtime',body:'packages/runtime/src/llm-client.ts. Export interface ILLMClient { callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string>; callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string>; }. LLMClient class implements ILLMClient — takes {proxyUrl, authToken} in constructor. callChat: POST /llm/chat with {model, messages, stream:true}, reads SSE response, yields each data: chunk as a string token. callChatSync: accumulates callChat tokens and returns full string. Non-2xx: throw FlowExecutionError({nodeId:\'llm-client\', message:\'proxy error\', cause:{status}}). ExecutionContext (P1.3) holds an ILLMClient — tests inject a stub implementation.'},
+      {id:'P0.6',name:'RuntimeEvent types',body:'packages/runtime/src/events.ts. RuntimeEvent discriminated union — each variant carries a type field for discrimination: NodeStart({type:\'node:start\', nodeId, nodeType}), NodeComplete({type:\'node:complete\', nodeId, nodeType, durationMs, tokenCount?}), NodeError({type:\'node:error\', nodeId, error:FlowExecutionError}), TokenChunk({type:\'token:chunk\', nodeId, token:string}), FlowPaused({type:\'flow:paused\', nodeId, prompt:string, resumeSchema:object}), FlowComplete({type:\'flow:complete\', finalState:Record<string,unknown>}), FlowError({type:\'flow:error\', error:FlowExecutionError}). EventBus: typed subscribe<T extends RuntimeEvent>(type:T[\'type\'], handler:(e:T)=>void):()=>void (returns unsubscribe fn); emit(event:RuntimeEvent):void. No external dep. Used by all phases P1+.'},
+    ],
+    tests:[
+      'Proxy: GET /health returns 200 with no auth required',
+      'Proxy: POST /llm/chat without Bearer token → 401 with no provider call',
+      'Proxy: POST /llm/chat with expired JWT → 401',
+      'Proxy: POST /llm/chat with malformed JWT → 401',
+      'Proxy: POST /auth/token with correct PROXY_SECRET → JWT with 1h expiry and jti claim',
+      'Proxy: POST /auth/token with wrong secret → 401',
+      'Proxy: CORS header present when Origin matches ALLOWED_ORIGIN',
+      'Proxy: CORS header absent when Origin does not match ALLOWED_ORIGIN',
+      'Proxy: model prefix "claude-" routes request to Anthropic endpoint',
+      'Proxy: model prefix "gpt-" routes request to OpenAI endpoint',
+      'Proxy: API key from env injected into forwarded request; client-supplied Authorization stripped',
+      'Proxy: forwards mock Anthropic response as 3 streamed SSE chunks without buffering',
+      'Proxy: forwards 429 from provider with status code and body intact',
+      'Proxy: provider 5xx forwarded with correct status; proxy does not retry',
+      'LLMClient: async iterator yields streamed chunks in arrival order',
+      'LLMClient: non-streaming mode accumulates all chunks and returns full string',
+      'LLMClient: throws FlowExecutionError with status code on non-2xx proxy response',
+      'EventBus: subscribe → emit → handler called with correct event payload',
+      'EventBus: unsubscribe → subsequent emit does not invoke handler',
+      'EventBus: multiple handlers for same event type all receive the event',
+      'Runtime package: tsc --noEmit passes on scaffolded empty src/index.ts'
+    ]
+  },
+  {
+    id:'P1', color:'var(--c-p1)', weeks:'~1.5 weeks', mvp:true,
+    title:'Graph Engine & Core Node Types',
+    sub:'Sequential execution of input → llm_call → transform → condition → output',
+    summary:'Build the graph traversal engine and implement the five most common node types. After P1, any FlowSpec that is a linear chain of these node types runs end-to-end. The three built-in example flows use these node types as their backbone.',
+    tasks:[
+      {id:'P1.1',name:'FlowGraph: build + topo sort',body:"packages/runtime/src/graph.ts: parse FlowSpec nodes[] and edges[] into adjacency maps (forward + backward). Topological sort via Kahn's algorithm — reuse the same logic as mastra_adapter.py's build_graph(). Detect cycles: throw FlowExecutionError with offending node IDs. Identify root nodes (no predecessors) and leaf nodes (no successors).<br><em style='font-size:10.5px;color:var(--t1)'>Ref: <code style='font-size:10px'>adapter/mastra_adapter.py:96</code> — build_graph() for Kahn's algorithm and adjacency map structure.</em>"},
+      {id:'P1.2',name:'FlowState',body:'packages/runtime/src/state.ts: FlowState class. Initialized from FlowSpec state_schema with null/undefined defaults. get(key): typed getter. set(key, value): validates against state_schema type if defined. patch(partial): merge update. snapshot(): deep clone for branch isolation. Serializable to/from plain JSON.'},
+      {id:'P1.3',name:'ExecutionContext',body:'packages/runtime/src/context.ts: ExecutionContext holding LLMClient, ToolRegistry, Map of memory adapters (keyed by store_id), EventBus, and AbortController. Passed to every executor. Context is immutable after creation — executors cannot replace its members, only call them.'},
+      {id:'P1.4',name:'Template resolver',body:"packages/runtime/src/template.ts: resolveTemplate(template, state): replaces {{key}} and {{$.state.key}} with values from FlowState. Same logic as mastra_adapter.py's ts_prompt(). Returns a resolved string. No template engine dependency — regex replace only.<br><em style='font-size:10.5px;color:var(--t1)'>Ref: <code style='font-size:10px'>adapter/mastra_adapter.py:63</code> — ts_prompt() for regex pattern and JSONPath substitution logic.</em>"},
+      {id:'P1.5',name:'Executor: input',body:'InputExecutor: copies all fields from triggerData into FlowState. Validates triggerData against node.output_schema if defined (Zod parse). Emits NodeStart + NodeComplete events.'},
+      {id:'P1.6',name:'Executor: llm_call',body:'LLMCallExecutor: resolves system_prompt + prompt_template via template resolver. Builds messages array (system + user). Calls LLMClient. If structured_output.schema defined: parses JSON response against schema. Writes result string/object to state[output_key]. Emits TokenChunk events during streaming.'},
+      {id:'P1.7',name:'Executor: transform',body:'TransformExecutor: mode="fn_ref" → looks up FunctionRegistry[fn_ref], calls with (state). mode="mapping" → applies key remapping object. Writes result to output_key. FunctionRegistry is part of ExecutionContext — host app registers functions at init. Throws if fn_ref key not found.'},
+      {id:'P1.8',name:'Executor: condition',body:'ConditionExecutor: iterates node.branches in order, evaluates each condition.expr using safe expression evaluator (jsonpath-plus for $.state.* lookups + ==, !=, <, >, &&, || operators). Returns first matching branch target, or default_target if none match. No eval().'},
+      {id:'P1.9',name:'Executor: output',body:"OutputExecutor: terminal node. Returns final FlowState. Emits FlowComplete event. If node has output_schema, validates final state against it and emits a warning (not an error) on mismatch — strict validation is the caller's responsibility."},
+      {id:'P1.10',name:'FlowRuntime: sequential execute',body:'packages/runtime/src/runtime.ts: FlowRuntime class. execute(flowSpec, triggerData, context): validates FlowSpec at entry — import <code style="font-size:10px">{ assertFlowSpec }</code> from <code style="font-size:10px">@itsharness/canvas</code> (throws immediately on invalid spec or unsupported spec_version). Do not use parseFlowSpec() here — it returns a SafeParseReturnType and does not throw. Builds FlowGraph. Walks from root node following edges, dispatching to executor registry. Returns final FlowState. AbortController integration: each executor checks context.signal before running.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">packages/canvas/src/spec/schema.ts:541</code> — parseFlowSpec() (safeParse, returns {success,data,error}) · :545 assertFlowSpec() (throws on failure, use this at runtime entry). Both are exported from <code style="font-size:10px">@itsharness/canvas</code>.</em>'},
+    ],
+    tests:[
+      'FlowGraph: topo sort on 5-node linear chain returns nodes in dependency order',
+      'FlowGraph: topo sort on diamond (fork-then-join) returns valid order where fork precedes join',
+      'FlowGraph: root nodes correctly identified as nodes with no predecessors',
+      'FlowGraph: leaf nodes correctly identified as nodes with no successors',
+      'FlowGraph: throws GraphCycleError with both offending nodeIds on cycle',
+      'FlowGraph: disconnected subgraph raises FlowExecutionError at construction time',
+      'FlowState: get/set/patch round-trips preserve type across string, number, object',
+      'FlowState: patch() merges partial update without overwriting unrelated keys',
+      'FlowState: snapshot() produces deep-independent copy — mutation of copy does not affect original',
+      'FlowState: set() validates against state_schema type if schema defined; throws on mismatch',
+      'FlowState: serialises to and from plain JSON without loss',
+      'Template: resolves {{question}} from flat FlowState key',
+      'Template: resolves {{$.state.document}} JSONPath from nested FlowState',
+      'Template: unresolved placeholder left as-is (does not throw on missing key)',
+      'Template: multiple placeholders in single string all resolved',
+      'InputExecutor: all triggerData fields copied into FlowState',
+      'InputExecutor: validates triggerData against output_schema; throws on mismatch when schema defined',
+      'InputExecutor: emits NodeStart then NodeComplete events in order',
+      'LLMCallExecutor: system_prompt included as system role message in messages array',
+      'LLMCallExecutor: prompt_template resolved against FlowState before messages built',
+      'LLMCallExecutor: structured_output.schema parses valid JSON response into object',
+      'LLMCallExecutor: structured_output.schema throws on response that fails schema validation',
+      'LLMCallExecutor: streaming mode emits TokenChunk events then NodeComplete',
+      'LLMCallExecutor: non-streaming mode returns full concatenated string',
+      'LLMCallExecutor: result written to state[output_key]',
+      'ConditionExecutor: evaluates branches in order; returns first matching target',
+      'ConditionExecutor: falls through to default_target when no branch condition is true',
+      'ConditionExecutor: no eval() used — safe expr evaluator handles ==, !=, <, >, &&, ||',
+      'TransformExecutor: mode=fn_ref looks up key in FunctionRegistry and calls function with state',
+      'TransformExecutor: mode=mapping applies key remapping object to state fields',
+      'TransformExecutor: mode=fn_ref throws if fn_ref key not found in FunctionRegistry',
+      'OutputExecutor: emits FlowComplete with final FlowState payload',
+      'OutputExecutor: emits warning event (not error) on output_schema validation mismatch',
+      'FlowRuntime: throws UnknownNodeTypeError with nodeId for unregistered node type',
+      'FlowRuntime: validates FlowSpec via assertFlowSpec() at init; unsupported spec_version throws immediately with a clear error (uses assertFlowSpec not parseFlowSpec — the latter returns a Result type and does not throw)',
+      'FlowRuntime: AbortController.abort() stops execution; executor after abort is never called',
+      'FlowRuntime: runs full RAG Agent flow (mocked LLM) end-to-end and returns final FlowState'
+    ]
+  },
+  {
+    id:'P2', color:'var(--c-p2)', weeks:'~1 week', mvp:true,
+    title:'Parallel Execution & Flow Control',
+    sub:'parallel_fork/join + error handling + per-node retry',
+    summary:'Add parallel branch execution and harden error handling. After P2, the Parallel Risk Assessment example flow runs end-to-end. This closes the MVP node type surface — the three built-in example flows all execute correctly.',
+    tasks:[
+      {id:'P2.1',name:'Executor: parallel_fork',body:'ParallelForkExecutor: takes node.targets[] (array of node IDs). Creates a state snapshot per target. Dispatches all target sub-graphs concurrently via Promise.all, each with their own snapshot. Emits NodeStart for each branch. Stores branch results keyed by target ID for the join step.'},
+      {id:'P2.2',name:'Executor: parallel_join',body:'ParallelJoinExecutor: waits for all preceding fork branches (resolved from branch result map). Merges branch FlowStates: for each key, applies reducer from state_schema (replace = last-write-wins, append = array concat). Logs console.warn on key conflicts. Emits NodeComplete with merged state.'},
+      {id:'P2.3',name:'Parallel error propagation',body:'If any branch throws during parallel execution: cancel remaining branches (AbortController.abort() on branch contexts), surface the first error as FlowExecutionError with branchId and original error attached. All-or-nothing semantics: no partial merges on failure.'},
+      {id:'P2.4',name:'Per-node retry',body:"Add retry config to ExecutionContext: maxRetries (default 2) and retryOn (default: network errors + 429). Wrap each executor call in retry loop with exponential backoff (100ms base, 2× factor). Retries do not re-snapshot state — they retry the executor with the same pre-execution state. Add retryCount to NodeExecStat."},
+      {id:'P2.5',name:'FlowExecutionError hierarchy',body:"packages/runtime/src/errors.ts: FlowExecutionError base (nodeId, message, cause). Subclasses: NodeExecutionError (executor threw), GraphCycleError (topo sort failed), UnknownNodeTypeError, AbortedError. All carry enough context for a host app to surface meaningful error UI without parsing message strings."},
+    ],
+    tests:[
+      'ParallelFork: all target branches dispatched concurrently (mock confirms overlap before any resolves)',
+      'ParallelFork: each branch receives an independent FlowState snapshot — mutation in one branch does not affect another',
+      'ParallelFork: emits NodeStart for each branch target before any branch resolves',
+      'ParallelJoin: merges legal_risk + financial_risk + technical_risk fields from all branches',
+      'ParallelJoin: replace reducer — last branch wins when two branches write same key',
+      'ParallelJoin: array reducer — branch arrays concatenated in join order',
+      'ParallelJoin: emits console.warn for each key written by more than one branch',
+      'ParallelJoin: emits NodeComplete with merged state after all branches resolve',
+      'Parallel error: one branch failure calls AbortController.abort() on remaining branches',
+      'Parallel error: first error surfaced as FlowExecutionError with branchId and original error as cause',
+      'Parallel error: no partial state merge occurs — FlowState unchanged after any branch failure',
+      'Retry: retries on 429 with exponential backoff (100ms base, 2× factor); succeeds on 3rd attempt',
+      'Retry: does not retry on 400 (permanent client error — not in retryOn list)',
+      'Retry: does not retry on 500 when 500 not in retryOn list',
+      'Retry: retryCount recorded correctly in NodeExecStat after retry loop completes',
+      'Retry: max retries exhausted → throws NodeExecutionError carrying final retryCount',
+      'FlowExecutionError: carries nodeId, message, and cause on every subclass',
+      'AbortedError: thrown and caught correctly when abort() called during active execution',
+      'FlowRuntime: Parallel Risk Assessment flow end-to-end with 3 mocked agents completing independently'
+    ]
+  },
+  {
+    id:'P3', color:'var(--c-p3)', weeks:'~1 week', mvp:false,
+    title:'Memory & Tool Registry',
+    sub:'memory_read, memory_write, tool_invoke + adapters',
+    summary:'Add the three storage/tool node types. After P3, flows that read from knowledge bases, cache results, or invoke registered tools run correctly. The RAG Agent flow with real memory adapters (not just mocked) works end-to-end.',
+    tasks:[
+      {id:'P3.1',name:'MemoryAdapter interface',body:'packages/runtime/src/memory/adapter.ts: MemoryAdapter interface: get(key): Promise<unknown>, set(key, value, mode): Promise<void>, search(query, topK, minScore): Promise<MemoryResult[]>, delete(key): Promise<void>. MemoryResult: {key, value, score}. All methods async.'},
+      {id:'P3.2',name:'InMemoryAdapter',body:'Map-backed implementation. search() performs linear scan with substring scoring: score=1.0 if the entry value (serialised to string) contains the query string, 0.0 otherwise. Results are sorted descending by score and filtered by minScore before returning topK. No embeddings or semantic similarity in MVP. Supports global and thread scopes via namespace prefix on keys (e.g. <code style="font-size:10px">global::</code> vs <code style="font-size:10px">thread::{instanceId}::</code>). Thread scope creates a unique namespace per FlowRuntime instance.'},
+      {id:'P3.3',name:'IndexedDBAdapter',body:'IDB-backed implementation using idb-keyval (lightweight wrapper). Namespace-scoped. Falls back to InMemoryAdapter if IndexedDB unavailable (private browsing, test env). search() delegates to proxy /memory/search endpoint if configured, otherwise falls back to linear scan.'},
+      {id:'P3.4',name:'Memory store initialization',body:"At FlowRuntime construction, iterate FlowSpec.memory_stores. For each store, instantiate the correct adapter based on store.backend (in-memory for redis/key-value if no connection_env provided, IndexedDB for key-value if browser, external fetch for vector in browser). Register in ExecutionContext by store_id. Missing connection_env in browser: warn and use in-memory fallback — don't error."},
+      {id:'P3.5',name:'Executor: memory_read',body:'MemoryReadExecutor: resolve query_expr from state using template resolver. For key-value stores: call adapter.get(resolvedKey). For vector stores: call adapter.search(resolvedQuery, node.top_k, node.min_score). Filter results below min_score. Write to state[output_key]. Emit NodeComplete with result count in metadata.'},
+      {id:'P3.6',name:'Executor: memory_write',body:'MemoryWriteExecutor: resolve key_expr and value_expr from state. Call adapter.set(resolvedKey, resolvedValue, node.write_mode). write_mode: upsert (default) / append (array push) / overwrite (same as upsert for KV stores).'},
+      {id:'P3.7',name:'ToolRegistry + built-ins',body:'packages/runtime/src/tools/registry.ts: ToolRegistry with register(name, def) and invoke(name, args). ToolDef: {name, description, inputSchema (Zod), execute(args): Promise<unknown>}. Built-in tools registered by default: fetch (HTTP GET/POST with URL + headers), search (stub that returns empty array — host app should override). Host app calls registry.register() before constructing ExecutionContext.'},
+      {id:'P3.8',name:'Executor: tool_invoke',body:'ToolInvokeExecutor: resolve tool args from state (each arg_expr evaluated via template resolver). Look up tool in registry — throw UnknownToolError if not found. Call tool.execute(args). Write result to state[output_key]. Emit NodeComplete with tool name and duration.'},
+    ],
+    tests:[
+      'InMemoryAdapter: get/set/delete round-trip preserves exact value',
+      'InMemoryAdapter: get on missing key returns undefined (does not throw)',
+      'InMemoryAdapter: search linear scan returns top_k results sorted by descending score',
+      'InMemoryAdapter: results below min_score excluded from search output',
+      'InMemoryAdapter: global scope and thread scope use separate key namespaces (no cross-contamination)',
+      'IndexedDBAdapter: value persisted by one adapter instance readable by a second instance (jsdom)',
+      'IndexedDBAdapter: falls back to InMemoryAdapter silently when IndexedDB unavailable',
+      'IndexedDBAdapter: fallback logs console.warn on unavailability',
+      'IndexedDBAdapter: search delegates to proxy /memory/search endpoint when configured',
+      'Memory store init: in-memory adapter used when connection_env missing in browser (no error thrown)',
+      'Memory store init: console.warn (not error) emitted when browser connection_env missing',
+      'MemoryReadExecutor: key-value mode calls adapter.get(resolved key from query_expr)',
+      'MemoryReadExecutor: vector mode calls adapter.search(resolved query, top_k, min_score)',
+      'MemoryReadExecutor: results with score below min_score filtered before writing to output_key',
+      'MemoryReadExecutor: emits NodeComplete with result count in event metadata',
+      'MemoryWriteExecutor: upsert mode calls adapter.set with key and value',
+      'MemoryWriteExecutor: append mode calls adapter.set with array-push semantics',
+      'MemoryWriteExecutor: overwrite mode behaves same as upsert for key-value stores',
+      'ToolRegistry: register then invoke round-trip calls execute() with provided args',
+      'ToolRegistry: built-in fetch tool registered by default without explicit registration',
+      'ToolRegistry: throws UnknownToolError on invoke of unregistered tool name',
+      'ToolInvokeExecutor: each arg_expr resolved from FlowState via template resolver',
+      'ToolInvokeExecutor: resolved result written to state[output_key]',
+      'ToolInvokeExecutor: emits NodeComplete with tool name and durationMs in metadata',
+      'RAG Agent flow: memory_read (vector) + llm_call (generate) + memory_write (cache) end-to-end with mocked adapter'
+    ]
+  },
+  {
+    id:'P4', color:'var(--c-p4)', weeks:'~1.5 weeks', mvp:false,
+    title:'HITL & Agent Nodes',
+    sub:'hitl_breakpoint, agent_role, agent_debate, subgraph',
+    summary:'Implement the four most complex node types. HITL pause/resume enables human-in-the-loop workflows. agent_role enables full tool-use loops within a single node. agent_debate enables multi-agent patterns. subgraph enables nested flows.',
+    tasks:[
+      {id:'P4.1',name:'Executor: hitl_breakpoint',body:'HITLBreakpointExecutor: resolve prompt template. Emit FlowPaused event with {nodeId, prompt, resumeSchema}. Suspend execution by awaiting an externally-resolved Promise stored in ExecutionContext.hitlResolvers Map (keyed by nodeId). FlowRuntime.resume(nodeId, payload): validates payload against resume_schema (Zod), resolves the Promise. Writes payload to state[output_key].'},
+      {id:'P4.2',name:'HITL timeout handling',body:"If node.timeout_seconds defined: race the resume Promise against a setTimeout. On timeout: if on_timeout='raise' throw HITLTimeoutError; if on_timeout='skip' resolve with null payload and continue. Persist HITL pause state (nodeId + prompt + timestamp) to IndexedDB before emitting FlowPaused — survives page reload."},
+      {id:'P4.3',name:'Executor: agent_role',body:"AgentRoleExecutor: look up agent def from FlowSpec.agents by agent_ref. Build system prompt from role + backstory + goal. Run tool-use loop: (1) call LLM with current messages + available tools from ToolRegistry; (2) if response has tool_calls: invoke each tool, add tool result to messages, loop; (3) if no tool_calls or max_iter reached: extract final text response. Write to state[output_field]. Emit per-iteration NodeStart sub-events."},
+      {id:'P4.4',name:'Executor: agent_debate',body:'AgentDebateExecutor: initialize each agent from FlowSpec.agents. Run turn-taking loop: each agent receives prior turns as conversation history and produces a response. After each round: evaluate convergence condition (if defined as expr) — stop if met. Stop unconditionally at max_iter. Collects all turns into a transcript. Writes final consensus/transcript to output_key.'},
+      {id:'P4.5',name:'Executor: subgraph',body:'SubgraphExecutor: loads nested FlowSpec from node.subgraph_spec (inline) or node.subgraph_ref (resolved from a SubgraphRegistry in ExecutionContext). Instantiates new FlowRuntime with the same ExecutionContext (shares LLMClient, ToolRegistry, memory adapters). Maps parent state fields to triggerData per node.input_map. Runs nested flow. Maps nested output back to parent state per node.output_map.'},
+    ],
+    tests:[
+      'HITLBreakpointExecutor: resolves prompt_template against FlowState before emitting pause event',
+      'HITLBreakpointExecutor: emits FlowPaused event with nodeId, resolved prompt, and resumeSchema',
+      'HITLBreakpointExecutor: HITL pause state persisted to IndexedDB before FlowPaused event fires',
+      'HITLBreakpointExecutor: execution suspended — node after HITL is not called until resume() invoked',
+      'HITLBreakpointExecutor: resume() validates payload against resume_schema (Zod) before resolving',
+      'HITLBreakpointExecutor: valid payload written to state[output_key] after resume',
+      'HITLBreakpointExecutor: invalid payload throws validation error without resolving the Promise; status stays paused',
+      'HITLBreakpointExecutor: resume() called with wrong nodeId returns error without affecting active pause',
+      'HITL timeout: on_timeout=raise throws HITLTimeoutError after timeout_seconds elapses',
+      'HITL timeout: on_timeout=skip resolves with null payload and execution continues to next node',
+      'AgentRoleExecutor: system prompt built from agent role + backstory + goal concatenated',
+      'AgentRoleExecutor: LLM response with tool_call invokes tool and loops with tool result in messages',
+      'AgentRoleExecutor: multiple tool_calls in single LLM response all invoked before next LLM call',
+      'AgentRoleExecutor: LLM response with no tool_call terminates loop and writes output_field',
+      'AgentRoleExecutor: max_iter guard fires at exact count; partial answer returned with warning event emitted',
+      'AgentDebateExecutor: each agent receives all prior turns as conversation history in turn-taking loop',
+      'AgentDebateExecutor: convergence condition expr evaluated after each round; loop stops when true',
+      'AgentDebateExecutor: stops unconditionally at max_iter even when convergence condition never fires',
+      'AgentDebateExecutor: transcript contains all turns from all agents in order',
+      'SubgraphExecutor: nested FlowRuntime shares parent LLMClient, ToolRegistry, and memory adapters',
+      'SubgraphExecutor: input_map fields from parent state correctly passed as triggerData to nested flow',
+      'SubgraphExecutor: output_map fields from nested output written back to parent state',
+      'SubgraphExecutor: AbortController.abort() on parent context propagates abort to nested FlowRuntime',
+      'Content Moderation flow: severity=high → status=paused → resume({decision: reject}) → output node reached'
+    ]
+  },
+  {
+    id:'P5', color:'var(--c-p5)', weeks:'~1 week', mvp:true,
+    title:'React Hook & Streaming',
+    sub:'useHarness hook — run, resume, abort, state, nodeStats, streaming',
+    summary:'Wrap the runtime in a React hook. This is the primary integration point for host apps. The hook manages all async lifecycle, surfaces live state updates, and handles streaming tokens. After P5, any React app can execute a FlowSpec with a single hook call.',
+    tasks:[
+      {id:'P5.1',name:'useHarness hook',body:"packages/react/src/use-harness.ts: useHarness(flowSpec, options) returns HarnessHandle. Uses useReducer internally (no Zustand dep). Options: proxyUrl, authToken, tools (ToolDef[]), memoryAdapters, functions (fn_ref registry). Constructs ExecutionContext on first run. Reconstructs if flowSpec reference changes."},
+      {id:'P5.2',name:'Status state machine',body:"Status transitions: idle → running (on run()), running → paused (on FlowPaused event), paused → running (on resume()), running → complete (on FlowComplete), running → error (on FlowError or uncaught throw), any → idle (on reset()). Status is the single source of truth — UI should never need to inspect internal runtime state."},
+      {id:'P5.3',name:'Live state + nodeStats',body:"On each NodeComplete event: merge executor's state update into hook state and update nodeStats[nodeId] with {status:'complete', durationMs, tokenCount}. On NodeStart: set nodeStats[nodeId].status='running'. On NodeError: set status:'error'. nodeStats shape must be compatible with the <code style='font-size:10px'>execStats</code> prop on ItsHarnessCanvas — host apps embedding the canvas get live overlays for free if desired. The required shape is <code style='font-size:10px'>Record&lt;string, NodeExecStat&gt;</code>.<br><em style='font-size:10.5px;color:var(--t1)'>Ref: <code style='font-size:10px'>packages/canvas/src/store/create.ts:37</code> — NodeExecStat interface definition · <code style='font-size:10px'>packages/canvas/src/ItsHarnessCanvas.tsx:65</code> — execStats prop signature (Record&lt;string, NodeExecStat&gt;).</em>"},
+      {id:'P5.4',name:'Streaming token delivery',body:'On TokenChunk events from llm_call nodes: append token to streamingTokens[nodeId] in hook state. Host app can render streamingTokens[currentNodeId] to show live LLM output. On NodeComplete: clear streamingTokens[nodeId] (final value is in state[output_key]).'},
+      {id:'P5.5',name:'HITL surface',body:"When status='paused': hook exposes hitlPrompt (resolved prompt string) and hitlResumeSchema (Zod schema). Host app renders its own UI from these. resume(payload) validates payload against hitlResumeSchema before passing to runtime — double validation (runtime also validates) but fast-fail in the UI layer is better UX."},
+      {id:'P5.6',name:'abort + cleanup',body:'abort(): calls AbortController.abort() on active context, sets status to error with AbortedError. Cleans up any pending HITL resolvers. reset(): clears all state, returns to idle. Both are safe to call from cleanup effects in React (unmount, dependency change).'},
+    ],
+    tests:[
+      'Hook: idle → running → complete on happy path',
+      'Hook: idle → running → paused → running → complete through full HITL cycle',
+      'Hook: idle → running → error when executor throws',
+      'Hook: nodeStats[nodeId].status transitions running → complete on NodeComplete event',
+      'Hook: nodeStats[nodeId].durationMs populated with elapsed ms after each node completes',
+      'Hook: streamingTokens[nodeId] accumulates token strings progressively during LLM stream',
+      'Hook: streamingTokens[nodeId] cleared on NodeComplete (final value available in state[output_key])',
+      'Hook: status=paused on FlowPaused event; hitlPrompt and hitlResumeSchema exposed on handle',
+      'Hook: resume() validates payload against hitlResumeSchema before passing to runtime',
+      'Hook: invalid resume payload throws; status remains paused; hitlPrompt unchanged',
+      'Hook: abort() in running state → status=error with AbortedError',
+      'Hook: reset() from complete state → idle; state, nodeStats, and streamingTokens all cleared',
+      'Hook: reset() from error state → idle',
+      'Hook: second run() uses fresh FlowState independent of first run',
+      'Hook: flowSpec reference change triggers ExecutionContext re-construction on next run()',
+      'Hook: nodeStats shape compatible with ItsHarnessCanvas execStats prop (same key/field names)',
+      'Hook: events subscriber receives NodeStart events in real time during active run'
+    ]
+  },
+  {
+    id:'P6', color:'var(--c-p6)', weeks:'~0.5 weeks', mvp:false,
+    title:'Deploy Templates',
+    sub:'CF Worker deploy, Hono Node.js server, minimal React app template',
+    summary:'Provide ready-to-deploy templates for the proxy and a minimal reference app showing useHarness wired to a chat UI. These are not boilerplate generators — they are concrete, runnable examples that a team can fork and modify.',
+    tasks:[
+      {id:'P6.1',name:'CF Worker proxy template',body:'packages/proxy/: add wrangler.toml with route config, [vars] for ALLOWED_ORIGIN, and secrets config for ANTHROPIC_API_KEY / OPENAI_API_KEY / PROXY_SECRET. One-command deploy: wrangler deploy. README with setup steps (wrangler login, wrangler secret put, wrangler deploy). Include miniflare config for local dev.'},
+      {id:'P6.2',name:'Hono Node.js proxy template',body:'packages/proxy/: add Dockerfile (node:20-alpine, non-root, expose 3001). docker-compose snippet showing proxy alongside a static React app. .env.example listing all required env vars. Health check endpoint for container orchestrators.'},
+      {id:'P6.3',name:'Minimal React app template',body:'templates/react-app/: Vite + React + TypeScript. Imports useHarness from @itsharness/react. Loads a FlowSpec from public/flow.json (drop-in replaceable). Shows a chat-style UI: input form → run() → streaming output → HITL pause panel if needed. .env.example with VITE_PROXY_URL + VITE_AUTH_TOKEN.'},
+      {id:'P6.4',name:'Environment variable documentation',body:"Document all env vars in a single table: proxy-side (ANTHROPIC_API_KEY, OPENAI_API_KEY, PROXY_SECRET, ALLOWED_ORIGIN, PORT) and client-side (VITE_PROXY_URL, VITE_AUTH_TOKEN). Note which are secrets vs public. Note that VITE_ vars are bundled into the client — VITE_AUTH_TOKEN is only appropriate for development/private deployments."},
+    ],
+    tests:[
+      'CF Worker: wrangler deploy succeeds in CI (dry-run mode, no actual deploy)',
+      'CF Worker: miniflare local dev starts on default port without errors',
+      'CF Worker: ALLOWED_ORIGIN env var restricts CORS to configured origin only (wildcard not accepted)',
+      'Node.js proxy: docker build succeeds on node:20-alpine base',
+      'Node.js proxy: container runs as non-root user (verify via whoami in entrypoint)',
+      'Node.js proxy: GET /health returns 200 from inside running container',
+      'Node.js proxy: docker-compose snippet starts proxy and static app together',
+      'React template: npm run dev starts without type errors on first run',
+      'React template: chat UI renders with minimal FlowSpec (no flow nodes)',
+      'React template: run() with mock proxy returns streamed response tokens visible in UI',
+      'React template: HITL pause panel rendered when hook status=paused',
+      'React template: streaming output div updates token-by-token during active LLM call',
+      'Env var docs: all proxy-side vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, PROXY_SECRET, ALLOWED_ORIGIN, PORT) listed in table',
+      'Env var docs: VITE_AUTH_TOKEN labelled as development-only (not safe for public deployments)'
+    ]
+  },
+  {
+    id:'P7', color:'var(--c-p7)', weeks:'~1 week', mvp:false,
+    title:'Harness State Layer',
+    sub:'13 state types + normalise() + generation_id helpers + Zod schemas',
+    summary:'Lay all TypeScript foundations for the harness reasoning engine before any node logic exists. This phase produces no runtime behaviour — only well-typed, serialisable state objects and the normalisation helpers that every subsequent node depends on. A mistake here propagates to all 22 nodes; getting it right first is cheaper than patching it across five phases.',
+    tasks:[
+      {id:'P7.1',name:'Core state type definitions',body:'packages/harness/src/state/: TypeScript interfaces and classes for all 13 state objects: WorldModel (generation_id, observations[], beliefs[], assumptions[], contradictions[], environment_change_log[], completeness_flags{}), CallerState (current_constraints, clarification_history[], last_update, output_preferences, success_criteria, constraints_changed flag), ControlState (generation_id, risk_state: NORMAL|CAUTIOUS|BLOCKED, escalation_reason, block_mask[], notes[]), Diagnostics (four health vectors each with 2-3 sub-dims), TaskGraph (tasks with 6-state status enum, depends_on[], parallel_write_domains[], abstraction_level, conflict_probability_cache), OutputContract. All serialisable to/from plain JSON.'},
+      {id:'P7.2',name:'Evidence, hypothesis, and reasoning state types',body:'EvidenceStore: Evidence interface (obs, reliability: H|M|L, source, evidence_type: OBSERVATION|INFERENCE|SYSTEM_ERROR, freshness), tool_reliability_envelopes Map, tool_availability_manifest Map. HypothesisSet: active[] (id, explanation, confidence, predicted_observations[], discriminating_evidence[], generation_sources[], diversity_score), eliminated[] (capped at K). EliminationPolicy interface (conditions, retention K). MemoryState: token_budget, CompressionRisk (compressed_structures[], pruned_regions[], dependent_tasks[]), journal, JournalRetentionPolicy, rollback_points[]. StrategyState: current_strategy, switch_triggers, prior_strategy_weights, recovery_strategy_order enum.'},
+      {id:'P7.3',name:'FailureDiagnostics, ExperienceStore, BeliefDepGraph',body:'FailureDiagnostics: failure_mode_library (read-only, match() returns MatchResult), matched_pattern: MatchResult|null (confidence is normalised property alias), failure_history[]. ExperienceStore interface: get/set for successful_decompositions, tool_workflows, verification_plans, recovery_sequences, strategy_weights (keyed by StrategyWeightKey named tuple), class_priors. InMemoryExperienceStore stub implementation. available property as computed getter (returns true; DB implementations will add a ping). BeliefDepGraph: belief_nodes[], derived_from_edges[], invalidation_frontier, propagation_queue, unverified_edge_ratio, confidence_decay_rate. DepGraphBudget: max_unverified_edge_ratio, refresh_policy, confidence_decay_rate.'},
+      {id:'P7.4',name:'normalise() with four DimensionTypes',body:"packages/harness/src/normalise.ts: DimensionType enum: ratio | composite | entropy | match_confidence. normalise(raw, type): ratio → clamp to [0,1]; composite → weighted sum of components / sum(weights) clamped [0,1]; entropy → Shannon entropy / log2(numSources) clamped [0,1] (returns 1.0 for uniform distribution, 0.0 for single source); match_confidence → explicit clamp [0,1]. assertNormalised(value, label): throws NormalisationError if value outside [0,1]. All signals entering resolveControlState() must pass assertNormalised() — enforced at the entry point of the function.<br><em style='font-size:10.5px;color:var(--t1)'>Ref: <code style='font-size:10px'>adapter/harness/diagnostics.py:227</code> — normalise_ratio/composite/entropy/match_confidence · :259 normalise() dispatcher · :16 DimensionType literal · <code style='font-size:10px'>adapter/harness/failure_modes.py:46</code> — normalise_confidence().</em>"},
+      {id:'P7.5',name:'generation_id staleness helpers',body:'packages/harness/src/generation-id.ts: _maybeResolve(controlState, worldModel, diagnostics, failureDiagnostics): checks staleness (controlState.generation_id &lt; worldModel.generation_id); re-resolves once via resolveControlState() when diagnostics provided; throws StalenessError if still stale or diagnostics absent. computeElevationFactor(subDims): public module-level helper for TIER 4 proportionality — exposed separately so TIER 4 tests can call it without triggering TIER 1/2 blocking. GateContext type carrying both sub-step A and sub-step B values.<br><strong style="font-size:11px;color:var(--t0)">Architecture note (TS vs Python divergence):</strong> <span style="font-size:11px">The Python reference uses an <code style="font-size:10px">@assert_generation_fresh</code> decorator (<code style="font-size:10px">adapter/harness/staleness.py:54</code>) that raises StalenessError before the function body runs. The TS implementation intentionally does NOT use decorators — a decorator raises before the function body, which prevents in-gate re-resolution (the gate cannot call _maybeResolve() to fix the stale state and retry). Instead, all three gates call <code style="font-size:10px">_maybeResolve()</code> as the first statement in the function body. This is a deliberate TS-specific pattern, not an oversight.</span><br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/staleness.py</code> — staleness_check(), assert_generation_fresh decorator, increment_generation_id(), staleness_sweep() · <code style="font-size:10px">adapter/harness/gates.py:29</code> — _maybe_resolve() (the Python equivalent of _maybeResolve) · <code style="font-size:10px">adapter/harness/control_state.py:185</code> — compute_elevation_factor().</em>'},
+      {id:'P7.6',name:'Zod schemas + serialization',body:'Zod schema for each state object. parse() validates at HarnessRuntime init and on deserialization (e.g. loading from IndexedDB for session recovery). toJSON() / fromJSON() helpers on WorldModel and ControlState — used by ContextCompression and HITL persistence. HarnessRunState type: all 13 state objects as one serialisable bundle. conflict_probability_cache key format: sorted pair joined by "::" (not tuple — tuple keys cannot be JSON-serialised as object keys, breaking HarnessRunState.save()).'},
+    ],
+    tests:[
+      'WorldModel: full toJSON/fromJSON round-trip preserves all fields including contradictions and completeness_flags',
+      'WorldModel: generation_id increments monotonically with each significant update call',
+      'WorldModel: addBelief() throws if derived_from[] is empty (observation vs conclusion invariant)',
+      'WorldModel: completeness_flags{} records which regions were pruned during compression',
+      'CallerState: constraints_changed flag set on any constraint mutation and cleared after propagation',
+      'ControlState: notes[] holds dep_class_gap_annotation as a string; no numeric field exposed',
+      'ControlState: generation_id starts at 0 and matches worldModel.generation_id after stamping',
+      'TaskGraph: COMPLETE status is terminal — any further status transition raises ValueError',
+      'TaskGraph: FAILED set only by execution layer — planning logic cannot set it directly',
+      'TaskGraph: select_unblocked_leaf returns HIGH risk tasks before MEDIUM before LOW (stable sort preserves insertion order within same level)',
+      'TaskGraph: conflict_probability_cache key for (da, db) equals key for (db, da) (sorted pair joined by "::")',
+      'EvidenceStore: tool_availability_manifest populated and keyed by tool name string',
+      'MemoryState: action_dep_overlap() checks intersection against both compressed_structures[] and pruned_regions[]',
+      'MemoryState: "structure present" does not mean "structure complete" — pruned regions tracked separately',
+      'StrategyState: prior_strategy_weights is flat (uniform) when no experience store provided',
+      'StrategyState: recovery_strategy_order defaults to DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE',
+      'EliminationPolicy: last K eliminated retained; oldest entry evicted when K exceeded',
+      'normalise: ratio clamps -0.1 → 0.0 and 1.1 → 1.0; 0.5 unchanged',
+      'normalise: entropy returns 1.0 for uniform distribution over 4 sources',
+      'normalise: composite weighted sum normalised to [0,1]',
+      'normalise: match_confidence clamps same as ratio',
+      'assertNormalised: throws NormalisationError for -0.01 (below floor)',
+      'assertNormalised: throws NormalisationError for 1.01 (above ceiling)',
+      '_maybeResolve: re-resolves control state once when generation_id stale',
+      '_maybeResolve: throws StalenessError if still stale after one resolution attempt',
+      'HarnessRunState: full toJSON/fromJSON round-trip including all 13 nested state objects'
+    ]
+  },
+  {
+    id:'P8', color:'var(--c-p8)', weeks:'~1.5 weeks', mvp:false,
+    title:'World Model & Evidence Nodes',
+    sub:'gather_evidence, apply_tool_reliability, update_world_model, detect_contradictions, generate_update_hypotheses, update_diagnostics',
+    summary:'Implement the six nodes that process observations, maintain the world model, and compute diagnostic health vectors. These nodes run every iteration of the harness loop. They must be individually testable without the rest of the loop — each takes a state snapshot and returns a state update, with no side effects on shared module state.',
+    tasks:[
+      {id:'P8.1',name:'Node: gather_evidence',body:'packages/harness/src/nodes/gather-evidence.ts: Evidence factory function enforcing the observation vs conclusion invariant — observation_type must be explicitly declared (OBSERVATION, INFERENCE, or SYSTEM_ERROR); no implicit promotion. tool_availability_manifest.get(tool) checked before gathering from that tool: if unavailable, Evidence not created and a warning event emitted. Observation stored in evidence_store.observations[] without auto-promotion to beliefs[].<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/evidence.py</code> — Evidence dataclass, observation_type enum, tool manifest check · <code style="font-size:10px">adapter/harness/tool_manifest.py</code> — tool_availability_manifest structure.</em>'},
+      {id:'P8.2',name:'Node: apply_tool_reliability',body:'applyToolReliability(evidence, toolReliabilityEnvelopes): caps conclusion reliability to tool envelope. Updates diagnostics.verification_health.feasibility from evidence_freshness_mean and tool_envelope_gap count (number of tools with LOW max reliability). Returns modified Evidence with adjusted reliability — the raw evidence is never mutated; a new Evidence object is returned. Penalises verification plans before execution — adequacy penalty precedes pruning so there is no double-counting in verify().<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/tool_reliability.py</code> — apply_tool_reliability(), tool_reliability_envelopes structure, reliability cap logic.</em>'},
+      {id:'P8.3',name:'Node: update_world_model + propagate_beliefs',body:'updateWorldModel(evidence, worldModel, beliefDepGraph): reliability-weighted integration. Observations added to worldModel.observations[]; conclusions only added to worldModel.beliefs[] when explicitly inferred with documented derived_from[] chain. propagateBelief(beliefDepGraph, depGraphBudget): low-confidence edges propagate with proportionally lower weight; budget breach (unverified_edge_ratio > max) → wider invalidation frontier. applyDecay(): reduces edge confidence by confidence_decay_rate each iteration, independent of content changes. completeness_flags updated if any belief regions confirmed present or newly pruned. belief_health proxies recomputed after integration: freshness (1 - stale_flag_ratio), consistency (1 - contradiction_density), support (mean_reliability_weight). generation_id incremented.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/world_model.py</code> — WorldModel dataclass, addBelief() validation, completeness_flags · <code style="font-size:10px">adapter/harness/world_model_ops.py</code> — update_world_model(), reliability-weighted integration · <code style="font-size:10px">adapter/harness/belief_graph.py</code> — propagate_beliefs(), BeliefDepGraph, applyDecay(), invalidation_frontier · <code style="font-size:10px">adapter/harness/staleness.py:96</code> — staleness_sweep() (stale_flag_ratio source).</em>'},
+      {id:'P8.4',name:'Node: detect_contradictions',body:'detectContradictions(worldModel, evidenceStore, hypothesisSet): typed detection for 4 contradiction types (pairwise: two beliefs directly conflict; set-level: set is jointly inconsistent; temporal: belief conflicts with its predecessor; abstraction: cross-abstraction-level conflict). Each contradiction annotated with type, severity (LOW|MEDIUM|HIGH|SYSTEM_BREAKING), and scope (local|task|global). SYSTEM_BREAKING: pushed to worldModel.contradictions[] only — no throw, no inline halt. Lower severities also enter contradictions[] and feed TIER 2 + TIER 4 via belief_health.consistency in the next updateDiagnostics() call. applyResolutionPolicy(c, worldModel) runs per contradiction after adding to contradictions[].<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/contradiction.py</code> — detect_contradictions(), 4 contradiction types, Contradiction dataclass, severity enum, _resolve_low/medium/high/system_breaking() resolution policies.</em>'},
+      {id:'P8.5',name:'Node: generate_update_hypotheses',body:'generateUpdateHypotheses(worldModel, evidenceStore, hypothesisSet, policy): 4 structurally distinct sources (symptom_inference, counterfactual_reasoning, failure_mode_library, analogy_based_generation). diversity_score computed as structural uniqueness across sources; if below 0.7 threshold, additional generation passes forced until threshold satisfied. computeSourceEntropy(hypothesis_set): Shannon entropy over generation source counts / log2(numSources) → bound [0,1] → feeds explanation_coverage. eliminationPolicy.apply(): eliminates on contradicting_evidence | prediction_failure_count ≥ K | posterior < FLOOR. Eliminated set capped at K; oldest evicted beyond cap. MAX_BELIEFS=10 / KEEP_BELIEFS=5 applied when a belief key accumulates >10 entries — recorded in pruned_regions[].<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/hypothesis.py</code> — generate_update_hypotheses(), HypothesisSet, EliminationPolicy, 4 generation sources, diversity_score, elimination conditions, eliminated-set K cap.</em>'},
+      {id:'P8.6',name:'Node: update_diagnostics',body:'updateDiagnostics(worldModel, hypothesisSet, taskGraph, failureDiagnostics, depGraph): recomputes all 4 health vectors. belief_health: freshness, consistency, support. coverage_health: symptom_coverage = normalise(1 - uncovered_symptom_ratio, ratio); explanation_coverage = normalise(hypothesis_source_entropy, entropy). verification_health: strength = normalise(coverage_layer_count × adversarial_pass_rate, ratio); feasibility = normalise(tool_adequacy + evidence_adequacy + 0.3×abstraction_fit, composite). execution_health: progress_rate = normalise(completion_velocity, ratio); failure_recurrence = normalise(recurrence_rate, composite, inverted); oscillation_score = normalise(oscillation_rate, composite, inverted). failureDiagnostics.matched_pattern: failure_mode_library.match() returns raw confidence → normalise(raw, match_confidence) before TIER 4. dep_class_gap_annotation: computed, attached to diagnostics.dep_class_gap_annotation as advisory annotation only — not a numeric input to any resolve_control_state() tier. If task_graph.changed: abstraction_fit recalculated via check_abstraction_alignment().<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/diagnostics.py</code> — update_diagnostics(), all health-vector sub-dim formulas (lines 140–220), DimensionType (line 16), Diagnostics dataclass, normalise() (line 259) · <code style="font-size:10px">adapter/harness/failure_modes.py</code> — FailureDiagnostics, failure_mode_library.match(), normalise_confidence().</em>'},
+    ],
+    tests:[
+      'gather_evidence: evidence_type=SYSTEM_ERROR carries reliability=HIGH automatically',
+      'gather_evidence: OBSERVATION evidence stored in observations[], never auto-promoted to beliefs[]',
+      'gather_evidence: unavailable tool → no Evidence object created; warning event emitted',
+      'apply_tool_reliability: LOW envelope caps HIGH observation reliability to LOW conclusion reliability',
+      'apply_tool_reliability: returns new Evidence object; original evidence object not mutated',
+      'apply_tool_reliability: updates verification_health.feasibility from tool_envelope_gap count',
+      'update_world_model: observation added to observations[] only',
+      'update_world_model: belief creation without derived_from[] throws (invariant enforced at write)',
+      'update_world_model: belief_health.freshness = normalise(1 - stale_flag_ratio, ratio)',
+      'update_world_model: belief_health.consistency = normalise(1 - contradiction_density, ratio)',
+      'update_world_model: belief_health.support = normalise(mean_reliability_weight, ratio)',
+      'update_world_model: completeness_flags{} updated when belief regions confirmed or newly pruned',
+      'propagate_beliefs: low-confidence edge reduces propagated weight proportionally to edge confidence',
+      'propagate_beliefs: budget breach (unverified_edge_ratio > max) widens invalidation frontier to downstream nodes',
+      'detect_contradictions: SYSTEM_BREAKING enters contradictions[] — does NOT throw, does NOT halt loop',
+      'detect_contradictions: pairwise type detected on two directly conflicting beliefs',
+      'detect_contradictions: temporal type detected on belief that conflicts with its prior-version entry',
+      'detect_contradictions: scope=local for single-task contradiction; scope=global for objective-level',
+      'generate_update_hypotheses: all 4 generation sources contribute at least one hypothesis',
+      'generate_update_hypotheses: diversity_score < 0.7 forces additional generation passes until threshold met',
+      'generate_update_hypotheses: elimination_policy removes hypothesis when posterior falls below FLOOR',
+      'generate_update_hypotheses: eliminated set capped at K; oldest entry evicted when capacity exceeded',
+      'generate_update_hypotheses: MAX_BELIEFS=10 / KEEP_BELIEFS=5 pruning recorded in pruned_regions[]',
+      'update_diagnostics: all health vector sub-dims pass assertNormalised() (no out-of-range values emitted)',
+      'update_diagnostics: dep_class_gap_annotation is string attached to advisory field — not passed to any tier as a number',
+      'update_diagnostics: abstraction_fit recalculated only when task_graph.changed flag is set'
+    ]
+  },
+  {
+    id:'P9', color:'var(--c-p9)', weeks:'~1 week', mvp:false,
+    title:'Control & Planning Nodes',
+    sub:'resolve_control_state, check_caller_updates, update_task_graph, select_task, estimate_risk, estimate_voi',
+    summary:'Implement the nodes that make control decisions and plan which task to execute next. resolve_control_state() is the most critical node — it is the sole control input to action selection. Its five-tier logic and deadlock detection must be independently verifiable. All planning nodes are pure functions of their state inputs.',
+    tasks:[
+      {id:'P9.1',name:'Node: resolve_control_state',body:'resolveControlState(diagnostics, worldModel, failureDiagnostics, step): asserts control_state.generation_id == worldModel.generation_id before reading (stale = structural bug). All inputs pass assertNormalised() at entry. Five tiers in strict order: TIER 1: any contradiction with severity=SYSTEM_BREAKING → escalation_reason=CONTRADICTION → return immediately (no lower tier runs). TIER 2: any diagnostic dimension < CRITICAL_THRESHOLD (0.2) → add dimension\'s action_class to block_mask; continue to lower tiers. DEADLOCK CHECK: block_mask contains two entries whose recovery actions are mutually blocked → escalation_reason=HUMAN_REQUIRED; return (no autonomous recovery attempted). RECOVERY_ACTION_DEPENDENCIES wired cross-dimension (not self-referential — self-referential deps make every single-block appear as a deadlock). TIER 3: symptom_coverage < HIGH_THRESHOLD OR explanation_coverage < DIVERSITY_FLOOR → risk_state=CAUTIOUS; conflict rule: allow exploration not requiring blocked dimension. TIER 4: belief_health sub-scores < CAUTION_THRESHOLD (0.4) OR matched_pattern.confidence > PATTERN_THRESHOLD → caution += computeElevationFactor(). TIER 5: risk_state=NORMAL. dep_class_gap_annotation attached to control_state.notes[] only — NOT evaluated in any tier. control_state.generation_id stamped to worldModel.generation_id.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/control_state.py:205</code> — resolve_control_state() full 5-tier implementation · :185 compute_elevation_factor() (TIER 4) · :164 _extract_sub_dimensions() · ControlState dataclass with risk_state, escalation_reason, block_mask, generation_id, notes[].</em>'},
+      {id:'P9.2',name:'Node: check_caller_updates',body:'checkCallerUpdates(callerState, updateChannel): non-blocking poll. If update available: inject_clarification(pending_update); caller_state.update(). If constraints_changed: applyConstraintChangePropagation() — shared entry point for both this path and escalation-triggered propagation (same code, not two implementations): detect_contradictions(worldModel, updated_success_criteria, hypothesisSet); update_success_criteria(callerState); update_output_contract(callerState); revalidate_task_graph() (scope narrowing may invalidate subtrees; expansion may add tasks); worldModel.generation_id++; resolve_control_state(); return RESTART_ITERATION. reset_constraints_changed() called after propagation to prevent re-trigger. UpdateChannel protocol: NoOpUpdateChannel (default) and implementations. NoOpUpdateChannel is the test/default stub; production implementations satisfy the same protocol.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/external_updates.py</code> — check_caller_updates(), UpdateChannel protocol, NoOpUpdateChannel · <code style="font-size:10px">adapter/harness/constraint_propagation.py</code> — applyConstraintChangePropagation() shared entry point, revalidate_task_graph(), update_output_contract() · <code style="font-size:10px">adapter/harness/caller_state.py</code> — CallerState, constraints_changed flag.</em>'},
+      {id:'P9.3',name:'Node: update_task_graph',body:'updateTaskGraph(objective, worldModel, hypothesisSet, taskGraph): adds or removes blocking conditions as depends_on completion status changes. New subtasks added if worldModel reveals additional necessary work. Cycle detection + status consistency checks. abstraction_fit check recalculated if task_graph.changed and fed into diagnostics.verification_health.feasibility. parallel_write_domains updated for new/modified tasks. conflict_probability_cache: estimated per write-domain pair from task_graph structure (supplemented by experience_store.write_conflict_history if available). TaskGraph has no add_task() method — initialise via constructor: TaskGraph({ tasks: [...] }). COMPLETE status is terminal — any transition raises ValueError. FAILED only set by execution layer, never by planning logic. select_unblocked_leaf() priority: HIGH → MEDIUM → LOW by risk_level (stable sort preserves insertion order within same risk level).<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/task_graph.py</code> — TaskGraph, 6-state status enum, update_task_graph(), select_unblocked_leaf(), conflict_probability_cache, parallel_write_domains, cycle detection.</em>'},
+      {id:'P9.4',name:'Node: select_task + parallel branch merge',body:'selectTask(taskGraph, controlState): escalation_reason==HUMAN_REQUIRED → do not select, escalate immediately. For parallel-eligible tasks: conflict_probability_cache.estimate() consulted first. conflict_prob > PESSIMISTIC_THRESHOLD (0.5): pessimistic write-domain conflict detection blocks overlapping tasks. conflict_prob ≤ 0.5: optimistic — both tasks proceed; parallel branch merge handles conflict detection. Inter-task belief consistency checked before execution regardless of concurrency model. reconcileParallelBranches(): take max(generation_id) across joining branches; merge world models; detect contradictions on merged model; invoke resolveControlState() on merged model; merged control_state.generation_id = merged world_model.generation_id. conflict_probability_cache updated from actual write overlap at merge (cross-domain pairs recorded with conflict_observed=False in no-conflict case — refines estimates). Assumptions deduplicated in mergeWorldModels() to prevent duplicate string entries.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/task_graph.py</code> — select_task() · <code style="font-size:10px">adapter/harness/parallel_merge.py</code> — reconcileParallelBranches(), mergeWorldModels() (deduplication), conflict_probability_cache update at merge.</em>'},
+      {id:'P9.5',name:'Node: estimate_risk',body:'estimateRisk(action, taskGraph, worldModel): LOW|MEDIUM|HIGH from: file_centrality (import-count of affected files from task_graph.parallel_write_domains, normalised), change_scope (lines + functions affected, normalised), module_type (test:LOW, business_logic:MEDIUM, infrastructure:HIGH base). HIGH risk → reduce_edit_size() + increase_verification() recommendations attached to action metadata. Orthogonal to compression overlap check (action_dep_overlap()) which is a separate risk dimension on state availability, not structural risk.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/risk.py</code> — estimate_risk(), file_centrality computation, module_type classification, reduce_edit_size()/increase_verification() recommendation attachment.</em>'},
+      {id:'P9.6',name:'Node: estimate_voi + verification_adequacy_critic',body:'estimateVOI(diagnostics, worldModel, hypothesisSet, toolAvailabilityManifest): VOI = expected_uncertainty_reduction × decision_impact. High VOI → gather_additional_evidence(); Low VOI → proceed to action selection. verification_adequacy_critic runs here: consults tool_availability_manifest to prune any 9-layer checks whose required tools are unavailable — this shortfall already penalised in verification_health.strength before execution (no double-counting). LOW adequacy forces evidence-gathering pass. HIGH risk requires adversarial verification pass. If adequacy cannot be raised (evidence structurally unavailable or tools unavailable): shortfall updates verification_health.strength (normalised) → feeds next resolve_control_state() → may trigger TIER 2 blocking. Prevents indefinite gather loop: unresolvable inadequacy escalates via TIER 1/2, not infinite gather.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/voi.py</code> — estimate_voi(), verification_adequacy_critic(), gather_additional_evidence(), adequacy shortfall → verification_health.strength path.</em>'},
+    ],
+    tests:[
+      'resolveControlState: TIER 1 fires on SYSTEM_BREAKING contradiction → BLOCKED returned; TIER 2+ not evaluated',
+      'resolveControlState: TIER 2 adds dimension action_class to block_mask when sub-dim < 0.2 (CRITICAL_THRESHOLD)',
+      'resolveControlState: single blocked dimension is NOT a deadlock (RECOVERY_ACTION_DEPENDENCIES cross-dimension)',
+      'resolveControlState: deadlock detected when block_mask has two entries whose recovery actions mutually block each other → HUMAN_REQUIRED',
+      'resolveControlState: TIER 3 fires on low symptom_coverage even when TIER 2 not triggered',
+      'resolveControlState: conflict rule in TIER 3 allows exploration actions that do not require blocked dimension',
+      'resolveControlState: TIER 4 proportional caution elevation via compute_elevation_factor() callable in isolation',
+      'resolveControlState: TIER 5 returns NORMAL when all signals are above their respective thresholds',
+      'resolveControlState: dep_class_gap_annotation attached to control_state.notes[] as string only; not evaluated in any tier',
+      'resolveControlState: generation_id stamped to worldModel.generation_id after resolution completes',
+      'resolveControlState: assertNormalised() called on all inputs at entry; throws NormalisationError on out-of-range value',
+      'checkCallerUpdates: NoOpUpdateChannel returns empty list (default no-op)',
+      'checkCallerUpdates: constraint update triggers applyConstraintChangePropagation() — same shared function as escalation path',
+      'checkCallerUpdates: reset_constraints_changed() called after propagation to prevent re-trigger',
+      'checkCallerUpdates: iteration restarts via RESTART_ITERATION signal after constraint propagation',
+      'updateTaskGraph: circular depends_on raises GraphCycleError at update time',
+      'updateTaskGraph: conflict_probability_cache per write-domain pair estimated from task_graph structure',
+      'selectTask: task with one incomplete depends_on is not eligible for selection',
+      'selectTask: escalation_reason=HUMAN_REQUIRED → escalate immediately without selecting any task',
+      'selectTask: conflict_prob > 0.5 → pessimistic path blocks overlapping parallel task',
+      'selectTask: conflict_prob ≤ 0.5 → optimistic path; both tasks proceed concurrently',
+      'selectTask: parallel branch merge takes max(generation_id) across joining branches',
+      'selectTask: parallel branch merge runs contradiction detection on merged world model',
+      'selectTask: cross-domain pairs recorded with conflict_observed=False at merge (refines cache estimates)',
+      'estimateRisk: infrastructure module → HIGH risk; test file → LOW risk',
+      'estimateRisk: HIGH risk action carries reduce_edit_size + increase_verification recommendations in metadata',
+      'estimateVOI: high VOI triggers gather_additional_evidence() before action selection',
+      'estimateVOI: unresolvable adequacy shortfall updates verification_health.strength → TIER 2 picks it up next iteration'
+    ]
+  },
+  {
+    id:'P10', color:'var(--c-p10)', weeks:'~1.5 weeks', mvp:false,
+    title:'Policy, Execution & Recovery Nodes',
+    sub:'review_proposed_change, execute, verify (9 layers), rollback_replan, escalate',
+    summary:'Implement the mutation-critical nodes. These nodes apply changes and enforce quality gates. review_proposed_change() and the policy gates (action_gate, post_exec_gate) must assert generation_id freshness before reading. verify() runs all 9 layers internally and post-filters — it does not skip layers, it penalises missing tools upstream via the adequacy critic.',
+    tasks:[
+      {id:'P10.1',name:'Node: review_proposed_change',body:'reviewProposedChange(proposedChange, currentTask, worldModel, outputContract, hypothesisSet): checks 5 dimensions in order: (1) task requirements alignment — change implements currentTask spec no more and no less; (2) world model consistency — change does not contradict any HIGH-reliability belief in worldModel.beliefs[]; (3) output contract pre-check — required interface fields present, no type regressions; (4) code quality heuristics — linter checks if tool_availability_manifest.linter == available; (5) open hypothesis compatibility — change does not contradict any uneliminated hypothesis in hypothesisSet.active[]. Failed review: action blocked → select_best_action() re-invoked for same task. Second consecutive failure same task: indicates structural decomposition fault → escalate_to_human rather than looping. Gates use internal _maybeResolve() helper (not @assert_generation_fresh decorator — decorator raises before function body, preventing in-gate re-resolution).<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/review_gate.py</code> — review_proposed_change(), 5-dimension check order, second-failure escalation · <code style="font-size:10px">adapter/harness/output_contract.py</code> — OutputContract, pre-check logic.</em>'},
+      {id:'P10.2',name:'Policy gates: action_gate + post_exec_gate',body:'actionGate(action, controlState, worldModel, diagnostics, failureDiagnostics): asserts generation_id (sub-step A value — after observation/belief updates, pre-execution). _maybeResolve() called first. block_mask → BLOCK; escalation_reason → ESCALATE; high caution → add exploration step. postExecGate(result, verification, controlState, worldModel, diagnostics, failureDiagnostics): asserts generation_id (sub-step B value — after execution/verification updates, distinct from sub-step A). contract_shadow_check() runs inside this gate: required interface fields present, no type signature regressions. Full validate_output_contract() at loop end is authoritative — shadow check is early detection only. GateContext type carries both sub-step A and sub-step B generation_id values to prevent confusion.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/gates.py:29</code> — _maybe_resolve() (the Python equivalent of _maybeResolve, used identically at gate entry) · :81 action_gate() · :109 post_exec_gate() · :142 decomposition_gate() · contract_shadow_check() inline logic.</em>'},
+      {id:'P10.3',name:'Node: execute',body:'execute(proposedChange, toolWorkflow, reversibilityStrategy, context): reversibility selected per action: snapshot (serialise worldModel+state before mutation), git-revert (record affected paths), patch-rollback (keep inverse diff), ephemeral (read-only, no rollback needed). result logged to environment_change_log for subsequent staleness sweeps. Tool error path: Evidence(result.error, reliability=HIGH, source=result.tool, evidence_type=SYSTEM_ERROR, freshness=NOW) → update_world_model → hypothesis_set and failure_diagnostics updated → contradictions detected and propagated. failure_mode_library match does NOT redirect control here — it produces a MatchResult that the next resolve_control_state() TIER 4 reads. planToolWorkflow() includes dep graph refresh step when dep_graph_budget signals unverified_edge_ratio exceeded. Hypothesis discriminating_evidence guides workflow toward tests that differentiate remaining hypotheses.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/execution.py</code> — execute(), per-action reversibility selection, environment_change_log.record(), tool error → Evidence path, planToolWorkflow() with dep-graph refresh · <code style="font-size:10px">adapter/harness/world_model.py</code> — environment_change_log field.</em>'},
+      {id:'P10.4',name:'Node: verify (9 layers)',body:'verify(result, successCriteria, worldModel, toolAvailabilityManifest, riskLevel): always runs all 9 layers internally (syntax, unit, integration, consistency, requirements, assumptions, goal_correctness, evidence_sufficiency, partial_output_contract). Post-filters layer_results to enabled_layers set; constructs new VerificationResult from filtered list — filtering at output, not at execution. enabled_layers: layers whose required tools are unavailable per tool_availability_manifest are excluded (shortfall already penalised upstream in verification_health.strength by adequacy critic). evidence_sufficiency threshold is claim-scoped, not a single global bar: local claim requires less evidence than a global claim. HIGH risk → adversarial verification pass. LayerResult.layer field (not .layer_name) used for enabled_layers filtering — matches P10 Python implementation decision.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/verification.py</code> — verify(), 9 layer implementations, enabled_layers post-filter, LayerResult.layer field (not .layer_name), adversarial pass, evidence_sufficiency claim-scoped thresholds.</em>'},
+      {id:'P10.5',name:'Node: rollback_replan',body:'rollbackAndReplan(reversibilityStrategy, failureDiagnostics, strategyState, worldModel, taskGraph, experienceStore): rollback(reversibilityStrategy) → record_failure(). cannot_make_progress() checked: 4 proxies with documented constants: completion_velocity stalled for STALL_WINDOW=5 steps; strategy_state.switch_count > MAX_SWITCHES=3 with no completed_count advance; same failure_mode matched ≥ RECURRENCE_THRESHOLD=3 consecutive; risk_state alternated CAUTIOUS/NORMAL for OSCILLATION_WINDOW=6 steps. Any one → True. Short-circuits on first True proxy (order: completion_velocity → strategy_loop → failure_recurrence → risk_oscillation). Records strategyState.stall_reason before returning. Strategy switch: failure_diagnostics.matched_pattern advisory input (biases, does not override). 6 named strategies in order: DIRECT_EDIT → TRACE_EXEC → BROADER_SEARCH → REIMPLEMENT → MINIMAL_FIX → ESCALATE. Softmax policy over (strategy, failure_class) pairs if experienceStore.available — build_strategy_ordering() sorts by descending probability, falls back to DEFAULT_STRATEGY_ORDER when no weights available. Replan scope: LOCAL → diagnoseAndReplan(currentTask); GLOBAL → rebuildTaskGraph() + validateTaskGraph().<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/recovery.py</code> — rollbackAndReplan(), rollback(), record_failure(), diagnoseAndReplan(), rebuildTaskGraph() · <code style="font-size:10px">adapter/harness/progress.py:15</code> — STALL_WINDOW, MAX_SWITCHES constants · :19 RECURRENCE_THRESHOLD · :21 OSCILLATION_WINDOW · :69 cannot_make_progress() with 4-proxy short-circuit · <code style="font-size:10px">adapter/harness/replanning.py</code> — build_strategy_ordering(), softmax policy, DEFAULT_STRATEGY_ORDER.</em>'},
+      {id:'P10.6',name:'Node: escalate',body:'escalate(controlState, strategyState, worldModel, callerState, updateChannel): escalation fires when risk_state==BLOCKED OR cannot_make_progress(). surfaceBlocker(reason, missing_info, context): SurfaceBlocker typed object (reason, missing_info[], context) — replaces _escalate_budget_exhausted stub. await_clarification() raises EscalationHalt (not returns) — callers catch it and inject clarification via inject_clarification(). On human_response: inject_clarification(); caller_state.update(). If constraints_changed: applyConstraintChangePropagation() (same shared path as H03 checkCallerUpdates). If no human_response: halt(). _escalate_budget_exhausted(): returns { escalated: true, reason: "budget_exhausted", missing_info: [...] } — wired at the call site.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/escalation.py</code> — escalate(), surfaceBlocker(), await_clarification() (raises EscalationHalt), inject_clarification(), halt(), _escalate_budget_exhausted(), constraint propagation path on human_response.</em>'},
+    ],
+    tests:[
+      'reviewProposedChange: all 5 dimensions evaluated; first failure blocks action without evaluating remaining dimensions',
+      'reviewProposedChange: world-model consistency check rejects change contradicting any HIGH-reliability belief',
+      'reviewProposedChange: linter check skipped silently when linter absent from tool_availability_manifest',
+      'reviewProposedChange: open hypothesis compatibility check blocks change contradicting uneliminated hypothesis',
+      'reviewProposedChange: output contract pre-check catches missing required interface field before mutation',
+      'reviewProposedChange: second consecutive failure on same task triggers escalate_to_human (not further re-selection)',
+      'actionGate: _maybeResolve() called at entry; stale control state re-resolved before any gate logic',
+      'actionGate: action whose class is in block_mask → BLOCK result returned',
+      'actionGate: escalation_reason=HUMAN_REQUIRED → ESCALATE immediately without evaluating block_mask',
+      'actionGate: sub-step A generation_id used; distinct from sub-step B (postExecGate) value',
+      'postExecGate: _maybeResolve() called at entry using sub-step B generation_id',
+      'postExecGate: contract_shadow_check() runs inside gate; required fields + no type regressions checked',
+      'postExecGate: contract_shadow_check does not replace full output_validation at loop end',
+      'execute: snapshot reversibility serialises worldModel state before mutation applied',
+      'execute: ephemeral (read-only) action has no rollback_points entry created',
+      'execute: tool error → Evidence(reliability=HIGH, evidence_type=SYSTEM_ERROR) → update_world_model called',
+      'execute: environment_change_log.record(result) called for every execution regardless of outcome',
+      'execute: planToolWorkflow() triggers dep graph refresh when unverified_edge_ratio exceeded',
+      'verify: all 9 layers run internally; enabled_layers post-filters VerificationResult (no layer skipped at execution)',
+      'verify: unavailable tool layers excluded from enabled_layers (already penalised upstream; no double-count)',
+      'verify: evidence_sufficiency threshold is claim-scoped — local claim requires less evidence than global claim',
+      'verify: HIGH risk task triggers adversarial verification pass in addition to standard 9 layers',
+      'verify: LayerResult.layer field (not .layer_name) used for enabled_layers membership check',
+      'rollbackAndReplan: cannot_make_progress() short-circuits on first True proxy; remaining proxies not evaluated',
+      'rollbackAndReplan: stall_reason recorded in strategyState.stall_reason before returning True',
+      'rollbackAndReplan: softmax policy replaces fixed strategy order when experienceStore.available',
+      'rollbackAndReplan: LOCAL replan calls diagnoseAndReplan(currentTask) only',
+      'rollbackAndReplan: GLOBAL replan calls rebuildTaskGraph() + validateTaskGraph()',
+      'escalate: surfaceBlocker object carries reason, missing_info[], and context fields',
+      'escalate: await_clarification() raises EscalationHalt — does not return a value',
+      'escalate: constraint propagation on human response uses applyConstraintChangePropagation() (same path as checkCallerUpdates)'
+    ]
+  },
+  {
+    id:'P11', color:'var(--c-p11)', weeks:'~1 week', mvp:false,
+    title:'Harness Lifecycle — Initialize, WarmStart, ContextCompression, ReviewerPass, HarnessRuntime',
+    sub:'full loop orchestration + reviewer pass + output validation + ExperienceStore wiring',
+    summary:'Wire all nodes into a complete HarnessRuntime class that executes the full agent loop. Initialize and WarmStart run once at the start. ContextCompression and CheckCallerUpdates run each iteration. ReviewerPass closes the loop post-execution. HarnessRuntime owns the step counter, generation_id double-increment, and sub-step A/B distinction.',
+    tasks:[
+      {id:'P11.1',name:'Node: initialize',body:'initializeHarness(objective, successCriteria, options): creates all 13 state objects. Populates tool_availability_manifest by querying each configured tool; returns { available: bool, fallback_tool: string|null }. Sets max_steps, journal_retention_policy (retain_failures_permanently=true, max_passing_verbatim=20, compress_older_passing=true), elimination_policy K sizes and FLOOR. reversibility_strategy map (per action class). Runs _validate_recovery_action_dependencies() at init — throws immediately if any self-referential dependency found. Runs validate_task_graph() + initial diagnostics setup: diagnostics.verification_health.feasibility = check_abstraction_alignment(taskGraph, objective); diagnostics.coverage_health.symptom_coverage = init_coverage_estimate(); diagnostics.coverage_health.explanation_coverage = compute_source_entropy(). worldModel.generation_id++ → resolve_control_state() → decomposition_gate().<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/loop.py</code> — top-level initialisation before run_one_iteration() · <code style="font-size:10px">adapter/harness/tool_manifest.py</code> — populate_tool_availability_manifest() · <code style="font-size:10px">adapter/harness/gates.py:142</code> — decomposition_gate() (asserted after first resolve_control_state call).</em>'},
+      {id:'P11.2',name:'Node: warm_start',body:'warmStart(experienceStore, strategyState, failureDiagnostics, depGraphBudget, taskGraph): no-op if !experienceStore.available — available is a computed getter that performs a DB ping, NOT a constructor parameter. 6 loaders run in sequence (each no-op if corresponding collection is empty): (1) strategy priors → strategyState.prior_strategy_weights ← empirical success rates by StrategyWeightKey(strategyType, failureClass); (2) failure class priors → failureDiagnostics.failure_mode_library.class_priors; (3) dep_graph decay rates → depGraphBudget.prior_decay_rates; (4) structural decompositions → seed taskGraph patterns; (5) tool workflow seeds → seed plan_tool_workflow(); (6) verification plan seeds → seed verification_adequacy_critic. softmax_strategy_policy(temperature=1.0): returns probability dict over StrategyType values normalised to sum 1.0. update_experience_store(): idempotent on repeated calls with same run_id (upsert, not insert).<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/experience_store.py</code> — ExperienceStore interface, InMemoryExperienceStore, available getter (computed, not constructor param), 6 loader collections, update_experience_store() upsert, StrategyWeightKey.</em>'},
+      {id:'P11.3',name:'Node: context_compression',body:'contextCompression(memoryState, worldModel, beliefDepGraph, hypothesisSet, taskGraph, diagnostics, controlState, callerState): context_pressure = assessContextPressure(token_budget). Compression trigger at 90% of token_budget (not 100% — leaves headroom for compression pass itself). compress_memory(compression_policy, preserve=[worldModel, beliefDepGraph, hypothesisSet, taskGraph, diagnostics, controlState, callerState, open_failures]): returns { dropped: Structure[], pruned: PrunedRegion[] }. compression_risk.compressed_structures.extend(dropped); compression_risk.pruned_regions.extend(pruned). staleness_sweep(worldModel, environment_change_log): TTL-based + environment-change-based invalidation. dep_graph_budget.applyDecay(beliefDepGraph): edge confidence decay independently of content changes. journal_retention_policy.apply(execution_journal): retain all failures + last 20 passing verbatim; compress older passing → (action_class, outcome, step) summary records.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/memory.py</code> — MemoryState, contextCompression(), compress_memory(), CompressionRisk, journal_retention_policy · <code style="font-size:10px">adapter/harness/staleness.py:96</code> — staleness_sweep() (TTL + environment-change invalidation) · <code style="font-size:10px">adapter/harness/belief_graph.py</code> — dep_graph_budget.applyDecay().</em>'},
+      {id:'P11.4',name:'Node: reviewer_pass',body:'reviewerPass(worldModel, successCriteria, failureHistory, beliefDepGraph, hypothesisSet, taskGraph, diagnostics, failureDiagnostics): 3 lenses in fixed sequence. implementerLens(): "did I do what I intended?" — shares worldModel. reviewerLens(): "what would a PR reviewer criticise?" — shares worldModel (acknowledged structural limitation: shared blind spots with implementer). adversarialLens(adversarialPrior): seed_adversarial_prior() selects beliefs by causal proximity threshold 0.5 using BFS 3-hop depth limit from success_criteria dependency chain. Returns at most max_seeds beliefs. Low-proximity beliefs (file paths, incidental details) excluded — excluded to avoid noise. Also seeds from failure_history failure class priors and dep_class_gap_annotation. adversarial_prior discarded after adversarialLens() — never stored in worldModel (INV-adversarial). abstraction_fit recomputed unconditionally (not limited to task_graph.changed as in mid-loop) — reviewer pass has full execution history. After pass: update_world_model, propagate_beliefs, update_hypothesis_set, elimination_policy.apply(), detect_contradictions. drain_propagation_queue(): empties reviewer reopen queue atomically → non-empty signals loop re-entry. ReviewPassResult.reopened_task_ids: non-empty → re-enter loop; empty → advance to output validation.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/reviewer.py</code> — reviewerPass(), 3 lenses, seed_adversarial_prior() (BFS 3-hop, proximity threshold 0.5), adversarial_prior discard invariant, drain_propagation_queue(), ReviewPassResult.</em>'},
+      {id:'P11.5',name:'Node: output_validation',body:'outputValidation(finalResult, outputContract, callerState): full contract check. A result can satisfy all success_criteria and still violate the output_contract — the contract captures external interface requirements from callerState which may have been updated mid-run via escalation or checkCallerUpdates(). Checks: format_requirements, required_sections, interface_constraints, validation_rules, caller_specific_constraints from current callerState. validate_output_contract() supersedes contract_shadow_check() — any violations caught here that shadow check missed indicate shadow check is under-specified. Raises OutputContractError with specific violated dimension.'},
+      {id:'P11.6',name:'HarnessRuntime class',body:'packages/harness/src/harness-runtime.ts: HarnessRuntime class. run(objective, successCriteria, options): synchronous iteration loop with step + steps_used counters. Sub-step A: gather evidence → update world model → detect contradictions → update hypotheses → update diagnostics → worldModel.generation_id++ (A increment) → resolve_control_state → completion check → update task graph → select task → estimate risk + VOI → review change → action_gate → execute. Sub-step B: worldModel.generation_id++ (B increment) → update world model (post-execution) → update diagnostics → resolve_control_state (sub-step B value) → post_exec_gate → update task state. If steps_used ≥ 0.8 × max_steps: lower feasibility floor as budget warning. If steps_used ≥ max_steps: escalate("budget_exhausted"); halt(). After loop: reviewer_pass → if reopened_tasks, re-enter loop. → output_validation → return final_result.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/loop.py:167</code> — run_one_iteration() with full sub-step A/B node ordering. This is the definitive source for the iteration sequence. Also see the loop orchestrator above it for budget_exhausted and reviewer_pass wiring.</em>'},
+      {id:'P11.7',name:'ExperienceStore integration + full loop smoke test',body:'packages/harness/src/state/experience-store.ts: ExperienceStore interface complete. InMemoryExperienceStore: available getter returns true. available is a computed getter (not a constructor parameter) — to create an unavailable store for testing, create a stub class whose available getter returns false. update_experience_store() idempotent on same run_id. Wire update_experience_store() call after each COMPLETE task: if experience_store.available, store outcome. End-to-end smoke test: run HarnessRuntime with a 3-task objective (mock tools, mock LLM), mock ExperienceStore. Assert all 22 nodes execute in correct order. Assert final result passes output_validation. Assert warm_start no-ops gracefully when store returns empty collections.<br><em style="font-size:10.5px;color:var(--t1)">Ref: <code style="font-size:10px">adapter/harness/experience_store.py</code> — ExperienceStore interface, InMemoryExperienceStore (available getter pattern), update_experience_store() idempotency, StrategyWeightKey named tuple · <code style="font-size:10px">adapter/harness/state_store.py</code> — HarnessRunState persistence helpers (DB-backed store for production).</em>'},
+    ],
+    tests:[
+      'initialize: all 13 state objects created with correct default values',
+      'initialize: tool_availability_manifest populated for each configured tool (available + fallback fields)',
+      'initialize: _validate_recovery_action_dependencies() called; self-referential dep throws at init',
+      'initialize: initial diagnostics computed — coverage_health and verification_health both initialised',
+      'initialize: validate_task_graph() called at init; invalid graph throws before loop starts',
+      'initialize: decomposition_gate asserted after first resolve_control_state() call',
+      'warmStart: no-op when experienceStore.available returns false (DB ping fails)',
+      'warmStart: 6 loaders run in sequence; each no-ops silently when corresponding collection is empty',
+      'warmStart: strategy priors loaded into strategyState.prior_strategy_weights keyed by StrategyWeightKey',
+      'warmStart: softmax_strategy_policy(temperature=1.0) output sums to 1.0 over all StrategyType values',
+      'warmStart: build_strategy_ordering falls back to DEFAULT_STRATEGY_ORDER when weights map is empty',
+      'warmStart: update_experience_store() idempotent on repeated same run_id (no duplicate entries created)',
+      'contextCompression: compression triggered at 90% of token_budget (not 100%)',
+      'contextCompression: compress_memory returns separate dropped[] and pruned[] lists',
+      'contextCompression: compression_risk.compressed_structures and .pruned_regions tracked independently',
+      'contextCompression: staleness_sweep() runs after compress_memory (TTL + environment-change-based invalidation)',
+      'contextCompression: dep_graph decay applied after staleness_sweep (independently of content changes)',
+      'contextCompression: journal_retention — all failures retained permanently; last 20 passing verbatim; older passing compressed to (action_class, outcome, step)',
+      'reviewerPass: implementerLens then reviewerLens then adversarialLens in fixed sequence',
+      'reviewerPass: adversarial_prior seeded only on beliefs with causal_proximity ≥ 0.5 (3-hop BFS from success_criteria chain)',
+      'reviewerPass: adversarial_prior discarded after adversarialLens() completes — not stored in worldModel',
+      'reviewerPass: abstraction_fit recomputed unconditionally (not guarded by task_graph.changed)',
+      'reviewerPass: drain_propagation_queue() empties queue atomically and returns complete list of reopened task IDs',
+      'reviewerPass: non-empty reopened_task_ids causes HarnessRuntime to re-enter main loop',
+      'reviewerPass: empty reopened_task_ids allows HarnessRuntime to advance to outputValidation',
+      'outputValidation: contract check uses current callerState.constraints (may differ from init if updated mid-run)',
+      'outputValidation: catches contract violation not caught by postExecGate shadow check → raises OutputContractError with field name',
+      'HarnessRuntime: worldModel.generation_id increments twice per iteration (sub-step A after observation update, sub-step B after execution)',
+      'HarnessRuntime: steps_used ≥ 0.8 × max_steps lowers diagnostics.verification_health.feasibility to BUDGET_WARNING_FLOOR',
+      'HarnessRuntime: steps_used == max_steps → escalate("budget_exhausted") → halt() without further iteration',
+      'HarnessRuntime: ExperienceStore.update() called after each task reaches COMPLETE status (when store available)',
+      'HarnessRuntime: all 22 nodes execute in correct sequence during end-to-end smoke test run'
+    ]
+  }
+];
+
+function renderPhases(){
+  const list=document.getElementById('phase-list');
+  PHASES.forEach((p,i)=>{
+    const row=document.createElement('div');
+    row.className='phase-row';
+    row.style.borderLeftColor=p.color;
+    row.innerHTML=`<div class="phase-header"><span class="phase-num" style="color:${p.color}">${p.id}</span><span class="phase-title" style="color:${p.color}">${p.title}</span>${p.mvp?'<span class="mvp-tag">MVP</span>':''}<span class="phase-meta">${p.weeks}</span></div><div class="phase-sub">${p.sub}</div>`;
+    row.onclick=()=>showPhase(p,row);
+    list.appendChild(row);
+  });
+}
+
+function showPhase(p,row){
+  document.querySelectorAll('.phase-row').forEach(r=>r.classList.remove('active'));
+  row.classList.add('active');
+  const panel=document.getElementById('phase-detail');
+  const taskHtml=p.tasks.map(t=>`
+    <div class="task-item">
+      <div class="task-header"><span class="task-id">${t.id}</span><span class="task-name">${t.name}</span></div>
+      <div class="task-body">${t.body}</div>
+    </div>`).join('');
+  const testHtml=p.tests.map(t=>`<div class="test-item">${t}</div>`).join('');
+  panel.innerHTML=`
+    <div class="det-title" style="color:${p.color}">${p.id} — ${p.title} <span style="font-size:12px;font-weight:400;color:var(--t1)">${p.weeks}</span></div>
+    <div class="det-body">${p.summary}</div>
+    <div class="section-label">Tasks</div>
+    <div class="task-list">${taskHtml}</div>
+    <div class="section-label">Acceptance tests</div>
+    <div class="test-list">${testHtml}</div>`;
+}
+
+renderPhases();
+</script>
+
+</div><!-- root -->
+</body>
+</html>
