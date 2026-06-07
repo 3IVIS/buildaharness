@@ -3,15 +3,15 @@
 
 ## Current state
 
-v0.8.0 — all four phases complete. 240 items shipped across 4 phases:
+v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place. No open RFCs.
 
-- **Phase 0** — FlowSpec schema, 14 node types, 5 reference flows, RFC closed (ADR-001)
-- **Phase 1** — XYFlow canvas, LangGraph + CrewAI + Mastra adapters, auth, Langfuse, execution, HITL
-- **Phase 2** — Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
-- **Phase 3** — Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
-- **Phase 4** — MAF adapter, SSO/OIDC + SCIM, Visual CI/CD, Helm chart, Yjs real-time collab, `@itsharness/canvas`
-
-All four adapter runtimes are fully executable. No open RFCs.
+**What's shipped:**
+- FlowSpec schema, 14 node types, 5 reference flows, ADR-001 closed
+- XYFlow canvas, LangGraph + CrewAI + Mastra + MAF adapters, auth, Langfuse, execution, HITL
+- Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
+- Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
+- SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@itsharness/canvas` package
+- Full harness architecture: 11-layer reasoning and control system, 22-node execution loop, 241 harness tests
 
 ---
 

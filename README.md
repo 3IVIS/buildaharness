@@ -32,7 +32,7 @@ flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
            →  [ A2A agent ]          →  any A2A-compatible runtime
 ```
 
-**Current version:** v0.8.0 — canvas, four framework adapters, and Langfuse observability complete. Harness phases P0–P4 done · 106 tests passing · P5 (Execution & Verification) unblocked.
+**Current version:** v0.8.0 — canvas, four framework adapters, Langfuse observability, and full 11-layer harness architecture implemented. 241 harness tests passing.
 
 ---
 
@@ -40,23 +40,25 @@ flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
 
 A workflow tells your AI what to do. A harness makes sure it actually does it.
 
-The difference is not a matter of degree — it is architectural. A workflow routes prompts from node to node. A harness governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns for next time. Its Harness is building toward that complete architecture: draw it on a canvas today, run it on any framework, and gain the full control layer as each phase lands.
+The difference is not a matter of degree — it is architectural. A workflow routes prompts from node to node. A harness governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns for next time. Its Harness implements that complete architecture: draw it on a canvas, run it on any framework, and get the full 11-layer control system out of the box.
 
-### Where we are today vs the full target
+### The implemented harness
 
-| | Today — v0.8.0 | Target — Full Harness |
-|---|---|---|
-| Canvas | 14 node types | 24 node types (10 new harness nodes in P10) |
-| Frameworks | LangGraph · CrewAI · Mastra · MAF | All four + harness-layer adapters |
-| Observability | Langfuse traces for all 4 runtimes | Harness spans: world model, control state, verification, recovery |
-| Reasoning | Evidence store · tool reliability envelopes · VOI · hypothesis system *(P1 ✓)* | Full integration with execution loop |
-| World Model | Belief dep graph · typed contradictions · staleness sweep *(P2 ✓)* | Full integration with harness spans |
-| Control | 5-tier resolver · NORMAL / CAUTIOUS / BLOCKED · 106 tests *(P3 ✓)* | Harness control spans across all frameworks |
-| Planning | Task graph (6-state) · parallel concurrency · `conflict_probability_cache` *(P4 ✓)* | Full adapter integration |
-| Verification | None | 9 layers · adversarial reviewer pass · pre-execution gate |
-| Recovery | None | 6 named strategies · typed failure library · local/global replan |
-| Memory | None | Budget tracking · journal · compression risk |
-| Learning | None | Experience store — structural reuse across runs |
+The full 11-layer, 22-node harness is implemented and integrated across all four framework adapters:
+
+| Layer | What's implemented |
+|---|---|
+| **Canvas** | 14 node types · visual editor · real-time multi-user collab · `@itsharness/canvas` embed package |
+| **Frameworks** | LangGraph · CrewAI · Mastra · MS Agent Framework — all four with full harness-layer adapter support |
+| **Observability** | Langfuse traces + harness spans (world model, control state, verification, recovery) across all 4 runtimes |
+| **Reasoning** | Evidence store · tool reliability envelopes · VOI-gated evidence gathering · hypothesis system (4 sources · diversity enforcement · elimination policy) |
+| **World Model** | Belief dep graph · `generation_id` staleness tracking · typed contradictions · staleness sweep · `completeness_flags` |
+| **Control** | 5-tier `resolve_control_state()` · `NORMAL`/`CAUTIOUS`/`BLOCKED` · deadlock detection · generation_id gate assertions |
+| **Planning** | Task graph (6-state) · parallel write-domain conflict detection · `conflict_probability_cache` · pessimistic/optimistic concurrency |
+| **Verification** | 9 verification layers · adversarial reviewer pass · pre-execution review gate · `contract_shadow_check` · `tool_availability_manifest` |
+| **Recovery** | 6 named recovery strategies · typed failure library · `cannot_make_progress()` (4 measurable proxies) · local/global replan |
+| **Memory** | Token budget tracking · journal retention policy · structured compression risk (`compressed_structures[]` + `pruned_regions[]`) |
+| **Learning** | Experience store (optional) — structural reuse across runs: decompositions, tool workflows, verification plans, recovery sequences |
 
 ### The 11 architectural layers
 
@@ -105,26 +107,7 @@ The full harness executes a 22-node loop. Each node corresponds to a specific re
 | 21 | **Reviewer Pass** | Verification | Three lenses (implementer · reviewer · adversarial); adversarial prior seeded on causal proximity to success criteria |
 | 22 | **Output Validation** | Verification | Full output contract check against current caller constraints — authoritative pass before return |
 
-### The 11 implementation phases
-
-The repository ships today as a working canvas-and-adapters tool. Every subsequent phase adds a layer of the full harness:
-
-| Phase | Name | Focus |
-|---|---|---|
-| **P0** ✓ | Foundation & State Architecture | FlowSpec extension, harness state model, `generation_id`, `completeness_flags`, health vectors |
-| **P1** ✓ | Evidence & Reasoning | Evidence store, tool reliability envelopes, VOI estimation, hypothesis system |
-| **P2** ✓ | World Model & Contradiction | Belief dep graph, typed contradiction detection, staleness sweep |
-| **P3** ✓ | Diagnostics & Control State | Health vector computation, five-tier `resolve_control_state()`, deadlock detection |
-| **P4** ✓ | Planning & Task Graph | Task graph (6-state), parallel write-domain conflict detection, `conflict_probability_cache` |
-| **P5** *(in progress)* | Execution & Verification | Pre-execution review gate, 9-layer verification, adversarial pass, reversibility strategy |
-| **P6** | Recovery & Memory | Six named recovery strategies, typed failure library, context compression, journal retention |
-| **P7** | Caller State & Escalation | Proactive mid-loop caller updates, `cannot_make_progress()`, constraint change propagation |
-| **P8** | Experience Store | Cross-run structural reuse — decompositions, workflows, recovery sequences, strategy weights |
-| **P9** | Reviewer Pass & Output Contract | Three-lens reviewer, adversarial prior, full output contract validation |
-| **P10** | Canvas Integration | 10 new harness canvas node types, diagnostic health dashboard, updated framework adapters |
-| **P11** | E2E Integration & Testing | End-to-end tests covering all 10 architectural invariants across all four frameworks |
-
-See [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) for the complete architecture reference — pseudo-code, node definitions, layer table, state model, and scope.
+See [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md) for service interactions and data flows. See [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) for the complete harness reference — pseudo-code, all 22 nodes, all 11 layers, state model, deep dives, and scope.
 
 ---
 
@@ -323,11 +306,8 @@ itsharness/
 │   ├── 04-research-crew-flow-test.json  (test variant of 04)
 │   └── flow-{plan-execute,parallel-research,llm-planner-meta,research-write}.json
 │
-├── plan/                        ← Architecture planning documents
-│   ├── full_harness_architecture.html  Complete 22-node / 11-layer architecture reference
-│   ├── harness_implementation_plan.html
-│   ├── phase_0_plan.html
-│   └── phase_1_plan.html
+├── plan/                        ← Architecture reference documents
+│   └── full_harness_architecture.html  Complete 22-node / 11-layer harness architecture reference
 │
 ├── scripts/                     ← Helper scripts (all run from project root)
 │   ├── setup-env.sh               First-time setup — secrets, venv, Docker
@@ -385,8 +365,7 @@ itsharness/
 | [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md) | Docker, Helm, SSO/OIDC configuration, full env var reference |
 | [docs/troubleshooting.md](https://github.com/3IVIS/itsharness/blob/main/docs/troubleshooting.md) | Common startup errors and fixes |
 | [docs/adr/001](https://github.com/3IVIS/itsharness/blob/main/docs/adr/001-codegen-field-semantics.md) | Codegen field semantics: `output_key`, `*_expr`, `context_from`, `memory_write.tier` |
-| [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) | Complete architecture — pseudo-code, all 22 nodes, all 11 layers, state model, scope |
-| [plan/harness_implementation_plan.html](https://github.com/3IVIS/itsharness/blob/main/plan/harness_implementation_plan.html) | Full 11-phase implementation plan |
+| [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) | Complete harness architecture — pseudo-code, all 22 nodes, all 11 layers, state model, deep dives, scope |
 | [CONTRIBUTING.md](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md) | How to contribute — adapters, schema, canvas, migrations |
 | [packages/canvas/README.md](https://github.com/3IVIS/itsharness/blob/main/packages/canvas/README.md) | `@itsharness/canvas` usage and props |
 | [spec/CHANGELOG.md](https://github.com/3IVIS/itsharness/blob/main/spec/CHANGELOG.md) | Spec version history |
