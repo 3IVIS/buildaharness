@@ -87,7 +87,14 @@ def initialize_harness(
             dep_graph_budget=dep_graph_budget,
         )
 
-    gate_result = decomposition_gate(world_model, diagnostics, task_graph)
+    control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics)
+    gate_result = decomposition_gate(
+        task_graph,
+        control_state=control_state,
+        world_model=world_model,
+        diagnostics=diagnostics,
+        failure_diagnostics=failure_diagnostics,
+    )
 
     return {
         "valid": True,
