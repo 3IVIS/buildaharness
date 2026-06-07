@@ -601,7 +601,6 @@ def test_default_registry_populated():
 from harness.process_tools import complete_step, get_current_step, list_processes, load_process  # noqa: E402
 
 
-
 def test_t29_list_processes_shape():
     """T29: list_processes() returns dicts with id/name/description/step_count."""
     registry = ProcessRegistry()
