@@ -15,23 +15,20 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.process_concept import (
+    _FILE_CACHE,
     ProcessConcept,
     ProcessConceptNotFoundError,
     ProcessConceptStep,
     ProcessConceptValidationError,
-    _ABSTRACTION_MAP,
-    _FILE_CACHE,
 )
 from harness.process_registry import ProcessRegistry
 from harness.task_graph import Task, TaskGraph, validate_task_graph
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -372,7 +369,6 @@ def test_t18_initialize_harness_validation_failure():
     """T18: initialize_harness() returns valid=False when validate_task_graph() reports errors."""
     from harness.diagnostics import Diagnostics
     from harness.loop import initialize_harness
-    from harness.task_graph import Task
     from harness.world_model import WorldModel
 
     wm = WorldModel()
@@ -380,9 +376,7 @@ def test_t18_initialize_harness_validation_failure():
     tg = TaskGraph()
 
     # Add a task with an orphaned dependency to force a validation error
-    tg.tasks.append(
-        Task(id="bad_task", description="bad", depends_on=["nonexistent_dep"])
-    )
+    tg.tasks.append(Task(id="bad_task", description="bad", depends_on=["nonexistent_dep"]))
 
     result = initialize_harness(world_model=wm, diagnostics=diag, task_graph=tg)
     assert result["valid"] is False
@@ -552,7 +546,7 @@ def test_t28_registry_thread_safety():
             errors.append(exc)
 
     threads = [
-        threading.Thread(target=_register, args=(f"concept_{i}", f"/tmp/concept_{i}.json"))
+        threading.Thread(target=_register, args=(f"concept_{i}", f"{tempfile.gettempdir()}/concept_{i}.json"))
         for i in range(50)
     ]
     for t in threads:

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 # Module-level mtime cache: path (str) → (mtime: float, concept: ProcessConcept)
-_FILE_CACHE: dict[str, tuple[float, "ProcessConcept"]] = {}
+_FILE_CACHE: dict[str, tuple[float, ProcessConcept]] = {}
 
 
 # ── Errors ────────────────────────────────────────────────────────────────────
@@ -144,9 +144,7 @@ class ProcessConcept:
 
         errors = concept.validate()
         if errors:
-            raise ProcessConceptValidationError(
-                f"Concept {path} failed validation: " + "; ".join(errors)
-            )
+            raise ProcessConceptValidationError(f"Concept {path} failed validation: " + "; ".join(errors))
 
         _FILE_CACHE[str(path)] = (mtime, concept)
         return concept
@@ -192,9 +190,7 @@ class ProcessConcept:
         for step in self.steps:
             for dep in step.depends_on:
                 if dep not in id_set:
-                    errors.append(
-                        f"Step {step.id!r} depends_on unknown step {dep!r}"
-                    )
+                    errors.append(f"Step {step.id!r} depends_on unknown step {dep!r}")
 
         # Cycle detection (iterative DFS)
         adj: dict[str, list[str]] = {s.id: list(s.depends_on) for s in self.steps}

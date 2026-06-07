@@ -101,11 +101,23 @@ _APPLY_TO_VALUES = {"inferences_only", "all"}
 _INTEGRATION_MODES = {"observations_only", "infer_beliefs"}
 _DISPLAY_MODES = {"summary", "expanded"}
 _VERIFICATION_LAYERS = {
-    "syntax", "unit", "integration", "consistency", "requirements",
-    "assumptions", "goal_correctness", "evidence_sufficiency", "output_contract_partial",
+    "syntax",
+    "unit",
+    "integration",
+    "consistency",
+    "requirements",
+    "assumptions",
+    "goal_correctness",
+    "evidence_sufficiency",
+    "output_contract_partial",
 }
 _RECOVERY_STRATEGIES = {
-    "DIRECT_EDIT", "TRACE_EXEC", "BROADER_SEARCH", "REIMPLEMENT", "MINIMAL_FIX", "ESCALATE",
+    "DIRECT_EDIT",
+    "TRACE_EXEC",
+    "BROADER_SEARCH",
+    "REIMPLEMENT",
+    "MINIMAL_FIX",
+    "ESCALATE",
 }
 
 
@@ -232,11 +244,10 @@ def _validate_harness_configs(spec: dict) -> None:
                     raise HTTPException(
                         status_code=400,
                         detail=(
-                            f"verification_gate node '{node.get('id')}': "
-                            "harness_config.enabled_layers must be a list"
+                            f"verification_gate node '{node.get('id')}': harness_config.enabled_layers must be a list"
                         ),
                     )
-                invalid = [l for l in enabled_layers if l not in _VERIFICATION_LAYERS]
+                invalid = [layer for layer in enabled_layers if layer not in _VERIFICATION_LAYERS]
                 if invalid:
                     raise HTTPException(
                         status_code=400,
@@ -297,10 +308,7 @@ def _validate_harness_configs(spec: dict) -> None:
     if pc_id is not None and (not isinstance(pc_id, str) or not pc_id.strip()):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "harness_meta.process_concept_id must be a non-empty string when present, "
-                f"got {pc_id!r}"
-            ),
+            detail=(f"harness_meta.process_concept_id must be a non-empty string when present, got {pc_id!r}"),
         )
 
 

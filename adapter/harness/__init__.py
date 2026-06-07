@@ -138,6 +138,21 @@ from .memory import (
     compress_memory,
     should_compress,
 )
+from .node_compilers import (
+    HARNESS_NODE_COMPILERS,
+    compile_apply_tool_reliability,
+    compile_control_state_node,
+    compile_evidence_store_node,
+    compile_experience_store_node,
+    compile_gather_evidence,
+    compile_hypothesis_set_node,
+    compile_recovery_node,
+    compile_reviewer_pass_node,
+    compile_task_graph_node,
+    compile_update_world_model,
+    compile_verification_gate_node,
+    compile_world_model_node,
+)
 from .output_contract import (
     ContractCheckResult,
     OutputContract,
@@ -151,6 +166,13 @@ from .output_contract import (
     validate_output_contract,
 )
 from .parallel_merge import merge_world_models, reconcile_parallel_branches
+from .process_concept import (
+    ProcessConcept,
+    ProcessConceptNotFoundError,
+    ProcessConceptStep,
+    ProcessConceptValidationError,
+)
+from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
 from .progress import (
     cannot_make_progress,
 )
@@ -201,13 +223,6 @@ from .risk import (
     compute_file_centrality,
     estimate_risk,
 )
-from .process_concept import (
-    ProcessConcept,
-    ProcessConceptNotFoundError,
-    ProcessConceptStep,
-    ProcessConceptValidationError,
-)
-from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
 from .staleness import assert_generation_fresh, increment_generation_id, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
 from .task_graph import (
@@ -258,47 +273,16 @@ from .voi import (
     update_verification_strength,
     verification_adequacy_critic,
 )
-from .node_compilers import (
-    HARNESS_NODE_COMPILERS,
-    compile_apply_tool_reliability,
-    compile_control_state_node,
-    compile_evidence_store_node,
-    compile_experience_store_node,
-    compile_gather_evidence,
-    compile_hypothesis_set_node,
-    compile_recovery_node,
-    compile_reviewer_pass_node,
-    compile_task_graph_node,
-    compile_update_world_model,
-    compile_verification_gate_node,
-    compile_world_model_node,
-)
 from .world_model import Belief, Contradiction, Observation, WorldModel
 from .world_model_ops import integrate_evidence, recompute_belief_health
 
 __all__ = [
-    # Phase 10 node compilers
-    "HARNESS_NODE_COMPILERS",
-    "compile_apply_tool_reliability",
-    "compile_control_state_node",
-    "compile_evidence_store_node",
-    "compile_experience_store_node",
-    "compile_gather_evidence",
-    "compile_hypothesis_set_node",
-    "compile_recovery_node",
-    "compile_reviewer_pass_node",
-    "compile_task_graph_node",
-    "compile_update_world_model",
-    "compile_verification_gate_node",
-    "compile_world_model_node",
-    # Phase 8
-    "DEFAULT_STRATEGY_ORDER",
     "DEFAULT_REGISTRY",
+    "DEFAULT_STRATEGY_ORDER",
+    "HARNESS_NODE_COMPILERS",
     "STRATEGY_ORDER",
     "TOOL_RELIABILITY_ENVELOPES",
-    # Phase 5
     "AdequacyResult",
-    # Phase 9
     "AdversarialPrior",
     "Belief",
     "BeliefDepGraph",
@@ -306,7 +290,6 @@ __all__ = [
     "BeliefHealth",
     "BlockEntry",
     "CallerState",
-    # Phase 6
     "CompressionRisk",
     "ConflictProbabilityCache",
     "ContractCheckResult",
@@ -319,7 +302,6 @@ __all__ = [
     "DimensionType",
     "EliminationPolicy",
     "EliminationRecord",
-    # Phase 7
     "EscalationHalt",
     "Evidence",
     "EvidenceStore",
@@ -336,7 +318,6 @@ __all__ = [
     "FailurePattern",
     "FrozenManifestError",
     "HarnessRunState",
-    "initialize_harness",
     "Hypothesis",
     "HypothesisSet",
     "LayerResult",
@@ -347,12 +328,12 @@ __all__ = [
     "Observation",
     "OutputContract",
     "PendingUpdate",
+    "PostgresNotifyChannel",
     "ProcessConcept",
     "ProcessConceptNotFoundError",
     "ProcessConceptStep",
     "ProcessConceptValidationError",
     "ProcessRegistry",
-    "PostgresNotifyChannel",
     "ReliabilityClass",
     "ReplanScope",
     "ReversibilityStrategy",
@@ -416,6 +397,18 @@ __all__ = [
     "check_task_alignment",
     "check_world_model_consistency",
     "classify_module_type",
+    "compile_apply_tool_reliability",
+    "compile_control_state_node",
+    "compile_evidence_store_node",
+    "compile_experience_store_node",
+    "compile_gather_evidence",
+    "compile_hypothesis_set_node",
+    "compile_recovery_node",
+    "compile_reviewer_pass_node",
+    "compile_task_graph_node",
+    "compile_update_world_model",
+    "compile_verification_gate_node",
+    "compile_world_model_node",
     "completion_check_final",
     "compress_memory",
     "compute_causal_proximity",
@@ -449,6 +442,7 @@ __all__ = [
     "get_next_strategy",
     "get_strategy_with_experience",
     "increment_generation_id",
+    "initialize_harness",
     "inject_clarification",
     "integrate_evidence",
     "load_strategy_priors",

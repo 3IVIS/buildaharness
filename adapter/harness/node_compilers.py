@@ -237,22 +237,22 @@ def compile_verification_gate_node(
     lines = [
         "from harness.verification import verify as _verify",
         "from harness.verification import VerificationResult as _VerificationResult",
-        f"_full_vr = _verify(",
+        "_full_vr = _verify(",
         f"    {result_var}, {success_criteria_var}, {assumptions_var},",
         f"    {tool_manifest_var}, {task_risk_var},",
-        f")",
+        ")",
     ]
 
     if enabled_layers is not None:
         enabled_repr = repr(set(enabled_layers))
         lines += [
             f"_enabled_layers = {enabled_repr}",
-            f"_filtered = [lr for lr in _full_vr.layer_results if lr.layer in _enabled_layers]",
+            "_filtered = [lr for lr in _full_vr.layer_results if lr.layer in _enabled_layers]",
             f"{output_var} = _VerificationResult(",
-            f"    layer_results=_filtered,",
-            f"    has_critical_failure=any(lr.status == 'FAIL' for lr in _filtered),",
-            f"    adversarial_passed=_full_vr.adversarial_passed,",
-            f")",
+            "    layer_results=_filtered,",
+            "    has_critical_failure=any(lr.status == 'FAIL' for lr in _filtered),",
+            "    adversarial_passed=_full_vr.adversarial_passed,",
+            ")",
         ]
     else:
         lines.append(f"{output_var} = _full_vr")
@@ -365,7 +365,6 @@ def compile_reviewer_pass_node(
         f")\n"
         f"_tasks_reopened = bool({output_var}.reopened_task_ids)\n"
     )
-
 
 
 def compile_process_concept_node(node: dict, harness_meta_var: str) -> str:
