@@ -162,7 +162,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="card" style="background:var(--bg2);border:.5px solid rgba(74,222,128,0.25);border-left:3px solid #4ade80;margin-bottom:.75rem">
   <div class="card-title" style="color:#4ade80">As-built summary — key implementation divergences from plan</div>
   <div class="card-body" style="font-size:12px;line-height:1.85">
-    P-PC.1–P-PC.5 and P-PC.7 were implemented in full. P-PC.6 (canvas node) was partially implemented — the backend compiler and validation were done; the React canvas component was deferred to P11. The following design decisions diverged from the plan:
+    P-PC.1–P-PC.7 were all implemented in full. P-PC.6 (canvas node) was completed across two phases: the backend compiler and validation were done in this phase; the React canvas component (<code>ProcessConceptNode.tsx</code>), canvas node registration, and live run overlay were completed in P11 (post E2E Integration &amp; Testing). The following design decisions diverged from the plan:
     <br><br>
     <strong style="color:var(--t0)">seed_task_graph() signature:</strong> Plan specified <code>seed_task_graph(objective: str) → TaskGraph</code> (returns a new graph). Implemented as <code>seed_task_graph(task_graph: Any) → None</code> — modifies the existing <code>TaskGraph</code> in-place. This avoids constructing two graph objects and lets the caller pass its own pre-initialized graph.
     <br><br>
@@ -182,7 +182,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <br><br>
     <strong style="color:var(--t0)">register() does not check file existence:</strong> Plan said <code>register()</code> raises if the file does not exist. Implemented stores the path without checking — the error is surfaced at <code>load()</code> time via <code>ProcessConcept.from_file()</code>.
     <br><br>
-    <strong style="color:var(--t0)">P-PC.6 Canvas node — backend only:</strong> <code>compile_process_concept_node()</code> added to <code>node_compilers.py</code> and <code>"process_concept"</code> added to <code>_HARNESS_NODE_TYPES</code> in <code>validate.py</code>. The React canvas component (<code>ProcessConceptNode.tsx</code>), canvas node registration, and live overlay were deferred to P11.
+    <strong style="color:var(--t0)">P-PC.6 Canvas node — completed in P11:</strong> <code>compile_process_concept_node()</code> added to <code>node_compilers.py</code> and <code>"process_concept"</code> added to <code>_HARNESS_NODE_TYPES</code> in <code>validate.py</code> in this phase. The React canvas component (<code>ProcessConceptNode.tsx</code> at <code>src/canvas/nodes/harness/</code>), canvas node registration in <code>src/canvas/nodes/index.ts</code>, and live run overlay were completed in P11.
   </div>
 </div>
 
@@ -394,7 +394,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="task-body" id="body-ppc6">
     <div class="desc-block">Adds the <code>process_concept</code> canvas node type. Lets flow authors pick a concept from the registry, preview its steps, and observe live task status per step during an active run.</div>
 
-    <div class="note-block" style="border-left-color:var(--amber)"><strong style="color:var(--amber)">Partially implemented — backend only:</strong> The backend compiler (<code>compile_process_concept_node()</code> in <code>node_compilers.py</code>) and the validator (<code>"process_concept"</code> added to <code>_HARNESS_NODE_TYPES</code>, <code>concept_id</code> config validation in <code>validate.py</code>) are complete. The React canvas component (<code>ProcessConceptNode.tsx</code>), the canvas node type registration (<code>packages/canvas/nodeTypes.ts</code>), the concept picker, and the live run overlay were deferred to P11.</div>
+    <div class="note-block" style="border-left-color:var(--green)"><strong style="color:var(--green)">Fully implemented (completed across P-PC + P11):</strong> The backend compiler (<code>compile_process_concept_node()</code> in <code>node_compilers.py</code>) and the validator (<code>"process_concept"</code> added to <code>_HARNESS_NODE_TYPES</code>, <code>concept_id</code> config validation in <code>validate.py</code>) were completed in this phase. The React canvas component (<code>ProcessConceptNode.tsx</code> at <code>src/canvas/nodes/harness/</code>, 138 lines), canvas node registration in <code>src/canvas/nodes/index.ts</code>, live run overlay (concept name, step progress, active step risk badge, status indicator), and the <code>process_concept: ProcessConceptNode</code> entry in the node type map were completed in P11.</div>
 
     <div class="steps-title">Implementation steps</div>
 
@@ -402,16 +402,16 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 
     <div class="step"><span class="step-num">2</span><div class="step-body"><strong>Add <code>"process_concept"</code> to <code>_HARNESS_NODE_TYPES</code> in <code>adapter/validate.py</code>.</strong> Add case in <code>_validate_harness_configs()</code> validating that <code>harness_config.concept_id</code> is a non-empty string when present. Validate <code>harness_meta.process_concept_id</code> after the node loop.</div></div>
 
-    <div class="step"><span class="step-num">3 (deferred)</span><div class="step-body" style="color:var(--t1);opacity:.6"><strong>Create <code>src/components/nodes/harness/ProcessConceptNode.tsx</code>.</strong> Deferred to P11 — frontend canvas component, concept picker, step list with risk badges and dependency arrows.</div></div>
+    <div class="step"><span class="step-num">3</span><div class="step-body"><strong>Create <code>src/canvas/nodes/harness/ProcessConceptNode.tsx</code>.</strong> Completed in P11 — 138-line React component with live run overlay (<code>LiveProcessConceptState</code> interface), concept status indicator, active step display with risk badge (LOW/MEDIUM/HIGH colour-coded), and step progress counter (completed_steps / total_steps).</div></div>
 
-    <div class="step"><span class="step-num">4 (deferred)</span><div class="step-body" style="color:var(--t1);opacity:.6"><strong>Register <code>"process_concept"</code> in <code>packages/canvas/nodeTypes.ts</code>.</strong> Deferred to P11.</div></div>
+    <div class="step"><span class="step-num">4</span><div class="step-body"><strong>Register <code>"process_concept"</code> in <code>src/canvas/nodes/index.ts</code>.</strong> Completed in P11 — <code>process_concept: ProcessConceptNode</code> entry added to the node type map alongside the other harness node types.</div></div>
 
-    <div class="step"><span class="step-num">5 (deferred)</span><div class="step-body" style="color:var(--t1);opacity:.6"><strong>Live run overlay — poll harness-state and cross-reference step IDs.</strong> Deferred to P11.</div></div>
+    <div class="step"><span class="step-num">5</span><div class="step-body"><strong>Live run overlay — display harness-state concept progress in the canvas node.</strong> Completed in P11 — the component renders <code>LiveProcessConceptState</code> (concept_name, total_steps, completed_steps, active_step_id, active_step_description, active_step_risk, seeded, status) surfaced from the node data prop.</div></div>
 
-    <div class="section-label">Acceptance tests (as implemented — backend compiler only)</div>
+    <div class="section-label">Acceptance tests (as implemented)</div>
     <div class="test-item"><code>compile_process_concept_node({"harness_config": {"concept_id": "debug_test_failure"}}, "meta")</code> emits code setting <code>meta.process_concept_id = "debug_test_failure"</code></div>
     <div class="test-item">A spec with a <code>process_concept</code> node and <code>concept_id = ""</code> in <code>harness_config</code> fails <code>validate.py</code> with a message referencing "non-empty"</div>
-    <div class="test-item">Canvas UI tests (risk badges, dependency arrows, live overlay) — deferred to P11</div>
+    <div class="test-item">Canvas component renders concept name, step progress, and active step risk badge from <code>LiveProcessConceptState</code> data — completed in P11</div>
   </div>
 </div>
 
@@ -483,13 +483,11 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   schema.ts                             <span class="f-mod">MOD</span>  <span class="f-note">add process_concept_id: z.string().optional() to harness_meta block · add ProcessConceptNodeConfig shape</span>
   schema.json                           <span class="f-mod">MOD</span>  <span class="f-note">regenerated from schema.ts</span>
 
-<span class="f-dir">src/components/nodes/harness/</span>  <span style="color:var(--amber);font-size:11px">⚡ DEFERRED — backend only in this phase (P11 canvas work)</span>
-  ProcessConceptNode.tsx                <span style="color:var(--t2);font-size:11px">NOT CREATED</span>  <span class="f-note">concept picker · ordered step list · risk badges · strategy_hint chips · dependency arrows · live run overlay — deferred to P11</span>
-  index.tsx                             <span style="color:var(--t2);font-size:11px">NOT MODIFIED</span>  <span class="f-note">deferred to P11</span>
+<span class="f-dir">src/canvas/nodes/harness/</span>  <span style="color:#4ade80;font-size:11px">✓ COMPLETED IN P11</span>
+  ProcessConceptNode.tsx                <span class="f-new">NEW</span>  <span class="f-note">138-line React component · LiveProcessConceptState interface · concept status indicator · active step display with risk badge · step progress counter · colour-coded risk levels (LOW/MEDIUM/HIGH)</span>
 
-<span class="f-dir">packages/canvas/</span>  <span style="color:var(--amber);font-size:11px">⚡ DEFERRED — deferred to P11</span>
-  nodeTypes.ts                          <span style="color:var(--t2);font-size:11px">NOT MODIFIED</span>  <span class="f-note">register "process_concept" node type — deferred to P11</span>
-  nodeDefaults.ts                       <span style="color:var(--t2);font-size:11px">NOT MODIFIED</span>  <span class="f-note">default ProcessConceptNodeConfig values — deferred to P11</span>
+<span class="f-dir">src/canvas/nodes/</span>  <span style="color:#4ade80;font-size:11px">✓ COMPLETED IN P11</span>
+  index.ts                              <span class="f-mod">MOD</span>  <span class="f-note">add ProcessConceptNode import · add process_concept: ProcessConceptNode to node type map</span>
 
 <span class="f-dir">adapter/</span>
   validate.py                           <span class="f-mod">MOD</span>  <span class="f-note">accept process_concept_id in harness_meta (non-empty string if present) · add ProcessConceptNodeConfig shape validation</span>
@@ -502,7 +500,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 
 <div class="card">
   <div class="card-title">Files NOT touched in this phase</div>
-  <div class="card-body">All existing harness logic modules are untouched except for <code>loop.py</code> (new <code>initialize_harness()</code> function added — existing <code>run_one_iteration()</code> and <code>select_best_action()</code> are unchanged) and <code>state_store.py</code> (one optional <code>process_concept_id</code> field added). Frontend canvas files are deferred to P11 and were not modified. In particular, the following are unchanged:
+  <div class="card-body">All existing harness logic modules are untouched except for <code>loop.py</code> (new <code>initialize_harness()</code> function added — existing <code>run_one_iteration()</code> and <code>select_best_action()</code> are unchanged) and <code>state_store.py</code> (one optional <code>process_concept_id</code> field added). Frontend canvas files were completed in P11 (after this phase). In particular, the following were not modified in this phase:
   <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">world_model.py</code>
   <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">task_graph.py</code>
   <code style="font-family:var(--font-mono);font-size:11px;background:var(--bg2);padding:1px 5px;border-radius:3px">control_state.py</code>
@@ -651,7 +649,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="card-body">
     Process concepts tests only: <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/test_harness_process_concepts.py -v</code><br><br>
     Full harness suite (P0–P9 regression check): <code style="font-family:var(--font-mono);font-size:11.5px;background:var(--bg2);padding:3px 8px;border-radius:4px;display:inline-block">pytest adapter/tests/ -v -k harness</code><br><br>
-    No database infrastructure is required for any test in this phase — all tests use in-memory fixtures; no Postgres, no live adapter. Canvas component tests are deferred to P11. The test file contains 30 tests total: 28 named tests (T01–T28) plus <code>test_bundled_concepts_valid</code> and <code>test_default_registry_populated</code>.
+    No database infrastructure is required for any test in this phase — all tests use in-memory fixtures; no Postgres, no live adapter. Canvas component tests were completed in P11 alongside the <code>ProcessConceptNode.tsx</code> implementation. The test file contains 30 tests total: 28 named tests (T01–T28) plus <code>test_bundled_concepts_valid</code> and <code>test_default_registry_populated</code>.
   </div>
 </div>
 
