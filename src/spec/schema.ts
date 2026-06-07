@@ -496,6 +496,16 @@ export const ReviewerPassNode = NodeBase.extend({
   harness_config: ReviewerPassNodeConfig.optional(),
 })
 
+const ProcessConceptNodeConfig = z.object({
+  concept_id: z.string().min(1),
+  show_steps: z.boolean().default(true).optional(),
+  show_success_criteria: z.boolean().default(false).optional(),
+})
+export const ProcessConceptNode = NodeBase.extend({
+  type: z.literal('process_concept'),
+  harness_config: ProcessConceptNodeConfig,
+})
+
 export type WorldModelNode = z.infer<typeof WorldModelNode>
 export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
 export type GatherEvidenceNode = z.infer<typeof GatherEvidenceNode>
@@ -508,6 +518,7 @@ export type RecoveryNode = z.infer<typeof RecoveryNode>
 export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
 export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
 export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+export type ProcessConceptNode = z.infer<typeof ProcessConceptNode>
 
 export type WorldModelNodeConfig = z.infer<typeof WorldModelNodeConfig>
 export type HypothesisSetNodeConfig = z.infer<typeof HypothesisSetNodeConfig>
@@ -518,6 +529,7 @@ export type RecoveryNodeConfig = z.infer<typeof RecoveryNodeConfig>
 export type EvidenceStoreNodeConfig = z.infer<typeof EvidenceStoreNodeConfig>
 export type ExperienceStoreNodeConfig = z.infer<typeof ExperienceStoreNodeConfig>
 export type ReviewerPassNodeConfig = z.infer<typeof ReviewerPassNodeConfig>
+export type ProcessConceptNodeConfig = z.infer<typeof ProcessConceptNodeConfig>
 
 export const HarnessNode = z.discriminatedUnion('type', [
   WorldModelNode,
@@ -532,6 +544,7 @@ export const HarnessNode = z.discriminatedUnion('type', [
   EvidenceStoreNode,
   ExperienceStoreNode,
   ReviewerPassNode,
+  ProcessConceptNode,
 ])
 export type HarnessNode = z.infer<typeof HarnessNode>
 
@@ -789,4 +802,5 @@ export const NODE_SUPPORT_MATRIX: Record<AnyNodeType, Record<AdapterName, Suppor
   evidence_store_node:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
   experience_store_node:   { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
   reviewer_pass:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  process_concept:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
 }
