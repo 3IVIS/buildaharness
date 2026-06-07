@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Activity } from 'lucide-react'
 
 // Thresholds from the harness architecture
@@ -125,7 +125,7 @@ interface DiagnosticsPanelProps {
 
 export function DiagnosticsPanel({ state, onClose }: DiagnosticsPanelProps) {
   const s = state ?? {}
-  const sections = buildSections(s)
+  const sections = useMemo(() => buildSections(state ?? {}), [state])
 
   // Track which dims changed since the last render for highlight animation
   const prevStateRef = useRef<DiagnosticsState>({})
@@ -144,7 +144,7 @@ export function DiagnosticsPanel({ state, onClose }: DiagnosticsPanelProps) {
       return () => clearTimeout(t)
     }
     prevStateRef.current = state
-  }, [state?.generation_id])
+  }, [state, sections])
 
   const anyCritical = sections.some((sec) =>
     sec.dims.some((d) => d.value != null && d.value < CRITICAL_THRESHOLD),

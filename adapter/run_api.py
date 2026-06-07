@@ -59,8 +59,8 @@ from validate import validate_spec as _validate_spec
 # ── Process concept registry (P-PC) ──────────────────────────────────────────
 # Populated at import time from repo-root concepts/. Absent directory = no-op.
 try:
-    from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
     from harness.process_concept import ProcessConceptNotFoundError as _ProcessConceptNotFoundError
+    from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
 except ImportError:
     _concept_registry = None  # type: ignore[assignment]
     _ProcessConceptNotFoundError = None  # type: ignore[assignment]
@@ -1224,7 +1224,7 @@ async def run_flow(
                 status_code=400,
                 detail=f"process_concept_id {pc_id!r} is not registered. "
                 "Check available concepts at GET /run/concepts.",
-            )
+            ) from None
 
     spec = await resolve_prompts(spec, org)
 
