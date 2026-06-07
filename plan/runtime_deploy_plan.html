@@ -16,7 +16,7 @@
   --font-mono:'IBM Plex Mono',monospace;--font-ui:'Syne',sans-serif;
   --c-p0:#60a5fa;--c-p1:#4ade80;--c-p2:#8b5cf6;--c-p3:#fbbf24;
   --c-p4:#f0abfc;--c-p5:#67e8f9;--c-p6:#34d399;
-  --c-p7:#fb7185;--c-p8:#a3e635;--c-p9:#f97316;--c-p10:#e879f9;--c-p11:#22d3ee;
+  --c-p7:#fb7185;--c-p8:#a3e635;--c-p9:#f97316;--c-p10:#e879f9;--c-p11:#22d3ee;--c-ppc:#22d3ee;
 }
 body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 .root{padding:1.5rem 0;max-width:1240px;margin:0 auto}
@@ -107,8 +107,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div class="hero">
   <h1>itsharness Deploy — Client-Side Runtime</h1>
   <p>Phased implementation plan for two complementary TypeScript packages: (1) a <strong style="color:var(--t0)">FlowSpec runtime</strong> that executes a compiled canvas flow directly in the browser, paired with a thin authenticated LLM proxy; and (2) a <strong style="color:var(--t0)">Harness reasoning engine</strong> implementing the full 22-node agent reasoning/control architecture from the harness architecture spec. Together these give any React app both flow execution and the full agent loop — world model, hypothesis tracking, control-state resolution, verification, and reviewer pass.</p>
-  <span class="badge badge-blue">12 Phases</span>
-  <span class="badge badge-green">14 FlowSpec + 22 Harness node types</span>
+  <span class="badge badge-blue">13 Phases</span>
+  <span class="badge badge-green">15 FlowSpec + 22 Harness node types</span>
   <span class="badge badge-warn">~14–15 weeks total</span>
   <span class="badge badge-purple">MVP ~4 weeks</span>
   <div style="margin-top:.6rem;font-size:12px;color:var(--t1)">Depends on: <code style="font-size:10px">@itsharness/canvas</code> spec types (already published) · Python adapter not required at runtime · harness arch spec (full_harness_architecture.html)</div>
@@ -127,8 +127,8 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <div id="overview" class="tab-content active">
 
 <div class="summary-row">
-  <div class="sum-card"><div class="sum-n" style="color:#60a5fa">12</div><div class="sum-l">Phases</div></div>
-  <div class="sum-card"><div class="sum-n" style="color:#4ade80">36</div><div class="sum-l">Node types (14+22)</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#60a5fa">13</div><div class="sum-l">Phases</div></div>
+  <div class="sum-card"><div class="sum-n" style="color:#4ade80">37</div><div class="sum-l">Node types (15+22)</div></div>
   <div class="sum-card"><div class="sum-n" style="color:#f0abfc">4</div><div class="sum-l">New packages</div></div>
   <div class="sum-card"><div class="sum-n" style="color:#fbbf24">~15</div><div class="sum-l">Weeks estimated</div></div>
 </div>
@@ -163,6 +163,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="tl-phase"><div class="tl-label" style="color:var(--c-p9)">P9</div><div class="tl-bar" style="background:var(--c-p9);opacity:.7;width:100%"></div><div class="tl-name">Control &amp; Planning</div><div class="tl-weeks">~1 week · harness</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:var(--c-p10)">P10</div><div class="tl-bar" style="background:var(--c-p10);opacity:.7;width:100%"></div><div class="tl-name">Policy, Execution &amp; Recovery</div><div class="tl-weeks">~1.5 weeks · harness</div></div>
   <div class="tl-phase"><div class="tl-label" style="color:var(--c-p11)">P11</div><div class="tl-bar" style="background:var(--c-p11);opacity:.7;width:100%"></div><div class="tl-name">Harness Lifecycle</div><div class="tl-weeks">~1 week · harness</div></div>
+  <div class="tl-phase" style="border-top:1px solid rgba(34,211,238,0.3)"><div class="tl-label" style="color:var(--c-ppc)">P-PC</div><div class="tl-bar" style="background:var(--c-ppc);opacity:.7;width:100%"></div><div class="tl-name">Process Concepts</div><div class="tl-weeks">~1 week · harness</div></div>
 </div>
 </div>
 
@@ -177,6 +178,9 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
   <div class="inv-item"><strong>The proxy is the only place API keys appear</strong>LLMClient sends requests to the proxy URL — never directly to Anthropic or OpenAI. API keys are env vars on the proxy only. A host app cannot exfiltrate keys even with full access to the runtime source.</div>
   <div class="inv-item"><strong>Harness: generation_id must match before any gate reads control_state</strong>All three harness policy gates (decomposition, action, post_exec) assert control_state.generation_id === world_model.generation_id before reading. If stale, the gate re-invokes resolveControlState() via _maybeResolve() before proceeding. A stale control state is a structural bug, not a runtime condition — gates must never silently proceed with a stale value.</div>
   <div class="inv-item"><strong>Harness: SYSTEM_BREAKING contradictions do not inline-halt</strong>detectContradictions() never throws on a SYSTEM_BREAKING contradiction. It pushes the contradiction into world_model.contradictions[] and returns. The next resolveControlState() call picks it up via TIER 1. This ensures all system-breaking conditions produce the same response through the same code path regardless of where in the loop they are detected.</div>
+  <div class="inv-item"><strong>Process concepts: loadProcess() is idempotent (INV-PC-05)</strong>Calling loadProcess(conceptId, taskGraph, registry) a second time with the same conceptId must not add duplicate tasks. The function detects existing tasks whose IDs carry the concept namespace prefix ({conceptId}:{stepId}) and skips seeding, returning the current first step instead. Allows the agent to safely call loadProcess() again after a pause or context reload without corrupting the task graph.</div>
+  <div class="inv-item"><strong>Process concepts: getCurrentStep() returns null when the process is complete (INV-PC-06)</strong>getCurrentStep(taskGraph) delegates to selectUnblockedLeaf(). When all concept tasks are COMPLETE (or no PENDING task has all its dependencies COMPLETE), the function returns null. The agent treats a null return as the process-complete signal — no separate "isDone" predicate is needed.</div>
+  <div class="inv-item"><strong>Process concepts: completeStep() only touches the named task (INV-PC-07)</strong>completeStep(stepId, taskGraph) transitions exactly one task to COMPLETE. It does not automatically advance any other task's status. Dependency unlocking is emergent: on the next getCurrentStep() call, selectUnblockedLeaf() naturally returns any task whose dependsOn list is now fully COMPLETE. Status transitions are explicit and auditable.</div>
 </div>
 
 </div>
@@ -301,6 +305,10 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
     <div class="file-item file-new">src/nodes/context-compression.ts</div>
     <div class="file-item file-new">src/nodes/reviewer-pass.ts</div>
     <div class="file-item file-new">src/nodes/output-validation.ts</div>
+    <div class="file-item file-new">src/process-concept.ts — ProcessConcept · ProcessConceptStep · validate() · fromJson() · seedTaskGraph() · ProcessConceptValidationError · ProcessConceptNotFoundError (P-PC)</div>
+    <div class="file-item file-new">src/process-registry.ts — ProcessRegistry · register · load · listAvailable · DEFAULT_REGISTRY auto-populated from bundled JSON imports (P-PC)</div>
+    <div class="file-item file-new">src/process-tools.ts — listProcesses · loadProcess · getCurrentStep · completeStep — agent-callable tools (P-PC)</div>
+    <div class="file-item file-new">src/concepts/debug-test-failure.json · implement-feature.json · code-review.json · refactor-module.json (P-PC)</div>
     <div class="file-item file-new">src/index.ts — public API exports</div>
     <div class="file-item file-new">package.json · tsconfig.json · vite.config.lib.ts</div>
   </div>
@@ -337,6 +345,7 @@ body{background:var(--bg0);font-family:var(--font-ui);color:var(--t0)}
 <tr><td>12</td><td><code>agent_role</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Runs LLM tool-use loop: call LLM → if tool_call → invoke tool → repeat until no tool_call or max_iter. Writes final answer to output_field.</td></tr>
 <tr><td>13</td><td><code>agent_debate</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Multi-agent turn-taking. Each agent sees prior turns. Terminates on convergence condition or max_iter. Most complex node.</td></tr>
 <tr><td>14</td><td><code>subgraph</code></td><td><span class="phase-dot" style="background:var(--c-p4)"></span>P4</td><td><span style="color:var(--t1);font-size:11px">— full</span></td><td style="color:var(--t1);font-size:11px">Recursively instantiates FlowRuntime with nested FlowSpec. Parent state fields mapped to trigger data. Result written back to parent state.</td></tr>
+<tr><td>15</td><td><code>process_concept</code></td><td><span class="phase-dot" style="background:var(--c-ppc)"></span>P-PC</td><td><span style="color:var(--t1);font-size:11px">— harness</span></td><td style="color:var(--t1);font-size:11px">Harness-meta node. ProcessConceptExecutor reads harness_config.concept_id and sets harness_meta.process_concept_id. At HarnessRuntime init, seeds the task graph via ProcessRegistry.load() + concept.seedTaskGraph(). Missing concept_id is a hard error (INV-PC-04).</td></tr>
 </tbody>
 </table>
 
@@ -1006,6 +1015,59 @@ const PHASES = [
       'HarnessRuntime: steps_used == max_steps → escalate("budget_exhausted") → halt() without further iteration',
       'HarnessRuntime: ExperienceStore.update() called after each task reaches COMPLETE status (when store available)',
       'HarnessRuntime: all 22 nodes execute in correct sequence during end-to-end smoke test run'
+    ]
+  },
+  {
+    id:'P-PC', color:'var(--c-ppc)', weeks:'~1 week', mvp:false,
+    title:'Process Concepts — TypeScript Port',
+    sub:'ProcessConcept types · ProcessRegistry · process-tools · initializeHarness seeding · process_concept executor',
+    summary:'TypeScript port of the Python process concept system. A concept is a structured JSON plan for a well-known task class (debug_test_failure, implement_feature, code_review, refactor_module). The agent can either have a concept pre-wired via the canvas process_concept node, or select one at runtime via the agent-callable process tools. Both paths seed the same TaskGraph via seedTaskGraph(). In the browser, concepts are bundled as static JSON imports — no filesystem access.',
+    tasks:[
+      {id:'P-PC.1',name:'ProcessConcept and ProcessConceptStep types + seedTaskGraph()',body:'packages/harness/src/process-concept.ts. ProcessConceptStep interface: id, description, dependsOn: string[], riskLevel: "LOW"|"MEDIUM"|"HIGH", abstractionLevel: "module"|"goal"|"subgoal"|"function"|"leaf"|"statement", expectedTools: string[], successCriteria: string[], strategyHint: string|null. ProcessConcept class: id, name, description, successCriteria: string[], schemaVersion: string, steps: ProcessConceptStep[]. validate() → string[] (empty = valid): checks non-empty concept ID, step ID uniqueness, dependsOn reference validity, valid enum values, dependency cycle detection via DFS. fromJson(json) → ProcessConcept: constructs and calls validate(); throws ProcessConceptValidationError if non-empty. seedTaskGraph(taskGraph: TaskGraph): void — appends Task objects in-place, namespacing IDs as {conceptId}:{stepId}, maps abstractionLevel strings to ints (module/goal→0, subgoal/function→1, leaf/statement→2), writes strategyHint to assignedStrategy, sets taskGraph.changed=true. Export ProcessConceptValidationError(Error) and ProcessConceptNotFoundError(Error).'},
+      {id:'P-PC.2',name:'ProcessRegistry + bundled concept JSON files',body:'packages/harness/src/process-registry.ts. ProcessRegistry class: _registry: Map&lt;string,ProcessConcept&gt;. register(conceptId, concept): stores concept object directly (no filesystem path — concepts are already parsed at bundle time). load(conceptId): returns concept or throws ProcessConceptNotFoundError. listAvailable() → string[]: sorted alphabetically. No scan_directory() — browser has no filesystem. Instead: a static registerAll(registry) helper imports the 4 bundled concept JSON files and calls register() for each. DEFAULT_REGISTRY: module-level instance, auto-populated via registerAll() at import time. Four bundled concept files in src/concepts/ as .json with resolveJsonModule:true in tsconfig: debug-test-failure.json (5 steps, linear), implement-feature.json (6 steps, linear), code-review.json (6 steps), refactor-module.json (5 steps, linear). Step structure mirrors the Python bundled concepts.'},
+      {id:'P-PC.3',name:'process-tools.ts — agent-callable process tools',body:'packages/harness/src/process-tools.ts. listProcesses(registry: ProcessRegistry) → {id, name, description, stepCount: number}[]: returns summary metadata sorted by ID. loadProcess(conceptId, taskGraph, registry) → {conceptId, seededSteps, firstStep}: loads concept, checks for existing namespace-prefixed tasks to skip duplicate seeding (INV-PC-05), calls concept.seedTaskGraph() if not yet seeded, returns getCurrentStep(taskGraph) as firstStep. getCurrentStep(taskGraph) → TaskStep | null: delegates to selectUnblockedLeaf(); returns null when all tasks COMPLETE or none unblocked (INV-PC-06). completeStep(stepId, taskGraph) → {completed, nextStep}: looks up task by ID, throws ProcessConceptNotFoundError if missing, throws Error if already COMPLETE, transitions status to COMPLETE, sets taskGraph.changed=true, returns getCurrentStep(taskGraph) as nextStep (INV-PC-07). All four exported from harness/src/index.ts.'},
+      {id:'P-PC.4',name:'initializeHarness() extension for processConceptId + process_concept node executor',body:'Extend P11\'s initializeHarness() to accept optional processConceptId?: string. When provided: load concept from DEFAULT_REGISTRY (throws ProcessConceptNotFoundError → surfaces as hard 400 in run_api; INV-PC-04), call concept.seedTaskGraph(taskGraph) before validate_task_graph() and decomposition_gate(). INV-PC-03: processConceptId=undefined path returns unchanged result with processConceptId:null. INV-PC-02: seeded graph passes the same validate_task_graph() and decomposition_gate() gates — never bypassed. Add ProcessConceptExecutor to packages/runtime/src/executors/: handles node type "process_concept", reads node.harness_config.concept_id, stores it in ExecutionContext.harnessMeta.process_concept_id. FlowRuntime passes harnessMeta to HarnessRuntime at startup.'},
+      {id:'P-PC.5',name:'Integration tests — TypeScript equivalents of T01–T36',body:'packages/harness/src/process-concept.test.ts: 36 named tests (TS-T01–TS-T36) plus two bonus tests. All in-memory — no filesystem, no browser APIs. TS-T01–T08: serialisation round-trips and validate() error detection (duplicate IDs, unknown dependsOn, cycles, invalid enum values). TS-T09–T14: seedTaskGraph() mechanics (namespaced IDs, mapped abstractionLevel, changed flag, validate_task_graph pass). TS-T15–T18: initializeHarness() integration (decomposition_gate in result dict, null path, concept ID in result, orphaned dependency). TS-T19–T23: ProcessRegistry operations (register/load round-trip, not-found error, sorted list, bundled concepts). TS-T24–T28: fromJson() caching and error handling (missing concept, invalid JSON structure). TS-T29–T36: process-tools (listProcesses shape and sort, loadProcess seeds and returns firstStep, idempotency, getCurrentStep null when complete, completeStep advances, unknown step raises). Bonus tests: bundled concepts all pass validate(); DEFAULT_REGISTRY contains all 4 concept IDs at import time.'},
+    ],
+    tests:[
+      'TS-T01: ProcessConceptStep interface preserves all 9 fields across JSON round-trip (including strategyHint=null)',
+      'TS-T02: ProcessConcept.fromJson()/validate() round-trip preserves concept ID, name, schemaVersion, and full step list',
+      'TS-T03: validate() returns [] for a well-formed 2-step concept with linear dependency',
+      'TS-T04: validate() returns error containing "Duplicate" when two steps share the same ID',
+      'TS-T05: validate() returns error referencing missing ID when dependsOn names a non-existent step',
+      'TS-T06: validate() detects A→B, B→A cycle and returns error containing "cycle"',
+      'TS-T07: validate() returns error referencing "riskLevel" for invalid value like "CRITICAL"',
+      'TS-T08: validate() returns error referencing "abstractionLevel" for invalid value like "granular"',
+      'TS-T09: seedTaskGraph() task IDs are {conceptId}:{stepId}; raw step ID not present in graph',
+      'TS-T10: seedTaskGraph() dependsOn references are also namespaced to {conceptId}:{dependencyId}',
+      'TS-T11: seedTaskGraph() maps abstractionLevel strings to ints: module/goal→0, subgoal/function→1, leaf/statement→2',
+      'TS-T12: taskGraph.changed is true after seedTaskGraph(); was false before',
+      'TS-T13: seeded TaskGraph passes validateTaskGraph() with no errors (INV-PC-02 verified)',
+      'TS-T14: riskLevel preserved from concept steps — HIGH step produces Task with riskLevel="HIGH"',
+      'TS-T15: initializeHarness() with concept returns dict with decompositionGate bool key and valid=true',
+      'TS-T16: initializeHarness(processConceptId=undefined) returns processConceptId=null and valid=true (INV-PC-03)',
+      'TS-T17: concept ID appears as result.processConceptId after seeded init',
+      'TS-T18: orphaned dependency task causes valid=false with non-empty errors array',
+      'TS-T19: registry register()/load() round-trip returns ProcessConcept with correct ID',
+      'TS-T20: registry load() throws ProcessConceptNotFoundError for an unregistered ID',
+      'TS-T21: registry listAvailable() returns alphabetically sorted IDs',
+      'TS-T22: registerAll() registers all 4 bundled concepts; listAvailable() count=4',
+      'TS-T23: DEFAULT_REGISTRY is non-empty at module import time (auto-populated by registerAll)',
+      'TS-T24: fromJson() with valid JSON returns concept with correct step count',
+      'TS-T25: fromJson() throws ProcessConceptValidationError for JSON missing required id field',
+      'TS-T26: fromJson() throws ProcessConceptValidationError for invalid riskLevel value',
+      'TS-T27: load() of unregistered ID throws ProcessConceptNotFoundError with missing ID in message',
+      'TS-T28: register() then load() returns the same object reference',
+      'TS-T29: listProcesses() returns array of dicts each with id/name/description/stepCount',
+      'TS-T30: listProcesses() returns entries sorted alphabetically by id; count matches DEFAULT_REGISTRY.listAvailable()',
+      'TS-T31: loadProcess("implement-feature") seeds task graph and returns firstStep pointing to first PENDING task',
+      'TS-T32: loadProcess() called twice with same conceptId leaves task count unchanged — idempotent (INV-PC-05)',
+      'TS-T33: loadProcess() with unregistered conceptId throws ProcessConceptNotFoundError',
+      'TS-T34: getCurrentStep() returns null when all tasks in graph are COMPLETE (INV-PC-06)',
+      'TS-T35: completeStep(stepId) sets task to COMPLETE and returns nextStep pointing to newly-unblocked dependent',
+      'TS-T36: completeStep() with nonexistent stepId throws Error with missing ID in message (INV-PC-07)',
+      'Bonus: all 4 bundled concept JSON files pass validate() — schema integrity confirmed at import time',
+      'Bonus: DEFAULT_REGISTRY contains all 4 concept IDs (debug-test-failure, implement-feature, code-review, refactor-module)'
     ]
   }
 ];
