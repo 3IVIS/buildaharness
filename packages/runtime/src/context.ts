@@ -3,7 +3,7 @@ import type { FlowState } from './state'  // used in branchResults map type
 import { EventBus } from './events'
 import { ToolDef, ToolRegistry } from './tools/registry'
 import { BUILT_IN_TOOLS } from './tools/built-ins'
-import { IndexedDBAdapter } from './memory/indexeddb'
+import { InMemoryAdapter } from './memory/in-memory'
 
 export { ToolDef, ToolRegistry }
 
@@ -77,6 +77,6 @@ export function createExecutionContext(opts: {
     abortController,
     agents: opts.agents ?? new Map(),
     subgraphRegistry: opts.subgraphRegistry ?? new Map(),
-    hitlPersistStore: opts.hitlPersistStore ?? new IndexedDBAdapter({ scope: 'global', namespace: '__hitl__' }),
+    hitlPersistStore: opts.hitlPersistStore ?? new InMemoryAdapter({ scope: 'global', namespace: '__hitl__' }),
   }
 }
