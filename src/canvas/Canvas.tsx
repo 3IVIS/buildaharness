@@ -12,7 +12,7 @@ import { RegionLayer } from './regions/RegionLayer'
 import { CanvasToolbar } from '../components/CanvasToolbar'
 import { CollabStatus } from '../collab/CollabStatus'
 import { CollabCursors } from '../collab/CollabCursors'
-import type { NodeType } from '../spec/schema'
+import type { AnyNodeType } from '../spec/schema'
 
 type FocusDepth = 1 | 2 | 'all'
 
@@ -214,7 +214,7 @@ export function Canvas() {
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border)" />
         <MiniMap
           nodeColor={(n) => {
-            const hex = NODE_HEX[n.type as NodeType]
+            const hex = NODE_HEX[n.type as AnyNodeType]
             return desaturateForMinimap(hex ?? '#52526a')
           }}
           maskColor="rgba(12,12,14,0.7)"
@@ -233,7 +233,7 @@ export function Canvas() {
 // Fix: Canvas previously calculated drop position with raw clientX/Y coordinates,
 // which gave wrong results when the user had zoomed or panned the canvas.
 // useReactFlow().screenToFlowPosition() applies the viewport transform correctly.
-function DnDHandler({ addNode }: { addNode: (type: NodeType, pos: { x: number; y: number }) => void }) {
+function DnDHandler({ addNode }: { addNode: (type: AnyNodeType, pos: { x: number; y: number }) => void }) {
   const { screenToFlowPosition } = useReactFlow()
 
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -248,7 +248,7 @@ function DnDHandler({ addNode }: { addNode: (type: NodeType, pos: { x: number; y
     // screenToFlowPosition converts screen px → flow coordinate space,
     // correctly handling zoom level and pan offset.
     const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
-    addNode(type as NodeType, position)
+    addNode(type as AnyNodeType, position)
   }, [addNode, screenToFlowPosition])
 
   // Render an invisible overlay div that catches drag events across the full viewport

@@ -13,7 +13,7 @@ import {
 import { z } from 'zod'
 import dagre from '@dagrejs/dagre'
 import type {
-  FlowSpec, NodeType, AdapterName,
+  FlowSpec, AnyNodeType, AdapterName,
   AgentDef, MemoryStoreDef, ToolDef, ModelDefaults, FlowConfig,
   StateSchema,
 } from '../spec/schema'
@@ -174,9 +174,9 @@ export interface CanvasStore extends PersistedState {
   onConnect:     (c: Connection) => void
 
   // Node ops
-  addNode:            (type: NodeType, pos: { x: number; y: number }) => void
+  addNode:            (type: AnyNodeType, pos: { x: number; y: number }) => void
   addAnnotation:      (pos: { x: number; y: number }) => void
-  insertNodeOnEdge:   (edgeId: string, type: NodeType) => void
+  insertNodeOnEdge:   (edgeId: string, type: AnyNodeType) => void
   updateNodeData:     (id: string, data: Partial<NodeData>) => void
   deleteNode:         (id: string) => void
   selectNode:         (id: string | null) => void
@@ -271,7 +271,7 @@ export function defaultMeta(): FlowMeta {
  * The Yjs clientID suffix prevents two clients from producing the same ID.
  */
 function newNodeIdCollab(
-  type:     NodeType | 'annotation',
+  type:     AnyNodeType | 'annotation',
   counter:  number,
   clientId: number | null,
 ): string {
@@ -280,7 +280,7 @@ function newNodeIdCollab(
 }
 
 
-const NODE_DEFAULTS: Partial<Record<NodeType, NodeData>> = {
+const NODE_DEFAULTS: Partial<Record<AnyNodeType, NodeData>> = {
   input:           { label: 'Input',           output_schema: {} },
   output:          { label: 'Output',          exit_code: 'success' },
   llm_call:        { label: 'LLM call',        prompt_template: '', model_params: { temperature: 0.7, max_tokens: 512 } },
