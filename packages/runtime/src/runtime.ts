@@ -11,8 +11,31 @@ import {
   UnknownNodeTypeError,
   AbortedError,
 } from './errors'
+import { InMemoryAdapter } from './memory/in-memory'
 
 export class FlowRuntime {
+  /** Initialize memory stores from FlowSpec.memory_stores, skipping pre-registered adapters. */
+  private _initMemoryStores(spec: FlowSpec, context: ExecutionContext): void {
+    const stores = spec.memory_stores ?? {}
+    for (const [storeId, storeDef] of Object.entries(stores)) {
+      // Caller-registered adapters always win
+      if (context.memoryAdapters.has(storeId)) continue
+
+      const backend = storeDef.backend ?? 'in_memory'
+      if (backend === 'in_memory' || !storeDef.connection_env) {
+        const adapter = new InMemoryAdapter({
+          scope: storeDef.scope ?? 'thread',
+          namespace: storeDef.namespace ?? storeId,
+        })
+        context.memoryAdapters.set(storeId, adapter)
+      } else {
+        console.warn(
+          `FlowRuntime: memory store "${storeId}" backend "${backend}" requires connection env "${storeDef.connection_env}" — skipping auto-init`,
+        )
+      }
+    }
+  }
+
   async execute(
     flowSpec: unknown,
     triggerData: Record<string, unknown>,
@@ -20,6 +43,9 @@ export class FlowRuntime {
   ): Promise<FlowState> {
     // Throws immediately on invalid spec or unsupported spec_version
     const spec: FlowSpec = assertFlowSpec(flowSpec)
+
+    // Initialize memory stores from spec (caller-registered adapters take precedence)
+    this._initMemoryStores(spec, context)
 
     const graph = new FlowGraph(spec.nodes, spec.edges)
     const state = new FlowState(spec.state_schema)
