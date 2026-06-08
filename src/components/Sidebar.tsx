@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { StickyNote, Store } from 'lucide-react'
-import type { NodeType } from '../spec/schema'
+import type { AnyNodeType } from '../spec/schema'
 import { NODE_SUPPORT_MATRIX } from '../spec/schema'
 import { EXAMPLE_FLOWS } from '../spec/examples'
 import { useCanvasStore, type SettingsTab } from '../store'
@@ -12,7 +12,7 @@ type SidebarTab = 'nodes' | 'marketplace'
 
 // §2 — every palette entry carries a one-line description for the hover
 // tooltip. Wording vetted against UI Changes Spec §2.
-interface PaletteEntry { type: NodeType; group: string; description: string }
+interface PaletteEntry { type: AnyNodeType; group: string; description: string }
 
 const PALETTE: PaletteEntry[] = [
   { type: 'input',           group: 'I/O',     description: 'Entry point — initial state passed in from the caller.' },
@@ -29,11 +29,25 @@ const PALETTE: PaletteEntry[] = [
   { type: 'memory_write',    group: 'Memory',  description: 'Persist values from local state into a store.' },
   { type: 'agent_role',      group: 'Agents',  description: 'Dispatch to a registered role-based agent.' },
   { type: 'agent_debate',    group: 'Agents',  description: 'Multi-agent debate with N rounds and a judge.' },
+  // Harness nodes
+  { type: 'world_model',            group: 'Harness', description: 'Durable snapshot of current world state and beliefs.' },
+  { type: 'hypothesis_set',         group: 'Harness', description: 'Set of active hypotheses the agent is evaluating.' },
+  { type: 'gather_evidence',        group: 'Harness', description: 'Collect evidence from external sources for analysis.' },
+  { type: 'apply_tool_reliability', group: 'Harness', description: 'Score and filter evidence by tool reliability.' },
+  { type: 'update_world_model',     group: 'Harness', description: 'Integrate new evidence into the world model.' },
+  { type: 'control_state',          group: 'Harness', description: 'Encapsulates harness control flow and phase transitions.' },
+  { type: 'task_graph_node',        group: 'Harness', description: 'Node in the task decomposition graph.' },
+  { type: 'verification_gate',      group: 'Harness', description: 'Assert invariants before advancing the flow.' },
+  { type: 'recovery_node',          group: 'Harness', description: 'Handle failure and route to a recovery path.' },
+  { type: 'evidence_store_node',    group: 'Harness', description: 'Long-term evidence store with versioned snapshots.' },
+  { type: 'experience_store_node',  group: 'Harness', description: 'Agent experience store for learning from past runs.' },
+  { type: 'reviewer_pass',          group: 'Harness', description: 'Human or LLM reviewer pass with sign-off gate.' },
+  { type: 'process_concept',        group: 'Harness', description: 'Abstract process concept linking theory to execution.' },
 ]
 
-const GROUPS = ['I/O', 'Core', 'Control', 'Memory', 'Agents']
+const GROUPS = ['I/O', 'Core', 'Control', 'Memory', 'Agents', 'Harness']
 
-function onDragStart(e: React.DragEvent, type: NodeType) {
+function onDragStart(e: React.DragEvent, type: AnyNodeType) {
   e.dataTransfer.setData('application/itsharness-node', type)
   e.dataTransfer.effectAllowed = 'move'
 }
