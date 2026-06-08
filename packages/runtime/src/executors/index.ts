@@ -8,6 +8,9 @@ import { conditionExecutor } from './condition'
 import { outputExecutor } from './output'
 import { parallelForkExecutor } from './parallel-fork'
 import { parallelJoinExecutor } from './parallel-join'
+import { memoryReadExecutor } from './memory-read'
+import { memoryWriteExecutor } from './memory-write'
+import { toolInvokeExecutor } from './tool-invoke'
 
 export interface ExecutorOutput {
   stateUpdate: Record<string, unknown>
@@ -22,9 +25,8 @@ export type ExecutorFn = (
 ) => Promise<ExecutorOutput>
 
 // Passthrough stub — emits lifecycle events and returns empty state update.
-// Used for node types scheduled for later phases (memory_read/write → P3,
-// hitl_breakpoint/agent_role/agent_debate/subgraph → P4).
-async function _stubExecutor(node: Node, _state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
+// Used for node types scheduled for later phases (hitl_breakpoint/agent_role/agent_debate/subgraph → P4).
+export async function _stubExecutor(node: Node, _state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
   context.eventBus.emit({ type: 'node:start', nodeId: node.id, nodeType: node.type })
   context.eventBus.emit({ type: 'node:complete', nodeId: node.id, nodeType: node.type, durationMs: 0 })
   return { stateUpdate: {} }
@@ -39,10 +41,10 @@ const REGISTRY = new Map<string, ExecutorFn>([
   // P2 parallel executors
   ['parallel_fork', parallelForkExecutor],
   ['parallel_join', parallelJoinExecutor],
-  // P3 stubs — replaced by full implementations in Phase 3
-  ['memory_read', _stubExecutor],
-  ['memory_write', _stubExecutor],
-  ['tool_invoke', _stubExecutor],
+  // P3 executors
+  ['memory_read', memoryReadExecutor],
+  ['memory_write', memoryWriteExecutor],
+  ['tool_invoke', toolInvokeExecutor],
 ])
 
 export function getExecutor(nodeType: string): ExecutorFn | undefined {
