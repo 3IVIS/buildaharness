@@ -46,6 +46,14 @@ from adapter_logger import (
 _log = get_adapter_logger("langgraph")
 
 ADAPTER_VERSION = "0.1.0"
+
+try:
+    from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+
+    _HARNESS_AVAILABLE = True
+except (ImportError, SyntaxError):  # pragma: no cover
+    _HARNESS_NODE_COMPILERS = {}
+    _HARNESS_AVAILABLE = False
 LG_MIN = ">=0.2.0"
 LCX_OPENAI_MIN = ">=0.2.0"
 
@@ -151,6 +159,50 @@ def build_output_key_map(nodes: list[dict]) -> dict[str, str | None]:
 
 
 # ─── Code section generators ──────────────────────────────────────────────────
+
+
+def gen_harness_preamble() -> str:
+    """Emit HarnessRunState initialisation into the generated flow code."""
+    return dedent0("""\
+        # ─── Harness state ───────────────────────────────────────────────────────────
+        import sys as _sys, pathlib as _pl
+        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        from harness.state_store import HarnessRunState as _HarnessRunState
+        from harness.world_model import WorldModel as _WorldModel
+        from harness.diagnostics import Diagnostics as _Diagnostics
+        from harness.task_graph import TaskGraph as _TaskGraph
+        from harness.hypothesis import HypothesisSet as _HypothesisSet
+        from harness.evidence import EvidenceStore as _EvidenceStore
+        from harness.recovery import StrategyState as _StrategyState
+        from harness.memory import MemoryState as _MemoryState
+        from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics
+
+        _harness_state = _HarnessRunState(
+            run_id=os.environ.get("HARNESS_RUN_ID", "run-1"),
+            world_model=_WorldModel(),
+            diagnostics=_Diagnostics(),
+            task_graph=_TaskGraph(),
+            hypothesis_set=_HypothesisSet(),
+            evidence_store=_EvidenceStore(),
+            strategy_state=_StrategyState(),
+            memory_state=_MemoryState(),
+            failure_diagnostics=_FailureDiagnostics(),
+        )
+
+        try:
+            from harness.process_tools import list_processes as _list_processes
+            from harness.process_tools import load_process as _load_process
+            from harness.process_tools import get_current_step as _get_current_step
+            from harness.process_tools import complete_step as _complete_step
+            from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
+            def list_processes(): return _list_processes(_concept_registry)
+            def load_process(concept_id): return _load_process(concept_id, _harness_state.task_graph, _concept_registry)
+            def get_current_step(): return _get_current_step(_harness_state.task_graph)
+            def complete_step(step_id): return _complete_step(step_id, _harness_state.task_graph)
+        except ImportError:
+            pass
+
+    """)
 
 
 def gen_header(spec: dict) -> str:
@@ -444,6 +496,76 @@ def _fn(label: str, vid: str, body: str) -> str:
     return f"# {label}\ndef node_{vid}(state: FlowState) -> dict:\n{indented}\n"
 
 
+def _gen_harness_node_body(node: dict) -> str:
+    """Generate the execution body for a harness node in the LangGraph context.
+
+    Reads mutable structures from _harness_state, runs the compiled harness
+    node code, then writes back any structures that may have been mutated.
+    The generated body runs inside a node_<vid>(state: FlowState) -> dict function.
+    """
+    ntype = node["type"]
+
+    preamble = (
+        "# Harness node — shared state from _harness_state\n"
+        "world_model = _harness_state.world_model\n"
+        "evidence_store = _harness_state.evidence_store\n"
+        "hypothesis_set = _harness_state.hypothesis_set\n"
+        "diagnostics = _harness_state.diagnostics\n"
+        "task_graph = _harness_state.task_graph\n"
+        "strategy_state = _harness_state.strategy_state\n"
+        "tool_manifest = _harness_state.tool_manifest\n"
+        "tool_output = state.get('tool_output', '')\n"
+        "result = state.get('result', {})\n"
+        "success_criteria = []\n"
+        "assumptions = []\n"
+        "task_risk = None\n"
+    )
+
+    compiler = _HARNESS_NODE_COMPILERS.get(ntype)
+    if compiler is None:
+        core = f"# Harness node type {ntype!r} has no compiler\n"
+    elif ntype == "gather_evidence":
+        core = compiler(node, "evidence_store")
+    elif ntype == "apply_tool_reliability":
+        core = compiler(node, "evidence_store", "diagnostics")
+    elif ntype == "update_world_model":
+        core = compiler(node, "world_model", "evidence_store")
+    elif ntype == "world_model":
+        core = compiler(node, "world_model")
+    elif ntype == "hypothesis_set":
+        core = compiler(node, "world_model", "evidence_store", "hypothesis_set")
+    elif ntype == "control_state":
+        core = compiler(node, "diagnostics", "world_model")
+    elif ntype == "task_graph_node":
+        core = compiler(node, "task_graph")
+    elif ntype == "verification_gate":
+        core = compiler(node, "result", "tool_manifest")
+    elif ntype == "recovery_node":
+        core = compiler(node, "strategy_state")
+    elif ntype == "evidence_store_node":
+        core = compiler(node, "evidence_store", "tool_manifest")
+    elif ntype == "experience_store_node":
+        core = compiler(node, "_harness_state.experience_store", "strategy_state")
+    elif ntype == "reviewer_pass":
+        core = compiler(node, "world_model", "task_graph", "hypothesis_set")
+    elif ntype == "process_concept":
+        core = compiler(node, "_harness_state")
+    else:
+        core = compiler(node) if callable(compiler) else f"# compiler for {ntype!r} not wired\n"
+
+    postamble = (
+        "# Write back mutated harness structures\n"
+        "_harness_state.evidence_store = evidence_store\n"
+        "_harness_state.hypothesis_set = hypothesis_set\n"
+        "_harness_state.strategy_state = strategy_state\n"
+        "_harness_state.world_model = world_model\n"
+        "_harness_state.task_graph = task_graph\n"
+        "_harness_state.diagnostics = diagnostics\n"
+    )
+
+    return preamble + core + postamble
+
+
 def gen_node_function(
     node: dict,
     spec: dict,
@@ -484,6 +606,11 @@ def gen_node_function(
                     f"context_from on edge to '{nid}': source '{src}' has no output_key — nothing to inject (ADR-001)"
                 )
     ctx = ("\n".join(ctx_lines) + "\n") if ctx_lines else ""
+
+    # ── harness node types — dispatch to node compilers ───────────────────────
+    if _HARNESS_AVAILABLE and ntype in _HARNESS_NODE_COMPILERS:
+        body = f"{ctx}{_gen_harness_node_body(node)}\nreturn {{}}"
+        return _fn(label, vid, body)
 
     # ── input / output / annotation — no function ─────────────────────────────
     if ntype in ("input", "output", "annotation"):
@@ -1168,6 +1295,7 @@ def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
         sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
         ctx_map = build_context_map(edges)
         output_key_map = build_output_key_map(nodes)
+        harness_enabled = bool((spec.get("harness_meta") or {}).get("enabled"))
 
         # ── Section: header + imports + helpers
         log_section(_log, "header+imports+helpers", flow_id=flow_id)
@@ -1175,6 +1303,7 @@ def compile_langgraph(spec: dict) -> tuple[str, list[str]]:
             gen_header(spec),
             gen_imports(spec),
             gen_helpers(spec),
+            gen_harness_preamble() if harness_enabled else "",
             gen_state_typeddict(spec),
             gen_memory_stores(spec),
             gen_tools(spec),

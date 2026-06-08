@@ -56,6 +56,15 @@ from prompt_resolver import resolve_prompts
 from rate_limit import limiter
 from validate import validate_spec as _validate_spec
 
+# ── Process concept registry (P-PC) ──────────────────────────────────────────
+# Populated at import time from repo-root concepts/. Absent directory = no-op.
+try:
+    from harness.process_concept import ProcessConceptNotFoundError as _ProcessConceptNotFoundError
+    from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
+except ImportError:
+    _concept_registry = None  # type: ignore[assignment]
+    _ProcessConceptNotFoundError = None  # type: ignore[assignment,misc]
+
 try:
     from langgraph.errors import GraphInterrupt as _GraphInterrupt
 
@@ -1203,6 +1212,20 @@ async def run_flow(
     spec = req.spec
     inputs = req.inputs  # user-supplied initial state values (e.g. {"topic": "photosynthesis"})
     _validate_spec(spec)
+
+    # P-PC — reject unknown process_concept_id early (INV-PC-04: hard error)
+    harness_meta = spec.get("harness_meta") or {}
+    pc_id = harness_meta.get("process_concept_id")
+    if pc_id and _concept_registry is not None and _ProcessConceptNotFoundError is not None:
+        try:
+            _concept_registry.load(pc_id)
+        except _ProcessConceptNotFoundError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"process_concept_id {pc_id!r} is not registered. "
+                "Check available concepts at GET /run/concepts.",
+            ) from None
+
     spec = await resolve_prompts(spec, org)
 
     if not runtime:
@@ -1354,6 +1377,22 @@ async def job_status(
         "trace_id": job.trace_id,
         "trace_url": job.trace_url,
     }
+
+
+# ─── Process concept endpoints (P-PC) ────────────────────────────────────────
+
+
+@router.get("/concepts", status_code=200)
+async def list_concepts(
+    user: User = Depends(current_user),
+):
+    """Return a list of all registered process concept IDs.
+
+    Returns an empty list when the concept registry is unavailable.
+    """
+    if _concept_registry is None:
+        return {"concepts": []}
+    return {"concepts": _concept_registry.list_available()}
 
 
 # ─── Harness state endpoints (P0.6) ──────────────────────────────────────────

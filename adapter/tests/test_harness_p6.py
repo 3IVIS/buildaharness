@@ -11,54 +11,44 @@ Run with: pytest adapter/tests/test_harness_p6.py -v
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass, field
+from typing import ClassVar
 
 import pytest
 
-# ── Harness imports ───────────────────────────────────────────────────────────
+from harness.diagnostics import Diagnostics
+from harness.failure_modes import (
+    FailureDiagnostics,
+    FailureEntry,
+    FailureModeLibrary,
+    FailurePattern,
+    MatchResult,
+    normalise_confidence,
+)
+from harness.hypothesis import generate_from_failure_library
+from harness.memory import (
+    MemoryState,
+    apply_retention_policy,
+    check_max_steps,
+    compress_memory,
+)
 
-from adapter.harness.progress import (
+# ── Harness imports ───────────────────────────────────────────────────────────
+from harness.progress import (
     STALL_WINDOW,
     cannot_make_progress,
 )
-from adapter.harness.recovery import (
-    STRATEGY_ORDER,
+from harness.recovery import (
     StrategyState,
     apply_failure_mode_bias,
     get_next_strategy,
     get_strategy_with_experience,
     switch_strategy,
 )
-from adapter.harness.failure_modes import (
-    FailureDiagnostics,
-    FailureEntry,
-    FailureModeLibrary,
-    FailurePattern,
-    MatchResult,
-    build_default_library,
-    normalise_confidence,
-)
-from adapter.harness.hypothesis import generate_from_failure_library
-from adapter.harness.replanning import (
-    ReplanScope,
+from harness.replanning import (
     apply_replan,
-    assess_replan_scope,
-    diagnose_and_replan,
-    rebuild_task_graph,
 )
-from adapter.harness.memory import (
-    CompressionRisk,
-    MemoryState,
-    apply_retention_policy,
-    check_max_steps,
-    compress_memory,
-    should_compress,
-)
-from adapter.harness.task_graph import Task, TaskGraph
-from adapter.harness.world_model import Belief, Observation, WorldModel
-from adapter.harness.diagnostics import Diagnostics
-
+from harness.task_graph import Task, TaskGraph
+from harness.world_model import Belief, Observation, WorldModel
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +61,7 @@ def _make_failure_diagnostics(
     failure_classes: list[str] | None = None,
 ) -> FailureDiagnostics:
     fd = FailureDiagnostics()
-    for fc in (failure_classes or []):
+    for fc in failure_classes or []:
         fd.failure_history.append(FailureEntry(failure_class=fc))
     return fd
 
@@ -134,7 +124,7 @@ class TestCannotMakeProgress:
 
     def test_T03_stall_window_constant_overridable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """T03: Setting STALL_WINDOW=2 causes proxy 1 to fire after 2 stalled steps."""
-        import adapter.harness.progress as prog_module
+        import harness.progress as prog_module
 
         monkeypatch.setattr(prog_module, "STALL_WINDOW", 2)
 
@@ -186,8 +176,8 @@ class TestRecoveryStrategies:
 
         # Mock experience_store with weights favouring TRACE_EXEC
         class _FakeStore:
-            available = True
-            strategy_weights = {
+            available: ClassVar[bool] = True
+            strategy_weights: ClassVar[dict[str, dict[str, float]]] = {
                 "tool_error": {
                     "DIRECT_EDIT": -5.0,
                     "TRACE_EXEC": 5.0,
@@ -222,21 +212,25 @@ class TestFailureModeLibrary:
         assert normalise_confidence(0.7) == pytest.approx(0.7)
 
         # Library with a pattern whose all conditions are satisfied
-        lib = FailureModeLibrary([
-            FailurePattern(
-                name="ALWAYS",
-                description="always matches",
-                required_conditions=["always"],
-                excluded_conditions=[],
-                strategy_affinity=None,
-                hypothesis_template="always fires",
-            )
-        ])
+        lib = FailureModeLibrary(
+            [
+                FailurePattern(
+                    name="ALWAYS",
+                    description="always matches",
+                    required_conditions=["always"],
+                    excluded_conditions=[],
+                    strategy_affinity=None,
+                    hypothesis_template="always fires",
+                )
+            ]
+        )
         wm = WorldModel()
         wm.beliefs = []
         # Inject context via a belief
-        from adapter.harness.world_model import Belief
         import uuid
+
+        from harness.world_model import Belief
+
         b = Belief(
             id=str(uuid.uuid4()),
             statement="this always fires due to the word always being present",
@@ -252,20 +246,24 @@ class TestFailureModeLibrary:
     def test_T08_generate_from_failure_library_sources(self) -> None:
         """T08: generate_from_failure_library() returns Hypothesis with
         generation_sources=["failure_mode_library"] using the matched template."""
-        lib = FailureModeLibrary([
-            FailurePattern(
-                name="TEST_PATTERN",
-                description="test",
-                required_conditions=["circular", "cycle"],
-                excluded_conditions=[],
-                strategy_affinity="BROADER_SEARCH",
-                hypothesis_template="A circular dependency was detected",
-            )
-        ])
+        lib = FailureModeLibrary(
+            [
+                FailurePattern(
+                    name="TEST_PATTERN",
+                    description="test",
+                    required_conditions=["circular", "cycle"],
+                    excluded_conditions=[],
+                    strategy_affinity="BROADER_SEARCH",
+                    hypothesis_template="A circular dependency was detected",
+                )
+            ]
+        )
 
         wm = WorldModel()
         import uuid
-        from adapter.harness.world_model import Belief
+
+        from harness.world_model import Belief
+
         b = Belief(
             id=str(uuid.uuid4()),
             statement="circular dependency and cycle detected in task graph",
@@ -283,9 +281,9 @@ class TestFailureModeLibrary:
     def test_T09_block_mask_not_derived_from_match_result(self) -> None:
         """T09: block_mask in resolve_control_state is derived solely from diagnostic
         sub-dimension thresholds — MatchResult fields do not appear in it."""
-        from adapter.harness.control_state import resolve_control_state
-        from adapter.harness.diagnostics import Diagnostics
-        from adapter.harness.world_model import WorldModel
+        from harness.control_state import resolve_control_state
+        from harness.diagnostics import Diagnostics
+        from harness.world_model import WorldModel
 
         wm = WorldModel()
         wm.generation_id = 1
@@ -313,12 +311,16 @@ class TestFailureModeLibrary:
         for entry in cs.block_mask:
             dim = getattr(entry, "dimension", None)
             if dim is not None:
-                assert dim in valid_block_dimensions, (
-                    f"block_mask entry references unexpected dimension: {dim!r}"
-                )
+                assert dim in valid_block_dimensions, f"block_mask entry references unexpected dimension: {dim!r}"
 
         # MatchResult fields must not appear in block_mask computation
-        match_result_fields = {"matched", "pattern_name", "raw_confidence", "normalised_confidence", "strategy_affinity"}
+        match_result_fields = {
+            "matched",
+            "pattern_name",
+            "raw_confidence",
+            "normalised_confidence",
+            "strategy_affinity",
+        }
         for entry in cs.block_mask:
             entry_dict = entry.__dict__ if hasattr(entry, "__dict__") else {}
             assert not match_result_fields.intersection(entry_dict), (
@@ -335,6 +337,7 @@ class TestReplanning:
     def _make_contradiction(self, scope: str) -> object:
         class _C:
             pass
+
         c = _C()
         c.scope = scope  # type: ignore[attr-defined]
         return c
@@ -342,6 +345,7 @@ class TestReplanning:
     def _make_caller_state(self, criteria: list[str]) -> object:
         class _CS:
             success_criteria = criteria
+
         return _CS()
 
     def test_T10_global_scope_rebuilds_all_pending(self) -> None:
@@ -377,8 +381,8 @@ class TestReplanning:
 
     def test_T12_validate_always_called_after_global_replan(self) -> None:
         """T12: Invalid graph (cycle) from rebuild raises immediately — never returned silently."""
-        from adapter.harness import replanning as replan_mod
-        import uuid
+
+        from harness import replanning as replan_mod
 
         original_rebuild = replan_mod.rebuild_task_graph
 
@@ -408,6 +412,7 @@ class TestReplanning:
 class TestContextCompression:
     def _make_world_model_with_beliefs(self, n_beliefs: int) -> WorldModel:
         import uuid
+
         wm = WorldModel()
         for i in range(n_beliefs):
             b = Belief(
@@ -423,6 +428,7 @@ class TestContextCompression:
         """T13: compress_memory separates dropped obs → compressed_structures and
         truncated beliefs → pruned_regions; the two lists are mutually exclusive."""
         import uuid
+
         wm = WorldModel()
 
         # Observations not referenced by any belief → will be dropped
@@ -457,7 +463,7 @@ class TestContextCompression:
 
     def test_T15_action_dep_overlap_detects_pruned_regions(self) -> None:
         """T15: action_dep_overlap returns non-empty when action depends on a pruned region."""
-        from adapter.harness.execution import action_dep_overlap
+        from harness.execution import action_dep_overlap
 
         ms = MemoryState()
         ms.compression_risk.pruned_regions.append("beliefs")
@@ -499,13 +505,11 @@ class TestJournalAndBudget:
 
         failures_in_result = [e for e in result if e.get("outcome") == "fail" or e.get("success") is False]
         verbatim_passing = [
-            e for e in result
+            e
+            for e in result
             if e.get("outcome") == "pass" and e.get("success") is True and "action_class" in e and "step" in e
         ]
-        compressed_passing = [
-            e for e in result
-            if e.get("outcome") == "pass" and e.get("success") is not True
-        ]
+        compressed_passing = [e for e in result if e.get("outcome") == "pass" and e.get("success") is not True]
 
         assert len(failures_in_result) == 5
         assert len(verbatim_passing) == 10
@@ -533,8 +537,8 @@ class TestJournalAndBudget:
         assert result == "escalate"
 
         # Verify loop wires escalation correctly
-        from adapter.harness.world_model import WorldModel
-        from adapter.harness.loop import run_one_iteration
+        from harness.loop import run_one_iteration
+        from harness.world_model import WorldModel
 
         wm = WorldModel()
         wm.generation_id = 0
