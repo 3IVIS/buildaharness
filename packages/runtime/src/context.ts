@@ -3,6 +3,7 @@ import type { FlowState } from './state'  // used in branchResults map type
 import { EventBus } from './events'
 import { ToolDef, ToolRegistry } from './tools/registry'
 import { BUILT_IN_TOOLS } from './tools/built-ins'
+import { InMemoryAdapter } from './memory/in-memory'
 
 export { ToolDef, ToolRegistry }
 
@@ -34,6 +35,9 @@ export interface ExecutionContext {
   readonly hitlResolvers: Map<string, (payload: unknown) => void>
   readonly branchResults: Map<string, FlowState[]>
   readonly retryConfig: RetryConfig
+  readonly agents: Map<string, unknown>
+  readonly subgraphRegistry: Map<string, unknown>
+  readonly hitlPersistStore: MemoryAdapter
 }
 
 export function createExecutionContext(opts: {
@@ -44,6 +48,9 @@ export function createExecutionContext(opts: {
   abortController?: AbortController
   functions?: FunctionRegistry
   retryConfig?: Partial<RetryConfig>
+  agents?: Map<string, unknown>
+  subgraphRegistry?: Map<string, unknown>
+  hitlPersistStore?: MemoryAdapter
 }): ExecutionContext & { abortController: AbortController } {
   const abortController = opts.abortController ?? new AbortController()
   const retryConfig: RetryConfig = {
@@ -68,5 +75,8 @@ export function createExecutionContext(opts: {
     branchResults: new Map(),
     retryConfig,
     abortController,
+    agents: opts.agents ?? new Map(),
+    subgraphRegistry: opts.subgraphRegistry ?? new Map(),
+    hitlPersistStore: opts.hitlPersistStore ?? new InMemoryAdapter({ scope: 'global', namespace: '__hitl__' }),
   }
 }

@@ -14,6 +14,8 @@ import {
 import { InMemoryAdapter } from './memory/in-memory'
 
 export class FlowRuntime {
+  _activeContext: ExecutionContext | null = null
+
   /** Initialize memory stores from FlowSpec.memory_stores, skipping pre-registered adapters. */
   private _initMemoryStores(spec: FlowSpec, context: ExecutionContext): void {
     const stores = spec.memory_stores ?? {}
@@ -36,6 +38,14 @@ export class FlowRuntime {
     }
   }
 
+  resume(nodeId: string, payload: unknown): void {
+    const resolver = this._activeContext?.hitlResolvers.get(nodeId)
+    if (!resolver) {
+      throw new FlowExecutionError({ nodeId, message: `No active HITL pause for node "${nodeId}"` })
+    }
+    resolver(payload)
+  }
+
   async execute(
     flowSpec: unknown,
     triggerData: Record<string, unknown>,
@@ -44,8 +54,19 @@ export class FlowRuntime {
     // Throws immediately on invalid spec or unsupported spec_version
     const spec: FlowSpec = assertFlowSpec(flowSpec)
 
+    this._activeContext = context
+
+    try {
+
     // Initialize memory stores from spec (caller-registered adapters take precedence)
     this._initMemoryStores(spec, context)
+
+    // Populate agents from FlowSpec (executor needs them via context.agents)
+    for (const agent of spec.agents ?? []) {
+      if (!context.agents.has(agent.id)) {
+        (context.agents as Map<string, unknown>).set(agent.id, agent)
+      }
+    }
 
     const graph = new FlowGraph(spec.nodes, spec.edges)
     const state = new FlowState(spec.state_schema)
@@ -107,6 +128,10 @@ export class FlowRuntime {
     const finalData = state.toJSON()
     delete finalData['__triggerData__']
     return FlowState.fromJSON(finalData, spec.state_schema)
+
+    } finally {
+      this._activeContext = null
+    }
   }
 
   // ---------------------------------------------------------------------------
