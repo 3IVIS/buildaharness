@@ -1,4 +1,15 @@
-// @itsharness/harness — Harness host package
-// Full exports will be added in Phase 7+.
-
-export {}
+export * from './state/world-model.js'
+export * from './state/caller-state.js'
+export * from './state/control-state.js'
+export * from './state/diagnostics.js'
+export * from './state/task-graph.js'
+export * from './state/output-contract.js'
+export * from './state/evidence-store.js'
+export * from './state/hypothesis-set.js'
+export * from './state/memory-state.js'
+export * from './state/strategy-state.js'
+export * from './state/failure-diagnostics.js'
+export * from './state/experience-store.js'
+export * from './normalise.js'
+export * from './generation-id.js'
+export * from './harness-run-state.js'
