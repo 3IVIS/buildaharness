@@ -1,0 +1,25 @@
+{
+  "name": "Chat Flow",
+  "description": "Minimal single-node chat flow — replace with your own FlowSpec.",
+  "state_schema": {
+    "fields": [
+      { "name": "userMessage", "type": "str" },
+      { "name": "output", "type": "str" }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "chat",
+      "type": "llm_call",
+      "config": {
+        "model": "claude-3-5-haiku-20241022",
+        "prompt": "You are a helpful assistant. User said: {{userMessage}}",
+        "output_key": "output"
+      }
+    }
+  ],
+  "edges": [],
+  "flow_config": {
+    "entry_node": "chat"
+  }
+}

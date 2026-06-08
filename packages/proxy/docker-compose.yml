@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  proxy:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-http://localhost:5173}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      PROXY_SECRET: "${PROXY_SECRET}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  app:
+    image: nginx:alpine
+    ports:
+      - "5173:80"
+    volumes:
+      # Mount the built React app dist directory here.
+      # Build it first: cd ../../templates/react-app && npm run build
+      - ../../templates/react-app/dist:/usr/share/nginx/html:ro
+    depends_on:
+      proxy:
+        condition: service_healthy
+    restart: unless-stopped

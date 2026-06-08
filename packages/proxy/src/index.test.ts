@@ -194,4 +194,23 @@ describe('CORS headers', () => {
     const allowOrigin = res.headers.get('Access-Control-Allow-Origin')
     expect(allowOrigin).toBeTruthy()
   })
+
+  it('ALLOWED_ORIGIN restricts CORS to configured origin only', async () => {
+    process.env.ALLOWED_ORIGIN = 'https://app.example.com'
+    const res = await app.request('/health', {
+      headers: { 'Origin': 'https://app.example.com' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.example.com')
+  })
+
+  it('wildcard is not returned when ALLOWED_ORIGIN is set to a specific origin', async () => {
+    process.env.ALLOWED_ORIGIN = 'https://app.example.com'
+    const res = await app.request('/health', {
+      headers: { 'Origin': 'https://attacker.example.com' },
+    })
+    // Hono CORS returns the configured origin only — wildcard must not appear.
+    const allowOrigin = res.headers.get('Access-Control-Allow-Origin')
+    expect(allowOrigin).not.toBe('*')
+  })
 })
