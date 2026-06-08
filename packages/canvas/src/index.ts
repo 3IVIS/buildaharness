@@ -38,6 +38,7 @@ export {
   ADAPTER_LABELS,
   CURRENT_SPEC_VERSION,
   parseFlowSpec,
+  assertFlowSpec,
 } from './spec/schema'
 
 // ── Canvas internals (for building custom toolbars that drag nodes) ───────────
