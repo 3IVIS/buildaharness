@@ -1,31 +1,10 @@
 import type { ILLMClient } from './llm-client'
-import type { FlowState } from './state'
+import type { FlowState } from './state'  // used in branchResults map type
 import { EventBus } from './events'
-import { UnknownToolError } from './errors'
+import { ToolDef, ToolRegistry } from './tools/registry'
+import { BUILT_IN_TOOLS } from './tools/built-ins'
 
-export interface ToolDef {
-  name: string
-  description?: string
-  execute(args: Record<string, unknown>): Promise<unknown>
-}
-
-export class ToolRegistry {
-  private tools: Map<string, ToolDef> = new Map()
-
-  register(name: string, def: ToolDef): void {
-    this.tools.set(name, def)
-  }
-
-  async invoke(nodeId: string, name: string, args: Record<string, unknown>): Promise<unknown> {
-    const tool = this.tools.get(name)
-    if (!tool) throw new UnknownToolError({ nodeId, toolName: name })
-    return tool.execute(args)
-  }
-
-  get(name: string): ToolDef | undefined {
-    return this.tools.get(name)
-  }
-}
+export { ToolDef, ToolRegistry }
 
 export interface RetryConfig {
   maxRetries: number
@@ -42,12 +21,8 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
 export type FlowFunction = (state: Record<string, unknown>) => Record<string, unknown>
 export type FunctionRegistry = Map<string, FlowFunction>
 
-export interface MemoryAdapter {
-  get(key: string): Promise<unknown>
-  set(key: string, value: unknown, mode?: string): Promise<void>
-  search(query: string, topK?: number, minScore?: number): Promise<{ key: string; value: unknown; score: number }[]>
-  delete(key: string): Promise<void>
-}
+export type { MemoryAdapter } from './memory/adapter'
+import type { MemoryAdapter } from './memory/adapter'
 
 export interface ExecutionContext {
   readonly llmClient: ILLMClient
@@ -75,9 +50,16 @@ export function createExecutionContext(opts: {
     ...DEFAULT_RETRY_CONFIG,
     ...opts.retryConfig,
   }
+  const toolRegistry = opts.toolRegistry ?? new ToolRegistry()
+  // Register built-in tools if not already registered by the caller
+  for (const tool of BUILT_IN_TOOLS) {
+    if (!toolRegistry.get(tool.name)) {
+      toolRegistry.register(tool.name, tool)
+    }
+  }
   return {
     llmClient: opts.llmClient,
-    toolRegistry: opts.toolRegistry ?? new ToolRegistry(),
+    toolRegistry,
     memoryAdapters: opts.memoryAdapters ?? new Map(),
     eventBus: opts.eventBus ?? new EventBus(),
     signal: abortController.signal,

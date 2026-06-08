@@ -1,5 +1,5 @@
 export type NodeStartEvent = { type: 'node:start'; nodeId: string; nodeType: string }
-export type NodeCompleteEvent = { type: 'node:complete'; nodeId: string; nodeType: string; durationMs: number; tokenCount?: number; retryCount?: number }
+export type NodeCompleteEvent = { type: 'node:complete'; nodeId: string; nodeType: string; durationMs: number; tokenCount?: number; retryCount?: number; metadata?: Record<string, unknown> }
 export type NodeErrorEvent = { type: 'node:error'; nodeId: string; error: unknown }
 export type TokenChunkEvent = { type: 'token:chunk'; nodeId: string; token: string }
 export type FlowPausedEvent = { type: 'flow:paused'; nodeId: string; prompt: string; resumeSchema: object }
