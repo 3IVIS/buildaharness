@@ -1,4 +1,2 @@
-// @itsharness/react — React bindings for the itsharness runtime
-// Full exports will be added in Phase 5.
-
-export {}
+export { useHarness } from './use-harness'
+export type { HarnessOptions, HarnessHandle, HarnessStatus, NodeExecStat } from './types'
