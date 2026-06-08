@@ -53,3 +53,13 @@ export class UnknownToolError extends FlowExecutionError {
     this.toolName = toolName
   }
 }
+
+export class HITLTimeoutError extends FlowExecutionError {
+  readonly timeoutSeconds: number
+
+  constructor({ nodeId, timeoutSeconds }: { nodeId: string; timeoutSeconds: number }) {
+    super({ nodeId, message: `HITL breakpoint at node "${nodeId}" timed out after ${timeoutSeconds}s` })
+    this.name = 'HITLTimeoutError'
+    this.timeoutSeconds = timeoutSeconds
+  }
+}

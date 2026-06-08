@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { FlowRuntime } from './runtime'
 import { createExecutionContext } from './context'
 import { UnknownNodeTypeError, AbortedError } from './errors'
-import type { ILLMClient, ChatMessage, ChatOptions } from './llm-client'
+import type { ILLMClient, ChatMessage, ChatOptions, LLMStructuredResponse } from './llm-client'
 import type { FlowSpec } from '@itsharness/canvas'
 import { EXAMPLE_FLOWS } from '../../canvas/src/spec/examples'
+import { getExecutor, registerExecutor, unregisterExecutor } from './executors/index'
 
 function mockLLMClient(response = 'mocked response'): ILLMClient {
   return {
@@ -13,6 +14,9 @@ function mockLLMClient(response = 'mocked response'): ILLMClient {
     },
     async callChatSync() {
       return response
+    },
+    async callChatStructured(): Promise<LLMStructuredResponse> {
+      return { content: response }
     },
   }
 }
@@ -73,23 +77,29 @@ describe('FlowRuntime', () => {
   })
 
   it('throws UnknownNodeTypeError with nodeId for unregistered node type', async () => {
-    // hitl_breakpoint is a valid FlowSpec node type but has no executor registered in P1
-    const flow: FlowSpec = {
-      spec_version: '0.2.0',
-      id: 'unknown-type-flow',
-      nodes: [
-        { id: 'start', type: 'input' },
-        { id: 'pause', type: 'hitl_breakpoint' },
-        { id: 'done', type: 'output' },
-      ],
-      edges: [
-        { type: 'direct', from: 'start', to: 'pause' },
-        { type: 'direct', from: 'pause', to: 'done' },
-      ],
+    // Temporarily unregister hitl_breakpoint to simulate a valid spec node with no executor
+    const original = getExecutor('hitl_breakpoint')
+    unregisterExecutor('hitl_breakpoint')
+    try {
+      const flow: FlowSpec = {
+        spec_version: '0.2.0',
+        id: 'unknown-type-flow',
+        nodes: [
+          { id: 'start', type: 'input' },
+          { id: 'pause', type: 'hitl_breakpoint' },
+          { id: 'done', type: 'output' },
+        ],
+        edges: [
+          { type: 'direct', from: 'start', to: 'pause' },
+          { type: 'direct', from: 'pause', to: 'done' },
+        ],
+      }
+      const runtime = new FlowRuntime()
+      const ctx = createExecutionContext({ llmClient: mockLLMClient() })
+      await expect(runtime.execute(flow, {}, ctx)).rejects.toThrow(UnknownNodeTypeError)
+    } finally {
+      if (original) registerExecutor('hitl_breakpoint', original)
     }
-    const runtime = new FlowRuntime()
-    const ctx = createExecutionContext({ llmClient: mockLLMClient() })
-    await expect(runtime.execute(flow, {}, ctx)).rejects.toThrow(UnknownNodeTypeError)
   })
 
   it('AbortController.abort() stops execution; executor after abort is never called', async () => {

@@ -11,6 +11,10 @@ import { parallelJoinExecutor } from './parallel-join'
 import { memoryReadExecutor } from './memory-read'
 import { memoryWriteExecutor } from './memory-write'
 import { toolInvokeExecutor } from './tool-invoke'
+import { hitlBreakpointExecutor } from './hitl-breakpoint'
+import { agentRoleExecutor } from './agent-role'
+import { agentDebateExecutor } from './agent-debate'
+import { subgraphExecutor } from './subgraph'
 
 export interface ExecutorOutput {
   stateUpdate: Record<string, unknown>
@@ -45,6 +49,11 @@ const REGISTRY = new Map<string, ExecutorFn>([
   ['memory_read', memoryReadExecutor],
   ['memory_write', memoryWriteExecutor],
   ['tool_invoke', toolInvokeExecutor],
+  // P4 executors
+  ['hitl_breakpoint', hitlBreakpointExecutor],
+  ['agent_role', agentRoleExecutor],
+  ['agent_debate', agentDebateExecutor],
+  ['subgraph', subgraphExecutor],
 ])
 
 export function getExecutor(nodeType: string): ExecutorFn | undefined {
@@ -53,4 +62,8 @@ export function getExecutor(nodeType: string): ExecutorFn | undefined {
 
 export function registerExecutor(nodeType: string, fn: ExecutorFn): void {
   REGISTRY.set(nodeType, fn)
+}
+
+export function unregisterExecutor(nodeType: string): void {
+  REGISTRY.delete(nodeType)
 }

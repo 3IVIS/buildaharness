@@ -13,7 +13,8 @@ export async function forwardToProvider(c: Context): Promise<Response> {
   const apiKey = getApiKey(provider, env)
   if (!apiKey) return c.json({ error: 'api key not configured' }, 500) as Response
 
-  const forwardBody = { ...body, stream: true }
+  const forwardBody = { ...body }
+  if (!('stream' in body)) forwardBody.stream = true
   // Strip client-supplied Authorization before forwarding
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -28,6 +29,11 @@ export async function forwardToProvider(c: Context): Promise<Response> {
     headers,
     body: JSON.stringify(forwardBody),
   })
+
+  if (forwardBody.stream === false) {
+    const text = await upstream.text()
+    return new Response(text, { status: upstream.status, headers: { 'Content-Type': 'application/json' } })
+  }
 
   return new Response(upstream.body, {
     status: upstream.status,
