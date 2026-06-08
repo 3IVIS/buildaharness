@@ -25,17 +25,83 @@ P8 additions:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from .control_state import ControlState, resolve_control_state
 from .diagnostics import Diagnostics
+from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
-from .gates import action_gate, post_exec_gate
+from .gates import action_gate, decomposition_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .progress import cannot_make_progress
 from .recovery import StrategyState, switch_strategy
 from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
+
+
+def initialize_harness(
+    world_model: Any,
+    diagnostics: Diagnostics,
+    task_graph: Any,
+    process_concept: Any | None = None,
+    experience_store: Any | None = None,
+    strategy_state: StrategyState | None = None,
+    failure_diagnostics: Any | None = None,
+    task_class: str = "",
+    dep_graph_budget: Any | None = None,
+) -> dict[str, Any]:
+    """Initialise the harness for a new run — P-PC.4.
+
+    If process_concept is provided its steps are seeded into task_graph before
+    validate_task_graph() runs. The model-driven decomposition_gate() is never
+    bypassed (INV-PC-01). When experience_store is provided warm_start() is
+    called after concept seeding so the two signals are additive (INV-PC-05).
+
+    Returns a dict with keys:
+      valid (bool), errors (list[str]), decomposition_gate (bool),
+      process_concept_id (str | None).
+    """
+    from .task_graph import validate_task_graph
+
+    if process_concept is not None:
+        process_concept.seed_task_graph(task_graph)
+
+    errors = validate_task_graph(task_graph)
+    if errors:
+        return {
+            "valid": False,
+            "errors": errors,
+            "decomposition_gate": False,
+            "process_concept_id": getattr(process_concept, "id", None),
+        }
+
+    if experience_store is not None:
+        from .experience_store import warm_start
+
+        warm_start(
+            experience_store=experience_store,
+            strategy_state=strategy_state,
+            failure_diagnostics=failure_diagnostics,
+            task_graph=task_graph,
+            task_class=task_class or None,
+            dep_graph_budget=dep_graph_budget,
+        )
+
+    control_state = resolve_control_state(diagnostics, world_model, failure_diagnostics)
+    gate_result = decomposition_gate(
+        task_graph,
+        control_state=control_state,
+        world_model=world_model,
+        diagnostics=diagnostics,
+        failure_diagnostics=failure_diagnostics,
+    )
+
+    return {
+        "valid": True,
+        "errors": [],
+        "decomposition_gate": gate_result,
+        "process_concept_id": getattr(process_concept, "id", None),
+    }
 
 
 def select_best_action(
@@ -92,7 +158,7 @@ def _build_surface_blocker(reason: str, control_state: ControlState, task_graph:
         current_task_summary = f"{current_task_summary} | reason: {escalation_reason}"
 
     return SurfaceBlocker(
-        reason=reason,
+        reason=cast(EscalationReason, reason),
         missing_info=missing_info,
         current_task_summary=current_task_summary,
     )
@@ -117,6 +183,8 @@ def run_one_iteration(
     dep_graph_budget: Any | None = None,
     completed_task: Any | None = None,
     execution_context: Any | None = None,
+    belief_dep_graph: Any | None = None,
+    evidence_store: Any | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -130,7 +198,7 @@ def run_one_iteration(
     triggers fire after resolve_control_state() in Sub-step A when
     risk_state==BLOCKED, and after stall detection when strategy==ESCALATE.
     """
-    from .escalation import EscalationHalt, SurfaceBlocker, escalate
+    from .escalation import EscalationHalt, escalate
 
     escalation: dict[str, Any] | None = None
     channel = update_channel if update_channel is not None else NoOpUpdateChannel()
@@ -138,6 +206,7 @@ def run_one_iteration(
     # ── P8 — warm_start on first iteration ───────────────────────────────────
     if step_count == 0 and experience_store is not None:
         from .experience_store import warm_start
+
         warm_start(
             experience_store=experience_store,
             strategy_state=strategy_state,
@@ -150,6 +219,7 @@ def run_one_iteration(
     # ── P8 — update_experience_store hook on task completion ─────────────────
     if completed_task is not None and experience_store is not None:
         from .experience_store import update_experience_store
+
         update_experience_store(
             completed_task=completed_task,
             strategy_state=strategy_state,
@@ -177,9 +247,7 @@ def run_one_iteration(
         if should_compress(world_model, memory_state):
             compress_memory(world_model, memory_state)
             increment_generation_id(world_model)
-            memory_state.journal.append(
-                {"event": "compression", "step": step_count, "outcome": "pass"}
-            )
+            memory_state.journal.append({"event": "compression", "step": step_count, "outcome": "pass"})
 
         # P6.6 — budget check
         budget_status = check_max_steps(step_count, memory_state, diagnostics)
@@ -205,9 +273,7 @@ def run_one_iteration(
                 "step_count": step_count,
             }
         if budget_status == "warn":
-            memory_state.journal.append(
-                {"event": "budget_warn", "step": step_count, "outcome": "pass"}
-            )
+            memory_state.journal.append({"event": "budget_warn", "step": step_count, "outcome": "pass"})
 
     # P6.1/P6.2 — stall detection and strategy switch
     if strategy_state is not None and failure_diagnostics is not None and task_graph is not None:
@@ -219,9 +285,7 @@ def run_one_iteration(
             if strategy_state.current_strategy == "ESCALATE":
                 if harness_run_state is not None:
                     ctrl_stub = ControlState()
-                    blocker = _build_surface_blocker(
-                        "cannot_make_progress", ctrl_stub, task_graph
-                    )
+                    blocker = _build_surface_blocker("cannot_make_progress", ctrl_stub, task_graph)
                     try:
                         escalate(blocker, harness_run_state, run_id)
                     except EscalationHalt as exc:
@@ -243,9 +307,7 @@ def run_one_iteration(
                     pass
                 if current_task is not None:
                     scope: ReplanScope = assess_replan_scope(contradiction, task_graph)
-                    task_graph = apply_replan(
-                        scope, contradiction, current_task, task_graph, world_model, caller_state
-                    )
+                    task_graph = apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state)
                     increment_generation_id(world_model)
 
     # ── Sub-step A ────────────────────────────────────────────────────────────
@@ -304,13 +366,52 @@ def run_one_iteration(
 
     # P6.6 — journal retention at end of step
     if memory_state is not None:
-        memory_state.journal = apply_retention_policy(
-            memory_state.journal, memory_state.journal_retention_policy
-        )
+        memory_state.journal = apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)
 
     # Track risk state history for oscillation proxy
     if strategy_state is not None:
         strategy_state.risk_state_history.append(control_state_b.risk_state)
+
+    # ── P9 — reviewer pass after post_exec_gate ───────────────────────────────
+    review_result: Any = None
+    tasks_reopened = False
+
+    if belief_dep_graph is not None and output_contract is not None:
+        from .reviewer import reviewer_pass
+
+        sc_list = getattr(caller_state, "success_criteria", []) if caller_state else []
+        review_result = reviewer_pass(
+            world_model=world_model,
+            task_graph=task_graph,
+            success_criteria=sc_list,
+            output_contract=output_contract,
+            hypothesis_set=hypothesis_set,
+            evidence_store=evidence_store,
+            caller_state=caller_state,
+            belief_dep_graph=belief_dep_graph,
+            failure_history=failure_diagnostics,
+        )
+        tasks_reopened = review_result.tasks_reopened
+
+        # If no tasks were reopened, run the final output contract gate
+        if not tasks_reopened and harness_run_state is not None:
+            from .output_contract import completion_check_final
+
+            result_payload = getattr(gate_b_result, "payload", None) or result
+            try:
+                completion_check_final(
+                    result=result_payload,
+                    output_contract=output_contract,
+                    caller_state=caller_state,
+                    harness_run_state=harness_run_state,
+                )
+            except EscalationHalt as exc:
+                return {
+                    "escalated": True,
+                    "escalation": exc.blocker.to_dict(),
+                    "step_count": step_count,
+                    "review_result": review_result.to_dict() if review_result else None,
+                }
 
     return {
         "control_state_a": control_state,
@@ -321,4 +422,6 @@ def run_one_iteration(
         "strategy_state": strategy_state,
         "task_graph": task_graph,
         "escalation": escalation,
+        "review_result": review_result.to_dict() if review_result else None,
+        "tasks_reopened": tasks_reopened,
     }

@@ -40,6 +40,9 @@ class Task:
     # 0 = coarsest (module), 1 = function, 2 = statement-level
     abstraction_level: int = 0
     block_reason: str | None = None
+    # Belief IDs whose validity was required to conclude this task COMPLETE.
+    # Populated by the execution layer; consumed by the P9 reviewer drain.
+    completed_evidence: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -52,6 +55,7 @@ class Task:
             "parallel_write_domains": list(self.parallel_write_domains),
             "abstraction_level": self.abstraction_level,
             "block_reason": self.block_reason,
+            "completed_evidence": list(self.completed_evidence),
         }
 
     @classmethod
@@ -66,6 +70,7 @@ class Task:
             parallel_write_domains=d.get("parallel_write_domains", []),
             abstraction_level=d.get("abstraction_level", 0),
             block_reason=d.get("block_reason"),
+            completed_evidence=d.get("completed_evidence", []),
         )
 
 

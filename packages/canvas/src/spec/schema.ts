@@ -372,6 +372,18 @@ export type NodeType = Node['type']
 // Fix #25: AnyNode is imported by validation.ts — export it as an alias for Node.
 export type AnyNode = Node
 
+// Phase 10: harness node type identifiers for BaseNode palette/icon registration.
+// These are type-only definitions — the canvas package schema stays at v0.2.0;
+// harness node Zod schemas live in src/spec/schema.ts (the main-app copy).
+export type HarnessNodeType =
+  | 'world_model' | 'hypothesis_set'
+  | 'gather_evidence' | 'apply_tool_reliability' | 'update_world_model'
+  | 'control_state' | 'task_graph_node' | 'verification_gate'
+  | 'recovery_node' | 'evidence_store_node' | 'experience_store_node'
+  | 'reviewer_pass'
+
+export type AnyNodeType = NodeType | HarnessNodeType
+
 // ---------------------------------------------------------------------------
 // Edges
 // ---------------------------------------------------------------------------
@@ -573,19 +585,33 @@ export const ADAPTER_LABELS: Record<AdapterName, string> = {
 // Fix #56: microsoft_agent_framework has no adapter implementation.
 // All node types marked 'missing' until the adapter is built.
 // The enum value is kept for forward-compatibility with saved specs.
-export const NODE_SUPPORT_MATRIX: Record<NodeType, Record<AdapterName, SupportLevel>> = {
-  input:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  output:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  llm_call:         { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  tool_invoke:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  condition:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  parallel_fork:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  parallel_join:    { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  hitl_breakpoint:  { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
-  memory_read:      { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  memory_write:     { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  subgraph:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
-  transform:        { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
-  agent_role:       { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'missing' },
-  agent_debate:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+// Harness nodes are 'partial' across all adapters until P11 E2E integration completes.
+export const NODE_SUPPORT_MATRIX: Record<AnyNodeType, Record<AdapterName, SupportLevel>> = {
+  input:                   { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  output:                  { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  llm_call:                { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  tool_invoke:             { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  condition:               { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_fork:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  parallel_join:           { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  hitl_breakpoint:         { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_read:             { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  memory_write:            { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  subgraph:                { langgraph: 'full', crewai: 'partial', mastra: 'full', microsoft_agent_framework: 'missing' },
+  transform:               { langgraph: 'full', crewai: 'full', mastra: 'full', microsoft_agent_framework: 'missing' },
+  agent_role:              { langgraph: 'partial', crewai: 'full', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  agent_debate:            { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  // Harness nodes — P10 canvas UI; full adapter wiring deferred to P11.
+  world_model:             { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  hypothesis_set:          { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  gather_evidence:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  apply_tool_reliability:  { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  update_world_model:      { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  control_state:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  task_graph_node:         { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  verification_gate:       { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  recovery_node:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  evidence_store_node:     { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  experience_store_node:   { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
+  reviewer_pass:           { langgraph: 'partial', crewai: 'partial', mastra: 'partial', microsoft_agent_framework: 'missing' },
 }

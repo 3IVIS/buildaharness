@@ -14,7 +14,15 @@
     "typecheck": "tsc --noEmit",
     "build:canvas": "npm run build --workspace=packages/canvas",
     "test:canvas": "npm test --workspace=packages/canvas",
-    "typecheck:canvas": "npm run typecheck --workspace=packages/canvas"
+    "typecheck:canvas": "npm run typecheck --workspace=packages/canvas",
+    "build:runtime": "npm run build --workspace=packages/runtime",
+    "build:react": "npm run build --workspace=packages/react",
+    "build:proxy": "echo 'proxy uses wrangler deploy, not vite build'",
+    "build:harness": "npm run build --workspace=packages/harness",
+    "test:runtime": "npm test --workspace=packages/runtime",
+    "test:react": "npm test --workspace=packages/react",
+    "test:harness": "npm test --workspace=packages/harness",
+    "deploy:proxy": "npm run deploy --workspace=packages/proxy"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",

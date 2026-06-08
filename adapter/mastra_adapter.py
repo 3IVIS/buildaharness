@@ -217,6 +217,55 @@ def state_schema_to_zod(schema: dict | None) -> str:
     return "\n".join(lines)
 
 
+# ─── Harness TypeScript step generation ──────────────────────────────────────
+
+_HARNESS_TS_NODE_DESCRIPTIONS = {
+    "gather_evidence": "collect tool output into the harness evidence store",
+    "apply_tool_reliability": "cap evidence reliability by tool envelope",
+    "update_world_model": "integrate evidence and recompute belief health",
+    "world_model": "snapshot current world model for canvas display",
+    "hypothesis_set": "generate and score hypotheses from evidence",
+    "control_state": "resolve control state from diagnostics",
+    "task_graph_node": "validate task graph and select next task",
+    "verification_gate": "run multi-layer verification on the result",
+    "recovery_node": "initialise recovery strategy state",
+    "evidence_store_node": "initialise evidence store and tool manifest",
+    "experience_store_node": "warm-start from prior experience",
+    "reviewer_pass": "adversarial reviewer pass and propagation queue drain",
+    "process_concept": "seed task graph from process concept",
+}
+
+_HARNESS_TS_NODE_TYPES = set(_HARNESS_TS_NODE_DESCRIPTIONS.keys())
+
+
+def gen_harness_ts_step(node: dict) -> str:
+    """Generate a TypeScript createStep stub for a harness node type."""
+    ntype = node["type"]
+    nid = node["id"]
+    vid = safe_id(nid)
+    desc = _HARNESS_TS_NODE_DESCRIPTIONS.get(ntype, ntype)
+
+    return f"""\
+// Harness node: {ntype} — {desc}
+// Calls the itsharness Python harness API to execute this node's logic.
+const {vid}Step = createStep({{
+  id: {json.dumps(nid)},
+  description: {json.dumps("Harness: " + desc)},
+  inputSchema: z.object({{ tool_output: z.string().optional(), run_id: z.string().optional() }}),
+  outputSchema: z.object({{ harness_updated: z.boolean() }}),
+  execute: async ({{ context }}) => {{
+    const runId = context.getStepResult('trigger')?.run_id ?? 'run-1';
+    const resp = await fetch(
+      `${{process.env.HARNESS_API_URL ?? 'http://localhost:8000'}}/api/harness/${{runId}}/node/{ntype}`,
+      {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ tool_output: context.getStepResult('trigger')?.tool_output ?? '' }}) }}
+    );
+    return {{ harness_updated: resp.ok }};
+  }},
+}})
+"""
+
+
 # ─── Step generators ──────────────────────────────────────────────────────────
 
 
@@ -722,6 +771,10 @@ const {vid}Step = createStep({{
             "z.object({ result: z.unknown() })",
             body,
         )
+
+    # ── harness node types ────────────────────────────────────────────────────
+    if ntype in _HARNESS_TS_NODE_TYPES:
+        return gen_harness_ts_step(node)
 
     # ── parallel_join (no-op step — results arrive via .parallel()) ───────────
     if ntype == "parallel_join":

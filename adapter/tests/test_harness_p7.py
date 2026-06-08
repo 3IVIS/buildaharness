@@ -15,17 +15,16 @@ Run all: pytest adapter/tests/test_harness_p7.py -v
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.caller_state import CallerState, inject_clarification, update_success_criteria
+from harness.caller_state import CallerState, inject_clarification
 from harness.constraint_propagation import (
     apply_constraint_change_propagation,
-    revalidate_task_graph,
 )
-from harness.control_state import ControlState
 from harness.diagnostics import Diagnostics
 from harness.escalation import EscalationHalt, SurfaceBlocker, escalate
 from harness.external_updates import (
@@ -36,10 +35,8 @@ from harness.external_updates import (
 )
 from harness.memory import MemoryState
 from harness.output_contract import OutputContract
-from harness.recovery import StrategyState
-from harness.task_graph import Task, TaskGraph
-from harness.world_model import Belief, WorldModel
-
+from harness.task_graph import Task, TaskGraph, TaskStatus
+from harness.world_model import WorldModel
 
 # ─── Helper factories ────────────────────────────────────────────────────────
 
@@ -63,7 +60,7 @@ def _make_task_graph(*tasks: Task) -> TaskGraph:
 
 
 def _make_task(id_: str, description: str, status: str = "PENDING") -> Task:
-    return Task(id=id_, description=description, status=status)
+    return Task(id=id_, description=description, status=cast(TaskStatus, status))
 
 
 class _MockChannel(UpdateChannel):
@@ -108,9 +105,7 @@ def test_T01_noop_channel_is_fast_and_nonmutating():
     assert result is False, "NoOpUpdateChannel must return False"
     assert elapsed_ms < 10.0, f"poll took {elapsed_ms:.2f}ms — must be under 10ms"
     assert wm.generation_id == initial_gen_id, "generation_id must not change on no-update"
-    assert len(cs.clarification_history) == initial_history_len, (
-        "clarification_history must not grow on no-update"
-    )
+    assert len(cs.clarification_history) == initial_history_len, "clarification_history must not grow on no-update"
 
 
 def test_T02_constraint_update_propagates():
@@ -254,8 +249,7 @@ def test_T06_conformance_both_paths_produce_identical_state():
     statuses_a = {t.id: (t.status, t.block_reason) for t in tg_a.tasks}
     statuses_b = {t.id: (t.status, t.block_reason) for t in tg_b.tasks}
     assert statuses_a == statuses_b, (
-        f"Both propagation paths must produce identical task_graph state.\n"
-        f"Path A: {statuses_a}\nPath B: {statuses_b}"
+        f"Both propagation paths must produce identical task_graph state.\nPath A: {statuses_a}\nPath B: {statuses_b}"
     )
 
     # Both output_contracts must have identical caller_specific_constraints
@@ -297,9 +291,9 @@ def test_T07_blocked_risk_state_triggers_escalation():
     assert state.pending_escalation.reason == "blocked_state"
     assert exc_info.value.blocker.reason == "blocked_state"
     # Journal entry must be present
-    assert any(
-        e.get("action_class") == "escalation" for e in state.memory_state.journal
-    ), "escalation journal entry must be recorded"
+    assert any(e.get("action_class") == "escalation" for e in state.memory_state.journal), (
+        "escalation journal entry must be recorded"
+    )
 
 
 def test_T08_cannot_make_progress_triggers_escalation():
@@ -339,14 +333,20 @@ def test_T09_surface_blocker_contains_only_human_readable_fields():
 
     # Must NOT contain raw internal state
     forbidden_keys = {
-        "world_model", "hypothesis_set", "evidence_store", "beliefs",
-        "contradictions", "observations", "hypotheses", "evidence",
-        "generation_id", "block_mask", "diagnostics",
+        "world_model",
+        "hypothesis_set",
+        "evidence_store",
+        "beliefs",
+        "contradictions",
+        "observations",
+        "hypotheses",
+        "evidence",
+        "generation_id",
+        "block_mask",
+        "diagnostics",
     }
     present_forbidden = forbidden_keys & set(blocker_dict.keys())
-    assert not present_forbidden, (
-        f"SurfaceBlocker must not contain internal state keys: {present_forbidden}"
-    )
+    assert not present_forbidden, f"SurfaceBlocker must not contain internal state keys: {present_forbidden}"
 
     # Verify round-trip serialisation
     restored = SurfaceBlocker.from_dict(blocker_dict)

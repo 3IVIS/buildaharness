@@ -1,0 +1,78 @@
+{
+  "schema_version": "1",
+  "id": "refactor_module",
+  "name": "Refactor Module",
+  "description": "Canonical decomposition for refactoring an existing module. Guides the model through understanding current behaviour, planning the refactor, implementing changes incrementally, and verifying behavioural equivalence.",
+  "success_criteria": [
+    "Existing test suite passes without modification",
+    "Public interface is preserved or migration path is documented",
+    "Internal complexity is measurably reduced"
+  ],
+  "steps": [
+    {
+      "id": "understand_current_behaviour",
+      "description": "Read the module and its tests to understand current behaviour, public contracts, and known edge cases before making any changes.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Public interface documented",
+        "Test coverage understood"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "identify_refactor_targets",
+      "description": "Identify specific code smells, duplication, or complexity hotspots that the refactor should address. Prioritise by impact.",
+      "depends_on": ["understand_current_behaviour"],
+      "risk_level": "LOW",
+      "abstraction_level": "subgoal",
+      "expected_tools": ["read_file", "search_code"],
+      "success_criteria": [
+        "Refactor targets listed with rationale",
+        "Targets prioritised by impact vs risk"
+      ],
+      "strategy_hint": "BROADER_SEARCH"
+    },
+    {
+      "id": "plan_changes",
+      "description": "Design the refactored structure without writing code. Confirm that the new structure preserves all public interfaces and that existing tests will still pass.",
+      "depends_on": ["identify_refactor_targets"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": "subgoal",
+      "expected_tools": ["read_file"],
+      "success_criteria": [
+        "New structure sketched",
+        "Interface preservation confirmed"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    },
+    {
+      "id": "apply_refactor",
+      "description": "Apply the planned refactor incrementally. Make one logical change at a time and verify tests pass after each change.",
+      "depends_on": ["plan_changes"],
+      "risk_level": "HIGH",
+      "abstraction_level": "leaf",
+      "expected_tools": ["edit_file", "write_file", "run_tests"],
+      "success_criteria": [
+        "Each incremental change keeps the test suite green",
+        "No behaviour-changing side effects"
+      ],
+      "strategy_hint": "MINIMAL_FIX"
+    },
+    {
+      "id": "verify_equivalence",
+      "description": "Run the full test suite after all refactor changes are applied. Confirm no regressions and that the public interface is unchanged.",
+      "depends_on": ["apply_refactor"],
+      "risk_level": "LOW",
+      "abstraction_level": "module",
+      "expected_tools": ["run_tests"],
+      "success_criteria": [
+        "Full test suite passes",
+        "No public interface changes without documentation"
+      ],
+      "strategy_hint": "DIRECT_EDIT"
+    }
+  ]
+}

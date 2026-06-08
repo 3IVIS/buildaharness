@@ -1,0 +1,23 @@
+{
+  "name": "@itsharness/harness",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "vite build --config vite.config.lib.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.4",
+    "vitest": "^1.6.0",
+    "vite-plugin-dts": "^4.5.4"
+  }
+}
