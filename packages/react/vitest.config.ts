@@ -1,0 +1,15 @@
+import { defineConfig } from 'vitest/config'
+import { resolve } from 'path'
+
+export default defineConfig({
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
+  resolve: {
+    alias: {
+      '@itsharness/runtime': resolve(__dirname, '../runtime/src/index.ts'),
+      '@itsharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
+    },
+  },
+})
