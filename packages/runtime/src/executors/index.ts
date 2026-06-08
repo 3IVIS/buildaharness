@@ -6,6 +6,8 @@ import { llmCallExecutor } from './llm-call'
 import { transformExecutor } from './transform'
 import { conditionExecutor } from './condition'
 import { outputExecutor } from './output'
+import { parallelForkExecutor } from './parallel-fork'
+import { parallelJoinExecutor } from './parallel-join'
 
 export interface ExecutorOutput {
   stateUpdate: Record<string, unknown>
@@ -34,6 +36,9 @@ const REGISTRY = new Map<string, ExecutorFn>([
   ['transform', transformExecutor],
   ['condition', conditionExecutor],
   ['output', outputExecutor],
+  // P2 parallel executors
+  ['parallel_fork', parallelForkExecutor],
+  ['parallel_join', parallelJoinExecutor],
   // P3 stubs — replaced by full implementations in Phase 3
   ['memory_read', _stubExecutor],
   ['memory_write', _stubExecutor],

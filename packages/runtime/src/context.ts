@@ -1,4 +1,5 @@
 import type { ILLMClient } from './llm-client'
+import type { FlowState } from './state'
 import { EventBus } from './events'
 import { UnknownToolError } from './errors'
 
@@ -26,6 +27,18 @@ export class ToolRegistry {
   }
 }
 
+export interface RetryConfig {
+  maxRetries: number
+  retryOn: string[]
+  delayBaseMs: number
+}
+
+export const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 2,
+  retryOn: ['network', '429'],
+  delayBaseMs: 100,
+}
+
 export type FlowFunction = (state: Record<string, unknown>) => Record<string, unknown>
 export type FunctionRegistry = Map<string, FlowFunction>
 
@@ -44,6 +57,8 @@ export interface ExecutionContext {
   readonly signal: AbortSignal
   readonly functions: FunctionRegistry
   readonly hitlResolvers: Map<string, (payload: unknown) => void>
+  readonly branchResults: Map<string, FlowState[]>
+  readonly retryConfig: RetryConfig
 }
 
 export function createExecutionContext(opts: {
@@ -53,8 +68,13 @@ export function createExecutionContext(opts: {
   eventBus?: EventBus
   abortController?: AbortController
   functions?: FunctionRegistry
+  retryConfig?: Partial<RetryConfig>
 }): ExecutionContext & { abortController: AbortController } {
   const abortController = opts.abortController ?? new AbortController()
+  const retryConfig: RetryConfig = {
+    ...DEFAULT_RETRY_CONFIG,
+    ...opts.retryConfig,
+  }
   return {
     llmClient: opts.llmClient,
     toolRegistry: opts.toolRegistry ?? new ToolRegistry(),
@@ -63,6 +83,8 @@ export function createExecutionContext(opts: {
     signal: abortController.signal,
     functions: opts.functions ?? new Map(),
     hitlResolvers: new Map(),
+    branchResults: new Map(),
+    retryConfig,
     abortController,
   }
 }
