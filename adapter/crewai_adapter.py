@@ -42,6 +42,14 @@ from adapter_logger import (
 _log = get_adapter_logger("crewai")
 
 ADAPTER_VERSION = "0.2.0"
+
+try:
+    from harness.node_compilers import HARNESS_NODE_COMPILERS as _HARNESS_NODE_COMPILERS
+
+    _HARNESS_AVAILABLE = True
+except (ImportError, SyntaxError):  # pragma: no cover
+    _HARNESS_NODE_COMPILERS = {}
+    _HARNESS_AVAILABLE = False
 CREWAI_MIN = ">=1.0.0"
 
 # ADR-001 RFC-2: memory_write.tier → CrewAI 1.x memory mapping.
@@ -177,6 +185,50 @@ def infer_context_from_templates(node: dict, output_key_to_node: dict[str, str])
 
 
 # ─── Section generators ───────────────────────────────────────────────────────
+
+
+def gen_harness_preamble() -> str:
+    """Emit HarnessRunState initialisation into the generated flow code."""
+    return dedent0("""\
+        # ─── Harness state ───────────────────────────────────────────────────────────
+        import sys as _sys, pathlib as _pl
+        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        from harness.state_store import HarnessRunState as _HarnessRunState
+        from harness.world_model import WorldModel as _WorldModel
+        from harness.diagnostics import Diagnostics as _Diagnostics
+        from harness.task_graph import TaskGraph as _TaskGraph
+        from harness.hypothesis import HypothesisSet as _HypothesisSet
+        from harness.evidence import EvidenceStore as _EvidenceStore
+        from harness.recovery import StrategyState as _StrategyState
+        from harness.memory import MemoryState as _MemoryState
+        from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics
+
+        _harness_state = _HarnessRunState(
+            run_id=os.environ.get("HARNESS_RUN_ID", "run-1"),
+            world_model=_WorldModel(),
+            diagnostics=_Diagnostics(),
+            task_graph=_TaskGraph(),
+            hypothesis_set=_HypothesisSet(),
+            evidence_store=_EvidenceStore(),
+            strategy_state=_StrategyState(),
+            memory_state=_MemoryState(),
+            failure_diagnostics=_FailureDiagnostics(),
+        )
+
+        try:
+            from harness.process_tools import list_processes as _list_processes
+            from harness.process_tools import load_process as _load_process
+            from harness.process_tools import get_current_step as _get_current_step
+            from harness.process_tools import complete_step as _complete_step
+            from harness.process_registry import DEFAULT_REGISTRY as _concept_registry
+            def list_processes(): return _list_processes(_concept_registry)
+            def load_process(concept_id): return _load_process(concept_id, _harness_state.task_graph, _concept_registry)
+            def get_current_step(): return _get_current_step(_harness_state.task_graph)
+            def complete_step(step_id): return _complete_step(step_id, _harness_state.task_graph)
+        except ImportError:
+            pass
+
+    """)
 
 
 def gen_header(spec: dict) -> str:
@@ -402,6 +454,28 @@ def gen_agents(spec: dict) -> str:
     return "\n".join(lines)
 
 
+def _gen_harness_task_description(node: dict) -> str:
+    """Generate a human-readable task description for a harness node type."""
+    ntype = node["type"]
+    nid = node["id"]
+    descriptions = {
+        "gather_evidence": f"Execute gather_evidence harness node '{nid}': collect tool output into the evidence store.",  # noqa: E501
+        "apply_tool_reliability": f"Execute apply_tool_reliability harness node '{nid}': cap evidence reliability by tool envelope.",  # noqa: E501
+        "update_world_model": f"Execute update_world_model harness node '{nid}': integrate evidence and recompute belief health.",  # noqa: E501
+        "world_model": f"Execute world_model harness node '{nid}': snapshot current world model for canvas display.",
+        "hypothesis_set": f"Execute hypothesis_set harness node '{nid}': generate and score hypotheses from evidence.",
+        "control_state": f"Execute control_state harness node '{nid}': resolve control state from diagnostics.",
+        "task_graph_node": f"Execute task_graph_node harness node '{nid}': validate task graph and select next task.",
+        "verification_gate": f"Execute verification_gate harness node '{nid}': run multi-layer verification on the result.",  # noqa: E501
+        "recovery_node": f"Execute recovery_node harness node '{nid}': initialise recovery strategy state.",
+        "evidence_store_node": f"Execute evidence_store_node harness node '{nid}': initialise evidence store and tool manifest.",  # noqa: E501
+        "experience_store_node": f"Execute experience_store_node harness node '{nid}': warm-start from prior experience.",  # noqa: E501
+        "reviewer_pass": f"Execute reviewer_pass harness node '{nid}': adversarial reviewer pass and propagation queue drain.",  # noqa: E501
+        "process_concept": f"Execute process_concept harness node '{nid}': seed task graph from process concept.",
+    }
+    return descriptions.get(ntype, f"Execute harness node '{nid}' (type={ntype!r}).")
+
+
 def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
     agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
     parallel_tgts = find_parallel_targets(spec)
@@ -431,6 +505,27 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             tgts = node.get("targets", [])
             lines.append(f"# parallel_fork '{nid}' — downstream tasks have async_execution=True")
             lines.append(f"# targets: {tgts}")
+            lines.append("")
+            continue
+
+        # ── harness node types ───────────────────────────────────────────────
+        if _HARNESS_AVAILABLE and ntype in _HARNESS_NODE_COMPILERS:
+            desc = _gen_harness_task_description(node)
+            expected = f"Harness {ntype} node executed; state updated in _harness_state."
+            # Build merged_ctx inline for harness nodes (emit_task not yet defined here)
+            inferred_ctx_h = infer_context_from_templates(node, output_key_to_node)
+            merged_ctx_h = list(dict.fromkeys(ctx + [c for c in inferred_ctx_h if c not in ctx]))
+            lines.append(f"task_{vid} = Task(")
+            lines.append(f"    description={desc!r},")
+            lines.append(f"    expected_output={expected!r},")
+            lines.append("    agent=_executor,")
+            lines.append("    # harness node — executed via Python harness middleware")
+            if is_parallel:
+                lines.append("    async_execution=True,  # parallel_fork branch")
+            if merged_ctx_h:
+                ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in merged_ctx_h)
+                lines.append(f"    context=[{ctx_vars}],")
+            lines.append(")")
             lines.append("")
             continue
 
@@ -774,6 +869,7 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
 
         log_section(_log, "topo_sort", flow_id=flow_id)
         sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
+        harness_enabled = bool((spec.get("harness_meta") or {}).get("enabled"))
 
         log_section(_log, "header", flow_id=flow_id)
         _header = gen_header(spec)
@@ -786,7 +882,9 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
         log_section(_log, "crew_and_kickoff", flow_id=flow_id)
         _crew = gen_crew_and_kickoff(spec, sorted_nodes)
 
-        code = "\n\n".join(filter(None, [_header, _tools, _agents, _tasks, _crew]))
+        code = "\n\n".join(
+            filter(None, [_header, gen_harness_preamble() if harness_enabled else "", _tools, _agents, _tasks, _crew])
+        )
         log_compile_end(_log, start_ts, code, warnings, spec)
         return code, warnings
 

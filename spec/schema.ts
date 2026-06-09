@@ -464,8 +464,27 @@ const HarnessNodeBase = NodeBase.extend({
   harness_config: z.record(z.unknown()).optional(),
 })
 
-export const WorldModelNode = HarnessNodeBase.extend({ type: z.literal('world_model') })
-export const HypothesisSetNode = HarnessNodeBase.extend({ type: z.literal('hypothesis_set') })
+// Phase 10: full harness_config shapes for all canvas node types
+
+const WorldModelNodeConfig = z.object({
+  display_mode: z.enum(['summary', 'expanded']).default('summary').optional(),
+  show_observations: z.boolean().default(false).optional(),
+  show_contradictions: z.boolean().default(true).optional(),
+  max_beliefs_shown: z.number().int().min(1).default(10).optional(),
+})
+export const WorldModelNode = NodeBase.extend({
+  type: z.literal('world_model'),
+  harness_config: WorldModelNodeConfig.optional(),
+})
+
+const HypothesisSetNodeConfig = z.object({
+  show_eliminated: z.boolean().default(false).optional(),
+  max_hypotheses_shown: z.number().int().min(1).default(5).optional(),
+})
+export const HypothesisSetNode = NodeBase.extend({
+  type: z.literal('hypothesis_set'),
+  harness_config: HypothesisSetNodeConfig.optional(),
+})
 
 const GatherEvidenceConfig = z.object({
   source_tool: z.string().min(1),
@@ -484,21 +503,88 @@ export const ApplyToolReliabilityNode = NodeBase.extend({
   type: z.literal('apply_tool_reliability'),
   harness_config: ApplyToolReliabilityConfig.optional(),
 })
+
 const UpdateWorldModelConfig = z.object({
   integration_mode: z.enum(['observations_only', 'infer_beliefs']).default('observations_only'),
   reliability_threshold: z.enum(['HIGH', 'MEDIUM', 'LOW']).default('HIGH'),
 })
-export const UpdateWorldModelNode = HarnessNodeBase.extend({
+export const UpdateWorldModelNode = NodeBase.extend({
   type: z.literal('update_world_model'),
   harness_config: UpdateWorldModelConfig.optional(),
 })
-export const ControlStateNode = HarnessNodeBase.extend({ type: z.literal('control_state') })
-export const TaskGraphNode = HarnessNodeBase.extend({ type: z.literal('task_graph_node') })
-export const VerificationGateNode = HarnessNodeBase.extend({ type: z.literal('verification_gate') })
-export const RecoveryNode = HarnessNodeBase.extend({ type: z.literal('recovery_node') })
-export const EvidenceStoreNode = HarnessNodeBase.extend({ type: z.literal('evidence_store_node') })
-export const ExperienceStoreNode = HarnessNodeBase.extend({ type: z.literal('experience_store_node') })
-export const ReviewerPassNode = HarnessNodeBase.extend({ type: z.literal('reviewer_pass') })
+
+const ControlStateNodeConfig = z.object({
+  show_block_mask: z.boolean().default(true).optional(),
+  show_notes: z.boolean().default(false).optional(),
+})
+export const ControlStateNode = NodeBase.extend({
+  type: z.literal('control_state'),
+  harness_config: ControlStateNodeConfig.optional(),
+})
+
+const TaskGraphNodeConfig = z.object({
+  show_write_domains: z.boolean().default(false).optional(),
+  show_abstraction_level: z.boolean().default(false).optional(),
+  max_tasks_shown: z.number().int().min(1).default(20).optional(),
+})
+export const TaskGraphNode = NodeBase.extend({
+  type: z.literal('task_graph_node'),
+  harness_config: TaskGraphNodeConfig.optional(),
+})
+
+const VERIFICATION_LAYER_NAMES = [
+  'syntax', 'unit', 'integration', 'consistency', 'requirements',
+  'assumptions', 'goal_correctness', 'evidence_sufficiency', 'output_contract_partial',
+] as const
+const VerificationGateNodeConfig = z.object({
+  enabled_layers: z.array(z.enum(VERIFICATION_LAYER_NAMES)).optional(),
+  require_adversarial_on_high_risk: z.boolean().default(true).optional(),
+})
+export const VerificationGateNode = NodeBase.extend({
+  type: z.literal('verification_gate'),
+  harness_config: VerificationGateNodeConfig.optional(),
+})
+
+const RECOVERY_STRATEGY_NAMES = [
+  'DIRECT_EDIT', 'TRACE_EXEC', 'BROADER_SEARCH', 'REIMPLEMENT', 'MINIMAL_FIX', 'ESCALATE',
+] as const
+const RecoveryNodeConfig = z.object({
+  strategy_order_override: z.array(z.enum(RECOVERY_STRATEGY_NAMES)).optional(),
+  show_pattern_confidence: z.boolean().default(true).optional(),
+})
+export const RecoveryNode = NodeBase.extend({
+  type: z.literal('recovery_node'),
+  harness_config: RecoveryNodeConfig.optional(),
+})
+
+const EvidenceStoreNodeConfig = z.object({
+  show_envelopes: z.boolean().default(true).optional(),
+  show_manifest: z.boolean().default(true).optional(),
+  max_evidence_shown: z.number().int().min(1).default(20).optional(),
+})
+export const EvidenceStoreNode = NodeBase.extend({
+  type: z.literal('evidence_store_node'),
+  harness_config: EvidenceStoreNodeConfig.optional(),
+})
+
+const ExperienceStoreNodeConfig = z.object({
+  show_weights_heatmap: z.boolean().default(true).optional(),
+  show_run_count: z.boolean().default(true).optional(),
+})
+export const ExperienceStoreNode = NodeBase.extend({
+  type: z.literal('experience_store_node'),
+  harness_config: ExperienceStoreNodeConfig.optional(),
+})
+
+const ReviewerPassNodeConfig = z.object({
+  show_adversarial_prior: z.boolean().default(true).optional(),
+  show_findings_detail: z.boolean().default(true).optional(),
+  show_reopened_tasks: z.boolean().default(true).optional(),
+})
+export const ReviewerPassNode = NodeBase.extend({
+  type: z.literal('reviewer_pass'),
+  harness_config: ReviewerPassNodeConfig.optional(),
+})
 
 export type WorldModelNode = z.infer<typeof WorldModelNode>
 export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
@@ -512,6 +598,16 @@ export type RecoveryNode = z.infer<typeof RecoveryNode>
 export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
 export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
 export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+
+export type WorldModelNodeConfig = z.infer<typeof WorldModelNodeConfig>
+export type HypothesisSetNodeConfig = z.infer<typeof HypothesisSetNodeConfig>
+export type ControlStateNodeConfig = z.infer<typeof ControlStateNodeConfig>
+export type TaskGraphNodeConfig = z.infer<typeof TaskGraphNodeConfig>
+export type VerificationGateNodeConfig = z.infer<typeof VerificationGateNodeConfig>
+export type RecoveryNodeConfig = z.infer<typeof RecoveryNodeConfig>
+export type EvidenceStoreNodeConfig = z.infer<typeof EvidenceStoreNodeConfig>
+export type ExperienceStoreNodeConfig = z.infer<typeof ExperienceStoreNodeConfig>
+export type ReviewerPassNodeConfig = z.infer<typeof ReviewerPassNodeConfig>
 
 // ---------------------------------------------------------------------------
 // v0.2 Node discriminated union (14 types — unchanged)
@@ -746,9 +842,11 @@ export type FlowConfig = z.infer<typeof FlowConfig>
 // ---------------------------------------------------------------------------
 
 export const HarnessMeta = z.object({
-  harness_version: z.string().optional(),
-  phase:           z.string().optional(),
-  enabled:         z.boolean().default(false),
+  harness_version:    z.string().optional(),
+  phase:              z.string().optional(),
+  enabled:            z.boolean().default(false),
+  process_concept_id: z.string().optional()
+    .describe('ID of the process concept that seeds the task graph for this run. Must reference a registered concept. When absent the model performs its own decomposition.'),
 }).describe(
   'Marks a flow as harness-capable. When enabled is false (default), the adapter rejects harness node types. ' +
   'Set enabled: true only on flows that have been migrated and use harness nodes.'

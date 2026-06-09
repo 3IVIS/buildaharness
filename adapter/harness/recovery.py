@@ -97,6 +97,7 @@ def switch_strategy(
     """
     if experience_store is not None and failure_class and getattr(experience_store, "available", False):
         from .experience_store import build_strategy_ordering
+
         ordering = build_strategy_ordering(failure_class, experience_store)
         try:
             idx = ordering.index(strategy_state.current_strategy)
@@ -110,7 +111,7 @@ def switch_strategy(
     return StrategyState(
         current_strategy=next_strategy,
         switch_count=strategy_state.switch_count + 1,
-        switch_triggers=list(strategy_state.switch_triggers) + [reason],
+        switch_triggers=[*list(strategy_state.switch_triggers), reason],
         prior_strategy_weights=dict(strategy_state.prior_strategy_weights),
         completion_history=list(strategy_state.completion_history),
         risk_state_history=list(strategy_state.risk_state_history),
@@ -148,9 +149,7 @@ def get_strategy_with_experience(
         return get_next_strategy(strategy_state)
 
     try:
-        weights_by_class: dict[str, dict[str, float]] = getattr(
-            experience_store, "strategy_weights", {}
-        )
+        weights_by_class: dict[str, dict[str, float]] = getattr(experience_store, "strategy_weights", {})
         class_weights = weights_by_class.get(failure_class, {})
         if not class_weights:
             return get_next_strategy(strategy_state)

@@ -7,8 +7,15 @@ export default defineConfig({
   resolve: {
     // Fix #14: tsconfig.json declares "@/*" → "src/*" paths but Vite requires its own alias.
     // Without this, any `import ... from '@/...'` compiles in TS but fails at build time.
-    alias: { '@': resolve(__dirname, 'src') },
+    alias: {
+      '@': resolve(__dirname, 'src'),
+      // Mirror packages/*/src/index.ts so vitest resolves packages from source
+      // rather than requiring each package to be pre-built before running tests.
+      '@itsharness/canvas': resolve(__dirname, 'packages/canvas/src/spec/schema.ts'),
+      '@itsharness/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),
+      '@itsharness/react': resolve(__dirname, 'packages/react/src/index.ts'),
+    },
   },
   server: { port: 3000 },
-  test: { environment: 'jsdom' },
+  test: { environment: 'jsdom', globals: true },
 })

@@ -16,10 +16,7 @@ import sys
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -40,14 +37,15 @@ from harness.experience_store import (
 from harness.recovery import StrategyState
 from harness.task_graph import Task, TaskGraph
 
-
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
 def _make_failing_factory():
     """Return a session factory that always raises a connection error."""
+
     def factory():
         raise ConnectionError("DB unavailable")
+
     return factory
 
 
@@ -74,18 +72,24 @@ class _InMemorySession:
         # Handle INSERT into experience_entries
         if "INSERT INTO experience_entries" in sql and params:
             import json
+
             payload = params.get("payload", "{}")
             if isinstance(payload, str):
                 payload = json.loads(payload)
-            self._pending.append(("experience_entries", {
-                "id": params.get("id"),
-                "entry_type": params.get("entry_type"),
-                "failure_class": params.get("failure_class"),
-                "task_class": params.get("task_class"),
-                "payload": payload,
-                "run_id": params.get("run_id"),
-                "created_at": params.get("created_at"),
-            }))
+            self._pending.append(
+                (
+                    "experience_entries",
+                    {
+                        "id": params.get("id"),
+                        "entry_type": params.get("entry_type"),
+                        "failure_class": params.get("failure_class"),
+                        "task_class": params.get("task_class"),
+                        "payload": payload,
+                        "run_id": params.get("run_id"),
+                        "created_at": params.get("created_at"),
+                    },
+                )
+            )
             return MagicMock()
         # Handle INSERT/UPSERT into experience_strategy_weights
         if "INSERT INTO experience_strategy_weights" in sql and params:
@@ -99,14 +103,16 @@ class _InMemorySession:
                 existing["rate"] = existing["success_count"] / existing["attempt_count"]
             else:
                 success_inc = params.get("success_inc", 0)
-                weights.append({
-                    "id": str(uuid.uuid4()),
-                    "strategy_type": params.get("strategy_type"),
-                    "failure_class": params.get("failure_class"),
-                    "success_count": success_inc,
-                    "attempt_count": 1,
-                    "rate": float(success_inc),
-                })
+                weights.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "strategy_type": params.get("strategy_type"),
+                        "failure_class": params.get("failure_class"),
+                        "success_count": success_inc,
+                        "attempt_count": 1,
+                        "rate": float(success_inc),
+                    }
+                )
             return MagicMock()
         # Handle SELECT on experience_entries
         if "SELECT" in sql and "FROM experience_entries" in sql:
@@ -117,11 +123,20 @@ class _InMemorySession:
                 rows = [r for r in rows if r.get("task_class") == params["task_class"]]
             limit = params.get("limit", 100) if params else 100
             rows = rows[:limit]
-            return _FakeResult([
-                (r["id"], r["entry_type"], r.get("failure_class"), r.get("task_class"),
-                 r["payload"], r["run_id"], r.get("created_at"))
-                for r in rows
-            ])
+            return _FakeResult(
+                [
+                    (
+                        r["id"],
+                        r["entry_type"],
+                        r.get("failure_class"),
+                        r.get("task_class"),
+                        r["payload"],
+                        r["run_id"],
+                        r.get("created_at"),
+                    )
+                    for r in rows
+                ]
+            )
         # Handle SELECT on experience_strategy_weights
         if "SELECT" in sql and "FROM experience_strategy_weights" in sql:
             rows = self._db.get("experience_strategy_weights", [])
@@ -200,10 +215,10 @@ def test_t03_get_strategy_weights_returns_named_tuple_keys():
     """T03: get_strategy_weights() keys are StrategyWeightKey namedtuples with float values."""
     store = _make_in_memory_store()
     # Seed a weight entry by calling update directly on the session
-    db = store.db_session_factory  # actually the factory
     # Manually insert via the in-memory session
     with store.db_session_factory() as session:
         from sqlalchemy import text
+
         session.execute(
             text("INSERT INTO experience_strategy_weights"),
             {
@@ -334,13 +349,15 @@ def test_t06_warm_start_loads_non_flat_weights():
             {},
         )
         # Insert via direct db manipulation in the in-memory session
-        session._db.setdefault("experience_strategy_weights", []).append({
-            "strategy_type": "DIRECT_EDIT",
-            "failure_class": "syntax_error",
-            "success_count": 4,
-            "attempt_count": 5,
-            "rate": 0.8,
-        })
+        session._db.setdefault("experience_strategy_weights", []).append(
+            {
+                "strategy_type": "DIRECT_EDIT",
+                "failure_class": "syntax_error",
+                "success_count": 4,
+                "attempt_count": 5,
+                "rate": 0.8,
+            }
+        )
 
     strategy_state = StrategyState()
     result = warm_start(
@@ -498,8 +515,11 @@ def test_t12_build_strategy_ordering_changes_with_empirical_data():
         with store_populated.db_session_factory() as session:
             session._db.setdefault("experience_strategy_weights", [])
             existing = next(
-                (w for w in session._db["experience_strategy_weights"]
-                 if w["strategy_type"] == "TRACE_EXEC" and w["failure_class"] == "import_error"),
+                (
+                    w
+                    for w in session._db["experience_strategy_weights"]
+                    if w["strategy_type"] == "TRACE_EXEC" and w["failure_class"] == "import_error"
+                ),
                 None,
             )
             if existing:
@@ -507,30 +527,37 @@ def test_t12_build_strategy_ordering_changes_with_empirical_data():
                 existing["attempt_count"] += 1
                 existing["rate"] = existing["success_count"] / existing["attempt_count"]
             else:
-                session._db["experience_strategy_weights"].append({
-                    "strategy_type": "TRACE_EXEC",
-                    "failure_class": "import_error",
-                    "success_count": 1,
-                    "attempt_count": 1,
-                    "rate": 1.0,
-                })
+                session._db["experience_strategy_weights"].append(
+                    {
+                        "strategy_type": "TRACE_EXEC",
+                        "failure_class": "import_error",
+                        "success_count": 1,
+                        "attempt_count": 1,
+                        "rate": 1.0,
+                    }
+                )
             # DIRECT_EDIT always fails
             existing_de = next(
-                (w for w in session._db["experience_strategy_weights"]
-                 if w["strategy_type"] == "DIRECT_EDIT" and w["failure_class"] == "import_error"),
+                (
+                    w
+                    for w in session._db["experience_strategy_weights"]
+                    if w["strategy_type"] == "DIRECT_EDIT" and w["failure_class"] == "import_error"
+                ),
                 None,
             )
             if existing_de:
                 existing_de["attempt_count"] += 1
                 existing_de["rate"] = existing_de["success_count"] / existing_de["attempt_count"]
             else:
-                session._db["experience_strategy_weights"].append({
-                    "strategy_type": "DIRECT_EDIT",
-                    "failure_class": "import_error",
-                    "success_count": 0,
-                    "attempt_count": 1,
-                    "rate": 0.0,
-                })
+                session._db["experience_strategy_weights"].append(
+                    {
+                        "strategy_type": "DIRECT_EDIT",
+                        "failure_class": "import_error",
+                        "success_count": 0,
+                        "attempt_count": 1,
+                        "rate": 0.0,
+                    }
+                )
 
     ordering_run10 = build_strategy_ordering("import_error", store_populated, temperature=1.0)
 

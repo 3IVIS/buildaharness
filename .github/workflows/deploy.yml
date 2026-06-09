@@ -52,7 +52,7 @@ env:
   REGISTRY:        ghcr.io
   IMAGE_NAME:      ${{ github.repository }}/itsharness-adapter
   # Resolve environment string used in later steps
-  DEPLOY_ENV: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'production' || (github.event.inputs.environment || 'staging') }}
+  DEPLOY_ENV: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'production' || (inputs.environment || 'staging') }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
