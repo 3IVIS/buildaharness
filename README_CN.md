@@ -2,14 +2,14 @@
 
 # Its Harness 中文版
 
-**AI 智能体线束的可视化画布**
+**在画布上构建完整的 AI 智能体线束。编译到任何编排器。通过 Langfuse 观测。**
 
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/itsharness/releases)
 [![Status](https://img.shields.io/badge/状态-公开测试版-orange.svg)](https://github.com/3IVIS/itsharness)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/itsharness?style=social)](https://github.com/3IVIS/itsharness/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/3IVIS/itsharness)](https://github.com/3IVIS/itsharness/issues)
-[![PRs Welcome](https://img.shields.io/badge/欢迎-PR贡献-brightgreen.svg)](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/欢迎-PR贡献-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-required-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
@@ -20,111 +20,160 @@
 
 ---
 
-在画布上绘制流程 → 导出与运行时无关的规格文件 → 编译到您的框架 → 运行、追踪、调试和部署 — 一套工具完成所有工作。
+工作流将提示从节点路由到节点。**线束**管理智能体*相信*什么、它*被允许*做什么、如何捕获自身错误，以及学到什么。Its Harness 提供完整的 11 层线束架构 — 在画布上绘制，编译到任意框架，通过 Langfuse 追踪一切。
+
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr valign="top">
+<td width="44%" style="border:1px solid #d1d5db;border-radius:8px;padding:18px;background:#f9fafb">
+<div align="center" style="font-family:monospace;font-size:11px;letter-spacing:0.1em;color:#6b7280;text-transform:uppercase;padding-bottom:14px">简单智能体循环</div>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#0891b2">⬤</span>&nbsp;输入 / 调用者</td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#7c3aed">⬤</span>&nbsp;LLM 调用</td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#d97706">⬤</span>&nbsp;工具调用 &nbsp;<span style="color:#9ca3af;font-size:10px">↺ 循环</span></td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#059669">⬤</span>&nbsp;输出</td></tr>
+</table>
+<div align="center" style="margin-top:14px;font-family:monospace;font-size:10px;color:#9ca3af">提示输入 → 答案输出<br>无世界模型 · 无控制状态 · 无验证</div>
+</td>
+<td width="12%" align="center" valign="middle" style="font-size:20px;color:#d1d5db;font-weight:500;font-family:monospace;padding:0 8px">vs</td>
+<td width="44%" style="border:1px solid #a5b4fc;border-radius:8px;padding:18px;background:#fafbff">
+<div align="center" style="font-family:monospace;font-size:11px;letter-spacing:0.1em;color:#4f46e5;text-transform:uppercase;padding-bottom:14px">完整线束 — 已实现</div>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #0891b2;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>调用者状态</b><span style="color:#9ca3af;font-size:10px"> — 约束 · 澄清</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #7c3aed;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>世界模型</b><span style="color:#9ca3af;font-size:10px"> — 信念 · 矛盾 · generation_id</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #16a34a;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>推理</b><span style="color:#9ca3af;font-size:10px"> — 证据 · 假设（4 种来源）· VOI</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #a5b4fc;border-left:4px solid #a21caf;border-radius:4px;padding:6px 10px;background:#eef2ff;font-family:monospace;font-size:11px"><b>控制</b> <span style="background:#e0e7ff;color:#4f46e5;border:1px solid #a5b4fc;border-radius:3px;padding:1px 5px;font-size:9px">核心</span><span style="color:#9ca3af;font-size:10px"> — 5 层解析器 · NORMAL/CAUTIOUS/BLOCKED</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #2563eb;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>规划</b><span style="color:#9ca3af;font-size:10px"> — 任务图（6 状态）· 并行并发</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="padding:0">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #d97706;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>执行</b><span style="color:#9ca3af;font-size:10px"> — VOI · 审查门</span></td>
+    <td width="2%"></td>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #dc2626;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>验证</b><span style="color:#9ca3af;font-size:10px"> — 9 层</span></td>
+  </tr></table>
+</td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="padding:0">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #ea580c;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>恢复</b><span style="color:#9ca3af;font-size:10px"> — 6 种策略</span></td>
+    <td width="2%"></td>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #65a30d;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>内存</b><span style="color:#9ca3af;font-size:10px"> — 压缩 · 日志</span></td>
+  </tr></table>
+</td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px dashed #e5e7eb;border-left:3px solid #94a3b8;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px;color:#9ca3af"><b>学习</b><span style="font-size:10px"> — 经验存储 · 热启动（可选）</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #059669;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>输出 &amp; 审查员通过</b><span style="color:#9ca3af;font-size:10px"> — 合同 · 三镜头审查</span></td></tr>
+</table>
+<div align="center" style="margin-top:14px;font-family:monospace;font-size:10px;color:#9ca3af">22 个节点 · 11 层 · 241 个测试通过</div>
+</td>
+</tr>
+</table>
+
+> 规格是合约。画布是编辑器。适配器是编译器。
 
 ```
-flow.json  →  [ langgraph 适配器 ]  →  Python / LangGraph
-           →  [ crewai 适配器 ]     →  Python / CrewAI
-           →  [ mastra 适配器 ]     →  TypeScript / Mastra
-           →  [ maf 适配器 ]        →  Python / MS Agent Framework
-           →  [ REST 端点 ]          →  POST /flows/{id}/invoke
-           →  [ MCP 工具 ]           →  Claude Desktop + 任何 MCP 客户端
-           →  [ A2A 智能体 ]         →  任何 A2A 兼容运行时
+画布  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework  →  Langfuse
 ```
 
-**当前版本：** v0.8.0 — 画布、四个框架适配器、Langfuse 可观测性以及完整的 11 层线束架构已全部实现。241 个线束测试通过。
+**v0.8.0** — 画布、四个框架适配器、完整 11 层线束架构、Langfuse 可观测性。
 
 ---
 
-## 更宏观的视角 — 完整线束是什么
+## 节点面板
 
-工作流告诉你的 AI 该做什么。线束确保它真正做到。
+线束由 **14 个核心节点**和 **13 个线束层节点**构建 — 每个节点均可编译到全部四个运行时。悬停节点名称可查看说明。
 
-这不仅仅是程度上的差异 — 而是架构上的根本差异。工作流将提示从一个节点路由到另一个节点。线束管理智能体*相信*什么、它*被允许*做什么、如何捕获自身错误，以及下次学到什么。Its Harness 实现了这一完整架构：在画布上绘制，在任何框架上运行，即可获得完整的 11 层控制系统。
+<table>
+<thead><tr><th colspan="7" align="left">核心节点</th></tr></thead>
+<tbody>
+<tr>
+<td><abbr title="流程入口点 — 接收初始请求和状态">⤵ <code>input</code></abbr></td>
+<td><abbr title="流程出口点 — 将最终结果返回给调用者">⤴ <code>output</code></abbr></td>
+<td><abbr title="LLM 调用 — 结构化输出、验证器、fail_branch、Langfuse 托管提示">✨ <code>llm_call</code></abbr></td>
+<td><abbr title="从流程的 tools[] 注册表中调用命名工具">🔧 <code>tool_invoke</code></abbr></td>
+<td><abbr title="分支 — JSONPath 或 fn_ref 表达式计算为命名分支目标">⎇ <code>condition</code></abbr></td>
+<td><abbr title="扇出到 N 个并发分支">⑂ <code>parallel_fork</code></abbr></td>
+<td><abbr title="扇入 — merge / append / fn_ref 归约器，等待所有分支完成">⊖ <code>parallel_join</code></abbr></td>
+</tr>
+<tr>
+<td><abbr title="暂停并等待类型化的人工恢复载荷 — 所有运行时均支持顺序 HITL">⏸ <code>hitl_breakpoint</code></abbr></td>
+<td><abbr title="从键值或语义内存存储中读取">📖 <code>memory_read</code></abbr></td>
+<td><abbr title="写入命名内存存储">🔖 <code>memory_write</code></abbr></td>
+<td><abbr title="将另一个流程嵌入为可复用节点 — LangGraph/Mastra：完整支持；CrewAI：部分支持">📦 <code>subgraph</code></abbr></td>
+<td><abbr title="状态转换 — 字段映射或应用于流程状态的 fn_ref 函数">⇌ <code>transform</code></abbr></td>
+<td><abbr title="从流程的 agents[] 注册表执行智能体角色 — CrewAI 中原生，其他框架中合成">🤖 <code>agent_role</code></abbr></td>
+<td><abbr title="具有可配置终止条件的多智能体循环 — MS Agent Framework 中原生，其他框架中合成">👥 <code>agent_debate</code></abbr></td>
+</tr>
+</tbody>
+</table>
 
-### 已实现的线束架构
+<table>
+<thead><tr><th colspan="7" align="left">线束节点 — 实现 11 层控制架构</th></tr></thead>
+<tbody>
+<tr>
+<td><abbr title="观察、信念、假设、矛盾 — generation_id 跟踪每次重要更新">🧠 <code>world_model</code></abbr></td>
+<td><abbr title="四种生成来源；多样性执行（阈值 0.7）；带 K 保留的消除策略">💡 <code>hypothesis_set</code></abbr></td>
+<td><abbr title="收集类型化 Evidence(obs, reliability, source, type, freshness) — 观察从不自动提升为结论">🗄️ <code>gather_evidence</code></abbr></td>
+<td><abbr title="在已知范围限制下限制每个工具的最大结论可靠性；更新 verification_health.feasibility">🔧 <code>apply_tool_rel</code></abbr></td>
+<td><abbr title="可靠性加权信念整合；belief_dep_graph 传播；更新 completeness_flags">🧠 <code>update_wm</code></abbr></td>
+<td><abbr title="五层解析器 → NORMAL / CAUTIOUS / BLOCKED；死锁检测；generation_id 门断言">🛡️ <code>control_state</code></abbr></td>
+<td><abbr title="6 状态任务分解；循环检测；变化时重新计算 abstraction_fit；并行写域冲突检测">🕸️ <code>task_graph</code></abbr></td>
+</tr>
+<tr>
+<td><abbr title="9 个验证层（由 tool_availability_manifest 修剪）；高风险时对抗性通过；contract_shadow_check">✅ <code>verify_gate</code></abbr></td>
+<td><abbr title="rollback() → record_failure() → 策略切换；六种策略：DIRECT_EDIT、TRACE_EXEC、BROADER_SEARCH、REIMPLEMENT、MINIMAL_FIX、ESCALATE">🔄 <code>recovery</code></abbr></td>
+<td><abbr title="具有 tool_reliability_envelopes 和 tool_availability_manifest 的证据存储 — 用于修剪不可用验证检查">🗄️ <code>evidence_store</code></abbr></td>
+<td><abbr title="跨运行结构复用：分解、工具工作流、验证计划、恢复序列（可选）">📊 <code>exp_store</code></abbr></td>
+<td><abbr title="三镜头审查：实施者 · 审查员 · 对抗性 — 基于成功标准因果邻近度的对抗性先验">👁️ <code>reviewer_pass</code></abbr></td>
+<td><abbr title="为常见任务模式预置的概念性流程脚手架">🧭 <code>process_concept</code></abbr></td>
+<td></td>
+</tr>
+</tbody>
+</table>
 
-完整的 11 层、22 节点线束已实现并集成到全部四个框架适配器中：
+完整 22 节点循环、11 层架构、伪代码和状态模型：[plan/harness_architecture.html](plan/harness_architecture.html)
 
-| 层 | 已实现内容 |
-|---|---|
-| **画布** | 14 种节点类型 · 可视化编辑器 · 实时多用户协作 · `@itsharness/canvas` 嵌入包 |
-| **框架** | LangGraph · CrewAI · Mastra · MS Agent Framework — 全部四个，含完整线束层适配器支持 |
-| **可观测性** | Langfuse 追踪 + 线束跨度（世界模型、控制状态、验证、恢复）覆盖所有 4 个运行时 |
-| **推理** | 证据存储 · 工具可靠性包络 · VOI 门控证据收集 · 假设系统（4 种来源 · 多样性执行 · 消除策略）|
-| **世界模型** | 信念依赖图 · `generation_id` 陈旧性跟踪 · 类型化矛盾 · 陈旧性扫描 · `completeness_flags` |
-| **控制** | 5 层 `resolve_control_state()` · `NORMAL`/`CAUTIOUS`/`BLOCKED` · 死锁检测 · generation_id 门断言 |
-| **规划** | 任务图（6 状态）· 并行写域冲突检测 · `conflict_probability_cache` · 悲观/乐观并发 |
-| **验证** | 9 层验证 · 对抗性审查员通过 · 预执行审查门控 · `contract_shadow_check` · `tool_availability_manifest` |
-| **恢复** | 6 种命名恢复策略 · 类型化故障库 · `cannot_make_progress()`（4 个可测代理）· 局部/全局重规划 |
-| **内存** | Token 预算跟踪 · 日志保留策略 · 结构化压缩风险（`compressed_structures[]` + `pruned_regions[]`）|
-| **学习** | 经验存储（可选）— 跨运行结构复用：分解、工具工作流、验证计划、恢复序列 |
+---
 
-### 11 个架构层
+## 框架适配器
 
-完整线束组织为 11 个层，每个层有明确的职责：
+全部四个运行时完整支持 — 同一份规格编译一次，在任意框架运行。
 
-| 层 | 职责 |
-|---|---|
-| **调用者状态** | 需求、约束、澄清 — 运行中可变的一等对象 |
-| **世界模型** | 观察、信念、假设、矛盾 — `generation_id` 跟踪每次重要更新 |
-| **推理** | 证据处理、四来源假设生成、VOI 门控证据收集 |
-| **规划** | 任务分解、调度、带写域冲突检测的并行并发 |
-| **控制** | 风险状态管理 — 五层解析器输出 `NORMAL` / `CAUTIOUS` / `BLOCKED` |
-| **执行** | 动作选择和变异 — 控制状态是唯一控制输入 |
-| **验证** | 9 层验证 · 对抗性审查员通过 · 预执行审查门控 |
-| **策略** | 分解、动作选择和执行后的门控执行 |
-| **恢复** | 回滚和重规划 — 六种命名策略 · 类型化故障库 |
-| **内存** | 上下文压缩 · 日志保留策略 · 预算跟踪 |
-| **学习（可选）** | 经验存储 — 跨运行结构复用，不仅仅是概率先验 |
+| 运行时 | 语言 | HITL | 关键集成 |
+|---|---|---|---|
+| **LangGraph** | Python | `interrupt()` | `@observe` · 线束子跨度 |
+| **CrewAI** | Python | — | `context_from → Task.context` · 层级感知内存 |
+| **Mastra** | TypeScript | `suspend()/resume()` | Node.js 侧车 |
+| **MS Agent Framework** | Python | `_HitlPause` | `AgentGroupChat` 原生 · OTel → Langfuse |
 
-### 22 个节点
+编译：`POST /compile?runtime=langgraph` — 同一份 `flow.json`，任意运行时。  
+一键部署为 **REST 端点**、**MCP 工具**或 **A2A 智能体**。
 
-完整线束执行一个 22 节点的循环：
+---
 
-| # | 节点 | 功能 |
-|---|---|---|
-| 1 | **初始化** | 设置所有持久状态：世界模型、信念依赖图、假设集、任务图、诊断、控制状态、内存预算 |
-| 2 | **热启动** | 从经验存储加载可复用结构（策略先验、故障基础率、结构模式）— 不可用时为空操作 |
-| 3 | **检查调用者更新** | 对运行中约束变化的非阻塞轮询；约束变化时完整传播到任务图和输出合同 |
-| 4 | **上下文压缩** | `compress_memory()` — 分别跟踪压缩结构和修剪区域；更新 `completeness_flags` |
-| 5 | **收集证据** | 收集 `Evidence(obs, reliability, source, type, freshness)` — 观察从不自动提升为结论 |
-| 6 | **应用工具可靠性** | 在已知范围限制下限制每个工具可导出结论的最大可靠性 |
-| 7 | **更新世界模型** | 可靠性加权信念整合；`belief_dep_graph` 传播；更新 `completeness_flags` |
-| 8 | **检测矛盾** | 类型化检测：成对 · 集合级 · 时间 · 抽象 — 四个严重级别，三个范围 |
-| 9 | **生成/更新假设** | 四个结构不同的来源；多样性执行（阈值 0.7）；带 K 保留的消除策略 |
-| 10 | **更新诊断** | 重新计算所有四个健康向量；`failure_mode_library.match()`；`dep_class_gap` 建议注释 |
-| 11 | **解析控制状态** | 严格顺序的五个隐式层 → `NORMAL` / `CAUTIOUS` / `BLOCKED`；死锁检测；`generation_id` 戳记 |
-| 12 | **更新任务图** | 反映新世界模型状态；循环检测；变化时重新计算 `abstraction_fit` |
-| 13 | **选择任务** | `depends_on` 解析；来自 `conflict_probability_cache` 的悲观或乐观并发；连接处的并行分支合并 |
-| 14 | **估计风险** | `LOW` / `MEDIUM` / `HIGH` — 基于文件中心性、变更范围、模块类型 |
-| 15 | **估计 VOI** | `VOI = 预期不确定性减少 × 决策影响`；验证充分性批评器修剪不可用的 9 层检查 |
-| 16 | **审查建议变更** | 五维度预执行门控 — 任务对齐、世界模型一致性、输出合同、代码质量、开放假设 |
-| 17 | **执行** | 每动作可逆性策略；工具工作流；工具错误成为 `Evidence(HIGH, SYSTEM_ERROR)` |
-| 18 | **验证** | 9 个验证层（由 `tool_availability_manifest` 修剪）；高风险时对抗性通过；`contract_shadow_check` |
-| 19 | **回滚 + 重规划** | `rollback()` → `record_failure()` → 策略切换；六种命名策略：`DIRECT_EDIT` · `TRACE_EXEC` · `BROADER_SEARCH` · `REIMPLEMENT` · `MINIMAL_FIX` · `ESCALATE` |
-| 20 | **上报** | 当 `BLOCKED` 或 `cannot_make_progress()` 时触发；呈现最少所需信息；人工响应后完整约束传播 |
-| 21 | **审查员通过** | 三个镜头（实施者 · 审查员 · 对抗性）；基于成功标准因果邻近度的对抗性先验 |
-| 22 | **输出验证** | 针对当前调用者约束的完整输出合同检查 — 返回前的权威通过 |
+## 可观测性
 
-完整架构参考（伪代码、所有 22 个节点、所有 11 层、状态模型和深度解析）请参阅 [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html)。服务交互与数据流参见 [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md)。
+自托管 **Langfuse** 随 `docker compose up` 一同启动 — 无需额外配置。
+
+- 跨全部四个运行时的每节点子跨度（世界模型、控制状态、验证、恢复）
+- 通过 LiteLLM 获取每节点的 token 计数、延迟和成本
+- 每次运行后画布中的实时 **查看追踪 →** 链接
+- 通过 Langfuse 提示 API 管理提示（任意 `llm_call` 节点上的 `prompt_ref`）
 
 ---
 
 ## 快速开始
 
-### 1. 运行配置
-
 ```bash
-./scripts/setup-env.sh
-```
-
-生成密钥，写入 `.env`，可选创建 Python venv 并启动服务栈。可安全重复运行 — 现有真实值不会被覆盖。
-
-### 2. 启动服务栈
-
-```bash
-docker compose up
+./scripts/setup-env.sh   # 生成密钥，写入 .env
+docker compose up        # 启动全部 9 个服务
 ```
 
 | 服务 | URL |
@@ -133,110 +182,77 @@ docker compose up
 | 适配器 API | http://localhost:8000/health |
 | Langfuse | http://localhost:3001 |
 
-九个服务启动：canvas、adapter、mastra-runner、postgres、redis、clickhouse、litellm、langfuse-web、langfuse-worker。
-
-> **启动错误？** 请参阅 [docs/troubleshooting.md](https://github.com/3IVIS/itsharness/blob/main/docs/troubleshooting.md)。最常见原因是陈旧的 Postgres 卷（`./scripts/reset-volumes.sh`）或错误长度的密钥（`bash scripts/check-env.sh`）。
-
-**实时协作**为可选功能 — 请参阅 [docs/collab.md](https://github.com/3IVIS/itsharness/blob/main/docs/collab.md)。  
-**本地部署 / Kubernetes** — 请参阅 [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md)。
-
-### 无 Docker 方式
-
+**无 Docker 方式：**
 ```bash
-./scripts/setup-env.sh
-source adapter/.venv/bin/activate
-npm install && npm run dev       # 画布 → http://localhost:3000
-cd adapter && python main.py     # 适配器 → http://localhost:8000
+./scripts/setup-env.sh && source adapter/.venv/bin/activate
+npm install && npm run dev       # 画布 → localhost:3000
+cd adapter && python main.py     # 适配器 → localhost:8000
 ```
 
-### 测试
-
+**测试：**
 ```bash
-npm test                                          # Vitest — 验证所有 5 个参考流程
-pytest adapter/tests/ -v                         # 适配器单元 + 集成套件
-pytest adapter/tests/test_maf_adapter.py -v     # MAF 适配器套件（742 个测试）
+npm test                                         # Vitest — 验证 5 个参考流程
+pytest adapter/tests/ -v                        # 适配器单元 + 集成测试
+pytest adapter/tests/test_maf_adapter.py -v    # MAF 套件（742 个测试）
 ```
 
-### 诊断
-
-| 脚本 | 检查内容 |
-|---|---|
-| `bash scripts/verify_services.sh` | 所有容器运行 · 健康检查 · HTTP 端点 · Redis / Postgres / Langfuse 认证 |
-| `bash scripts/verify_llm.sh` | Ollama → LiteLLM → 适配器 LLM 路径（3 个独立层）|
-| `bash scripts/verify_hitl.sh` | LangGraph、Mastra、MAF 的 HITL 暂停 → 恢复 → 完成 |
-| `bash scripts/verify_observability.sh` | 所有 4 个运行时的 Langfuse 追踪确认 |
-| `bash scripts/verify_prompts.sh` | Langfuse 提示 API · 适配器 HTTP 代理 · SDK 解析 |
-
-设置 `TEST_EMAIL=... TEST_PASSWORD=...` 可跳过交互式凭据提示。
+> 启动错误？请参阅 [docs/troubleshooting.md](docs/troubleshooting.md)。  
+> 实时协作：[docs/collab.md](docs/collab.md) · 本地部署 / Kubernetes：[docs/deployment.md](docs/deployment.md)
 
 ---
 
 ## AI 模型支持
 
-所有 LLM 调用通过 **LiteLLM** 路由。在 `.env` 中添加相关密钥：
+所有调用通过 **LiteLLM** 路由 — 在 `.env` 中添加密钥：
 
-| 提供商 | 密钥 | 流程规格中的模型名称 |
+| 提供商 | 环境变量 | 示例模型 |
 |---|---|---|
-| OpenAI | `OPENAI_API_KEY=sk-...` | `gpt-4o`, `gpt-4o-mini` |
-| Anthropic | `ANTHROPIC_API_KEY=sk-ant-...` | `claude-sonnet`, `claude-haiku`, `claude-opus` |
-| Ollama（本地）| 无 | `mistral`, `qwen3`, `qwen2.5-coder` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet`, `claude-opus` |
+| Ollama（本地）| — | `mistral`, `qwen3`, `qwen2.5-coder` |
 
-完整设置说明（包括 Ollama 和自定义模型）请参阅 [docs/llm-setup.md](https://github.com/3IVIS/itsharness/blob/main/docs/llm-setup.md)。
-
----
-
-## 功能概述
-
-- **绘制** — 可视化画布上的 14 种节点类型。每个规格字段均可直接编辑。
-- **掌控规格** — 画布输出您控制的版本化、与运行时无关的 JSON 规格。
-- **编译** — 一次 API 调用将规格转换为您选择的框架的可运行代码。
-- **运行与观察** — 实时节点覆盖、每节点 token 计数、Langfuse 追踪链接、HITL 暂停/恢复。
-- **部署** — 一键同时将流程发布为 REST 端点、MCP 工具和 A2A 智能体。
-- **协作** — 使用 Yjs CRDT 的实时多用户编辑、实时光标和离线持久化。
-- **嵌入** — 使用 `@itsharness/canvas` npm 包将画布嵌入您自己的门户。
-
-**规格是合约。画布是编辑器。适配器是编译器。**
+完整设置说明（包括自定义模型）：[docs/llm-setup.md](docs/llm-setup.md)
 
 ---
 
-## 框架适配器支持
+## 嵌入画布
 
-| 运行时 | 状态 | 关键说明 |
-|---|---|---|
-| **LangGraph** · Python | ✅ 完整 | `@observe` 追踪 + 子跨度 · 通过 `interrupt()` 的 HITL |
-| **CrewAI** · Python | ✅ 完整 | `context_from → Task.context` · 层级感知 `Crew()` 内存 |
-| **Mastra** · TypeScript | ✅ 完整 | Node.js 侧车 · `suspend()/resume()` HITL |
-| **MS Agent Framework** · Python | ✅ 完整 | `AgentGroupChat` 原生 · `_HitlPause` HITL · OTel → Langfuse |
+```bash
+npm install @itsharness/canvas
+```
+
+```tsx
+import { ItsHarnessCanvas } from '@itsharness/canvas'
+import '@itsharness/canvas/styles.css'
+
+<ItsHarnessCanvas
+  initialSpec={mySpec}
+  onSpecChange={(updated) => save(updated)}
+  execStats={runState.nodeStats}
+  theme="dark"
+/>
+```
+
+完整属性参考：[`packages/canvas/README.md`](packages/canvas/README.md)
 
 ---
 
-## 延伸阅读
+## 文档
 
-| 文档 | 内容 |
+| | |
 |---|---|
-| [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md) | 系统设计、服务交互、数据流、关键决策 |
-| [docs/api.md](https://github.com/3IVIS/itsharness/blob/main/docs/api.md) | 完整 API 参考 — 所有端点、认证、错误代码 |
-| [docs/llm-setup.md](https://github.com/3IVIS/itsharness/blob/main/docs/llm-setup.md) | LLM 提供商设置 — OpenAI、Anthropic、Ollama、自定义模型 |
-| [docs/collab.md](https://github.com/3IVIS/itsharness/blob/main/docs/collab.md) | 实时协作 — 设置、Yjs 内部原理、环境变量 |
-| [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md) | Docker、Helm、SSO/OIDC 配置、完整环境变量参考 |
-| [docs/troubleshooting.md](https://github.com/3IVIS/itsharness/blob/main/docs/troubleshooting.md) | 常见启动错误及修复 |
-| [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) | 完整线束架构 — 伪代码、所有 22 个节点、所有 11 层、状态模型、深度解析、范围 |
-| [CONTRIBUTING.md](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md) | 如何贡献 — 适配器、规格、画布、迁移 |
-| [spec/CHANGELOG.md](https://github.com/3IVIS/itsharness/blob/main/spec/CHANGELOG.md) | 规格版本历史 |
-
----
-
-## 贡献
-
-欢迎贡献！请参阅 [CONTRIBUTING.md](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md) 了解如何贡献适配器、规格更改、画布节点和迁移。
-
-- **报告 Bug** → [打开 Bug 报告](https://github.com/3IVIS/itsharness/issues/new?template=bug_report.md)
-- **请求功能** → [打开功能请求](https://github.com/3IVIS/itsharness/issues/new?template=feature_request.md)
-- **阅读规格** → [spec/](https://github.com/3IVIS/itsharness/tree/main/spec)
-- **架构参考** → [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html)
+| [plan/harness_architecture.html](plan/harness_architecture.html) | 完整线束 — 伪代码、22 个节点、11 层、状态模型、深度解析 |
+| [plan/canvas_plan.html](plan/canvas_plan.html) | 画布路线图 — 4 个阶段、240 个已交付项 |
+| [docs/architecture.md](docs/architecture.md) | 系统设计、服务交互、数据流 |
+| [docs/api.md](docs/api.md) | REST API 参考 — 编译、执行、部署、HITL 恢复 |
+| [docs/llm-setup.md](docs/llm-setup.md) | LLM 提供商设置 — OpenAI、Anthropic、Ollama、自定义 |
+| [docs/collab.md](docs/collab.md) | 实时协作 — Yjs 设置与内部原理 |
+| [docs/deployment.md](docs/deployment.md) | Docker、Helm、SSO/OIDC、完整环境变量参考 |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | 常见启动错误 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 如何贡献 |
 
 ---
 
 ## 许可证
 
-Apache 2.0 — 请参阅 [LICENSE](https://github.com/3IVIS/itsharness/blob/main/LICENSE)。
+Apache 2.0 — 请参阅 [LICENSE](LICENSE)。

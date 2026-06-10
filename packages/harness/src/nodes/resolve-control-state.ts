@@ -46,7 +46,7 @@ export function resolveControlState(
   diagnostics: Diagnostics,
   worldModel: WorldModel,
   failureDiagnostics: FailureDiagnostics,
-  step?: number,
+  _step?: number,
 ): ControlState {
   assertNormalised(diagnostics.belief_health.freshness, 'belief_health.freshness')
   assertNormalised(diagnostics.belief_health.consistency, 'belief_health.consistency')

@@ -2,14 +2,14 @@
 
 # Its Harness
 
-**Visual Canvas for AI Agent Harnesses**
+**Build complete AI agent harnesses on canvas. Compile to any orchestrator. Observe with Langfuse.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/itsharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/itsharness)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/itsharness?style=social)](https://github.com/3IVIS/itsharness/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/3IVIS/itsharness)](https://github.com/3IVIS/itsharness/issues)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-required-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
@@ -20,111 +20,160 @@
 
 ---
 
-Draw a flow on the canvas → export a runtime-agnostic spec → compile to your framework → run, trace, debug, and deploy — all from one tool.
+A workflow routes prompts from node to node. A **harness** governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns. Its Harness gives you the complete 11-layer harness architecture — draw it on a canvas, compile to any framework, trace everything in Langfuse.
+
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr valign="top">
+<td width="44%" style="border:1px solid #d1d5db;border-radius:8px;padding:18px;background:#f9fafb">
+<div align="center" style="font-family:monospace;font-size:11px;letter-spacing:0.1em;color:#6b7280;text-transform:uppercase;padding-bottom:14px">Simple Agent Loop</div>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#0891b2">⬤</span>&nbsp;Input / Caller</td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#7c3aed">⬤</span>&nbsp;LLM Call</td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#d97706">⬤</span>&nbsp;Tool Call &nbsp;<span style="color:#9ca3af;font-size:10px">↺ loop</span></td></tr>
+<tr><td align="center" style="color:#d1d5db;padding:3px 0;font-size:13px">↓</td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-radius:5px;padding:8px 12px;background:#fff;font-family:monospace;font-size:12px"><span style="color:#059669">⬤</span>&nbsp;Output</td></tr>
+</table>
+<div align="center" style="margin-top:14px;font-family:monospace;font-size:10px;color:#9ca3af">prompt in → answer out<br>no world model · no control state · no verification</div>
+</td>
+<td width="12%" align="center" valign="middle" style="font-size:20px;color:#d1d5db;font-weight:500;font-family:monospace;padding:0 8px">vs</td>
+<td width="44%" style="border:1px solid #a5b4fc;border-radius:8px;padding:18px;background:#fafbff">
+<div align="center" style="font-family:monospace;font-size:11px;letter-spacing:0.1em;color:#4f46e5;text-transform:uppercase;padding-bottom:14px">Full Harness — Implemented</div>
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #0891b2;border-radius:4px;padding:6px 10px;margin-bottom:3px;background:#fff;font-family:monospace;font-size:11px"><b>Caller State</b><span style="color:#9ca3af;font-size:10px"> — constraints · clarification</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #7c3aed;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>World Model</b><span style="color:#9ca3af;font-size:10px"> — beliefs · contradictions · generation_id</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #16a34a;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>Reasoning</b><span style="color:#9ca3af;font-size:10px"> — evidence · hypotheses (4 sources) · VOI</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #a5b4fc;border-left:4px solid #a21caf;border-radius:4px;padding:6px 10px;background:#eef2ff;font-family:monospace;font-size:11px"><b>Control</b> <span style="background:#e0e7ff;color:#4f46e5;border:1px solid #a5b4fc;border-radius:3px;padding:1px 5px;font-size:9px">key</span><span style="color:#9ca3af;font-size:10px"> — 5-tier resolver · NORMAL/CAUTIOUS/BLOCKED</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #2563eb;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>Planning</b><span style="color:#9ca3af;font-size:10px"> — task graph (6-state) · parallel concurrency</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="padding:0">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #d97706;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>Execution</b><span style="color:#9ca3af;font-size:10px"> — VOI · review gate</span></td>
+    <td width="2%"></td>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #dc2626;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>Verification</b><span style="color:#9ca3af;font-size:10px"> — 9 layers</span></td>
+  </tr></table>
+</td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="padding:0">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #ea580c;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>Recovery</b><span style="color:#9ca3af;font-size:10px"> — 6 strategies</span></td>
+    <td width="2%"></td>
+    <td width="49%" style="border:1px solid #e5e7eb;border-left:3px solid #65a30d;border-radius:4px;padding:6px 8px;background:#fff;font-family:monospace;font-size:11px"><b>Memory</b><span style="color:#9ca3af;font-size:10px"> — compression · journal</span></td>
+  </tr></table>
+</td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px dashed #e5e7eb;border-left:3px solid #94a3b8;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px;color:#9ca3af"><b>Learning</b><span style="font-size:10px"> — experience store · warm start (optional)</span></td></tr>
+<tr><td height="3"></td></tr>
+<tr><td style="border:1px solid #e5e7eb;border-left:3px solid #059669;border-radius:4px;padding:6px 10px;background:#fff;font-family:monospace;font-size:11px"><b>Output &amp; Reviewer Pass</b><span style="color:#9ca3af;font-size:10px"> — contract · 3-lens review</span></td></tr>
+</table>
+<div align="center" style="margin-top:14px;font-family:monospace;font-size:10px;color:#9ca3af">22 nodes · 11 layers · 241 tests passing</div>
+</td>
+</tr>
+</table>
+
+> The spec is the contract. The canvas is the editor. The adapters are the compilers.
 
 ```
-flow.json  →  [ langgraph adapter ]  →  Python / LangGraph
-           →  [ crewai adapter ]     →  Python / CrewAI
-           →  [ mastra adapter ]     →  TypeScript / Mastra
-           →  [ maf adapter ]        →  Python / MS Agent Framework
-           →  [ REST endpoint ]      →  POST /flows/{id}/invoke
-           →  [ MCP tool ]           →  Claude Desktop + any MCP client
-           →  [ A2A agent ]          →  any A2A-compatible runtime
+Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework  →  Langfuse
 ```
 
-**Current version:** v0.8.0 — canvas, four framework adapters, Langfuse observability, and full 11-layer harness architecture implemented. 241 harness tests passing.
+**v0.8.0** — canvas, four framework adapters, full 11-layer harness architecture, Langfuse observability.
 
 ---
 
-## The bigger picture — what a full harness is
+## Node palette
 
-A workflow tells your AI what to do. A harness makes sure it actually does it.
+Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — every node compiles to all four runtimes. Hover a node name for its description.
 
-The difference is not a matter of degree — it is architectural. A workflow routes prompts from node to node. A harness governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns for next time. Its Harness implements that complete architecture: draw it on a canvas, run it on any framework, and get the full 11-layer control system out of the box.
+<table>
+<thead><tr><th colspan="7" align="left">Core nodes</th></tr></thead>
+<tbody>
+<tr>
+<td><abbr title="Flow entry point — receives the initial request and state">⤵ <code>input</code></abbr></td>
+<td><abbr title="Flow exit point — returns the final result to the caller">⤴ <code>output</code></abbr></td>
+<td><abbr title="LLM invocation — structured output, validator, fail_branch, managed Langfuse prompts">✨ <code>llm_call</code></abbr></td>
+<td><abbr title="Named tool from the flow's tools[] registry">🔧 <code>tool_invoke</code></abbr></td>
+<td><abbr title="Branching — JSONPath or fn_ref expression evaluates to a named branch target">⎇ <code>condition</code></abbr></td>
+<td><abbr title="Fan-out to N concurrent branches">⑂ <code>parallel_fork</code></abbr></td>
+<td><abbr title="Fan-in — merge / append / fn_ref reducer waits for all branches to complete">⊖ <code>parallel_join</code></abbr></td>
+</tr>
+<tr>
+<td><abbr title="Suspend and wait for a typed human resume payload — sequential HITL supported across all runtimes">⏸ <code>hitl_breakpoint</code></abbr></td>
+<td><abbr title="Read from key-value or semantic memory store">📖 <code>memory_read</code></abbr></td>
+<td><abbr title="Write to a named memory store">🔖 <code>memory_write</code></abbr></td>
+<td><abbr title="Embed another flow as a reusable node — LangGraph/Mastra: full support; CrewAI: partial">📦 <code>subgraph</code></abbr></td>
+<td><abbr title="State transform — field mapping or fn_ref function applied to the flow state">⇌ <code>transform</code></abbr></td>
+<td><abbr title="Execute an agent persona from the flow's agents[] registry — native in CrewAI, synthesised in others">🤖 <code>agent_role</code></abbr></td>
+<td><abbr title="Multi-agent loop with configurable termination condition — native in MS Agent Framework, synthesised in others">👥 <code>agent_debate</code></abbr></td>
+</tr>
+</tbody>
+</table>
 
-### The implemented harness
+<table>
+<thead><tr><th colspan="7" align="left">Harness nodes — implement the 11-layer control architecture</th></tr></thead>
+<tbody>
+<tr>
+<td><abbr title="Observations, beliefs, assumptions, contradictions — generation_id increments on every significant update">🧠 <code>world_model</code></abbr></td>
+<td><abbr title="Four generation sources; diversity enforcement (0.7 threshold); K-retention elimination policy">💡 <code>hypothesis_set</code></abbr></td>
+<td><abbr title="Collects typed Evidence(obs, reliability, source, type, freshness) — observations are never auto-promoted to conclusions">🗄️ <code>gather_evidence</code></abbr></td>
+<td><abbr title="Caps max conclusion reliability per tool given known scope limits; updates verification_health.feasibility">🔧 <code>apply_tool_rel</code></abbr></td>
+<td><abbr title="Reliability-weighted belief integration; belief_dep_graph propagation; completeness_flags updated">🧠 <code>update_wm</code></abbr></td>
+<td><abbr title="Five-tier resolver → NORMAL / CAUTIOUS / BLOCKED; deadlock detection; generation_id gate assertions">🛡️ <code>control_state</code></abbr></td>
+<td><abbr title="Six-state task decomposition; cycle detection; abstraction_fit recomputed on change; parallel write-domain conflict detection">🕸️ <code>task_graph</code></abbr></td>
+</tr>
+<tr>
+<td><abbr title="9 verification layers pruned by tool_availability_manifest; adversarial pass on HIGH risk; contract_shadow_check">✅ <code>verify_gate</code></abbr></td>
+<td><abbr title="rollback() → record_failure() → strategy switch; six strategies: DIRECT_EDIT, TRACE_EXEC, BROADER_SEARCH, REIMPLEMENT, MINIMAL_FIX, ESCALATE">🔄 <code>recovery</code></abbr></td>
+<td><abbr title="Evidence store with tool_reliability_envelopes and tool_availability_manifest — consulted to prune unavailable verification checks">🗄️ <code>evidence_store</code></abbr></td>
+<td><abbr title="Optional cross-run structural reuse of decompositions, tool workflows, verification plans, and recovery sequences">📊 <code>exp_store</code></abbr></td>
+<td><abbr title="Three-lens review: implementer · reviewer · adversarial — adversarial prior seeded on causal proximity to success criteria">👁️ <code>reviewer_pass</code></abbr></td>
+<td><abbr title="Pre-seeded conceptual process scaffolds for common task patterns">🧭 <code>process_concept</code></abbr></td>
+<td></td>
+</tr>
+</tbody>
+</table>
 
-The full 11-layer, 22-node harness is implemented and integrated across all four framework adapters:
+Full 22-node loop, 11 architectural layers, pseudo-code, and state model: [plan/harness_architecture.html](plan/harness_architecture.html)
 
-| Layer | What's implemented |
-|---|---|
-| **Canvas** | 14 node types · visual editor · real-time multi-user collab · `@itsharness/canvas` embed package |
-| **Frameworks** | LangGraph · CrewAI · Mastra · MS Agent Framework — all four with full harness-layer adapter support |
-| **Observability** | Langfuse traces + harness spans (world model, control state, verification, recovery) across all 4 runtimes |
-| **Reasoning** | Evidence store · tool reliability envelopes · VOI-gated evidence gathering · hypothesis system (4 sources · diversity enforcement · elimination policy) |
-| **World Model** | Belief dep graph · `generation_id` staleness tracking · typed contradictions · staleness sweep · `completeness_flags` |
-| **Control** | 5-tier `resolve_control_state()` · `NORMAL`/`CAUTIOUS`/`BLOCKED` · deadlock detection · generation_id gate assertions |
-| **Planning** | Task graph (6-state) · parallel write-domain conflict detection · `conflict_probability_cache` · pessimistic/optimistic concurrency |
-| **Verification** | 9 verification layers · adversarial reviewer pass · pre-execution review gate · `contract_shadow_check` · `tool_availability_manifest` |
-| **Recovery** | 6 named recovery strategies · typed failure library · `cannot_make_progress()` (4 measurable proxies) · local/global replan |
-| **Memory** | Token budget tracking · journal retention policy · structured compression risk (`compressed_structures[]` + `pruned_regions[]`) |
-| **Learning** | Experience store (optional) — structural reuse across runs: decompositions, tool workflows, verification plans, recovery sequences |
+---
 
-### The 11 architectural layers
+## Frameworks
 
-The full harness is organised into 11 layers, each with a distinct responsibility:
+All four runtimes are fully supported — compile once from the same spec, run anywhere.
 
-| Layer | Responsibility |
-|---|---|
-| **Caller State** | Requirements, constraints, clarifications — mutable first-class object updated mid-run |
-| **World Model** | Observations, beliefs, assumptions, contradictions — `generation_id` tracks every significant update |
-| **Reasoning** | Evidence handling, hypothesis generation from four sources, VOI-gated evidence gathering |
-| **Planning** | Task decomposition, scheduling, parallel concurrency with write-domain conflict detection |
-| **Control** | Risk state management — five-tier resolver outputs `NORMAL` / `CAUTIOUS` / `BLOCKED` |
-| **Execution** | Action selection and mutation — control state is the sole control input |
-| **Verification** | 9-layer verification · adversarial reviewer pass · pre-execution review gate |
-| **Policy** | Gate enforcement at decomposition, action selection, and post-execution |
-| **Recovery** | Rollback and replanning — six named strategies · typed failure library |
-| **Memory** | Context compression · journal retention policy · budget tracking |
-| **Learning** | Experience store (optional) — structural reuse across runs, not just probability priors |
-
-### The 22 nodes
-
-The full harness executes a 22-node loop. Each node corresponds to a specific reasoning or control responsibility:
-
-| # | Node | Layer | What it does |
+| Runtime | Language | HITL | Key integration |
 |---|---|---|---|
-| 1 | **Initialize** | Planning | Sets up all persistent state: world model, belief dep graph, hypothesis set, task graph, diagnostics, control state, memory budget |
-| 2 | **Warm Start** | Learning | Loads reusable structures from the experience store (strategy priors, failure base rates, structural patterns) — no-op if unavailable |
-| 3 | **Check Caller Updates** | Caller State | Non-blocking poll for mid-run constraint changes; full propagation to task graph and output contract if constraints changed |
-| 4 | **Context Compression** | Memory | `compress_memory()` — tracks compressed structures and pruned regions separately; updates `completeness_flags` |
-| 5 | **Gather Evidence** | Reasoning | Collects `Evidence(obs, reliability, source, type, freshness)` — observations never auto-promoted to conclusions |
-| 6 | **Apply Tool Reliability** | Reasoning | Caps maximum conclusion reliability per tool given known scope limits; updates `verification_health.feasibility` |
-| 7 | **Update World Model** | World Model | Reliability-weighted belief integration; `belief_dep_graph` propagation; `completeness_flags` updated |
-| 8 | **Detect Contradictions** | World Model | Typed detection: `pairwise` · `set-level` · `temporal` · `abstraction` — four severity levels, three scopes |
-| 9 | **Generate / Update Hypotheses** | Reasoning | Four structurally distinct sources; diversity enforcement (threshold 0.7); elimination policy with K-retention |
-| 10 | **Update Diagnostics** | Control | Recomputes all four health vectors; `failure_mode_library.match()`; `dep_class_gap` advisory annotation |
-| 11 | **Resolve Control State** | Control | Five implicit tiers in strict order → `NORMAL` / `CAUTIOUS` / `BLOCKED`; deadlock detection; `generation_id` stamped |
-| 12 | **Update Task Graph** | Planning | Reflects new world model state; cycle detection; `abstraction_fit` recomputed on change |
-| 13 | **Select Task** | Planning | `depends_on` resolution; pessimistic or optimistic concurrency from `conflict_probability_cache`; parallel branch merge at join |
-| 14 | **Estimate Risk** | Execution | `LOW` / `MEDIUM` / `HIGH` — based on file centrality, change scope, module type |
-| 15 | **Estimate VOI** | Reasoning | `VOI = expected_uncertainty_reduction × decision_impact`; verification adequacy critic prunes unavailable 9-layer checks |
-| 16 | **Review Proposed Change** | Policy | Five-dimension pre-execution gate — task alignment, world model consistency, output contract, code quality, open hypotheses |
-| 17 | **Execute** | Execution | Per-action reversibility strategy; tool workflow; tool errors become `Evidence(HIGH, SYSTEM_ERROR)` |
-| 18 | **Verify** | Verification | 9 verification layers (pruned by `tool_availability_manifest`); adversarial pass if `HIGH` risk; `contract_shadow_check` |
-| 19 | **Rollback + Replan** | Recovery | `rollback()` → `record_failure()` → strategy switch; six named strategies: `DIRECT_EDIT` · `TRACE_EXEC` · `BROADER_SEARCH` · `REIMPLEMENT` · `MINIMAL_FIX` · `ESCALATE` |
-| 20 | **Escalate** | Caller State | Fires when `BLOCKED` or `cannot_make_progress()`; surfaces minimum information needed; full constraint propagation on human response |
-| 21 | **Reviewer Pass** | Verification | Three lenses (implementer · reviewer · adversarial); adversarial prior seeded on causal proximity to success criteria |
-| 22 | **Output Validation** | Verification | Full output contract check against current caller constraints — authoritative pass before return |
+| **LangGraph** | Python | `interrupt()` | `@observe` · harness child spans |
+| **CrewAI** | Python | — | `context_from → Task.context` · tier-aware memory |
+| **Mastra** | TypeScript | `suspend()/resume()` | Node.js sidecar |
+| **MS Agent Framework** | Python | `_HitlPause` | `AgentGroupChat` native · OTel → Langfuse |
 
-See [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md) for service interactions and data flows. See [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) for the complete harness reference — pseudo-code, all 22 nodes, all 11 layers, state model, deep dives, and scope.
+Compile: `POST /compile?runtime=langgraph` — same `flow.json`, any runtime.  
+Deploy as a **REST endpoint**, **MCP tool**, or **A2A agent** in one step.
+
+---
+
+## Observability
+
+Self-hosted **Langfuse** starts alongside the canvas with `docker compose up` — no extra configuration.
+
+- Per-node child spans across all four runtimes (world model, control state, verification, recovery)
+- Token counts, latency, and cost per node via LiteLLM
+- Live **View trace →** link in the canvas after each run
+- Managed prompts via the Langfuse prompt API (`prompt_ref` on any `llm_call` node)
 
 ---
 
 ## Quick start
 
-### 1. Run setup
-
 ```bash
-./scripts/setup-env.sh
-```
-
-Generates secrets, writes `.env`, optionally creates the Python venv and starts the stack. Safe to re-run — existing real values are never overwritten.
-
-### 2. Start the stack
-
-```bash
-docker compose up
+./scripts/setup-env.sh   # generate secrets, write .env
+docker compose up        # start all 9 services
 ```
 
 | Service | URL |
@@ -133,140 +182,40 @@ docker compose up
 | Adapter API | http://localhost:8000/health |
 | Langfuse | http://localhost:3001 |
 
-Nine services start: canvas, adapter, mastra-runner, postgres, redis, clickhouse, litellm, langfuse-web, langfuse-worker.
-
-> **Startup errors?** See [docs/troubleshooting.md](https://github.com/3IVIS/itsharness/blob/main/docs/troubleshooting.md). The most common causes are a stale Postgres volume (`./scripts/reset-volumes.sh`) or a secret that's wrong length (`bash scripts/check-env.sh`).
-
-**Real-time collaboration** is opt-in — see [docs/collab.md](https://github.com/3IVIS/itsharness/blob/main/docs/collab.md).  
-**On-prem / Kubernetes** — see [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md).
-
-### Without Docker
-
+**Without Docker:**
 ```bash
-./scripts/setup-env.sh
-source adapter/.venv/bin/activate
-npm install && npm run dev       # canvas → http://localhost:3000
-cd adapter && python main.py     # adapter → http://localhost:8000
+./scripts/setup-env.sh && source adapter/.venv/bin/activate
+npm install && npm run dev       # canvas → localhost:3000
+cd adapter && python main.py     # adapter → localhost:8000
 ```
 
-### Tests
-
+**Tests:**
 ```bash
-npm test                                          # Vitest — validates all 5 reference flows
-pytest adapter/tests/ -v                         # adapter unit + integration suite
-pytest adapter/tests/test_maf_adapter.py -v     # MAF adapter suite (742 tests)
+npm test                                         # Vitest — validates 5 reference flows
+pytest adapter/tests/ -v                        # adapter unit + integration
+pytest adapter/tests/test_maf_adapter.py -v    # MAF suite (742 tests)
 ```
 
-### Diagnostics
-
-| Script | What it checks |
-|---|---|
-| `bash scripts/verify_services.sh` | All containers running · healthchecks · HTTP endpoints · Redis / Postgres / Langfuse auth |
-| `bash scripts/verify_llm.sh` | Ollama → LiteLLM → adapter LLM path (3 independent layers) |
-| `bash scripts/verify_hitl.sh` | HITL pause → resume → done for LangGraph, Mastra, MAF |
-| `bash scripts/verify_observability.sh` | Langfuse trace confirmed for all 4 runtimes |
-| `bash scripts/verify_prompts.sh` | Langfuse prompt API · adapter HTTP proxy · SDK resolve |
-
-Set `TEST_EMAIL=... TEST_PASSWORD=...` to skip the interactive credentials prompt.
+> Startup errors? See [docs/troubleshooting.md](docs/troubleshooting.md).  
+> Real-time collaboration: [docs/collab.md](docs/collab.md) · On-prem / Kubernetes: [docs/deployment.md](docs/deployment.md)
 
 ---
 
 ## LLM providers
 
-All LLM calls route through **LiteLLM**. Add the relevant key(s) to `.env`:
+All calls route through **LiteLLM** — add the key to `.env`:
 
-| Provider | Key | Model name in flow spec |
+| Provider | Env var | Example models |
 |---|---|---|
-| OpenAI | `OPENAI_API_KEY=sk-...` | `gpt-4o`, `gpt-4o-mini` |
-| Anthropic | `ANTHROPIC_API_KEY=sk-ant-...` | `claude-sonnet`, `claude-haiku`, `claude-opus` |
-| Ollama (local) | none | `mistral`, `qwen3`, `qwen2.5-coder` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet`, `claude-opus` |
+| Ollama (local) | — | `mistral`, `qwen3`, `qwen2.5-coder` |
 
-For full setup instructions including Ollama and custom models see [docs/llm-setup.md](https://github.com/3IVIS/itsharness/blob/main/docs/llm-setup.md).
+Full setup including custom models: [docs/llm-setup.md](docs/llm-setup.md)
 
 ---
 
-## What it does
-
-- **Draw** — 14 node types on a visual canvas. Every spec field is directly editable.
-- **Own the spec** — the canvas emits a versioned, runtime-agnostic JSON spec you control.
-- **Compile** — one API call transforms the spec into runnable code for your chosen framework.
-- **Run and observe** — live node overlays, per-node token counts, Langfuse trace links, HITL pause/resume.
-- **Deploy** — one click publishes the flow as a REST endpoint, MCP tool, and A2A agent simultaneously.
-- **Collaborate** — real-time multi-user editing with Yjs CRDT, live cursors, and offline persistence.
-- **Embed** — drop the canvas into your own portal with the `@itsharness/canvas` npm package.
-
-**The spec is the contract. The canvas is the editor. The adapters are the compilers.**
-
----
-
-## The spec — `@itsharness/flow-spec`
-
-**Current version:** `0.2.0` · **RFC:** closed — field semantics in [`docs/adr/001`](https://github.com/3IVIS/itsharness/blob/main/docs/adr/001-codegen-field-semantics.md)
-
-### Node types
-
-| Node | What it does | Runtime support |
-|---|---|---|
-| `input` | Flow entry point | All |
-| `output` | Flow exit point | All |
-| `llm_call` | LLM invocation — structured output, validator, fail_branch, managed prompts | All |
-| `tool_invoke` | Named tool from the flow's `tools[]` registry | All |
-| `condition` | Branching — JSONPath or `fn_ref` | All |
-| `parallel_fork` | Fan-out to N concurrent branches | All |
-| `parallel_join` | Fan-in — `merge` / `append` / `fn_ref` reducer | All |
-| `hitl_breakpoint` | Suspend; wait for a typed human resume payload | All |
-| `memory_read` | Read from key-value or semantic store | All |
-| `memory_write` | Write to a named store | All |
-| `subgraph` | Embed another flow as a node | LG/MA: full · CR: partial |
-| `transform` | State transform — mapping or `fn_ref` | All |
-| `agent_role` | Execute an agent persona from `agents[]` | CR: native · others: synthesised |
-| `agent_debate` | Multi-agent loop with termination condition | MAF: native · others: synthesised |
-
-### Example flows
-
-| Flow | Runtime | Exercises |
-|---|---|---|
-| [01 — RAG Agent](https://github.com/3IVIS/itsharness/blob/main/flows/01-rag-agent-flow.json) | LangGraph | `memory_read` semantic, `transform` fn_ref |
-| [02 — Content Moderation + HITL](https://github.com/3IVIS/itsharness/blob/main/flows/02-content-moderation-hitl-flow.json) | Mastra | `llm_call` structured output, `hitl_breakpoint` |
-| [03 — Parallel Risk Assessment](https://github.com/3IVIS/itsharness/blob/main/flows/03-parallel-risk-assessment-flow.json) | CrewAI | `parallel_fork/join`, `agent_role` ×3 |
-| [04 — Research Crew](https://github.com/3IVIS/itsharness/blob/main/flows/04-research-crew-flow.json) | CrewAI | `context_from` on edges, `tool_approval: "human"` |
-| [05 — Debate Agent + A2A](https://github.com/3IVIS/itsharness/blob/main/flows/05-debate-agent-a2a-flow.json) | MS Agent Framework | `agent_debate`, `a2a_config` |
-| [06 — Ollama Simple](https://github.com/3IVIS/itsharness/blob/main/flows/06-ollama-simple-flow.json) | All | Single `llm_call`; no external deps — used by `scripts/setup-ollama.sh` |
-| [07 — Minimal HITL Test](https://github.com/3IVIS/itsharness/blob/main/flows/07-minimal-hitl-test-flow.json) | LG / MA / MAF | No LLM; always pauses — used by `scripts/verify_hitl.sh` |
-| [Plan + Execute](https://github.com/3IVIS/itsharness/blob/main/flows/flow-plan-execute.json) | All | `hitl_breakpoint` ×2, `agent_role`, `llm_call` quality gates |
-| [Parallel Research](https://github.com/3IVIS/itsharness/blob/main/flows/flow-parallel-research.json) | All | `parallel_fork/join`, 3 concurrent `agent_role` researchers |
-| [LLM Planner (meta-flow)](https://github.com/3IVIS/itsharness/blob/main/flows/flow-llm-planner-meta.json) | All | `agent_role` generates a FlowSpec; `condition` retry loop |
-| [Research + Write](https://github.com/3IVIS/itsharness/blob/main/flows/flow-research-write.json) | All | `parallel_fork/join`, `hitl_breakpoint` quality gate, `transform` |
-
-### Adapter coverage
-
-| Runtime | Status | Key notes |
-|---|---|---|
-| **LangGraph** · Python | ✅ Full | `@observe` trace + child spans · HITL via `interrupt()` |
-| **CrewAI** · Python | ✅ Full | `context_from → Task.context` · tier-aware `Crew()` memory |
-| **Mastra** · TypeScript | ✅ Full | Node.js sidecar · `suspend()/resume()` HITL |
-| **MS Agent Framework** · Python / semantic-kernel 1.x | ✅ Full | `AgentGroupChat` native · HITL via `_HitlPause` · OTel → Langfuse |
-
----
-
-## Running flows
-
-```bash
-# Unified runner — any runtime, HITL-aware
-bash scripts/run.sh --runtime langgraph flows/flow-plan-execute.json topic="AI agents"
-
-# Or use per-runtime wrappers (prompt for credentials, stream node events):
-bash scripts/run_langgraph.sh flow-plan-execute.json
-bash scripts/run_mastra.sh    flow-plan-execute.json
-bash scripts/run_maf.sh       flow-plan-execute.json
-bash scripts/run_crewai.sh    flow-plan-execute.json   # no API-level HITL
-```
-
-See [docs/api.md](https://github.com/3IVIS/itsharness/blob/main/docs/api.md) for the full REST API reference including compile, execute, deploy, and HITL resume endpoints.
-
----
-
-## The `@itsharness/canvas` package
+## Embed the canvas
 
 ```bash
 npm install @itsharness/canvas
@@ -279,99 +228,31 @@ import '@itsharness/canvas/styles.css'
 <ItsHarnessCanvas
   initialSpec={mySpec}
   onSpecChange={(updated) => save(updated)}
-  onNodeSelect={(id) => setInspector(id)}
   execStats={runState.nodeStats}
   theme="dark"
 />
 ```
 
-See [`packages/canvas/README.md`](https://github.com/3IVIS/itsharness/blob/main/packages/canvas/README.md) for the full props reference.
+Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 
 ---
 
-## Repository structure
+## Documentation
 
-```
-itsharness/
-│
-├── spec/                        ← @itsharness/flow-spec (published npm)
-│   ├── schema.ts                  Canonical Zod schema — source of truth
-│   ├── schema.json                Derived JSON Schema
-│   └── CHANGELOG.md
-│
-├── flows/                       ← 11 flows (5 published reference + 6 working), 12 files
-│   ├── 01–05-*.json               Published reference flows (see table above)
-│   ├── 06-ollama-simple-flow.json
-│   ├── 07-minimal-hitl-test-flow.json
-│   ├── 04-research-crew-flow-test.json  (test variant of 04)
-│   └── flow-{plan-execute,parallel-research,llm-planner-meta,research-write}.json
-│
-├── plan/                        ← Architecture reference documents
-│   └── full_harness_architecture.html  Complete 22-node / 11-layer harness architecture reference
-│
-├── scripts/                     ← Helper scripts (all run from project root)
-│   ├── setup-env.sh               First-time setup — secrets, venv, Docker
-│   ├── setup-ollama.sh            Test all 4 runtimes against local Ollama
-│   ├── check-env.sh               Validate required secrets in .env
-│   ├── reset-volumes.sh           Wipe Postgres / Redis / Clickhouse volumes
-│   ├── run.sh                     Unified flow runner — any runtime, HITL-aware
-│   ├── run_{langgraph,crewai,mastra,maf}.sh   Per-runtime wrappers (interactive, HITL-aware)
-│   ├── verify_{services,llm,hitl,observability,prompts}.sh   Regression verification
-│   └── ingest_rag_data.py         Ingest documents into the RAG vector store
-│
-├── packages/
-│   └── canvas/                  ← @itsharness/canvas (published npm)
-│
-├── src/                         ← Canvas app (React + TypeScript + XYFlow)
-│   ├── collab/                    Yjs CRDT real-time collaboration layer
-│   ├── spec/                      Canvas schema + validation
-│   ├── store/index.ts             Zustand store
-│   ├── canvas/nodes/              14 node components
-│   └── components/                Sidebar, ConfigPanel, deploy panels, HITL
-│
-├── adapter/                     ← FastAPI backend
-│   ├── langgraph_adapter.py, crewai_adapter.py, mastra_adapter.py, maf_adapter.py
-│   ├── sso_auth.py                OIDC + SCIM 2.0
-│   ├── migrations/versions/       Alembic migrations 0001–0008
-│   └── tests/
-│
-├── mastra-runner/               ← Node.js sidecar for Mastra execution
-│
-├── deploy/helm/itsharness/      ← On-prem Helm chart (v0.1.0)
-│
-├── .github/workflows/
-│   ├── ci.yml, eval.yml, deploy.yml
-│   └── publish-spec.yml, publish-canvas.yml
-│
-└── docs/
-    ├── architecture.md, api.md, llm-setup.md
-    ├── collab.md, deployment.md, troubleshooting.md
-    └── adr/001-codegen-field-semantics.md
-```
-
-> **`spec/schema.ts` vs `src/spec/schema.ts`** — `spec/schema.ts` is the canonical published schema. When the spec changes, update both and run `scripts/check-schema-sync.mjs`.
-
----
-
-## Further reading
-
-| Document | Contents |
+| | |
 |---|---|
-| [docs/architecture.md](https://github.com/3IVIS/itsharness/blob/main/docs/architecture.md) | System design, service interactions, data flows, key decisions |
-| [docs/api.md](https://github.com/3IVIS/itsharness/blob/main/docs/api.md) | Full API reference — all endpoints, auth, error codes |
-| [docs/tests-and-scripts.md](https://github.com/3IVIS/itsharness/blob/main/docs/tests-and-scripts.md) | All test suites and helper scripts — what each covers and how to run them |
-| [docs/llm-setup.md](https://github.com/3IVIS/itsharness/blob/main/docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom models |
-| [docs/collab.md](https://github.com/3IVIS/itsharness/blob/main/docs/collab.md) | Real-time collaboration — setup, Yjs internals, env vars |
-| [docs/deployment.md](https://github.com/3IVIS/itsharness/blob/main/docs/deployment.md) | Docker, Helm, SSO/OIDC configuration, full env var reference |
-| [docs/troubleshooting.md](https://github.com/3IVIS/itsharness/blob/main/docs/troubleshooting.md) | Common startup errors and fixes |
-| [docs/adr/001](https://github.com/3IVIS/itsharness/blob/main/docs/adr/001-codegen-field-semantics.md) | Codegen field semantics: `output_key`, `*_expr`, `context_from`, `memory_write.tier` |
-| [plan/full_harness_architecture.html](https://github.com/3IVIS/itsharness/blob/main/plan/full_harness_architecture.html) | Complete harness architecture — pseudo-code, all 22 nodes, all 11 layers, state model, deep dives, scope |
-| [CONTRIBUTING.md](https://github.com/3IVIS/itsharness/blob/main/CONTRIBUTING.md) | How to contribute — adapters, schema, canvas, migrations |
-| [packages/canvas/README.md](https://github.com/3IVIS/itsharness/blob/main/packages/canvas/README.md) | `@itsharness/canvas` usage and props |
-| [spec/CHANGELOG.md](https://github.com/3IVIS/itsharness/blob/main/spec/CHANGELOG.md) | Spec version history |
+| [plan/harness_architecture.html](plan/harness_architecture.html) | Complete harness — pseudo-code, 22 nodes, 11 layers, state model, deep dives |
+| [plan/canvas_plan.html](plan/canvas_plan.html) | Canvas roadmap — 4 phases, 240 shipped items |
+| [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows |
+| [docs/api.md](docs/api.md) | REST API reference — compile, execute, deploy, HITL resume |
+| [docs/llm-setup.md](docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom |
+| [docs/collab.md](docs/collab.md) | Real-time collaboration — Yjs setup and internals |
+| [docs/deployment.md](docs/deployment.md) | Docker, Helm, SSO/OIDC, full env var reference |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common startup errors |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 
 ---
 
 ## License
 
-Apache 2.0 — see [LICENSE](https://github.com/3IVIS/itsharness/blob/main/LICENSE).
+Apache 2.0 — see [LICENSE](LICENSE).
