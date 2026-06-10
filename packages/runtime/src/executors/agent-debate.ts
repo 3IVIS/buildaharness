@@ -50,7 +50,7 @@ export async function agentDebateExecutor(node: Node, state: FlowState, context:
     if (config.termination_condition) {
       const cond = config.termination_condition
       if (cond.type === 'expr' && cond.expr) {
-        const evalState = new FlowStateClass({})
+        const evalState = new FlowStateClass()
         evalState.patch({ transcript })
         try {
           const result = evaluateExpr(cond.expr, evalState.toJSON())

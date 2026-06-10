@@ -14,6 +14,9 @@ function mockLLMClient(tokens: string[]): ILLMClient {
     async callChatSync(_msgs: ChatMessage[], _opts?: ChatOptions) {
       return tokens.join('')
     },
+    async callChatStructured() {
+      return { content: tokens.join('') }
+    },
   }
 }
 
@@ -42,6 +45,7 @@ describe('LLMCallExecutor', () => {
         yield 'ok'
       },
       callChatSync: vi.fn().mockResolvedValue('ok'),
+      callChatStructured: vi.fn().mockResolvedValue({ content: 'ok' }),
     }
     const ctx = createExecutionContext({ llmClient: client })
     await llmCallExecutor(makeNode({ system_prompt: 'You are helpful' }), stateWith({}), ctx)
@@ -56,6 +60,7 @@ describe('LLMCallExecutor', () => {
         yield 'answer'
       },
       callChatSync: vi.fn().mockResolvedValue('answer'),
+      callChatStructured: vi.fn().mockResolvedValue({ content: 'answer' }),
     }
     const ctx = createExecutionContext({ llmClient: client })
     const state = stateWith({ topic: 'TypeScript' })

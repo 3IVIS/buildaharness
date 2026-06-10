@@ -9,6 +9,7 @@ function mockLLMClient(): ILLMClient {
   return {
     callChat: vi.fn().mockImplementation(async function* () {}),
     callChatSync: vi.fn().mockResolvedValue(''),
+    callChatStructured: vi.fn().mockResolvedValue({ content: '' }),
   }
 }
 

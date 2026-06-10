@@ -1,11 +1,12 @@
 import type { ILLMClient } from './llm-client'
 import type { FlowState } from './state'  // used in branchResults map type
 import { EventBus } from './events'
-import { ToolDef, ToolRegistry } from './tools/registry'
+import { type ToolDef, ToolRegistry } from './tools/registry'
 import { BUILT_IN_TOOLS } from './tools/built-ins'
 import { InMemoryAdapter } from './memory/in-memory'
 
-export { ToolDef, ToolRegistry }
+export type { ToolDef }
+export { ToolRegistry }
 
 export interface RetryConfig {
   maxRetries: number

@@ -51,8 +51,10 @@ permissions:
 env:
   REGISTRY:        ghcr.io
   IMAGE_NAME:      ${{ github.repository }}/itsharness-adapter
-  # Resolve environment string used in later steps
-  DEPLOY_ENV: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && 'production' || (inputs.environment || 'staging') }}
+  # Resolve environment string used in later steps.
+  # Avoid accessing inputs.* at workflow level for non-dispatch events — it can
+  # silently fail and prevent all jobs from running ("No jobs were run").
+  DEPLOY_ENV: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')) && 'production' || 'staging' }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -62,7 +64,10 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   adapter-lint:
     name: Adapter — lint + format check
-    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (inputs.skip_tests != true && inputs.promote_staging != true)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -85,7 +90,10 @@ jobs:
 
   adapter-typecheck:
     name: Adapter — typecheck (mypy)
-    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (inputs.skip_tests != true && inputs.promote_staging != true)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -106,7 +114,10 @@ jobs:
 
   adapter-unit-tests:
     name: Adapter — unit + integration + MAF tests
-    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (inputs.skip_tests != true && inputs.promote_staging != true)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -137,7 +148,10 @@ jobs:
 
   adapter-eval-gate:
     name: Adapter — eval spec-validation gate
-    if: github.event_name != 'workflow_dispatch' || (inputs.skip_tests != 'true' && inputs.promote_staging != 'true')
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (inputs.skip_tests != true && inputs.promote_staging != true)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -175,7 +189,7 @@ jobs:
       always() &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled') &&
-      (github.event_name != 'workflow_dispatch' || inputs.promote_staging != 'true') &&
+      (github.event_name != 'workflow_dispatch' || inputs.promote_staging != true) &&
       github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 

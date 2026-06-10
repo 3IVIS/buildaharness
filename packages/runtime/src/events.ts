@@ -20,7 +20,7 @@ type EventHandler<T extends RuntimeEvent> = (event: T) => void
 export class EventBus {
   private handlers = new Map<string, Set<EventHandler<RuntimeEvent>>>()
 
-  subscribe<T extends RuntimeEvent>(type: T['type'], handler: EventHandler<T>): () => void {
+  subscribe<TType extends RuntimeEvent['type']>(type: TType, handler: EventHandler<Extract<RuntimeEvent, { type: TType }>>): () => void {
     if (!this.handlers.has(type)) this.handlers.set(type, new Set())
     this.handlers.get(type)!.add(handler as EventHandler<RuntimeEvent>)
     return () => this.handlers.get(type)?.delete(handler as EventHandler<RuntimeEvent>)

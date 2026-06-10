@@ -21,6 +21,9 @@ function mockLLMClient(): ILLMClient {
     async callChatSync() {
       return 'mocked'
     },
+    async callChatStructured() {
+      return { content: 'mocked' }
+    },
   }
 }
 

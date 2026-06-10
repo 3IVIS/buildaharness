@@ -11,6 +11,12 @@ export default defineConfig({
     }),
   ],
 
+  resolve: {
+    alias: {
+      '@itsharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
+    },
+  },
+
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),

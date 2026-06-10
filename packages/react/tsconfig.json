@@ -10,7 +10,8 @@
     "noEmit": true,
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@itsharness/runtime": ["../runtime/src/index.ts"]
+      "@itsharness/runtime": ["../runtime/src/index.ts"],
+      "@itsharness/canvas": ["../canvas/src/spec/schema.ts"]
     }
   },
   "include": ["src", "*.ts"],
