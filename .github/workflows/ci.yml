@@ -118,3 +118,139 @@ jobs:
           JWT_SECRET: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           TESTING: "true"
+
+  runtime-package:
+    name: '@itsharness/runtime — typecheck, test, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/runtime
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: packages/runtime
+        run: npm test
+
+      - name: Build
+        working-directory: packages/runtime
+        run: npm run build
+
+  react-package:
+    name: '@itsharness/react — typecheck, test, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/react
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: packages/react
+        run: npm test
+
+      - name: Build
+        working-directory: packages/react
+        run: npm run build
+
+  harness-package:
+    name: '@itsharness/harness — typecheck, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/harness
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: packages/harness
+        run: npm run build
+
+  proxy-package:
+    name: '@itsharness/proxy — typecheck, test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/proxy
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: packages/proxy
+        run: npm test
+
+  spec-package:
+    name: '@itsharness/flow-spec — typecheck, schema check'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install spec deps
+        working-directory: spec
+        run: npm ci
+
+      - name: Type-check spec
+        working-directory: spec
+        run: npm run typecheck
+
+      - name: Verify schema.json is up to date
+        working-directory: spec
+        run: node scripts/gen-json-schema.mjs --check
+
+  mastra-runner:
+    name: 'mastra-runner — build (tsc)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mastra-runner/package-lock.json
+
+      - name: Install deps
+        working-directory: mastra-runner
+        run: npm ci
+
+      - name: Build (tsc)
+        working-directory: mastra-runner
+        run: npm run build
