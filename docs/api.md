@@ -56,13 +56,63 @@ GET  /run/{job_id}          Job status, node_events, trace_id, trace_url
 POST /run/{job_id}/resume   Resume a paused HITL flow
 ```
 
+### Harness execution endpoints
+
+These endpoints are only relevant for flows with `harness_meta.enabled = true`.
+
+```
+GET  /runs/{id}/harness-state         Read current HarnessRunState
+PUT  /runs/{id}/harness-state         Write updated HarnessRunState
+POST /run/{job_id}/escalation/respond Respond to a surface_blocker escalation
+GET  /run/concepts                    List all registered process concepts
+```
+
+#### `PUT /runs/{id}/harness-state` body
+
+```json
+{
+  "world_model": { ... },
+  "hypothesis_set": { ... },
+  "control_state": { ... },
+  "task_graph": { ... },
+  "evidence_store": { ... },
+  "caller_state": { ... },
+  "output_contract": { ... }
+}
+```
+
+Only the fields provided are updated; absent fields retain their current values.
+
+#### `POST /run/{job_id}/escalation/respond` body
+
+```json
+{
+  "response": "...",
+  "updated_constraints": { ... }   // optional — triggers constraint-change propagation
+}
+```
+
+Returns `{ "status": "resumed" }` when the harness loop is successfully unblocked.
+
 ### `POST /run` body
 
 ```json
 {
-  "spec":    { ... },            // FlowSpec
+  "spec":    { ... },            // FlowSpec (v1.0.0 — includes optional harness_meta block)
   "input":   { ... },            // optional initial state
   "runtime": "langgraph"         // optional — overrides runtime_hints.preferred_adapter
+}
+```
+
+To enable the harness, include `harness_meta` in the FlowSpec:
+
+```json
+{
+  "harness_meta": {
+    "enabled": true,
+    "process_concept_id": "implement_feature",  // optional — seeds task graph from a concept
+    "max_steps": 50
+  }
 }
 ```
 

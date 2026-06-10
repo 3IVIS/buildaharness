@@ -6,12 +6,13 @@
 v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place. No open RFCs.
 
 **What's shipped:**
-- FlowSpec schema, 14 node types, 5 reference flows, ADR-001 closed
+- FlowSpec schema v1.0.0, 23 canvas node types (14 base + 9 harness), 5 reference flows, ADR-001 closed
 - XYFlow canvas, LangGraph + CrewAI + Mastra + MAF adapters, auth, Langfuse, execution, HITL
 - Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
 - Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
 - SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@itsharness/canvas` package
-- Full harness architecture: 11-layer reasoning and control system, 22-node execution loop, 241 harness tests
+- Full harness architecture: 11-layer reasoning and control system, 22-node execution loop, 470 harness tests (P0–P11, P-PC, integration, E2E, invariants)
+- npm packages: `@itsharness/harness`, `@itsharness/runtime`, `@itsharness/react`, `@itsharness/proxy`
 
 ---
 
@@ -143,6 +144,15 @@ Touches eight places:
 7. **`src/components/ConfigPanel.tsx`** — panel function + entry in `PANEL_MAP`
 8. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
 
+### Adding a harness node type
+
+Harness nodes (those inside `src/canvas/nodes/harness/`) need two additional steps:
+
+9. **`adapter/harness/node_compilers.py`** — add a `compile_<type>_node(node)` function and register it in `HARNESS_NODE_COMPILERS`
+10. **`adapter/harness/__init__.py`** — export the new compile function and update `HARNESS_NODE_COMPILERS`
+
+The harness node is then available to all four adapters automatically via `gen_harness_preamble()`.
+
 ---
 
 ## Canvas contributions
@@ -220,9 +230,16 @@ Example flows live in `flows/`. A valid flow must:
 ## Adapter test suite
 
 ```bash
+# Main suite (SQLite in-memory, no stack required)
 pytest adapter/tests/ -v
-pytest adapter/tests/test_maf_adapter.py -v    # MAF suite (742 tests)
+pytest adapter/tests/test_maf_adapter.py -v    # MAF suite
 pytest adapter/tests/test_sso.py -v            # SSO/OIDC + SCIM suite
+
+# Harness suite (all infrastructure-free, uses --noconftest)
+PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_p*.py adapter/tests/test_harness_process_concepts.py adapter/tests/test_harness_primitives.py -v --noconftest
+
+# Harness integration + E2E + invariants
+PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_integration_*.py adapter/tests/test_harness_e2e.py adapter/tests/test_harness_invariants.py -v --noconftest
 ```
 
 Tests use an in-memory SQLite database via the `client` fixture in `conftest.py`. New test files must:
@@ -235,11 +252,11 @@ Tests use an in-memory SQLite database via the `client` fixture in `conftest.py`
 
 ## Database migrations
 
-The current migration chain is `0001 → 0008`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
+The current migration chain is `0001 → 0011`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
 
 ```python
-revision: str = "0009"
-down_revision: str | None = "0008"
+revision: str = "0012"
+down_revision: str | None = "0011"
 
 def upgrade() -> None:
     op.create_table("my_table", ...)

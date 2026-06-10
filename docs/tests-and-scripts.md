@@ -7,11 +7,20 @@ Complete reference for the itsharness test suites and helper scripts.
 ## Running the tests
 
 ```bash
-# Frontend — Vitest (schema + canvas store, no server needed)
+# Frontend — Vitest (schema + canvas store + harness package, no server needed)
 npm test
 
 # Adapter — main integration suite (470 tests, SQLite in-memory, no server needed)
 pytest adapter/tests/ -v
+
+# Adapter — harness unit tests (P0–P11, all infrastructure-free)
+PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_p*.py adapter/tests/test_harness_process_concepts.py adapter/tests/test_harness_primitives.py -v --noconftest
+
+# Adapter — harness integration + E2E + invariants (111 tests, all infrastructure-free)
+PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_integration_*.py adapter/tests/test_harness_e2e.py adapter/tests/test_harness_invariants.py -v --noconftest
+
+# Adapter — harness benchmarks (50 runs per operation)
+PYTHONPATH=adapter python3.12 adapter/tests/benchmark_harness.py
 
 # Adapter — eval suite (structural tests always run; LLM metrics need EVAL_USE_REAL_LLM=true)
 pytest adapter/eval/ -v
@@ -21,7 +30,7 @@ pytest adapter/tests/test_maf_adapter.py -v
 pytest adapter/tests/test_debate_agent_a2a_flow.py -v
 ```
 
-No running stack is required for any of the above. The adapter tests use an in-memory SQLite database and mock all LLM/external calls.
+No running stack is required for any of the above. The adapter tests use an in-memory SQLite database and mock all LLM/external calls. All harness tests are infrastructure-free (no Postgres, no LLM calls).
 
 ---
 
@@ -85,6 +94,55 @@ Each flow test class (`TestLangGraphCompile`, `TestMAFCompile`, `TestCrewAICompi
 - Emits the right adapter-specific primitives (e.g. `interrupt()` for LangGraph HITL, `_HitlPause` for MAF, `suspend()` for Mastra)
 - Emits the correct warning count for partially-supported node types
 - Includes telemetry setup when `flow_config.telemetry.enabled = true`
+
+---
+
+---
+
+## Adapter — harness tests (`adapter/tests/test_harness_*.py`)
+
+470 tests in the harness suite. All infrastructure-free — no Postgres, no LLM keys, no running services. All tests use `--noconftest` to run without the SQLite fixture from `conftest.py`.
+
+### Phase unit tests
+
+| File | Tests | What it covers |
+|---|---|---|
+| `test_harness_p0.py` | 29 | Foundation: `WorldModel`, `generation_id`, staleness tracking, `CallerState`, `OutputContract` stubs, `HarnessRunState` |
+| `test_harness_p1.py` | 26 | Evidence: `Evidence`, `EvidenceStore`, tool reliability envelopes, `ToolAvailabilityManifest`, hypothesis generation (4 sources), elimination policy, diversity enforcement |
+| `test_harness_p2.py` | 18 | World Model ops: `integrate_evidence`, `BeliefDepGraph`, belief propagation, contradiction detection (pairwise / temporal / abstraction), resolution policy, staleness sweep |
+| `test_harness_p3.py` | 20 | Diagnostics: 10 normalised sub-dimensions, `resolve_control_state` 5-tier, deadlock detection, `select_best_action`, `run_one_iteration` |
+| `test_harness_p4.py` | 13 | Planning: `TaskGraph`, 6-state task status, `ConflictProbabilityCache`, `parallel_merge`, `reconcile_parallel_branches` |
+| `test_harness_p5.py` | 45 | Execution: risk estimation, VOI gating, `verify` (9 layers), `review_gate` (5 dimensions), `execute`, `ReversibilityStrategy`, `contract_shadow_check` |
+| `test_harness_p6.py` | 18 | Recovery: `StrategyState`, `FailureModeLibrary`, `cannot_make_progress` (4 stall proxies), `diagnose_and_replan`, `compress_memory`, `check_max_steps` |
+| `test_harness_p7.py` | 9 | Caller updates & escalation: `UpdateChannel`, `check_external_updates`, `apply_constraint_change_propagation`, `escalate`, `await_clarification` |
+| `test_harness_p8.py` | 16 | Experience store: `warm_start`, `update_experience_store`, softmax strategy weights, no-op path when `experience_store.available = False` |
+| `test_harness_p9.py` | 15 | Reviewer pass: `seed_adversarial_prior`, `compute_causal_proximity`, `reviewer_pass` (10-step), adversarial prior discarded after use (INV-09), `completion_check_final`, `validate_output_contract` |
+| `test_harness_p10.py` | 30 | Canvas node compilers: all 9 harness node types — schema validation + `exec()` correctness, `HARNESS_NODE_COMPILERS` dispatch table |
+| `test_harness_process_concepts.py` | 38 | Process concepts: `ProcessConcept`, `ProcessRegistry`, `seed_task_graph`, `load_process`, `get_current_step`, `complete_step`, idempotency (INV-PC-05), hard error on missing concept (INV-PC-04) |
+| `test_harness_primitives.py` | 83 | G-series primitives: `TurnContextBootstrap` (G-2), `FeedbackPreferenceExtractor` (G-3), `MultiSourceDiversityReducer` (G-4), `TaxonomyClassifier` (G-5), `SessionCloseFactory` (G-6) |
+
+### Integration, E2E, and invariant tests
+
+| File | Tests | What it covers |
+|---|---|---|
+| `test_harness_integration_LG.py` | 16 | LangGraph adapter: harness spec compiles, preamble generated, all 12 node types compile, non-harness path unaffected |
+| `test_harness_integration_CR.py` | 16 | CrewAI adapter: same 4 checks |
+| `test_harness_integration_MA.py` | 16 | Mastra adapter: same 4 checks (TypeScript stubs) |
+| `test_harness_integration_MAF.py` | 16 | MS Agent Framework adapter: same 4 checks |
+| `test_harness_e2e.py` | 32 | 8 scenarios × 4 frameworks: happy path, BLOCKED escalation, recovery cycle, warm-start, parallel branch merge, context compression, reviewer re-entry, max_steps budget |
+| `test_harness_invariants.py` | 15 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions |
+
+### Performance benchmarks
+
+`adapter/tests/benchmark_harness.py` — 50-run benchmarks with `time.perf_counter()`. Results as of P11:
+
+| Operation | Mean (ms) | Target | Status |
+|---|---|---|---|
+| `run_one_iteration` (full loop overhead) | 0.11 | < 500 ms | **✓** |
+| `generate_hypotheses` | 0.23 | < 200 ms | **✓** |
+| `propagate_beliefs` | < 0.01 | < 100 ms | **✓** |
+
+Harness adds negligible overhead relative to any LLM inference call. See `docs/harness_benchmark_report.md` for full results.
 
 ---
 

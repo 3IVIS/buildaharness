@@ -9,9 +9,11 @@ itsharness is a harness for building AI agent workflows. The core idea is a **ne
 │  Canvas  (React + XYFlow)                                   │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │  Node graph  │  │  Config      │  │  Sidebar           │  │
-│  │  14 types    │  │  panels      │  │  Library / Mkt    │  │
+│  │  23 types    │  │  panels      │  │  Library / Mkt    │  │
+│  │  (14 base +  │  │  + Harness   │  │                   │  │
+│  │   9 harness) │  │  Diagnostics │  │                   │  │
 │  └──────┬──────┘  └──────────────┘  └───────────────────┘  │
-│         │ FlowSpec (JSON)                                     │
+│         │ FlowSpec (JSON, v1.0.0)                            │
 └─────────┼───────────────────────────────────────────────────┘
           │
           ▼
@@ -26,9 +28,15 @@ itsharness is a harness for building AI agent workflows. The core idea is a **ne
 │  /run ────→ async job queue  →  node_events SSE stream      │
 │  /deploy ─→ REST + MCP + A2A endpoints                      │
 │  /eval ───→ Langfuse LLM-as-judge scoring                   │
+│                                                              │
+│  Harness layer (adapter/harness/)                           │
+│  ├── 11-layer reasoning & control system                    │
+│  ├── 22-node execution loop                                 │
+│  ├── HarnessRunState persisted to Postgres                  │
+│  └── Langfuse tracing (10 diagnostic attrs per span)        │
 └────────┬────────────────────────────────────────────────────┘
          │
-         ├── Postgres (flows, jobs, teams, orgs, deployments)
+         ├── Postgres (flows, jobs, teams, orgs, deployments, harness state)
          ├── Redis (JWT revocation blocklist, OIDC CSRF state, refresh tokens)
          ├── LiteLLM (LLM proxy — OpenAI + Anthropic + others)
          └── Langfuse (trace + eval storage via ClickHouse + Redis BullMQ)
@@ -151,6 +159,118 @@ ItsHarnessCanvas
 ```
 
 Host apps access the store via `useCanvasStore()` which reads from the nearest `CanvasStoreProvider` in the tree. This means config panels rendered *inside* the canvas component automatically bind to the correct instance.
+
+## Harness layer
+
+The harness layer (`adapter/harness/`) is the reasoning and control architecture that sits above the execution nodes. It makes agents *reliable*, not merely capable. All 12 phases are complete.
+
+### 11-layer architecture
+
+| Layer | Module(s) | Responsibility |
+|---|---|---|
+| Caller State | `caller_state.py` | `CallerState` — mutable constraints, clarification history, success criteria, constraint-change propagation |
+| World Model | `world_model.py`, `world_model_ops.py`, `staleness.py` | Typed beliefs and observations with `generation_id` staleness tracking; `integrate_evidence()` enforces observation/conclusion separation |
+| Evidence & Reasoning | `evidence.py`, `tool_reliability.py`, `tool_manifest.py` | Evidence store, reliability envelopes that cap conclusion reliability per tool type, tool availability manifest |
+| Hypothesis | `hypothesis.py` | 4-source generation (symptom, counterfactual, failure library, analogy), Shannon entropy diversity enforcement (threshold 0.7), K-retention elimination |
+| Contradiction Detection | `contradiction.py`, `belief_graph.py` | Pairwise, temporal, abstraction-level contradiction detection; `SYSTEM_BREAKING` contradictions enter `world_model.contradictions[]` and are picked up by Tier 1 on the next control state resolution |
+| Diagnostics | `diagnostics.py` | 10 normalised `[0,1]` sub-dimensions feeding the 5-tier control state resolver |
+| Control State | `control_state.py` | 5-tier `resolve_control_state()`: Tier 1 SYSTEM_BREAKING → Tier 2 deadlock → Tier 3 block mask → Tier 4 weighted → Tier 5 NORMAL |
+| Planning | `task_graph.py`, `parallel_merge.py` | 6-state task graph, conflict probability cache, parallel branch merge with contradiction detection at join |
+| Execution | `execution.py`, `voi.py`, `risk.py`, `review_gate.py` | VOI-gated evidence gathering, risk estimation, reversibility strategies, pre-execution review gate |
+| Verification | `verification.py` | 9-layer verification (including adversarial pass for HIGH risk actions) |
+| Recovery | `recovery.py`, `replanning.py`, `progress.py`, `failure_modes.py`, `memory.py` | Named strategies (DIRECT_EDIT → TRACE_EXEC → ...), stall detection, global/local replanning, context compression with dependency-risk tracking |
+| Caller Updates & Escalation | `external_updates.py`, `constraint_propagation.py`, `escalation.py` | PostgreSQL NOTIFY channel for live constraint changes, `surface_blocker` escalation to HITL |
+| Experience Store | `experience_store.py` | Cross-run learning via softmax strategy weights; warm start from prior decompositions; no-op when absent |
+| Reviewer Pass | `reviewer.py` | 3-lens review (consistency, adversarial, abstraction fit); adversarial prior discarded after use (INV-09) |
+| Process Concepts | `process_concept.py`, `process_registry.py`, `process_tools.py` | Static task graph templates that seed planning without locking it; agent-callable `list_processes()`, `load_process()`, `get_current_step()`, `complete_step()` |
+| Output Contract | `output_contract.py` | 4-check validation: format requirements, required sections, interface constraints, caller-specific constraints |
+
+### Architectural invariants
+
+Ten invariants are permanently enforced by `adapter/tests/test_harness_invariants.py`:
+
+- **INV-01** Observations and beliefs are separate structures; HIGH-reliability tool output never auto-promotes to a belief without an explicit `derived_from[]` chain.
+- **INV-02** Every diagnostic sub-dimension entering `resolve_control_state()` is normalised `[0,1]`.
+- **INV-03** `world_model.generation_id` increments exactly twice per loop iteration (pre- and post-execution).
+- **INV-04** Mutual deadlock in `block_mask` always escalates to `HUMAN_REQUIRED`, never attempts autonomous recovery.
+- **INV-05** `SYSTEM_BREAKING` contradictions never halt inline; they enter `contradictions[]` and are read by Tier 1 on the next resolve call.
+- **INV-06** `select_best_action()` reads `control_state` exclusively for control decisions.
+- **INV-07** `dep_class_gap_annotation` is advisory only — never a numeric input to any resolver tier.
+- **INV-08** `failure_mode_library` contributes to Tier 4 and hypothesis generation only; it cannot veto or block.
+- **INV-09** `adversarial_prior` is discarded after `adversarial_lens()` completes and never persists.
+- **INV-10** All code paths that use `experience_store` guard with `experience_store.available`; the agent runs identically without it.
+
+### Harness canvas nodes (9 types, added in Phase 10)
+
+| Node type | Config class | Backend compiler |
+|---|---|---|
+| `world_model_node` | `WorldModelNodeConfig` | `compile_world_model_node` |
+| `hypothesis_set_node` | `HypothesisSetNodeConfig` | `compile_hypothesis_set_node` |
+| `control_state_node` | `ControlStateNodeConfig` | `compile_control_state_node` |
+| `task_graph_node` | `TaskGraphNodeConfig` | `compile_task_graph_node` |
+| `verification_gate_node` | `VerificationGateNodeConfig` | `compile_verification_gate_node` |
+| `recovery_node` | `RecoveryNodeConfig` | `compile_recovery_node` |
+| `evidence_store_node` | `EvidenceStoreNodeConfig` | `compile_evidence_store_node` |
+| `experience_store_node` | `ExperienceStoreNodeConfig` | `compile_experience_store_node` |
+| `reviewer_pass_node` | `ReviewerPassNodeConfig` | `compile_reviewer_pass_node` |
+| `process_concept_node` | `ProcessConceptNodeConfig` | `compile_process_concept_node` |
+
+The `DiagnosticsPanel` (`src/components/panels/DiagnosticsPanel.tsx`) renders all 10 sub-dimensions as `[0,1]` bar charts during live runs.
+
+### Process concepts
+
+Process concepts (`concepts/`) are JSON templates that seed the task graph at harness init without locking it. Built-in concepts: `debug_test_failure`, `implement_feature`, `code_review`, `refactor_module`. Register custom concepts by pointing the adapter at a directory via `DEFAULT_REGISTRY.scan_directory()`.
+
+```
+GET /run/concepts          List all registered concepts
+harness_meta.process_concept_id  Name the concept in the FlowSpec
+```
+
+### Harness state persistence
+
+`HarnessRunState` is persisted to Postgres via migrations `0009`–`0011`. The adapter API exposes:
+
+```
+GET /runs/{id}/harness-state    Read current HarnessRunState
+PUT /runs/{id}/harness-state    Write updated HarnessRunState
+POST /{job_id}/escalation/respond   Respond to a surface_blocker escalation
+```
+
+### Harness Langfuse tracing
+
+`adapter/harness/langfuse_tracing.py` emits per-iteration spans with 10 diagnostic attributes, strategy change events, and escalation events. All tracing is no-op when Langfuse is absent (`TESTING=true`).
+
+---
+
+## npm packages
+
+In addition to the server-side adapter, itsharness ships five npm packages:
+
+| Package | Purpose |
+|---|---|
+| `@itsharness/canvas` | Embeddable React canvas component (context-scoped store) |
+| `@itsharness/harness` | TypeScript types and node implementations for the harness state structures |
+| `@itsharness/runtime` | Framework-agnostic TypeScript runtime — executes FlowSpec flows without a server |
+| `@itsharness/react` | React hook (`useHarness`) for embedding runtime-driven flows in React apps |
+| `@itsharness/proxy` | LLM proxy that keeps API keys server-side — ships as a Cloudflare Worker or Docker service |
+
+### `@itsharness/harness`
+
+TypeScript mirror of the Python harness state layer. Provides typed interfaces for `WorldModel`, `HypothesisSet`, `ControlState`, `TaskGraph`, `EvidenceStore`, `ExperienceStore`, `CallerState`, `OutputContract`, and all associated sub-structures. Also includes the full set of harness node implementations (e.g. `gather-evidence`, `detect-contradictions`, `resolve-control-state`, `execute`, `verify`, `reviewer-pass`).
+
+### `@itsharness/runtime`
+
+Executes FlowSpec flows client-side or in a Node.js process without needing the adapter server. All 14 base node types have executors. Useful for testing flows in CI without a running stack, or for embedding flows in desktop/Electron apps.
+
+### `@itsharness/react`
+
+`useHarness(flowSpec, input)` hook that wraps `@itsharness/runtime`. Returns `{ status, result, nodeEvents, resume }`.
+
+### `@itsharness/proxy`
+
+Thin Hono server that issues short-lived JWTs and forwards LLM requests to Anthropic or OpenAI, keeping API keys off the client. Deploys to Cloudflare Workers or Docker. See `packages/proxy/README.md` and `docs/env-vars.md`.
+
+---
 
 ## Key design decisions
 
