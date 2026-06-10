@@ -6,8 +6,9 @@ configurable keyword-to-field signal mappings.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -21,9 +22,7 @@ class PreferenceSignal:
 
     def __post_init__(self) -> None:
         if self.value is not None and self.delta is not None:
-            raise ValueError(
-                "PreferenceSignal: value and delta are mutually exclusive; set at most one"
-            )
+            raise ValueError("PreferenceSignal: value and delta are mutually exclusive; set at most one")
 
 
 def make_preference_extractor(

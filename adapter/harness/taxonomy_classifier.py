@@ -2,6 +2,7 @@
 G-5 — TaxonomyClassifier
 Configurable LLM-powered text classifier. Taxonomy is caller-provided.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,9 +30,7 @@ class ClassifierConfig:
             raise ValueError("taxonomy must not be empty")
         valid_ids = {t.id for t in self.taxonomy}
         if self.fallback_type_id not in valid_ids:
-            raise ValueError(
-                f"fallback_type_id '{self.fallback_type_id}' is not in the taxonomy"
-            )
+            raise ValueError(f"fallback_type_id '{self.fallback_type_id}' is not in the taxonomy")
 
 
 class TaxonomyClassifier:
@@ -49,9 +48,7 @@ class TaxonomyClassifier:
         }
 
     def _build_prompt(self, text: str, context: dict | None) -> str:
-        taxonomy_lines = "\n".join(
-            f"{t.id}: {t.description}" for t in self._config.taxonomy
-        )
+        taxonomy_lines = "\n".join(f"{t.id}: {t.description}" for t in self._config.taxonomy)
         ctx_section = ""
         if self._config.context_state_key and context:
             ctx_value = context.get(self._config.context_state_key)

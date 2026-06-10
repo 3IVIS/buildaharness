@@ -245,7 +245,10 @@ export function validateCrossRefs(spec: FlowSpec): ValidationError[] {
       if (cycleFound) break
     }
 
-    if (cycleFound) {
+    // LangGraph natively supports cycles (state machine); only warn for sequential adapters.
+    const adapter = spec.runtime_hints?.preferred_adapter
+    const cyclesAllowed = adapter === 'langgraph'
+    if (cycleFound && !cyclesAllowed) {
       errors.push({
         field:    'edges',
         message:  'Graph contains a cycle — sequential flows must be acyclic',

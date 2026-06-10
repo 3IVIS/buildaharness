@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,14 +26,14 @@ from unittest.mock import MagicMock
 _mock_litellm = MagicMock()
 sys.modules.setdefault("litellm", _mock_litellm)
 
-from harness.blend_engine import BlendRule, make_blend_adjuster, normalize_blend
-from harness.multi_source_reducer import BranchConfig, _jaccard_similarity, make_multi_source_reducer
-from harness.preference_extractor import PreferenceSignal, make_preference_extractor
-from harness.taxonomy_classifier import ClassifierConfig, TaxonomyClassifier, TaxonomyType
-from harness.turn_context import ResourceBudget, SessionField, make_turn_initializer
-
+from harness.blend_engine import BlendRule, make_blend_adjuster, normalize_blend  # noqa: E402
+from harness.multi_source_reducer import BranchConfig, _jaccard_similarity, make_multi_source_reducer  # noqa: E402
+from harness.preference_extractor import PreferenceSignal, make_preference_extractor  # noqa: E402
+from harness.taxonomy_classifier import ClassifierConfig, TaxonomyClassifier, TaxonomyType  # noqa: E402
+from harness.turn_context import ResourceBudget, SessionField, make_turn_initializer  # noqa: E402
 
 # ── G-1: normalize_blend ──────────────────────────────────────────────────────
+
 
 def test_normalize_blend_sums_to_100():
     result = normalize_blend({"a": 20.0, "b": 30.0, "c": 50.0})
@@ -53,6 +53,7 @@ def test_normalize_blend_all_zero_returns_unchanged():
 
 
 # ── G-1: make_blend_adjuster ──────────────────────────────────────────────────
+
 
 def test_non_matching_rule_not_applied():
     rule = BlendRule(condition=lambda _: False, adjustments={"a": -20.0}, redistribute_to=None)
@@ -189,6 +190,7 @@ def test_empty_rules_list_normalises_blend_unchanged():
 
 # ── G-2: make_turn_initializer ────────────────────────────────────────────────
 
+
 def test_source_path_nested_dot_path_reads_correctly():
     f = SessionField("style", default="standard", source_path="user_profile.preferences.style")
     init = make_turn_initializer([f])
@@ -257,7 +259,7 @@ def test_resource_budget_turn1_initialises_all_keys():
 def test_resource_budget_turn2_updates_elapsed_preserves_limits():
     budget = ResourceBudget(time_limit_seconds=1800, token_budget=30000)
     init = make_turn_initializer([], resource_budget=budget)
-    started = datetime.now(timezone.utc) - timedelta(seconds=30)
+    started = datetime.now(UTC) - timedelta(seconds=30)
     state = {
         "turn_number": 2,
         "resource_budget": {
@@ -340,6 +342,7 @@ def test_make_turn_initializer_all_params_none_returns_state_unchanged():
 
 
 # ── G-3: make_preference_extractor ───────────────────────────────────────────
+
 
 def test_empty_input_key_state_returned_unchanged():
     extract = make_preference_extractor([])
@@ -459,6 +462,7 @@ def test_two_signals_same_field_last_matching_wins():
 
 # ── G-4: make_multi_source_reducer ───────────────────────────────────────────
 
+
 def _g4_text_fn(item: dict) -> str:
     return item.get("text", "")
 
@@ -549,9 +553,7 @@ def test_g4_diversity_warning_true_when_too_few_items():
         BranchConfig("a", "src_a", "HIGH"),
         BranchConfig("b", "src_b", "HIGH"),
     ]
-    reduce = make_multi_source_reducer(
-        branches, _g4_text_fn, similarity_threshold=0.8, min_diversity_count=2
-    )
+    reduce = make_multi_source_reducer(branches, _g4_text_fn, similarity_threshold=0.8, min_diversity_count=2)
     text = "same text"
     branch_states = [
         {"a": [{"text": text}]},
@@ -599,9 +601,7 @@ def test_g4_reliability_fn_overrides_static_reliability():
 
     branches = [BranchConfig("a", "src_a", "MEDIUM", reliability_fn=rel_fn)]
     reduce = make_multi_source_reducer(branches, _g4_text_fn, min_diversity_count=1)
-    branch_states = [
-        {"a": [{"text": "item one", "score": 10}, {"text": "item two", "score": 5}]}
-    ]
+    branch_states = [{"a": [{"text": "item one", "score": 10}, {"text": "item two", "score": 5}]}]
     result = reduce(branch_states)
     items_by_text = {item["text"]: item for item in result["items"]}
     assert items_by_text["item one"]["reliability"] == "HIGH"
@@ -630,9 +630,7 @@ def test_g4_equal_reliability_tie_lower_index_branch_retained():
         BranchConfig("a", "branch_zero", "MEDIUM"),
         BranchConfig("b", "branch_one", "MEDIUM"),
     ]
-    reduce = make_multi_source_reducer(
-        branches, _g4_text_fn, similarity_threshold=0.8, min_diversity_count=1
-    )
+    reduce = make_multi_source_reducer(branches, _g4_text_fn, similarity_threshold=0.8, min_diversity_count=1)
     text = "duplicate text item"
     branch_states = [
         {"a": [{"text": text}]},
@@ -648,9 +646,7 @@ def test_g4_empty_text_fn_item_not_deduplicated():
         BranchConfig("a", "src_a", "HIGH"),
         BranchConfig("b", "src_b", "HIGH"),
     ]
-    reduce = make_multi_source_reducer(
-        branches, _g4_text_fn, similarity_threshold=0.5, min_diversity_count=1
-    )
+    reduce = make_multi_source_reducer(branches, _g4_text_fn, similarity_threshold=0.5, min_diversity_count=1)
     branch_states = [
         {"a": [{"text": ""}]},
         {"b": [{"text": "some real content here"}]},
@@ -725,12 +721,14 @@ def _mock_llm_response(json_body: str):
 
 
 def test_g5_returns_at_least_one_detected_type_for_non_empty_input():
-    payload = json.dumps({
-        "detected_types": ["INSIGHT"],
-        "primary_type": "INSIGHT",
-        "confidence_scores": {"INSIGHT": 0.9},
-        "rationale": "Aha moment",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["INSIGHT"],
+            "primary_type": "INSIGHT",
+            "confidence_scores": {"INSIGHT": 0.9},
+            "rationale": "Aha moment",
+        }
+    )
     _mock_litellm.completion.return_value = _mock_llm_response(payload)
     clf = TaxonomyClassifier(_G5_CONFIG)
     result = clf.classify("I finally understand!")
@@ -738,12 +736,14 @@ def test_g5_returns_at_least_one_detected_type_for_non_empty_input():
 
 
 def test_g5_primary_type_always_valid_taxonomy_id():
-    payload = json.dumps({
-        "detected_types": ["CONFUSION"],
-        "primary_type": "CONFUSION",
-        "confidence_scores": {"CONFUSION": 0.8},
-        "rationale": "confused",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["CONFUSION"],
+            "primary_type": "CONFUSION",
+            "confidence_scores": {"CONFUSION": 0.8},
+            "rationale": "confused",
+        }
+    )
     _mock_litellm.completion.return_value = _mock_llm_response(payload)
     clf = TaxonomyClassifier(_G5_CONFIG)
     result = clf.classify("What does this mean?")
@@ -751,12 +751,14 @@ def test_g5_primary_type_always_valid_taxonomy_id():
 
 
 def test_g5_invalid_type_ids_stripped_from_response():
-    payload = json.dumps({
-        "detected_types": ["CONFUSION", "BOGUS_TYPE", "ANOTHER_FAKE"],
-        "primary_type": "CONFUSION",
-        "confidence_scores": {"CONFUSION": 0.7, "BOGUS_TYPE": 0.3},
-        "rationale": "partial",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["CONFUSION", "BOGUS_TYPE", "ANOTHER_FAKE"],
+            "primary_type": "CONFUSION",
+            "confidence_scores": {"CONFUSION": 0.7, "BOGUS_TYPE": 0.3},
+            "rationale": "partial",
+        }
+    )
     _mock_litellm.completion.return_value = _mock_llm_response(payload)
     clf = TaxonomyClassifier(_G5_CONFIG)
     result = clf.classify("Something ambiguous")
@@ -782,12 +784,14 @@ def test_g5_json_parse_error_returns_fallback_no_exception():
 
 
 def test_g5_context_included_in_prompt_when_key_present():
-    payload = json.dumps({
-        "detected_types": ["CLEAR_REQUEST"],
-        "primary_type": "CLEAR_REQUEST",
-        "confidence_scores": {"CLEAR_REQUEST": 0.9},
-        "rationale": "direct",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["CLEAR_REQUEST"],
+            "primary_type": "CLEAR_REQUEST",
+            "confidence_scores": {"CLEAR_REQUEST": 0.9},
+            "rationale": "direct",
+        }
+    )
     config = ClassifierConfig(
         taxonomy=_G5_TAXONOMY,
         fallback_type_id="CLEAR_REQUEST",
@@ -807,12 +811,14 @@ def test_g5_context_included_in_prompt_when_key_present():
 
 
 def test_g5_temperature_zero_passed_to_litellm():
-    payload = json.dumps({
-        "detected_types": ["CLEAR_REQUEST"],
-        "primary_type": "CLEAR_REQUEST",
-        "confidence_scores": {"CLEAR_REQUEST": 1.0},
-        "rationale": "direct",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["CLEAR_REQUEST"],
+            "primary_type": "CLEAR_REQUEST",
+            "confidence_scores": {"CLEAR_REQUEST": 1.0},
+            "rationale": "direct",
+        }
+    )
     captured_kwargs: list[dict] = []
 
     def capture_call(**kwargs):
@@ -845,11 +851,13 @@ def test_g5_classifier_config_empty_taxonomy_raises():
 
 
 def test_g5_missing_confidence_scores_defaults_to_0_5():
-    payload = json.dumps({
-        "detected_types": ["INSIGHT", "CONFUSION"],
-        "primary_type": "INSIGHT",
-        "rationale": "both apply",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["INSIGHT", "CONFUSION"],
+            "primary_type": "INSIGHT",
+            "rationale": "both apply",
+        }
+    )
     _mock_litellm.completion.return_value = _mock_llm_response(payload)
     clf = TaxonomyClassifier(_G5_CONFIG)
     result = clf.classify("interesting thought")
@@ -858,12 +866,14 @@ def test_g5_missing_confidence_scores_defaults_to_0_5():
 
 
 def test_g5_context_key_absent_from_context_dict_no_exception():
-    payload = json.dumps({
-        "detected_types": ["CLEAR_REQUEST"],
-        "primary_type": "CLEAR_REQUEST",
-        "confidence_scores": {"CLEAR_REQUEST": 0.9},
-        "rationale": "direct",
-    })
+    payload = json.dumps(
+        {
+            "detected_types": ["CLEAR_REQUEST"],
+            "primary_type": "CLEAR_REQUEST",
+            "confidence_scores": {"CLEAR_REQUEST": 0.9},
+            "rationale": "direct",
+        }
+    )
     config = ClassifierConfig(
         taxonomy=_G5_TAXONOMY,
         fallback_type_id="CLEAR_REQUEST",

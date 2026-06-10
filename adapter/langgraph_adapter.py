@@ -165,8 +165,10 @@ def gen_harness_preamble() -> str:
     """Emit HarnessRunState initialisation into the generated flow code."""
     return dedent0("""\
         # ─── Harness state ───────────────────────────────────────────────────────────
-        import sys as _sys, pathlib as _pl
-        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        import sys as _sys, pathlib as _pl, os as _os
+        # __file__ is undefined when the code is exec()'d — fall back to cwd (/app in container)
+        _sys.path.insert(0, str(_pl.Path(globals().get('__file__') or _os.getcwd()).resolve().parent
+                                if globals().get('__file__') else _os.getcwd()))
         from harness.state_store import HarnessRunState as _HarnessRunState
         from harness.world_model import WorldModel as _WorldModel
         from harness.diagnostics import Diagnostics as _Diagnostics
@@ -314,7 +316,8 @@ def _gen_qdrant_helper() -> str:
             \"\"\"Embed *query* and run a cosine similarity search against Qdrant.\"\"\"
             _base = os.environ.get("EMBED_BASE_URL") or os.environ.get("OPENAI_BASE_URL", "")
             _key  = os.environ.get("OPENAI_API_KEY", "ollama")
-            _emb  = OpenAIEmbeddings(model=embedding_model, base_url=_base or None, api_key=_key)
+            _emb  = OpenAIEmbeddings(model=embedding_model, base_url=_base or None, api_key=_key,
+                                      check_embedding_ctx_length=False)
             _vec  = _emb.embed_query(query)
             _client = QdrantClient(url=os.environ.get("QDRANT_URL", "http://localhost:6333"))
             _result = _client.query_points(
@@ -358,13 +361,42 @@ def gen_helpers(spec: dict | None = None) -> str:
             return re.sub(r'\\{\\{([^}]+)\\}\\}', _sub, template)
 
 
-        # Shared in-memory stores (replace with real backends in production)
+        # Shared stores — Redis-backed when REDIS_URL is set, in-memory fallback.
+        # Redis keys: itsharness:store:{store_id}:{key}, TTL 24 h (86400 s).
         _STORES: dict[str, dict] = {}
+        _REDIS_URL = os.environ.get("REDIS_URL", "")
+        _redis_client: Any = None
+
+        def _get_redis() -> Any:
+            global _redis_client
+            if _redis_client is None and _REDIS_URL:
+                try:
+                    import redis as _rm
+                    _redis_client = _rm.from_url(_REDIS_URL, decode_responses=True)
+                except Exception:
+                    pass
+            return _redis_client
 
         def _store_get(store_id: str, key: Any) -> Any:
+            _r = _get_redis()
+            if _r is not None:
+                try:
+                    _v = _r.get(f"itsharness:store:{store_id}:{key}")
+                    return json.loads(_v) if _v is not None else None
+                except Exception:
+                    pass
             return _STORES.get(store_id, {}).get(str(key))
 
         def _store_set(store_id: str, key: Any, value: Any, overwrite: bool = True) -> None:
+            _r = _get_redis()
+            if _r is not None:
+                try:
+                    _rk = f"itsharness:store:{store_id}:{key}"
+                    if overwrite or not _r.exists(_rk):
+                        _r.setex(_rk, 86400, json.dumps(value, default=str))
+                    return
+                except Exception:
+                    pass
             if store_id not in _STORES:
                 _STORES[store_id] = {}
             if overwrite or str(key) not in _STORES[store_id]:
@@ -379,6 +411,16 @@ def gen_helpers(spec: dict | None = None) -> str:
             if _base_url:
                 kw["base_url"] = _base_url
                 kw["api_key"]  = _api_key or "ollama"
+            if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+                try:
+                    from langfuse.langchain import CallbackHandler as _LFCb
+                    kw["callbacks"] = [_LFCb()]
+                except ImportError:
+                    try:
+                        from langfuse.callback import CallbackHandler as _LFCb2
+                        kw["callbacks"] = [_LFCb2()]
+                    except ImportError:
+                        pass
             return ChatOpenAI(**kw)
 
     """) + (_gen_qdrant_helper() if spec and _has_qdrant_store(spec) else "")
@@ -508,6 +550,13 @@ def _gen_harness_node_body(node: dict) -> str:
     preamble = (
         "# Harness node — shared state from _harness_state\n"
         "world_model = _harness_state.world_model\n"
+        "# Seed world model from persisted state snapshot on turn 2+\n"
+        "_wm_snap = state.get('world_model_state')\n"
+        "if (_wm_snap and isinstance(_wm_snap, dict)\n"
+        "        and 'observations' in _wm_snap\n"
+        "        and not world_model.observations and not world_model.beliefs):\n"
+        "    _harness_state.world_model = _WorldModel.from_dict(_wm_snap)\n"
+        "    world_model = _harness_state.world_model\n"
         "evidence_store = _harness_state.evidence_store\n"
         "hypothesis_set = _harness_state.hypothesis_set\n"
         "diagnostics = _harness_state.diagnostics\n"
@@ -609,7 +658,20 @@ def gen_node_function(
 
     # ── harness node types — dispatch to node compilers ───────────────────────
     if _HARNESS_AVAILABLE and ntype in _HARNESS_NODE_COMPILERS:
-        body = f"{ctx}{_gen_harness_node_body(node)}\nreturn {{}}"
+        # Certain harness nodes produce snapshots that should be written back to
+        # LangGraph state so downstream memory_write nodes can persist them.
+        _HARNESS_STATE_RETURNS: dict[str, str] = {
+            "world_model": ("return {'world_model_state': wm_snapshot}\n"),
+            "update_world_model": (
+                # Persist a full serialised snapshot so turn 2+ can restore it.
+                "return {'world_model_state': world_model.to_dict()}\n"
+            ),
+            "control_state": (
+                "return {'control_state': str(getattr(diagnostics, 'resolved_control_state', 'NORMAL'))}\n"
+            ),
+        }
+        return_stmt = _HARNESS_STATE_RETURNS.get(ntype, "return {}\n")
+        body = f"{ctx}{_gen_harness_node_body(node)}\n{return_stmt}"
         return _fn(label, vid, body)
 
     # ── input / output / annotation — no function ─────────────────────────────
@@ -645,8 +707,10 @@ def gen_node_function(
             )
 
         if out_key and struct:
-            # structured_output: parse the JSON string returned by the LLM into a dict
-            # so downstream _resolve() calls can traverse the nested fields.
+            # structured_output: parse the JSON string returned by the LLM.
+            # When the output_key matches a field in the schema (e.g. output_key='control_state'
+            # and schema has {control_state: string, reason: string}), extract just that field
+            # so state[output_key] gets the scalar value, not the full response dict.
             ret = (
                 f"try:\n"
                 f"    _resp_val = (\n"
@@ -654,6 +718,8 @@ def gen_node_function(
                 f"        if isinstance(response.content, str)\n"
                 f"        else response.content\n"
                 f"    )\n"
+                f"    if isinstance(_resp_val, dict) and {out_key!r} in _resp_val:\n"
+                f"        _resp_val = _resp_val[{out_key!r}]\n"
                 f"except Exception:\n"
                 f"    _resp_val = response.content\n"
                 f"return {{{out_key!r}: _resp_val}}"
@@ -817,10 +883,12 @@ def gen_node_function(
                     f"return {{{out_key!r}: results}}\n"
                 )
         else:
+            # key_expr takes priority; fall back to query_expr (some specs use only query_expr)
+            kv_expr = key_expr or q_expr
             body = (
                 f"{ctx}"
                 f"# memory_read: key-value retrieval from store {store_id!r}\n"
-                f"key   = _resolve(state, {key_expr!r})\n"
+                f"key   = _resolve(state, {kv_expr!r})\n"
                 f"value = _store_get({store_id!r}, key)\n"
                 f"return {{{out_key!r}: value}}\n"
             )
@@ -854,10 +922,9 @@ def gen_node_function(
 
         if reducer == "fn_ref" and join_fn_ref:
             parts = join_fn_ref.rsplit(":", 1) if ":" in join_fn_ref else (join_fn_ref, "join")
-            # Fix: `import importlib` must appear in the generated body. transform already
-            # emits `import importlib` as a statement; parallel_join used importlib inline
-            # without importing it, causing NameError at runtime.
-            m_expr = f"importlib.import_module({parts[0]!r}).__dict__[{parts[1]!r}](list(state.values()))"
+            # Pass dict(state) so the join function can select specific keys by name.
+            # list(state.values()) would pass ALL state values without key context.
+            m_expr = f"importlib.import_module({parts[0]!r}).__dict__[{parts[1]!r}](dict(state))"
         elif reducer == "append":
             m_expr = "[v for v in state.values() if v is not None]"
         else:
@@ -997,17 +1064,37 @@ def gen_node_function(
         input_map = node.get("input_map") or {}
         output_map = node.get("output_map") or {}
         warnings.append(
-            f"subgraph '{nid}': compile flow_ref={flow_ref!r} separately and invoke as a compiled LangGraph sub-graph"
+            f"subgraph '{nid}': compile flow_ref={flow_ref!r} separately and inject as "
+            f"globals()[{safe_id(flow_ref) + '_compiled'!r}] to wire this subgraph"
         )
-        in_expr = repr(input_map) if input_map else "dict(state)"
-        out_expr = repr(output_map) if output_map else "_result"
+        sub_var = safe_id(flow_ref) + "_compiled"
+        in_repr = repr(input_map)
+
+        # Build per-key output expressions for compiled and stub paths.
+        compiled_lines: list[str] = []
+        stub_lines: list[str] = []
+        for ok, src in output_map.items():
+            field = src.replace("$.subgraph.", "").replace("$.state.", "")
+            compiled_lines.append(f"    {ok!r}: _sub_out.get({field!r})")
+            # Stub priority: $.subgraph.X → state[X] → state[output_key] → response_draft
+            stub_lines.append(
+                f"    {ok!r}: (state.get({field!r}) or state.get({ok!r}) or state.get('response_draft', ''))"
+            )
+
+        compiled_ret = "{\n" + ",\n".join(compiled_lines) + "\n}" if compiled_lines else "_sub_out"
+        stub_ret = "{\n" + ",\n".join(stub_lines) + "\n}" if stub_lines else "{}"
+
         body = (
             f"{ctx}"
             f"# subgraph: flow_ref={flow_ref!r}\n"
-            f"# from {safe_id(flow_ref)}_flow import compiled as _sub\n"
-            f"# _result = _sub.invoke({in_expr})\n"
-            f"# return {out_expr}\n"
-            f"raise NotImplementedError(f'Subgraph {flow_ref!r} not wired — see comment above')\n"
+            f"# Inject compiled sub-graph: globals()[{sub_var!r}] = compile_langgraph(sub_spec)\n"
+            f"_sub = globals().get({sub_var!r})\n"
+            f"if _sub is not None:\n"
+            f"    _sub_inputs = {{k: _resolve(state, v) for k, v in {in_repr}.items()}}\n"
+            f"    _sub_out = _sub.invoke(_sub_inputs)\n"
+            f"    return {compiled_ret}\n"
+            f"# Subgraph not compiled — best-effort from available state\n"
+            f"return {stub_ret}\n"
         )
         return _fn(label, vid, body)
 
@@ -1053,6 +1140,7 @@ def gen_condition_router(node: dict, spec: dict) -> str:
             _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
             if _inline and not value:
                 _path, _iop, _rhs = _inline.group(1), _inline.group(2), _inline.group(3).strip()
+                _rhs = {"false": "False", "true": "True", "null": "None"}.get(_rhs, _rhs)
                 lhs = f"_resolve(state, {_path!r})"
                 py_cond = f"{lhs} {_iop} {_rhs}"
             else:

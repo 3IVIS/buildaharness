@@ -9,9 +9,10 @@ tracking, and model skeleton initialisation.
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass
@@ -73,7 +74,7 @@ def make_turn_initializer(
         # Step 3: Resource budget
         if resource_budget is not None:
             budget_key = resource_budget.budget_key
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             if is_turn_one:
                 result[budget_key] = {

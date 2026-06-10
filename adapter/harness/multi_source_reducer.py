@@ -8,8 +8,9 @@ using token-overlap (Jaccard) similarity, and enforces a minimum diversity count
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 _RELIABILITY_RANK: dict[str, int] = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
@@ -60,11 +61,7 @@ def make_multi_source_reducer(
             if not items:
                 continue
             for item in items:
-                reliability = (
-                    config.reliability_fn(item)
-                    if config.reliability_fn is not None
-                    else config.reliability
-                )
+                reliability = config.reliability_fn(item) if config.reliability_fn is not None else config.reliability
                 tagged = dict(item)
                 tagged["source"] = config.source_label
                 tagged["reliability"] = reliability

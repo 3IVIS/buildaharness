@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from auth import current_user
 from crewai_adapter import compile_crewai, safe_id
-from db import DATABASE_URL, Job, User, get_session
+from db import DATABASE_URL, Flow, Job, User, get_session
 from langgraph_adapter import compile_langgraph
 from maf_adapter import compile_maf
 from org_context import Org
@@ -1027,6 +1027,25 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inp
         code, warnings = compile_langgraph(spec)
         namespace: dict = {}
         exec(compile(code, "<langgraph_generated>", "exec"), namespace)
+
+        # Compile referenced subgraph flows and inject into namespace so subgraph
+        # nodes can call them via globals()['{flow_ref}_compiled'].
+        for _sub_node in spec.get("nodes", []):
+            if _sub_node.get("type") == "subgraph":
+                _flow_ref = _sub_node.get("flow_ref", "")
+                if _flow_ref:
+                    async with _job_session() as db:
+                        _sub_flow = await db.get(Flow, _flow_ref)
+                    if _sub_flow and _sub_flow.current_spec:
+                        try:
+                            _sub_code, _ = compile_langgraph(_sub_flow.current_spec)
+                            _sub_ns: dict = {}
+                            exec(compile(_sub_code, f"<langgraph_{_flow_ref}>", "exec"), _sub_ns)
+                            _sub_compiled = _sub_ns.get("compiled")
+                            if _sub_compiled is not None:
+                                namespace[safe_id(_flow_ref) + "_compiled"] = _sub_compiled
+                        except Exception:
+                            pass  # Subgraph compile failure is non-fatal; stub handles it
 
         compiled_graph = namespace.get("compiled")
         if compiled_graph is None:
