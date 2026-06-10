@@ -326,9 +326,13 @@ async def _mark_stale_nodes_done(job_id: str, trackable: list[str], db: AsyncSes
     job = await _jobs_get(job_id, db)
     if not job:
         return
-    seen_done = {e["node_id"] for e in (job.node_events or []) if e["status"] in ("done", "paused")}
+    # Use latest status per node — a node whose last event is "running" after a prior "done"
+    # (race condition in the async emit callbacks) still needs to be corrected to "done".
+    latest_status: dict[str, str] = {}
+    for e in job.node_events or []:
+        latest_status[e["node_id"]] = e["status"]
     for nid in trackable:
-        if nid not in seen_done:
+        if latest_status.get(nid) not in ("done", "paused"):
             await _emit(job_id, nid, "done", db)
 
 

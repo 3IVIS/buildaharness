@@ -10,6 +10,7 @@ export interface SessionCloseConfig {
   experienceStoreId: string
   profileStoreId: string
   feedbackTextKey?: string
+  model?: string
 }
 
 export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
@@ -18,6 +19,8 @@ export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
   return {
     spec_version: CURRENT_SPEC_VERSION,
     id: config.flowId,
+    harness_meta: { enabled: true },
+    model_defaults: { model: config.model ?? 'qwen3' },
     nodes: [
       {
         id: 'close-input',
