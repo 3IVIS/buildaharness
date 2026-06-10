@@ -1986,13 +1986,36 @@
                         },
                         "additionalProperties": false
                       },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
                       "type": {
                         "type": "string",
                         "const": "world_model"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "display_mode": {
+                            "type": "string",
+                            "enum": [
+                              "summary",
+                              "expanded"
+                            ],
+                            "default": "summary"
+                          },
+                          "show_observations": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "show_contradictions": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "max_beliefs_shown": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 10
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2069,13 +2092,24 @@
                         },
                         "additionalProperties": false
                       },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
                       "type": {
                         "type": "string",
                         "const": "hypothesis_set"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_eliminated": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "max_hypotheses_shown": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 5
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2361,6 +2395,10 @@
                         },
                         "additionalProperties": false
                       },
+                      "type": {
+                        "type": "string",
+                        "const": "update_world_model"
+                      },
                       "harness_config": {
                         "type": "object",
                         "properties": {
@@ -2383,10 +2421,6 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "type": {
-                        "type": "string",
-                        "const": "update_world_model"
                       }
                     },
                     "required": [
@@ -2462,14 +2496,24 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "control_state"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_block_mask": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_notes": {
+                            "type": "boolean",
+                            "default": false
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2545,14 +2589,29 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "task_graph_node"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_write_domains": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "show_abstraction_level": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "max_tasks_shown": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 20
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2628,14 +2687,37 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "verification_gate"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "enabled_layers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "syntax",
+                                "unit",
+                                "integration",
+                                "consistency",
+                                "requirements",
+                                "assumptions",
+                                "goal_correctness",
+                                "evidence_sufficiency",
+                                "output_contract_partial"
+                              ]
+                            }
+                          },
+                          "require_adversarial_on_high_risk": {
+                            "type": "boolean",
+                            "default": true
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2711,14 +2793,34 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "recovery_node"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "strategy_order_override": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "DIRECT_EDIT",
+                                "TRACE_EXEC",
+                                "BROADER_SEARCH",
+                                "REIMPLEMENT",
+                                "MINIMAL_FIX",
+                                "ESCALATE"
+                              ]
+                            }
+                          },
+                          "show_pattern_confidence": {
+                            "type": "boolean",
+                            "default": true
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2794,14 +2896,29 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "evidence_store_node"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_envelopes": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_manifest": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "max_evidence_shown": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 20
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2877,14 +2994,24 @@
                           }
                         },
                         "additionalProperties": false
-                      },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
                       },
                       "type": {
                         "type": "string",
                         "const": "experience_store_node"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_weights_heatmap": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_run_count": {
+                            "type": "boolean",
+                            "default": true
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -2961,13 +3088,27 @@
                         },
                         "additionalProperties": false
                       },
-                      "harness_config": {
-                        "type": "object",
-                        "additionalProperties": {}
-                      },
                       "type": {
                         "type": "string",
                         "const": "reviewer_pass"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "show_adversarial_prior": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_findings_detail": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_reopened_tasks": {
+                            "type": "boolean",
+                            "default": true
+                          }
+                        },
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -3418,6 +3559,10 @@
             "enabled": {
               "type": "boolean",
               "default": false
+            },
+            "process_concept_id": {
+              "type": "string",
+              "description": "ID of the process concept that seeds the task graph for this run. Must reference a registered concept. When absent the model performs its own decomposition."
             }
           },
           "additionalProperties": false,
