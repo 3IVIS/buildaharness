@@ -11,6 +11,7 @@ import { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { OutputContract } from '../state/output-contract.js'
 import { resolveControlState, RECOVERY_ACTION_DEPENDENCIES } from './resolve-control-state.js'
 import { normalise, DimensionType } from '../normalise.js'
+import { DEFAULT_REGISTRY, type ProcessRegistry } from '../process-registry.js'
 
 export class SelfReferentialDependencyError extends Error {
   constructor(actionClass: string) {
@@ -77,6 +78,7 @@ export interface HarnessInitOptions {
     caller_specific_constraints: Record<string, unknown>
   }>
   processConceptId?: string
+  processRegistry?: ProcessRegistry
   recoveryActionDeps?: Record<string, string[]>
 }
 
@@ -113,6 +115,7 @@ export function initializeHarness(
     callerConstraints = {},
     outputContract: outputContractOptions,
     processConceptId,
+    processRegistry = DEFAULT_REGISTRY,
     recoveryActionDeps = RECOVERY_ACTION_DEPENDENCIES,
   } = options
 
@@ -173,6 +176,12 @@ export function initializeHarness(
 
   const beliefDepGraph = new BeliefDepGraph()
   const depGraphBudget = new DepGraphBudget()
+
+  // Seed task graph from process concept if provided (INV-PC-02: runs before validate)
+  if (processConceptId) {
+    const concept = processRegistry.load(processConceptId)
+    concept.seedTaskGraph(taskGraph)
+  }
 
   // Validate task graph
   const graphErrors = validateTaskGraph(taskGraph)

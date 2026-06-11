@@ -15,6 +15,7 @@ import { hitlBreakpointExecutor } from './hitl-breakpoint'
 import { agentRoleExecutor } from './agent-role'
 import { agentDebateExecutor } from './agent-debate'
 import { subgraphExecutor } from './subgraph'
+import { processConceptExecutor } from './process-concept'
 
 export interface ExecutorOutput {
   stateUpdate: Record<string, unknown>
@@ -54,6 +55,8 @@ const REGISTRY = new Map<string, ExecutorFn>([
   ['agent_role', agentRoleExecutor],
   ['agent_debate', agentDebateExecutor],
   ['subgraph', subgraphExecutor],
+  // P-PC executor
+  ['process_concept', processConceptExecutor],
 ])
 
 export function getExecutor(nodeType: string): ExecutorFn | undefined {

@@ -26,6 +26,10 @@ export type FunctionRegistry = Map<string, FlowFunction>
 export type { MemoryAdapter } from './memory/adapter'
 import type { MemoryAdapter } from './memory/adapter'
 
+export interface HarnessMeta {
+  process_concept_id: string | null
+}
+
 export interface ExecutionContext {
   readonly llmClient: ILLMClient
   readonly toolRegistry: ToolRegistry
@@ -39,6 +43,7 @@ export interface ExecutionContext {
   readonly agents: Map<string, unknown>
   readonly subgraphRegistry: Map<string, unknown>
   readonly hitlPersistStore: MemoryAdapter
+  readonly harnessMeta: HarnessMeta
 }
 
 export function createExecutionContext(opts: {
@@ -52,6 +57,7 @@ export function createExecutionContext(opts: {
   agents?: Map<string, unknown>
   subgraphRegistry?: Map<string, unknown>
   hitlPersistStore?: MemoryAdapter
+  harnessMeta?: Partial<HarnessMeta>
 }): ExecutionContext & { abortController: AbortController } {
   const abortController = opts.abortController ?? new AbortController()
   const retryConfig: RetryConfig = {
@@ -79,5 +85,6 @@ export function createExecutionContext(opts: {
     agents: opts.agents ?? new Map(),
     subgraphRegistry: opts.subgraphRegistry ?? new Map(),
     hitlPersistStore: opts.hitlPersistStore ?? new InMemoryAdapter({ scope: 'global', namespace: '__hitl__' }),
+    harnessMeta: { process_concept_id: null, ...opts.harnessMeta },
   }
 }
