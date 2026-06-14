@@ -16,7 +16,7 @@ describe('WorldModel', () => {
     const wm = new WorldModel()
     const contradiction: Contradiction = {
       id: 'c1', type: 'pairwise', severity: 'HIGH', scope: 'task',
-      description: 'test', belief_ids: ['b1', 'b2'],
+      description: 'test', involved_belief_ids: ['b1', 'b2'],
     }
     wm.contradictions.push(contradiction)
     wm.completeness_flags['region_a'] = false
@@ -41,8 +41,8 @@ describe('WorldModel', () => {
   it('addBelief() throws if derived_from[] is empty', () => {
     const wm = new WorldModel()
     const belief: Belief = {
-      id: 'b1', content: 'test', reliability: 'HIGH',
-      derived_from: [], timestamp: new Date().toISOString(),
+      id: 'b1', statement: 'test', confidence: 1.0,
+      derived_from: [], recorded_at: new Date().toISOString(),
     }
     expect(() => wm.addBelief(belief)).toThrow()
   })

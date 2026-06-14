@@ -5,12 +5,14 @@ import type { HypothesisSet } from '../state/hypothesis-set.js'
 type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
 type Scope = 'local' | 'task' | 'global'
 
-function computeSeverity(relA: string, relB: string): Severity {
-  const highCount = (relA === 'HIGH' ? 1 : 0) + (relB === 'HIGH' ? 1 : 0)
-  if (highCount === 2) return 'SYSTEM_BREAKING'
-  const medCount = (relA === 'MEDIUM' ? 1 : 0) + (relB === 'MEDIUM' ? 1 : 0)
-  if (highCount === 1 || medCount === 2) return 'HIGH'
-  if (medCount === 1) return 'MEDIUM'
+function computeSeverity(confA: number, confB: number): Severity {
+  const highA = confA >= 0.8
+  const highB = confB >= 0.8
+  const medA = confA >= 0.5
+  const medB = confB >= 0.5
+  if (highA && highB) return 'SYSTEM_BREAKING'
+  if (highA || highB || (medA && medB)) return 'HIGH'
+  if (medA || medB) return 'MEDIUM'
   return 'LOW'
 }
 
@@ -40,21 +42,21 @@ export function detectContradictions(
   const beliefs = worldModel.beliefs
   const detected = new Set<string>()
 
-  // 1. Pairwise: belief content "NOT: <X>" directly negates another belief with content "<X>"
+  // 1. Pairwise: belief statement "NOT: <X>" directly negates another belief with statement "<X>"
   for (let i = 0; i < beliefs.length; i++) {
     for (let j = i + 1; j < beliefs.length; j++) {
       const a = beliefs[i], b = beliefs[j]
-      const aIsNeg = a.content.startsWith('NOT: ')
-      const bIsNeg = b.content.startsWith('NOT: ')
+      const aIsNeg = a.statement.startsWith('NOT: ')
+      const bIsNeg = b.statement.startsWith('NOT: ')
 
       let baseContent = ''
       let beliefIds: string[] = []
 
-      if (aIsNeg && b.content === a.content.slice(5)) {
-        baseContent = b.content
+      if (aIsNeg && b.statement === a.statement.slice(5)) {
+        baseContent = b.statement
         beliefIds = [a.id, b.id]
-      } else if (bIsNeg && a.content === b.content.slice(5)) {
-        baseContent = a.content
+      } else if (bIsNeg && a.statement === b.statement.slice(5)) {
+        baseContent = a.statement
         beliefIds = [a.id, b.id]
       }
 
@@ -65,17 +67,17 @@ export function detectContradictions(
           addContradiction({
             id: key,
             type: 'pairwise',
-            severity: computeSeverity(a.reliability, b.reliability),
+            severity: computeSeverity(a.confidence, b.confidence),
             scope: computeScope(baseContent),
             description: `Pairwise contradiction between "${a.id}" and "${b.id}"`,
-            belief_ids: beliefIds,
+            involved_belief_ids: beliefIds,
           }, worldModel)
         }
       }
     }
   }
 
-  // 2. Temporal: versioned beliefs (<base>_v<n>) with same base but different content
+  // 2. Temporal: versioned beliefs (<base>_v<n>) with same base but different statement
   const byBase = new Map<string, Belief[]>()
   for (const b of beliefs) {
     const m = b.id.match(/^(.+)_v(\d+)$/)
@@ -86,19 +88,19 @@ export function detectContradictions(
     }
   }
   for (const [base, versions] of byBase) {
-    if (versions.length > 1 && new Set(versions.map(v => v.content)).size > 1) {
+    if (versions.length > 1 && new Set(versions.map(v => v.statement)).size > 1) {
       const key = `temporal_${base}`
       if (!detected.has(key)) {
         detected.add(key)
-        const sorted = [...versions].sort((x, y) => x.timestamp.localeCompare(y.timestamp))
+        const sorted = [...versions].sort((x, y) => x.recorded_at.localeCompare(y.recorded_at))
         const older = sorted[0], newer = sorted[sorted.length - 1]
         addContradiction({
           id: key,
           type: 'temporal',
-          severity: computeSeverity(older.reliability, newer.reliability),
-          scope: computeScope(older.content + ' ' + newer.content),
+          severity: computeSeverity(older.confidence, newer.confidence),
+          scope: computeScope(older.statement + ' ' + newer.statement),
           description: `Temporal contradiction: belief "${base}" changed between versions`,
-          belief_ids: versions.map(v => v.id),
+          involved_belief_ids: versions.map(v => v.id),
         }, worldModel)
       }
     }
@@ -107,7 +109,7 @@ export function detectContradictions(
   // 3. Set-level: beliefs tagged "SET:<id>:<value>:" are jointly inconsistent when values conflict
   const bySets = new Map<string, Belief[]>()
   for (const b of beliefs) {
-    const m = b.content.match(/^SET:(\w+):(\w+):/)
+    const m = b.statement.match(/^SET:(\w+):(\w+):/)
     if (m) {
       const setId = m[1]
       if (!bySets.has(setId)) bySets.set(setId, [])
@@ -116,7 +118,7 @@ export function detectContradictions(
   }
   for (const [setId, members] of bySets) {
     const values = members.map(b => {
-      const m = b.content.match(/^SET:\w+:(\w+):/)
+      const m = b.statement.match(/^SET:\w+:(\w+):/)
       return m ? m[1] : ''
     })
     const valSet = new Set(values)
@@ -127,32 +129,32 @@ export function detectContradictions(
         addContradiction({
           id: key,
           type: 'set-level',
-          severity: computeSeverity(members[0].reliability, members[1]?.reliability ?? 'LOW'),
-          scope: computeScope(members.map(m => m.content).join(' ')),
+          severity: computeSeverity(members[0].confidence, members[1]?.confidence ?? 0.0),
+          scope: computeScope(members.map(m => m.statement).join(' ')),
           description: `Set-level contradiction in set "${setId}"`,
-          belief_ids: members.map(m => m.id),
+          involved_belief_ids: members.map(m => m.id),
         }, worldModel)
       }
     }
   }
 
-  // 4. Abstraction: beliefs "hi:<concept>" and "lo:<concept>" with conflicting content
+  // 4. Abstraction: beliefs "hi:<concept>" and "lo:<concept>" with conflicting statement
   const hiBeliefs = beliefs.filter(b => b.id.startsWith('hi:'))
   const loBeliefs = beliefs.filter(b => b.id.startsWith('lo:'))
   for (const hi of hiBeliefs) {
     const concept = hi.id.slice(3)
     const lo = loBeliefs.find(b => b.id.slice(3) === concept)
-    if (lo && hi.content !== lo.content) {
+    if (lo && hi.statement !== lo.statement) {
       const key = `abstraction_${concept}`
       if (!detected.has(key)) {
         detected.add(key)
         addContradiction({
           id: key,
           type: 'abstraction',
-          severity: computeSeverity(hi.reliability, lo.reliability),
-          scope: computeScope(hi.content + ' ' + lo.content),
+          severity: computeSeverity(hi.confidence, lo.confidence),
+          scope: computeScope(hi.statement + ' ' + lo.statement),
           description: `Abstraction contradiction for concept "${concept}"`,
-          belief_ids: [hi.id, lo.id],
+          involved_belief_ids: [hi.id, lo.id],
         }, worldModel)
       }
     }

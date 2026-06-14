@@ -59,7 +59,7 @@ class VerificationResult:
 def _tool_available(tool_name: str, tool_manifest: Any) -> bool:
     """Check if a tool is available via the tool manifest."""
     if tool_manifest is None:
-        return True  # assume available if no manifest
+        return False  # no manifest → skip tool-dependent checks (don't fail)
     return bool(tool_manifest.check_tool_availability(tool_name))
 
 

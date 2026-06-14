@@ -50,7 +50,7 @@ function makeHealthyDiagnostics() {
     belief_health: { freshness: 0.8, consistency: 0.8, support: 0.8 },
     coverage_health: { symptom_coverage: 0.7, explanation_coverage: 0.6 },
     verification_health: { strength: 0.8, feasibility: 0.8 },
-    execution_health: { progress_rate: 0.8, failure_recurrence: 0.8, oscillation_score: 0.8 },
+    execution_health: { progress_rate: 0.8, failure_recurrence: 0.1, oscillation_score: 0.1 },
     dep_class_gap_annotation: '',
   })
 }
@@ -236,7 +236,7 @@ describe('contextCompression', () => {
       id: 'obs1',
       content: 'old observation',
       source: 'tool_a',
-      timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 min ago — past 5min TTL
+      recorded_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 min ago — past 5min TTL
     })
     wm.completeness_flags['tool_a'] = true
 
@@ -310,18 +310,18 @@ describe('reviewerPass', () => {
     // Add a belief that matches success criteria
     wm.addBelief({
       id: 'b1',
-      content: 'tests pass',
-      reliability: 'HIGH',
+      statement: 'tests pass',
+      confidence: 1.0,
       derived_from: ['obs1'],
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     // Add a low-proximity belief (file path detail)
     wm.addBelief({
       id: 'b2',
-      content: '/src/irrelevant/file.ts',
-      reliability: 'LOW',
+      statement: '/src/irrelevant/file.ts',
+      confidence: 0.0,
       derived_from: ['obs2'],
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     // Should not throw — adversarial_prior is seeded from matching beliefs
     expect(() => reviewerPass(wm, ['tests pass'], fd, bd, dd, hs, tg, diag, es, pq)).not.toThrow()

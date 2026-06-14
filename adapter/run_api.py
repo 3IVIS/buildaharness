@@ -107,6 +107,17 @@ except ImportError:
     _itsharness_tracer = _FakeTracer()  # type: ignore[assignment]
 
 
+def _lf_update_trace_output(state: dict) -> None:
+    if not _LANGFUSE_ENABLED:
+        return
+    try:
+        lf = _lf_get_client()
+        # Langfuse 3.x uses set_current_trace_io; update_current_trace was removed.
+        lf.set_current_trace_io(output=state)
+    except Exception:
+        pass
+
+
 def _lf_trace_info() -> tuple[str | None, str | None]:
     if not _LANGFUSE_ENABLED:
         return None, None
@@ -384,80 +395,101 @@ def _stream_graph(
 ) -> dict:
     """Stream a LangGraph graph synchronously (runs in an executor thread).
 
-    emit_cb(node_id, status, ms, tokens) schedules async DB writes on the
-    main event loop so executor threads can emit events without their own loop.
+    Uses stream_mode=["updates","debug"] to get real per-node timing via debug
+    "task"/"task_result" events — including harness canvas nodes that return {}.
+    Falls back gracefully when debug mode is unavailable (non-tuple output).
+
+    emit_cb(node_id, status, ms, tokens, error_message=None) schedules async
+    DB writes on the main event loop so executor threads can emit events without
+    their own loop.
     """
     final_state: dict = {}
     node_start_times: dict[str, datetime] = {}
+    done_nodes: set[str] = set()
+    trackable_set: set[str] = set(trackable)
 
-    if trackable:
-        node_start_times[trackable[0]] = datetime.now(UTC)
-        emit_cb(trackable[0], "running", None, None)
-
-    # _current_node tracks which node was running when an exception escapes
-    # the stream loop, so we can emit a precise "error" event for that node
-    # rather than marking every pending node as error in _mark_error_nodes.
+    # _current_node tracks the active node so exception handlers can emit a
+    # precise "error" event rather than marking every pending node.
     _current_node: str | None = None
 
-    # In LangGraph >=1.x, interrupt() no longer raises GraphInterrupt from
-    # inside stream(). Instead it emits an __interrupt__ chunk and the stream
-    # ends cleanly. We capture the value here and re-raise after the loop.
+    # In LangGraph >=1.x, interrupt() ends the stream cleanly with an
+    # __interrupt__ chunk.  Capture it and re-raise after the loop.
     _pending_interrupt: Any = None
 
     try:
-        for chunk in compiled_graph.stream(inputs, stream_mode="updates", config=config):
-            for node_id, state_update in chunk.items():
-                if node_id == "__interrupt__":
-                    _pending_interrupt = state_update
+        for chunk in compiled_graph.stream(inputs, stream_mode=["updates", "debug"], config=config):
+            # Combined stream_mode yields (mode, data) tuples in LangGraph 0.2+.
+            # Older versions yield plain dicts — treat those as "updates".
+            if isinstance(chunk, tuple):
+                mode, data = chunk
+            else:
+                mode, data = "updates", chunk
+
+            # ── debug events: real node start / end timing ─────────────────
+            if mode == "debug":
+                evt_type = (data or {}).get("type", "")
+                payload = (data or {}).get("payload", {}) or {}
+                node_name = payload.get("name", "")
+
+                if not node_name or node_name.startswith("__") or node_name not in trackable_set:
                     continue
-                if node_id.startswith("__"):
-                    continue
 
-                _current_node = node_id
-                t0 = node_start_times.get(node_id, datetime.now(UTC))
-                ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
+                if evt_type == "task":
+                    # Node about to start — record wall-clock start time.
+                    node_start_times[node_name] = datetime.now(UTC)
+                    emit_cb(node_name, "running", None, None)
+                    _current_node = node_name
 
-                # Check for LangGraph node-level error payloads: when a node
-                # raises, LangGraph may surface the error as a special key in
-                # state_update rather than propagating it as a Python exception.
-                if isinstance(state_update, dict) and "__error__" in state_update:
-                    node_err = state_update["__error__"]
-                    err_msg = str(node_err) if not isinstance(node_err, str) else node_err
-                    emit_cb(node_id, "error", ms, None, err_msg)
-                    raise RuntimeError(f"Node '{node_id}' failed: {err_msg}")
+                elif evt_type == "task_result":
+                    # Node just finished (fires even for nodes that return {}).
+                    if node_name not in done_nodes:
+                        t0 = node_start_times.get(node_name, datetime.now(UTC))
+                        ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
+                        emit_cb(node_name, "done", ms, None)
+                        done_nodes.add(node_name)
+                        if _current_node == node_name:
+                            _current_node = None
 
-                try:
-                    with _itsharness_tracer.start_as_current_span(
-                        f"node.{node_id}",
-                        attributes={"node.id": node_id, "flow.job_id": job_id, "node.ms": ms},
-                    ) as span:
-                        span.set_attribute(
-                            "node.output_keys",
-                            str(list(state_update.keys()))[:200] if isinstance(state_update, dict) else "",
-                        )
-                except Exception:
-                    pass
+            # ── updates: accumulate final state ────────────────────────────
+            elif mode == "updates":
+                for node_id, state_update in (data or {}).items():
+                    if node_id == "__interrupt__":
+                        _pending_interrupt = state_update
+                        continue
+                    if node_id.startswith("__"):
+                        continue
 
-                emit_cb(node_id, "done", ms, None)
-                _current_node = None
+                    _current_node = node_id
 
-                if isinstance(state_update, dict):
-                    final_state.update(state_update)
+                    # Check for LangGraph node-level error payloads.
+                    if isinstance(state_update, dict) and "__error__" in state_update:
+                        node_err = state_update["__error__"]
+                        err_msg = str(node_err) if not isinstance(node_err, str) else node_err
+                        t0 = node_start_times.get(node_id, datetime.now(UTC))
+                        ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
+                        emit_cb(node_id, "error", ms, None, err_msg)
+                        done_nodes.add(node_id)
+                        raise RuntimeError(f"Node '{node_id}' failed: {err_msg}")
 
-                try:
-                    idx = trackable.index(node_id)
-                    if idx + 1 < len(trackable):
-                        nxt = trackable[idx + 1]
-                        node_start_times[nxt] = datetime.now(UTC)
-                        emit_cb(nxt, "running", None, None)
-                        _current_node = nxt
-                except ValueError:
-                    pass
+                    try:
+                        with _itsharness_tracer.start_as_current_span(
+                            f"node.{node_id}",
+                            attributes={"node.id": node_id, "flow.job_id": job_id},
+                        ) as span:
+                            span.set_attribute(
+                                "node.output_keys",
+                                str(list(state_update.keys()))[:200] if isinstance(state_update, dict) else "",
+                            )
+                    except Exception:
+                        pass
+
+                    if isinstance(state_update, dict):
+                        final_state.update(state_update)
+
+                    _current_node = None
 
     except Exception:
-        # If we know which node was active, emit a precise error event for it
-        # so the canvas highlights exactly the failing node, not all pending nodes.
-        if _current_node is not None:
+        if _current_node is not None and _current_node not in done_nodes:
             import sys
 
             exc_info = sys.exc_info()
@@ -465,9 +497,6 @@ def _stream_graph(
             emit_cb(_current_node, "error", None, None, err_msg)
         raise
 
-    # LangGraph >=1.x: interrupt() ends the stream cleanly with an
-    # __interrupt__ chunk instead of raising GraphInterrupt. Re-raise so
-    # the caller's _is_interrupt() check can route to _handle_pause().
     if _pending_interrupt is not None and _GraphInterrupt is not None:
         raise _GraphInterrupt(_pending_interrupt)
 
@@ -692,6 +721,7 @@ async def _run_maf(job_id: str, spec: dict, org_id: str | None = None, inputs: d
 
         import json as _json_mod
 
+        _lf_update_trace_output(final_state)
         output = _json_mod.dumps(final_state, default=str, indent=2)
         if warnings:
             output = f"[warnings]\n{chr(10).join(warnings)}\n\n{output}"
@@ -790,6 +820,7 @@ async def _resume_maf(job_id: str, resume_payload: dict, spec: dict, org_id: str
 
         import json as _json_mod
 
+        _lf_update_trace_output(final_state)
         output = _json_mod.dumps(final_state, default=str, indent=2)
 
         async with _job_session() as db:
@@ -1058,7 +1089,7 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inp
         # Namespace the LangGraph checkpointer thread_id with org_id so memory
         # state is siloed per tenant: {org_id}:{job_id} on Postgres checkpointer.
         _thread_id = f"{org_id}:{job_id}" if org_id else job_id
-        config = {"configurable": {"thread_id": _thread_id}}
+        config = {"configurable": {"thread_id": _thread_id}, "recursion_limit": 50}
         skip = {"input", "output", "annotation"}
         trackable = [n["id"] for n in spec.get("nodes", []) if n.get("type") not in skip]
 
@@ -1098,6 +1129,7 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inp
         async with _job_session() as db:
             await _mark_stale_nodes_done(job_id, trackable, db)
 
+        _lf_update_trace_output(final_state)
         output = _json.dumps(final_state, default=str, indent=2)
         if warnings:
             output = f"[warnings]\n{chr(10).join(warnings)}\n\n{output}"
@@ -1204,6 +1236,7 @@ async def _resume_langgraph(job_id: str, resume_payload: dict, spec: dict, org_i
         async with _job_session() as db:
             await _mark_stale_nodes_done(job_id, trackable or [], db)
 
+        _lf_update_trace_output(final_state)
         output = _json.dumps(final_state, default=str, indent=2)
 
         async with _job_session() as db:

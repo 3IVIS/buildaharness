@@ -191,13 +191,22 @@ def action_dep_overlap(action: Any, memory_state: Any) -> list[str]:
         compressed = list(getattr(memory_state, "compressed_structures", []))
         pruned = list(getattr(memory_state, "pruned_regions", []))
 
-    affected.update(str(s) for s in compressed)
-    affected.update(str(s) for s in pruned)
+    affected.update(_structure_id(s) for s in compressed)
+    affected.update(_structure_id(r) for r in pruned)
 
     return [r for r in required if r in affected]
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+
+def _structure_id(item: Any) -> str:
+    """Extract the string ID from a structure/region item (str, dict, or dataclass)."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        return item.get("id", str(item))
+    return getattr(item, "id", str(item))
 
 
 def _get_change_type(proposed_change: Any) -> str:

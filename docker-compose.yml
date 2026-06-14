@@ -63,6 +63,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - MASTRA_RUNNER_PORT=8001
       - QDRANT_URL=http://qdrant:6333
@@ -101,6 +103,8 @@ services:
       dockerfile: Dockerfile.adapter
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PYTHONUNBUFFERED=1
       - QDRANT_URL=http://qdrant:6333
@@ -192,6 +196,8 @@ services:
     image: ghcr.io/berriai/litellm:main-latest
     ports:
       - "4000:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./adapter/litellm_config.yaml:/app/config.yaml
     command: ["--config", "/app/config.yaml", "--port", "4000"]

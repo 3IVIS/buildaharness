@@ -46,7 +46,8 @@ export class Diagnostics {
     this.belief_health = data?.belief_health ?? { freshness: 1.0, consistency: 1.0, support: 1.0 }
     this.coverage_health = data?.coverage_health ?? { symptom_coverage: 0.5, explanation_coverage: 0.5 }
     this.verification_health = data?.verification_health ?? { strength: 1.0, feasibility: 1.0 }
-    this.execution_health = data?.execution_health ?? { progress_rate: 1.0, failure_recurrence: 1.0, oscillation_score: 1.0 }
+    // failure_recurrence and oscillation_score: 0=healthy (inverted in resolveControlState)
+    this.execution_health = data?.execution_health ?? { progress_rate: 1.0, failure_recurrence: 0.0, oscillation_score: 0.0 }
     this.dep_class_gap_annotation = data?.dep_class_gap_annotation ?? ''
   }
 

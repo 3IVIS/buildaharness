@@ -447,6 +447,7 @@ const VERIFICATION_LAYER_NAMES = [
   'assumptions', 'goal_correctness', 'evidence_sufficiency', 'output_contract_partial',
 ] as const
 const VerificationGateNodeConfig = z.object({
+  result_key: z.string().optional(),
   enabled_layers: z.array(z.enum(VERIFICATION_LAYER_NAMES)).optional(),
   require_adversarial_on_high_risk: z.boolean().default(true).optional(),
 })

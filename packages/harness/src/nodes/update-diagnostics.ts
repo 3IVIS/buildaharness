@@ -47,7 +47,7 @@ export function updateDiagnostics(
 
   const reliabilityWeight: Record<string, number> = { HIGH: 1.0, MEDIUM: 0.5, LOW: 0.0 }
   const meanSupport = worldModel.beliefs.length > 0
-    ? worldModel.beliefs.reduce((acc, b) => acc + (reliabilityWeight[b.reliability] ?? 0.5), 0) / worldModel.beliefs.length
+    ? worldModel.beliefs.reduce((acc, b) => acc + (reliabilityWeight[b.reliability ?? 'MEDIUM'] ?? 0.5), 0) / worldModel.beliefs.length
     : 1.0
   const support = normalise(meanSupport, DimensionType.ratio)
   assertNormalised(support, 'belief_health.support')
@@ -102,21 +102,25 @@ export function updateDiagnostics(
   const totalTasks = taskGraph.tasks.length
   const completedTasks = taskGraph.tasks.filter(t => t.status === 'COMPLETE').length
   const failedTasks = taskGraph.tasks.filter(t => t.status === 'FAILED').length
+  const attemptedTasks = completedTasks + failedTasks
 
+  // progress_rate: higher=better; return 1.0 until tasks have been attempted
+  // (matches Python: only update from journal when journal is non-empty)
   const progressRate = normalise(
-    totalTasks > 0 ? completedTasks / totalTasks : 1.0,
+    attemptedTasks > 0 ? completedTasks / totalTasks : 1.0,
     DimensionType.ratio,
   )
   assertNormalised(progressRate, 'execution_health.progress_rate')
 
+  // failure_recurrence: 0=healthy (no failures), 1=max failures — inverted in resolveControlState
   const failureRecurrence = normalise(
-    1 - Math.min(1, failureDiagnostics.failure_history.length / 10),
+    Math.min(1, failureDiagnostics.failure_history.length / 10),
     DimensionType.ratio,
   )
   assertNormalised(failureRecurrence, 'execution_health.failure_recurrence')
 
-  const failureRatio = totalTasks > 0 ? failedTasks / totalTasks : 0
-  const oscillationScore = normalise(1 - failureRatio, DimensionType.ratio)
+  // oscillation_score: 0=healthy (no failed tasks), 1=max — inverted in resolveControlState
+  const oscillationScore = normalise(totalTasks > 0 ? failedTasks / totalTasks : 0, DimensionType.ratio)
   assertNormalised(oscillationScore, 'execution_health.oscillation_score')
 
   diagnostics.execution_health = { progress_rate: progressRate, failure_recurrence: failureRecurrence, oscillation_score: oscillationScore }

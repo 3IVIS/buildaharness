@@ -13,7 +13,7 @@ gates handle staleness internally.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from .staleness import StalenessError, assert_generation_fresh, staleness_check
 
@@ -97,27 +97,31 @@ def action_gate(
     world_model: Any,
     diagnostics: Any | None = None,
     failure_diagnostics: Any | None = None,
-) -> bool:
+) -> Literal["PASS", "BLOCK", "ESCALATE"]:
     """Gate action execution (sub-step A freshness check).
 
-    Returns False when:
-    - control_state is BLOCKED, or
-    - action.required_resources overlap with any blocked dimension in block_mask.
+    Returns:
+      'ESCALATE' when escalation_reason is HUMAN_REQUIRED (before evaluating block_mask).
+      'BLOCK' when control_state is BLOCKED or action overlaps a blocked dimension.
+      'PASS' otherwise.
 
     Re-resolves control_state once if stale.
     """
     control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
 
+    if getattr(control_state, "escalation_reason", None) == "HUMAN_REQUIRED":
+        return "ESCALATE"
+
     if control_state.risk_state == "BLOCKED":
-        return False
+        return "BLOCK"
 
     blocked_dims = {entry.dimension for entry in control_state.block_mask}
     if blocked_dims and action is not None:
         required = _get_required_resources(action)
         if required & blocked_dims:
-            return False
+            return "BLOCK"
 
-    return True
+    return "PASS"
 
 
 def post_exec_gate(

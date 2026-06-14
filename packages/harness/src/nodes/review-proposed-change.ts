@@ -71,8 +71,8 @@ function checkWorldModelConsistency(proposedChange: ProposedChange, worldModel: 
   }
   const changeDesc = getChangeDescription(proposedChange)
   for (const belief of worldModel.beliefs) {
-    if (belief.reliability !== 'HIGH') continue
-    const stmt = belief.content.toLowerCase()
+    if (belief.confidence < 0.8) continue
+    const stmt = belief.statement.toLowerCase()
     if (isNegation(changeDesc, stmt)) {
       return {
         dimension: 'world_model_consistency',

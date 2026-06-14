@@ -80,7 +80,7 @@ export function cannotMakeProgress(
     strategyState.stall_reason = 'risk_oscillation'
     return true
   }
-  strategyState.stall_reason = null
+  strategyState.stall_reason = ''
   return false
 }
 
@@ -158,7 +158,7 @@ function rebuildTaskGraph(worldModel: WorldModel, callerState: CallerState): Tas
 
   const beliefTasks = worldModel.beliefs.slice(0, 5).map((belief, i) => ({
     id: `belief-verify-${i}-${Math.random().toString(36).slice(2, 6)}`,
-    description: `Verify: ${belief.content.slice(0, 120)}`,
+    description: `Verify: ${belief.statement.slice(0, 120)}`,
     status: 'PENDING' as const,
     risk_level: 'LOW' as const,
     depends_on: [],

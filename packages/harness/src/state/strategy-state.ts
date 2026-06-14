@@ -18,11 +18,13 @@ export const StrategyStateSchema = z.object({
   current_strategy: StrategyTypeSchema,
   switch_triggers: z.array(z.string()),
   prior_strategy_weights: z.record(z.number()),
-  recovery_strategy_order: z.array(StrategyTypeSchema),
+  recovery_strategy_order: z.array(StrategyTypeSchema).default(() => [...DEFAULT_STRATEGY_ORDER]),
   switch_count: z.number().int().nonnegative(),
-  stall_reason: z.string().nullable(),
+  stall_reason: z.string(),
   completion_history: z.array(z.number().int().nonnegative()),
   risk_state_history: z.array(z.string()),
+  recovery_was_used: z.boolean(),
+  last_failure_class: z.string(),
 })
 export type StrategyStateData = z.infer<typeof StrategyStateSchema>
 
@@ -32,11 +34,15 @@ export class StrategyState {
   prior_strategy_weights: Record<string, number>
   recovery_strategy_order: StrategyType[]
   switch_count: number
-  stall_reason: string | null
+  stall_reason: string
   /** Running count of completed tasks recorded each iteration — used by cannot_make_progress() proxy 1. */
   completion_history: number[]
   /** Risk state string recorded each iteration — used by cannot_make_progress() proxy 4. */
   risk_state_history: string[]
+  /** Whether a recovery strategy was used in the current run (P8). */
+  recovery_was_used: boolean
+  /** The failure class that triggered the most recent strategy switch (P8). */
+  last_failure_class: string
 
   constructor(data?: Partial<StrategyStateData>) {
     this.current_strategy = data?.current_strategy ?? 'DIRECT_EDIT'
@@ -44,9 +50,11 @@ export class StrategyState {
     this.prior_strategy_weights = data?.prior_strategy_weights ?? makeFlatWeights()
     this.recovery_strategy_order = data?.recovery_strategy_order ?? [...DEFAULT_STRATEGY_ORDER]
     this.switch_count = data?.switch_count ?? 0
-    this.stall_reason = data?.stall_reason ?? null
+    this.stall_reason = data?.stall_reason ?? ''
     this.completion_history = data?.completion_history ?? []
     this.risk_state_history = data?.risk_state_history ?? []
+    this.recovery_was_used = data?.recovery_was_used ?? false
+    this.last_failure_class = data?.last_failure_class ?? ''
   }
 
   toJSON(): StrategyStateData {
@@ -59,6 +67,8 @@ export class StrategyState {
       stall_reason: this.stall_reason,
       completion_history: this.completion_history,
       risk_state_history: this.risk_state_history,
+      recovery_was_used: this.recovery_was_used,
+      last_failure_class: this.last_failure_class,
     }
   }
 

@@ -37,7 +37,7 @@ function seedAdversarialPrior(
   const criteriaSet = new Set(successCriteria.map(c => c.toLowerCase()))
 
   function causalProximity(belief: Belief): number {
-    const text = belief.content.toLowerCase()
+    const text = belief.statement.toLowerCase()
     // Direct match → high proximity
     for (const criterion of criteriaSet) {
       if (text.includes(criterion)) return 1.0
@@ -89,7 +89,7 @@ function implementerLens(worldModel: WorldModel, successCriteria: string[]): Rev
   // "Did I do what I intended?" — check beliefs cover success criteria
   for (const criterion of successCriteria) {
     const covered = worldModel.beliefs.some(b =>
-      b.content.toLowerCase().includes(criterion.toLowerCase()),
+      b.statement.toLowerCase().includes(criterion.toLowerCase()),
     )
     if (!covered) {
       findings.push(`Success criterion not covered by any belief: "${criterion}"`)
@@ -110,9 +110,9 @@ function reviewerLens(worldModel: WorldModel, successCriteria: string[]): Review
     }
   }
 
-  const weakBeliefs = worldModel.beliefs.filter(b => b.reliability === 'LOW')
+  const weakBeliefs = worldModel.beliefs.filter(b => b.confidence < 0.25)
   if (weakBeliefs.length > worldModel.beliefs.length / 2) {
-    findings.push(`More than half of beliefs have LOW reliability (${weakBeliefs.length}/${worldModel.beliefs.length})`)
+    findings.push(`More than half of beliefs have LOW confidence (${weakBeliefs.length}/${worldModel.beliefs.length})`)
   }
 
   void successCriteria
@@ -138,10 +138,10 @@ function adversarialLens(
 
   // Challenge each seeded belief adversarially
   for (const belief of adversarialPrior) {
-    if (belief.reliability === 'HIGH') {
+    if (belief.confidence >= 0.8) {
       // Check if contradicted
       const contradicted = worldModel.contradictions.some(c =>
-        c.belief_ids.includes(belief.id),
+        c.involved_belief_ids.includes(belief.id),
       )
       if (contradicted) {
         findings.push(`Adversarial challenge: HIGH-reliability belief "${belief.id}" is contradicted`)

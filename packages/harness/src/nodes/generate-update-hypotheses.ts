@@ -63,7 +63,7 @@ function generateFromSource(
         return [makeSeed(
           `counter_${beliefs[0].id}${suffix}`,
           source,
-          `Counterfactual: if "${beliefs[0].content}" were false, goal would be impacted`,
+          `Counterfactual: if "${beliefs[0].statement}" were false, goal would be impacted`,
           0.35,
         )]
       }

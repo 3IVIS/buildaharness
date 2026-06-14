@@ -3,9 +3,15 @@ import type { Evidence } from '../state/evidence-store.js'
 import type { Diagnostics } from '../state/diagnostics.js'
 import { normalise, DimensionType } from '../normalise.js'
 
+function reliabilityToFloat(r: string): number {
+  if (r === 'HIGH') return 1.0
+  if (r === 'MEDIUM') return 0.5
+  return 0.0
+}
+
 export interface BeliefInput {
   id?: string
-  content?: string
+  statement?: string
   derived_from: string[]
 }
 
@@ -25,17 +31,19 @@ export function updateWorldModel(
       id: evidence.id,
       content: evidence.obs,
       source: evidence.source,
-      timestamp: evidence.freshness,
+      recorded_at: evidence.freshness,
     })
     const key = regionKey ?? evidence.source
     worldModel.completeness_flags[key] = prune !== true
   } else if (type === 'INFERENCE') {
     const belief: Belief = {
       id: beliefInput?.id ?? evidence.id,
-      content: beliefInput?.content ?? evidence.obs,
-      reliability: evidence.reliability,
+      statement: beliefInput?.statement ?? evidence.obs,
+      confidence: reliabilityToFloat(evidence.reliability),
+      supporting_evidence: [],
+      reliability: '',
       derived_from: beliefInput?.derived_from ?? [],
-      timestamp: evidence.freshness,
+      recorded_at: evidence.freshness,
     }
     // addBelief() enforces derived_from[] non-empty — throws if empty
     worldModel.addBelief(belief)
@@ -60,9 +68,8 @@ export function recomputeBeliefHealth(worldModel: WorldModel, diagnostics: Diagn
     : 0
   diagnostics.belief_health.consistency = normalise(1 - contradictionDensity, DimensionType.ratio)
 
-  const reliabilityWeight: Record<string, number> = { HIGH: 1.0, MEDIUM: 0.5, LOW: 0.0 }
   const meanSupport = worldModel.beliefs.length > 0
-    ? worldModel.beliefs.reduce((acc, b) => acc + (reliabilityWeight[b.reliability] ?? 0.5), 0) / worldModel.beliefs.length
+    ? worldModel.beliefs.reduce((acc, b) => acc + b.confidence, 0) / worldModel.beliefs.length
     : 1.0
   diagnostics.belief_health.support = normalise(meanSupport, DimensionType.ratio)
 }

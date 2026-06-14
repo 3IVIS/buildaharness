@@ -58,6 +58,7 @@ export const MemoryStateSchema = z.object({
   journal: z.array(JournalEntrySchema),
   journal_retention_policy: JournalRetentionPolicySchema,
   rollback_points: z.array(RollbackPointSchema),
+  max_steps: z.number().int().positive(),
 })
 export type MemoryStateData = z.infer<typeof MemoryStateSchema>
 
@@ -67,6 +68,7 @@ export class MemoryState {
   journal: JournalEntry[]
   journal_retention_policy: JournalRetentionPolicy
   rollback_points: RollbackPoint[]
+  max_steps: number
 
   constructor(data?: Partial<MemoryStateData>) {
     this.token_budget = data?.token_budget ?? { total: 200000, used: 0 }
@@ -82,6 +84,7 @@ export class MemoryState {
       compress_older_passing: true,
     }
     this.rollback_points = data?.rollback_points ?? []
+    this.max_steps = data?.max_steps ?? 100
   }
 
   action_dep_overlap(actionWriteDomains: string[]): boolean {
@@ -97,6 +100,7 @@ export class MemoryState {
       journal: this.journal,
       journal_retention_policy: this.journal_retention_policy,
       rollback_points: this.rollback_points,
+      max_steps: this.max_steps,
     }
   }
 

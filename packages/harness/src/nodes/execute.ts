@@ -106,7 +106,7 @@ export function execute(
       id: `err-obs-${makeRollbackRef()}`,
       content: `SYSTEM_ERROR: ${error}`,
       source: 'execution_engine',
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
 
     // Transition task to FAILED

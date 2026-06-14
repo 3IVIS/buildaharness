@@ -58,8 +58,13 @@ export async function llmCallExecutor(
     }
   }
 
-  const outputKey = node.output_key ?? 'llm_output'
-  const stateUpdate: Record<string, unknown> = { [outputKey]: outputValue }
+  let stateUpdate: Record<string, unknown>
+  if (!node.output_key && node.structured_output?.schema && typeof outputValue === 'object' && outputValue !== null) {
+    stateUpdate = outputValue as Record<string, unknown>
+  } else {
+    const outputKey = node.output_key ?? 'llm_output'
+    stateUpdate = { [outputKey]: outputValue }
+  }
 
   context.eventBus.emit({ type: 'node:complete', nodeId: node.id, nodeType: node.type, durationMs: Date.now() - start, tokenCount })
 

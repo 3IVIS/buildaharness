@@ -45,7 +45,7 @@ function makeDiagnostics(): Diagnostics {
     belief_health: { freshness: 0.8, consistency: 0.8, support: 0.8 },
     coverage_health: { symptom_coverage: 0.7, explanation_coverage: 0.6 },
     verification_health: { strength: 0.8, feasibility: 0.8 },
-    execution_health: { progress_rate: 0.8, failure_recurrence: 0.8, oscillation_score: 0.8 },
+    execution_health: { progress_rate: 0.8, failure_recurrence: 0.1, oscillation_score: 0.1 },
     dep_class_gap_annotation: '',
   })
 }
@@ -55,13 +55,13 @@ function makeDiagnostics(): Diagnostics {
 describe('reviewProposedChange', () => {
   it('first failure blocks action without evaluating remaining dimensions', () => {
     const wm = makeWorldModel()
-    // HIGH-reliability belief whose negation the change matches
+    // HIGH-confidence belief whose negation the change matches
     wm.beliefs.push({
       id: 'b1',
-      content: 'system is stable',
-      reliability: 'HIGH',
+      statement: 'system is stable',
+      confidence: 1.0,
       derived_from: ['obs1'],
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     // change contradicts the belief AND would also fail hypothesis compatibility
     const change = { description: 'removes system is stable and not hypothesis pred' }
@@ -90,10 +90,10 @@ describe('reviewProposedChange', () => {
     const wm = makeWorldModel()
     wm.beliefs.push({
       id: 'b1',
-      content: 'auth is enabled',
-      reliability: 'HIGH',
+      statement: 'auth is enabled',
+      confidence: 1.0,
       derived_from: ['obs1'],
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     const change = { description: 'remove auth is enabled' }
     const map = new Map<string, number>()
@@ -154,10 +154,10 @@ describe('reviewProposedChange', () => {
     const wm = makeWorldModel()
     wm.beliefs.push({
       id: 'b1',
-      content: 'db is connected',
-      reliability: 'HIGH',
+      statement: 'db is connected',
+      confidence: 1.0,
       derived_from: ['obs1'],
-      timestamp: new Date().toISOString(),
+      recorded_at: new Date().toISOString(),
     })
     const change = { description: 'removes db is connected' }
     const map = new Map<string, number>()
@@ -192,8 +192,8 @@ describe('actionGate', () => {
     const cs = new ControlState()
     cs.generation_id = 2
     cs.risk_state = 'CAUTIOUS'
-    cs.block_mask = ['GATHER_EVIDENCE']
-    const action = { required_resources: ['GATHER_EVIDENCE'] }
+    cs.block_mask = [{ dimension: 'belief_freshness', value: 0.1, recovery_action_class: 'belief_refresh' }]
+    const action = { required_resources: ['belief_freshness'] }
     const result = actionGate(action, cs, wm)
     expect(result).toBe('BLOCK')
   })
@@ -205,8 +205,8 @@ describe('actionGate', () => {
     cs.generation_id = 1
     cs.escalation_reason = 'HUMAN_REQUIRED'
     cs.risk_state = 'BLOCKED'  // would BLOCK but ESCALATE fires first
-    cs.block_mask = ['GATHER_EVIDENCE']
-    const action = { required_resources: ['GATHER_EVIDENCE'] }
+    cs.block_mask = [{ dimension: 'belief_freshness', value: 0.1, recovery_action_class: 'belief_refresh' }]
+    const action = { required_resources: ['belief_freshness'] }
     const result = actionGate(action, cs, wm)
     expect(result).toBe('ESCALATE')
   })

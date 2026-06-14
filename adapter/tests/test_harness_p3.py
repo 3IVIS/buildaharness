@@ -371,8 +371,31 @@ def test_T16_action_gate_re_resolves_stale_control_state():
         diagnostics=d,
     )
 
-    # Gate should return True (NORMAL state, no blocked dims)
-    assert result is True
+    # Gate should return 'PASS' (NORMAL state, no blocked dims)
+    assert result == "PASS"
+
+
+def test_T16b_action_gate_escalates_on_human_required():
+    """T16b — action_gate returns ESCALATE immediately when escalation_reason=HUMAN_REQUIRED."""
+    wm = _fresh_world_model(generation_id=1)
+
+    cs = ControlState(generation_id=1)
+    cs.escalation_reason = "HUMAN_REQUIRED"
+    cs.risk_state = "BLOCKED"  # would BLOCK, but ESCALATE fires first
+
+    result = action_gate({"type": "noop"}, control_state=cs, world_model=wm)
+    assert result == "ESCALATE"
+
+
+def test_T16c_action_gate_blocks_on_blocked_risk_state():
+    """T16c — action_gate returns BLOCK when risk_state=BLOCKED and no escalation_reason."""
+    wm = _fresh_world_model(generation_id=1)
+
+    cs = ControlState(generation_id=1)
+    cs.risk_state = "BLOCKED"
+
+    result = action_gate({"type": "noop"}, control_state=cs, world_model=wm)
+    assert result == "BLOCK"
 
 
 def test_T17_post_exec_gate_identifies_substep_a_control_state_as_stale():

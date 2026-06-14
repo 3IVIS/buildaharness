@@ -140,9 +140,9 @@ describe('update_world_model', () => {
 
   it('belief_health.consistency = normalise(1 - contradiction_density, ratio)', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', content: 'x', reliability: 'HIGH', derived_from: ['o1'], timestamp: '' })
-    wm.beliefs.push({ id: 'b2', content: 'y', reliability: 'MEDIUM', derived_from: ['o2'], timestamp: '' })
-    wm.contradictions.push({ id: 'c1', type: 'pairwise', severity: 'HIGH', scope: 'local', description: '', belief_ids: ['b1', 'b2'] })
+    wm.beliefs.push({ id: 'b1', statement: 'x', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'y', confidence: 0.5, derived_from: ['o2'], recorded_at: '' })
+    wm.contradictions.push({ id: 'c1', type: 'pairwise', severity: 'HIGH', scope: 'local', description: '', involved_belief_ids: ['b1', 'b2'] })
     const diagnostics = new Diagnostics()
     const evidence = { id: 'e1', obs: 'obs', reliability: 'LOW' as const, source: 'src', evidence_type: 'OBSERVATION' as const, freshness: new Date().toISOString() }
     updateWorldModel(evidence, wm, diagnostics)
@@ -150,10 +150,10 @@ describe('update_world_model', () => {
     expect(diagnostics.belief_health.consistency).toBeCloseTo(0.5)
   })
 
-  it('belief_health.support = normalise(mean_reliability_weight, ratio)', () => {
+  it('belief_health.support = normalise(mean_confidence, ratio)', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', content: 'x', reliability: 'HIGH', derived_from: ['o1'], timestamp: '' })  // weight=1.0
-    wm.beliefs.push({ id: 'b2', content: 'y', reliability: 'LOW', derived_from: ['o2'], timestamp: '' })   // weight=0.0
+    wm.beliefs.push({ id: 'b1', statement: 'x', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'y', confidence: 0.0, derived_from: ['o2'], recorded_at: '' })
     const diagnostics = new Diagnostics()
     const evidence = { id: 'e1', obs: 'obs', reliability: 'LOW' as const, source: 'src', evidence_type: 'OBSERVATION' as const, freshness: new Date().toISOString() }
     updateWorldModel(evidence, wm, diagnostics)
@@ -231,9 +231,9 @@ describe('propagate_beliefs', () => {
 describe('detect_contradictions', () => {
   it('SYSTEM_BREAKING enters contradictions[] — does NOT throw, does NOT halt loop', () => {
     const wm = new WorldModel()
-    // Both HIGH-reliability → SYSTEM_BREAKING
-    wm.beliefs.push({ id: 'b1', content: 'system is stable', reliability: 'HIGH', derived_from: ['o1'], timestamp: '' })
-    wm.beliefs.push({ id: 'b2', content: 'NOT: system is stable', reliability: 'HIGH', derived_from: ['o2'], timestamp: '' })
+    // Both HIGH confidence → SYSTEM_BREAKING
+    wm.beliefs.push({ id: 'b1', statement: 'system is stable', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'NOT: system is stable', confidence: 1.0, derived_from: ['o2'], recorded_at: '' })
     const store = new EvidenceStore()
     const hyps = new HypothesisSet()
     expect(() => detectContradictions(wm, store, hyps)).not.toThrow()
@@ -243,8 +243,8 @@ describe('detect_contradictions', () => {
 
   it('pairwise type detected on two directly conflicting beliefs', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', content: 'cache is valid', reliability: 'LOW', derived_from: ['o1'], timestamp: '' })
-    wm.beliefs.push({ id: 'b2', content: 'NOT: cache is valid', reliability: 'LOW', derived_from: ['o2'], timestamp: '' })
+    wm.beliefs.push({ id: 'b1', statement: 'cache is valid', confidence: 0.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'NOT: cache is valid', confidence: 0.0, derived_from: ['o2'], recorded_at: '' })
     detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
     expect(wm.contradictions).toHaveLength(1)
     expect(wm.contradictions[0].type).toBe('pairwise')
@@ -252,27 +252,27 @@ describe('detect_contradictions', () => {
 
   it('temporal type detected on belief that conflicts with its prior-version entry', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'state_v1', content: 'state is A', reliability: 'HIGH', derived_from: ['o1'], timestamp: '2024-01-01T00:00:00Z' })
-    wm.beliefs.push({ id: 'state_v2', content: 'state is B', reliability: 'HIGH', derived_from: ['o2'], timestamp: '2024-01-02T00:00:00Z' })
+    wm.beliefs.push({ id: 'state_v1', statement: 'state is A', confidence: 1.0, derived_from: ['o1'], recorded_at: '2024-01-01T00:00:00Z' })
+    wm.beliefs.push({ id: 'state_v2', statement: 'state is B', confidence: 1.0, derived_from: ['o2'], recorded_at: '2024-01-02T00:00:00Z' })
     detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
     expect(wm.contradictions).toHaveLength(1)
     expect(wm.contradictions[0].type).toBe('temporal')
-    expect(wm.contradictions[0].belief_ids).toContain('state_v1')
-    expect(wm.contradictions[0].belief_ids).toContain('state_v2')
+    expect(wm.contradictions[0].involved_belief_ids).toContain('state_v1')
+    expect(wm.contradictions[0].involved_belief_ids).toContain('state_v2')
   })
 
   it('scope=local for single-task contradiction; scope=global for objective-level', () => {
     // local scope: no global/objective keywords
     const wmLocal = new WorldModel()
-    wmLocal.beliefs.push({ id: 'b1', content: 'cache hit rate is high', reliability: 'LOW', derived_from: ['o1'], timestamp: '' })
-    wmLocal.beliefs.push({ id: 'b2', content: 'NOT: cache hit rate is high', reliability: 'LOW', derived_from: ['o2'], timestamp: '' })
+    wmLocal.beliefs.push({ id: 'b1', statement: 'cache hit rate is high', confidence: 0.0, derived_from: ['o1'], recorded_at: '' })
+    wmLocal.beliefs.push({ id: 'b2', statement: 'NOT: cache hit rate is high', confidence: 0.0, derived_from: ['o2'], recorded_at: '' })
     detectContradictions(wmLocal, new EvidenceStore(), new HypothesisSet())
     expect(wmLocal.contradictions[0].scope).toBe('local')
 
-    // global scope: content contains "objective"
+    // global scope: statement contains "objective"
     const wmGlobal = new WorldModel()
-    wmGlobal.beliefs.push({ id: 'b3', content: 'objective: system is healthy', reliability: 'LOW', derived_from: ['o3'], timestamp: '' })
-    wmGlobal.beliefs.push({ id: 'b4', content: 'NOT: objective: system is healthy', reliability: 'LOW', derived_from: ['o4'], timestamp: '' })
+    wmGlobal.beliefs.push({ id: 'b3', statement: 'objective: system is healthy', confidence: 0.0, derived_from: ['o3'], recorded_at: '' })
+    wmGlobal.beliefs.push({ id: 'b4', statement: 'NOT: objective: system is healthy', confidence: 0.0, derived_from: ['o4'], recorded_at: '' })
     detectContradictions(wmGlobal, new EvidenceStore(), new HypothesisSet())
     expect(wmGlobal.contradictions[0].scope).toBe('global')
   })
@@ -291,7 +291,7 @@ describe('generate_update_hypotheses', () => {
 
   it('all 4 generation sources contribute at least one hypothesis', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', content: 'prior belief', reliability: 'MEDIUM', derived_from: ['o1'], timestamp: '' })
+    wm.beliefs.push({ id: 'b1', statement: 'prior belief', confidence: 0.5, derived_from: ['o1'], recorded_at: '' })
     const store = makeStore()
     const hyps = new HypothesisSet()
     const fd = new FailureDiagnostics()
@@ -395,8 +395,8 @@ describe('generate_update_hypotheses', () => {
 describe('update_diagnostics', () => {
   function makeAll() {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', content: 'x', reliability: 'HIGH', derived_from: ['o1'], timestamp: '' })
-    wm.observations.push({ id: 'o1', content: 'obs', source: 'tool', timestamp: '' })
+    wm.beliefs.push({ id: 'b1', statement: 'x', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.observations.push({ id: 'o1', content: 'obs', source: 'tool', recorded_at: '' })
     const hyps = new HypothesisSet({
       active: [{ id: 'h1', explanation: 'e', confidence: 0.5, predicted_observations: [], discriminating_evidence: [], generation_sources: ['symptom_inference'], diversity_score: 0.5 }],
     })

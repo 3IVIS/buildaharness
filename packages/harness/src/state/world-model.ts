@@ -4,16 +4,18 @@ export const ObservationSchema = z.object({
   id: z.string(),
   content: z.string(),
   source: z.string(),
-  timestamp: z.string(),
+  recorded_at: z.string(),
 })
 export type Observation = z.infer<typeof ObservationSchema>
 
 export const BeliefSchema = z.object({
   id: z.string(),
-  content: z.string(),
-  reliability: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+  statement: z.string(),
+  confidence: z.number().min(0).max(1),
   derived_from: z.array(z.string()),
-  timestamp: z.string(),
+  supporting_evidence: z.array(z.string()).optional(),
+  reliability: z.string().optional(),
+  recorded_at: z.string(),
 })
 export type Belief = z.infer<typeof BeliefSchema>
 
@@ -23,7 +25,7 @@ export const ContradictionSchema = z.object({
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'SYSTEM_BREAKING']),
   scope: z.enum(['local', 'task', 'global']),
   description: z.string(),
-  belief_ids: z.array(z.string()),
+  involved_belief_ids: z.array(z.string()),
 })
 export type Contradiction = z.infer<typeof ContradictionSchema>
 
@@ -148,6 +150,7 @@ export const WorldModelSchema = z.object({
   contradictions: z.array(ContradictionSchema),
   environment_change_log: z.array(EnvironmentChangeSchema),
   completeness_flags: z.record(z.boolean()),
+  stale_flags: z.record(z.boolean()),
 })
 export type WorldModelData = z.infer<typeof WorldModelSchema>
 
@@ -159,6 +162,7 @@ export class WorldModel {
   contradictions: Contradiction[]
   environment_change_log: EnvironmentChange[]
   completeness_flags: Record<string, boolean>
+  stale_flags: Record<string, boolean>
 
   constructor(data?: Partial<WorldModelData>) {
     this.generation_id = data?.generation_id ?? 0
@@ -168,6 +172,7 @@ export class WorldModel {
     this.contradictions = data?.contradictions ?? []
     this.environment_change_log = data?.environment_change_log ?? []
     this.completeness_flags = data?.completeness_flags ?? {}
+    this.stale_flags = data?.stale_flags ?? {}
   }
 
   addBelief(belief: Belief): void {
@@ -192,6 +197,7 @@ export class WorldModel {
       contradictions: this.contradictions,
       environment_change_log: this.environment_change_log,
       completeness_flags: this.completeness_flags,
+      stale_flags: this.stale_flags,
     }
   }
 

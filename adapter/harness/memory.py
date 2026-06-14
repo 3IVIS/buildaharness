@@ -7,6 +7,7 @@ Journal retention policy and max_steps hard budget cap (P6.6).
 
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -15,22 +16,68 @@ _DEFAULT_MAX_PASSING_VERBATIM = 20
 
 
 @dataclass
-class CompressionRisk:
-    compressed_structures: list[str] = field(default_factory=list)
-    pruned_regions: list[str] = field(default_factory=list)
+class Structure:
+    id: str
+    description: str = ""
+    token_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "description": self.description, "token_count": self.token_count}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Structure:
+        return cls(id=d["id"], description=d.get("description", ""), token_count=d.get("token_count", 0))
+
+
+@dataclass
+class PrunedRegion:
+    id: str
+    description: str = ""
+    token_count: int = 0
+    pruned_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "compressed_structures": list(self.compressed_structures),
-            "pruned_regions": list(self.pruned_regions),
+            "id": self.id,
+            "description": self.description,
+            "token_count": self.token_count,
+            "pruned_at": self.pruned_at,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> PrunedRegion:
+        return cls(
+            id=d["id"],
+            description=d.get("description", ""),
+            token_count=d.get("token_count", 0),
+            pruned_at=d.get("pruned_at", ""),
+        )
+
+
+@dataclass
+class CompressionRisk:
+    compressed_structures: list[Structure] = field(default_factory=list)
+    pruned_regions: list[PrunedRegion] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "compressed_structures": [s.to_dict() for s in self.compressed_structures],
+            "pruned_regions": [r.to_dict() for r in self.pruned_regions],
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> CompressionRisk:
-        return cls(
-            compressed_structures=list(d.get("compressed_structures", [])),
-            pruned_regions=list(d.get("pruned_regions", [])),
-        )
+        raw_structures = d.get("compressed_structures", [])
+        raw_regions = d.get("pruned_regions", [])
+        structures = [
+            Structure.from_dict(s) if isinstance(s, dict) else Structure(id=s)
+            for s in raw_structures
+        ]
+        regions = [
+            PrunedRegion.from_dict(r) if isinstance(r, dict) else PrunedRegion(id=r)
+            for r in raw_regions
+        ]
+        return cls(compressed_structures=structures, pruned_regions=regions)
 
 
 @dataclass
@@ -49,12 +96,12 @@ class MemoryState:
     rollback_points: list[str] = field(default_factory=list)
 
     @property
-    def compressed_structures(self) -> list[str]:
+    def compressed_structures(self) -> list[Structure]:
         """Direct accessor for action_dep_overlap() compatibility."""
         return self.compression_risk.compressed_structures
 
     @property
-    def pruned_regions(self) -> list[str]:
+    def pruned_regions(self) -> list[PrunedRegion]:
         """Direct accessor for action_dep_overlap() compatibility."""
         return self.compression_risk.pruned_regions
 
@@ -113,10 +160,12 @@ def compress_memory(
       (1) Drop observations with no beliefs derived from them → compressed_structures[].
       (2) Truncate belief lists > 10 beliefs, keeping 5 most recent → pruned_regions[].
 
-    Returns (dropped_names, pruned_names). The two lists are mutually exclusive.
+    Returns (dropped_names, pruned_names) as strings. The two lists are mutually exclusive.
     """
     dropped_names: list[str] = []
     pruned_names: list[str] = []
+    dropped_structures: list[Structure] = []
+    pruned_region_objs: list[PrunedRegion] = []
 
     observations: list[Any] = list(getattr(world_model, "observations", []))
     beliefs: list[Any] = list(getattr(world_model, "beliefs", []))
@@ -138,6 +187,7 @@ def compress_memory(
             name = f"observation:{obs_id}"
             dropped_names.append(name)
             completeness_flags[name] = False
+            dropped_structures.append(Structure(id=name, description=name, token_count=0))
 
     if hasattr(world_model, "observations"):
         world_model.observations = surviving_obs
@@ -150,12 +200,20 @@ def compress_memory(
         region_name = "beliefs"
         pruned_names.append(region_name)
         completeness_flags[region_name] = False
+        pruned_region_objs.append(
+            PrunedRegion(
+                id=region_name,
+                description=region_name,
+                token_count=0,
+                pruned_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            )
+        )
 
     if hasattr(world_model, "completeness_flags"):
         world_model.completeness_flags = completeness_flags
 
-    memory_state.compression_risk.compressed_structures.extend(dropped_names)
-    memory_state.compression_risk.pruned_regions.extend(pruned_names)
+    memory_state.compression_risk.compressed_structures.extend(dropped_structures)
+    memory_state.compression_risk.pruned_regions.extend(pruned_region_objs)
 
     return dropped_names, pruned_names
 

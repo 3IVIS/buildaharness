@@ -51,7 +51,7 @@ function stalenessSweep(worldModel: WorldModel, environmentChangeLog: Environmen
 
   // TTL-based invalidation: mark stale observations in completeness_flags
   for (const obs of worldModel.observations) {
-    const age = now - new Date(obs.timestamp).getTime()
+    const age = now - new Date(obs.recorded_at).getTime()
     if (age > TTL_MS) {
       worldModel.completeness_flags[obs.source] = false
     }

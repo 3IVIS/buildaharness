@@ -55,10 +55,10 @@ export function actionGate(
   if (controlState.risk_state === 'BLOCKED') return 'BLOCK'
 
   if (controlState.block_mask.length > 0 && action !== null) {
-    const blockedSet = new Set(controlState.block_mask)
+    const blockedDims = new Set(controlState.block_mask.map(e => e.dimension))
     const required = new Set(action.required_resources ?? [])
     for (const r of required) {
-      if (blockedSet.has(r)) return 'BLOCK'
+      if (blockedDims.has(r)) return 'BLOCK'
     }
   }
 

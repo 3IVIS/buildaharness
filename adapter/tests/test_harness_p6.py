@@ -464,10 +464,11 @@ class TestContextCompression:
     def test_T15_action_dep_overlap_detects_pruned_regions(self) -> None:
         """T15: action_dep_overlap returns non-empty when action depends on a pruned region."""
         from harness.execution import action_dep_overlap
+        from harness.memory import PrunedRegion, Structure
 
         ms = MemoryState()
-        ms.compression_risk.pruned_regions.append("beliefs")
-        ms.compression_risk.compressed_structures.append("observation:xyz")
+        ms.compression_risk.pruned_regions.append(PrunedRegion(id="beliefs", description="beliefs", token_count=0, pruned_at=""))
+        ms.compression_risk.compressed_structures.append(Structure(id="observation:xyz", description="observation:xyz", token_count=0))
 
         action_pruned = {"required_state_structures": ["beliefs"]}
         action_compressed = {"required_state_structures": ["observation:xyz"]}
