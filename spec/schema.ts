@@ -547,6 +547,7 @@ export const VerificationGateNode = NodeBase.extend({
 
 const RECOVERY_STRATEGY_NAMES = [
   'DIRECT_EDIT', 'TRACE_EXEC', 'BROADER_SEARCH', 'REIMPLEMENT', 'MINIMAL_FIX', 'ESCALATE',
+  'REGROUND_TO_AGREEMENT', 'REFRAME_QUESTION', 'HOLD_SPACE', 'COMPRESS_STAGE',
 ] as const
 const RecoveryNodeConfig = z.object({
   strategy_order_override: z.array(z.enum(RECOVERY_STRATEGY_NAMES)).optional(),

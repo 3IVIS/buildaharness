@@ -69,14 +69,8 @@ class CompressionRisk:
     def from_dict(cls, d: dict[str, Any]) -> CompressionRisk:
         raw_structures = d.get("compressed_structures", [])
         raw_regions = d.get("pruned_regions", [])
-        structures = [
-            Structure.from_dict(s) if isinstance(s, dict) else Structure(id=s)
-            for s in raw_structures
-        ]
-        regions = [
-            PrunedRegion.from_dict(r) if isinstance(r, dict) else PrunedRegion(id=r)
-            for r in raw_regions
-        ]
+        structures = [Structure.from_dict(s) if isinstance(s, dict) else Structure(id=s) for s in raw_structures]
+        regions = [PrunedRegion.from_dict(r) if isinstance(r, dict) else PrunedRegion(id=r) for r in raw_regions]
         return cls(compressed_structures=structures, pruned_regions=regions)
 
 
@@ -205,7 +199,7 @@ def compress_memory(
                 id=region_name,
                 description=region_name,
                 token_count=0,
-                pruned_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                pruned_at=datetime.datetime.now(datetime.UTC).isoformat(),
             )
         )
 

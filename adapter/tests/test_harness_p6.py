@@ -467,8 +467,12 @@ class TestContextCompression:
         from harness.memory import PrunedRegion, Structure
 
         ms = MemoryState()
-        ms.compression_risk.pruned_regions.append(PrunedRegion(id="beliefs", description="beliefs", token_count=0, pruned_at=""))
-        ms.compression_risk.compressed_structures.append(Structure(id="observation:xyz", description="observation:xyz", token_count=0))
+        ms.compression_risk.pruned_regions.append(
+            PrunedRegion(id="beliefs", description="beliefs", token_count=0, pruned_at="")
+        )
+        ms.compression_risk.compressed_structures.append(
+            Structure(id="observation:xyz", description="observation:xyz", token_count=0)
+        )
 
         action_pruned = {"required_state_structures": ["beliefs"]}
         action_compressed = {"required_state_structures": ["observation:xyz"]}
