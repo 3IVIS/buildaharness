@@ -456,7 +456,7 @@ def test_t18_compile_recovery_node_strategy_override():
     node = {"harness_config": {"strategy_order_override": ["MINIMAL_FIX", "DIRECT_EDIT", "ESCALATE"]}}
     code = compile_recovery_node(node, strategy_state_var="strategy_state")
 
-    ns: dict = {"strategy_state": None}
+    ns: dict = {"strategy_state": None, "state": {}}
     exec(code, ns)
 
     ss = ns["strategy_state"]

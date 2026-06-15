@@ -82,3 +82,10 @@ def recompute_belief_health(world_model: WorldModel) -> dict[str, float]:
     # Store on world model as transient proxy (not persisted as a typed field)
     world_model.belief_health_proxies = proxies  # type: ignore[attr-defined]
     return proxies
+
+
+def bump_generation(world_model: WorldModel) -> None:
+    """Increment generation_id after each world model write cycle (staleness tracking)."""
+    world_model.generation_id += 1
+
+

@@ -102,23 +102,75 @@ def compile_update_world_model(
     node: dict,
     world_model_var: str,
     evidence_store_var: str,
+    model: str = "gpt-4o-mini",
 ) -> str:
     """Generate Python code for an update_world_model canvas node.
 
     The generated code calls integrate_evidence() with the configured
     reliability_threshold, then recompute_belief_health() to update the
-    three proxy sub-dimensions. Never calls add_belief() directly (INV-01).
+    three proxy sub-dimensions.
+
+    When integration_mode == 'infer_beliefs', an additional LLM call derives
+    Belief objects from the new observations and adds them via add_belief(),
+    satisfying INV-01 (derived_from must be non-empty).
     """
     config = node.get("harness_config") or {}
     reliability_threshold: str = config.get("reliability_threshold", "HIGH")
+    integration_mode: str = config.get("integration_mode", "")
 
-    return (
+    base_code = (
         "from harness.world_model_ops import integrate_evidence as _integrate_evidence\n"
         "from harness.world_model_ops import recompute_belief_health as _recompute_belief_health\n"
+        # Track how many observations existed before integration so we only
+        # return the NEW ones — the caller uses 'append' reducer to accumulate.
+        f"_obs_before = len({world_model_var}.observations)\n"
         f"_integrate_evidence({evidence_store_var}, {world_model_var},"
         f" reliability_threshold={reliability_threshold!r})\n"
         f"_recompute_belief_health({world_model_var})\n"
+        "from harness.world_model_ops import bump_generation as _bump_generation\n"
+        f"_bump_generation({world_model_var})\n"
+        f"_new_obs_dicts = [{{'id': _o.id, 'content': _o.content, 'source': _o.source}}"
+        f" for _o in {world_model_var}.observations[_obs_before:]]\n"
     )
+
+    if integration_mode != "infer_beliefs":
+        return base_code
+
+    infer_code = (
+        f"if _new_obs_dicts:\n"
+        f"    _ib_llm = _make_llm({model!r}, temperature=0)\n"
+        f"    _ib_obs_text = '\\n'.join('- [' + _o['id'] + '] ' + (_o.get('content') or '') for _o in _new_obs_dicts)\n"
+        f"    _ib_prompt = (\n"
+        f"        'From these observations, infer up to 3 high-confidence beliefs '\n"
+        f"        'directly and reliably derivable from them. Each belief must cite the observation '\n"
+        f"        'ID(s) it comes from.\\n\\n'\n"
+        f"        'Observations:\\n' + _ib_obs_text + '\\n\\n'\n"
+        "        'Respond with JSON only: "
+        '{"beliefs": [{"statement": "...", "confidence": 0.0, '
+        '"derived_from": ["obs-id"]}]}'
+        "'\n"
+        f"    )\n"
+        f"    try:\n"
+        f"        _ib_resp = _invoke_with_trace('infer_beliefs', {model!r}, "
+        "_ib_llm, [HumanMessage(content=_ib_prompt)])\n"
+        f"        _ib_raw = str(getattr(_ib_resp, 'content', '') or '').strip()\n"
+        f"        _ib_raw = re.sub(r'```\\w*|```', '', _ib_raw).strip()\n"
+        f"        _ib_parsed = json.loads(_ib_raw)\n"
+        f"        from harness.world_model import Belief as _Belief\n"
+        f"        import uuid as _ib_uuid\n"
+        f"        for _ib in (_ib_parsed.get('beliefs') or []):\n"
+        f"            _ib_src = _ib.get('derived_from') or []\n"
+        f"            if _ib.get('statement') and _ib_src:\n"
+        f"                {world_model_var}.add_belief(_Belief(\n"
+        f"                    id=f'belief-{{_ib_uuid.uuid4().hex[:8]}}',\n"
+        f"                    statement=_ib['statement'],\n"
+        f"                    confidence=float(_ib.get('confidence', 0.6)),\n"
+        f"                    derived_from=_ib_src,\n"
+        f"                ))\n"
+        f"    except Exception:\n"
+        f"        pass\n"
+    )
+    return base_code + infer_code
 
 
 def compile_world_model_node(
@@ -290,6 +342,12 @@ def compile_recovery_node(
     lines += [
         f"if {strategy_state_var} is None:",
         f"    {strategy_state_var} = _StrategyState(current_strategy=_node_strategy_order[0])",
+        "_vr_failed = (state.get('verification_result') or {}).get('failed_layers') or []",
+        "if _vr_failed:",
+        "    from harness.recovery import switch_strategy as _switch_strategy",
+        f"    {strategy_state_var} = _switch_strategy("
+        f"{strategy_state_var}, reason='; '.join(_vr_failed), "
+        "failure_class='verification_failure')",
     ]
     return "\n".join(lines) + "\n"
 
@@ -372,8 +430,8 @@ def compile_reviewer_pass_node(
 def compile_process_concept_node(node: dict, harness_meta_var: str) -> str:
     """Generate Python code for a process_concept canvas node.
 
-    Emits the concept_id into harness_meta.process_concept_id so that the run
-    handler can load and seed the task graph before the first iteration fires.
+    Sets concept_id on harness_meta so the run handler can load and seed the
+    task graph before the first iteration fires (INV-PC-03).
     """
     config = node.get("harness_config") or {}
     concept_id: str = config.get("concept_id", "")

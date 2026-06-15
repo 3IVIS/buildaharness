@@ -411,17 +411,91 @@ def gen_helpers(spec: dict | None = None) -> str:
             if _base_url:
                 kw["base_url"] = _base_url
                 kw["api_key"]  = _api_key or "ollama"
-            if os.environ.get("LANGFUSE_PUBLIC_KEY"):
-                try:
-                    from langfuse.langchain import CallbackHandler as _LFCb
-                    kw["callbacks"] = [_LFCb()]
-                except ImportError:
-                    try:
-                        from langfuse.callback import CallbackHandler as _LFCb2
-                        kw["callbacks"] = [_LFCb2()]
-                    except ImportError:
-                        pass
             return ChatOpenAI(**kw)
+
+
+        def _invoke_with_trace(node_id: str, model: str, llm, messages: list):
+            \"\"\"Invoke LLM and record a Langfuse 4.x generation observation when configured.
+
+            Uses start_as_current_observation (Langfuse ≥3.x OTEL SDK) — no langchain
+            package required. Falls back to plain llm.invoke() if Langfuse is absent.
+            \"\"\"
+            if not os.environ.get("LANGFUSE_PUBLIC_KEY"):
+                return llm.invoke(messages)
+            try:
+                from langfuse import get_client as _lf_get
+                _lf = _lf_get()
+                _inp = [
+                    {"role": "system" if getattr(m, "type", "") == "system" else "user",
+                     "content": m.content}
+                    for m in messages
+                ]
+                with _lf.start_as_current_observation(
+                    name=f"llm-{node_id}",
+                    as_type="generation",
+                    model=model,
+                    input=_inp,
+                ):
+                    _resp = llm.invoke(messages)
+                    _tok = getattr(_resp, "usage_metadata", {}) or {}
+                    _lf.update_current_generation(
+                        output=_resp.content,
+                        usage_details={
+                            "input": _tok.get("input_tokens", 0),
+                            "output": _tok.get("output_tokens", 0),
+                        },
+                    )
+                    return _resp
+            except Exception:
+                return llm.invoke(messages)
+
+
+        try:
+            from langgraph.errors import GraphRecursionError as _GraphRecursionError
+        except ImportError:
+            _GraphRecursionError = RecursionError
+
+        def _invoke_agent_with_trace(node_id: str, model: str, agent, messages: list, recursion_limit: int = 25):
+            \"\"\"Invoke a ReAct agent and record a Langfuse 4.x generation span when configured.
+
+            Wraps the full agent.invoke() call (which includes the internal ReAct loop)
+            in a single generation observation so it appears in Langfuse traces.
+            Falls back to plain agent.invoke() when Langfuse is absent.
+            On GraphRecursionError returns empty messages so the caller's direct-LLM
+            fallback fires instead of propagating an exception.
+            \"\"\"
+            _inp = [
+                {"role": "system" if getattr(m, "type", "") == "system" else "user",
+                 "content": (m.content or "")[:1000]}
+                for m in messages
+            ]
+            _cfg = {"recursion_limit": recursion_limit}
+            if not os.environ.get("LANGFUSE_PUBLIC_KEY"):
+                try:
+                    return agent.invoke({"messages": messages}, config=_cfg)
+                except _GraphRecursionError:
+                    return {"messages": []}
+            try:
+                from langfuse import get_client as _lf_get
+                _lf = _lf_get()
+                with _lf.start_as_current_observation(
+                    name=f"agent-{node_id}",
+                    as_type="generation",
+                    model=model,
+                    input=_inp,
+                ):
+                    _out = agent.invoke({"messages": messages}, config=_cfg)
+                    _msgs = _out.get("messages") or []
+                    _final_content = (_msgs[-1].content if _msgs else "")[:2000]
+                    _lf.update_current_generation(output=_final_content)
+                    return _out
+            except _GraphRecursionError:
+                return {"messages": []}
+            except Exception:
+                try:
+                    return agent.invoke({"messages": messages}, config=_cfg)
+                except _GraphRecursionError:
+                    return {"messages": []}
 
     """) + (_gen_qdrant_helper() if spec and _has_qdrant_store(spec) else "")
 
@@ -438,10 +512,6 @@ def gen_state_typeddict(spec: dict) -> str:
         "boolean": "bool",
         "object": "dict",
         "array": "list",
-    }
-    _reducer_map = {
-        "append": "Annotated[list, operator.add]",
-        "merge": "dict",  # adapters handle merge semantics
     }
 
     lines = [
@@ -467,6 +537,26 @@ def gen_state_typeddict(spec: dict) -> str:
                 py_type = type_map.get(raw_type, "Any")
 
             lines.append(f"    {field}: {py_type}{comment}")
+
+    # Auto-include output_key fields from nodes that are not already in the schema.
+    # LangGraph silently drops state updates for keys not declared in the TypedDict,
+    # which breaks parallel branches that store results in intermediate keys
+    # (e.g. hypo_explicit_result, hypo_subtext_result) for a downstream join node.
+    declared = set(props.keys())
+    extra_keys: dict[str, str] = {}
+    skip_types = {"input", "output", "annotation", "condition", "parallel_fork"}
+    for node in spec.get("nodes", []):
+        if node.get("type") in skip_types:
+            continue
+        out_key = node.get("output_key")
+        if out_key and out_key not in declared and out_key not in extra_keys:
+            extra_keys[out_key] = f"  # intermediate output from '{node['id']}'"
+        cfg = node.get("config") or {}
+        out_field = cfg.get("output_field")
+        if out_field and out_field not in declared and out_field not in extra_keys:
+            extra_keys[out_field] = f"  # agent_role output from '{node['id']}'"
+    for key, comment in extra_keys.items():
+        lines.append(f"    {key}: object{comment}")
 
     lines.append("")
     return "\n".join(lines)
@@ -519,6 +609,25 @@ def gen_tools(spec: dict) -> str:
                 f"{vid} = {expr}",
                 "",
             ]
+        elif source == "local" and ":" in ref:
+            # Local tool: import module:function at runtime and wrap as StructuredTool
+            # so the agent gets the real signature for schema generation.
+            mod_name, fn_name = ref.rsplit(":", 1)
+            lines += [
+                f"# tool_ref: {ref}  source: {source}",
+                "try:",
+                f"    import importlib as _im_{vid}",
+                f"    from langchain_core.tools import StructuredTool as _ST_{vid}",
+                f"    _raw_{vid} = getattr(_im_{vid}.import_module({mod_name!r}), {fn_name!r})",
+                f"    {vid} = _ST_{vid}.from_function(_raw_{vid}, name={tid!r}, description={py_str(desc)})",
+                "except (ImportError, AttributeError):",
+                "    # fallback stub when local module is unavailable",
+                "    @tool",
+                f"    def {vid}(query: str) -> str:",
+                f"        {py_str(desc)}",
+                f"        return json.dumps({{'error': 'Local tool {tid} not available', 'query': query}})",
+                "",
+            ]
         else:
             lines += [
                 f"# tool_ref: {ref}  source: {source}",
@@ -538,7 +647,7 @@ def _fn(label: str, vid: str, body: str) -> str:
     return f"# {label}\ndef node_{vid}(state: FlowState) -> dict:\n{indented}\n"
 
 
-def _gen_harness_node_body(node: dict) -> str:
+def _gen_harness_node_body(node: dict, model: str = "gpt-4o-mini", harness_input_key: str = "input") -> str:
     """Generate the execution body for a harness node in the LangGraph context.
 
     Reads mutable structures from _harness_state, runs the compiled harness
@@ -563,7 +672,7 @@ def _gen_harness_node_body(node: dict) -> str:
         "task_graph = _harness_state.task_graph\n"
         "strategy_state = _harness_state.strategy_state\n"
         "tool_manifest = _harness_state.tool_manifest\n"
-        "tool_output = state.get('tool_output', '')\n"
+        f"tool_output = (state.get('tool_output') or state.get({harness_input_key!r}, ''))\n"
         "result = state.get('result', {})\n"
         "success_criteria = []\n"
         "assumptions = []\n"
@@ -578,7 +687,7 @@ def _gen_harness_node_body(node: dict) -> str:
     elif ntype == "apply_tool_reliability":
         core = compiler(node, "evidence_store", "diagnostics")
     elif ntype == "update_world_model":
-        core = compiler(node, "world_model", "evidence_store")
+        core = compiler(node, "world_model", "evidence_store", model=model)
     elif ntype == "world_model":
         core = compiler(node, "world_model")
     elif ntype == "hypothesis_set":
@@ -588,7 +697,12 @@ def _gen_harness_node_body(node: dict) -> str:
     elif ntype == "task_graph_node":
         core = compiler(node, "task_graph")
     elif ntype == "verification_gate":
-        core = compiler(node, "result", "tool_manifest")
+        vg_cfg = node.get("harness_config") or {}
+        vg_result_key = vg_cfg.get("result_key", "result")
+        # When result_key is configured (e.g. 'response_draft'), rebind the
+        # 'result' variable so the verifier sees the real content, not {}.
+        result_remap = f"result = state.get({vg_result_key!r}) or result\n" if vg_result_key != "result" else ""
+        core = result_remap + compiler(node, "result", "tool_manifest")
     elif ntype == "recovery_node":
         core = compiler(node, "strategy_state")
     elif ntype == "evidence_store_node":
@@ -661,17 +775,57 @@ def gen_node_function(
         # Certain harness nodes produce snapshots that should be written back to
         # LangGraph state so downstream memory_write nodes can persist them.
         _HARNESS_STATE_RETURNS: dict[str, str] = {
-            "world_model": ("return {'world_model_state': wm_snapshot}\n"),
+            # Canvas display node — read-only; must NOT overwrite world_model_state
+            # because it produces a reduced snapshot (no observations) that would
+            # break the turn-2+ restore logic and hide observations from LLM prompts.
+            "world_model": "return {}\n",
             "update_world_model": (
-                # Persist a full serialised snapshot so turn 2+ can restore it.
-                "return {'world_model_state': world_model.to_dict()}\n"
+                # Persist the full world-model snapshot AND write back the new
+                # observations so LLM nodes can read them via $.state.observations.
+                # Merge into the existing dict so extra keys stored alongside the
+                # world-model snapshot are preserved across the write-back.
+                "_uwm_base = dict(state.get('world_model_state') or {})\n"
+                "_uwm_base.update(world_model.to_dict())\n"
+                "return {'world_model_state': _uwm_base, 'observations': _new_obs_dicts}\n"
             ),
             "control_state": (
                 "return {'control_state': str(getattr(diagnostics, 'resolved_control_state', 'NORMAL'))}\n"
             ),
+            # Verification gate: serialise VerificationResult → LangGraph state so
+            # the route_verification condition node can read verification_result.passed.
+            # When recovery has already switched strategy twice (switch_count >= 2), skip
+            # re-evaluation and force-pass so route_verification exits the loop instead of
+            # re-entering select_recovery (which would otherwise cycle until recursion limit).
+            "verification_gate": (
+                "_vg_sw = strategy_state.switch_count if strategy_state is not None else 0\n"
+                "if _vg_sw >= 2:\n"
+                "    return {'verification_result': {'passed': True, 'failed_layers': [],\n"
+                "                                    'reason': 'Recovery cap — verification bypassed'}}\n"
+                "return {'verification_result': {\n"
+                "    'passed': not verify_result.has_critical_failure,\n"
+                "    'failed_layers': [lr.layer for lr in verify_result.layer_results if lr.status == 'FAIL'],\n"
+                "    'reason': ('All layers passed' if not verify_result.has_critical_failure else\n"
+                "               'Failed: ' + ', '.join("
+                "lr.layer for lr in verify_result.layer_results if lr.status == 'FAIL')),\n"
+                "}}\n"
+            ),
+            # Recovery node: write loop_break_hint back to LangGraph state so
+            # generate_response receives explicit fix instructions on the next attempt.
+            # After 2 retries (switch_count >= 2) force-pass to break the loop.
+            "recovery_node": (
+                "_vr_fl = (state.get('verification_result') or {}).get('failed_layers') or []\n"
+                "_sw = strategy_state.switch_count if strategy_state is not None else 0\n"
+                "_hint = ('Fix these verification failures: ' + '; '.join(_vr_fl)) if _vr_fl else ''\n"
+                "if _sw >= 2 and _vr_fl:\n"
+                "    return {'loop_break_hint': _hint, 'recovery_cap_reached': True,\n"
+                "            'verification_result': {'passed': True, 'failed_layers': [],\n"
+                "                                    'reason': 'Recovery cap — accepting response after 2 retries'}}\n"
+                "return {'loop_break_hint': _hint}\n"
+            ),
         }
         return_stmt = _HARNESS_STATE_RETURNS.get(ntype, "return {}\n")
-        body = f"{ctx}{_gen_harness_node_body(node)}\n{return_stmt}"
+        harness_input_key = (spec.get("harness_meta") or {}).get("input_key", "input")
+        body = f"{ctx}{_gen_harness_node_body(node, model_default, harness_input_key)}\n{return_stmt}"
         return _fn(label, vid, body)
 
     # ── input / output / annotation — no function ─────────────────────────────
@@ -726,6 +880,19 @@ def gen_node_function(
             )
         elif out_key:
             ret = f"return {{{out_key!r}: response.content}}"
+        elif struct:
+            ret = (
+                "try:\n"
+                "    _spread = (\n"
+                "        json.loads(response.content)\n"
+                "        if isinstance(response.content, str)\n"
+                "        else response.content\n"
+                "    )\n"
+                "    _spread = _spread if isinstance(_spread, dict) else {}\n"
+                "except Exception:\n"
+                "    _spread = {}\n"
+                "return _spread"
+            )
         else:
             ret = "return {}"
 
@@ -735,7 +902,7 @@ def gen_node_function(
             f"    SystemMessage(content={py_str(sys_p)}),",
             f"    HumanMessage(content=_render({py_str(prompt_tmpl)}, state)),",
             "]",
-            "response = llm.invoke(messages)",
+            f"response = _invoke_with_trace({nid!r}, {model!r}, llm, messages)",
             ret,
         ]
         core = "\n".join(core_lines)
@@ -901,7 +1068,7 @@ def gen_node_function(
         val_expr = node.get("value_expr", "")
         write_mode = node.get("write_mode", "upsert")
         tier = node.get("tier", "short")
-        overwrite = write_mode == "overwrite"
+        overwrite = write_mode in ("upsert", "overwrite")
 
         body = (
             f"{ctx}"
@@ -957,6 +1124,8 @@ def gen_node_function(
         goal = agent_def.get("goal", "")
         agent_tools = [safe_id(t) for t in (agent_def.get("tools") or []) if t in tools_registry]
         tools_arg = f"[{', '.join(agent_tools)}]" if agent_tools else "[]"
+        max_iter = agent_def.get("max_iter", 3)
+        recursion_limit_val = max_iter * 2 + 1
 
         warnings.append(
             f"agent_role '{nid}': expanded to ReAct sub-graph via create_react_agent "
@@ -1000,11 +1169,37 @@ def gen_node_function(
             f"_agent = create_react_agent(_llm, {tools_arg})\n"
             f"_task  = _render({py_str(task_desc)}, state)\n"
             f"{ctx_inject}"
-            f"_out   = _agent.invoke({{\n"
-            f"    'messages': [SystemMessage(content={system_expr}), HumanMessage(content=_task)]\n"
-            f"}})\n"
+            f"# _invoke_agent_with_trace wraps the full ReAct loop in a Langfuse generation span.\n"
+            f"_out   = _invoke_agent_with_trace({nid!r}, {model!r}, _agent, "
+            f"[SystemMessage(content={system_expr}), HumanMessage(content=_task)], "
+            f"recursion_limit={recursion_limit_val})\n"
             f"# expected_output: {expected!r}\n"
-            f"_final = _out['messages'][-1].content if _out.get('messages') else ''\n"
+            f"# Extract final response: search backwards for last AIMessage with real text.\n"
+            f"# Some models (e.g. qwen3/Ollama) may embed tool calls as inline JSON in content\n"
+            f"# rather than using structured tool_calls, leaving no subsequent text message.\n"
+            f"_final = ''\n"
+            f"for _msg in reversed(list(_out.get('messages') or [])):\n"
+            f"    if getattr(_msg, 'type', '') != 'ai': continue  # only AI messages\n"
+            f"    _mc = re.sub(r'<think>.*?</think>', '', "
+            "str(getattr(_msg, 'content', '') or ''), flags=re.DOTALL).strip()\n"
+            f"    if not _mc or len(_mc) < 20: continue\n"
+            f"    # Skip JSON-looking content: covers structured tool calls, malformed inline calls,\n"
+            f"    # and tool-result echoes — qwen3/Ollama may produce any of these variants.\n"
+            f"    if _mc.startswith('{{') or _mc.startswith('['): continue\n"
+            f"    _final = _mc; break\n"
+            f"if not _final:\n"
+            f"    # Fallback: model produced no usable prose via ReAct — invoke LLM directly.\n"
+            f"    # Remove the 'call tool first' instruction so the model writes prose immediately.\n"
+            f"    _fb_task = re.sub(r'Before drafting.*?technique\\.\\s*', '', _task, flags=re.DOTALL)\n"
+            f"    _fb_task = re.sub(r'call the \\w+ tool[^.]*\\.\\s*', '', _fb_task, flags=re.DOTALL)\n"
+            f"    _fb = _invoke_with_trace({nid!r}, {model!r}, _llm, "
+            f"[SystemMessage(content={system_expr}), HumanMessage(content=_fb_task)])\n"
+            f"    _raw = str(_fb.content or '')\n"
+            f"    # Strip qwen3 EOS artefacts: </think>, <|endoftext|>, hallucinated role turns\n"
+            f"    _raw = re.sub(r'<think>.*?</think>', '', _raw, flags=re.DOTALL)\n"
+            f"    _raw = re.sub(r'<\\|endoftext\\|>.*', '', _raw, flags=re.DOTALL)\n"
+            f"    _raw = re.sub(r'\\n(Human|User|Assistant|Coach):.*', '', _raw, flags=re.DOTALL)\n"
+            f"    _final = _raw.strip()\n"
             f"return {{{out_field!r}: _final}}\n"
         )
         return _fn(label, vid, body)
