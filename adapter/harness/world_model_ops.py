@@ -87,5 +87,3 @@ def recompute_belief_health(world_model: WorldModel) -> dict[str, float]:
 def bump_generation(world_model: WorldModel) -> None:
     """Increment generation_id after each world model write cycle (staleness tracking)."""
     world_model.generation_id += 1
-
-
