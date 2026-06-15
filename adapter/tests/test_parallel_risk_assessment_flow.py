@@ -257,7 +257,7 @@ def test_langgraph_parallel_branches_all_run(risk_spec):
 
     call_log: list[str] = []
 
-    def _mock_agent_invoke(inputs: dict):
+    def _mock_agent_invoke(inputs: dict, **_kw):
         msgs = inputs.get("messages", [])
         system_content = msgs[0].content if msgs else ""
         call_log.append(system_content[:30])
@@ -295,7 +295,7 @@ def test_langgraph_synthesise_receives_all_branch_results(risk_spec):
     """The synthesise node prompt template must receive the three risk fields from state."""
     captured_prompts: list[str] = []
 
-    def _mock_agent_invoke(inputs: dict):
+    def _mock_agent_invoke(inputs: dict, **_kw):
         msgs = inputs.get("messages", [])
         content = msgs[0].content if msgs else ""
         suffix = "legal" if "Legal" in content else "financial" if "Financial" in content else "technical"

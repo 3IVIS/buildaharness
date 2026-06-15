@@ -374,7 +374,7 @@ def test_langgraph_prepare_position_writes_advocate_position(debate_spec):
         "First, historical precedent shows technology expands employment. "
         "Second, AI enables new industries. Third, productivity gains fund new roles."
     )
-    mock_advocate = MagicMock(invoke=lambda _inputs: _fake_agent_response(opening))
+    mock_advocate = MagicMock(invoke=lambda _inputs, **_kw: _fake_agent_response(opening))
 
     code, _ = compile_langgraph(debate_spec)
     ns = _exec_langgraph(code, "<debate_prepare>")

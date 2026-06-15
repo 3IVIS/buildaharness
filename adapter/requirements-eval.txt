@@ -11,6 +11,12 @@
 deepeval>=1.0.0         # 50+ LLM quality metrics, pytest-native runner
 ragas>=0.2.0            # RAG-specific evaluation (faithfulness, context relevance)
 
+# ── LangChain version cap (deepeval 1.x compat) ───────────────────────────────
+# deepeval 1.x imports from langchain.schema (removed in langchain>=0.3).
+# Cap langchain-community at <0.3 so the transitive langchain pin stays at 0.2.x
+# where langchain.schema is still available as a re-export.
+langchain-community>=0.2.0,<0.3.0
+
 # ── LLM client used by metric computation ────────────────────────────────────
 # DeepEval and Ragas call an LLM to score outputs; route through LiteLLM so
 # evals use the same model routing and cost tracking as the adapter.
