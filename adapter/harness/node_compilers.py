@@ -342,9 +342,7 @@ def compile_recovery_node(
         # silently resetting the retry counter every time this node runs and
         # preventing the recovery cap from ever being reached (infinite
         # verify -> recover loop).
-        lines.append(
-            f"if {strategy_state_var} is None:\n    {strategy_state_var} = _StrategyState()"
-        )
+        lines.append(f"if {strategy_state_var} is None:\n    {strategy_state_var} = _StrategyState()")
         return "\n".join(lines) + "\n"
 
     if strategy_order_override:

@@ -54,7 +54,8 @@ env:
   # Resolve environment string used in later steps.
   # Avoid accessing inputs.* at workflow level for non-dispatch events — it can
   # silently fail and prevent all jobs from running ("No jobs were run").
-  DEPLOY_ENV: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')) && 'production' || 'staging' }}
+  # Use github.event.inputs (safe for all triggers) instead of inputs.* here.
+  DEPLOY_ENV: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')) && 'production' || 'staging' }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
@@ -265,7 +266,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   promote-staging:
     name: Promote staging → production
-    if: inputs.promote_staging == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.promote_staging == 'true'
     runs-on: ubuntu-latest
 
     outputs:
