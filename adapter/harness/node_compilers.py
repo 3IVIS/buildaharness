@@ -333,6 +333,20 @@ def compile_recovery_node(
         "from harness.recovery import STRATEGY_ORDER as _STRATEGY_ORDER",
     ]
 
+    if config.get("read_only"):
+        # An observability-only twin of an active recovery_node (e.g. a canvas
+        # "monitor" node downstream of the real selector, with its own display
+        # strategy_order_override). It must not mutate the shared strategy_state:
+        # doing so would clobber the switch_count / current_strategy that the
+        # active recovery_node is progressing through ITS OWN strategy_order_override,
+        # silently resetting the retry counter every time this node runs and
+        # preventing the recovery cap from ever being reached (infinite
+        # verify -> recover loop).
+        lines.append(
+            f"if {strategy_state_var} is None:\n    {strategy_state_var} = _StrategyState()"
+        )
+        return "\n".join(lines) + "\n"
+
     if strategy_order_override:
         order_repr = repr(strategy_order_override)
         lines.append(f"_node_strategy_order = {order_repr}")
@@ -340,14 +354,22 @@ def compile_recovery_node(
         lines.append("_node_strategy_order = list(_STRATEGY_ORDER)")
 
     lines += [
-        f"if {strategy_state_var} is None:",
+        # A strategy_state carried over from a prior node (or the default
+        # StrategyState() seeded by the harness preamble) may hold a
+        # current_strategy that isn't part of THIS node's override — e.g. the
+        # generic "DIRECT_EDIT" default when strategy_order_override is set.
+        # Treat that the same as "uninitialised" so the override's first
+        # entry is actually used instead of being skipped straight to the
+        # second entry by the switch below.
+        f"if {strategy_state_var} is None or {strategy_state_var}.current_strategy not in _node_strategy_order:",
         f"    {strategy_state_var} = _StrategyState(current_strategy=_node_strategy_order[0])",
-        "_vr_failed = (state.get('verification_result') or {}).get('failed_layers') or []",
-        "if _vr_failed:",
-        "    from harness.recovery import switch_strategy as _switch_strategy",
-        f"    {strategy_state_var} = _switch_strategy("
+        "else:",
+        "    _vr_failed = (state.get('verification_result') or {}).get('failed_layers') or []",
+        "    if _vr_failed:",
+        "        from harness.recovery import switch_strategy as _switch_strategy",
+        f"        {strategy_state_var} = _switch_strategy("
         f"{strategy_state_var}, reason='; '.join(_vr_failed), "
-        "failure_class='verification_failure')",
+        "failure_class='verification_failure', order=_node_strategy_order)",
     ]
     return "\n".join(lines) + "\n"
 

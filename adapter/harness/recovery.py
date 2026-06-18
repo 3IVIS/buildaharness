@@ -73,14 +73,20 @@ class StrategyState:
         )
 
 
-def get_next_strategy(strategy_state: StrategyState) -> StrategyType:
-    """Return the next strategy in STRATEGY_ORDER. ESCALATE is terminal."""
+def get_next_strategy(strategy_state: StrategyState, order: list[str] | None = None) -> StrategyType:
+    """Return the next strategy in ``order`` (default STRATEGY_ORDER). The last entry is terminal.
+
+    ``order`` lets callers supply a domain-specific strategy sequence (e.g. a
+    canvas node's ``strategy_order_override``) instead of the generic dev-flow
+    STRATEGY_ORDER. Falls back to STRATEGY_ORDER when not given.
+    """
+    sequence = order or STRATEGY_ORDER
     try:
-        idx = STRATEGY_ORDER.index(strategy_state.current_strategy)
+        idx = sequence.index(strategy_state.current_strategy)
     except ValueError:
         idx = 0
-    next_idx = min(idx + 1, len(STRATEGY_ORDER) - 1)
-    return STRATEGY_ORDER[next_idx]
+    next_idx = min(idx + 1, len(sequence) - 1)
+    return sequence[next_idx]  # type: ignore[return-value]
 
 
 def switch_strategy(
@@ -88,12 +94,15 @@ def switch_strategy(
     reason: str,
     failure_class: str = "",
     experience_store: Any | None = None,
+    order: list[str] | None = None,
 ) -> StrategyState:
     """Return a new StrategyState advanced to the next strategy (immutable update).
 
     When experience_store is available and failure_class is provided, uses
     build_strategy_ordering() to select the next strategy empirically (P8.4).
     Falls back to fixed STRATEGY_ORDER when the store is unavailable (INV-10).
+    ``order`` (e.g. a recovery_node's strategy_order_override) takes precedence
+    over the experience-store ordering and is used for the plain fallback path.
     """
     if experience_store is not None and failure_class and getattr(experience_store, "available", False):
         from .experience_store import build_strategy_ordering
@@ -106,7 +115,7 @@ def switch_strategy(
         next_idx = min(idx + 1, len(ordering) - 1)
         next_strategy: StrategyType = ordering[next_idx]  # type: ignore[assignment]
     else:
-        next_strategy = get_next_strategy(strategy_state)
+        next_strategy = get_next_strategy(strategy_state, order)
 
     return StrategyState(
         current_strategy=next_strategy,
