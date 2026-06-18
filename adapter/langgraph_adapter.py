@@ -533,6 +533,9 @@ def gen_state_typeddict(spec: dict) -> str:
                 py_type = "Annotated[list, operator.add]"
             elif reducer == "merge":
                 py_type = "dict"
+            elif reducer == "last_wins":
+                base = type_map.get(raw_type, "Any")
+                py_type = f"Annotated[{base}, lambda a, b: b]"
             else:
                 py_type = type_map.get(raw_type, "Any")
 
@@ -825,7 +828,8 @@ def gen_node_function(
                 "return {'loop_break_hint': _hint}\n"
             ),
         }
-        return_stmt = _HARNESS_STATE_RETURNS.get(ntype, "return {}\n")
+        _is_readonly = (node.get("harness_config") or {}).get("read_only")
+        return_stmt = "return {}\n" if _is_readonly else _HARNESS_STATE_RETURNS.get(ntype, "return {}\n")
         harness_input_key = (spec.get("harness_meta") or {}).get("input_key", "input")
         body = f"{ctx}{_gen_harness_node_body(node, model_default, harness_input_key)}\n{return_stmt}"
         return _fn(label, vid, body)
