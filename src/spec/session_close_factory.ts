@@ -11,10 +11,23 @@ export interface SessionCloseConfig {
   profileStoreId: string
   feedbackTextKey?: string
   model?: string
+  // X-3: optional overrides — defaults documented inline in makeSessionCloseFlow
+  feedbackUserTemplate?: string
+  summaryUserTemplate?: string
 }
 
 export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
   const feedbackKey = config.feedbackTextKey ?? 'feedback_text'
+
+  // X-3 / M-6: use caller-supplied templates if provided; fall back to defaults.
+  const feedbackUserTemplate =
+    config.feedbackUserTemplate ??
+    'World model state:\n{{$.state.world_model_state}}\n\n' +
+    'Conversation history:\n{{$.state.conversation_history}}\n\n' +
+    'Write the internal session summary now.'
+
+  const summaryUserTemplate =
+    config.summaryUserTemplate ?? 'Summarise the session and agreed next steps.'
 
   return {
     spec_version: CURRENT_SPEC_VERSION,
@@ -35,9 +48,10 @@ export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
       {
         id: 'ask-feedback',
         type: 'llm_call',
-        label: 'Collect session feedback',
+        // M-6: label and prompt_template fixed to remove the ambiguous first-person question.
+        label: 'Generate internal session record',
         system_prompt: config.feedbackPrompt,
-        prompt_template: 'What feedback do you have about this session?',
+        prompt_template: feedbackUserTemplate,
         output_key: feedbackKey,
       },
       {
@@ -61,7 +75,7 @@ export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
         type: 'llm_call',
         label: 'Generate session summary',
         system_prompt: config.summaryPrompt,
-        prompt_template: 'Summarise the session and agreed next steps.',
+        prompt_template: summaryUserTemplate,
         output_key: 'session_summary',
       },
       {

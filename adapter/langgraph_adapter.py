@@ -452,7 +452,10 @@ def gen_helpers(spec: dict | None = None) -> str:
                         )
                     if _content:
                         import re as _re
-                        _content = _re.sub(r"<think>.*?</think>", "", str(_content), flags=_re.DOTALL).strip() or _content
+                        _content = (
+                            _re.sub(r"<think>.*?</think>", "", str(_content), flags=_re.DOTALL).strip()
+                            or _content
+                        )
                     _lf.update_current_generation(
                         output=_content or None,
                         usage_details={
@@ -1364,10 +1367,21 @@ def gen_condition_router(node: dict, spec: dict) -> str:
         py_op = op_map.get(op, "==")
 
         if expr:
-            # Detect inline expressions like "$.state.X == 'value'" (type=expr with no
-            # separate op/value fields). Split them so _resolve only gets the JSONPath part.
-            _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
-            if _inline and not value:
+            # Compound JS expression (contains && or ||) — translate to Python wholesale.
+            # Replace logical operators, null literal, and bare JSONPath references.
+            if "&&" in expr or "||" in expr:
+                _py = expr
+                _py = _py.replace("&&", " and ").replace("||", " or ")
+                _py = _re.sub(r"\bnull\b", "None", _py)
+                _py = _re.sub(
+                    r"(\$[\w.\[\]]+)",
+                    lambda m: f"_resolve(state, {m.group(1)!r})",
+                    _py,
+                )
+                py_cond = _py
+            # Simple inline expression like "$.state.X == 'value'" with no separate op/value.
+            elif _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip()) and not value:
+                _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
                 _path, _iop, _rhs = _inline.group(1), _inline.group(2), _inline.group(3).strip()
                 _rhs = {"false": "False", "true": "True", "null": "None"}.get(_rhs, _rhs)
                 lhs = f"_resolve(state, {_path!r})"

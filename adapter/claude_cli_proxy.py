@@ -26,7 +26,6 @@ import json
 import os
 import time
 import uuid
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -38,9 +37,9 @@ DEFAULT_MODEL = os.environ.get("CLAUDE_CLI_DEFAULT_MODEL", "claude-sonnet-4-6")
 
 _MODEL_MAP: dict[str, str] = {
     "claude-cli-sonnet": "claude-sonnet-4-6",
-    "claude-cli-opus":   "claude-opus-4-8",
-    "claude-cli-haiku":  "claude-haiku-4-5-20251001",
-    "claude-cli":        DEFAULT_MODEL,
+    "claude-cli-opus": "claude-opus-4-8",
+    "claude-cli-haiku": "claude-haiku-4-5-20251001",
+    "claude-cli": DEFAULT_MODEL,
 }
 
 
@@ -52,8 +51,8 @@ class _Message(BaseModel):
 class _ChatRequest(BaseModel):
     model: str = DEFAULT_MODEL
     messages: list[_Message]
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
+    temperature: float | None = None
+    max_tokens: int | None = None
     stream: bool = False
 
 
@@ -82,9 +81,12 @@ def _build_args(messages: list[_Message], model_id: str) -> list[str]:
 
     cmd = [
         CLAUDE_PATH,
-        "--output-format", "json",
-        "--model", model_id,
-        "-p", prompt,
+        "--output-format",
+        "json",
+        "--model",
+        model_id,
+        "-p",
+        prompt,
     ]
 
     if system_parts:
@@ -148,13 +150,12 @@ async def chat_completions(req: _ChatRequest):
     try:
         content = await _invoke(cmd)
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
-    except FileNotFoundError:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
         raise HTTPException(
             status_code=503,
-            detail=f"claude binary not found at '{CLAUDE_PATH}'. "
-                   "Set CLAUDE_PATH or install @anthropic-ai/claude-code.",
-        )
+            detail=f"claude binary not found at '{CLAUDE_PATH}'. Set CLAUDE_PATH or install @anthropic-ai/claude-code.",
+        ) from exc
 
     prompt_text = " ".join(m.content for m in req.messages)
     return _openai_response(req.model, content, prompt_text)
@@ -164,10 +165,7 @@ async def chat_completions(req: _ChatRequest):
 async def list_models():
     return {
         "object": "list",
-        "data": [
-            {"id": k, "object": "model", "created": 0, "owned_by": "claude-cli"}
-            for k in _MODEL_MAP
-        ],
+        "data": [{"id": k, "object": "model", "created": 0, "owned_by": "claude-cli"} for k in _MODEL_MAP],
     }
 
 
@@ -175,7 +173,8 @@ async def list_models():
 async def health():
     try:
         proc = await asyncio.create_subprocess_exec(
-            CLAUDE_PATH, "--version",
+            CLAUDE_PATH,
+            "--version",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
