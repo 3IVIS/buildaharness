@@ -36,6 +36,34 @@ model_list:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
+  # ── Claude CLI (local subprocess via claude-cli-proxy) ──────────────────────
+  # Routes through the claude-cli-proxy sidecar (port 4001) which shells out
+  # to `claude -p` using locally-authenticated ~/.claude credentials.
+  # Start with: docker compose --profile claude-cli up
+  - model_name: claude-cli-sonnet
+    litellm_params:
+      model: openai/claude-cli-sonnet
+      api_base: http://claude-cli-proxy:4001/v1
+      api_key: "none"
+
+  - model_name: claude-cli-opus
+    litellm_params:
+      model: openai/claude-cli-opus
+      api_base: http://claude-cli-proxy:4001/v1
+      api_key: "none"
+
+  - model_name: claude-cli-haiku
+    litellm_params:
+      model: openai/claude-cli-haiku
+      api_base: http://claude-cli-proxy:4001/v1
+      api_key: "none"
+
+  - model_name: claude-cli
+    litellm_params:
+      model: openai/claude-cli
+      api_base: http://claude-cli-proxy:4001/v1
+      api_key: "none"
+
   # ── Anthropic / Claude ──────────────────────────────────────────────────────
   # Set ANTHROPIC_API_KEY in .env to enable these models.
   # Use these model_name values in your flow spec's model field.

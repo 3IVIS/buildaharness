@@ -224,6 +224,36 @@ services:
       langfuse:
         condition: service_healthy
 
+  # ── Claude CLI proxy (optional — activate with --profile claude-cli) ────────
+  # Wraps `claude -p` as an OpenAI-compatible /v1/chat/completions endpoint so
+  # LiteLLM can route "claude-cli-*" model requests to it without an API key.
+  # Requires the Claude Code CLI to be authenticated on the host (claude auth login).
+  #
+  # Start alongside the main stack:
+  #   docker compose --profile claude-cli up
+  #
+  # The host's ~/.claude directory is bind-mounted read-only so the CLI inside
+  # the container picks up the same credentials as the host user.
+  claude-cli-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude-cli-proxy
+    profiles: [claude-cli]
+    ports:
+      - "4001:4001"
+    volumes:
+      - ${HOME}/.claude:/home/appuser/.claude:ro
+    environment:
+      - CLAUDE_PATH=${CLAUDE_PATH:-claude}
+      - CLAUDE_CLI_DEFAULT_MODEL=${CLAUDE_CLI_DEFAULT_MODEL:-claude-sonnet-4-6}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4001/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
   # ── MinIO (local S3 for Langfuse OTel ingestion) ─────────────────────────
   # Fix #52: Langfuse's OTel ingest path always writes to S3 before queuing
   # spans for the worker — it does not honour LANGFUSE_S3_EVENT_UPLOAD_ENABLED.
