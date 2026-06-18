@@ -438,8 +438,23 @@ def gen_helpers(spec: dict | None = None) -> str:
                 ):
                     _resp = llm.invoke(messages)
                     _tok = getattr(_resp, "usage_metadata", {}) or {}
+                    # Thinking-mode models (e.g. qwen3) may return empty content when the
+                    # reasoning tokens consume the full max_tokens budget. Check
+                    # additional_kwargs for reasoning_content as a fallback, then fall
+                    # back to a stripped string repr so the span always has some output.
+                    _content = _resp.content
+                    if not _content:
+                        _ak = getattr(_resp, "additional_kwargs", {}) or {}
+                        _content = (
+                            _ak.get("reasoning_content")
+                            or _ak.get("thinking")
+                            or None
+                        )
+                    if _content:
+                        import re as _re
+                        _content = _re.sub(r"<think>.*?</think>", "", str(_content), flags=_re.DOTALL).strip() or _content
                     _lf.update_current_generation(
-                        output=_resp.content,
+                        output=_content or None,
                         usage_details={
                             "input": _tok.get("input_tokens", 0),
                             "output": _tok.get("output_tokens", 0),
@@ -477,6 +492,7 @@ def gen_helpers(spec: dict | None = None) -> str:
                     return {"messages": []}
             try:
                 from langfuse import get_client as _lf_get
+                import re as _re
                 _lf = _lf_get()
                 with _lf.start_as_current_observation(
                     name=f"agent-{node_id}",
@@ -486,8 +502,20 @@ def gen_helpers(spec: dict | None = None) -> str:
                 ):
                     _out = agent.invoke({"messages": messages}, config=_cfg)
                     _msgs = _out.get("messages") or []
-                    _final_content = (_msgs[-1].content if _msgs else "")[:2000]
-                    _lf.update_current_generation(output=_final_content)
+                    # Walk backwards to find the last AI message with real prose.
+                    # qwen3/Ollama may embed tool results as inline JSON in AIMessages,
+                    # so skip messages that are non-AI, empty, or pure JSON objects.
+                    _final_content = ""
+                    for _m in reversed(_msgs):
+                        if getattr(_m, "type", "") != "ai":
+                            continue
+                        _mc = _re.sub(r"<think>.*?</think>", "",
+                                      str(getattr(_m, "content", "") or ""),
+                                      flags=_re.DOTALL).strip()
+                        if _mc and not (_mc.startswith("{") or _mc.startswith("[")):
+                            _final_content = _mc[:2000]
+                            break
+                    _lf.update_current_generation(output=_final_content or None)
                     return _out
             except _GraphRecursionError:
                 return {"messages": []}
@@ -1477,10 +1505,13 @@ def gen_graph_assembly(
 
         # The condition node itself needs to be added as a node (passthrough)
         lines.append(f"graph.add_node({nid!r}, lambda s: {{}})")
-        # Incoming edges to the condition node
+        # Incoming edges to the condition node.
+        # Skip edges where the source is also a condition node: those nodes route
+        # exclusively via add_conditional_edges and cannot also have add_edge calls
+        # from the same source — doing so creates an unintended LangGraph fan-out.
         for pred_edge in [e for e in edges if e.get("to", e.get("target", "")) == nid]:
             src = pred_edge.get("from", pred_edge.get("source", ""))
-            if src != (input_node["id"] if input_node else None):
+            if src != (input_node["id"] if input_node else None) and src not in condition_nodes:
                 key = (src, nid)
                 if key not in added_edges:
                     lines.append(f"graph.add_edge({src!r}, {nid!r})")
