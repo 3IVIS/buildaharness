@@ -1380,8 +1380,7 @@ def gen_condition_router(node: dict, spec: dict) -> str:
                 )
                 py_cond = _py
             # Simple inline expression like "$.state.X == 'value'" with no separate op/value.
-            elif _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip()) and not value:
-                _inline = _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())
+            elif (_inline := _re.match(r"^(\$[\w.\[\]]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$", expr.strip())) and not value:
                 _path, _iop, _rhs = _inline.group(1), _inline.group(2), _inline.group(3).strip()
                 _rhs = {"false": "False", "true": "True", "null": "None"}.get(_rhs, _rhs)
                 lhs = f"_resolve(state, {_path!r})"
