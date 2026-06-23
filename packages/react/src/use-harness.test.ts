@@ -52,8 +52,8 @@ function makeErrorFlowSpec() {
     id: 'error-flow',
     nodes: [
       { id: 'n-input', type: 'input' as const, label: 'Start' },
-      // 'transform' with an fn_ref that doesn't exist → will throw at runtime
-      { id: 'n-bad', type: 'transform' as const, label: 'Bad', fn_ref: '__nonexistent_fn__' },
+      // 'transform' in fn_ref mode with a non-existent fn → throws at runtime
+      { id: 'n-bad', type: 'transform' as const, mode: 'fn_ref' as const, label: 'Bad', fn_ref: '__nonexistent_fn__' },
     ],
     edges: [{ id: 'e1', type: 'direct' as const, from: 'n-input', to: 'n-bad' }],
   }
