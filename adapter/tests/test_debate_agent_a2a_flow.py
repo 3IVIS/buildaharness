@@ -42,6 +42,7 @@ from mastra_adapter import compile_mastra
 
 # ── Lightweight LangGraph / SK execution stubs ────────────────────────────────
 
+
 class _FakeStateGraph:
     """Minimal StateGraph that actually executes registered node functions."""
 
@@ -182,6 +183,7 @@ def _build_sk_stubs() -> dict[str, types.ModuleType]:
         "opentelemetry.sdk.trace.export": otel_sdk_export,
         "opentelemetry.exporter.otlp.proto.http.trace_exporter": otel_exp,
     }
+
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 

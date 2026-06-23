@@ -30,6 +30,7 @@ from mastra_adapter import compile_mastra
 
 # ── Lightweight LangGraph / SK execution stubs ────────────────────────────────
 
+
 class _FakeStateGraph:
     """Minimal StateGraph that actually executes registered node functions."""
 
@@ -185,6 +186,7 @@ def _exec_with_stubs(code: str, label: str, stubs: dict) -> dict:
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = orig
+
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
