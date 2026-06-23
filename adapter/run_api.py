@@ -695,11 +695,7 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
 
         # Use kickoff_async() directly — avoids Flow.kickoff()'s internal asyncio.run()
         # which hangs when called from within a run_in_executor thread in Python 3.12.
-        result = await (
-            crew.kickoff_async(inputs=_kickoff_inputs)
-            if _kickoff_inputs
-            else crew.kickoff_async()
-        )
+        result = await (crew.kickoff_async(inputs=_kickoff_inputs) if _kickoff_inputs else crew.kickoff_async())
 
         # Hybrid mode: call _post_crew() to execute post-agent fn_ref transforms.
         _post_crew = namespace.get("_post_crew")

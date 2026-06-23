@@ -732,7 +732,7 @@ def gen_tools(spec: dict) -> str:
             method_lines = [
                 f"    async def {vid}(self, query: str = '') -> str:",
                 f"        {py_str(desc)}",
-                f"        return \"Tool {tid} is not yet configured in this runtime.\"",
+                f'        return "Tool {tid} is not yet configured in this runtime."',
                 "",
             ]
 
