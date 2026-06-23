@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { FlowState } from './state'
-import type { StateSchema } from '@itsharness/canvas'
+import type { StateSchema } from '@buildaharness/canvas'
 
 const schema: StateSchema = {
   type: 'object',

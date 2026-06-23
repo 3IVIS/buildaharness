@@ -28,7 +28,7 @@ export interface CollabDoc {
   /** Per-user cursor position + identity */
   awareness:  Awareness
   /**
-   * The active WebsocketProvider — set by ItsHarnessCanvas after connecting.
+   * The active WebsocketProvider — set by BuildAHarnessCanvas after connecting.
    * Null until the async setup completes.
    */
   wsProvider: WebsocketProvider | null

@@ -3,7 +3,7 @@
 .github/scripts/deploy_flows.py
 --------------------------------
 Called by the deploy.yml workflow to register/refresh all reference flows
-against a running itsharness adapter instance.
+against a running buildaharness adapter instance.
 
 For each flow JSON in --flows:
   1. POST /flows            — upsert the spec (creates or bumps version)
@@ -63,7 +63,7 @@ def _deploy_flow(client: httpx.Client, base_url: str, token: str, flow_id: str) 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Deploy itsharness reference flows")
+    parser = argparse.ArgumentParser(description="Deploy buildaharness reference flows")
     parser.add_argument("--env",       required=True, help="staging | production")
     parser.add_argument("--api-url",   required=True, help="Base URL of the adapter API")
     parser.add_argument("--token",     required=True, help="Bearer token for the adapter")

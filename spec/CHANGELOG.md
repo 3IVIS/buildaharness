@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Its Harness Flow Spec schema are documented here.
+All notable changes to the Build A Harness Flow Spec schema are documented here.
 
 Format: [Semantic Versioning](https://semver.org). Schema changes in minor versions are always additive (new optional fields). Breaking changes require a major version bump and a migration note.
 

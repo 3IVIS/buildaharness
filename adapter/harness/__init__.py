@@ -1,5 +1,5 @@
 """
-Its Harness — reasoning and control architecture modules.
+Build A Harness — reasoning and control architecture modules.
 
 Phase 0 exports: core data structures and staleness infrastructure.
 Phase 1 exports: evidence data model, tool reliability envelopes,

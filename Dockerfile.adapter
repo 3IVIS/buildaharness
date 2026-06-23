@@ -1,5 +1,5 @@
 # Fix #44: install pip deps at image-build time, not on every container start.
-# Usage: docker build -f Dockerfile.adapter -t itsharness-adapter ./adapter
+# Usage: docker build -f Dockerfile.adapter -t buildaharness-adapter ./adapter
 #        docker compose up  (uses this image via docker-compose.yml build: context)
 
 FROM python:3.12-slim

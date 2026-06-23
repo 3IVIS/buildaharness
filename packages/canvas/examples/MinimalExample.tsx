@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { ItsHarnessCanvas } from '@itsharness/canvas'
-import type { FlowSpec } from '@itsharness/canvas'
-import '@itsharness/canvas/styles.css'
+import { BuildAHarnessCanvas } from '@buildaharness/canvas'
+import type { FlowSpec } from '@buildaharness/canvas'
+import '@buildaharness/canvas/styles.css'
 
 const emptySpec: FlowSpec = {
   spec_version: '0.2.0',
@@ -19,7 +19,7 @@ export function MinimalExample() {
 
   return (
     <div style={{ width: '100%', height: 600 }}>
-      <ItsHarnessCanvas
+      <BuildAHarnessCanvas
         initialSpec={spec}
         onSpecChange={setSpec}
         onNodeSelect={setSelectedNode}

@@ -243,7 +243,7 @@ function DnDHandler({ addNode }: { addNode: (type: AnyNodeType, pos: { x: number
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    const type = e.dataTransfer.getData('application/itsharness-node')
+    const type = e.dataTransfer.getData('application/buildaharness-node')
     if (!type) return
     // screenToFlowPosition converts screen px → flow coordinate space,
     // correctly handling zoom level and pan offset.

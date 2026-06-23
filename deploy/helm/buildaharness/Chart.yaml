@@ -1,7 +1,7 @@
 apiVersion: v2
-name: itsharness
+name: buildaharness
 description: >
-  itsharness — visual AI agent canvas with multi-runtime flow execution.
+  buildaharness — visual AI agent canvas with multi-runtime flow execution.
   Deploys the full stack: adapter (FastAPI), canvas (Vite), mastra-runner (Node.js),
   PostgreSQL, Redis, ClickHouse, Langfuse, and LiteLLM.
 type: application
@@ -17,13 +17,13 @@ keywords:
   - mastra
   - langfuse
 
-home: https://github.com/itsharness/itsharness
+home: https://github.com/buildaharness/buildaharness
 sources:
-  - https://github.com/itsharness/itsharness
+  - https://github.com/buildaharness/buildaharness
 
 maintainers:
-  - name: itsharness
-    email: platform@itsharness.dev
+  - name: buildaharness
+    email: platform@buildaharness.dev
 
 dependencies:
   # Bitnami sub-charts are used for PostgreSQL and Redis so operators

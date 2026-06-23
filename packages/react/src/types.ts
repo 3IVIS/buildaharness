@@ -1,4 +1,4 @@
-import type { ILLMClient, ToolDef, FlowFunction, MemoryAdapter, EventBus } from '@itsharness/runtime'
+import type { ILLMClient, ToolDef, FlowFunction, MemoryAdapter, EventBus } from '@buildaharness/runtime'
 
 export type HarnessStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error'
 
@@ -32,7 +32,7 @@ export interface HarnessHandle {
   status: HarnessStatus
   /** Final (or latest intermediate) flow state. */
   state: Record<string, unknown>
-  /** Per-node execution stats. Compatible with ItsHarnessCanvas execStats prop. */
+  /** Per-node execution stats. Compatible with BuildAHarnessCanvas execStats prop. */
   nodeStats: Record<string, NodeExecStat>
   /** Live streaming token accumulator per nodeId. Cleared on node complete. */
   streamingTokens: Record<string, string>

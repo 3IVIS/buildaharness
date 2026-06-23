@@ -3,7 +3,7 @@ import { transformExecutor } from './transform'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
 import type { ILLMClient } from '../llm-client'
-import type { TransformNode } from '@itsharness/canvas'
+import type { TransformNode } from '@buildaharness/canvas'
 
 function mockLLMClient(): ILLMClient {
   return {

@@ -132,9 +132,7 @@ def test_t01_world_model_node_validates():
 
 def test_t02_world_model_invalid_display_mode_rejected():
     """T02 · validate_spec rejects world_model node with display_mode="invalid"."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "wm-1",
@@ -188,9 +186,7 @@ def test_t04_hypothesis_set_node_validates():
 
 def test_t05_hypothesis_set_max_zero_rejected():
     """T05 · validate_spec rejects hypothesis_set with max_hypotheses_shown=0."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "hs-1",
@@ -249,9 +245,7 @@ def test_t07_control_state_node_validates():
 
 def test_t08_control_state_rejected_without_harness_enabled():
     """T08 · validate_spec rejects control_state node when harness_meta.enabled is absent."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     spec = {
         "spec_version": "1.0.0",
@@ -310,9 +304,7 @@ def test_t10_task_graph_node_validates():
 
 def test_t11_task_graph_max_zero_rejected():
     """T11 · validate_spec rejects task_graph_node with max_tasks_shown=0."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "tg-1",
@@ -351,9 +343,7 @@ def test_t12_compile_task_graph_node():
 
 def test_t13_verification_gate_unknown_layer_rejected():
     """T13 · validate_spec rejects verification_gate with unknown enabled_layer."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "vg-1",
@@ -432,9 +422,7 @@ def test_t16_recovery_node_validates():
 
 def test_t17_recovery_node_unknown_strategy_rejected():
     """T17 · validate_spec rejects recovery_node with unknown strategy in strategy_order_override."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "rn-1",
@@ -484,9 +472,7 @@ def test_t19_evidence_store_node_validates():
 
 def test_t20_evidence_store_max_zero_rejected():
     """T20 · validate_spec rejects evidence_store_node with max_evidence_shown=0."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     node = {
         "id": "es-1",
@@ -690,9 +676,7 @@ def test_t29_all_p10_validators_accept_valid_configs():
 
 def test_t30_harness_nodes_without_enabled_rejected():
     """T30 · validate_spec rejects a spec with harness nodes when harness_meta.enabled is false (regression)."""
-    from fastapi import HTTPException
-
-    from validate import validate_spec
+    from validate import HTTPException, validate_spec
 
     spec = {
         "spec_version": "1.0.0",

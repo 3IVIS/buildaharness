@@ -9,7 +9,7 @@
     "noEmit": true,
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@itsharness/canvas": ["../canvas/src/spec/schema.ts"]
+      "@buildaharness/canvas": ["../canvas/src/spec/schema.ts"]
     }
   },
   "include": ["src", "*.ts"],

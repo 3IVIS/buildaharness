@@ -10,7 +10,7 @@
  *
  * Usage
  * -----
- * // Provider (in ItsHarnessCanvas.tsx):
+ * // Provider (in BuildAHarnessCanvas.tsx):
  *   <CanvasStoreProvider store={storeInstance}>
  *     <YourTree />
  *   </CanvasStoreProvider>
@@ -49,7 +49,7 @@ export function useCanvasStore<T>(selector: (s: CanvasStore) => T): T {
   const store = useContext(CanvasStoreContext)
   if (!store) {
     throw new Error(
-      '[itsharness/canvas] useCanvasStore must be called inside <ItsHarnessCanvas>. ' +
+      '[buildaharness/canvas] useCanvasStore must be called inside <BuildAHarnessCanvas>. ' +
       'Make sure the component is mounted inside a CanvasStoreProvider.'
     )
   }

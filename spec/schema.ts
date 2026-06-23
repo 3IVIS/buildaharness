@@ -1,5 +1,5 @@
 /**
- * Its Harness flow spec v1.0.0 — Zod schema
+ * Build A Harness flow spec v1.0.0 — Zod schema
  *
  * Runtime-agnostic workflow specification for LangGraph, CrewAI, Mastra,
  * and Microsoft Agent Framework adapters.
@@ -21,7 +21,7 @@
  *   - RuntimeSupportOverride: semantic_kernel → microsoft_agent_framework + crewai
  *
  * @version 1.0.0
- * @see https://spec.itsharness.com/v1.0/flow
+ * @see https://spec.buildaharness.com/v1.0/flow
  */
 
 import { z } from 'zod'
@@ -80,10 +80,10 @@ export type RuntimeHints = z.infer<typeof RuntimeHints>
 // ---------------------------------------------------------------------------
 
 export const ReducerStrategy = z
-  .enum(['replace', 'append', 'merge', 'custom'])
+  .enum(['replace', 'append', 'merge', 'last_wins', 'custom'])
   .default('replace')
   .describe(
-    'replace: last-write-wins (default). append: concat arrays. merge: deep object merge. custom: fn_ref required.'
+    'replace: last-write-wins (default). append: concat arrays. merge: deep object merge. last_wins: explicit last-write-wins (same as replace but semantically distinct). custom: fn_ref required.'
   )
 
 export const StateField = z
@@ -876,7 +876,7 @@ export const FlowSpec = z
     flow_config:    FlowConfig.optional(),
     harness_meta:   HarnessMeta.optional(),
   })
-  .describe('Its Harness flow spec v1.0.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters.')
+  .describe('Build A Harness flow spec v1.0.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters.')
 
 export type FlowSpec = z.infer<typeof FlowSpec>
 

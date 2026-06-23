@@ -54,3 +54,7 @@ packages/canvas/node_modules/
 
 # Claude Code local state (worktrees, session data — not project code)
 .claude/
+
+# Private plugin files — live in private repo only, not tracked here
+adapter/private_tool_impls.py
+src/spec/flows/coaching.ts

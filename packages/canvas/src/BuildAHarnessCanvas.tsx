@@ -1,12 +1,12 @@
 /**
- * ItsHarnessCanvas — embeddable flow canvas.
+ * BuildAHarnessCanvas — embeddable flow canvas.
  *
  * Usage
  * -----
- * import { ItsHarnessCanvas } from '@itsharness/canvas'
- * import '@itsharness/canvas/styles.css'
+ * import { BuildAHarnessCanvas } from '@buildaharness/canvas'
+ * import '@buildaharness/canvas/styles.css'
  *
- * <ItsHarnessCanvas
+ * <BuildAHarnessCanvas
  *   initialSpec={spec}
  *   onSpecChange={(updated) => saveToBackend(updated)}
  *   onNodeSelect={(id) => setInspectorNode(id)}
@@ -18,7 +18,7 @@
  *
  * execStats can be injected from the host to show run-time status rings:
  *
- * <ItsHarnessCanvas
+ * <BuildAHarnessCanvas
  *   execStats={runState.nodeStats}
  * />
  *
@@ -33,7 +33,7 @@ import { createCanvasStore, type CanvasStoreApi, type NodeExecStat } from './sto
 import { Canvas } from './canvas/Canvas'
 import type { FlowSpec } from './spec/schema'
 
-export interface ItsHarnessCanvasProps {
+export interface BuildAHarnessCanvasProps {
   /**
    * Flow spec to load into the canvas on mount (or when the reference changes).
    * If omitted the canvas starts with a single "Start" input node.
@@ -74,7 +74,7 @@ export interface ItsHarnessCanvasProps {
   style?: React.CSSProperties
 }
 
-export function ItsHarnessCanvas({
+export function BuildAHarnessCanvas({
   initialSpec,
   onSpecChange,
   onNodeSelect,
@@ -83,7 +83,7 @@ export function ItsHarnessCanvas({
   theme = 'dark',
   className,
   style,
-}: ItsHarnessCanvasProps) {
+}: BuildAHarnessCanvasProps) {
   // ── Create store once per mount ──────────────────────────────────────────
   // useMemo (not useState) so the store is synchronously available on the
   // first render without a double-render cycle. createCanvasStore is pure.
@@ -184,9 +184,9 @@ export function ItsHarnessCanvas({
     <CanvasStoreProvider store={store}>
       <div
         ref={rootRef}
-        data-itsharness-canvas
+        data-buildaharness-canvas
         data-theme={theme}
-        className={['itsharness-canvas', className].filter(Boolean).join(' ')}
+        className={['buildaharness-canvas', className].filter(Boolean).join(' ')}
         style={{
           position: 'relative',
           width: '100%',

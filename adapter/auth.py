@@ -48,7 +48,7 @@ JWT_TTL_DAYS = int(os.getenv("JWT_TTL_DAYS", "30"))
 # When the email is not in the database we still call _verify() against this
 # hash so bcrypt always runs (~100 ms), preventing timing-based user enumeration.
 # bcrypt is called directly — passlib is abandoned and broken on bcrypt 4.x.
-_DUMMY_HASH: str = bcrypt.hashpw(b"itsharness-dummy-constant-time-sentinel", bcrypt.gensalt()).decode()
+_DUMMY_HASH: str = bcrypt.hashpw(b"buildaharness-dummy-constant-time-sentinel", bcrypt.gensalt()).decode()
 bearer = HTTPBearer()
 
 # Fix #8: password complexity — at least one letter and one digit.

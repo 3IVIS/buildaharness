@@ -1,4 +1,4 @@
-# itsharness — Mastra execution runner
+# buildaharness — Mastra execution runner
 #
 # Multi-stage build: compile TypeScript in a builder image, then copy
 # only the compiled dist/ into a lean runtime image.
@@ -7,8 +7,8 @@
 #   docker compose up --build mastra-runner
 #
 # Usage (standalone):
-#   docker build -f mastra-runner/Dockerfile -t itsharness-mastra-runner ./mastra-runner
-#   docker run -p 8001:8001 -e OPENAI_API_KEY=sk-... itsharness-mastra-runner
+#   docker build -f mastra-runner/Dockerfile -t buildaharness-mastra-runner ./mastra-runner
+#   docker run -p 8001:8001 -e OPENAI_API_KEY=sk-... buildaharness-mastra-runner
 
 # ── Stage 1: build ────────────────────────────────────────────────────────────
 FROM node:20-slim AS builder

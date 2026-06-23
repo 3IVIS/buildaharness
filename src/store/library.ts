@@ -91,7 +91,7 @@ export const useLibraryStore = create<LibraryStore>()(
       markSaved: (specJson) => set({ lastSavedSpecJson: specJson }),
     }),
     {
-      name:    'itsharness:library',
+      name:    'buildaharness:library',
       storage: createJSONStorage(() => localStorage),
       version: 2,
       // §13 — migrate v1 entries (had savedAt + specJson) to v2 (draft + published shape)
@@ -116,7 +116,7 @@ export const useLibraryStore = create<LibraryStore>()(
         return persisted
       },
       onRehydrateStorage: () => (_state, error) => {
-        if (error) console.warn('[itsharness] library rehydration failed:', error)
+        if (error) console.warn('[buildaharness] library rehydration failed:', error)
       },
     }
   )

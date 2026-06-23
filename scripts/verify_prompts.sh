@@ -43,7 +43,7 @@ RESOLVE_TIMEOUT="${RESOLVE_TIMEOUT:-90}"
 CONTENT_HEADER="Content-Type: application/json"
 
 # Stable name — re-running the script creates a new version in Langfuse (idempotent).
-TEST_PROMPT_NAME="itsharness-prompt-verify"
+TEST_PROMPT_NAME="buildaharness-prompt-verify"
 # Sentinel text: LLM output "VERIFIED" means the SDK resolved the prompt correctly.
 TEST_PROMPT_TEXT="Reply with exactly one word: VERIFIED"
 # Sentinel fallback in the spec: if this appears in the result, resolution failed.
@@ -91,7 +91,7 @@ _section() {
 # ── Header ────────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — Prompt management verification"
+echo "  buildaharness — Prompt management verification"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  Adapter:     $BASE_URL"

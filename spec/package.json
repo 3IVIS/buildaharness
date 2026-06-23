@@ -1,5 +1,5 @@
 {
-  "name": "@itsharness/flow-spec",
+  "name": "@buildaharness/flow-spec",
   "version": "1.0.0",
   "description": "Runtime-agnostic AI agent workflow specification — Zod schema and JSON Schema",
   "exports": {
@@ -35,7 +35,7 @@
     "ai-agents", "langgraph", "crewai", "mastra", "workflow", "spec", "schema"
   ],
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "https://github.com/itsharness/itsharness" },
-  "bugs":       { "url": "https://github.com/itsharness/itsharness/issues" },
-  "homepage":   "https://itsharness.com"
+  "repository": { "type": "git", "url": "https://github.com/buildaharness/buildaharness" },
+  "bugs":       { "url": "https://github.com/buildaharness/buildaharness/issues" },
+  "homepage":   "https://buildaharness.com"
 }

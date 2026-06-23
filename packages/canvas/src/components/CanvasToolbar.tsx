@@ -3,7 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import { Minus, Plus, Maximize, LayoutDashboard, Search } from 'lucide-react'
 import { useCanvasStore } from '../store/context'
 
-export const CANVAS_SEARCH_EVENT = 'itsharness:open-canvas-search'
+export const CANVAS_SEARCH_EVENT = 'buildaharness:open-canvas-search'
 
 export function CanvasToolbar() {
   const { autoLayout } = useCanvasStore((s) => s)

@@ -327,7 +327,7 @@ function _snapshot(s: PersistedState): Snapshot {
 // Fix #15: debounce timer for updateNodeData history pushes.
 let _updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
 const MAX_HISTORY     = 50
-const STORAGE_KEY    = 'itsharness:current'
+const STORAGE_KEY    = 'buildaharness:current'
 const STORAGE_VERSION = 3
 
 // ─── Store ───────────────────────────────────────────────────────────────────
@@ -348,7 +348,7 @@ export const useCanvasStore = create<CanvasStore>()(
       selectedEdgeId: null, isEdgePanelOpen: false,
       isSettingsOpen: false, settingsTab: 'meta' as SettingsTab,
       // §10 — theme (read from localStorage; applied to <html> in main.tsx on boot)
-      theme: (localStorage.getItem('itsharness:theme') as 'dark' | 'light') ?? 'dark',
+      theme: (localStorage.getItem('buildaharness:theme') as 'dark' | 'light') ?? 'dark',
       // §11 — library page
       isLibraryOpen: false,
       isProblemsOpen: false,
@@ -540,7 +540,7 @@ export const useCanvasStore = create<CanvasStore>()(
 
       // §10 — theme
       setTheme: (t) => {
-        localStorage.setItem('itsharness:theme', t)
+        localStorage.setItem('buildaharness:theme', t)
         document.documentElement.setAttribute('data-theme', t)
         set({ theme: t })
       },
@@ -854,7 +854,7 @@ export const useCanvasStore = create<CanvasStore>()(
           return persisted
         }
         console.warn(
-          `[itsharness] stored state version ${version} is newer than app version ${STORAGE_VERSION}. ` +
+          `[buildaharness] stored state version ${version} is newer than app version ${STORAGE_VERSION}. ` +
           'Resetting canvas to avoid incompatible state.'
         )
         return {}
@@ -862,9 +862,9 @@ export const useCanvasStore = create<CanvasStore>()(
 
       onRehydrateStorage: () => (state, error) => {
         if (error) {
-          console.warn('[itsharness] failed to restore previous session:', error)
+          console.warn('[buildaharness] failed to restore previous session:', error)
         } else if (state) {
-          console.info('[itsharness] session restored from localStorage')
+          console.info('[buildaharness] session restored from localStorage')
         }
       },
     }

@@ -18,7 +18,7 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime', '@itsharness/runtime'],
+      external: ['react', 'react-dom', 'react/jsx-runtime', '@buildaharness/runtime'],
     },
     minify: false,
     sourcemap: true,

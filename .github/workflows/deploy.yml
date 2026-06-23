@@ -45,7 +45,7 @@ permissions:
 #   - "staging"     in all other cases (push to main, PR, dispatch default)
 env:
   REGISTRY:        ghcr.io
-  IMAGE_NAME:      ${{ github.repository }}/itsharness-adapter
+  IMAGE_NAME:      ${{ github.repository }}/buildaharness-adapter
   # Resolve environment string used in later steps.
   # Avoid accessing inputs.* at workflow level for non-dispatch events — it can
   # silently fail and prevent all jobs from running ("No jobs were run").
@@ -291,7 +291,7 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────────────────────
   # JOB 3 — deploy-staging
-  # Update the staging environment with the new image by calling the itsharness
+  # Update the staging environment with the new image by calling the buildaharness
   # deploy API.  Staging is always updated on pushes to main.
   # ─────────────────────────────────────────────────────────────────────────────
   deploy-staging:

@@ -3,7 +3,7 @@ import { subgraphExecutor } from './subgraph'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
 import type { ILLMClient, ChatMessage, ChatOptions } from '../llm-client'
-import type { FlowSpec } from '@itsharness/canvas'
+import type { FlowSpec } from '@buildaharness/canvas'
 import { AbortedError } from '../errors'
 
 function makeMockLLMClient(response = 'mocked response'): ILLMClient {

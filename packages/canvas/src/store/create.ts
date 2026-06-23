@@ -2,7 +2,7 @@
  * createCanvasStore — factory that produces a scoped Zustand store instance.
  *
  * Unlike the app-level singleton (src/store/index.ts), this store:
- *   • Is created fresh per <ItsHarnessCanvas> mount — safe to embed multiple times.
+ *   • Is created fresh per <BuildAHarnessCanvas> mount — safe to embed multiple times.
  *   • Has no localStorage persistence (the host app owns persistence).
  *   • Strips app-level concerns: run state, deployment, eval/feedback, navigation.
  *   • Accepts initialSpec to seed the canvas and fires onSpecChange after edits.

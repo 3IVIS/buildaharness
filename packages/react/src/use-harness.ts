@@ -5,14 +5,14 @@ import {
   ToolRegistry,
   createExecutionContext,
   EventBus,
-} from '@itsharness/runtime'
+} from '@buildaharness/runtime'
 import type {
   NodeStartEvent,
   NodeCompleteEvent,
   NodeErrorEvent,
   TokenChunkEvent,
   FlowPausedEvent,
-} from '@itsharness/runtime'
+} from '@buildaharness/runtime'
 import type { HarnessOptions, HarnessHandle, HarnessStatus, NodeExecStat } from './types'
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────

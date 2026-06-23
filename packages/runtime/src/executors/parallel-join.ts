@@ -1,4 +1,4 @@
-import type { Node, ParallelJoinNode } from '@itsharness/canvas'
+import type { Node, ParallelJoinNode } from '@buildaharness/canvas'
 import type { FlowState } from '../state'
 import type { ExecutionContext } from '../context'
 import type { ExecutorOutput } from './index'

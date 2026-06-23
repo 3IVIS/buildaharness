@@ -1,14 +1,14 @@
 <div align="center">
 
-# Its Harness 中文版
+# Build A Harness 中文版
 
 **在画布上构建完整的 AI 智能体线束。编译到任何编排器。通过 Langfuse 观测。**
 
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/itsharness/releases)
-[![Status](https://img.shields.io/badge/状态-公开测试版-orange.svg)](https://github.com/3IVIS/itsharness)
+[![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
+[![Status](https://img.shields.io/badge/状态-公开测试版-orange.svg)](https://github.com/3IVIS/buildaharness)
 [![Tests](https://img.shields.io/badge/测试-379%20通过-brightgreen.svg)](#)
-[![GitHub Stars](https://img.shields.io/github/stars/3IVIS/itsharness?style=social)](https://github.com/3IVIS/itsharness/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/欢迎-PR贡献-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -20,7 +20,7 @@
 
 ---
 
-工作流将提示从节点路由到节点。**线束**管理智能体*相信*什么、它*被允许*做什么、如何捕获自身错误，以及学到什么。Its Harness 提供完整的 11 层架构 — 在画布上绘制，编译到任意框架，追踪每一个决策。
+工作流将提示从节点路由到节点。**线束**管理智能体*相信*什么、它*被允许*做什么、如何捕获自身错误，以及学到什么。Build A Harness 提供完整的 11 层架构 — 在画布上绘制，编译到任意框架，追踪每一个决策。
 
 ```
 画布  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework  →  Langfuse
@@ -228,14 +228,14 @@ pytest adapter/tests/test_maf_adapter.py -v     # MAF 套件（742 个测试）
 ## 嵌入画布
 
 ```bash
-npm install @itsharness/canvas
+npm install @buildaharness/canvas
 ```
 
 ```tsx
-import { ItsHarnessCanvas } from '@itsharness/canvas'
-import '@itsharness/canvas/styles.css'
+import { BuildAHarnessCanvas } from '@buildaharness/canvas'
+import '@buildaharness/canvas/styles.css'
 
-<ItsHarnessCanvas
+<BuildAHarnessCanvas
   initialSpec={mySpec}
   onSpecChange={(updated) => save(updated)}
   execStats={runState.nodeStats}

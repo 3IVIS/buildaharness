@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-ollama.sh — Test all 4 itsharness adapters against a local Ollama server.
+# setup-ollama.sh — Test all 4 buildaharness adapters against a local Ollama server.
 #
 # Submits flows/06-ollama-simple-flow.json to every runtime, polls for
 # completion, and verifies the response mentions the expected topic.
@@ -113,7 +113,7 @@ fi
 ok "Model '${MODEL}' is available"
 
 if ! curl -sf "${BASE_URL}/health" >/dev/null 2>&1; then
-  fail "itsharness adapter is not running at ${BASE_URL}"
+  fail "buildaharness adapter is not running at ${BASE_URL}"
   echo ""
   echo "  Option A — Docker Compose:"; echo "    docker compose up"
   echo "  Option B — local dev:"

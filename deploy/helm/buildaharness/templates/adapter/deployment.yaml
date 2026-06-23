@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "itsharness.fullname" . }}-adapter
+  name: {{ include "buildaharness.fullname" . }}-adapter
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: adapter
   {{- with .Values.global.commonAnnotations }}
   annotations:
@@ -14,7 +14,7 @@ spec:
   replicas: {{ .Values.adapter.replicaCount }}
   selector:
     matchLabels:
-      {{- include "itsharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 6 }}
+      {{- include "buildaharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 6 }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -23,14 +23,14 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "itsharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 8 }}
+        {{- include "buildaharness.selectorLabels" (dict "root" . "component" "adapter") | nindent 8 }}
       {{- with .Values.adapter.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
-      serviceAccountName: {{ include "itsharness.serviceAccountName" . }}
+      {{- include "buildaharness.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "buildaharness.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.adapter.podSecurityContext | nindent 8 }}
       # Wait for Postgres and Redis to be ready before starting.
@@ -41,7 +41,7 @@ spec:
             - sh
             - -c
             - |
-              until nc -z {{ include "itsharness.postgresHost" . }} {{ include "itsharness.postgresPort" . }}; do
+              until nc -z {{ include "buildaharness.postgresHost" . }} {{ include "buildaharness.postgresPort" . }}; do
                 echo "Waiting for PostgreSQL..."; sleep 2;
               done
         - name: wait-for-redis
@@ -50,12 +50,12 @@ spec:
             - sh
             - -c
             - |
-              until nc -z {{ include "itsharness.redisHost" . }} 6379; do
+              until nc -z {{ include "buildaharness.redisHost" . }} 6379; do
                 echo "Waiting for Redis..."; sleep 2;
               done
       containers:
         - name: adapter
-          image: "{{ .Values.adapter.image.repository }}:{{ include "itsharness.imageTag" (dict "image" .Values.adapter.image "chart" .Chart) }}"
+          image: "{{ .Values.adapter.image.repository }}:{{ include "buildaharness.imageTag" (dict "image" .Values.adapter.image "chart" .Chart) }}"
           imagePullPolicy: {{ .Values.adapter.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.adapter.securityContext | nindent 12 }}
@@ -76,15 +76,15 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: postgres-password
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://itsharness:$(POSTGRES_PASSWORD)@{{ include "itsharness.postgresHost" . }}:{{ include "itsharness.postgresPort" . }}/itsharness"
+              value: "postgresql+asyncpg://buildaharness:$(POSTGRES_PASSWORD)@{{ include "buildaharness.postgresHost" . }}:{{ include "buildaharness.postgresPort" . }}/buildaharness"
             # ── Auth ────────────────────────────────────────────────────────
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: jwt-secret
             - name: JWT_TTL_DAYS
               value: {{ .Values.adapter.jwtTtlDays | quote }}
@@ -92,46 +92,46 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: redis-password
             - name: REDIS_URL
-              value: "redis://:$(REDIS_PASSWORD)@{{ include "itsharness.redisHost" . }}:6379/{{ include "itsharness.redisDb" . }}"
+              value: "redis://:$(REDIS_PASSWORD)@{{ include "buildaharness.redisHost" . }}:6379/{{ include "buildaharness.redisDb" . }}"
             # ── LLM keys ─────────────────────────────────────────────────────
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: openai-api-key
                   optional: true
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: anthropic-api-key
                   optional: true
             # ── LiteLLM proxy ─────────────────────────────────────────────────
             - name: LITELLM_URL
-              value: {{ include "itsharness.litellmInternalUrl" . | quote }}
+              value: {{ include "buildaharness.litellmInternalUrl" . | quote }}
             # ── Langfuse ─────────────────────────────────────────────────────
             - name: LANGFUSE_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: langfuse-public-key
             - name: LANGFUSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: langfuse-secret-key
             - name: LANGFUSE_BASE_URL
-              value: {{ include "itsharness.langfuseInternalUrl" . | quote }}
+              value: {{ include "buildaharness.langfuseInternalUrl" . | quote }}
             # ── Mastra runner ─────────────────────────────────────────────────
             - name: MASTRA_RUNNER_URL
-              value: {{ include "itsharness.mastraRunnerUrl" . | quote }}
+              value: {{ include "buildaharness.mastraRunnerUrl" . | quote }}
             - name: MASTRA_RUNNER_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: mastra-runner-api-key
                   optional: true
             - name: MASTRA_POLL_INTERVAL_S
@@ -164,7 +164,7 @@ spec:
             - name: OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: oidc-client-secret
             - name: OIDC_REDIRECT_URI
               value: {{ .Values.oidc.redirectUri | quote }}
@@ -183,7 +183,7 @@ spec:
             - name: SCIM_BEARER_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: scim-bearer-token
                   optional: true
             # ── Extra env ─────────────────────────────────────────────────────

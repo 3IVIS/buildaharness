@@ -3,7 +3,7 @@ import { conditionExecutor } from './condition'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
 import type { ILLMClient } from '../llm-client'
-import type { ConditionNode } from '@itsharness/canvas'
+import type { ConditionNode } from '@buildaharness/canvas'
 
 function mockLLMClient(): ILLMClient {
   return {

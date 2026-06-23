@@ -160,7 +160,7 @@ export function DeploymentPanel() {
       mcpServers: {
         [flowMeta.name.toLowerCase().replace(/\s+/g, '_')]: {
           command: "npx",
-          args: ["-y", "@itsharness/mcp-proxy"],
+          args: ["-y", "@buildaharness/mcp-proxy"],
           env: {
             MCP_MANIFEST_URL: mcp_url,
             ITSHARNESS_TOKEN: "<YOUR_TOKEN>",

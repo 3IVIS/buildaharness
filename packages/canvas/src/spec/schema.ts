@@ -1,5 +1,5 @@
 /**
- * Its Harness flow spec v0.2.0 — canvas implementation
+ * Build A Harness flow spec v0.2.0 — canvas implementation
  *
  * This file is the canvas app's working copy of the spec schema.
  * Canonical source of truth for publishing: spec/schema.ts (root).
@@ -81,7 +81,7 @@ export type RuntimeHints = z.infer<typeof RuntimeHints>
 // ---------------------------------------------------------------------------
 
 export const ReducerStrategy = z
-  .enum(['replace', 'append', 'merge', 'custom'])
+  .enum(['replace', 'append', 'merge', 'last_wins', 'custom'])
   .default('replace')
 
 export const StateField = z.object({

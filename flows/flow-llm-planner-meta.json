@@ -2,7 +2,7 @@
   "spec_version": "0.2.0",
   "id": "toddly-llm-planner-meta",
   "name": "LLM Planner (meta-flow)",
-  "description": "Implements the cuddlytoddly LLMPlanner.propose() loop as an itsharness flow. Takes a goal, runs clarification, generates a FlowSpec JSON via the planner agent, scrutinises it, and emits a valid FlowSpec that can be loaded into the canvas or submitted to /compile + /run. This is the 'dynamic planning as a meta-flow' strategy: planning itself becomes a visible, editable, versioned itsharness workflow.",
+  "description": "Implements the cuddlytoddly LLMPlanner.propose() loop as an buildaharness flow. Takes a goal, runs clarification, generates a FlowSpec JSON via the planner agent, scrutinises it, and emits a valid FlowSpec that can be loaded into the canvas or submitted to /compile + /run. This is the 'dynamic planning as a meta-flow' strategy: planning itself becomes a visible, editable, versioned buildaharness workflow.",
   "runtime_hints": {
     "preferred_adapter": "langgraph",
     "compatible": ["langgraph", "mastra"]
@@ -29,7 +29,7 @@
     {
       "id": "planner",
       "role": "FlowSpec Planning Engine",
-      "backstory": "Generates itsharness FlowSpec JSON from a natural language goal. Knows the FlowSpec v0.2.0 schema: node types (input, output, llm_call, tool_invoke, condition, parallel_fork, parallel_join, hitl_breakpoint, memory_read, memory_write, subgraph, transform, agent_role, agent_debate), edge types (direct, conditional), and state_schema conventions. Always responds with valid JSON and nothing else.",
+      "backstory": "Generates buildaharness FlowSpec JSON from a natural language goal. Knows the FlowSpec v0.2.0 schema: node types (input, output, llm_call, tool_invoke, condition, parallel_fork, parallel_join, hitl_breakpoint, memory_read, memory_write, subgraph, transform, agent_role, agent_debate), edge types (direct, conditional), and state_schema conventions. Always responds with valid JSON and nothing else.",
       "goal": "Produce a complete, valid FlowSpec v0.2.0 JSON for the given goal. Use the minimum number of nodes needed. Always include input and output nodes. Add hitl_breakpoint for any step requiring human action. Use parallel_fork/join for independent tasks that can run concurrently.",
       "max_iter": 3
     },

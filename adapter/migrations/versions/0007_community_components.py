@@ -29,8 +29,8 @@ Schema
     node_spec       JSONB NOT NULL        — ready-to-use node fragment
     tool_def        JSONB                 — ToolDef to auto-register (tool nodes only)
     tags            JSONB NOT NULL DEFAULT '[]'  — searchable string array
-    verified        TEXT NOT NULL DEFAULT 'false'  — 'true' for @itsharness/* packages
-    author          TEXT NOT NULL DEFAULT '@itsharness'
+    verified        TEXT NOT NULL DEFAULT 'false'  — 'true' for @buildaharness/* packages
+    author          TEXT NOT NULL DEFAULT '@buildaharness'
     install_count   INTEGER NOT NULL DEFAULT 0
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -85,7 +85,7 @@ def upgrade() -> None:
             server_default=sa.text("'[]'"),
         ),
         sa.Column("verified", sa.Text(), nullable=False, server_default=sa.text("'false'")),
-        sa.Column("author", sa.Text(), nullable=False, server_default=sa.text("'@itsharness'")),
+        sa.Column("author", sa.Text(), nullable=False, server_default=sa.text("'@buildaharness'")),
         sa.Column("install_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "created_at",

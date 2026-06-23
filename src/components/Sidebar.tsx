@@ -48,7 +48,7 @@ const PALETTE: PaletteEntry[] = [
 const GROUPS = ['I/O', 'Core', 'Control', 'Memory', 'Agents', 'Harness']
 
 function onDragStart(e: React.DragEvent, type: AnyNodeType) {
-  e.dataTransfer.setData('application/itsharness-node', type)
+  e.dataTransfer.setData('application/buildaharness-node', type)
   e.dataTransfer.effectAllowed = 'move'
 }
 

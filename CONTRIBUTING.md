@@ -1,4 +1,4 @@
-# Contributing to itsharness
+# Contributing to buildaharness
 
 
 ## Current state
@@ -6,13 +6,13 @@
 v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place. No open RFCs.
 
 **What's shipped:**
-- FlowSpec schema v1.0.0, 23 canvas node types (14 base + 9 harness), 5 reference flows, ADR-001 closed
+- FlowSpec schema v1.0.0, 26 canvas node types (14 base + 12 harness), 5 reference flows, ADR-001 closed
 - XYFlow canvas, LangGraph + CrewAI + Mastra + MAF adapters, auth, Langfuse, execution, HITL
 - Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
 - Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
-- SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@itsharness/canvas` package
-- Full harness architecture: 11-layer reasoning and control system, 22-node execution loop, 470 harness tests (P0–P11, P-PC, integration, E2E, invariants)
-- npm packages: `@itsharness/harness`, `@itsharness/runtime`, `@itsharness/react`, `@itsharness/proxy`
+- SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@buildaharness/canvas` package
+- Full harness architecture: 11-layer reasoning and control system, 470 harness tests (P0–P11, P-PC, integration, E2E, invariants)
+- npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/proxy`
 
 ---
 
@@ -36,7 +36,7 @@ Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with n
 
 **Eval integration feedback** — the eval harness (DeepEval + Ragas) and Langfuse LLM-as-judge are shipped. Tell us what's missing: in-flow quality gates, specific metric implementations, CI regression thresholds.
 
-**`@itsharness/canvas` consumers** — if you embed the canvas package in your own tool, open a `[canvas-pkg]` issue for anything that doesn't fit the current props API.
+**`@buildaharness/canvas` consumers** — if you embed the canvas package in your own tool, open a `[canvas-pkg]` issue for anything that doesn't fit the current props API.
 
 ---
 
@@ -55,7 +55,7 @@ Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with n
 | `[eval]` | Eval harness, LLM-as-judge, Langfuse scoring |
 | `[observability]` | Tracing, token counts, Langfuse wiring |
 | `[collab]` | Yjs real-time collaboration, presence, offline persistence |
-| `[canvas-pkg]` | `@itsharness/canvas` npm package — props API, embedding, theming |
+| `[canvas-pkg]` | `@buildaharness/canvas` npm package — props API, embedding, theming |
 
 ---
 
@@ -170,11 +170,11 @@ npm run typecheck:canvas # TypeScript check
 
 The canvas must never break spec round-trip. `npm test` validates all 5 reference flows through import → canvas state → export → Zod parse.
 
-### `@itsharness/canvas` package contributions
+### `@buildaharness/canvas` package contributions
 
 The canvas package in `packages/canvas/` uses a **per-instance Zustand store** via `createStore()` — not a module-level singleton. This is intentional so the component is safe to mount multiple times on a page. Any contribution that introduces module-level mutable state will be rejected.
 
-Props changes require updating `packages/canvas/src/ItsHarnessCanvas.tsx`, `packages/canvas/README.md`, and this file's props table if it changes the public API.
+Props changes require updating `packages/canvas/src/BuildAHarnessCanvas.tsx`, `packages/canvas/README.md`, and this file's props table if it changes the public API.
 
 ### Collab contributions
 
@@ -211,7 +211,7 @@ curl -s -X POST http://localhost:8000/marketplace \
 
 **Slug rules** — kebab-case, `[a-z0-9][a-z0-9-]*[a-z0-9]`, max 80 chars, globally unique.  
 `node_spec.tool_id` must equal `slug.replace("-", "_")`.  
-User-published components start unverified. The `@itsharness` verified badge is reserved for the six seed packages.
+User-published components start unverified. The `@buildaharness` verified badge is reserved for the six seed packages.
 
 ---
 

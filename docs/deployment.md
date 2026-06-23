@@ -22,10 +22,10 @@ Adds a tenth service: the y-websocket server on port 1234. Set `VITE_COLLAB_SERV
 
 ## Helm chart (Kubernetes / on-prem)
 
-The Helm chart is at `deploy/helm/itsharness/`. It deploys all nine services with correct readiness probes, SIGTERM handling, and rolling updates.
+The Helm chart is at `deploy/helm/buildaharness/`. It deploys all nine services with correct readiness probes, SIGTERM handling, and rolling updates.
 
 ```bash
-helm install itsharness ./deploy/helm/itsharness \
+helm install buildaharness ./deploy/helm/buildaharness \
   --set secrets.jwtSecret=$(openssl rand -base64 32) \
   --set secrets.postgresPassword=$(openssl rand -base64 24) \
   --set secrets.litellmMasterKey=$(openssl rand -base64 32) \
@@ -34,10 +34,10 @@ helm install itsharness ./deploy/helm/itsharness \
   --set secrets.langfuseEncryptionKey=$(openssl rand -hex 32) \
   --set secrets.clickhousePassword=yourpassword \
   --set ingress.enabled=true \
-  --set ingress.host=itsharness.your-domain.com
+  --set ingress.host=buildaharness.your-domain.com
 ```
 
-Post-install, `helm status itsharness` prints the SSO setup guide from `templates/NOTES.txt`.
+Post-install, `helm status buildaharness` prints the SSO setup guide from `templates/NOTES.txt`.
 
 ### External Postgres / Redis (RDS, ElastiCache)
 
@@ -48,7 +48,7 @@ postgresql:
   external:
     host: my-rds.us-east-1.rds.amazonaws.com
     port: 5432
-    database: itsharness
+    database: buildaharness
 
 redis:
   enabled: false          # disable Bitnami sub-chart
@@ -62,7 +62,7 @@ redis:
 ```yaml
 # values.yaml
 secrets:
-  existingSecret: my-itsharness-secrets   # K8s Secret with all required keys
+  existingSecret: my-buildaharness-secrets   # K8s Secret with all required keys
 ```
 
 ### SSO / OIDC via Helm
@@ -71,10 +71,10 @@ secrets:
 # values.yaml
 oidc:
   enabled: true
-  issuerUrl: https://keycloak.example.com/realms/itsharness
-  clientId: itsharness
-  redirectUri: https://itsharness.your-domain.com/auth/sso/callback
-  adminGroups: itsharness-admins
+  issuerUrl: https://keycloak.example.com/realms/buildaharness
+  clientId: buildaharness
+  redirectUri: https://buildaharness.your-domain.com/auth/sso/callback
+  adminGroups: buildaharness-admins
 ```
 
 Set `secrets.oidcClientSecret` to your OAuth2 client secret.
@@ -88,7 +88,7 @@ Set `secrets.oidcClientSecret` to your OAuth2 client secret.
 | Variable | Description |
 |---|---|
 | `OIDC_ENABLED` | `true` to enable SSO login |
-| `OIDC_ISSUER_URL` | OIDC issuer base URL — e.g. `https://keycloak.example.com/realms/itsharness` |
+| `OIDC_ISSUER_URL` | OIDC issuer base URL — e.g. `https://keycloak.example.com/realms/buildaharness` |
 | `OIDC_CLIENT_ID` | OAuth2 client ID |
 | `OIDC_CLIENT_SECRET` | OAuth2 client secret |
 | `OIDC_REDIRECT_URI` | Full callback URL — must match what's registered with the provider |
@@ -102,13 +102,13 @@ Set `secrets.oidcClientSecret` to your OAuth2 client secret.
 
 ### Keycloak quick-start
 
-Create a realm named `itsharness`, add a client with:
-- **Client ID:** `itsharness`
+Create a realm named `buildaharness`, add a client with:
+- **Client ID:** `buildaharness`
 - **Access type:** `confidential`
 - **Valid Redirect URIs:** `https://your-domain/auth/sso/callback`
 - **Group mapper:** map the `groups` claim to the access token
 
-Then set `OIDC_ISSUER_URL=https://keycloak.example.com/realms/itsharness` and the client credentials.
+Then set `OIDC_ISSUER_URL=https://keycloak.example.com/realms/buildaharness` and the client credentials.
 
 ### SCIM provisioning
 

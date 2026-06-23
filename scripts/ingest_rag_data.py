@@ -25,17 +25,32 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+def _env_or_dotenv(key: str, default: str = "") -> str:
+    """Read from environment, then fall back to .env file."""
+    val = os.environ.get(key, "")
+    if not val and os.path.exists(".env"):
+        for line in open(".env"):
+            line = line.strip()
+            if line.startswith(f"{key}="):
+                val = line[len(key) + 1:]
+                break
+    return val or default
+
 QDRANT_URL   = os.environ.get("QDRANT_URL",     "http://localhost:6333")
 EMBED_BASE   = os.environ.get("EMBED_BASE_URL",  "http://localhost:4000")
-OPENAI_KEY   = os.environ.get("OPENAI_API_KEY",  "ollama")
 EMBED_MODEL  = os.environ.get("EMBED_MODEL",     "nomic-embed-text")
+# When running from the host against the Docker LiteLLM proxy, use the master key.
+# OPENAI_API_KEY overrides; falls back to LITELLM_MASTER_KEY from .env; then "ollama".
+OPENAI_KEY   = (os.environ.get("OPENAI_API_KEY")
+                or _env_or_dotenv("LITELLM_MASTER_KEY")
+                or "ollama")
 COLLECTION   = os.environ.get("COLLECTION",      "knowledge_base")
 DIMENSIONS   = 768
 CHUNK_WORDS  = 250
 OVERLAP_WORDS = 50
 BATCH_SIZE   = 20
 
-WIKIPEDIA_UA = "itsharness-ingest/1.0 (admin@itsharness.dev)"
+WIKIPEDIA_UA = "buildaharness-ingest/1.0 (admin@buildaharness.dev)"
 
 TOPICS = [
     "Retrieval-augmented generation",

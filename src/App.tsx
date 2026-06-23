@@ -45,7 +45,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 
   override componentDidCatch(error: unknown, info: { componentStack: string }) {
-    console.error('[itsharness] unhandled render error:', error, info.componentStack)
+    console.error('[buildaharness] unhandled render error:', error, info.componentStack)
   }
 
   override render() {
@@ -97,7 +97,7 @@ function hashColor(s: string): string {
  * for this session, which is still better than re-randomizing every mount.
  */
 function getOrCreateAnonColor(): string {
-  const KEY = 'itsharness:anonColor'
+  const KEY = 'buildaharness:anonColor'
   try {
     const stored = localStorage.getItem(KEY)
     if (stored) return stored
@@ -170,11 +170,11 @@ function useCollab() {
       // banner rather than leaving the user with a broken, silent failure.
       let persistence: import('y-indexeddb').IndexeddbPersistence | null = null
       try {
-        persistence = new IndexeddbPersistence(`itsharness:${roomId}`, collab.doc)
+        persistence = new IndexeddbPersistence(`buildaharness:${roomId}`, collab.doc)
         persistenceDestroy = () => persistence?.destroy()
         await persistence.whenSynced
       } catch (idbErr) {
-        console.warn('[itsharness:collab] IndexedDB unavailable, skipping offline persistence:', idbErr)
+        console.warn('[buildaharness:collab] IndexedDB unavailable, skipping offline persistence:', idbErr)
         // Continue without offline persistence — the WS server is still the
         // source of truth; we just won't have offline/reload resilience.
       }
@@ -229,7 +229,7 @@ function useCollab() {
     }
 
     setup().catch((err) => {
-      console.error('[itsharness:collab] setup failed:', err)
+      console.error('[buildaharness:collab] setup failed:', err)
     })
 
     return () => {
@@ -310,7 +310,7 @@ export function App() {
       // suppress the browser find bar (we own this intent now).
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
-        window.dispatchEvent(new CustomEvent('itsharness:open-canvas-search'))
+        window.dispatchEvent(new CustomEvent('buildaharness:open-canvas-search'))
         return
       }
 

@@ -18,7 +18,7 @@ import {
 import { useCanvasStore } from '../store'
 
 // Custom event used by App.tsx to toggle search from the global ⌘F handler.
-export const CANVAS_SEARCH_EVENT = 'itsharness:open-canvas-search'
+export const CANVAS_SEARCH_EVENT = 'buildaharness:open-canvas-search'
 
 export function CanvasToolbar() {
   const { autoLayout } = useCanvasStore()

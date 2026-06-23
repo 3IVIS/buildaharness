@@ -1,7 +1,7 @@
 {
-  "name": "@itsharness/canvas",
+  "name": "@buildaharness/canvas",
   "version": "0.1.0",
-  "description": "Embeddable itsharness flow canvas — spec in, spec changes out",
+  "description": "Embeddable buildaharness flow canvas — spec in, spec changes out",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -49,7 +49,7 @@
     "vitest": "^1.6.0"
   },
   "keywords": [
-    "itsharness",
+    "buildaharness",
     "ai-agent",
     "flow",
     "canvas",
@@ -58,7 +58,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/itsharness/itsharness",
+    "url": "https://github.com/buildaharness/buildaharness",
     "directory": "packages/canvas"
   }
 }

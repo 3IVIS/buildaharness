@@ -5,14 +5,14 @@
 **Symptom**
 
 ```
-postgres-1  | FATAL: password authentication failed for user "itsharness"
+postgres-1  | FATAL: password authentication failed for user "buildaharness"
 langfuse-1  | Error: P1000 — Authentication failed against database server
 langfuse-1 exited with code 1 (restarting)
 ```
 
 **Cause**
 
-Postgres stores the `itsharness` user's password inside the data volume when the container is first initialised. If `POSTGRES_PASSWORD` in your `.env` no longer matches the password baked into the volume — because you changed it, or because you're running on a machine that already had a `postgres_data` volume from an earlier run — Postgres rejects every connection.
+Postgres stores the `buildaharness` user's password inside the data volume when the container is first initialised. If `POSTGRES_PASSWORD` in your `.env` no longer matches the password baked into the volume — because you changed it, or because you're running on a machine that already had a `postgres_data` volume from an earlier run — Postgres rejects every connection.
 
 The `postgres-init.sql` script only runs when the data directory is **empty** (first boot). It does not run again on subsequent starts.
 
@@ -26,7 +26,7 @@ Back up any flows you want to keep (export them via the canvas export button or 
 
 This stops all containers and removes the three data volumes (`postgres_data`, `redis_data`, `clickhouse_data`). On the next `docker compose up`, Postgres initialises fresh with the password currently in your `.env`.
 
-> If you don't have the script: `docker compose down && docker volume rm itsharness_postgres_data itsharness_redis_data itsharness_clickhouse_data && docker compose up`
+> If you don't have the script: `docker compose down && docker volume rm buildaharness_postgres_data buildaharness_redis_data buildaharness_clickhouse_data && docker compose up`
 
 ---
 
@@ -61,7 +61,7 @@ docker compose down && docker compose up
 If the Redis volume already has data from a password-less run, you may also need to remove it:
 
 ```bash
-docker volume rm itsharness_redis_data
+docker volume rm buildaharness_redis_data
 ```
 
 ---
@@ -116,14 +116,14 @@ If Langfuse keeps restarting with a Prisma error, check that the `langfuse` data
 To verify manually:
 
 ```bash
-docker compose exec postgres psql -U itsharness -c '\l'
+docker compose exec postgres psql -U buildaharness -c '\l'
 ```
 
-You should see databases: `itsharness`, `langfuse`, `litellm`. If `langfuse` is missing, run:
+You should see databases: `buildaharness`, `langfuse`, `litellm`. If `langfuse` is missing, run:
 
 ```bash
-docker compose exec postgres psql -U itsharness \
-  -c "CREATE DATABASE langfuse OWNER itsharness;"
+docker compose exec postgres psql -U buildaharness \
+  -c "CREATE DATABASE langfuse OWNER buildaharness;"
 ```
 
 ---
@@ -142,7 +142,7 @@ If the data directory is corrupted (can happen after an unclean shutdown), reset
 
 ```bash
 docker compose down
-docker volume rm itsharness_clickhouse_data
+docker volume rm buildaharness_clickhouse_data
 docker compose up
 ```
 

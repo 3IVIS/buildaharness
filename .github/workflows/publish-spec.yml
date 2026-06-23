@@ -1,4 +1,4 @@
-name: Publish @itsharness/flow-spec
+name: Publish @buildaharness/flow-spec
 
 # Triggers on any tag matching v* pushed to the repo:
 #   git tag v0.3.0 && git push origin v0.3.0
@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          scope: '@itsharness'
+          scope: '@buildaharness'
 
       # ── Install root deps (Fix #50: uses package-lock.json for reproducibility)
       - name: Install root deps

@@ -1,5 +1,5 @@
 {
-  "name": "@itsharness/react",
+  "name": "@buildaharness/react",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@itsharness/runtime": "*"
+    "@buildaharness/runtime": "*"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",

@@ -1,6 +1,6 @@
 # Tests and Scripts
 
-Complete reference for the itsharness test suites and helper scripts.
+Complete reference for the buildaharness test suites and helper scripts.
 
 ---
 
@@ -130,7 +130,7 @@ Each flow test class (`TestLangGraphCompile`, `TestMAFCompile`, `TestCrewAICompi
 | `test_harness_integration_MA.py` | 16 | Mastra adapter: same 4 checks (TypeScript stubs) |
 | `test_harness_integration_MAF.py` | 16 | MS Agent Framework adapter: same 4 checks |
 | `test_harness_e2e.py` | 32 | 8 scenarios × 4 frameworks: happy path, BLOCKED escalation, recovery cycle, warm-start, parallel branch merge, context compression, reviewer re-entry, max_steps budget |
-| `test_harness_invariants.py` | 15 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions |
+| `test_harness_invariants.py` | 18 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions; includes multi-case tests for INV-03, INV-04, INV-05, INV-06, INV-10 and three plan-level invariant tests |
 
 ### Performance benchmarks
 

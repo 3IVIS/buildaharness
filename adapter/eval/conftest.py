@@ -1,5 +1,5 @@
 """
-Shared fixtures for the itsharness offline eval harness.
+Shared fixtures for the buildaharness offline eval harness.
 
 Design goals:
   - No running services required for basic eval runs.
@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-# adapter/eval/conftest.py → parent.parent.parent = repo root (itsharness/)
+# adapter/eval/conftest.py → parent.parent.parent = repo root (buildaharness/)
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _FLOWS_DIR = _REPO_ROOT / "flows"
 
@@ -136,16 +136,16 @@ RAG_EVAL_DATASET = [
         ),
     },
     {
-        "input": "What runtimes does itsharness support?",
+        "input": "What runtimes does buildaharness support?",
         "context": (
-            "itsharness supports four runtimes: LangGraph (Python), CrewAI (Python), "
+            "buildaharness supports four runtimes: LangGraph (Python), CrewAI (Python), "
             "Mastra (TypeScript), and MS Agent Framework (Python, semantic-kernel v1.x). "
             "MAF shipped in Phase 4 and is the only runtime where agent_debate maps "
             "natively to AgentGroupChat. The canvas compiles flows to any of these via "
             "adapter codegen."
         ),
         "expected_output": (
-            "itsharness supports LangGraph, CrewAI, Mastra, and MS Agent Framework. "
+            "buildaharness supports LangGraph, CrewAI, Mastra, and MS Agent Framework. "
             "The MAF adapter ships in Phase 4 with native support for agent_debate "
             "via AgentGroupChat."
         ),

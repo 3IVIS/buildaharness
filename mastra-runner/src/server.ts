@@ -1,5 +1,5 @@
 /**
- * itsharness — Mastra execution runner  v0.1.0
+ * buildaharness — Mastra execution runner  v0.1.0
  *
  * A lightweight Express sidecar that receives compiled Mastra TypeScript
  * from the Python adapter, executes it in a sandboxed vm.Module context,

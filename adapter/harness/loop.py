@@ -49,6 +49,9 @@ def initialize_harness(
     failure_diagnostics: Any | None = None,
     task_class: str = "",
     dep_graph_budget: Any | None = None,
+    plan_name: str | None = None,
+    plan_folder: Any | None = None,
+    _plan_store_ref: Any | None = None,
 ) -> dict[str, Any]:
     """Initialise the harness for a new run — P-PC.4.
 
@@ -57,11 +60,27 @@ def initialize_harness(
     bypassed (INV-PC-01). When experience_store is provided warm_start() is
     called after concept seeding so the two signals are additive (INV-PC-05).
 
+    If plan_name is provided the named PlanTemplate is loaded and its tasks are
+    appended to task_graph before validate_task_graph() runs (additive with
+    process_concept — INV-PC-05). plan_folder overrides DEFAULT_TEMPLATE_DIR.
+    _plan_store_ref is the load_plan callable, injected in tests only.
+
     Returns a dict with keys:
       valid (bool), errors (list[str]), decomposition_gate (bool),
       process_concept_id (str | None).
     """
     from .task_graph import validate_task_graph
+
+    # Plan seeding — before process_concept so both are additive (INV-PC-05)
+    if plan_name:
+        from .plan_store import DEFAULT_TEMPLATE_DIR, load_plan, plan_to_task_graph
+
+        folder = plan_folder or DEFAULT_TEMPLATE_DIR
+        _load = _plan_store_ref or load_plan
+        template = _load(plan_name, folder)
+        plan_tg, _ = plan_to_task_graph(template)
+        for task in plan_tg.tasks:
+            task_graph.tasks.append(task)
 
     if process_concept is not None:
         process_concept.seed_task_graph(task_graph)
@@ -185,6 +204,8 @@ def run_one_iteration(
     execution_context: Any | None = None,
     belief_dep_graph: Any | None = None,
     evidence_store: Any | None = None,
+    plan_template: Any | None = None,
+    plan_snapshot_dir: Any | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -412,6 +433,18 @@ def run_one_iteration(
                     "step_count": step_count,
                     "review_result": review_result.to_dict() if review_result else None,
                 }
+
+    # ── Plan export after P9 (never raises — INV-10 spirit) ──────────────────
+    if plan_template is not None:
+        from .plan_store import DEFAULT_SNAPSHOT_DIR, save_plan
+
+        save_plan(
+            run_id=run_id,
+            turn=step_count,
+            task_graph=task_graph,
+            template=plan_template,
+            snapshot_dir=plan_snapshot_dir or DEFAULT_SNAPSHOT_DIR,
+        )
 
     return {
         "control_state_a": control_state,

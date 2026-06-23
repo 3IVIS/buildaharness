@@ -8,10 +8,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "itsharness.fullname" . }}-clickhouse-config
+  name: {{ include "buildaharness.fullname" . }}-clickhouse-config
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: clickhouse
 data:
   # Single-node cluster config — same as infra/clickhouse/single-node-cluster.xml
@@ -85,23 +85,23 @@ data:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "itsharness.fullname" . }}-clickhouse
+  name: {{ include "buildaharness.fullname" . }}-clickhouse
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: clickhouse
 spec:
-  serviceName: {{ include "itsharness.fullname" . }}-clickhouse
+  serviceName: {{ include "buildaharness.fullname" . }}-clickhouse
   replicas: 1
   selector:
     matchLabels:
-      {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 6 }}
+      {{- include "buildaharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 8 }}
+        {{- include "buildaharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 8 }}
     spec:
-      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      {{- include "buildaharness.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: clickhouse
           image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
@@ -124,7 +124,7 @@ spec:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: clickhouse-password
           # P2-4 fix: use HTTP /ping endpoint for probes — no authentication required.
           # clickhouse-client --query requires --password when CLICKHOUSE_PASSWORD is
@@ -153,7 +153,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "itsharness.fullname" . }}-clickhouse-config
+            name: {{ include "buildaharness.fullname" . }}-clickhouse-config
             defaultMode: 0755
       {{- with .Values.clickhouse.nodeSelector }}
       nodeSelector:
@@ -182,10 +182,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "itsharness.fullname" . }}-clickhouse
+  name: {{ include "buildaharness.fullname" . }}-clickhouse
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: clickhouse
 spec:
   type: ClusterIP
@@ -201,5 +201,5 @@ spec:
       port: 9181
       targetPort: keeper
   selector:
-    {{- include "itsharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 4 }}
+    {{- include "buildaharness.selectorLabels" (dict "root" . "component" "clickhouse") | nindent 4 }}
 {{- end }}

@@ -1,5 +1,5 @@
-import { assertFlowSpec } from '@itsharness/canvas'
-import type { FlowSpec, Node } from '@itsharness/canvas'
+import { assertFlowSpec } from '@buildaharness/canvas'
+import type { FlowSpec, Node } from '@buildaharness/canvas'
 import { FlowGraph } from './graph'
 import { FlowState } from './state'
 import type { ExecutionContext } from './context'

@@ -282,20 +282,20 @@ async def seed_eval_templates() -> None:
                 # 200/201 → created; 409 → already registered — both are fine.
                 if resp.status_code not in (200, 201, 409):
                     print(
-                        f"[itsharness] WARNING: eval template seeder — "
+                        f"[buildaharness] WARNING: eval template seeder — "
                         f"'{template['name']}' returned HTTP {resp.status_code}: {resp.text}",
                         flush=True,
                     )
                 else:
                     action = "registered" if resp.status_code in (200, 201) else "already exists"
                     print(
-                        f"[itsharness] eval template '{template['name']}' {action}.",
+                        f"[buildaharness] eval template '{template['name']}' {action}.",
                         flush=True,
                     )
             except Exception as exc:
                 # Don't crash the adapter if Langfuse is temporarily unreachable
                 # at boot time — the seeder will run again on the next restart.
                 print(
-                    f"[itsharness] WARNING: eval template seeder — could not register '{template['name']}': {exc}",
+                    f"[buildaharness] WARNING: eval template seeder — could not register '{template['name']}': {exc}",
                     flush=True,
                 )

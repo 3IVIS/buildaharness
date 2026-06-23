@@ -1,4 +1,4 @@
-name: Publish @itsharness/canvas
+name: Publish @buildaharness/canvas
 
 # Triggers on tags matching canvas-v* pushed to the repo.
 #
@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          scope: '@itsharness'
+          scope: '@buildaharness'
 
       # ── Install root deps ────────────────────────────────────────────────────
       - name: Install root deps

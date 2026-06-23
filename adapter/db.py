@@ -348,7 +348,7 @@ class CommunityComponent(Base):
     Each row is one installable component — typically a pre-configured
     tool_invoke node with an npm package ref, description, and ready-to-drop
     node_spec fragment.  Verified components are published under the
-    @itsharness scope and seeded at startup.
+    @buildaharness scope and seeded at startup.
 
     slug          — URL-safe unique key, e.g. 'web-search'
     name          — display name shown in the sidebar card
@@ -360,7 +360,7 @@ class CommunityComponent(Base):
     node_spec     — ready-to-use FlowSpec node fragment (dropped onto canvas on install)
     tool_def      — ToolDef dict auto-registered in the flow's tools registry on install
     tags          — list[str] for full-text search
-    verified      — 'true' for @itsharness/* packages (shown with ✓ badge)
+    verified      — 'true' for @buildaharness/* packages (shown with ✓ badge)
     author        — package author handle
     install_count — incremented on each POST /marketplace/{slug}/install
     """
@@ -383,7 +383,7 @@ class CommunityComponent(Base):
     tool_def: Mapped[Any] = mapped_column(_JSONBType, nullable=True)
     tags: Mapped[Any] = mapped_column(_JSONBType, default=list)
     verified: Mapped[str] = mapped_column(Text, default="false")
-    author: Mapped[str] = mapped_column(Text, default="@itsharness")
+    author: Mapped[str] = mapped_column(Text, default="@buildaharness")
     install_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(

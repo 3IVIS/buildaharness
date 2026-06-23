@@ -1,5 +1,5 @@
 {
-  "name": "itsharness",
+  "name": "buildaharness",
   "version": "0.8.0",
   "private": false,
   "workspaces": [

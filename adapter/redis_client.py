@@ -1,5 +1,5 @@
 """
-Async Redis client for itsharness.
+Async Redis client for buildaharness.
 
 Provides a single shared ConnectionPool and two focused helpers:
 
@@ -7,10 +7,10 @@ Provides a single shared ConnectionPool and two focused helpers:
     is_revoked(jti)                  — return True if jti has been revoked
 
 The client uses the REDIS_URL env var (default: redis://redis:6379/1).
-Redis database 1 is reserved for itsharness; database 0 is used by
+Redis database 1 is reserved for buildaharness; database 0 is used by
 Langfuse's BullMQ ingestion queue, so the two stacks never share keyspace.
 
-The key prefix itsharness:revoked:{jti} provides an additional safety
+The key prefix buildaharness:revoked:{jti} provides an additional safety
 margin against accidental collision on shared Redis instances.
 
 TESTING=true:
@@ -24,7 +24,7 @@ import os
 import redis.asyncio as aioredis
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
-_KEY_PREFIX = "itsharness:revoked:"
+_KEY_PREFIX = "buildaharness:revoked:"
 
 # Module-level pool — created once, shared across requests.
 _pool: aioredis.ConnectionPool | None = None

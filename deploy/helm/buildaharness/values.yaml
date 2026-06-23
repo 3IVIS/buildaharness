@@ -1,4 +1,4 @@
-# itsharness Helm chart — default values
+# buildaharness Helm chart — default values
 #
 # Every field here corresponds directly to a docker-compose.yml env var or
 # service definition so operators familiar with the Compose stack can map
@@ -9,7 +9,7 @@
 # ExternalSecret (external-secrets.io) for all sensitive fields.
 #
 # Quick start:
-#   helm install itsharness ./itsharness \
+#   helm install buildaharness ./buildaharness \
 #     --set secrets.jwtSecret="$(openssl rand -base64 32)" \
 #     --set secrets.postgresPassword="$(openssl rand -base64 24)" \
 #     --set secrets.redisPassword="$(openssl rand -base64 24)" \
@@ -20,7 +20,7 @@
 #     --set secrets.langfuse.publicKey="pk-lf-$(openssl rand -hex 12)" \
 #     --set secrets.langfuse.secretKey="sk-lf-$(openssl rand -hex 12)" \
 #     --set llm.openaiApiKey="sk-..." \
-#     --namespace itsharness --create-namespace
+#     --namespace buildaharness --create-namespace
 
 # ── Global ────────────────────────────────────────────────────────────────────
 global:
@@ -37,7 +37,7 @@ global:
 imageRegistry: ghcr.io
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
-# All values here are written into a single Kubernetes Secret (itsharness-secrets).
+# All values here are written into a single Kubernetes Secret (buildaharness-secrets).
 # In production, set these via --set or an external secret manager — never commit
 # real values to values.yaml.
 secrets:
@@ -104,7 +104,7 @@ llm:
 oidc:
   enabled: false
   providerName: "SSO"
-  # Full issuer URL, e.g. https://keycloak.example.com/realms/itsharness
+  # Full issuer URL, e.g. https://keycloak.example.com/realms/buildaharness
   issuerUrl: ""
   clientId: ""
   # clientSecret is read from secrets.oidcClientSecret (see secrets section above).
@@ -122,7 +122,7 @@ adapter:
   replicaCount: 2
 
   image:
-    repository: ghcr.io/itsharness/itsharness-adapter
+    repository: ghcr.io/buildaharness/buildaharness-adapter
     tag: ""          # defaults to .Chart.AppVersion when empty
     pullPolicy: IfNotPresent
 
@@ -214,7 +214,7 @@ canvas:
   replicaCount: 2
 
   image:
-    repository: ghcr.io/itsharness/itsharness-canvas
+    repository: ghcr.io/buildaharness/buildaharness-canvas
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -269,7 +269,7 @@ mastraRunner:
   replicaCount: 1
 
   image:
-    repository: ghcr.io/itsharness/itsharness-mastra-runner
+    repository: ghcr.io/buildaharness/buildaharness-mastra-runner
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -322,11 +322,11 @@ mastraRunner:
 postgres:
   enabled: true
   auth:
-    username: itsharness
-    database: itsharness
+    username: buildaharness
+    database: buildaharness
     # Password is injected from the shared secrets Secret at deploy time.
     # Do not set postgres.auth.password here.
-    existingSecret: itsharness-secrets
+    existingSecret: buildaharness-secrets
     secretKeys:
       adminPasswordKey: postgres-password
       userPasswordKey: postgres-password
@@ -341,22 +341,22 @@ postgres:
       limits:
         cpu: "1"
         memory: 1Gi
-    # Run the Langfuse and LiteLLM database init alongside itsharness DB.
+    # Run the Langfuse and LiteLLM database init alongside buildaharness DB.
     initdb:
       scripts:
         00-extra-databases.sql: |
           -- BUG-8 fix: CREATE DATABASE ... OWNER grants full schema permissions on
           -- PostgreSQL 15+. GRANT ALL PRIVILEGES ON DATABASE alone does NOT grant
           -- CREATE on the public schema in Postgres 15+ (regression from pg14).
-          CREATE DATABASE langfuse OWNER itsharness;
-          CREATE DATABASE litellm  OWNER itsharness;
+          CREATE DATABASE langfuse OWNER buildaharness;
+          CREATE DATABASE litellm  OWNER buildaharness;
 
 # External Postgres (used when postgres.enabled=false).
 externalPostgres:
   host: ""
   port: 5432
-  username: itsharness
-  database: itsharness
+  username: buildaharness
+  database: buildaharness
   # Provide password via secrets.postgresPassword or secrets.existingSecret.
 
 # ── Redis (Bitnami sub-chart) ─────────────────────────────────────────────────
@@ -366,7 +366,7 @@ redis:
   architecture: standalone
   auth:
     enabled: true
-    existingSecret: itsharness-secrets
+    existingSecret: buildaharness-secrets
     existingSecretPasswordKey: redis-password
   master:
     persistence:
@@ -456,10 +456,10 @@ langfuse:
   nextauthUrl: ""
 
   # Langfuse project init (same as Compose LANGFUSE_INIT_* vars).
-  initOrgId: "itsharness"
-  initOrgName: "itsharness"
-  initProjectId: "itsharness"
-  initProjectName: "itsharness"
+  initOrgId: "buildaharness"
+  initOrgName: "buildaharness"
+  initProjectId: "buildaharness"
+  initProjectName: "buildaharness"
 
   nodeSelector: {}
   tolerations: []

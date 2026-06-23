@@ -31,7 +31,7 @@ from rag_utils import format_chunks
 
 RAG_SPEC_PATH = Path(__file__).parent.parent.parent / "flows" / "01-rag-agent-flow.json"
 
-_WIKIPEDIA_UA = "itsharness-test/1.0 (ci@example.com)"
+_WIKIPEDIA_UA = "buildaharness-test/1.0 (ci@example.com)"
 _WIKI_TOPIC = "retrieval-augmented generation"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -231,7 +231,8 @@ class TestMastraCompile:
     def test_retrieve_step(self, rag_spec):
         code, _ = compile_mastra(rag_spec)
         assert "retrieveStep" in code
-        assert "memory.query" in code or "mastra?.memory" in code
+        # Qdrant backend: direct Qdrant API; other backends: mastra?.memory
+        assert "_qdrantUrl" in code or "memory.query" in code or "mastra?.memory" in code
 
     def test_format_context_step_inlined(self, rag_spec):
         """Mastra inlines the Python fn_ref as equivalent JS logic."""

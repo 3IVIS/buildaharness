@@ -11,7 +11,7 @@ Authenticated:
 
 Startup:
   seed_marketplace()             → called from lifespan; idempotently inserts the
-                                   six built-in @itsharness components on first boot.
+                                   six built-in @buildaharness components on first boot.
 
 The install endpoint does not modify any flow — it returns the node_spec and
 tool_def fragments that the frontend drops onto the canvas and registers in the
@@ -37,7 +37,7 @@ from rate_limit import limiter
 router = APIRouter(prefix="/marketplace", tags=["marketplace"])
 
 # ── Seed data ─────────────────────────────────────────────────────────────────
-# Six canonical @itsharness components covering the most common tool gaps.
+# Six canonical @buildaharness components covering the most common tool gaps.
 # Each entry mirrors the CommunityComponent columns.  slug is the primary key.
 
 _SEED_COMPONENTS: list[dict[str, Any]] = [
@@ -50,7 +50,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "npm_ref": "@langchain/community/tools/TavilySearchResults",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["search", "web", "tavily", "retrieval"],
         "node_spec": {
             "type": "tool_invoke",
@@ -74,10 +74,10 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "description": "Load and extract text from a PDF file or URL using PyMuPDF.",
         "category": "tool",
         "icon_emoji": "📄",
-        "npm_ref": "@itsharness/tool-pdf-reader",
+        "npm_ref": "@buildaharness/tool-pdf-reader",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["pdf", "document", "extraction", "file"],
         "node_spec": {
             "type": "tool_invoke",
@@ -85,7 +85,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
             "data": {"label": "PDF Reader"},
         },
         "tool_def": {
-            "tool_ref": "@itsharness/tool-pdf-reader",
+            "tool_ref": "@buildaharness/tool-pdf-reader",
             "source": "npm",
             "description": "Load and extract text from a PDF file or URL",
             "input_schema": {
@@ -104,7 +104,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "npm_ref": "@langchain/community/tools/SlackTool",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["slack", "notification", "messaging", "webhook"],
         "node_spec": {
             "type": "tool_invoke",
@@ -134,7 +134,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "npm_ref": "@langchain/community/tools/GitHubToolkit",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["github", "issues", "devtools", "api"],
         "node_spec": {
             "type": "tool_invoke",
@@ -166,7 +166,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "npm_ref": "@langchain/community/tools/SqlTool",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["sql", "database", "postgres", "sqlite", "query"],
         "node_spec": {
             "type": "tool_invoke",
@@ -192,10 +192,10 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
         "description": "Make an authenticated HTTP request and return the JSON response body.",
         "category": "tool",
         "icon_emoji": "🌐",
-        "npm_ref": "@itsharness/tool-http-request",
+        "npm_ref": "@buildaharness/tool-http-request",
         "source": "npm",
         "verified": "true",
-        "author": "@itsharness",
+        "author": "@buildaharness",
         "tags": ["http", "api", "rest", "fetch", "request"],
         "node_spec": {
             "type": "tool_invoke",
@@ -203,7 +203,7 @@ _SEED_COMPONENTS: list[dict[str, Any]] = [
             "data": {"label": "HTTP Request"},
         },
         "tool_def": {
-            "tool_ref": "@itsharness/tool-http-request",
+            "tool_ref": "@buildaharness/tool-http-request",
             "source": "npm",
             "description": "Make an HTTP request and return the response body",
             "input_schema": {
@@ -368,7 +368,7 @@ async def publish_component(
     """Publish a new community component.
 
     Requires authentication.  The slug must be globally unique.
-    Published components are NOT verified by default — only @itsharness seed
+    Published components are NOT verified by default — only @buildaharness seed
     components carry verified=true.  A future admin endpoint can promote them.
     """
     existing = (
@@ -456,7 +456,7 @@ async def install_component(
 
 
 async def seed_marketplace() -> None:
-    """Idempotently insert the six built-in @itsharness components at startup.
+    """Idempotently insert the six built-in @buildaharness components at startup.
 
     Skips rows whose slug already exists so re-deploys are safe.
     Always runs (unlike eval seeder it needs no Langfuse) — the marketplace
@@ -497,6 +497,6 @@ async def seed_marketplace() -> None:
                 updated_at=now,
             )
             db.add(row)
-            print(f"[itsharness] marketplace: seeded '{entry['slug']}'", flush=True)
+            print(f"[buildaharness] marketplace: seeded '{entry['slug']}'", flush=True)
 
         await db.commit()

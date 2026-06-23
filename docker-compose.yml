@@ -1,11 +1,11 @@
-# itsharness — Docker Compose
+# buildaharness — Docker Compose
 #
 # Fixes applied:
 #   #3  / #4  — All secrets must be set in .env; no insecure defaults survive.
 #   #9        — CORS_ORIGINS env var passed to adapter (comma-separated list).
 #   #43       — Canvas uses Dockerfile.canvas; no npm install on every start.
 #   #44       — Adapter uses Dockerfile.adapter; no pip install on every start.
-#   #45       — LiteLLM gets its own 'litellm' database, not 'itsharness'.
+#   #45       — LiteLLM gets its own 'litellm' database, not 'buildaharness'.
 #   #46       — Adapter container has a healthcheck.
 #   #47       — langfuse-worker depends_on langfuse with service_healthy.
 #   #48       — Adapter has restart: unless-stopped.
@@ -87,6 +87,8 @@ services:
       - JOB_TTL_HOURS=${JOB_TTL_HOURS:-4}
       # Execution timeout per workflow run in ms (default 5 min).
       - MASTRA_EXEC_TIMEOUT_MS=${MASTRA_EXEC_TIMEOUT_MS:-300000}
+      # Python adapter URL for fn_ref bridge calls from the Mastra runner.
+      - ADAPTER_URL=${ADAPTER_URL:-http://adapter:8000}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8001/health').then(r=>r.ok||process.exit(1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -111,7 +113,7 @@ services:
       # Embedding calls always route through LiteLLM so they appear in Langfuse,
       # even when OPENAI_BASE_URL points directly to Ollama for LLM calls.
       - EMBED_BASE_URL=http://litellm:4000
-      - DATABASE_URL=postgresql+asyncpg://itsharness:${POSTGRES_PASSWORD}@postgres:5432/itsharness
+      - DATABASE_URL=postgresql+asyncpg://buildaharness:${POSTGRES_PASSWORD}@postgres:5432/buildaharness
       # Fix #3: JWT_SECRET must be set in .env — no fallback; adapter exits if unset.
       - JWT_SECRET=${JWT_SECRET}
       - LITELLM_URL=http://litellm:4000
@@ -140,7 +142,7 @@ services:
       - JWT_TTL_DAYS=${JWT_TTL_DAYS:-30}
       - MAX_BODY_BYTES=${MAX_BODY_BYTES:-1048576}
       # Redis — JWT revocation blocklist (shares the Redis 7 instance used by Langfuse)
-      # Database 1 is reserved for itsharness; database 0 is used by Langfuse's BullMQ queue.
+      # Database 1 is reserved for buildaharness; database 0 is used by Langfuse's BullMQ queue.
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/1
       # Langfuse
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
@@ -148,6 +150,12 @@ services:
       - LANGFUSE_BASE_URL=http://langfuse:3000        # internal: SDK sends traces here
       - LANGFUSE_HOST=http://langfuse:3000            # Python SDK reads this for HTTP calls
       - LANGFUSE_PUBLIC_URL=${LANGFUSE_PUBLIC_URL:-http://localhost:3001}  # browser-accessible: used in trace links
+      # Disable CrewAI telemetry — it makes a blocking outbound call on Crew.kickoff()
+      # that hangs indefinitely when the container has no internet access.
+      - CREWAI_DISABLE_TELEMETRY=true
+      # Override the LLM used by the generic executor agent (non-coach tasks).
+      # Set to a smaller/faster model (e.g. mistral) to speed up classification nodes.
+      - CREWAI_EXECUTOR_MODEL=${CREWAI_EXECUTOR_MODEL:-}
     # Fix #46: healthcheck so canvas (and CI) knows when the adapter is ready.
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
@@ -175,18 +183,18 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=itsharness
+      - POSTGRES_USER=buildaharness
       # Fix #4: password was hardcoded as a literal. Now read from .env — the adapter
       # exits at startup if JWT_SECRET is missing; operators must supply all secrets.
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=itsharness
+      - POSTGRES_DB=buildaharness
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U itsharness"]
+      test: ["CMD-SHELL", "pg_isready -U buildaharness"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -207,8 +215,8 @@ services:
       # No fallback — LITELLM_MASTER_KEY must be set in .env.
       # The adapter validates JWT_SECRET; .env.example documents all required secrets.
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      # Fix #45: LiteLLM uses its own 'litellm' database, not 'itsharness'.
-      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      # Fix #45: LiteLLM uses its own 'litellm' database, not 'buildaharness'.
+      - DATABASE_URL=postgresql://buildaharness:${POSTGRES_PASSWORD}@postgres:5432/litellm
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=http://langfuse:3000
@@ -360,7 +368,7 @@ services:
       - "3001:3000"
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      - DATABASE_URL=postgresql://buildaharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
       - CLICKHOUSE_MIGRATION_URL=clickhouse://default:${CLICKHOUSE_PASSWORD}@clickhouse:9000
       - CLICKHOUSE_URL=http://default:${CLICKHOUSE_PASSWORD}@clickhouse:8123
       - CLICKHOUSE_USER=default
@@ -376,10 +384,10 @@ services:
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY}
       - TELEMETRY_ENABLED=false
       - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=true
-      - LANGFUSE_INIT_ORG_ID=itsharness
-      - LANGFUSE_INIT_ORG_NAME=itsharness
-      - LANGFUSE_INIT_PROJECT_ID=itsharness-dev
-      - LANGFUSE_INIT_PROJECT_NAME=itsharness-dev
+      - LANGFUSE_INIT_ORG_ID=buildaharness
+      - LANGFUSE_INIT_ORG_NAME=buildaharness
+      - LANGFUSE_INIT_PROJECT_ID=buildaharness-dev
+      - LANGFUSE_INIT_PROJECT_NAME=buildaharness-dev
       - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
       - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_ADMIN_EMAIL}
@@ -423,7 +431,7 @@ services:
     image: langfuse/langfuse-worker:3
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://itsharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      - DATABASE_URL=postgresql://buildaharness:${POSTGRES_PASSWORD}@postgres:5432/langfuse
       - CLICKHOUSE_MIGRATION_URL=clickhouse://default:${CLICKHOUSE_PASSWORD}@clickhouse:9000
       - CLICKHOUSE_URL=http://default:${CLICKHOUSE_PASSWORD}@clickhouse:8123
       - CLICKHOUSE_USER=default

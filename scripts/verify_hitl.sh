@@ -60,7 +60,7 @@ _section() {
 # ── Header ────────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — HITL regression verification"
+echo "  buildaharness — HITL regression verification"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  Adapter:        $BASE_URL"
@@ -85,20 +85,20 @@ fi
 CREDS_JSON=$(python3 -c "import json; print(json.dumps({'email': '$EMAIL', 'password': '$PASSWORD'}))")
 
 echo "  Signing in..."
-LOGIN_HTTP=$(curl -s -o /tmp/_itsharness_hitl_body.json -w "%{http_code}" \
+LOGIN_HTTP=$(curl -s -o /tmp/_buildaharness_hitl_body.json -w "%{http_code}" \
   -X POST "$BASE_URL/auth/login" \
   -H "$CONTENT_HEADER" -d "$CREDS_JSON")
-LOGIN_BODY=$(cat /tmp/_itsharness_hitl_body.json)
+LOGIN_BODY=$(cat /tmp/_buildaharness_hitl_body.json)
 
 if [[ "$LOGIN_HTTP" == "200" ]]; then
   TOKEN=$(echo "$LOGIN_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
   echo "  ✓  Logged in."
 elif [[ "$LOGIN_HTTP" == "401" ]]; then
   echo "  Account not found, creating..."
-  REG_HTTP=$(curl -s -o /tmp/_itsharness_hitl_body.json -w "%{http_code}" \
+  REG_HTTP=$(curl -s -o /tmp/_buildaharness_hitl_body.json -w "%{http_code}" \
     -X POST "$BASE_URL/auth/register" \
     -H "$CONTENT_HEADER" -d "$CREDS_JSON")
-  REG_BODY=$(cat /tmp/_itsharness_hitl_body.json)
+  REG_BODY=$(cat /tmp/_buildaharness_hitl_body.json)
   if [[ "$REG_HTTP" == "201" ]]; then
     TOKEN=$(echo "$REG_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
     echo "  ✓  Account created and logged in."
@@ -149,9 +149,9 @@ print(json.dumps({
 
 verify_hitl_runtime() {
   local RUNTIME="$1"
-  local TMP_BODY="/tmp/_itsharness_hitl_resp_${RUNTIME}.json"
-  local TMP_SUBMIT="/tmp/_itsharness_hitl_submit_${RUNTIME}.json"
-  local TMP_RESUME="/tmp/_itsharness_hitl_resume_${RUNTIME}.json"
+  local TMP_BODY="/tmp/_buildaharness_hitl_resp_${RUNTIME}.json"
+  local TMP_SUBMIT="/tmp/_buildaharness_hitl_submit_${RUNTIME}.json"
+  local TMP_RESUME="/tmp/_buildaharness_hitl_resume_${RUNTIME}.json"
 
   _section "Runtime: $RUNTIME"
 

@@ -1,5 +1,5 @@
 {
-  "name": "@itsharness/runtime",
+  "name": "@buildaharness/runtime",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -17,7 +17,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@itsharness/canvas": "*",
+    "@buildaharness/canvas": "*",
     "@types/node": "^20.14.0",
     "typescript": "^5.4.5",
     "vite": "^5.3.4",

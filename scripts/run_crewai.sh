@@ -29,7 +29,7 @@ CONTENT_HEADER="Content-Type: application/json"
 # ── 1. Credentials prompt ─────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — CrewAI runner"
+echo "  buildaharness — CrewAI runner"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 printf "  Email:    "
@@ -49,11 +49,11 @@ CREDS_JSON=$(python3 -c "import json; print(json.dumps({'email': '$EMAIL', 'pass
 echo ""
 echo "  Signing in..."
 
-LOGIN_BODY=$(curl -s -o /tmp/_itsharness_body.json -w "%{http_code}" -X POST "$BASE_URL/auth/login" \
+LOGIN_BODY=$(curl -s -o /tmp/_buildaharness_body.json -w "%{http_code}" -X POST "$BASE_URL/auth/login" \
   -H "$CONTENT_HEADER" \
   -d "$CREDS_JSON")
 LOGIN_STATUS="$LOGIN_BODY"
-LOGIN_BODY=$(cat /tmp/_itsharness_body.json)
+LOGIN_BODY=$(cat /tmp/_buildaharness_body.json)
 
 if [[ "$LOGIN_STATUS" == "200" ]]; then
   TOKEN=$(echo "$LOGIN_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
@@ -63,10 +63,10 @@ elif [[ "$LOGIN_STATUS" == "401" ]]; then
   # User likely doesn't exist — try to register
   echo "  Account not found, creating..."
 
-  REGISTER_STATUS=$(curl -s -o /tmp/_itsharness_body.json -w "%{http_code}" -X POST "$BASE_URL/auth/register" \
+  REGISTER_STATUS=$(curl -s -o /tmp/_buildaharness_body.json -w "%{http_code}" -X POST "$BASE_URL/auth/register" \
     -H "$CONTENT_HEADER" \
     -d "$CREDS_JSON")
-  REGISTER_BODY=$(cat /tmp/_itsharness_body.json)
+  REGISTER_BODY=$(cat /tmp/_buildaharness_body.json)
 
   if [[ "$REGISTER_STATUS" == "201" ]]; then
     TOKEN=$(echo "$REGISTER_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")

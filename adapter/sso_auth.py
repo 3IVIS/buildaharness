@@ -1,5 +1,5 @@
 """
-itsharness — SSO / OIDC authentication  v0.1.0
+buildaharness — SSO / OIDC authentication  v0.1.0
 
 Adds enterprise single-sign-on alongside the existing password auth.
 Password login (/auth/login, /auth/register) remains fully functional for
@@ -19,7 +19,7 @@ Environment variables
 ─────────────────────
   OIDC_ENABLED            — "true" to enable SSO (default: false)
   OIDC_PROVIDER_NAME      — display name shown on the login button (default: "SSO")
-  OIDC_ISSUER_URL         — OIDC issuer base URL, e.g. https://keycloak.example.com/realms/itsharness
+  OIDC_ISSUER_URL         — OIDC issuer base URL, e.g. https://keycloak.example.com/realms/buildaharness
   OIDC_CLIENT_ID          — OAuth2 client ID
   OIDC_CLIENT_SECRET      — OAuth2 client secret
   OIDC_REDIRECT_URI       — full callback URL, e.g. https://app.example.com/auth/sso/callback
@@ -478,7 +478,7 @@ async def sso_callback(
       2. Exchange code for id_token + access_token.
       3. Fetch userinfo (group claims).
       4. Provision or retrieve the user + org membership.
-      5. Issue an itsharness JWT + refresh token.
+      5. Issue an buildaharness JWT + refresh token.
     """
     _require_oidc()
 
@@ -537,7 +537,7 @@ async def sso_callback(
     # Provision or retrieve user.
     user = await _provision_user(email, sub, name, merged_claims, db)
 
-    # Issue itsharness JWT.
+    # Issue buildaharness JWT.
     jwt_token, jti = _make_token(str(user.id), user.email)
 
     # Issue refresh token.

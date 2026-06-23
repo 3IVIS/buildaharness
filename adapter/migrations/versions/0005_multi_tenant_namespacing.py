@@ -146,7 +146,7 @@ def upgrade() -> None:
     #
     # This runs inside the Alembic transaction so it's atomic with the schema
     # changes above.  On a large dataset a separate migration step or a
-    # background job would be preferable; for the typical itsharness install
+    # background job would be preferable; for the typical buildaharness install
     # (tens to hundreds of users) this is fine inline.
 
     conn = op.get_bind()

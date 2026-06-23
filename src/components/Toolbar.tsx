@@ -217,7 +217,7 @@ export function Toolbar() {
   return (
     <>
       <div className="toolbar">
-        <span className="toolbar__logo">itsharness</span>
+        <span className="toolbar__logo">buildaharness</span>
         <div className="toolbar__divider" />
 
         <input

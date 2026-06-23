@@ -2,8 +2,8 @@
  * Auth store — JWT management.
  *
  * Fix #11: The token is now stored in ONE place only: the Zustand persist blob
- * ('itsharness:auth'). The old pattern wrote it to BOTH 'itsharness:auth' AND
- * 'itsharness:token', creating two sources of truth with potential divergence
+ * ('buildaharness:auth'). The old pattern wrote it to BOTH 'buildaharness:auth' AND
+ * 'buildaharness:token', creating two sources of truth with potential divergence
  * after a crash or logout race.
  *
  * api.ts reads the token from this store's in-memory state directly via
@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name:       'itsharness:auth',
+      name:       'buildaharness:auth',
       storage:    createJSONStorage(() => localStorage),
       partialize: (s) => ({ token: s.token, userId: s.userId, email: s.email }),
     },

@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures for the itsharness adapter test suite.
+Shared pytest fixtures for the buildaharness adapter test suite.
 
 Uses an in-memory SQLite database so no Postgres is required in CI.
 JWT_SECRET and DATABASE_URL are set before any adapter module is imported

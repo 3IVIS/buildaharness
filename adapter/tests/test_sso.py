@@ -47,11 +47,11 @@ FAKE_DISCOVERY = {
 
 FAKE_OIDC_ENV = {
     "OIDC_ENABLED": "true",
-    "OIDC_ISSUER_URL": "https://keycloak.example.com/realms/itsharness",
-    "OIDC_CLIENT_ID": "itsharness",
+    "OIDC_ISSUER_URL": "https://keycloak.example.com/realms/buildaharness",
+    "OIDC_CLIENT_ID": "buildaharness",
     "OIDC_CLIENT_SECRET": "secret",
     "OIDC_REDIRECT_URI": "https://app.example.com/auth/sso/callback",
-    "OIDC_ADMIN_GROUPS": "itsharness-admins",
+    "OIDC_ADMIN_GROUPS": "buildaharness-admins",
     "OIDC_GROUP_CLAIM": "groups",
     "SCIM_BEARER_TOKEN": "test-scim-token",
 }
@@ -98,7 +98,7 @@ async def test_sso_login_disabled_returns_404(client):
 async def test_sso_login_redirects_to_provider(client):
     with (
         patch.object(sso_auth, "OIDC_ENABLED", True),
-        patch.object(sso_auth, "OIDC_CLIENT_ID", "itsharness"),
+        patch.object(sso_auth, "OIDC_CLIENT_ID", "buildaharness"),
         patch.object(sso_auth, "OIDC_CLIENT_SECRET", "secret"),
         patch.object(sso_auth, "OIDC_ISSUER_URL", "https://kc.example.com"),
         patch.object(sso_auth, "_get_discovery", AsyncMock(return_value=FAKE_DISCOVERY)),
@@ -107,7 +107,7 @@ async def test_sso_login_redirects_to_provider(client):
     assert r.status_code == 302
     location = r.headers["location"]
     assert "keycloak.example.com/auth" in location
-    assert "client_id=itsharness" in location
+    assert "client_id=buildaharness" in location
     assert "response_type=code" in location
     assert "state=" in location
 
@@ -126,7 +126,7 @@ def _patch_sso_callback(claims: dict, userinfo: dict | None = None):
     }
     return (
         patch.object(sso_auth, "OIDC_ENABLED", True),
-        patch.object(sso_auth, "OIDC_CLIENT_ID", "itsharness"),
+        patch.object(sso_auth, "OIDC_CLIENT_ID", "buildaharness"),
         patch.object(sso_auth, "OIDC_CLIENT_SECRET", "secret"),
         patch.object(sso_auth, "OIDC_ISSUER_URL", "https://kc.example.com"),
         patch.object(sso_auth, "OIDC_REDIRECT_URI", "https://app.example.com/callback"),
@@ -209,7 +209,7 @@ async def test_sso_callback_group_maps_to_admin_role(client):
     claims = {
         "sub": "admin-sub",
         "email": "carol@corp.com",
-        "groups": ["itsharness-admins", "other-group"],
+        "groups": ["buildaharness-admins", "other-group"],
         "org": "acme",
     }
     patches = _patch_sso_callback(claims)
@@ -224,7 +224,7 @@ async def test_sso_callback_group_maps_to_admin_role(client):
         patches[7],
         patches[8],
         patches[9],
-        patch.object(sso_auth, "OIDC_ADMIN_GROUPS", {"itsharness-admins"}),
+        patch.object(sso_auth, "OIDC_ADMIN_GROUPS", {"buildaharness-admins"}),
         patch.object(sso_auth, "OIDC_ORG_SLUG_CLAIM", "org"),
     ):
         r = await client.get("/auth/sso/callback?code=authcode&state=teststate")

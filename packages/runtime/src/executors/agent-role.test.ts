@@ -3,7 +3,7 @@ import { agentRoleExecutor } from './agent-role'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
 import type { ILLMClient, ChatMessage, ChatOptions, LLMStructuredResponse, ToolDefinition } from '../llm-client'
-import type { AgentDef } from '@itsharness/canvas'
+import type { AgentDef } from '@buildaharness/canvas'
 import { ToolRegistry } from '../tools/registry'
 import { FlowExecutionError } from '../errors'
 

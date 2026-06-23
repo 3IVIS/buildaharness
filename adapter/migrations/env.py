@@ -1,5 +1,5 @@
 """
-Alembic environment for itsharness adapter.
+Alembic environment for buildaharness adapter.
 
 Uses SQLAlchemy async engine (asyncpg in production, aiosqlite in tests).
 DATABASE_URL is read from the environment — it must already be set before

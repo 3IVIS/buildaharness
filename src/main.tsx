@@ -7,7 +7,7 @@ import { App } from './App'
 import { initLangfuse } from './services/langfuse'
 
 // §10 — Apply saved theme before React mounts to avoid first-frame flash.
-const _theme = localStorage.getItem('itsharness:theme') ?? 'dark'
+const _theme = localStorage.getItem('buildaharness:theme') ?? 'dark'
 document.documentElement.setAttribute('data-theme', _theme)
 
 // Initialise Langfuse canvas event tracking.

@@ -18,7 +18,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      name: 'ItsHarnessCanvas',
+      name: 'BuildAHarnessCanvas',
       // vite generates both ESM (.js) and CJS (.cjs) from these formats.
       formats: ['es', 'cjs'],
       fileName: (format) => (format === 'es' ? 'index.js' : 'index.cjs'),

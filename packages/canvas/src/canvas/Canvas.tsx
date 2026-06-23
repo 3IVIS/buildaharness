@@ -217,7 +217,7 @@ function DnDHandler({ addNode }: { addNode: (type: NodeType, pos: { x: number; y
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    const type = e.dataTransfer.getData('application/itsharness-node')
+    const type = e.dataTransfer.getData('application/buildaharness-node')
     if (!type) return
     const position = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     addNode(type as NodeType, position)

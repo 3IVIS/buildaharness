@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useHarness } from '@itsharness/react'
+import { useHarness } from '@buildaharness/react'
 
 const PROXY_URL = import.meta.env.VITE_PROXY_URL ?? 'http://localhost:3001'
 const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN ?? ''
@@ -55,7 +55,7 @@ export default function App() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.heading}>ItsHarness Chat</h1>
+      <h1 style={styles.heading}>BuildAHarness Chat</h1>
 
       {/* Streaming output */}
       <div style={styles.outputBox} ref={outputRef} data-testid="output-box">

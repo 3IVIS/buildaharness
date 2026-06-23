@@ -73,6 +73,20 @@ class Task:
             completed_evidence=d.get("completed_evidence", []),
         )
 
+    def to_plan_task(self) -> dict[str, Any]:
+        """Plan-facing repr — omits completed_evidence and assigned_strategy."""
+        return {
+            "id": self.id,
+            "title": self.description.split(".")[0],
+            "description": self.description,
+            "depends_on": list(self.depends_on),
+            "risk_level": self.risk_level,
+            "abstraction_level": self.abstraction_level,
+            "parallel_write_domains": list(self.parallel_write_domains),
+            "status": self.status,
+            "block_reason": self.block_reason,
+        }
+
 
 @dataclass
 class TaskGraph:
@@ -115,6 +129,16 @@ class TaskGraph:
             tasks=[Task.from_dict(t) for t in d.get("tasks", [])],
             changed=d.get("changed", False),
         )
+
+    def to_plan(self, base_name: str = "") -> dict[str, Any]:
+        """Snapshot-compatible dict. Does NOT touch to_dict() (Postgres path)."""
+        tasks = self.tasks
+        complete = sum(1 for t in tasks if t.status == "COMPLETE")
+        return {
+            "name": base_name,
+            "completion_pct": round(100 * complete / len(tasks), 1) if tasks else 0.0,
+            "task_statuses": [{"id": t.id, "status": t.status, "block_reason": t.block_reason} for t in tasks],
+        }
 
 
 # ── P4.1 — Graph operations ───────────────────────────────────────────────────

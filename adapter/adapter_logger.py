@@ -1,5 +1,5 @@
 """
-adapter_logger.py — shared structured logging for all itsharness adapters.
+adapter_logger.py — shared structured logging for all buildaharness adapters.
 
 Usage (in each adapter):
     from adapter_logger import get_adapter_logger, log_compile_start, log_compile_end

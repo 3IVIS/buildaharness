@@ -8,8 +8,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@itsharness/runtime': resolve(__dirname, '../runtime/src/index.ts'),
-      '@itsharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
+      '@buildaharness/runtime': resolve(__dirname, '../runtime/src/index.ts'),
+      '@buildaharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
     },
   },
 })

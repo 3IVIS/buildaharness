@@ -8,5 +8,5 @@ import app from './index'
 const port = parseInt(process.env.PORT ?? '3001', 10)
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`itsharness-proxy listening on http://localhost:${info.port}`)
+  console.log(`buildaharness-proxy listening on http://localhost:${info.port}`)
 })

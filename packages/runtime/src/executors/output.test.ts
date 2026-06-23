@@ -4,7 +4,7 @@ import { FlowState } from '../state'
 import { EventBus } from '../events'
 import { createExecutionContext } from '../context'
 import type { ILLMClient } from '../llm-client'
-import type { OutputNode } from '@itsharness/canvas'
+import type { OutputNode } from '@buildaharness/canvas'
 
 function mockLLMClient(): ILLMClient {
   return {

@@ -2,16 +2,16 @@
 
 ## Overview
 
-itsharness is a harness for building AI agent workflows. The core idea is a **neutral intermediate representation** (the FlowSpec) that decouples authoring from execution. The canvas authors specs; adapters compile them; the adapter API executes and observes them.
+buildaharness is a harness for building AI agent workflows. The core idea is a **neutral intermediate representation** (the FlowSpec) that decouples authoring from execution. The canvas authors specs; adapters compile them; the adapter API executes and observes them.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Canvas  (React + XYFlow)                                   │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │  Node graph  │  │  Config      │  │  Sidebar           │  │
-│  │  23 types    │  │  panels      │  │  Library / Mkt    │  │
+│  │  26 types    │  │  panels      │  │  Library / Mkt    │  │
 │  │  (14 base +  │  │  + Harness   │  │                   │  │
-│  │   9 harness) │  │  Diagnostics │  │                   │  │
+│  │   12 harness) │  │  Diagnostics │  │                   │  │
 │  └──────┬──────┘  └──────────────┘  └───────────────────┘  │
 │         │ FlowSpec (JSON, v1.0.0)                            │
 └─────────┼───────────────────────────────────────────────────┘
@@ -48,7 +48,7 @@ itsharness is a harness for building AI agent workflows. The core idea is a **ne
 |---|---|---|---|
 | `canvas` | Dockerfile.canvas | 3000 | React + Vite dev / nginx prod |
 | `adapter` | Dockerfile.adapter | 8000 | FastAPI — compile, run, deploy, auth |
-| `mastra-runner` | mastra-runner/Dockerfile | 4000 | Node.js sidecar — Mastra execution sandbox |
+| `mastra-runner` | mastra-runner/Dockerfile | 8001 | Node.js sidecar — Mastra execution sandbox |
 | `postgres` | postgres:15 | 5432 | Primary DB — flows, jobs, teams, orgs |
 | `redis` | redis:7 | 6379 | JWT blocklist (DB 1) + Langfuse BullMQ (DB 0) |
 | `clickhouse` | clickhouse/clickhouse-server:24.3 | 8123 | Langfuse trace + analytics storage |
@@ -147,12 +147,12 @@ Canvas.tsx
   └── CollabCursors — peer cursor overlays (absolute-positioned over ReactFlow)
 ```
 
-## The `@itsharness/canvas` package
+## The `@buildaharness/canvas` package
 
-The embeddable package uses a **context-scoped store** rather than a module-level singleton, making it safe to mount multiple `<ItsHarnessCanvas>` instances on one page. The pattern:
+The embeddable package uses a **context-scoped store** rather than a module-level singleton, making it safe to mount multiple `<BuildAHarnessCanvas>` instances on one page. The pattern:
 
 ```
-ItsHarnessCanvas
+BuildAHarnessCanvas
   └── CanvasStoreProvider (React context)
         └── createStore() — fresh Zustand store per mount
               └── ReactFlow + all nodes/edges/components
@@ -166,9 +166,10 @@ The harness layer (`adapter/harness/`) is the reasoning and control architecture
 
 ### 11-layer architecture
 
+The 11 fundamental layers are the core reasoning and control design. Five additional supporting modules were introduced in later phases and are listed separately below.
+
 | Layer | Module(s) | Responsibility |
 |---|---|---|
-| Caller State | `caller_state.py` | `CallerState` — mutable constraints, clarification history, success criteria, constraint-change propagation |
 | World Model | `world_model.py`, `world_model_ops.py`, `staleness.py` | Typed beliefs and observations with `generation_id` staleness tracking; `integrate_evidence()` enforces observation/conclusion separation |
 | Evidence & Reasoning | `evidence.py`, `tool_reliability.py`, `tool_manifest.py` | Evidence store, reliability envelopes that cap conclusion reliability per tool type, tool availability manifest |
 | Hypothesis | `hypothesis.py` | 4-source generation (symptom, counterfactual, failure library, analogy), Shannon entropy diversity enforcement (threshold 0.7), K-retention elimination |
@@ -179,9 +180,15 @@ The harness layer (`adapter/harness/`) is the reasoning and control architecture
 | Execution | `execution.py`, `voi.py`, `risk.py`, `review_gate.py` | VOI-gated evidence gathering, risk estimation, reversibility strategies, pre-execution review gate |
 | Verification | `verification.py` | 9-layer verification (including adversarial pass for HIGH risk actions) |
 | Recovery | `recovery.py`, `replanning.py`, `progress.py`, `failure_modes.py`, `memory.py` | Named strategies (DIRECT_EDIT → TRACE_EXEC → ...), stall detection, global/local replanning, context compression with dependency-risk tracking |
+| Reviewer Pass | `reviewer.py` | 3-lens review (consistency, adversarial, abstraction fit); adversarial prior discarded after use (INV-09) |
+
+**Supporting modules (added in later phases)**
+
+| Module | Module(s) | Responsibility |
+|---|---|---|
+| Caller State | `caller_state.py` | `CallerState` — mutable constraints, clarification history, success criteria, constraint-change propagation |
 | Caller Updates & Escalation | `external_updates.py`, `constraint_propagation.py`, `escalation.py` | PostgreSQL NOTIFY channel for live constraint changes, `surface_blocker` escalation to HITL |
 | Experience Store | `experience_store.py` | Cross-run learning via softmax strategy weights; warm start from prior decompositions; no-op when absent |
-| Reviewer Pass | `reviewer.py` | 3-lens review (consistency, adversarial, abstraction fit); adversarial prior discarded after use (INV-09) |
 | Process Concepts | `process_concept.py`, `process_registry.py`, `process_tools.py` | Static task graph templates that seed planning without locking it; agent-callable `list_processes()`, `load_process()`, `get_current_step()`, `complete_step()` |
 | Output Contract | `output_contract.py` | 4-check validation: format requirements, required sections, interface constraints, caller-specific constraints |
 
@@ -200,7 +207,17 @@ Ten invariants are permanently enforced by `adapter/tests/test_harness_invariant
 - **INV-09** `adversarial_prior` is discarded after `adversarial_lens()` completes and never persists.
 - **INV-10** All code paths that use `experience_store` guard with `experience_store.available`; the agent runs identically without it.
 
-### Harness canvas nodes (9 types, added in Phase 10)
+### Harness canvas nodes (12 types)
+
+Three harness node types were added in Phase 1 alongside the core reasoning layers:
+
+| Node type | Backend compiler |
+|---|---|
+| `gather_evidence` | `compile_gather_evidence` |
+| `apply_tool_reliability` | `compile_apply_tool_reliability` |
+| `update_world_model` | `compile_update_world_model` |
+
+Nine additional harness node types were added in Phase 10 as first-class canvas nodes with config classes:
 
 | Node type | Config class | Backend compiler |
 |---|---|---|
@@ -213,7 +230,8 @@ Ten invariants are permanently enforced by `adapter/tests/test_harness_invariant
 | `evidence_store_node` | `EvidenceStoreNodeConfig` | `compile_evidence_store_node` |
 | `experience_store_node` | `ExperienceStoreNodeConfig` | `compile_experience_store_node` |
 | `reviewer_pass_node` | `ReviewerPassNodeConfig` | `compile_reviewer_pass_node` |
-| `process_concept_node` | `ProcessConceptNodeConfig` | `compile_process_concept_node` |
+
+`process_concept` is registered in `HARNESS_NODE_COMPILERS` as a compiler-only entry (no canvas schema node type); it is invoked by the harness loop directly rather than authored as a canvas node.
 
 The `DiagnosticsPanel` (`src/components/panels/DiagnosticsPanel.tsx`) renders all 10 sub-dimensions as `[0,1]` bar charts during live runs.
 
@@ -244,29 +262,29 @@ POST /{job_id}/escalation/respond   Respond to a surface_blocker escalation
 
 ## npm packages
 
-In addition to the server-side adapter, itsharness ships five npm packages:
+In addition to the server-side adapter, buildaharness ships five npm packages:
 
 | Package | Purpose |
 |---|---|
-| `@itsharness/canvas` | Embeddable React canvas component (context-scoped store) |
-| `@itsharness/harness` | TypeScript types and node implementations for the harness state structures |
-| `@itsharness/runtime` | Framework-agnostic TypeScript runtime — executes FlowSpec flows without a server |
-| `@itsharness/react` | React hook (`useHarness`) for embedding runtime-driven flows in React apps |
-| `@itsharness/proxy` | LLM proxy that keeps API keys server-side — ships as a Cloudflare Worker or Docker service |
+| `@buildaharness/canvas` | Embeddable React canvas component (context-scoped store) |
+| `@buildaharness/harness` | TypeScript types and node implementations for the harness state structures |
+| `@buildaharness/runtime` | Framework-agnostic TypeScript runtime — executes FlowSpec flows without a server |
+| `@buildaharness/react` | React hook (`useHarness`) for embedding runtime-driven flows in React apps |
+| `@buildaharness/proxy` | LLM proxy that keeps API keys server-side — ships as a Cloudflare Worker or Docker service |
 
-### `@itsharness/harness`
+### `@buildaharness/harness`
 
 TypeScript mirror of the Python harness state layer. Provides typed interfaces for `WorldModel`, `HypothesisSet`, `ControlState`, `TaskGraph`, `EvidenceStore`, `ExperienceStore`, `CallerState`, `OutputContract`, and all associated sub-structures. Also includes the full set of harness node implementations (e.g. `gather-evidence`, `detect-contradictions`, `resolve-control-state`, `execute`, `verify`, `reviewer-pass`).
 
-### `@itsharness/runtime`
+### `@buildaharness/runtime`
 
 Executes FlowSpec flows client-side or in a Node.js process without needing the adapter server. All 14 base node types have executors. Useful for testing flows in CI without a running stack, or for embedding flows in desktop/Electron apps.
 
-### `@itsharness/react`
+### `@buildaharness/react`
 
-`useHarness(flowSpec, input)` hook that wraps `@itsharness/runtime`. Returns `{ status, result, nodeEvents, resume }`.
+`useHarness(flowSpec, input)` hook that wraps `@buildaharness/runtime`. Returns `{ status, result, nodeEvents, resume }`.
 
-### `@itsharness/proxy`
+### `@buildaharness/proxy`
 
 Thin Hono server that issues short-lived JWTs and forwards LLM requests to Anthropic or OpenAI, keeping API keys off the client. Deploys to Cloudflare Workers or Docker. See `packages/proxy/README.md` and `docs/env-vars.md`.
 
@@ -281,5 +299,11 @@ Thin Hono server that issues short-lived JWTs and forwards LLM requests to Anthr
 **Langfuse (MIT, self-hosted) over LangSmith.** LangSmith is proprietary SaaS. Langfuse is MIT, self-hostable, OTel-compatible. The Python SDK v4 uses OTel as its native transport, making per-node child spans straightforward via `contextvars.copy_context().run()`.
 
 **ADR-001 as the spec-to-adapter contract.** Four field semantics were left open during spec design. Closing them via ADR means zero breaking changes and a permanent reference for future adapter authors.
+
+## Further reading
+
+- [flowspec.md](./flowspec.md) — complete FlowSpec v1.0.0 field-by-field reference for all 26 node types
+- [env-vars.md](./env-vars.md) — all environment variables across all services
+- [qdrant.md](./qdrant.md) — Qdrant vector store setup, seeding, and production deployment
 
 **`fn_ref` allowlist over sandboxing.** Generated code is exec'd directly. Full sandboxing is complex and escape-prone. Validating `fn_ref` values at every entry point before any codegen or exec() call is simpler, auditable, and effective.

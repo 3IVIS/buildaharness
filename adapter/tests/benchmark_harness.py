@@ -202,7 +202,7 @@ def _fmt(mean: float, min_: float, max_: float, target: float | None = None) -> 
 
 def run_benchmarks() -> dict[str, tuple[float, float, float]]:
     print(f"\n{'─' * 60}")
-    print(f"  Its Harness — Performance Benchmarks  (n={N_RUNS} runs)")
+    print(f"  Build A Harness — Performance Benchmarks  (n={N_RUNS} runs)")
     print(f"{'─' * 60}")
 
     results = {}

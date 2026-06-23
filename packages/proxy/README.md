@@ -1,4 +1,4 @@
-# @itsharness/proxy
+# @buildaharness/proxy
 
 LLM proxy that keeps API keys server-side. Ships as both a **Cloudflare Worker** (zero-infrastructure deploy) and a **Node.js/Docker service** (self-hosted).
 
@@ -53,7 +53,7 @@ zone_name = "yourdomain.com"
 
 ```bash
 # Build
-docker build -t itsharness-proxy .
+docker build -t buildaharness-proxy .
 
 # Run (all secrets passed as env vars — never bake them into the image)
 docker run -p 3001:3001 \
@@ -61,7 +61,7 @@ docker run -p 3001:3001 \
   -e OPENAI_API_KEY=sk-... \
   -e PROXY_SECRET=your-secret \
   -e ALLOWED_ORIGIN=http://localhost:5173 \
-  itsharness-proxy
+  buildaharness-proxy
 ```
 
 ### docker-compose (proxy + static React app)

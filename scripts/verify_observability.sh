@@ -47,6 +47,25 @@ fi
 LANGFUSE_PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-}"
 LANGFUSE_SECRET_KEY="${LANGFUSE_SECRET_KEY:-}"
 
+# Resolve the model name the adapter will accept at its OPENAI_BASE_URL.
+# Inside Docker the adapter routes through LiteLLM (http://litellm:4000), which
+# requires the alias without the Ollama tag (e.g. "mistral" not "mistral:latest").
+_env_val() {
+  local key="$1" default="${2:-}"
+  local val="${!key:-}"
+  if [[ -z "$val" && -f ".env" ]]; then
+    val=$(grep -E "^${key}=" .env | head -1 | cut -d= -f2-)
+  fi
+  echo "${val:-$default}"
+}
+_OPENAI_BASE_URL=$(_env_val OPENAI_BASE_URL "http://litellm:4000")
+_RAW_MODEL=$(python3 -c "import json; s=json.load(open('$SPEC_FILE')); print(s.get('model_defaults',{}).get('model','mistral:latest'))" 2>/dev/null || echo "mistral:latest")
+if echo "$_OPENAI_BASE_URL" | grep -qE "11434|ollama"; then
+  _FLOW_MODEL="$_RAW_MODEL"        # adapter → Ollama direct: use full tag
+else
+  _FLOW_MODEL="${_RAW_MODEL%%:*}"  # adapter → LiteLLM: strip :tag to get alias
+fi
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 PASS=0
 FAIL=0
@@ -58,7 +77,7 @@ record_fail() { FAIL=$((FAIL+1)); RESULTS+=("FAIL  $1"); }
 # ── Preflight ─────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — Observability (Langfuse) verification"
+echo "  buildaharness — Observability (Langfuse) verification"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  Adapter:   $BASE_URL"
@@ -105,20 +124,20 @@ fi
 CREDS_JSON=$(python3 -c "import json; print(json.dumps({'email': '$EMAIL', 'password': '$PASSWORD'}))")
 
 echo "  Signing in..."
-LOGIN_HTTP=$(curl -s -o /tmp/_itsharness_obs_body.json -w "%{http_code}" \
+LOGIN_HTTP=$(curl -s -o /tmp/_buildaharness_obs_body.json -w "%{http_code}" \
   -X POST "$BASE_URL/auth/login" \
   -H "$CONTENT_HEADER" -d "$CREDS_JSON")
-LOGIN_BODY=$(cat /tmp/_itsharness_obs_body.json)
+LOGIN_BODY=$(cat /tmp/_buildaharness_obs_body.json)
 
 if [[ "$LOGIN_HTTP" == "200" ]]; then
   TOKEN=$(echo "$LOGIN_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
   echo "  ✓  Logged in."
 elif [[ "$LOGIN_HTTP" == "401" ]]; then
   echo "  Account not found, creating..."
-  REG_HTTP=$(curl -s -o /tmp/_itsharness_obs_body.json -w "%{http_code}" \
+  REG_HTTP=$(curl -s -o /tmp/_buildaharness_obs_body.json -w "%{http_code}" \
     -X POST "$BASE_URL/auth/register" \
     -H "$CONTENT_HEADER" -d "$CREDS_JSON")
-  REG_BODY=$(cat /tmp/_itsharness_obs_body.json)
+  REG_BODY=$(cat /tmp/_buildaharness_obs_body.json)
   if [[ "$REG_HTTP" == "201" ]]; then
     TOKEN=$(echo "$REG_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
     echo "  ✓  Account created and logged in."
@@ -139,19 +158,30 @@ AUTH_HEADER="Authorization: Bearer $TOKEN"
 verify_runtime() {
   local RUNTIME="$1"
   # Unique temp files per call to avoid cross-runtime contamination.
-  local TMP_SUBMIT="/tmp/_itsharness_obs_submit_${RUNTIME}.json"
-  local TMP_LF="/tmp/_itsharness_obs_lf_${RUNTIME}.json"
+  local TMP_SUBMIT="/tmp/_buildaharness_obs_submit_${RUNTIME}.json"
+  local TMP_LF="/tmp/_buildaharness_obs_lf_${RUNTIME}.json"
 
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "  Runtime: $RUNTIME"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-  # 1. Submit job
-  local SUBMIT_RESPONSE
+  # 1. Submit job — patch model name to match LiteLLM alias (strips :tag when routing via LiteLLM)
+  local SUBMIT_PAYLOAD SUBMIT_RESPONSE
+  SUBMIT_PAYLOAD=$(python3 -c "
+import json, sys
+model = sys.argv[1]
+with open(sys.argv[2]) as f:
+    spec = json.load(f)
+spec.setdefault('model_defaults', {})['model'] = model
+for node in spec.get('nodes', []):
+    if node.get('type') in ('llm_call', 'agent_role') and node.get('model'):
+        node['model'] = model
+print(json.dumps({'spec': spec, 'inputs': {'topic': 'observability testing'}}))
+" "$_FLOW_MODEL" "$SPEC_FILE")
   SUBMIT_RESPONSE=$(curl -s -X POST "$BASE_URL/run?runtime=$RUNTIME" \
     -H "$AUTH_HEADER" -H "$CONTENT_HEADER" \
-    -d "{\"spec\": $(cat "$SPEC_FILE"), \"inputs\": {\"topic\": \"observability testing\"}}")
+    -d "$SUBMIT_PAYLOAD")
 
   local JOB_ID
   JOB_ID=$(echo "$SUBMIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['job_id'])" 2>/dev/null || echo "")
@@ -225,8 +255,8 @@ verify_runtime() {
   if curl -s -o "$TMP_LF" -w "%{http_code}" \
        -u "${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}" \
        "$LANGFUSE_BASE_URL/api/public/traces/$TRACE_ID" \
-       > /tmp/_itsharness_obs_http_"${RUNTIME}".txt 2>/dev/null; then
-    LF_HTTP_CODE=$(cat /tmp/_itsharness_obs_http_"${RUNTIME}".txt)
+       > /tmp/_buildaharness_obs_http_"${RUNTIME}".txt 2>/dev/null; then
+    LF_HTTP_CODE=$(cat /tmp/_buildaharness_obs_http_"${RUNTIME}".txt)
   else
     LF_HTTP_CODE="000"
   fi

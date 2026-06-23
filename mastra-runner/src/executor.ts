@@ -126,6 +126,7 @@ function makeContext(
         NODE_ENV:          process.env.NODE_ENV           ?? "production",
         QDRANT_URL:        process.env.QDRANT_URL         ?? "http://qdrant:6333",
         EMBED_BASE_URL:    process.env.EMBED_BASE_URL     ?? "",
+        ADAPTER_URL:       process.env.ADAPTER_URL        ?? "http://adapter:8000",
       },
     },
     fetch,
@@ -190,7 +191,7 @@ async function linker(
 /**
  * Execute a compiled Mastra workflow.
  *
- * @param job_id      - The itsharness job ID (matches the Postgres jobs row).
+ * @param job_id      - The buildaharness job ID (matches the Postgres jobs row).
  * @param code        - Compiled JavaScript (ESM) — output of esbuild on mastra_adapter output.
  * @param triggerData - The initial workflow trigger payload.
  */
@@ -205,7 +206,7 @@ export async function executeWorkflow(
   //   1. Intercept createStep to add __emitNodeEvent__ hooks.
   //   2. Expose the workflow name so we can call it after evaluation.
   const wrapped = `
-// ── itsharness runner instrumentation ──────────────────────────────────────
+// ── buildaharness runner instrumentation ──────────────────────────────────────
 import { createStep as __origCreateStep, createWorkflow as __origCreateWorkflow } from '@mastra/core'
 
 const __allWorkflows__ = new Map()
@@ -244,7 +245,7 @@ export { __allWorkflows__ }
   // are handled by the linker callback, not Node's real module loader.
   const module = new vm.SourceTextModule(wrapped, {
     context: ctx,
-    identifier: `itsharness:job:${job_id}`,
+    identifier: `buildaharness:job:${job_id}`,
   });
 
   await module.link(linker);
@@ -328,6 +329,17 @@ export { __allWorkflows__ }
       resume_schema_fields: resumeSchemaFields,
     }, { run, stepId: firstSuspendedId });
   } else {
-    jobStore.complete(job_id, JSON.stringify(runResult.results ?? runResult, null, 2));
+    // Build a flat merged state from all step outputs so the Python adapter can
+    // read coach_response, session_stage, etc. directly — the same shape that
+    // LangGraph returns as its accumulated TypedDict state.
+    const stepsMap = (runResult as any).steps as Record<string, unknown> | undefined ?? {};
+    let mergedState: Record<string, unknown> = { ...triggerData };
+    for (const stepResult of Object.values(stepsMap)) {
+      const output = (stepResult as any)?.output ?? stepResult;
+      if (output && typeof output === "object" && !Array.isArray(output)) {
+        Object.assign(mergedState, output);
+      }
+    }
+    jobStore.complete(job_id, JSON.stringify(mergedState, null, 2));
   }
 }

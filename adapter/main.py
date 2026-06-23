@@ -1,5 +1,5 @@
 """
-itsharness — adapter server  v0.7.0  (Phase 3 complete)
+buildaharness — adapter server  v0.7.0  (Phase 3 complete)
 
 Endpoints
   GET  /health                → adapter status
@@ -116,10 +116,10 @@ if _startup_errors:
 for _opt_var in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
     _opt_val = os.getenv(_opt_var, "")
     if not _opt_val:
-        print(f"[itsharness] WARNING: {_opt_var} not set — Langfuse tracing disabled.", file=sys.stderr)
+        print(f"[buildaharness] WARNING: {_opt_var} not set — Langfuse tracing disabled.", file=sys.stderr)
     elif _is_insecure(_opt_val):
         print(
-            f"[itsharness] WARNING: {_opt_var} is still at its placeholder value. "
+            f"[buildaharness] WARNING: {_opt_var} is still at its placeholder value. "
             "Langfuse will boot with a publicly-known key — replace it before exposing "
             "this stack to the network.",
             file=sys.stderr,
@@ -147,6 +147,14 @@ from mastra_adapter import compile_mastra  # noqa: E402
 from org_context import Org  # noqa: E402
 from org_context import current_org as _current_org_dep  # noqa: E402
 from orgs_api import router as orgs_router  # noqa: E402
+
+try:
+    from planner_api import router as planner_router
+
+    _planner_available = True
+except ImportError:
+    planner_router = None  # type: ignore[assignment]
+    _planner_available = False
 from prompt_resolver import resolve_prompts  # noqa: E402
 from prompts_api import router as prompts_router  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -168,7 +176,7 @@ async def lifespan(app: FastAPI):
         await close_pool()
 
 
-app = FastAPI(title="itsharness-adapter", version="0.7.0", lifespan=lifespan)
+app = FastAPI(title="buildaharness-adapter", version="0.7.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
@@ -241,6 +249,8 @@ app.include_router(deploy_wk_router)
 app.include_router(deploy_share_router)
 app.include_router(deploy_invoke_router)
 app.include_router(marketplace_router)
+if _planner_available:
+    app.include_router(planner_router)
 app.include_router(orgs_router)
 
 
@@ -270,7 +280,7 @@ class CompileResponse(BaseModel):
 def health():
     return {
         "status": "ok",
-        "adapter": "itsharness",
+        "adapter": "buildaharness",
         "version": "0.7.0",
         "langfuse": os.getenv("LANGFUSE_BASE_URL", "http://langfuse:3000"),
     }

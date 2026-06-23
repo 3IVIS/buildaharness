@@ -100,7 +100,7 @@ fi
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — flow runner"
+echo "  buildaharness — flow runner"
 echo "  runtime : $RUNTIME"
 echo "  spec    : $SPEC_FILE"
 if [[ "$INPUTS_JSON" != "{}" ]]; then

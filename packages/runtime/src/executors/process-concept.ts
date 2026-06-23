@@ -1,4 +1,4 @@
-import type { Node } from '@itsharness/canvas'
+import type { Node } from '@buildaharness/canvas'
 import type { FlowState } from '../state'
 import type { ExecutionContext } from '../context'
 import type { ExecutorOutput } from './index'

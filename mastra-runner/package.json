@@ -1,7 +1,7 @@
 {
-  "name": "itsharness-mastra-runner",
+  "name": "buildaharness-mastra-runner",
   "version": "0.1.0",
-  "description": "Node.js execution sidecar for Mastra-compiled itsharness workflows",
+  "description": "Node.js execution sidecar for Mastra-compiled buildaharness workflows",
   "private": true,
   "type": "module",
   "main": "dist/server.js",

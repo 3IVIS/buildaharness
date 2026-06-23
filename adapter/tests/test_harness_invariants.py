@@ -477,3 +477,85 @@ def test_inv_10_run_one_iteration_identical_without_experience_store():
     )
     # Both must have the same escalated status
     assert result_with.get("escalated") == result_without.get("escalated")
+
+
+# ─── Plan-agent invariant smoke tests (Phase 4 hooks) ─────────────────────────
+
+
+def _make_minimal_plan_template() -> dict:
+    """Minimal 7-task problem_solving template for use in tests without installed plan files."""
+    tasks = [
+        {"id": f"t{i}", "title": f"Task {i}", "description": f"Step {i}.", "depends_on": [f"t{i - 1}"] if i > 1 else []}
+        for i in range(1, 8)
+    ]
+    return {
+        "name": "problem_solving",
+        "version": "1.0.0",
+        "success_criteria": "All steps completed.",
+        "tasks": tasks,
+    }
+
+
+def test_inv_plan_load_does_not_bypass_decomposition_gate():
+    """INV-PC-01: decomposition_gate() still runs when plan_name is set."""
+    import json
+    import tempfile
+
+    from harness.loop import initialize_harness
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_path = Path(tmpdir) / "problem_solving.json"
+        plan_path.write_text(json.dumps(_make_minimal_plan_template()))
+
+        tg = TaskGraph()
+        result = initialize_harness(
+            world_model=_make_world_model(),
+            diagnostics=_make_diagnostics(),
+            task_graph=tg,
+            plan_name="problem_solving",
+            plan_folder=Path(tmpdir),
+        )
+    # Tasks seeded from template before gate ran
+    assert len(tg.tasks) == 7, "problem_solving has 7 tasks"
+    # Gate result is present in return value (not bypassed)
+    assert "decomposition_gate" in result, "INV-PC-01: decomposition_gate key must be present"
+
+
+def test_inv_plan_export_never_raises():
+    """save_plan with an unwritable path returns False and does not raise."""
+    import json
+    import tempfile
+
+    from harness.plan_store import load_plan, plan_to_task_graph, save_plan
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        plan_path = Path(tmpdir) / "problem_solving.json"
+        plan_path.write_text(json.dumps(_make_minimal_plan_template()))
+        template = load_plan("problem_solving", Path(tmpdir))
+
+    tg, _ = plan_to_task_graph(template)
+    bad_dir = Path("/nonexistent_xyz_abc/snapshots")
+    # Must not raise — only return False
+    result = save_plan("inv-test", 1, tg, template, bad_dir)
+    assert result is False
+
+
+def test_inv_task_graph_to_dict_unchanged():
+    """to_dict() output is byte-identical before and after calling the new plan methods."""
+    import json
+
+    tg = TaskGraph(
+        tasks=[
+            Task(id="t1", description="Task 1", status="PENDING"),
+            Task(id="t2", description="Task 2", status="ACTIVE", depends_on=["t1"]),
+        ]
+    )
+    baseline = json.dumps(tg.to_dict(), sort_keys=True)
+
+    # Call new plan-facing methods — must not mutate internal state
+    _ = tg.to_plan(base_name="test")
+    _ = tg.tasks[0].to_plan_task()
+    _ = tg.tasks[1].to_plan_task()
+
+    after = json.dumps(tg.to_dict(), sort_keys=True)
+    assert baseline == after, "INV: to_plan()/to_plan_task() must not mutate task_graph state"

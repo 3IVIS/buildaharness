@@ -181,7 +181,7 @@ async def resolve_prompts(spec: dict, org: Org | None = None) -> dict:
             node["prompt_template"] = resolved
         except Exception as exc:
             print(
-                f"[itsharness] WARNING: prompt_resolver — "
+                f"[buildaharness] WARNING: prompt_resolver — "
                 f"could not resolve prompt '{name}' "
                 f"(version={version or 'latest'}, label={label or 'production'}): {exc}",
                 flush=True,

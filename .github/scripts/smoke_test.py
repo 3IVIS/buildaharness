@@ -2,7 +2,7 @@
 """
 .github/scripts/smoke_test.py
 -------------------------------
-Post-deploy smoke tests that run against a live itsharness adapter.
+Post-deploy smoke tests that run against a live buildaharness adapter.
 Called by deploy.yml after every staging and production deploy.
 
 Checks:
@@ -165,7 +165,7 @@ def run_smoke_tests(base_url: str, token: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="itsharness post-deploy smoke tests")
+    parser = argparse.ArgumentParser(description="buildaharness post-deploy smoke tests")
     parser.add_argument("--api-url", required=True, help="Base URL of the adapter API")
     parser.add_argument("--token",   required=True, help="Bearer token for the adapter")
     args = parser.parse_args()

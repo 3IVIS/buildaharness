@@ -36,7 +36,7 @@ jobs:
         run: node scripts/check-schema-sync.mjs
 
   canvas-package:
-    name: '@itsharness/canvas — typecheck, test, build'
+    name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -105,7 +105,7 @@ jobs:
         run: cd adapter && mypy . --ignore-missing-imports --python-version 3.12
 
       - name: Test (adapter)
-        run: pytest adapter/tests/ -v
+        run: cd adapter && pytest tests/ -v
         env:
           JWT_SECRET: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
@@ -113,14 +113,14 @@ jobs:
 
       # Phase 4: MS Agent Framework adapter tests.
       - name: Test (MAF adapter)
-        run: pytest adapter/tests/test_maf_adapter.py -v
+        run: cd adapter && pytest tests/test_maf_adapter.py -v
         env:
           JWT_SECRET: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           TESTING: "true"
 
   runtime-package:
-    name: '@itsharness/runtime — typecheck, test, build'
+    name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,7 +145,7 @@ jobs:
         run: npm run build
 
   react-package:
-    name: '@itsharness/react — typecheck, test, build'
+    name: '@buildaharness/react — typecheck, test, build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -170,7 +170,7 @@ jobs:
         run: npm run build
 
   harness-package:
-    name: '@itsharness/harness — typecheck, build'
+    name: '@buildaharness/harness — typecheck, build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -191,7 +191,7 @@ jobs:
         run: npm run build
 
   proxy-package:
-    name: '@itsharness/proxy — typecheck, test'
+    name: '@buildaharness/proxy — typecheck, test'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +212,7 @@ jobs:
         run: npm test
 
   spec-package:
-    name: '@itsharness/flow-spec — typecheck, schema check'
+    name: '@buildaharness/flow-spec — typecheck, schema check'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

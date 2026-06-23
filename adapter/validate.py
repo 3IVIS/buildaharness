@@ -10,7 +10,18 @@ local imports and no circular dependency.
 
 import re
 
-from fastapi import HTTPException
+try:
+    from fastapi import HTTPException
+except ImportError:
+
+    class HTTPException(Exception):  # type: ignore[no-redef]
+        """Minimal stub used when fastapi is not installed (e.g. harness unit tests)."""
+
+        def __init__(self, status_code: int = 400, detail: str = ""):
+            self.status_code = status_code
+            self.detail = detail
+            super().__init__(f"[{status_code}] {detail}")
+
 
 # Fix: the original pattern used a single character-class regex that allowed
 # multiple colons (e.g. "module:func:extra"), which would cause importlib

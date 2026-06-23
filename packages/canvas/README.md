@@ -1,23 +1,23 @@
-# `@itsharness/canvas`
+# `@buildaharness/canvas`
 
-Embeddable itsharness flow canvas — spec in, spec changes out.
+Embeddable buildaharness flow canvas — spec in, spec changes out.
 
 ## Install
 
 ```bash
-npm install @itsharness/canvas @xyflow/react react react-dom
+npm install @buildaharness/canvas @xyflow/react react react-dom
 ```
 
 ## Usage
 
 ```tsx
-import { ItsHarnessCanvas } from '@itsharness/canvas'
-import '@itsharness/canvas/styles.css'
+import { BuildAHarnessCanvas } from '@buildaharness/canvas'
+import '@buildaharness/canvas/styles.css'
 
 export function FlowEditor() {
   return (
     <div style={{ width: '100%', height: '600px' }}>
-      <ItsHarnessCanvas
+      <BuildAHarnessCanvas
         initialSpec={myFlowSpec}
         onSpecChange={(updated) => saveToBackend(updated)}
         onNodeSelect={(id) => setInspectorNode(id)}
@@ -51,7 +51,7 @@ eventSource.onmessage = (e) => {
   setStats((prev) => ({ ...prev, [node_id]: { status, tokens, ms } }))
 }
 
-<ItsHarnessCanvas execStats={stats} />
+<BuildAHarnessCanvas execStats={stats} />
 ```
 
 ## Building a sidebar
@@ -60,7 +60,7 @@ eventSource.onmessage = (e) => {
 const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
 <div style={{ display: 'flex', height: '100vh' }}>
-  <ItsHarnessCanvas
+  <BuildAHarnessCanvas
     initialSpec={spec}
     onSpecChange={setSpec}
     onNodeSelect={setSelectedNodeId}
@@ -77,7 +77,7 @@ const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 For advanced use cases, mount your panel inside the same `CanvasStoreProvider` by using `useCanvasStore`:
 
 ```tsx
-import { useCanvasStore } from '@itsharness/canvas'
+import { useCanvasStore } from '@buildaharness/canvas'
 
 function MyConfigPanel() {
   const selectedId = useCanvasStore((s) => s.selectedNodeId)
@@ -87,24 +87,24 @@ function MyConfigPanel() {
 }
 ```
 
-`useCanvasStore` must be called within a subtree rendered inside `<ItsHarnessCanvas>` (reads from the canvas's React context). This is useful for config panels that need direct store access rather than going through `onSpecChange`.
+`useCanvasStore` must be called within a subtree rendered inside `<BuildAHarnessCanvas>` (reads from the canvas's React context). This is useful for config panels that need direct store access rather than going through `onSpecChange`.
 
 ## Multiple instances
 
-The canvas uses a **per-instance Zustand store** via `createStore()` — not a module-level singleton. It is safe to mount multiple `<ItsHarnessCanvas>` components on the same page. Each instance manages its own state, history, and selection independently.
+The canvas uses a **per-instance Zustand store** via `createStore()` — not a module-level singleton. It is safe to mount multiple `<BuildAHarnessCanvas>` components on the same page. Each instance manages its own state, history, and selection independently.
 
 ## CSS
 
 Styles are shipped separately so bundler tree-shaking works:
 
 ```ts
-import '@itsharness/canvas/styles.css'
+import '@buildaharness/canvas/styles.css'
 ```
 
-The stylesheet uses CSS custom properties so you can override the palette by targeting `[data-itsharness-canvas]`:
+The stylesheet uses CSS custom properties so you can override the palette by targeting `[data-buildaharness-canvas]`:
 
 ```css
-[data-itsharness-canvas] {
+[data-buildaharness-canvas] {
   --bg-canvas: #000;
   --bg-raised: #111;
 }

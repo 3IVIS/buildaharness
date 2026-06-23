@@ -3,7 +3,7 @@ import { agentDebateExecutor } from './agent-debate'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
 import type { ILLMClient, ChatMessage, ChatOptions } from '../llm-client'
-import type { AgentDef } from '@itsharness/canvas'
+import type { AgentDef } from '@buildaharness/canvas'
 
 function makeMockLLMClient(responseMap?: Record<string, string>): ILLMClient {
   let callIndex = 0

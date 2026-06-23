@@ -16,7 +16,7 @@
 set -euo pipefail
 
 echo ""
-echo "⚠️  This will permanently delete all itsharness data volumes:"
+echo "⚠️  This will permanently delete all buildaharness data volumes:"
 echo "   postgres_data  (flows, jobs, teams, orgs)"
 echo "   redis_data     (JWT blocklist)"
 echo "   clickhouse_data (Langfuse traces)"
@@ -33,9 +33,9 @@ docker compose down --timeout 10
 
 echo "Removing data volumes..."
 docker volume rm \
-  itsharness_postgres_data \
-  itsharness_redis_data \
-  itsharness_clickhouse_data \
+  buildaharness_postgres_data \
+  buildaharness_redis_data \
+  buildaharness_clickhouse_data \
   2>/dev/null && echo "Volumes removed." || echo "Some volumes not found (already gone)."
 
 echo ""

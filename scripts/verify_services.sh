@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# verify_services.sh — Confirm every itsharness service is up, healthy, and reachable.
+# verify_services.sh — Confirm every buildaharness service is up, healthy, and reachable.
 #
 # Checks (no user prompts — credentials are read from .env):
 #   1. Every Docker container is in "running" state
@@ -73,7 +73,7 @@ _section() {
 # ── Header ────────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  itsharness — Service verification"
+echo "  buildaharness — Service verification"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # ── 1. Container state ────────────────────────────────────────────────────────
@@ -90,16 +90,16 @@ _check_running() {
   fi
 }
 
-_check_running itsharness-adapter-1          "adapter"
-_check_running itsharness-mastra-runner-1     "mastra-runner"
-_check_running itsharness-litellm-1           "litellm"
-_check_running itsharness-langfuse-1          "langfuse"
-_check_running itsharness-langfuse-worker-1   "langfuse-worker"
-_check_running itsharness-canvas-1            "canvas"
-_check_running itsharness-postgres-1          "postgres"
-_check_running itsharness-redis-1             "redis"
-_check_running itsharness-clickhouse-1        "clickhouse"
-_check_running itsharness-minio-1             "minio"
+_check_running buildaharness-adapter-1          "adapter"
+_check_running buildaharness-mastra-runner-1     "mastra-runner"
+_check_running buildaharness-litellm-1           "litellm"
+_check_running buildaharness-langfuse-1          "langfuse"
+_check_running buildaharness-langfuse-worker-1   "langfuse-worker"
+_check_running buildaharness-canvas-1            "canvas"
+_check_running buildaharness-postgres-1          "postgres"
+_check_running buildaharness-redis-1             "redis"
+_check_running buildaharness-clickhouse-1        "clickhouse"
+_check_running buildaharness-minio-1             "minio"
 
 # ── 2. Docker healthchecks ────────────────────────────────────────────────────
 _section "2. Docker healthchecks"
@@ -119,15 +119,15 @@ _check_healthy() {
   fi
 }
 
-_check_healthy itsharness-adapter-1          "adapter"
-_check_healthy itsharness-mastra-runner-1     "mastra-runner"
-_check_healthy itsharness-litellm-1           "litellm"
-_check_healthy itsharness-langfuse-1          "langfuse"
-_check_healthy itsharness-langfuse-worker-1   "langfuse-worker"
-_check_healthy itsharness-postgres-1          "postgres"
-_check_healthy itsharness-redis-1             "redis"
-_check_healthy itsharness-clickhouse-1        "clickhouse"
-_check_healthy itsharness-minio-1             "minio"
+_check_healthy buildaharness-adapter-1          "adapter"
+_check_healthy buildaharness-mastra-runner-1     "mastra-runner"
+_check_healthy buildaharness-litellm-1           "litellm"
+_check_healthy buildaharness-langfuse-1          "langfuse"
+_check_healthy buildaharness-langfuse-worker-1   "langfuse-worker"
+_check_healthy buildaharness-postgres-1          "postgres"
+_check_healthy buildaharness-redis-1             "redis"
+_check_healthy buildaharness-clickhouse-1        "clickhouse"
+_check_healthy buildaharness-minio-1             "minio"
 
 # ── 3. HTTP endpoint checks ───────────────────────────────────────────────────
 _section "3. HTTP endpoints"
@@ -191,7 +191,7 @@ if command -v redis-cli &>/dev/null; then
   fi
 else
   # Fallback: check via docker exec
-  _redis_resp=$(docker exec itsharness-redis-1 \
+  _redis_resp=$(docker exec buildaharness-redis-1 \
     redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping 2>/dev/null || echo "")
   if [[ "$_redis_resp" == "PONG" ]]; then
     _pass "redis — PING/PONG (via docker exec)"
@@ -202,14 +202,14 @@ fi
 
 # PostgreSQL pg_isready
 if command -v pg_isready &>/dev/null; then
-  if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U itsharness -q 2>/dev/null; then
+  if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U buildaharness -q 2>/dev/null; then
     _pass "postgres — accepting connections"
   else
     _fail "postgres — not accepting connections"
   fi
 else
   # Fallback: check via docker exec
-  if docker exec itsharness-postgres-1 pg_isready -U itsharness -q 2>/dev/null; then
+  if docker exec buildaharness-postgres-1 pg_isready -U buildaharness -q 2>/dev/null; then
     _pass "postgres — accepting connections (via docker exec)"
   else
     _fail "postgres — unreachable (pg_isready not installed and docker exec failed)"
@@ -236,13 +236,13 @@ fi
 
 # MinIO bucket exists (langfuse-events)
 # S3 REST API requires AWS Sig V4 — use mc (bundled in the minio server image) instead.
-_mc_out=$(docker exec itsharness-minio-1 \
+_mc_out=$(docker exec buildaharness-minio-1 \
   mc ls local/langfuse-events 2>&1) && _mc_exit=0 || _mc_exit=$?
 if [[ "$_mc_exit" -eq 0 ]]; then
   _pass "minio — langfuse-events bucket accessible"
 else
   # mc alias 'local' may not be set in the server image; set it on the fly.
-  if docker exec itsharness-minio-1 sh -c \
+  if docker exec buildaharness-minio-1 sh -c \
       "mc alias set local http://localhost:9000 langfuse langfuse-minio-dev >/dev/null 2>&1 \
        && mc ls local/langfuse-events >/dev/null 2>&1"; then
     _pass "minio — langfuse-events bucket accessible"
@@ -257,7 +257,7 @@ _section "5. Inter-service connectivity (from adapter container)"
 _check_from_adapter() {
   local label="$1" url="$2"
   local result
-  result=$(docker exec itsharness-adapter-1 python3 -c "
+  result=$(docker exec buildaharness-adapter-1 python3 -c "
 import urllib.request, urllib.error, sys
 try:
     r = urllib.request.urlopen('$url', timeout=5)
@@ -280,7 +280,7 @@ _check_from_adapter "adapter → litellm"      "http://litellm:4000/health/livel
 _check_tcp_from_adapter() {
   local label="$1" host="$2" port="$3"
   local result
-  result=$(docker exec itsharness-adapter-1 python3 -c "
+  result=$(docker exec buildaharness-adapter-1 python3 -c "
 import socket
 try:
     s = socket.create_connection(('$host', $port), timeout=3)

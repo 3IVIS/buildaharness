@@ -3,10 +3,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "itsharness.fullname" . }}-litellm-config
+  name: {{ include "buildaharness.fullname" . }}-litellm-config
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: litellm
 data:
   config.yaml: |
@@ -39,22 +39,22 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "itsharness.fullname" . }}-litellm
+  name: {{ include "buildaharness.fullname" . }}-litellm
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: litellm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "itsharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 6 }}
+      {{- include "buildaharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "itsharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 8 }}
+        {{- include "buildaharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 8 }}
     spec:
-      {{- include "itsharness.imagePullSecrets" . | nindent 6 }}
+      {{- include "buildaharness.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: litellm
           image: "{{ .Values.litellm.image.repository }}:{{ .Values.litellm.image.tag }}"
@@ -69,39 +69,39 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: openai-api-key
                   optional: true
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: anthropic-api-key
                   optional: true
             - name: LITELLM_MASTER_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: litellm-master-key
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: postgres-password
             - name: DATABASE_URL
-              value: "postgresql://itsharness:$(POSTGRES_PASSWORD)@{{ include "itsharness.postgresHost" . }}:{{ include "itsharness.postgresPort" . }}/litellm"
+              value: "postgresql://buildaharness:$(POSTGRES_PASSWORD)@{{ include "buildaharness.postgresHost" . }}:{{ include "buildaharness.postgresPort" . }}/litellm"
             - name: LANGFUSE_PUBLIC_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: langfuse-public-key
             - name: LANGFUSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "itsharness.secretName" . }}
+                  name: {{ include "buildaharness.secretName" . }}
                   key: langfuse-secret-key
             - name: LANGFUSE_HOST
-              value: {{ include "itsharness.langfuseInternalUrl" . | quote }}
+              value: {{ include "buildaharness.langfuseInternalUrl" . | quote }}
           volumeMounts:
             - name: config
               mountPath: /app/config.yaml
@@ -109,7 +109,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "itsharness.fullname" . }}-litellm-config
+            name: {{ include "buildaharness.fullname" . }}-litellm-config
       {{- with .Values.litellm.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -126,10 +126,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "itsharness.fullname" . }}-litellm
+  name: {{ include "buildaharness.fullname" . }}-litellm
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itsharness.labels" . | nindent 4 }}
+    {{- include "buildaharness.labels" . | nindent 4 }}
     app.kubernetes.io/component: litellm
 spec:
   type: {{ .Values.litellm.service.type }}
@@ -139,5 +139,5 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "itsharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 4 }}
+    {{- include "buildaharness.selectorLabels" (dict "root" . "component" "litellm") | nindent 4 }}
 {{- end }}

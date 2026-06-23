@@ -274,7 +274,7 @@ function ComponentCard({ item, installing, installed, onInstall }: CardProps) {
           <CheckCircle
             size={11} strokeWidth={2}
             style={{ color: '#4ade80', flexShrink: 0 }}
-            aria-label="Verified @itsharness package"
+            aria-label="Verified @buildaharness package"
           />
         )}
       </div>

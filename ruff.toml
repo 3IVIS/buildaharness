@@ -28,6 +28,11 @@ ignore = [
   "RUF003", # ambiguous EN-dash in comments — intentional range notation
 ]
 
+[lint.isort]
+# Modules not committed to git must be listed here so ruff classifies them as
+# first-party on CI (where the files don't exist and ruff falls back to third-party).
+known-first-party = ["run_api", "planner_api"]
+
 [lint.per-file-ignores]
 "adapter/tests/*.py" = ["S105", "S106", "S107", "S310", "S607"]   # test-only hardcoded credentials; S310: Wikipedia URL fetch; S607: `node` invoked by partial path in test helpers
 "adapter/eval/*.py"  = ["S105", "S106", "S107"]

@@ -6,7 +6,7 @@ import { X, Plus, ChevronRight } from 'lucide-react'
 import { EXAMPLE_FLOWS } from '../spec/examples'
 import { useCanvasStore } from '../store'
 
-export const SUPPRESS_KEY = 'itsharness:new-chooser-suppressed'
+export const SUPPRESS_KEY = 'buildaharness:new-chooser-suppressed'
 
 interface Props { open: boolean; onClose: () => void }
 

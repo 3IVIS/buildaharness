@@ -1,14 +1,14 @@
 <div align="center">
 
-# Its Harness
+# Build A Harness
 
 **Build complete AI agent harnesses on canvas. Compile to any orchestrator. Observe with Langfuse.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/itsharness/releases)
-[![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/itsharness)
+[![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
+[![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
 [![Tests](https://img.shields.io/badge/tests-379%20passing-brightgreen.svg)](#)
-[![GitHub Stars](https://img.shields.io/github/stars/3IVIS/itsharness?style=social)](https://github.com/3IVIS/itsharness/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -20,7 +20,7 @@
 
 ---
 
-A workflow routes prompts from node to node. A **harness** governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns. Its Harness delivers the complete 11-layer architecture — draw it on a canvas, compile to any framework, trace every decision.
+A workflow routes prompts from node to node. A **harness** governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns. Build A Harness delivers the complete 11-layer architecture — draw it on a canvas, compile to any framework, trace every decision.
 
 ```
 Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework  →  Langfuse
@@ -205,7 +205,7 @@ pytest adapter/tests/test_maf_adapter.py -v     # MAF suite (742 tests)
 
 </details>
 
-> **Startup errors?** See [docs/troubleshooting.md](docs/troubleshooting.md) · Real-time collaboration: [docs/collab.md](docs/collab.md) · On-prem / Kubernetes: [docs/deployment.md](docs/deployment.md)
+> **New here?** Start with [docs/getting-started.md](docs/getting-started.md) · **Startup errors?** [docs/troubleshooting.md](docs/troubleshooting.md) · Real-time collaboration: [docs/collab.md](docs/collab.md) · On-prem / Kubernetes: [docs/deployment.md](docs/deployment.md)
 
 ---
 
@@ -228,14 +228,14 @@ Full setup: [docs/llm-setup.md](docs/llm-setup.md)
 ## Embed the canvas
 
 ```bash
-npm install @itsharness/canvas
+npm install @buildaharness/canvas
 ```
 
 ```tsx
-import { ItsHarnessCanvas } from '@itsharness/canvas'
-import '@itsharness/canvas/styles.css'
+import { BuildAHarnessCanvas } from '@buildaharness/canvas'
+import '@buildaharness/canvas/styles.css'
 
-<ItsHarnessCanvas
+<BuildAHarnessCanvas
   initialSpec={mySpec}
   onSpecChange={(updated) => save(updated)}
   execStats={runState.nodeStats}
@@ -251,14 +251,17 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 
 | | |
 |:--|:--|
-| [plan/harness_architecture.html](plan/harness_architecture.html) | Full harness — pseudo-code, 22 nodes, 11 layers, state model |
-| [plan/canvas_plan.html](plan/canvas_plan.html) | Canvas roadmap — 4 phases, 240 shipped items |
+| [docs/getting-started.md](docs/getting-started.md) | Step-by-step: clone → secrets → LLM → first run |
+| [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — all 26 node types, edges, fields |
 | [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows |
 | [docs/api.md](docs/api.md) | REST API reference — compile, execute, deploy, HITL resume |
 | [docs/llm-setup.md](docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom |
+| [docs/qdrant.md](docs/qdrant.md) | Qdrant vector store — seeding, collections, production |
+| [docs/env-vars.md](docs/env-vars.md) | All environment variables across all services |
 | [docs/collab.md](docs/collab.md) | Real-time collaboration — Yjs setup and internals |
-| [docs/deployment.md](docs/deployment.md) | Docker, Helm, SSO/OIDC, full env var reference |
+| [docs/deployment.md](docs/deployment.md) | Docker, Helm, SSO/OIDC |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common startup errors |
+| [plan/harness_architecture.html](plan/harness_architecture.html) | Full harness — pseudo-code, 22 nodes, 11 layers, state model |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 
 ---

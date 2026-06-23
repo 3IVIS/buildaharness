@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 import App from './App'
 
-// ── Minimal mock of @itsharness/react ──────────────────────────────────────
+// ── Minimal mock of @buildaharness/react ──────────────────────────────────────
 const mockRun = vi.fn()
 const mockResume = vi.fn()
 const mockReset = vi.fn()
@@ -24,7 +24,7 @@ const defaultHarnessState = {
 
 let harnessState = { ...defaultHarnessState }
 
-vi.mock('@itsharness/react', () => ({
+vi.mock('@buildaharness/react', () => ({
   useHarness: () => harnessState,
 }))
 

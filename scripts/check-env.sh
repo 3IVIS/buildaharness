@@ -25,7 +25,8 @@ is_placeholder() {
   [[ -z "$val" ]] && return 0
   for p in "REPLACE_ME" "REPLACE_WITH_REAL" "your_password" \
            "changeme" "placeholder" "YOUR_" \
-           "sk-ant-REPLACE" "sk-REPLACE"; do
+           "sk-ant-REPLACE" "sk-REPLACE" \
+           "sk-ant-..." "sk-..." "..."; do
     [[ "$val" == *"$p"* ]] && return 0
   done
   return 1
@@ -70,6 +71,16 @@ check_secret LANGFUSE_SALT            "openssl rand -base64 32"
 check_secret LANGFUSE_ENCRYPTION_KEY  "openssl rand -hex 32  ← must be exactly 64 hex chars"
 check_secret CLICKHOUSE_PASSWORD      "openssl rand -hex 24"
 
+# MASTRA_RUNNER_API_KEY — optional (empty = no auth, dev only); warn if unset
+MASTRA_KEY=$(get_val "MASTRA_RUNNER_API_KEY")
+if [[ -z "$MASTRA_KEY" ]]; then
+  warn "MASTRA_RUNNER_API_KEY is empty — mastra-runner has no auth (dev-only mode)"
+  echo "         Fix: run ./setup-env.sh to auto-generate it"
+  echo ""
+else
+  ok "MASTRA_RUNNER_API_KEY"
+fi
+
 # ── Special check: DATABASE_URL must have real password and correct host ────────
 DB_URL=$(get_val "DATABASE_URL")
 PG_PASS=$(get_val "POSTGRES_PASSWORD")
@@ -96,6 +107,27 @@ if ! is_placeholder "$DB_URL"; then
       ALL_OK=1
     else
       ok "DATABASE_URL"
+    fi
+  fi
+fi
+
+# ── Special check: REDIS_URL must be concrete (no unexpanded shell vars) ──────
+REDIS_URL_VAL=$(get_val "REDIS_URL")
+REDIS_PASS=$(get_val "REDIS_PASSWORD")
+if [[ -n "$REDIS_URL_VAL" ]]; then
+  if echo "$REDIS_URL_VAL" | grep -qE '\$\{|\$REDIS'; then
+    fail "REDIS_URL — contains unexpanded shell variable — run ./setup-env.sh to concrete it"
+    echo ""
+    ALL_OK=1
+  else
+    redis_url_pass=$(echo "$REDIS_URL_VAL" | sed -E 's|.*://:([^@]+)@.*|\1|')
+    if [[ -n "$REDIS_PASS" && "$redis_url_pass" != "$REDIS_PASS" ]]; then
+      fail "REDIS_URL — password does not match REDIS_PASSWORD"
+      echo "         Fix: run ./setup-env.sh to sync it automatically"
+      echo ""
+      ALL_OK=1
+    else
+      ok "REDIS_URL"
     fi
   fi
 fi
@@ -135,6 +167,7 @@ if [[ ! -f .env.local ]]; then
   warn ".env.local not found — run ./setup-env.sh to create it"
   ALL_OK=1
 else
+  # VITE_LANGFUSE_PUBLIC_KEY must match LANGFUSE_PUBLIC_KEY in .env
   lf_env=$(grep -E "^LANGFUSE_PUBLIC_KEY=" .env 2>/dev/null | cut -d= -f2-)
   lf_vite=$(grep -E "^VITE_LANGFUSE_PUBLIC_KEY=" .env.local 2>/dev/null | cut -d= -f2-)
   if [[ -n "$lf_env" && "$lf_env" != "$lf_vite" ]]; then
@@ -147,6 +180,17 @@ else
   else
     ok "VITE_LANGFUSE_PUBLIC_KEY matches LANGFUSE_PUBLIC_KEY"
   fi
+
+  # Required static VITE keys must be present
+  for vite_key in VITE_API_URL VITE_LANGFUSE_ENABLED VITE_LANGFUSE_HOST; do
+    if ! grep -qE "^${vite_key}=" .env.local 2>/dev/null; then
+      fail "${vite_key} missing from .env.local — run ./setup-env.sh to repair"
+      echo ""
+      ALL_OK=1
+    else
+      ok "${vite_key} present in .env.local"
+    fi
+  done
 fi
 
 # ── .env.bak cross-check ─────────────────────────────────────────────────────
@@ -154,8 +198,11 @@ echo ""
 echo "Checking .env.bak sync …"
 echo ""
 
-CRITICAL_KEYS=(JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD DATABASE_URL LITELLM_MASTER_KEY
-               LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY)
+CRITICAL_KEYS=(JWT_SECRET POSTGRES_PASSWORD REDIS_PASSWORD DATABASE_URL REDIS_URL
+               LITELLM_MASTER_KEY MASTRA_RUNNER_API_KEY
+               LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY LANGFUSE_ADMIN_EMAIL
+               LANGFUSE_ADMIN_PASSWORD LANGFUSE_NEXTAUTH_SECRET LANGFUSE_SALT
+               LANGFUSE_ENCRYPTION_KEY CLICKHOUSE_PASSWORD OPENAI_API_KEY ANTHROPIC_API_KEY)
 
 if [[ ! -f .env.bak ]]; then
   warn ".env.bak not found — run ./setup-env.sh to create it"

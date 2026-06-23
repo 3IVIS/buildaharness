@@ -12,7 +12,7 @@
  *                    renders inline (§14 fold-in of HitlResumePanel)
  *   4. Recent runs — last 10 per-flow, persisted to localStorage
  *
- * Per-flow state lives in localStorage under `itsharness:runs:<flowId>`.
+ * Per-flow state lives in localStorage under `buildaharness:runs:<flowId>`.
  * runPoller is responsible for advancing execStats/hitlState/traceUrl —
  * this component is a read-and-display surface, with one POST on submit.
  */
@@ -36,7 +36,7 @@ interface RunHistoryEntry {
   durationMs: number | null
 }
 
-const HISTORY_KEY  = (flowId: string) => `itsharness:runs:${flowId}`
+const HISTORY_KEY  = (flowId: string) => `buildaharness:runs:${flowId}`
 const HISTORY_MAX  = 10
 
 function loadHistory(flowId: string): RunHistoryEntry[] {

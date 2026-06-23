@@ -1,4 +1,4 @@
-import type { Node, Edge } from '@itsharness/canvas'
+import type { Node, Edge } from '@buildaharness/canvas'
 import { GraphCycleError, FlowExecutionError } from './errors'
 
 export class FlowGraph {

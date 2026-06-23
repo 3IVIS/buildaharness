@@ -1,5 +1,5 @@
 """
-itsharness — CrewAI adapter  v0.2.0
+buildaharness — CrewAI adapter  v0.2.0
 Generates runnable CrewAI Python code from a FlowSpec JSON.
 
 Coverage:
@@ -52,6 +52,131 @@ except (ImportError, SyntaxError):  # pragma: no cover
     _HARNESS_AVAILABLE = False
 CREWAI_MIN = ">=1.0.0"
 
+
+def _has_fn_refs(spec: dict) -> bool:
+    """True if any transform node uses fn_ref mode."""
+    return any(
+        n.get("type") == "transform" and n.get("mode") == "fn_ref" and n.get("fn_ref") for n in spec.get("nodes", [])
+    )
+
+
+def gen_state_header() -> str:
+    """Emit shared flow state dict and fn_ref execution helpers (hybrid mode)."""
+    return dedent0("""\
+        # ─── Hybrid state threading ─────────────────────────────────────────────────
+        # _flow_state is shared between Python fn_ref transforms and the CrewAI Crew.
+        # Pre-crew fn_refs run at exec() time; the Crew then sees the enriched state.
+        import json as _js
+        import importlib as _imp
+        import re as _re_s
+
+        _flow_state: dict = dict(_inputs)
+
+        def _sub_state(s: str) -> str:
+            \"\"\"Substitute {key} from _flow_state (superset of _inputs, enriched by fn_refs).\"\"\"
+            if not s or '{' not in s:
+                return s
+            for _k, _v in _flow_state.items():
+                if _v is not None:
+                    s = s.replace('{' + _k + '}', str(_v) if not isinstance(_v, (dict, list)) else '')
+            s = _re_s.sub('[{][a-zA-Z_][a-zA-Z0-9_]*[}]', '', s)
+            return s
+
+        def _fn_ref(module: str, fn: str) -> None:
+            \"\"\"Import module.fn, call with _flow_state, merge dict result back.\"\"\"
+            global _flow_state
+            try:
+                _mod = _imp.import_module(module)
+                _res = _mod.__dict__[fn](dict(_flow_state))
+                if isinstance(_res, dict):
+                    _flow_state.update(_res)
+            except Exception as _e:
+                _flow_state.setdefault('_fn_ref_errors', []).append(
+                    f'{module}:{fn} -> {type(_e).__name__}: {_e}'
+                )
+
+        def _eval_cond(expr: str) -> bool:
+            \"\"\"Evaluate a FlowSpec condition expression against _flow_state.\"\"\"
+            def _resolve(path: str):
+                val = _flow_state
+                for p in path.split('.'):
+                    val = val.get(p) if isinstance(val, dict) else None
+                return val
+            py = _re_s.sub(
+                r'\\$\\.state\\.([\\w.]+)',
+                lambda m: repr(_resolve(m.group(1))),
+                expr,
+            )
+            py = (py.replace('null', 'None')
+                    .replace('true', 'True')
+                    .replace('false', 'False')
+                    .replace('&&', ' and ')
+                    .replace('||', ' or '))
+            try:
+                return bool(eval(py))
+            except Exception:
+                return False
+    """)
+
+
+def _first_agent_index(sorted_nodes: list[dict]) -> int | None:
+    """Return the index of the first agent_role node, or None."""
+    for i, n in enumerate(sorted_nodes):
+        if n.get("type") == "agent_role":
+            return i
+    return None
+
+
+def gen_post_crew(spec: dict, sorted_nodes: list[dict]) -> str:
+    """Emit _post_crew() function for fn_ref transforms after the agent_role node."""
+    idx = _first_agent_index(sorted_nodes)
+    if idx is None:
+        return ""
+
+    post_nodes = sorted_nodes[idx + 1 :]
+    post_fn_refs: list[tuple[str, str, str]] = []  # (node_id, module, fn)
+    for n in post_nodes:
+        if n.get("type") == "transform" and n.get("mode") == "fn_ref" and n.get("fn_ref"):
+            fn_ref = n["fn_ref"]
+            parts = fn_ref.rsplit(":", 1) if ":" in fn_ref else (fn_ref, "transform")
+            post_fn_refs.append((n["id"], parts[0], parts[1]))
+
+    if not post_fn_refs:
+        return ""
+
+    # Find the variable name of the first agent_role task
+    agent_vid = safe_id(sorted_nodes[idx]["id"])
+
+    lines = [
+        "# ─── Post-crew fn_ref transforms ──────────────────────────────────────────",
+        "# Called by _run_crewai after crew.kickoff() to execute post-agent Python logic.",
+        "",
+        "def _post_crew(crew_response: str) -> None:",
+        '    """Promote crew output to response_draft and run post-agent fn_refs."""',
+        "    global _flow_state",
+        "    # Prefer the agent_role task's raw output over the crew's last-task output",
+        "    try:",
+        f"        _at = task_{agent_vid}",
+        "        if hasattr(_at, 'output') and _at.output:",
+        "            _raw = getattr(_at.output, 'raw', None) or str(_at.output)",
+        "            if _raw:",
+        "                crew_response = _raw",
+        "    except (NameError, AttributeError):",
+        "        pass",
+        "    if not _flow_state.get('response_draft'):",
+        "        _flow_state['response_draft'] = crew_response",
+        "    if not _flow_state.get('coach_response'):",
+        "        _flow_state['coach_response'] = _flow_state.get('response_draft', crew_response)",
+    ]
+    for nid, module, fn in post_fn_refs:
+        lines += [
+            f"    # post-agent fn_ref: {module}:{fn}  ({nid})",
+            f"    _fn_ref({module!r}, {fn!r})",
+        ]
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ADR-001 RFC-2: memory_write.tier → CrewAI 1.x memory mapping.
 # crewai 1.x removed the old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory
 # classes from crewai.memory.  All memory is now enabled via Crew(memory=True), which
@@ -83,7 +208,7 @@ def dedent0(text: str) -> str:
 
 
 def crewai_template(s: str) -> str:
-    """Convert itsharness {{$.state.key}} templates to CrewAI {key} placeholders.
+    """Convert buildaharness {{$.state.key}} templates to CrewAI {key} placeholders.
 
     CrewAI's crew.kickoff(inputs={...}) substitutes {key} placeholders in task
     descriptions.  The spec uses {{$.state.key}} mustache syntax which CrewAI
@@ -191,8 +316,10 @@ def gen_harness_preamble() -> str:
     """Emit HarnessRunState initialisation into the generated flow code."""
     return dedent0("""\
         # ─── Harness state ───────────────────────────────────────────────────────────
-        import sys as _sys, pathlib as _pl
-        _sys.path.insert(0, str(_pl.Path(__file__).parent))
+        import sys as _sys, pathlib as _pl, os as _os
+        # __file__ is undefined when code is exec()'d — fall back to cwd (/app in container)
+        _sys.path.insert(0, str(_pl.Path(globals().get('__file__') or _os.getcwd()).resolve().parent
+                                if globals().get('__file__') else _os.getcwd()))
         from harness.state_store import HarnessRunState as _HarnessRunState
         from harness.world_model import WorldModel as _WorldModel
         from harness.diagnostics import Diagnostics as _Diagnostics
@@ -237,7 +364,7 @@ def gen_header(spec: dict) -> str:
     nc, ec = len(spec.get("nodes", [])), len(spec.get("edges", []))
     return dedent0(f"""\
         \"\"\"
-        CrewAI code generated by itsharness-adapter v{ADAPTER_VERSION}
+        CrewAI code generated by buildaharness-adapter v{ADAPTER_VERSION}
         Flow   : {name}  ({fid})
         Nodes  : {nc}  |  Edges: {ec}
         Requires: crewai{CREWAI_MIN}
@@ -337,8 +464,16 @@ def _gen_qdrant_tools(spec: dict) -> str:
             f"        _emb  = _OAIEmb(model={emb_model!r}, base_url=_base or None, api_key=_key)",
             "        _vec  = _emb.embed_query(query)",
             "        _cli  = _QdrantClient(url=os.environ.get('QDRANT_URL', 'http://localhost:6333'))",
-            f"        _hits = _cli.search(collection_name={store_id!r}, query_vector=_vec,",
-            f"                            limit={top_k}, with_payload=True)",
+            "        try:",
+            "            # qdrant-client 1.x: search() removed; use query_points()",
+            f"            _res = _cli.query_points(collection_name={store_id!r}, query=_vec,",
+            f"                                     limit={top_k}, with_payload=True)",
+            "            _hits = _res.points",
+            "        except Exception as _e:",
+            "            _s = str(_e)",
+            "            if getattr(_e, 'status_code', None) == 404 or \"doesn't exist\" in _s or 'Not found' in _s:",
+            "                return 'No relevant results found.'",
+            "            raise",
             "        parts = [h.payload.get('text', '') for h in _hits if h.payload]",
             "        return '\\n\\n'.join(parts) or 'No relevant results found.'",
             "",
@@ -438,16 +573,20 @@ def gen_agents(spec: dict) -> str:
     executor_tools = f"    tools=[{', '.join(qdrant_tool_insts)}]," if qdrant_tool_insts else ""
     lines += [
         "# Generic executor for non-agent nodes (llm_call, tool_invoke, transform, etc.)",
+        "# CREWAI_EXECUTOR_MODEL overrides the spec model for the executor only —",
+        "# use a smaller/faster model (e.g. mistral) to speed up classification tasks.",
+        "_executor_model = os.environ.get('CREWAI_EXECUTOR_MODEL') or " + repr(model_default),
         "_executor = Agent(",
         '    role="Executor",',
         '    backstory="A general-purpose executor that runs non-agent workflow steps.",',
         '    goal="Complete the assigned step accurately and concisely.",',
-        f"    llm=_make_llm({model_default!r}),",
+        "    llm=_make_llm(_executor_model),",
+        "    max_iter=1,",
     ]
     if executor_tools:
         lines.append(executor_tools)
     lines += [
-        "    verbose=True,",
+        "    verbose=False,",
         ")",
         "",
     ]
@@ -476,7 +615,7 @@ def _gen_harness_task_description(node: dict) -> str:
     return descriptions.get(ntype, f"Execute harness node '{nid}' (type={ntype!r}).")
 
 
-def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
+def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str], *, hybrid_mode: bool = False) -> str:
     agents_by_id = {a["id"]: a for a in spec.get("agents", [])}
     parallel_tgts = find_parallel_targets(spec)
     ctx_map = build_context_map(spec.get("edges", []))
@@ -510,6 +649,16 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── harness node types ───────────────────────────────────────────────
         if _HARNESS_AVAILABLE and ntype in _HARNESS_NODE_COMPILERS:
+            if hybrid_mode:
+                # Hybrid mode: harness nodes are Python no-ops — no LLM call needed.
+                # Their state is threaded via _flow_state; skipping the LLM stub saves
+                # one LLM round-trip per harness node and eliminates empty-result noise.
+                lines += [
+                    f"# harness node: {nid} ({ntype}) — Python no-op in hybrid mode",
+                    "# (harness logic handled by pre/post-crew fn_ref transforms)",
+                    "",
+                ]
+                continue
             desc = _gen_harness_task_description(node)
             expected = f"Harness {ntype} node executed; state updated in _harness_state."
             # Build merged_ctx inline for harness nodes (emit_task not yet defined here)
@@ -520,7 +669,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             lines.append(f"    expected_output={expected!r},")
             lines.append("    agent=_executor,")
             lines.append("    # harness node — executed via Python harness middleware")
-            if is_parallel:
+            if is_parallel and not hybrid_mode:
                 lines.append("    async_execution=True,  # parallel_fork branch")
             if merged_ctx_h:
                 ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in merged_ctx_h)
@@ -546,16 +695,19 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             _ctx: list[str] = merged_ctx,
         ) -> None:
             _lines.append(f"task_{_vid} = Task(")
-            desc_expr = f"_sub({description!r})" if "{" in description else repr(description)
+            # In hybrid mode use _sub_state (enriched by fn_ref transforms); else _sub
+            _sub_fn = "_sub_state" if hybrid_mode else "_sub"
+            desc_expr = f"{_sub_fn}({description!r})" if "{" in description else repr(description)
             _lines.append(f"    description={desc_expr},")
             _lines.append(f"    expected_output={expected_output!r},")
             _lines.append(f"    agent={agent_var},")
-            if _is_parallel:
+            if _is_parallel and not hybrid_mode:
                 _lines.append("    async_execution=True,  # parallel_fork branch")
             if extra_lines:
                 _lines.extend(f"    {ln}" for ln in extra_lines)
             # ADR-001 RFC-1: context_from edges + inferred template deps → Task.context
-            if _ctx:
+            # In hybrid mode, context deps are threaded via _flow_state, not Task.context.
+            if _ctx and not hybrid_mode:
                 ctx_vars = ", ".join(f"task_{safe_id(c)}" for c in _ctx)
                 _lines.append(f"    context=[{ctx_vars}],")
             _lines.append(")")
@@ -617,6 +769,16 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             prompt = node.get("prompt", "Please review and provide input.")
             timeout_s = node.get("timeout_seconds", 86400)
             out_key = node.get("output_key", "")
+            if hybrid_mode:
+                # Hybrid mode: HitL breakpoints must not pause the automated run.
+                # Record the breakpoint in _flow_state so the caller can inspect it;
+                # human_input=True would block the crew.kickoff() thread indefinitely.
+                lines += [
+                    f"# hitl_breakpoint: {nid} — flagged in _flow_state (hybrid, no console pause)",
+                    f"_flow_state.setdefault('_hitl_flags', []).append({{'node': {nid!r}, 'prompt': {prompt[:80]!r}}})",
+                    "",
+                ]
+                continue
             emit_task(
                 prompt,
                 f"Human reviewer decision.{' Stored in state.' + out_key if out_key else ''}",
@@ -672,10 +834,67 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
         # ── memory_read ──────────────────────────────────────────────────────
         if ntype == "memory_read":
             store_id = node.get("store_id", "")
-            mode = node.get("retrieval_mode", "key_value")
-            out_key = node.get("output_key", "")
+            retrieval_mode = node.get("retrieval_mode", "key_value")
+            out_key = node.get("output_key", "") or safe_id(nid)
+            query_expr = node.get("query_expr", "")
             store_def = (spec.get("memory_stores") or {}).get(store_id, {})
-            if mode == "semantic" and store_def.get("backend") == "qdrant":
+            backend = store_def.get("backend", "")
+
+            if hybrid_mode:
+                # Hybrid mode: execute reads as Python so _flow_state is populated
+                # before the Crew runs — no LLM needed for data retrieval.
+                # query_expr is $.state.<key> — extract the trailing field name.
+                qkey = query_expr.split(".")[-1] if "." in query_expr else (query_expr or "")
+
+                if retrieval_mode == "semantic" and backend == "qdrant":
+                    inst_name = f"{safe_id(store_id)}_search_tool"
+                    lines += [
+                        f"# memory_read: {nid} → {store_id} (qdrant, semantic) [hybrid Python]",
+                        "try:",
+                        f"    _q_{vid} = str(_flow_state.get({qkey!r}, '') or '') if {qkey!r} else ''",
+                        f"    if _q_{vid}:",
+                        f"        _flow_state[{out_key!r}] = {inst_name}._run(_q_{vid})",
+                        "    else:",
+                        f"        _flow_state.setdefault({out_key!r}, None)",
+                        "except Exception as _me:",
+                        "    _flow_state.setdefault('_fn_ref_errors', []).append(",
+                        f"        f'memory_read:{nid} -> {{type(_me).__name__}}: {{_me}}')",
+                        f"    _flow_state.setdefault({out_key!r}, None)",
+                        "",
+                    ]
+                elif backend == "postgres":
+                    # session_state may be injected via _inputs; promote to _flow_state
+                    # so init_turn_state can unpack it.
+                    lines += [
+                        f"# memory_read: {nid} → {store_id} (postgres, key_value) [hybrid Python]",
+                        f"_flow_state.setdefault({out_key!r}, _inputs.get({out_key!r}) or None)",
+                        "",
+                    ]
+                elif backend == "redis":
+                    key_suffix = qkey or "session_id"
+                    lines += [
+                        f"# memory_read: {nid} → {store_id} (redis, key_value) [hybrid Python]",
+                        "try:",
+                        "    import redis as _redis_mod, json as _rjson",
+                        "    _redis_r = _redis_mod.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379'))",
+                        f"    _rkey_{vid} = str(_flow_state.get({key_suffix!r}, '') or '')",
+                        f"    _rval_{vid} = _redis_r.get(f'profile:{{_rkey_{vid}}}') if _rkey_{vid} else None",
+                        f"    _flow_state[{out_key!r}] = _rjson.loads(_rval_{vid}) if _rval_{vid} else None",
+                        "except Exception as _me:",
+                        "    _flow_state.setdefault('_fn_ref_errors', []).append(",
+                        f"        f'memory_read:{nid} -> {{type(_me).__name__}}: {{_me}}')",
+                        f"    _flow_state.setdefault({out_key!r}, None)",
+                        "",
+                    ]
+                else:
+                    lines += [
+                        f"# memory_read: {nid} → {store_id} ({backend}, {retrieval_mode}) [hybrid stub]",
+                        f"_flow_state.setdefault({out_key!r}, None)",
+                        "",
+                    ]
+                continue
+
+            if retrieval_mode == "semantic" and backend == "qdrant":
                 tool_name = f"{safe_id(store_id)}_search"
                 emit_task(
                     f"Use the {tool_name} tool to find relevant information about: {{question}}",
@@ -684,7 +903,7 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
                 )
             else:
                 emit_task(
-                    f"Read from memory store '{store_id}' using {mode} retrieval.",
+                    f"Read from memory store '{store_id}' using {retrieval_mode} retrieval.",
                     f"Retrieved content.{' Stored in state.' + out_key if out_key else ''}",
                     "_executor",
                     ["# CrewAI uses built-in agent memory — configure via Agent(memory=True)"],
@@ -697,6 +916,45 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             key_expr = node.get("key_expr", "")
             val_expr = node.get("value_expr", "")
             tier = node.get("tier", "short")
+            store_def = (spec.get("memory_stores") or {}).get(store_id, {})
+            backend = store_def.get("backend", "")
+            write_mode = node.get("write_mode", "upsert")
+
+            if hybrid_mode:
+                # Hybrid mode: execute writes as Python.
+                # Postgres session_state: snapshot already in _flow_state.
+                # Redis key_value: write directly.
+                kkey = key_expr.split(".")[-1] if "." in key_expr else (key_expr or "")
+                vkey = val_expr.split(".")[-1] if "." in val_expr else (val_expr or "")
+
+                if backend == "redis":
+                    lines += [
+                        f"# memory_write: {nid} → {store_id} (redis, {write_mode}) [hybrid Python]",
+                        "try:",
+                        "    import redis as _redis_mod, json as _wjson",
+                        "    _redis_w = _redis_mod.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379'))",
+                        f"    _wkey_{vid} = str(_flow_state.get({kkey!r}, '') or '') if {kkey!r} else ''",
+                        f"    _wval_{vid} = _flow_state.get({vkey!r})",
+                        f"    if _wkey_{vid} and _wval_{vid} is not None:",
+                        f"        _redis_w.set(f'profile:{{_wkey_{vid}}}', _wjson.dumps(_wval_{vid}, default=str))",
+                        "        _flow_state.setdefault('_memory_write_log', []).append(",
+                        f"            {{'store': {store_id!r}, 'key': _wkey_{vid}, 'status': 'written'}})",
+                        "except Exception as _me:",
+                        "    _flow_state.setdefault('_fn_ref_errors', []).append(",
+                        f"        f'memory_write:{nid} -> {{type(_me).__name__}}: {{_me}}')",
+                        "",
+                    ]
+                else:
+                    # Postgres/other: snapshot captured from _flow_state by run_api output handler
+                    lines += [
+                        f"# memory_write: {nid} → {store_id} ({backend}, {write_mode}) [hybrid Python]",
+                        "# session_snapshot persists via cross-turn state injection",
+                        "_flow_state.setdefault('_memory_write_log', []).append(",
+                        f"    {{'store': {store_id!r}, 'key': _flow_state.get({kkey!r}), 'status': 'captured'}})",
+                        "",
+                    ]
+                continue
+
             emit_task(
                 f"Write to memory store '{store_id}': key={key_expr}, value={val_expr}.",
                 "Memory write confirmed.",
@@ -710,6 +968,17 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
             mode = node.get("mode", "mapping")
             fn_ref = node.get("fn_ref", "")
             mapping = node.get("mapping", [])
+            if hybrid_mode and mode == "fn_ref" and fn_ref:
+                # Hybrid mode: execute fn_ref as Python directly (not an LLM task).
+                # This runs at exec()-time so _flow_state is enriched before LLM tasks
+                # are created, making _sub_state() resolve state placeholders correctly.
+                parts = fn_ref.rsplit(":", 1) if ":" in fn_ref else (fn_ref, "transform")
+                lines += [
+                    f"# transform fn_ref: {fn_ref} (Python, hybrid mode)",
+                    f"_fn_ref({parts[0]!r}, {parts[1]!r})",
+                    "",
+                ]
+                continue
             if mode == "fn_ref" and fn_ref:
                 desc = f"Transform state using function ref '{fn_ref}'."
             elif mapping:
@@ -724,6 +993,26 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
         if ntype == "condition":
             branches = node.get("branches", [])
             def_target = node.get("default_target", "")
+            if hybrid_mode:
+                # Hybrid mode: evaluate condition with Python, store result in _flow_state.
+                # Downstream tasks read _flow_state directly; no LLM routing task needed.
+                lines += [f"# condition: {nid} (Python evaluation, hybrid mode)"]
+                for b in branches:
+                    cond_obj = b.get("condition", {})
+                    expr = cond_obj.get("expr", "")
+                    target = b.get("target", "")
+                    if expr:
+                        lines += [
+                            f"if _eval_cond({expr!r}):",
+                            f"    _flow_state['_route_{vid}'] = {target!r}",
+                        ]
+                if def_target:
+                    lines += [
+                        f"if '_route_{vid}' not in _flow_state:",
+                        f"    _flow_state['_route_{vid}'] = {def_target!r}",
+                    ]
+                lines.append("")
+                continue
             branch_list = [b.get("target", "") for b in branches] + ([f"{def_target} (default)"] if def_target else [])
             emit_task(
                 "Evaluate conditions and return the name of the branch to follow.",
@@ -738,6 +1027,13 @@ def gen_tasks(spec: dict, sorted_nodes: list[dict], warnings: list[str]) -> str:
 
         # ── parallel_join ────────────────────────────────────────────────────
         if ntype == "parallel_join":
+            if hybrid_mode:
+                # Hybrid mode: parallel branches ran as Python — nothing to join.
+                lines += [
+                    f"# parallel_join: {nid} — branches already merged in _flow_state (hybrid mode)",
+                    "",
+                ]
+                continue
             wait_for = node.get("wait_for", "all")
             reducer = node.get("join_reducer", "merge")
             emit_task(
@@ -779,6 +1075,7 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     manager_ref = flow_config.get("manager_agent_ref", "")
     checkpoint = flow_config.get("checkpoint", {})
     telemetry = flow_config.get("telemetry", {})
+    hybrid = _has_fn_refs(spec) or bool((spec.get("harness_meta") or {}).get("enabled"))
 
     process_map = {
         "sequential": "Process.sequential",
@@ -787,9 +1084,33 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
     }
     process_val = process_map.get(process_type, "Process.sequential")
 
-    # Collect task vars (skip input/output/annotation/parallel_fork — they have no task_*)
+    # Collect task vars — skip nodes that have no task_* variable in the generated code.
+    # In hybrid mode also skip transform fn_ref nodes (→ Python calls) and condition nodes
+    # (→ Python evaluations), as they are NOT emitted as Task() objects.
     skip_types = {"input", "output", "annotation", "parallel_fork"}
-    task_vars = [f"task_{safe_id(n['id'])}" for n in sorted_nodes if n["type"] not in skip_types]
+
+    def _is_python_exec(n: dict) -> bool:
+        """True if this node was emitted as Python code (not a Task) in hybrid mode."""
+        if not hybrid:
+            return False
+        if n["type"] == "transform" and n.get("mode") == "fn_ref" and n.get("fn_ref"):
+            return True
+        if n["type"] == "condition":
+            return True
+        if n["type"] in ("memory_read", "memory_write"):
+            return True
+        if n["type"] == "parallel_join":
+            return True
+        if n["type"] == "hitl_breakpoint":
+            return True
+        # Harness node types are Python no-ops in hybrid mode
+        if _HARNESS_AVAILABLE and n["type"] in _HARNESS_NODE_COMPILERS:
+            return True
+        return False
+
+    task_vars = [
+        f"task_{safe_id(n['id'])}" for n in sorted_nodes if n["type"] not in skip_types and not _is_python_exec(n)
+    ]
     agent_vars = [safe_id(a["id"]) for a in spec.get("agents", [])] + ["_executor"]
 
     lines: list[str] = [
@@ -805,27 +1126,31 @@ def gen_crew_and_kickoff(spec: dict, sorted_nodes: list[dict]) -> str:
         lines.append(f"    manager_agent={safe_id(manager_ref)},")
     if process_type == "consensual":
         lines.append("    # process_type=consensual → no direct equivalent; using sequential")
-    if checkpoint.get("enabled"):
-        backend = checkpoint.get("backend", "memory")
-        lines.append(f"    memory=True,  # checkpoint.backend={backend}")
 
-    # ADR-001 RFC-2: crewai 1.x uses unified memory enabled via memory=True.
-    # The old ShortTermMemory/LongTermMemory/EntityMemory/UserMemory constructor
-    # args are gone.  If memory_write nodes request specific tiers, enable
-    # memory=True (idempotent if checkpoint already set it) and emit a comment.
-    used_tiers = {n.get("tier", "short") for n in spec.get("nodes", []) if n["type"] == "memory_write"}
-    if used_tiers and not checkpoint.get("enabled"):
-        lines.append("    memory=True,  # memory_write nodes present — unified memory (crewai 1.x)")
-    for tier in sorted(used_tiers):
-        desc = _TIER_COMMENT.get(tier, tier)
-        lines.append(f"    # memory tier '{tier}': {desc} — configure storage via CREWAI_STORAGE_DIR env")
+    # In hybrid mode: skip CrewAI's built-in memory and tracing.
+    # memory=True causes CrewAI to call OpenAI for embedding/summarization, which fails
+    # when only a local LiteLLM proxy is configured. State is threaded via _flow_state.
+    # tracing=True causes similar issues; Langfuse integration is handled at the adapter level.
+    if not hybrid:
+        if checkpoint.get("enabled"):
+            backend = checkpoint.get("backend", "memory")
+            lines.append(f"    memory=True,  # checkpoint.backend={backend}")
+        # ADR-001 RFC-2: crewai 1.x uses unified memory enabled via memory=True.
+        used_tiers = {n.get("tier", "short") for n in spec.get("nodes", []) if n["type"] == "memory_write"}
+        if used_tiers and not checkpoint.get("enabled"):
+            lines.append("    memory=True,  # memory_write nodes present — unified memory (crewai 1.x)")
+        for tier in sorted(used_tiers):
+            desc = _TIER_COMMENT.get(tier, tier)
+            lines.append(f"    # memory tier '{tier}': {desc} — configure storage via CREWAI_STORAGE_DIR env")
+        if telemetry.get("enabled"):
+            provider = telemetry.get("provider", "")
+            lines.append(f"    # telemetry.provider={provider!r}")
+            if provider == "langfuse":
+                lines.append("    # set CREWAI_TRACING_ENABLED=true or tracing=True below for Langfuse traces")
+            lines.append("    tracing=True,  # telemetry.enabled=true in spec")
+    else:
+        lines.append("    # memory/tracing disabled in hybrid mode (state via _flow_state; Langfuse via adapter)")
 
-    if telemetry.get("enabled"):
-        provider = telemetry.get("provider", "")
-        lines.append(f"    # telemetry.provider={provider!r}")
-        if provider == "langfuse":
-            lines.append("    # set CREWAI_TRACING_ENABLED=true or tracing=True below for Langfuse traces")
-        lines.append("    tracing=True,  # telemetry.enabled=true in spec")
     lines += ["    verbose=True,", ")", ""]
 
     # Derive example kickoff inputs from state_schema.required
@@ -871,6 +1196,12 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
         sorted_nodes = topo_sort(nodes, edges, flow_id=flow_id)
         harness_enabled = bool((spec.get("harness_meta") or {}).get("enabled"))
 
+        # Hybrid mode: emit Python fn_ref execution alongside CrewAI tasks.
+        # Only activated for harness-enabled specs (harness_meta.enabled=true) that
+        # also have fn_ref transforms.  This preserves legacy Task-based behaviour for
+        # simple specs (RAG, etc.) while enabling Python execution for harness flows.
+        hybrid = harness_enabled and _has_fn_refs(spec)
+
         log_section(_log, "header", flow_id=flow_id)
         _header = gen_header(spec)
         log_section(_log, "tools", flow_id=flow_id)
@@ -878,12 +1209,27 @@ def compile_crewai(spec: dict) -> tuple[str, list[str]]:
         log_section(_log, "agents", flow_id=flow_id)
         _agents = gen_agents(spec)
         log_section(_log, "tasks", flow_id=flow_id)
-        _tasks = gen_tasks(spec, sorted_nodes, warnings)
+        _tasks = gen_tasks(spec, sorted_nodes, warnings, hybrid_mode=hybrid)
         log_section(_log, "crew_and_kickoff", flow_id=flow_id)
         _crew = gen_crew_and_kickoff(spec, sorted_nodes)
 
+        _state_hdr = gen_state_header() if hybrid else ""
+        _post = gen_post_crew(spec, sorted_nodes) if hybrid else ""
+
         code = "\n\n".join(
-            filter(None, [_header, gen_harness_preamble() if harness_enabled else "", _tools, _agents, _tasks, _crew])
+            filter(
+                None,
+                [
+                    _header,
+                    gen_harness_preamble() if harness_enabled else "",
+                    _state_hdr,
+                    _tools,
+                    _agents,
+                    _tasks,
+                    _crew,
+                    _post,
+                ],
+            )
         )
         log_compile_end(_log, start_ts, code, warnings, spec)
         return code, warnings

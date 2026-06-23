@@ -125,10 +125,11 @@
                       "replace",
                       "append",
                       "merge",
+                      "last_wins",
                       "custom"
                     ],
                     "default": "replace",
-                    "description": "replace: last-write-wins (default). append: concat arrays. merge: deep object merge. custom: fn_ref required."
+                    "description": "replace: last-write-wins (default). append: concat arrays. merge: deep object merge. last_wins: explicit last-write-wins (same as replace but semantically distinct). custom: fn_ref required."
                   },
                   "reducer_fn_ref": {
                     "type": "string",
@@ -3580,7 +3581,7 @@
         "edges"
       ],
       "additionalProperties": false,
-      "description": "Its Harness flow spec v1.0.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters."
+      "description": "Build A Harness flow spec v1.0.0 — runtime-agnostic workflow spec for LangGraph, CrewAI, Mastra, and MS Agent Framework adapters."
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#"

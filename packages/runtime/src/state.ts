@@ -1,4 +1,4 @@
-import type { StateSchema } from '@itsharness/canvas'
+import type { StateSchema } from '@buildaharness/canvas'
 
 export class FlowState {
   private data: Record<string, unknown>

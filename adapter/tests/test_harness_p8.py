@@ -214,21 +214,17 @@ def test_t02_append_query_round_trip():
 def test_t03_get_strategy_weights_returns_named_tuple_keys():
     """T03: get_strategy_weights() keys are StrategyWeightKey namedtuples with float values."""
     store = _make_in_memory_store()
-    # Seed a weight entry by calling update directly on the session
-    # Manually insert via the in-memory session
+    # Seed directly into the in-memory dict — no sqlalchemy needed in unit tests.
     with store.db_session_factory() as session:
-        from sqlalchemy import text
-
-        session.execute(
-            text("INSERT INTO experience_strategy_weights"),
+        session._db.setdefault("experience_strategy_weights", []).append(
             {
-                "id": str(uuid.uuid4()),
                 "strategy_type": "DIRECT_EDIT",
                 "failure_class": "type_error",
-                "success_inc": 1,
-            },
+                "success_count": 1,
+                "attempt_count": 1,
+                "rate": 1.0,
+            }
         )
-        session.commit()
 
     weights = store.get_strategy_weights()
     assert isinstance(weights, dict)

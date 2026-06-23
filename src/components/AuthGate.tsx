@@ -43,7 +43,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         {/* Logo / title */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-            itsharness
+            buildaharness
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
             {mode === 'login' ? 'Sign in to your workspace' : 'Create your workspace'}

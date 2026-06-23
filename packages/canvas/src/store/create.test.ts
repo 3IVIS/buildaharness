@@ -1,12 +1,12 @@
 /**
- * @itsharness/canvas — unit tests
+ * @buildaharness/canvas — unit tests
  *
  * Tests cover:
  *   1. createCanvasStore — store factory produces isolated instances
  *   2. onSpecChange — subscription fires on data mutations, not UI-only changes
  *   3. loadFlow → exportSpec round-trip
  *   4. undo / redo
- *   5. ItsHarnessCanvas — renders without crashing, fires onSpecChange
+ *   5. BuildAHarnessCanvas — renders without crashing, fires onSpecChange
  *   6. Multiple simultaneous instances don't share state
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -231,7 +231,7 @@ describe('store subscription', () => {
 
   it('manual selective subscription fires only when slice changes', () => {
     // Zustand vanilla subscribe() is 1-arg only. Selector-based subscriptions
-    // require manual equality checks — the same pattern used in ItsHarnessCanvas.tsx.
+    // require manual equality checks — the same pattern used in BuildAHarnessCanvas.tsx.
     const store = makeStore()
     const nodeSelectCalls: (string | null)[] = []
     let prevSelected = store.getState().selectedNodeId

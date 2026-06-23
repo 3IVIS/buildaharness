@@ -28,6 +28,21 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+
+def _sql_text(sql: str):
+    """Wrap sql in sqlalchemy text() when available; fall back to the raw string.
+
+    The in-memory session used in unit tests checks str(stmt) for SQL patterns,
+    so a plain string is functionally equivalent to text() for that path.
+    """
+    try:
+        from sqlalchemy import text
+
+        return text(sql)
+    except ImportError:
+        return sql
+
+
 # Fixed default strategy order — used when experience store is unavailable
 # or when no empirical data exists for a given failure_class.
 DEFAULT_STRATEGY_ORDER: list[str] = [
@@ -137,10 +152,8 @@ class ExperienceStore:
         if self.db_session_factory is None:
             return False
         try:
-            from sqlalchemy import text
-
             with self.db_session_factory() as session:
-                session.execute(text("SELECT 1"))
+                session.execute(_sql_text("SELECT 1"))
             return True
         except Exception:
             return False
@@ -152,13 +165,11 @@ class ExperienceStore:
         try:
             import json
 
-            from sqlalchemy import text
-
             assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 payload_str = json.dumps(entry.payload)
                 session.execute(
-                    text(
+                    _sql_text(
                         """
                         INSERT INTO experience_entries
                             (id, entry_type, failure_class, task_class, payload, run_id, created_at)
@@ -194,14 +205,12 @@ class ExperienceStore:
         try:
             import json
 
-            from sqlalchemy import text
-
             type_val = entry_type.value if isinstance(entry_type, ExperienceType) else entry_type
             assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 if task_class is not None:
                     rows = session.execute(
-                        text(
+                        _sql_text(
                             """
                             SELECT id, entry_type, failure_class, task_class, payload, run_id, created_at
                             FROM experience_entries
@@ -214,7 +223,7 @@ class ExperienceStore:
                     ).fetchall()
                 else:
                     rows = session.execute(
-                        text(
+                        _sql_text(
                             """
                             SELECT id, entry_type, failure_class, task_class, payload, run_id, created_at
                             FROM experience_entries
@@ -251,12 +260,10 @@ class ExperienceStore:
         if not self.available:
             return {}
         try:
-            from sqlalchemy import text
-
             assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 rows = session.execute(
-                    text("SELECT strategy_type, failure_class, rate FROM experience_strategy_weights")
+                    _sql_text("SELECT strategy_type, failure_class, rate FROM experience_strategy_weights")
                 ).fetchall()
             return {StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): float(row[2]) for row in rows}
         except Exception:
@@ -419,10 +426,8 @@ def upsert_strategy_weight(
     session: Any,
 ) -> None:
     """UPSERT a strategy outcome into experience_strategy_weights."""
-    from sqlalchemy import text
-
     session.execute(
-        text(
+        _sql_text(
             """
             INSERT INTO experience_strategy_weights
                 (id, strategy_type, failure_class, success_count, attempt_count, rate, updated_at)

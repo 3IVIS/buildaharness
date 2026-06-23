@@ -11,6 +11,9 @@ export interface SessionCloseConfig {
   profileStoreId: string
   feedbackTextKey?: string
   model?: string
+  // X-3: strong model for generate-summary (coachee-facing final message).
+  // Falls back to model if not set.
+  summaryModel?: string
   // X-3: optional overrides — defaults documented inline in makeSessionCloseFlow
   feedbackUserTemplate?: string
   summaryUserTemplate?: string
@@ -74,6 +77,8 @@ export function makeSessionCloseFlow(config: SessionCloseConfig): FlowSpec {
         id: 'generate-summary',
         type: 'llm_call',
         label: 'Generate session summary',
+        // X-3: coachee-facing final message — use strong model when provided.
+        ...(config.summaryModel ? { model: config.summaryModel } : {}),
         system_prompt: config.summaryPrompt,
         prompt_template: summaryUserTemplate,
         output_key: 'session_summary',

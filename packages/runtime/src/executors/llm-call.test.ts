@@ -4,7 +4,7 @@ import { FlowState } from '../state'
 import { EventBus } from '../events'
 import { createExecutionContext } from '../context'
 import type { ILLMClient, ChatMessage, ChatOptions } from '../llm-client'
-import type { LlmCallNode } from '@itsharness/canvas'
+import type { LlmCallNode } from '@buildaharness/canvas'
 
 function mockLLMClient(tokens: string[]): ILLMClient {
   return {

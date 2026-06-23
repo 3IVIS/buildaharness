@@ -3,7 +3,7 @@ import { FlowRuntime } from './runtime'
 import { createExecutionContext } from './context'
 import { UnknownNodeTypeError, AbortedError } from './errors'
 import type { ILLMClient, ChatMessage, ChatOptions, LLMStructuredResponse } from './llm-client'
-import type { FlowSpec } from '@itsharness/canvas'
+import type { FlowSpec } from '@buildaharness/canvas'
 import { EXAMPLE_FLOWS } from '../../canvas/src/spec/examples'
 import { getExecutor, registerExecutor, unregisterExecutor } from './executors/index'
 

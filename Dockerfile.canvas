@@ -1,5 +1,5 @@
 # Fix #43: build canvas deps at image-build time, not on every container start.
-# Usage: docker build -f Dockerfile.canvas -t itsharness-canvas .
+# Usage: docker build -f Dockerfile.canvas -t buildaharness-canvas .
 #        docker compose up  (uses this image via docker-compose.yml build: context)
 
 FROM node:20-alpine AS deps

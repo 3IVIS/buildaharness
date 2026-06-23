@@ -79,7 +79,7 @@ try:
     from langfuse import observe as _lf_observe
     from opentelemetry import trace as _otel_trace
 
-    _itsharness_tracer = _otel_trace.get_tracer("itsharness.nodes", "0.1.0")
+    _buildaharness_tracer = _otel_trace.get_tracer("buildaharness.nodes", "0.1.0")
     _LANGFUSE_ENABLED = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
 except ImportError:
     _LANGFUSE_ENABLED = False
@@ -104,7 +104,7 @@ except ImportError:
         def start_as_current_span(self, *_, **__):
             return self._FakeSpan()
 
-    _itsharness_tracer = _FakeTracer()  # type: ignore[assignment]
+    _buildaharness_tracer = _FakeTracer()  # type: ignore[assignment]
 
 
 def _lf_update_trace_output(state: dict) -> None:
@@ -155,6 +155,81 @@ class ResumeRequest(BaseModel):
     payload: dict = {}
     # Optional: pass original spec so resume can recompile after a restart.
     spec: dict = {}
+
+
+class FnRefRequest(BaseModel):
+    module: str
+    function: str
+    state: dict = {}
+
+
+class MemoryWriteRequest(BaseModel):
+    store_id: str
+    key: str
+    value: Any = None
+
+
+class MemoryReadRequest(BaseModel):
+    store_id: str
+    key: str
+
+
+# Modules the Mastra runner bridge is allowed to call.
+# Must match the fn_ref allowlist in validate.py.
+# Add private module names via EXTRA_CALLABLE_MODULES (comma-separated env var).
+_CALLABLE_MODULES: frozenset[str] = frozenset({"rag_utils"}) | frozenset(
+    m.strip() for m in os.getenv("EXTRA_CALLABLE_MODULES", "").split(",") if m.strip()
+)
+
+# ─── Shared key-value store for memory_write/memory_read bridge ───────────────
+# Redis-backed when REDIS_URL is set (key: buildaharness:store:{store_id}:{key},
+# TTL 24 h), in-memory dict fallback otherwise.  Shared across LangGraph and
+# Mastra paths so session state written by one runtime is readable by the other.
+
+_BRIDGE_STORES: dict[str, dict] = {}
+_BRIDGE_REDIS_CLIENT: Any = None
+
+
+def _bridge_redis() -> Any:
+    global _BRIDGE_REDIS_CLIENT
+    if _BRIDGE_REDIS_CLIENT is None:
+        redis_url = os.getenv("REDIS_URL", "")
+        if redis_url:
+            try:
+                import redis as _rm
+
+                _BRIDGE_REDIS_CLIENT = _rm.from_url(redis_url, decode_responses=True)
+            except Exception:
+                pass
+    return _BRIDGE_REDIS_CLIENT
+
+
+def _bridge_store_get(store_id: str, key: str) -> Any:
+    r = _bridge_redis()
+    if r is not None:
+        try:
+            v = r.get(f"buildaharness:store:{store_id}:{key}")
+            return _json.loads(v) if v is not None else None
+        except Exception:
+            pass
+    return _BRIDGE_STORES.get(store_id, {}).get(str(key))
+
+
+def _bridge_store_set(store_id: str, key: str, value: Any) -> None:
+    r = _bridge_redis()
+    if r is not None:
+        try:
+            r.setex(
+                f"buildaharness:store:{store_id}:{key}",
+                86400,
+                _json.dumps(value, default=str),
+            )
+            return
+        except Exception:
+            pass
+    if store_id not in _BRIDGE_STORES:
+        _BRIDGE_STORES[store_id] = {}
+    _BRIDGE_STORES[store_id][str(key)] = value
 
 
 class HitlState(BaseModel):
@@ -472,7 +547,7 @@ def _stream_graph(
                         raise RuntimeError(f"Node '{node_id}' failed: {err_msg}")
 
                     try:
-                        with _itsharness_tracer.start_as_current_span(
+                        with _buildaharness_tracer.start_as_current_span(
                             f"node.{node_id}",
                             attributes={"node.id": node_id, "flow.job_id": job_id},
                         ) as span:
@@ -576,7 +651,7 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
                 continue
             next_nid = task_sequence[i + 1] if i + 1 < len(task_sequence) else None
 
-            def make_cb(node_id: str, next_node_id: str | None):
+            def make_cb(node_id: str, next_node_id: str | None, _loop: asyncio.AbstractEventLoop = loop):
                 def cb(task_output):
                     elapsed: int | None = None
                     if node_id in task_start:
@@ -603,17 +678,35 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
                                 task_start[next_node_id] = datetime.now(UTC)
                                 await _emit(job_id, next_node_id, "running", _db)
 
-                    asyncio.run_coroutine_threadsafe(_do(), loop)
+                    # CrewAI 1.14+ runs kickoff() via asyncio.to_thread(), so callbacks
+                    # fire from a worker thread with no running event loop.
+                    # run_coroutine_threadsafe is thread-safe; create_task is not.
+                    asyncio.run_coroutine_threadsafe(_do(), _loop)
 
                 return cb
 
             task.callback = make_cb(nid, next_nid)
 
-        # Pass user inputs so CrewAI substitutes {{key}} placeholders in task descriptions.
-        _kickoff_inputs = inputs if inputs else None
-        result = await loop.run_in_executor(
-            None, lambda: crew.kickoff(inputs=_kickoff_inputs) if _kickoff_inputs else crew.kickoff()
+        # Hybrid mode: pre-crew fn_ref transforms have already run during exec()
+        # and enriched _flow_state.  Use it as kickoff inputs so CrewAI task
+        # descriptions see the resolved state values.
+        _flow_state: dict = namespace.get("_flow_state") or {}
+        _kickoff_inputs = dict(_flow_state) if _flow_state else (inputs if inputs else None)
+
+        # Use kickoff_async() directly — avoids Flow.kickoff()'s internal asyncio.run()
+        # which hangs when called from within a run_in_executor thread in Python 3.12.
+        result = await (
+            crew.kickoff_async(inputs=_kickoff_inputs)
+            if _kickoff_inputs
+            else crew.kickoff_async()
         )
+
+        # Hybrid mode: call _post_crew() to execute post-agent fn_ref transforms.
+        _post_crew = namespace.get("_post_crew")
+        if callable(_post_crew):
+            await loop.run_in_executor(None, lambda: _post_crew(str(result)))
+            # Refresh _flow_state reference after post_crew updated the module global
+            _flow_state = namespace.get("_flow_state") or _flow_state
 
         async with _job_session() as db:
             job = await _jobs_get(job_id, db)
@@ -623,7 +716,19 @@ async def _run_crewai(job_id: str, spec: dict, org_id: str | None = None, inputs
                     if nid not in seen_done:
                         await _emit(job_id, nid, "done", db)
 
-        output = str(result)
+        # Prefer _flow_state JSON (hybrid mode — contains coach_response + full state)
+        # over the crew's plain-text last-task output.
+        _flow_state_final = namespace.get("_flow_state")
+        if (
+            _flow_state_final
+            and isinstance(_flow_state_final, dict)
+            and (_flow_state_final.get("coach_response") or _flow_state_final.get("response_draft"))
+        ):
+            import json as _json_local
+
+            output = _json_local.dumps(_flow_state_final, default=str)
+        else:
+            output = str(result)
         if warnings:
             output = f"[warnings]\n{chr(10).join(warnings)}\n\n{output}"
 
@@ -1089,7 +1194,9 @@ async def _run_langgraph(job_id: str, spec: dict, org_id: str | None = None, inp
         # Namespace the LangGraph checkpointer thread_id with org_id so memory
         # state is siloed per tenant: {org_id}:{job_id} on Postgres checkpointer.
         _thread_id = f"{org_id}:{job_id}" if org_id else job_id
-        config = {"configurable": {"thread_id": _thread_id}, "recursion_limit": 50}
+        # recursion_limit: complex graphs with multiple recovery cycles can reach
+        # ~67 steps in worst case; 150 gives ample headroom.
+        config = {"configurable": {"thread_id": _thread_id}, "recursion_limit": 150}
         skip = {"input", "output", "annotation"}
         trackable = [n["id"] for n in spec.get("nodes", []) if n.get("type") not in skip]
 
@@ -1252,6 +1359,76 @@ async def _resume_langgraph(job_id: str, resume_payload: dict, spec: dict, org_i
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
+
+
+@router.post("/fn_ref")
+async def call_fn_ref(body: FnRefRequest) -> dict:
+    """Execute a Python fn_ref on behalf of the Mastra runner sidecar.
+
+    The runner's generated TypeScript cannot import Python modules directly,
+    so it calls this endpoint to delegate fn_ref execution back to the adapter
+    process where private fn_ref modules are already loaded.
+
+    No user auth — this endpoint is only reachable from within the Docker
+    network (adapter and mastra-runner share the same internal bridge).
+    """
+    import importlib
+
+    from validate import check_fn_ref as _check_fn_ref
+
+    full_ref = f"{body.module}:{body.function}"
+    _check_fn_ref(full_ref, "fn_ref bridge")
+
+    if body.module not in _CALLABLE_MODULES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Module '{body.module}' is not in the fn_ref callable allowlist. Allowed: {sorted(_CALLABLE_MODULES)}"
+            ),
+        )
+
+    try:
+        mod = importlib.import_module(body.module)
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=f"Module '{body.module}' not found") from exc
+
+    fn = getattr(mod, body.function, None)
+    if fn is None or not callable(fn):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Function '{body.function}' not found in module '{body.module}'",
+        )
+
+    try:
+        result = fn(body.state)
+        if not isinstance(result, dict):
+            result = {"result": result}
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/memory_write")
+async def bridge_memory_write(body: MemoryWriteRequest) -> dict:
+    """Write a value to the shared key-value store on behalf of the Mastra runner.
+
+    Uses the same Redis/in-memory backend as the LangGraph adapter's _store_set,
+    so session state written by one runtime is readable by the other.
+    Only reachable from within the Docker network (no user auth required).
+    """
+    _bridge_store_set(body.store_id, body.key, body.value)
+    return {"written": True}
+
+
+@router.post("/memory_read")
+async def bridge_memory_read(body: MemoryReadRequest) -> dict:
+    """Read a value from the shared key-value store on behalf of the Mastra runner.
+
+    Returns {"value": <stored_value>} — value is null when the key has no entry.
+    Only reachable from within the Docker network (no user auth required).
+    """
+    value = _bridge_store_get(body.store_id, body.key)
+    return {"value": value}
 
 
 @router.post("", status_code=202)
