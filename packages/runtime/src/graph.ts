@@ -1,13 +1,17 @@
 import type { Node, Edge } from '@buildaharness/canvas'
 import { GraphCycleError, FlowExecutionError } from './errors'
 
+type NodeLike = { id: string; type: string; [key: string]: unknown }
+
 export class FlowGraph {
-  private nodeMap: Map<string, Node>
+  private nodeMap: Map<string, NodeLike>
   private fwd: Map<string, string[]>
   private bwd: Map<string, string[]>
   private order: string[]
+  private allowCycles: boolean
 
-  constructor(nodes: Node[], edges: Edge[]) {
+  constructor(nodes: NodeLike[], edges: Edge[], opts?: { allowCycles?: boolean }) {
+    this.allowCycles = opts?.allowCycles ?? false
     this.nodeMap = new Map(nodes.map(n => [n.id, n]))
     this.fwd = new Map(nodes.map(n => [n.id, [] as string[]]))
     this.bwd = new Map(nodes.map(n => [n.id, [] as string[]]))
@@ -76,10 +80,14 @@ export class FlowGraph {
     }
 
     if (sorted.length !== this.nodeMap.size) {
-      const inCycle = [...inDegree.entries()]
-        .filter(([, deg]) => deg > 0)
-        .map(([id]) => id)
-      throw new GraphCycleError({ nodeIds: inCycle })
+      if (!this.allowCycles) {
+        const inCycle = [...inDegree.entries()]
+          .filter(([, deg]) => deg > 0)
+          .map(([id]) => id)
+        throw new GraphCycleError({ nodeIds: inCycle })
+      }
+      // allowCycles: return partial order (acyclic portion); cycles are
+      // traversed at runtime via condition node routeToNodeId routing.
     }
 
     return sorted
@@ -101,7 +109,7 @@ export class FlowGraph {
     return [...(this.bwd.get(nodeId) ?? [])]
   }
 
-  getNode(nodeId: string): Node | undefined {
+  getNode(nodeId: string): NodeLike | undefined {
     return this.nodeMap.get(nodeId)
   }
 

@@ -2,6 +2,7 @@ import type { Node } from '@buildaharness/canvas'
 import type { FlowState } from '../state'
 import type { ExecutionContext } from '../context'
 import type { ExecutorOutput } from './index'
+import { resolveValue } from '../template'
 
 export async function transformExecutor(
   node: Node,
@@ -22,7 +23,11 @@ export async function transformExecutor(
     if (!fn) throw new Error(`transform node "${node.id}" fn_ref "${node.fn_ref}" not found in FunctionRegistry`)
     stateUpdate = fn(stateSnapshot)
   } else if (node.mode === 'mapping') {
-    if (node.mapping) {
+    if (node.output_map) {
+      for (const [outputKey, sourceExpr] of Object.entries(node.output_map)) {
+        stateUpdate[outputKey] = resolveValue(sourceExpr, state)
+      }
+    } else if (node.mapping) {
       for (const { from, to } of node.mapping) {
         stateUpdate[to] = stateSnapshot[from]
       }

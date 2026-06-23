@@ -155,6 +155,33 @@ describe('AgentRoleExecutor', () => {
     })
   })
 
+  describe('task_description template resolution', () => {
+    it('resolves {{$.state.field}} placeholders in task_description before sending to LLM', async () => {
+      const capturedMessages: ChatMessage[][] = []
+      const mockClient: ILLMClient = {
+        async *callChat() { yield '' },
+        async callChatSync() { return '' },
+        async callChatStructured(msgs) {
+          capturedMessages.push([...msgs])
+          return { content: 'done' }
+        },
+      }
+
+      const ctx = createExecutionContext({ llmClient: mockClient })
+      ctx.agents.set('researcher', sampleAgent)
+
+      const node = makeAgentRoleNode('researcher', 'Analyze: {{$.state.goal}} using {{$.state.tool}}')
+      const state = new FlowState()
+      state.set('goal', 'increase revenue')
+      state.set('tool', 'analytics')
+
+      await agentRoleExecutor(node, state, ctx)
+
+      const userMsg = capturedMessages[0].find(m => m.role === 'user')
+      expect(userMsg!.content).toBe('Analyze: increase revenue using analytics')
+    })
+  })
+
   describe('max_iter guard', () => {
     it('max_iter guard fires at exact count; partial answer returned with warning event emitted', async () => {
       // Agent always returns a tool call — will hit max_iter

@@ -4,6 +4,7 @@ import type { ExecutionContext } from '../context'
 import type { ExecutorOutput } from './index'
 import type { ChatMessage, ToolDefinition } from '../llm-client'
 import { FlowExecutionError, AbortedError } from '../errors'
+import { resolveTemplate } from '../template'
 
 export async function agentRoleExecutor(node: Node, state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
   if (node.type !== 'agent_role') throw new Error(`agentRoleExecutor called with node type "${node.type}"`)
@@ -25,7 +26,7 @@ export async function agentRoleExecutor(node: Node, state: FlowState, context: E
 
   const messages: ChatMessage[] = []
   if (systemParts.length > 0) messages.push({ role: 'system', content: systemParts.join('\n') })
-  messages.push({ role: 'user', content: config.task_description })
+  messages.push({ role: 'user', content: resolveTemplate(config.task_description, state) })
 
   // Build tool definitions
   const toolDefs: ToolDefinition[] = []

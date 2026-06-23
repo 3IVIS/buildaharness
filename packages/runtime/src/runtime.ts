@@ -1,5 +1,5 @@
-import { assertFlowSpec } from '@buildaharness/canvas'
-import type { FlowSpec, Node } from '@buildaharness/canvas'
+import { assertRuntimeFlowSpec } from '@buildaharness/canvas'
+import type { RuntimeFlowSpec, FlowSpec, Node } from '@buildaharness/canvas'
 import { FlowGraph } from './graph'
 import { FlowState } from './state'
 import type { ExecutionContext } from './context'
@@ -51,8 +51,9 @@ export class FlowRuntime {
     triggerData: Record<string, unknown>,
     context: ExecutionContext,
   ): Promise<FlowState> {
-    // Throws immediately on invalid spec or unsupported spec_version
-    const spec: FlowSpec = assertFlowSpec(flowSpec)
+    // Throws immediately on invalid spec or unsupported spec_version.
+    // assertRuntimeFlowSpec accepts harness/observability node types as stubs.
+    const spec: RuntimeFlowSpec = assertRuntimeFlowSpec(flowSpec)
 
     this._activeContext = context
 
@@ -68,7 +69,9 @@ export class FlowRuntime {
       }
     }
 
-    const graph = new FlowGraph(spec.nodes, spec.edges)
+    // harness-enabled flows may contain cycles (retry loops routed by condition nodes)
+    const harnessEnabled = (spec.harness_meta as Record<string, unknown> | undefined)?.['enabled'] === true
+    const graph = new FlowGraph(spec.nodes as unknown as Node[], spec.edges, { allowCycles: harnessEnabled })
     const state = new FlowState(spec.state_schema)
 
     // Store trigger data in state so InputExecutor can read it
@@ -139,7 +142,7 @@ export class FlowRuntime {
   // ---------------------------------------------------------------------------
 
   async _runNodeWithRetry(
-    node: Node,
+    node: { id: string; type: string; [key: string]: unknown },
     state: FlowState,
     context: ExecutionContext,
   ): Promise<ExecutorOutput & { retryCount: number }> {
@@ -153,7 +156,9 @@ export class FlowRuntime {
 
     while (true) {
       try {
-        const result = await executor(node, state, context)
+        // Cast to Node: standard nodes are strictly typed; harness stubs are
+        // handled by _stubExecutor which only accesses node.id and node.type.
+        const result = await executor(node as unknown as Node, state, context)
         return { ...result, retryCount: attempt }
       } catch (err) {
         // Check retryability BEFORE wrapping so raw TypeError (network error) is visible

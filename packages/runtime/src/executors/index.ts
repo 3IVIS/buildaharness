@@ -57,6 +57,23 @@ const REGISTRY = new Map<string, ExecutorFn>([
   ['subgraph', subgraphExecutor],
   // P-PC executor
   ['process_concept', processConceptExecutor],
+  // Harness node types — executed server-side by the Python adapter; the runtime
+  // treats them as passthrough stubs that emit lifecycle events but do not
+  // modify state. This allows harness-enabled flows (coaching, etc.) to be
+  // loaded and traversed by the client-side runtime without error.
+  ['gather_evidence', _stubExecutor],
+  ['update_world_model', _stubExecutor],
+  ['apply_tool_reliability', _stubExecutor],
+  ['recovery_node', _stubExecutor],
+  // Canvas observability node types (display-only, no execution semantics)
+  ['world_model', _stubExecutor],
+  ['hypothesis_set', _stubExecutor],
+  ['control_state', _stubExecutor],
+  ['task_graph_node', _stubExecutor],
+  ['verification_gate', _stubExecutor],
+  ['evidence_store_node', _stubExecutor],
+  ['experience_store_node', _stubExecutor],
+  ['reviewer_pass', _stubExecutor],
 ])
 
 export function getExecutor(nodeType: string): ExecutorFn | undefined {

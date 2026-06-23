@@ -27,6 +27,70 @@ from maf_adapter import compile_maf
 from mastra_adapter import compile_mastra
 from rag_utils import format_chunks
 
+# ── Lightweight fake StateGraph (used when langgraph is not installed) ────────
+
+
+class _FakeStateGraph:
+    """Minimal StateGraph stub that actually executes registered node functions."""
+
+    def __init__(self, state_type=None):
+        self._nodes: dict = {}
+        self._succs: dict = {}
+        self._entry: str | None = None
+
+    def add_node(self, name, fn=None, **_kw):
+        self._nodes[name] = fn or (lambda s: {})
+
+    def add_edge(self, src, dst):
+        if src == "__start__":
+            self._entry = dst
+        elif dst != "__end__":
+            self._succs.setdefault(src, []).append(dst)
+
+    def add_conditional_edges(self, src, fn, mapping=None, **_kw):
+        for dst in (mapping or {}).values():
+            if dst != "__end__":
+                self._succs.setdefault(src, []).append(dst)
+
+    def compile(self, **_kw):
+        return _FakeCompiled(self._nodes, self._succs, self._entry)
+
+
+class _FakeCompiled:
+    def __init__(self, nodes, succs, entry):
+        self._nodes = nodes
+        self._succs = succs
+        self._entry = entry
+
+    def stream(self, inputs, stream_mode="updates", config=None):
+        state = dict(inputs)
+        preds: dict = {}
+        for src, dsts in self._succs.items():
+            for dst in dsts:
+                preds.setdefault(dst, set()).add(src)
+        queue: list[str] = [self._entry] if self._entry else []
+        done: set[str] = set()
+        queued: set[str] = set(queue)
+        while queue:
+            ready = [n for n in queue if all(p in done for p in preds.get(n, set()))]
+            if not ready:
+                break
+            queue = [n for n in queue if n not in ready]
+            for name in ready:
+                fn = self._nodes.get(name)
+                if fn is None or name in done:
+                    continue
+                done.add(name)
+                update = fn(state) or {}
+                if isinstance(update, dict):
+                    state.update(update)
+                yield {name: update}
+                for nxt in self._succs.get(name, []):
+                    if nxt not in done and nxt not in queued:
+                        queue.append(nxt)
+                        queued.add(nxt)
+
+
 # ── paths ─────────────────────────────────────────────────────────────────────
 
 RAG_SPEC_PATH = Path(__file__).parent.parent.parent / "flows" / "01-rag-agent-flow.json"
@@ -330,12 +394,12 @@ def test_langgraph_end_to_end_with_wikipedia_data(wikipedia_chunks, rag_spec):
     fake_graph_mod = types.ModuleType("langgraph.graph")
     fake_memory_mod = types.ModuleType("langgraph.checkpoint.memory")
 
-    # Real StateGraph / START / END from langgraph if available; fall back to mocks.
+    # Real StateGraph / START / END from langgraph if available; fall back to fakes.
     try:
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.graph import END, START, StateGraph
     except ImportError:
-        StateGraph = MagicMock()
+        StateGraph = _FakeStateGraph
         START = "__start__"
         END = "__end__"
         MemorySaver = MagicMock()

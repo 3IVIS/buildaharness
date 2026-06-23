@@ -3,7 +3,8 @@ import { FlowRuntime } from './runtime'
 import { createExecutionContext } from './context'
 import { UnknownNodeTypeError, AbortedError } from './errors'
 import type { ILLMClient, ChatMessage, ChatOptions, LLMStructuredResponse } from './llm-client'
-import type { FlowSpec } from '@buildaharness/canvas'
+import type { FlowSpec, RuntimeFlowSpec } from '@buildaharness/canvas'
+import { assertRuntimeFlowSpec } from '@buildaharness/canvas'
 import { EXAMPLE_FLOWS } from '../../canvas/src/spec/examples'
 import { getExecutor, registerExecutor, unregisterExecutor } from './executors/index'
 
@@ -237,5 +238,65 @@ describe('FlowRuntime', () => {
     const ctx = createExecutionContext({ llmClient: mockLLMClient() })
     const state = await runtime.execute(flowWithStores, { val: 'stored-value' }, ctx)
     expect(state.get('retrieved')).toBe('stored-value')
+  })
+})
+
+describe('FlowRuntime - Harness-enabled flows', () => {
+  // A minimal harness flow with:
+  //   - harness_meta.enabled: true  → allowCycles: true
+  //   - harness node types (gather_evidence, update_world_model) as stubs
+  //   - a cycle-forming condition node (retry loop) that exits on first pass
+  const HARNESS_FLOW: RuntimeFlowSpec = assertRuntimeFlowSpec({
+    spec_version: '0.2.0',
+    id: 'harness-test-flow',
+    harness_meta: { enabled: true, input_key: 'message' },
+    nodes: [
+      { id: 'start',     type: 'input' },
+      { id: 'gather',    type: 'gather_evidence' },
+      { id: 'update_wm', type: 'update_world_model' },
+      {
+        id: 'route',
+        type: 'condition',
+        branches: [{ condition: { type: 'expr', expr: "$.state.retry == 'yes'" }, target: 'gather' }],
+        default_target: 'done',
+      },
+      { id: 'done', type: 'output' },
+    ],
+    edges: [
+      { type: 'direct', from: 'start',     to: 'gather' },
+      { type: 'direct', from: 'gather',    to: 'update_wm' },
+      { type: 'direct', from: 'update_wm', to: 'route' },
+      { type: 'direct', from: 'route',     to: 'gather' },
+      { type: 'direct', from: 'route',     to: 'done' },
+    ],
+  })
+
+  it('assertRuntimeFlowSpec accepts harness node types and harness_meta without throwing', () => {
+    expect(HARNESS_FLOW.id).toBe('harness-test-flow')
+    expect((HARNESS_FLOW.harness_meta as Record<string, unknown>)['enabled']).toBe(true)
+    expect(HARNESS_FLOW.nodes.map((n: { type: string }) => n.type)).toContain('gather_evidence')
+    expect(HARNESS_FLOW.nodes.map((n: { type: string }) => n.type)).toContain('update_world_model')
+  })
+
+  it('executes harness flow: stub nodes pass through without modifying state', async () => {
+    const runtime = new FlowRuntime()
+    const ctx = createExecutionContext({ llmClient: mockLLMClient() })
+    // retry: 'no' → condition takes default_target (done) on first evaluation
+    const state = await runtime.execute(HARNESS_FLOW, { message: 'hello', retry: 'no' }, ctx)
+    expect(state.get('message')).toBe('hello')
+    expect(state.get('retry')).toBe('no')
+  })
+
+  it('emits node:start and node:complete events for harness stub nodes', async () => {
+    const runtime = new FlowRuntime()
+    const events: { type: string; nodeId: string }[] = []
+    const ctx = createExecutionContext({ llmClient: mockLLMClient() })
+    ctx.eventBus.subscribe('node:start',    e => events.push({ type: e.type, nodeId: e.nodeId }))
+    ctx.eventBus.subscribe('node:complete', e => events.push({ type: e.type, nodeId: e.nodeId }))
+    await runtime.execute(HARNESS_FLOW, { message: 'hi', retry: 'no' }, ctx)
+    const gatherStarts   = events.filter(e => e.type === 'node:start'    && e.nodeId === 'gather')
+    const gatherComplete = events.filter(e => e.type === 'node:complete' && e.nodeId === 'gather')
+    expect(gatherStarts.length).toBeGreaterThanOrEqual(1)
+    expect(gatherComplete.length).toBeGreaterThanOrEqual(1)
   })
 })

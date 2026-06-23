@@ -298,10 +298,11 @@ export const SubgraphNode = NodeBase.extend({
 export type SubgraphNode = z.infer<typeof SubgraphNode>
 
 export const TransformNode = NodeBase.extend({
-  type:    z.literal('transform'),
-  mode:    z.enum(['mapping', 'fn_ref']),
-  mapping: z.array(z.object({ from: z.string(), to: z.string() })).optional(),
-  fn_ref:  NpmOrLocalRef.optional(),
+  type:       z.literal('transform'),
+  mode:       z.enum(['mapping', 'fn_ref']),
+  mapping:    z.array(z.object({ from: z.string(), to: z.string() })).optional(),
+  output_map: OutputMapping.optional(),
+  fn_ref:     NpmOrLocalRef.optional(),
 })
 export type TransformNode = z.infer<typeof TransformNode>
 

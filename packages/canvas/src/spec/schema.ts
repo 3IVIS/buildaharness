@@ -298,10 +298,11 @@ export const SubgraphNode = NodeBase.extend({
 export type SubgraphNode = z.infer<typeof SubgraphNode>
 
 export const TransformNode = NodeBase.extend({
-  type:    z.literal('transform'),
-  mode:    z.enum(['mapping', 'fn_ref']),
-  mapping: z.array(z.object({ from: z.string(), to: z.string() })).optional(),
-  fn_ref:  NpmOrLocalRef.optional(),
+  type:       z.literal('transform'),
+  mode:       z.enum(['mapping', 'fn_ref']),
+  mapping:    z.array(z.object({ from: z.string(), to: z.string() })).optional(),
+  output_map: OutputMapping.optional(),
+  fn_ref:     NpmOrLocalRef.optional(),
 })
 export type TransformNode = z.infer<typeof TransformNode>
 
@@ -544,6 +545,30 @@ export function parseFlowSpec(raw: unknown) {
 
 export function assertFlowSpec(raw: unknown): FlowSpec {
   return FlowSpec.parse(raw)
+}
+
+// ---------------------------------------------------------------------------
+// Runtime-permissive FlowSpec
+// Extends the canvas FlowSpec to accept harness-specific node types
+// (gather_evidence, update_world_model, recovery_node, etc.) and canvas
+// observability node types (world_model, hypothesis_set, etc.) as passthrough
+// stubs. Also allows the harness_meta field so harness-enabled flows validate.
+// Use assertRuntimeFlowSpec in the runtime package; use assertFlowSpec in the
+// canvas and validation tooling where strict node typing is required.
+// ---------------------------------------------------------------------------
+
+const RuntimeNodeStub = z.object({ id: NodeId, type: z.string() }).passthrough()
+const RuntimeNodeSchema = z.union([Node, RuntimeNodeStub])
+export type RuntimeNode = z.infer<typeof RuntimeNodeSchema>
+
+export const RuntimeFlowSpec = FlowSpec.extend({
+  nodes:        z.array(RuntimeNodeSchema).min(1),
+  harness_meta: z.record(z.unknown()).optional(),
+})
+export type RuntimeFlowSpec = z.infer<typeof RuntimeFlowSpec>
+
+export function assertRuntimeFlowSpec(raw: unknown): RuntimeFlowSpec {
+  return RuntimeFlowSpec.parse(raw)
 }
 
 /**

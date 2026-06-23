@@ -350,11 +350,12 @@ export const TransformNode = NodeBase.extend({
   mapping: z
     .array(z.object({ from: z.string(), to: z.string() }))
     .optional(),
+  output_map: OutputMapping.optional(),
   fn_ref: NpmOrLocalRef.optional(),
 })
   .refine(
-    (n) => n.mode !== 'mapping' || (!!n.mapping && n.mapping.length > 0),
-    { message: 'mapping array is required and non-empty when mode is "mapping"', path: ['mapping'] }
+    (n) => n.mode !== 'mapping' || (!!n.output_map) || (!!n.mapping && n.mapping.length > 0),
+    { message: 'mode="mapping" requires either output_map or a non-empty mapping array', path: ['mapping'] }
   )
   .refine(
     (n) => n.mode !== 'fn_ref' || !!n.fn_ref,

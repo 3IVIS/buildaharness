@@ -26,7 +26,6 @@ task_id == job_id — maps directly onto the Job rows in run_api's Postgres stor
 
 import asyncio
 import json as _json
-import os
 import uuid
 from datetime import UTC, datetime
 
@@ -36,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
+from a2a_utils import A2A_BASE_URL, generate_agent_card
 from auth import current_user
 from db import A2ADeployment, Flow, User, get_session
 from org_context import Org
@@ -62,10 +62,6 @@ _A2A_STATE: dict[str, str] = {
     "error": "failed",
     "paused": "input-required",
 }
-
-# ── Base URL (used for endpoint_url construction) ─────────────────────────────
-
-A2A_BASE_URL = os.getenv("A2A_BASE_URL", os.getenv("ADAPTER_BASE_URL", "http://localhost:8000")).rstrip("/")
 
 # ── Routers (three distinct URL namespaces) ───────────────────────────────────
 
@@ -112,55 +108,6 @@ class DeployResponse(BaseModel):
     endpoint_url: str
     agent_card: dict
     deployed_at: datetime
-
-
-# ── AgentCard generator (Python port of src/services/a2a.ts) ─────────────────
-
-
-def generate_agent_card(
-    flow_id: str,
-    flow_name: str,
-    flow_description: str | None,
-    flow_config: dict | None,
-    base_url: str = A2A_BASE_URL,
-) -> dict | None:
-    """Generate an A2A AgentCard from a flow's a2a_config.
-
-    Returns None when a2a_config is absent or enabled is False.
-    This is a faithful Python port of generateAgentCard() in a2a.ts.
-    """
-    a2a: dict = (flow_config or {}).get("a2a_config") or {}
-    if not a2a.get("enabled"):
-        return None
-
-    caps = set(a2a.get("capabilities") or [])
-
-    return {
-        "name": a2a.get("agent_name") or flow_name,
-        "description": a2a.get("agent_description") or flow_description,
-        # Discovery URL — external agents call this to fetch the full AgentCard.
-        "url": f"{base_url}/.well-known/agent/{flow_id}.json",
-        "version": a2a.get("version") or "1.0.0",
-        "capabilities": {
-            "streaming": "streaming" in caps,
-            "pushNotifications": "pushNotifications" in caps,
-            "stateTransitionHistory": "stateTransitionHistory" in caps,
-        },
-        "authentication": {
-            "schemes": [a2a.get("authentication") or "none"],
-        },
-        "defaultInputModes": ["application/json"],
-        "defaultOutputModes": ["application/json"],
-        "skills": [
-            {
-                "id": sk["id"],
-                "name": sk["name"],
-                "description": sk.get("description"),
-            }
-            for sk in (a2a.get("skills") or [])
-            if isinstance(sk, dict) and sk.get("id") and sk.get("name")
-        ],
-    }
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────

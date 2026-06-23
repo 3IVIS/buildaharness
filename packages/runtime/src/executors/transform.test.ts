@@ -48,4 +48,23 @@ describe('TransformExecutor', () => {
       transformExecutor(makeNode({ mode: 'fn_ref', fn_ref: 'missing' }), stateWith({}), ctx)
     ).rejects.toThrow()
   })
+
+  it('mode=mapping with output_map resolves JSONPath expressions from state', async () => {
+    const ctx = createExecutionContext({ llmClient: mockLLMClient() })
+    const node = makeNode({ mode: 'mapping', output_map: { final_flowspec: '$.state.draft_flowspec' } } as Partial<TransformNode>)
+    const result = await transformExecutor(node, stateWith({ draft_flowspec: { id: 'my-flow' } }), ctx)
+    expect(result.stateUpdate['final_flowspec']).toEqual({ id: 'my-flow' })
+  })
+
+  it('mode=mapping with output_map takes precedence over mapping array', async () => {
+    const ctx = createExecutionContext({ llmClient: mockLLMClient() })
+    const node = makeNode({
+      mode: 'mapping',
+      output_map: { result: '$.state.src' },
+      mapping: [{ from: 'src', to: 'other' }],
+    } as Partial<TransformNode>)
+    const result = await transformExecutor(node, stateWith({ src: 'hello' }), ctx)
+    expect(result.stateUpdate['result']).toBe('hello')
+    expect(result.stateUpdate['other']).toBeUndefined()
+  })
 })

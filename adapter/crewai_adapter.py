@@ -73,13 +73,25 @@ def gen_state_header() -> str:
         _flow_state: dict = dict(_inputs)
 
         def _sub_state(s: str) -> str:
-            \"\"\"Substitute {key} from _flow_state (superset of _inputs, enriched by fn_refs).\"\"\"
+            \"\"\"Substitute {key} and {key.subkey} from _flow_state (superset of _inputs, enriched by fn_refs).\"\"\"
             if not s or '{' not in s:
                 return s
             for _k, _v in _flow_state.items():
-                if _v is not None:
-                    s = s.replace('{' + _k + '}', str(_v) if not isinstance(_v, (dict, list)) else '')
-            s = _re_s.sub('[{][a-zA-Z_][a-zA-Z0-9_]*[}]', '', s)
+                if _v is None:
+                    continue
+                if isinstance(_v, dict):
+                    # Resolve {k.subkey} dotted paths (e.g. {parking_slot.max_turns})
+                    for _nk, _nv in _v.items():
+                        _nv_s = str(_nv) if not isinstance(_nv, (dict, list)) else _js.dumps(_nv)
+                        s = s.replace('{' + _k + '.' + _nk + '}', _nv_s)
+                    # Render the whole dict as JSON for {k} (more useful than empty string)
+                    s = s.replace('{' + _k + '}', _js.dumps(_v))
+                elif isinstance(_v, list):
+                    s = s.replace('{' + _k + '}', _js.dumps(_v))
+                else:
+                    s = s.replace('{' + _k + '}', str(_v))
+            # Remove any remaining unresolved {key} or {key.subkey} placeholders
+            s = _re_s.sub(r'\\{[a-zA-Z_][a-zA-Z0-9_.]*\\}', '', s)
             return s
 
         def _fn_ref(module: str, fn: str) -> None:
@@ -213,8 +225,11 @@ def crewai_template(s: str) -> str:
     CrewAI's crew.kickoff(inputs={...}) substitutes {key} placeholders in task
     descriptions.  The spec uses {{$.state.key}} mustache syntax which CrewAI
     doesn't understand, so we normalise it here during codegen.
+
+    Dotted paths like {{$.state.parking_slot.max_turns}} are preserved as
+    {parking_slot.max_turns} so _sub_state can resolve nested dict fields.
     """
-    return _re.sub(r"\{\{[^}]*\.state\.(\w+)[^}]*\}\}", r"{\1}", s)
+    return _re.sub(r"\{\{\$\.state\.([^}]+)\}\}", r"{\1}", s)
 
 
 # ─── Topological sort (Kahn's algorithm) ─────────────────────────────────────
@@ -382,7 +397,7 @@ def gen_header(spec: dict) -> str:
             _base_url = os.environ.get("OPENAI_BASE_URL", "")
             _api_key  = os.environ.get("OPENAI_API_KEY", "")
             if _base_url:
-                return LLM(model=model, base_url=_base_url, api_key=_api_key or "ollama")
+                return LLM(model=model, base_url=_base_url, api_key=_api_key or "ollama", timeout=300)
             return model or None
     """) + dedent0("""\
 
@@ -429,6 +444,78 @@ _BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, str]] = {
         ),
     ),
 }
+
+_PY_TYPES: dict[str, str] = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+}
+
+
+def _gen_local_tool_impl(tid: str, tdef: dict) -> tuple[list[str], list[str]]:
+    """Return (import_lines, body_lines) for a source=local tool with tool_ref 'module:function'.
+
+    If the ToolDef carries an input_schema (JSON Schema record), a Pydantic args_schema is
+    generated so CrewAI can call the tool with structured keyword arguments.  Without it the
+    tool accepts a single query string and the underlying function is called with that string.
+    """
+    tool_ref = tdef.get("tool_ref", "")
+    module, fn = tool_ref.rsplit(":", 1) if ":" in tool_ref else (tool_ref, "run")
+    vid = safe_id(tid)
+    cls_name = f"_{vid.capitalize()}Tool"
+    desc = tdef.get("description", tid)
+    input_schema: dict = tdef.get("input_schema") or {}
+
+    import_lines: list[str] = []
+    body: list[str] = []
+
+    if input_schema:
+        schema_cls = f"_{vid.capitalize()}Input"
+        import_lines += [
+            "from pydantic import BaseModel as _BM",
+            "from typing import Optional as _Opt, List as _List",
+        ]
+        body.append(f"class {schema_cls}(_BM):")
+        field_sigs: list[str] = []
+        field_names: list[str] = list(input_schema.keys())
+        for fname, fdef in input_schema.items():
+            fdef = fdef if isinstance(fdef, dict) else {}
+            ftype = fdef.get("type", "string")
+            if ftype == "array":
+                item_t = _PY_TYPES.get((fdef.get("items") or {}).get("type", "string"), "str")
+                body.append(f"    {fname}: _Opt[_List[{item_t}]] = None")
+                field_sigs.append(f"{fname}=None")
+            else:
+                py_t = _PY_TYPES.get(ftype, "str")
+                body.append(f"    {fname}: {py_t}")
+                field_sigs.append(fname)
+        kw_expr = "{" + ", ".join(f"{f!r}: {f}" for f in field_names) + "}"
+        body += [
+            f"class {cls_name}(BaseTool):",
+            f"    name: str = {tid!r}",
+            f"    description: str = {desc!r}",
+            f"    args_schema: type[_BM] = {schema_cls}",
+            f"    def _run(self, {', '.join(field_sigs)}) -> str:",
+            "        import json as _json",
+            f"        from {module} import {fn} as _fn",
+            f"        _kw = {kw_expr}",
+            "        return _json.dumps(_fn(**{k: v for k, v in _kw.items() if v is not None}))",
+            f"{vid} = {cls_name}()",
+        ]
+    else:
+        body += [
+            f"class {cls_name}(BaseTool):",
+            f"    name: str = {tid!r}",
+            f"    description: str = {desc!r}",
+            "    def _run(self, query: str) -> str:",
+            "        import json as _json",
+            f"        from {module} import {fn} as _fn",
+            "        return _json.dumps(_fn(query))",
+            f"{vid} = {cls_name}()",
+        ]
+
+    return import_lines, body
 
 
 def _has_qdrant_store(spec: dict) -> bool:
@@ -508,6 +595,10 @@ def gen_tools(spec: dict) -> str:
                 inst_expr,
                 "",
             ]
+        elif tdef.get("source") == "local" and ":" in ref:
+            local_imports, local_body = _gen_local_tool_impl(tid, tdef)
+            import_lines += local_imports
+            body_lines += [f"# tool_ref: {ref} (local)", *local_body, ""]
         else:
             body_lines += [
                 f"# tool_ref: {ref}",

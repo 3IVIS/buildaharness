@@ -821,6 +821,10 @@ def gen_node_function(
                 "    _resp_val = _json.loads(response) if isinstance(response, str) else response\n"
                 "except Exception:\n"
                 "    _resp_val = response\n"
+                # If the parsed JSON is a dict whose only meaningful content is a field
+                # named out_key, unwrap it — e.g. {"control_state": "NORMAL"} → "NORMAL".
+                f"if isinstance(_resp_val, dict) and {out_key!r} in _resp_val:\n"
+                f"    _resp_val = _resp_val[{out_key!r}]\n"
                 f"return {{{out_key!r}: _resp_val}}"
             )
         elif out_key:
@@ -1005,6 +1009,11 @@ def gen_node_function(
                 f"# memory_read: key-value from store {store_id!r}\n"
                 f"key   = _resolve(state, {key_expr!r})\n"
                 f"value = _store_get({store_id!r}, key)\n"
+                f"# Fall back to any value already in state (e.g. session_snapshot injected\n"
+                f"# as an initial input) — prevents overwriting with None on every turn\n"
+                f"# because the in-memory _STORES reset between executions.\n"
+                f"if value is None:\n"
+                f"    value = state.get({out_key!r})\n"
                 f"return {{{out_key!r}: value}}\n"
             )
         return _async_fn(label, vid, body)
@@ -1118,9 +1127,18 @@ def gen_node_function(
             f"    async for msg in agent.invoke(history):\n"
             f"        # Only collect text from ASSISTANT messages — skip tool-call and tool-result frames\n"
             f"        _content = msg.content\n"
+            f"        _stripped = _content.strip() if isinstance(_content, str) else ''\n"
+            f"        # Some local models (e.g. qwen3) emit tool calls as JSON text rather\n"
+            f"        # than via the API function-call mechanism. Detect and skip those frames.\n"
+            f"        _is_tool_json = (\n"
+            f"            _stripped.startswith('{{')\n"
+            f"            and ('\"function_name\"' in _stripped or '\"arguments\"' in _stripped\n"
+            f"                 or '\"tool_name\"' in _stripped)\n"
+            f"        )\n"
             f"        if (msg.role == AuthorRole.ASSISTANT\n"
-            f"                and isinstance(_content, str) and _content.strip()\n"
-            f"                and not _content.startswith('Tool Calls:')):\n"
+            f"                and isinstance(_content, str) and _stripped\n"
+            f"                and not _content.startswith('Tool Calls:')\n"
+            f"                and not _is_tool_json):\n"
             f"            response_parts.append(_content)\n"
             f"_sk_timeout = float(os.environ.get('MAF_SK_TIMEOUT', '300'))\n"
             f"try:\n"

@@ -27,15 +27,161 @@ Runtime support (per spec):
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from a2a_utils import generate_agent_card
 from crewai_adapter import compile_crewai
 from langgraph_adapter import compile_langgraph
 from maf_adapter import compile_maf
 from mastra_adapter import compile_mastra
+
+# ── Lightweight LangGraph / SK execution stubs ────────────────────────────────
+
+class _FakeStateGraph:
+    """Minimal StateGraph that actually executes registered node functions."""
+
+    def __init__(self, state_type=None):
+        self._nodes: dict = {}
+        self._succs: dict = {}
+        self._entry: str | None = None
+
+    def add_node(self, name, fn=None, **_kw):
+        self._nodes[name] = fn or (lambda s: {})
+
+    def add_edge(self, src, dst):
+        if src == "__start__":
+            self._entry = dst
+        elif dst != "__end__":
+            self._succs.setdefault(src, []).append(dst)
+
+    def add_conditional_edges(self, src, fn, mapping=None, **_kw):
+        for dst in (mapping or {}).values():
+            if dst != "__end__":
+                self._succs.setdefault(src, []).append(dst)
+
+    def compile(self, **_kw):
+        return _FakeCompiled(self._nodes, self._succs, self._entry)
+
+
+class _FakeCompiled:
+    def __init__(self, nodes, succs, entry):
+        self._nodes = nodes
+        self._succs = succs
+        self._entry = entry
+
+    def stream(self, inputs, stream_mode="updates", config=None):
+        state = dict(inputs)
+        preds: dict = {}
+        for src, dsts in self._succs.items():
+            for dst in dsts:
+                preds.setdefault(dst, set()).add(src)
+        queue: list[str] = [self._entry] if self._entry else []
+        done: set[str] = set()
+        queued: set[str] = set(queue)
+        while queue:
+            ready = [n for n in queue if all(p in done for p in preds.get(n, set()))]
+            if not ready:
+                break
+            queue = [n for n in queue if n not in ready]
+            for name in ready:
+                fn = self._nodes.get(name)
+                if fn is None or name in done:
+                    continue
+                done.add(name)
+                update = fn(state) or {}
+                if isinstance(update, dict):
+                    state.update(update)
+                yield {name: update}
+                for nxt in self._succs.get(name, []):
+                    if nxt not in done and nxt not in queued:
+                        queue.append(nxt)
+                        queued.add(nxt)
+
+
+def _build_lg_stubs() -> dict[str, types.ModuleType]:
+    """Return sys.modules stubs for LangGraph + LangChain so exec'd code can run."""
+    lc_openai = types.ModuleType("langchain_openai")
+    lc_openai.ChatOpenAI = MagicMock  # type: ignore[attr-defined]
+    lc_openai.OpenAIEmbeddings = MagicMock  # type: ignore[attr-defined]
+    lc_core_msg = types.ModuleType("langchain_core.messages")
+    lc_core_msg.HumanMessage = MagicMock  # type: ignore[attr-defined]
+    lc_core_msg.SystemMessage = MagicMock  # type: ignore[attr-defined]
+    lc_core_tools = types.ModuleType("langchain_core.tools")
+    lc_core_tools.tool = lambda f: f  # type: ignore[attr-defined]
+    lg = types.ModuleType("langgraph")
+    lg_graph = types.ModuleType("langgraph.graph")
+    lg_graph.StateGraph = _FakeStateGraph  # type: ignore[attr-defined]
+    lg_graph.START = "__start__"  # type: ignore[attr-defined]
+    lg_graph.END = "__end__"  # type: ignore[attr-defined]
+    lg_prebuilt = types.ModuleType("langgraph.prebuilt")
+    lg_prebuilt.create_react_agent = MagicMock()  # type: ignore[attr-defined]
+    lg_memory = types.ModuleType("langgraph.checkpoint.memory")
+    lg_memory.MemorySaver = MagicMock  # type: ignore[attr-defined]
+    return {
+        "langchain_openai": lc_openai,
+        "langchain_core.messages": lc_core_msg,
+        "langchain_core.tools": lc_core_tools,
+        "langgraph": lg,
+        "langgraph.graph": lg_graph,
+        "langgraph.prebuilt": lg_prebuilt,
+        "langgraph.checkpoint.memory": lg_memory,
+    }
+
+
+def _build_sk_stubs() -> dict[str, types.ModuleType]:
+    """Return sys.modules stubs for semantic-kernel so exec'd MAF code can run."""
+    sk = types.ModuleType("semantic_kernel")
+    sk.Kernel = MagicMock  # type: ignore[attr-defined]
+    sk_conn = types.ModuleType("semantic_kernel.connectors")
+    sk_conn_ai = types.ModuleType("semantic_kernel.connectors.ai")
+    sk_conn_ai_oai = types.ModuleType("semantic_kernel.connectors.ai.open_ai")
+    sk_conn_ai_oai.OpenAIChatCompletion = MagicMock  # type: ignore[attr-defined]
+    sk_contents = types.ModuleType("semantic_kernel.contents")
+    sk_contents.ChatMessageContent = MagicMock  # type: ignore[attr-defined]
+    sk_contents.ChatHistory = MagicMock  # type: ignore[attr-defined]
+    _author_role = MagicMock()
+    _author_role.SYSTEM = "system"
+    _author_role.USER = "user"
+    _author_role.ASSISTANT = "assistant"
+    sk_contents.AuthorRole = _author_role  # type: ignore[attr-defined]
+    sk_agents = types.ModuleType("semantic_kernel.agents")
+    sk_agents.ChatCompletionAgent = MagicMock  # type: ignore[attr-defined]
+    sk_agents.AgentGroupChat = MagicMock  # type: ignore[attr-defined]
+    sk_strats = types.ModuleType("semantic_kernel.agents.strategies")
+    sk_strats.KernelFunctionTerminationStrategy = MagicMock  # type: ignore[attr-defined]
+    sk_strats.KernelFunctionSelectionStrategy = MagicMock  # type: ignore[attr-defined]
+    sk_fns = types.ModuleType("semantic_kernel.functions")
+    sk_fns.KernelFunctionFromPrompt = MagicMock  # type: ignore[attr-defined]
+    otel = types.ModuleType("opentelemetry")
+    otel_trace = types.ModuleType("opentelemetry.trace")
+    otel_trace.get_tracer = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_trace.set_tracer_provider = lambda *a, **kw: None  # type: ignore[attr-defined]
+    otel_sdk_trace = types.ModuleType("opentelemetry.sdk.trace")
+    otel_sdk_trace.TracerProvider = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_sdk_export = types.ModuleType("opentelemetry.sdk.trace.export")
+    otel_sdk_export.BatchSpanProcessor = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_exp = types.ModuleType("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+    otel_exp.OTLPSpanExporter = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    return {
+        "semantic_kernel": sk,
+        "semantic_kernel.connectors": sk_conn,
+        "semantic_kernel.connectors.ai": sk_conn_ai,
+        "semantic_kernel.connectors.ai.open_ai": sk_conn_ai_oai,
+        "semantic_kernel.contents": sk_contents,
+        "semantic_kernel.agents": sk_agents,
+        "semantic_kernel.agents.strategies": sk_strats,
+        "semantic_kernel.functions": sk_fns,
+        "opentelemetry": otel,
+        "opentelemetry.trace": otel_trace,
+        "opentelemetry.sdk.trace": otel_sdk_trace,
+        "opentelemetry.sdk.trace.export": otel_sdk_export,
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter": otel_exp,
+    }
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -59,15 +205,11 @@ def debate_spec() -> dict:
 
 
 def test_agent_card_none_when_disabled():
-    from a2a_api import generate_agent_card
-
     spec = {"flow_config": {"a2a_config": {"enabled": False}}}
     assert generate_agent_card("debate-agent-a2a-flow", "Debate Agent", None, spec["flow_config"]) is None
 
 
 def test_agent_card_shape_for_debate_flow(debate_spec):
-    from a2a_api import generate_agent_card
-
     card = generate_agent_card(
         flow_id="debate-agent-a2a-flow",
         flow_name=debate_spec["name"],
@@ -83,8 +225,6 @@ def test_agent_card_shape_for_debate_flow(debate_spec):
 
 
 def test_agent_card_capabilities_streaming_and_history(debate_spec):
-    from a2a_api import generate_agent_card
-
     card = generate_agent_card(
         flow_id="debate-agent-a2a-flow",
         flow_name=debate_spec["name"],
@@ -98,8 +238,6 @@ def test_agent_card_capabilities_streaming_and_history(debate_spec):
 
 
 def test_agent_card_authentication_api_key(debate_spec):
-    from a2a_api import generate_agent_card
-
     card = generate_agent_card(
         flow_id="debate-agent-a2a-flow",
         flow_name=debate_spec["name"],
@@ -111,8 +249,6 @@ def test_agent_card_authentication_api_key(debate_spec):
 
 
 def test_agent_card_structured_debate_skill(debate_spec):
-    from a2a_api import generate_agent_card
-
     card = generate_agent_card(
         flow_id="debate-agent-a2a-flow",
         flow_name=debate_spec["name"],
@@ -338,10 +474,11 @@ def _exec_langgraph(code: str, label: str) -> dict:
     reducer.  get_type_hints() resolves ForwardRefs from sys.modules[cls.__module__],
     so we register a fake module with Annotated + operator in sys.modules and point
     __name__ at it before exec — that makes the TypedDict schema readable at runtime.
+
+    LangChain/LangGraph stubs are injected into sys.modules so the top-level imports
+    in the generated code succeed without the packages being installed.
     """
     import operator
-    import sys
-    import types
     from typing import Annotated
 
     _mod_name = f"_debate_lg_exec_{label.strip('<>')}"
@@ -350,10 +487,21 @@ def _exec_langgraph(code: str, label: str) -> dict:
     _mod.__dict__["operator"] = operator
     sys.modules[_mod_name] = _mod
 
-    ns: dict = {"__name__": _mod_name, "Annotated": Annotated, "operator": operator}
-    exec(compile(code, label, "exec"), ns)
-    _mod.__dict__.update(ns)
-    return ns
+    stubs = _build_lg_stubs()
+    saved = {name: sys.modules.get(name) for name in stubs}
+    for name, mod in stubs.items():
+        sys.modules[name] = mod
+    try:
+        ns: dict = {"__name__": _mod_name, "Annotated": Annotated, "operator": operator}
+        exec(compile(code, label, "exec"), ns)
+        _mod.__dict__.update(ns)
+        return ns
+    finally:
+        for name, orig in saved.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
 
 
 def _fake_agent_response(text: str) -> dict:
@@ -453,8 +601,19 @@ def test_maf_debate_group_chat_runs(debate_spec):
     debate_warns = [w for w in warnings if "agent_debate" in w]
     assert len(debate_warns) == 1, f"Expected exactly 1 debate warning, got: {warnings}"
 
-    ns: dict = {}
-    exec(compile(code, "<debate_maf>", "exec"), ns)
+    sk_stubs = _build_sk_stubs()
+    sk_saved = {name: sys.modules.get(name) for name in sk_stubs}
+    for name, mod in sk_stubs.items():
+        sys.modules[name] = mod
+    try:
+        ns: dict = {}
+        exec(compile(code, "<debate_maf>", "exec"), ns)
+    finally:
+        for name, orig in sk_saved.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
 
     # Capture transcript by patching node_prepare_position and node_debate directly.
     async def _fake_prepare(state: dict) -> dict:

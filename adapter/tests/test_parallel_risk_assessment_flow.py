@@ -16,6 +16,8 @@ Test categories
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -25,6 +27,164 @@ from crewai_adapter import compile_crewai
 from langgraph_adapter import compile_langgraph
 from maf_adapter import compile_maf
 from mastra_adapter import compile_mastra
+
+# ── Lightweight LangGraph / SK execution stubs ────────────────────────────────
+
+class _FakeStateGraph:
+    """Minimal StateGraph that actually executes registered node functions."""
+
+    def __init__(self, state_type=None):
+        self._nodes: dict = {}
+        self._succs: dict = {}
+        self._entry: str | None = None
+
+    def add_node(self, name, fn=None, **_kw):
+        self._nodes[name] = fn or (lambda s: {})
+
+    def add_edge(self, src, dst):
+        if src == "__start__":
+            self._entry = dst
+        elif dst != "__end__":
+            self._succs.setdefault(src, []).append(dst)
+
+    def add_conditional_edges(self, src, fn, mapping=None, **_kw):
+        for dst in (mapping or {}).values():
+            if dst != "__end__":
+                self._succs.setdefault(src, []).append(dst)
+
+    def compile(self, **_kw):
+        return _FakeCompiled(self._nodes, self._succs, self._entry)
+
+
+class _FakeCompiled:
+    def __init__(self, nodes, succs, entry):
+        self._nodes = nodes
+        self._succs = succs
+        self._entry = entry
+
+    def stream(self, inputs, stream_mode="updates", config=None):
+        state = dict(inputs)
+        preds: dict = {}
+        for src, dsts in self._succs.items():
+            for dst in dsts:
+                preds.setdefault(dst, set()).add(src)
+        queue: list[str] = [self._entry] if self._entry else []
+        done: set[str] = set()
+        queued: set[str] = set(queue)
+        while queue:
+            ready = [n for n in queue if all(p in done for p in preds.get(n, set()))]
+            if not ready:
+                break
+            queue = [n for n in queue if n not in ready]
+            for name in ready:
+                fn = self._nodes.get(name)
+                if fn is None or name in done:
+                    continue
+                done.add(name)
+                update = fn(state) or {}
+                if isinstance(update, dict):
+                    state.update(update)
+                yield {name: update}
+                for nxt in self._succs.get(name, []):
+                    if nxt not in done and nxt not in queued:
+                        queue.append(nxt)
+                        queued.add(nxt)
+
+
+def _build_lg_stubs() -> dict[str, types.ModuleType]:
+    lc_openai = types.ModuleType("langchain_openai")
+    lc_openai.ChatOpenAI = MagicMock  # type: ignore[attr-defined]
+    lc_openai.OpenAIEmbeddings = MagicMock  # type: ignore[attr-defined]
+    lc_core_msg = types.ModuleType("langchain_core.messages")
+    lc_core_msg.HumanMessage = MagicMock  # type: ignore[attr-defined]
+    lc_core_msg.SystemMessage = MagicMock  # type: ignore[attr-defined]
+    lc_core_tools = types.ModuleType("langchain_core.tools")
+    lc_core_tools.tool = lambda f: f  # type: ignore[attr-defined]
+    lg = types.ModuleType("langgraph")
+    lg_graph = types.ModuleType("langgraph.graph")
+    lg_graph.StateGraph = _FakeStateGraph  # type: ignore[attr-defined]
+    lg_graph.START = "__start__"  # type: ignore[attr-defined]
+    lg_graph.END = "__end__"  # type: ignore[attr-defined]
+    lg_prebuilt = types.ModuleType("langgraph.prebuilt")
+    lg_prebuilt.create_react_agent = MagicMock()  # type: ignore[attr-defined]
+    lg_memory = types.ModuleType("langgraph.checkpoint.memory")
+    lg_memory.MemorySaver = MagicMock  # type: ignore[attr-defined]
+    return {
+        "langchain_openai": lc_openai,
+        "langchain_core.messages": lc_core_msg,
+        "langchain_core.tools": lc_core_tools,
+        "langgraph": lg,
+        "langgraph.graph": lg_graph,
+        "langgraph.prebuilt": lg_prebuilt,
+        "langgraph.checkpoint.memory": lg_memory,
+    }
+
+
+def _build_sk_stubs() -> dict[str, types.ModuleType]:
+    sk = types.ModuleType("semantic_kernel")
+    sk.Kernel = MagicMock  # type: ignore[attr-defined]
+    sk_conn = types.ModuleType("semantic_kernel.connectors")
+    sk_conn_ai = types.ModuleType("semantic_kernel.connectors.ai")
+    sk_conn_ai_oai = types.ModuleType("semantic_kernel.connectors.ai.open_ai")
+    sk_conn_ai_oai.OpenAIChatCompletion = MagicMock  # type: ignore[attr-defined]
+    sk_contents = types.ModuleType("semantic_kernel.contents")
+    sk_contents.ChatMessageContent = MagicMock  # type: ignore[attr-defined]
+    sk_contents.ChatHistory = MagicMock  # type: ignore[attr-defined]
+    _author_role = MagicMock()
+    _author_role.SYSTEM = "system"
+    _author_role.USER = "user"
+    _author_role.ASSISTANT = "assistant"
+    sk_contents.AuthorRole = _author_role  # type: ignore[attr-defined]
+    sk_agents = types.ModuleType("semantic_kernel.agents")
+    sk_agents.ChatCompletionAgent = MagicMock  # type: ignore[attr-defined]
+    sk_agents.AgentGroupChat = MagicMock  # type: ignore[attr-defined]
+    sk_strats = types.ModuleType("semantic_kernel.agents.strategies")
+    sk_strats.KernelFunctionTerminationStrategy = MagicMock  # type: ignore[attr-defined]
+    sk_strats.KernelFunctionSelectionStrategy = MagicMock  # type: ignore[attr-defined]
+    sk_fns = types.ModuleType("semantic_kernel.functions")
+    sk_fns.KernelFunctionFromPrompt = MagicMock  # type: ignore[attr-defined]
+    otel = types.ModuleType("opentelemetry")
+    otel_trace = types.ModuleType("opentelemetry.trace")
+    otel_trace.get_tracer = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_trace.set_tracer_provider = lambda *a, **kw: None  # type: ignore[attr-defined]
+    otel_sdk_trace = types.ModuleType("opentelemetry.sdk.trace")
+    otel_sdk_trace.TracerProvider = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_sdk_export = types.ModuleType("opentelemetry.sdk.trace.export")
+    otel_sdk_export.BatchSpanProcessor = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    otel_exp = types.ModuleType("opentelemetry.exporter.otlp.proto.http.trace_exporter")
+    otel_exp.OTLPSpanExporter = lambda *a, **kw: MagicMock()  # type: ignore[attr-defined]
+    return {
+        "semantic_kernel": sk,
+        "semantic_kernel.connectors": sk_conn,
+        "semantic_kernel.connectors.ai": sk_conn_ai,
+        "semantic_kernel.connectors.ai.open_ai": sk_conn_ai_oai,
+        "semantic_kernel.contents": sk_contents,
+        "semantic_kernel.agents": sk_agents,
+        "semantic_kernel.agents.strategies": sk_strats,
+        "semantic_kernel.functions": sk_fns,
+        "opentelemetry": otel,
+        "opentelemetry.trace": otel_trace,
+        "opentelemetry.sdk.trace": otel_sdk_trace,
+        "opentelemetry.sdk.trace.export": otel_sdk_export,
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter": otel_exp,
+    }
+
+
+def _exec_with_stubs(code: str, label: str, stubs: dict) -> dict:
+    """exec compiled code with sys.modules stubs injected, then restored."""
+    saved = {name: sys.modules.get(name) for name in stubs}
+    for name, mod in stubs.items():
+        sys.modules[name] = mod
+    try:
+        ns: dict = {}
+        exec(compile(code, label, "exec"), ns)
+        return ns
+    finally:
+        for name, orig in saved.items():
+            if orig is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = orig
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -277,8 +437,7 @@ def test_langgraph_parallel_branches_all_run(risk_spec):
     mock_llm = MagicMock(invoke=_mock_llm_invoke)
 
     code, _ = compile_langgraph(risk_spec)
-    ns: dict = {}
-    exec(compile(code, "<risk_lg>", "exec"), ns)
+    ns = _exec_with_stubs(code, "<risk_lg>", _build_lg_stubs())
     ns["create_react_agent"] = lambda *a, **kw: mock_agent
     ns["_make_llm"] = lambda *a, **kw: mock_llm
 
@@ -313,8 +472,7 @@ def test_langgraph_synthesise_receives_all_branch_results(risk_spec):
     mock_llm = MagicMock(invoke=_mock_llm_invoke)
 
     code, _ = compile_langgraph(risk_spec)
-    ns: dict = {}
-    exec(compile(code, "<risk_lg_synth>", "exec"), ns)
+    ns = _exec_with_stubs(code, "<risk_lg_synth>", _build_lg_stubs())
     ns["create_react_agent"] = lambda *a, **kw: mock_agent
     ns["_make_llm"] = lambda *a, **kw: mock_llm
 
@@ -341,8 +499,7 @@ def test_maf_parallel_branches_all_run(risk_spec):
     code, warnings = compile_maf(risk_spec)
     assert warnings == []
 
-    ns: dict = {}
-    exec(compile(code, "<risk_maf>", "exec"), ns)
+    ns = _exec_with_stubs(code, "<risk_maf>", _build_sk_stubs())
 
     # Patch _make_kernel to avoid actual SK/OpenAI calls
     call_idx = {"n": 0}
