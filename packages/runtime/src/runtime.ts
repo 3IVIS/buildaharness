@@ -17,7 +17,7 @@ export class FlowRuntime {
   _activeContext: ExecutionContext | null = null
 
   /** Initialize memory stores from FlowSpec.memory_stores, skipping pre-registered adapters. */
-  private _initMemoryStores(spec: FlowSpec, context: ExecutionContext): void {
+  private _initMemoryStores(spec: FlowSpec | RuntimeFlowSpec, context: ExecutionContext): void {
     const stores = spec.memory_stores ?? {}
     for (const [storeId, storeDef] of Object.entries(stores)) {
       // Caller-registered adapters always win
@@ -104,7 +104,7 @@ export class FlowRuntime {
 
       if (node.type === 'parallel_fork') {
         // FlowRuntime handles the actual branching — executor just emits events
-        const forkNode = node as { type: 'parallel_fork'; targets: string[] }
+        const forkNode = node as unknown as { type: 'parallel_fork'; targets: string[] }
         const joinNodeId = await this._runBranches(forkNode.targets, state, context, graph)
         currentNodeId = joinNodeId
         // After returning from branches, immediately execute the join node
@@ -289,7 +289,7 @@ export class FlowRuntime {
 
       // Handle nested parallel forks inside a branch
       if (node.type === 'parallel_fork') {
-        const forkNode = node as { type: 'parallel_fork'; targets: string[] }
+        const forkNode = node as unknown as { type: 'parallel_fork'; targets: string[] }
         const nestedJoinId = await this._runBranches(forkNode.targets, state, context, graph)
         currentNodeId = nestedJoinId
         continue
