@@ -1615,6 +1615,13 @@
                           "additionalProperties": false
                         }
                       },
+                      "output_map": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Maps node output fields to state keys."
+                      },
                       "fn_ref": {
                         "type": "string",
                         "description": "npm package ref '@scope/pkg/fn' or local path './path/to/fn.ts'"
