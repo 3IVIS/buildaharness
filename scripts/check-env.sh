@@ -158,6 +158,18 @@ else
   ok "At least one LLM API key is set"
 fi
 
+# EXTRA_CALLABLE_MODULES — required for flows that call custom Python modules
+# via the Mastra fn_ref bridge. Empty = only built-in modules (rag_utils) are callable.
+EXTRA_MODS=$(get_val "EXTRA_CALLABLE_MODULES")
+if [[ -z "$EXTRA_MODS" ]]; then
+  warn "EXTRA_CALLABLE_MODULES is not set."
+  echo "         Flows that invoke custom Python modules via fn_ref nodes will fail"
+  echo "         at runtime. Set this to a comma-separated list of module names in"
+  echo "         .env if your flows require it (e.g. EXTRA_CALLABLE_MODULES=my_tools)."
+else
+  ok "EXTRA_CALLABLE_MODULES = ${EXTRA_MODS}"
+fi
+
 # ── .env.local cross-check — VITE_LANGFUSE_PUBLIC_KEY must match .env ──────────
 echo ""
 echo "Checking .env.local sync …"

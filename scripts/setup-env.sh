@@ -273,6 +273,25 @@ else
   dim "  ↳ ANTHROPIC_API_KEY already set — keeping"
 fi
 
+# Flow-specific callable modules for the Mastra fn_ref bridge
+echo ""
+info "Flow configuration (optional — press Enter to keep existing or skip):"
+echo ""
+
+CURRENT_EXTRA_MODS=$(get_env_val "EXTRA_CALLABLE_MODULES")
+if [[ -z "$CURRENT_EXTRA_MODS" ]]; then
+  printf "  Extra callable modules for fn_ref nodes (comma-separated, e.g. my_tools,my_utils): "
+  read -r inp_extra_mods
+  if [[ -n "$inp_extra_mods" ]]; then
+    set_env_key_both EXTRA_CALLABLE_MODULES "$inp_extra_mods"
+    success "EXTRA_CALLABLE_MODULES"
+  else
+    dim "  ↳ EXTRA_CALLABLE_MODULES left unset — only built-in modules will be callable via fn_ref"
+  fi
+else
+  dim "  ↳ EXTRA_CALLABLE_MODULES already set (${CURRENT_EXTRA_MODS}) — keeping"
+fi
+
 # --- Write .env.local for the Vite canvas -------------------------------------
 echo ""
 LFPUB_FINAL=$(get_env_val "LANGFUSE_PUBLIC_KEY")

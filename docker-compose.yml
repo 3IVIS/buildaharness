@@ -153,6 +153,8 @@ services:
       # Disable CrewAI telemetry — it makes a blocking outbound call on Crew.kickoff()
       # that hangs indefinitely when the container has no internet access.
       - CREWAI_DISABLE_TELEMETRY=true
+      # Flow-specific callable modules for the Mastra fn_ref bridge (set in .env).
+      - EXTRA_CALLABLE_MODULES=${EXTRA_CALLABLE_MODULES:-}
       # Override the LLM used by the generic executor agent (non-coach tasks).
       # Set to a smaller/faster model (e.g. mistral) to speed up classification nodes.
       - CREWAI_EXECUTOR_MODEL=${CREWAI_EXECUTOR_MODEL:-}
