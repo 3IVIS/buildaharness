@@ -76,9 +76,10 @@ def ts_prompt(s: str, data_var: str = "triggerData") -> str:
         # Strip $.state. / $. path prefixes → bare key name
         key = _re.sub(r"^\$\.state\.", "", key)
         key = _re.sub(r"^\$\.", "", key)
-        # Use only the last segment of dotted paths (e.g. $.state.foo.bar → bar)
-        key = key.split(".")[-1] if key else key
-        return "${" + f"String({data_var}?.[{json.dumps(key)}] ?? '')" + "}"
+        # Build optional-chaining accessor for dotted paths (e.g. foo.bar → ["foo"]?.["bar"])
+        segments = key.split(".") if key else [key]
+        accessor = data_var + "".join(f"?.[{json.dumps(seg)}]" for seg in segments)
+        return "${" + f"String({accessor} ?? '')" + "}"
 
     result = _re.sub(r"\{\{([^}]+)\}\}", _sub, escaped)
     return "`" + result + "`"
@@ -285,6 +286,41 @@ const {vid}Step = createStep({{
 """
 
 
+def gen_branch_flatten_step(cond_nid: str) -> str:
+    """Generate a thin step that flattens Mastra's keyed .branch() output.
+
+    Mastra ^0.10 wraps each branch step's output as { step_id: step_output }
+    before delivering it to the next .then() step.  This flatten step unwraps
+    that keyed dict so downstream steps see a flat state object.
+    """
+    fid = f"_bf_{safe_id(cond_nid)}"
+    return f"""\
+// Branch-flatten: Mastra delivers {{ [step_id]: output }} after .branch().
+// This step merges all branch outputs into a flat state object.
+const {fid}Step = createStep({{
+  id: {json.dumps(fid)},
+  description: "Flatten keyed branch output after condition {cond_nid}",
+  inputSchema: z.record(z.unknown()),
+  outputSchema: z.record(z.unknown()),
+  execute: async ({{ inputData }}) => {{
+    const _raw = inputData ?? {{}}
+    const _vals = Object.values(_raw)
+    // Flatten when every value is either null/undefined (non-ran branch step) OR an object
+    // (ran branch step output). Mastra delivers {{ step_id: output | null }} after .branch().
+    const _canFlatten = _vals.length > 0 && _vals.every(
+      v => v === null || v === undefined || (typeof v === "object" && !Array.isArray(v))
+    )
+    if (_canFlatten) {{
+      return _vals
+        .filter(v => v !== null && v !== undefined)
+        .reduce((acc, v) => ({{ ...acc, ...v }}), {{}})
+    }}
+    return _raw
+  }},
+}})
+"""
+
+
 # ─── Step generators ──────────────────────────────────────────────────────────
 
 
@@ -401,13 +437,10 @@ const {vid}Step = createStep({{
         fb_target = fail_branch.get("target", "")
         fb_retry = (fail_branch.get("retry") or {}).get("max_attempts", 3)
 
-        # _state merges the vm-global __triggerData__ (always the workflow's
-        # initial input) with inputData (this step's direct predecessor output).
-        # This ensures {{$.state.topic}} resolves correctly even in later steps
-        # where triggerData is not forwarded as a named execute parameter.
-        state_merge = (
-            "    const _state = { ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {}), ...inputData }"
-        )
+        # _state merges triggerData (always the workflow's initial trigger input) with
+        # inputData (this step's direct predecessor output).
+        # This ensures {{$.state.topic}} resolves correctly even in later steps.
+        state_merge = "    const _state = { ...(triggerData ?? {}), ...inputData }"
         if struct:
             core_body = f"""\
 {state_merge}
@@ -419,7 +452,7 @@ const {vid}Step = createStep({{
       temperature: {temp},
       maxTokens: {max_tok},
     }})
-    return {{ {out_key}: object.{out_key} }}"""
+    return {{ ..._state, {out_key}: object.{out_key} }}"""
         else:
             core_body = f"""\
 {state_merge}
@@ -430,7 +463,7 @@ const {vid}Step = createStep({{
       temperature: {temp},
       maxTokens: {max_tok},
     }})
-    return {{ {out_key}: text }}"""
+    return {{ ..._state, {out_key}: text }}"""
 
         if fb_target:
             body = f"""\
@@ -456,7 +489,7 @@ const {vid}Step = createStep({{
         )
         return step_wrap(
             input_schema,
-            f"z.object({{ {out_key}: z.string() }})",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -486,11 +519,12 @@ const {vid}Step = createStep({{
         else:
             body = f"""\
     // Invoke tool '{tool_id}'
-    const result = await {tool_var}.execute({{ context: inputData ?? {{}} }})
-    return {{ {out_key}: result }}"""
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
+    const result = await {tool_var}.execute({{ context: _state }})
+    return {{ ..._state, {out_key}: result }}"""
         return step_wrap(
-            "z.object({})",
-            f"z.object({{ {out_key}: z.unknown() }})",
+            "z.object({}).passthrough()",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -524,7 +558,9 @@ const {vid}Step = createStep({{
                 mod_name, fn_name = fn_ref.split(":", 1)
                 body = f"""\
     // fn_ref: {fn_ref} → Python adapter bridge
-    const _state = {{ ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {{}}), ...inputData }}
+    // Merge triggerData + all prior step outputs so the Python function sees
+    // the full accumulated state (not just the immediate predecessor's output).
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const _adapterUrl = process.env.ADAPTER_URL ?? 'http://adapter:8000'
     const _resp = await fetch(`${{_adapterUrl}}/run/fn_ref`, {{
       method: 'POST',
@@ -535,7 +571,9 @@ const {vid}Step = createStep({{
       const _err = await _resp.text()
       throw new Error(`fn_ref {fn_ref} failed (${{_resp.status}}): ${{_err}}`)
     }}
-    return await _resp.json()"""
+    const _delta = await _resp.json()
+    // Spread full accumulated state + delta so downstream steps see all fields.
+    return {{ ..._state, ..._delta }}"""
             else:
                 body = f"""\
     // fn_ref: {fn_ref} (bare module — not callable via bridge)
@@ -583,7 +621,7 @@ const {vid}Step = createStep({{
     return {{ {out_key}: null }}"""
         return step_wrap(
             "z.object({}).passthrough()",
-            f"z.object({{ {out_key}: z.unknown() }})",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -602,7 +640,7 @@ const {vid}Step = createStep({{
         if mode == "semantic" and backend == "qdrant":
             body = f"""\
     // memory_read: semantic retrieval from Qdrant store '{store_id}'
-    const _state   = inputData ?? {{}}
+    const _state   = {{ ...(triggerData ?? {{}}), ...inputData }}
     const _question = String(_state.question ?? _state[Object.keys(_state)[0]] ?? '')
     // Embed via LiteLLM (EMBED_BASE_URL) so the call appears in Langfuse
     const _embBase = process.env.EMBED_BASE_URL || process.env.OPENAI_BASE_URL || 'http://localhost:11434/v1'
@@ -627,7 +665,7 @@ const {vid}Step = createStep({{
     const {out_key} = (_srchData?.result || []).map((h) => ({{
       text: h.payload?.text || '', source: h.payload?.source || '', score: h.score,
     }}))
-    return {{ {out_key} }}"""
+    return {{ ..._state, {out_key} }}"""
         else:
             store_def2 = (spec.get("memory_stores") or {}).get(store_id, {})
             backend2 = store_def2.get("backend", "")
@@ -635,7 +673,7 @@ const {vid}Step = createStep({{
                 key_access = ts_resolve_state_expr(query_exp, "_state", as_string=True)
                 body = f"""\
     // memory_read: store='{store_id}', backend='{backend2}' → Python adapter bridge
-    const _state = {{ ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {{}}), ...inputData }}
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const _key = {key_access}
     const _adapterUrl = process.env.ADAPTER_URL ?? 'http://adapter:8000'
     const _resp = await fetch(`${{_adapterUrl}}/run/memory_read`, {{
@@ -649,15 +687,15 @@ const {vid}Step = createStep({{
     }}
     const _data = await _resp.json()
     const _readResult = (_data?.value !== undefined) ? _data.value : null
-    return {{ {out_key}: _readResult }}"""
+    return {{ ..._state, {out_key}: _readResult }}"""
             else:
                 body = f"""\
     // memory_read: store='{store_id}', mode='{mode}'
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const memory = mastra?.memory
     let {out_key} = null
     if (memory) {{
       if ({json.dumps(mode)} === 'semantic') {{
-        const state = inputData ?? {{}}
         const query = {ts_str(query_exp)} // resolves query_expr
         const results = await memory.query({{ query, topK: {top_k} }})
         {out_key} = results
@@ -665,10 +703,10 @@ const {vid}Step = createStep({{
         {out_key} = await memory.get({{ key: {json.dumps(store_id)} }})
       }}
     }}
-    return {{ {out_key} }}"""
+    return {{ ..._state, {out_key} }}"""
         return step_wrap(
             "z.object({}).passthrough()",
-            f"z.object({{ {out_key}: z.unknown() }})",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -687,7 +725,7 @@ const {vid}Step = createStep({{
             val_access = ts_resolve_state_expr(val_expr, "_state", as_string=False)
             body = f"""\
     // memory_write: store='{store_id}', backend='{backend}' → Python adapter bridge
-    const _state = {{ ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {{}}), ...inputData }}
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const _key = {key_access}
     const _value = {val_access}
     const _adapterUrl = process.env.ADAPTER_URL ?? 'http://adapter:8000'
@@ -700,21 +738,21 @@ const {vid}Step = createStep({{
       const _err = await _resp.text()
       throw new Error(`memory_write {store_id} failed (${{_resp.status}}): ${{_err}}`)
     }}
-    return {{ written: true }}"""
+    return {{ ..._state, written: true }}"""
         else:
             body = f"""\
     // memory_write: store='{store_id}', tier='{tier}', mode='{write_mode}'
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const memory = mastra?.memory
-    const state  = inputData ?? {{}}
     const key    = {ts_str(key_expr)}   // key_expr
     const value  = {ts_str(val_expr)}  // value_expr
     if (memory) {{
       await memory.set({{ key, value, overwrite: {json.dumps(write_mode == "overwrite")} }})
     }}
-    return {{ written: true }}"""
+    return {{ ..._state, written: true }}"""
         return step_wrap(
             "z.object({}).passthrough()",
-            "z.object({ written: z.boolean() })",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -761,7 +799,7 @@ const {vid}Step = createStep({{
 
         body = f"""\
 {hitl_comment}    // agent_role → agent_ref='{agent_ref}', memory_access='{mem_acc}'{ctx_block}
-    const _state = {{ ...(typeof __triggerData__ !== 'undefined' ? __triggerData__ : {{}}), ...inputData }}
+    const _state = {{ ...(triggerData ?? {{}}), ...inputData }}
     const agentModel = _openaiProvider({json.dumps(model)})
     const {{ text }} = await generateText({{
       model: agentModel,
@@ -770,10 +808,10 @@ const {vid}Step = createStep({{
       maxTokens: 2048,
     }})
     // expected_output: {json.dumps(expected)}
-    return {{ {out_field}: text }}"""
+    return {{ ..._state, {out_field}: text }}"""
         return step_wrap(
             "z.object({}).passthrough()",
-            f"z.object({{ {out_field}: z.string() }})",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -828,7 +866,7 @@ const {vid}Step = createStep({{
     return {{ {out_field}: transcript.join("\\n") }}"""
         return step_wrap(
             "z.object({}).passthrough()",
-            f"z.object({{ {out_field}: z.string() }})",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -846,7 +884,7 @@ const {vid}Step = createStep({{
     throw new Error('Subgraph {flow_ref} not yet wired — see comment above')"""
         return step_wrap(
             "z.object({}).passthrough()",
-            "z.object({ result: z.unknown() })",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -862,7 +900,13 @@ const {vid}Step = createStep({{
             _mod_name, _fn_name = _join_fn_ref.split(":", 1)
             body = f"""\
     // parallel_join with join_fn_ref: {_join_fn_ref} → Python adapter bridge
-    const _state = inputData ?? {{}}
+    // Mastra's .parallel() delivers {{ [stepId]: stepOutput }} — flatten values first,
+    // then merge triggerData so Python functions receive a single-level state dict.
+    const _rawIn = inputData ?? {{}}
+    const _flatIn = Object.values(_rawIn)
+      .filter(v => v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v))
+      .reduce((acc, v) => ({{ ...acc, ...v }}), {{}})
+    const _state = {{ ...triggerData, ..._flatIn }}
     const _adapterUrl = process.env.ADAPTER_URL ?? 'http://adapter:8000'
     const _resp = await fetch(`${{_adapterUrl}}/run/fn_ref`, {{
       method: 'POST',
@@ -874,15 +918,19 @@ const {vid}Step = createStep({{
       throw new Error(`join_fn_ref {_join_fn_ref} failed (${{_resp.status}}): ${{_err}}`)
     }}
     const _result = await _resp.json()
-    return {{ merged: _result }}"""
+    return {{ ..._state, ..._result }}"""
         else:
             body = """\
-    // parallel_join: Mastra's .parallel() resolves all branches before this step.
-    const branchResults = inputData ?? {}
-    return { merged: branchResults }"""
+    // parallel_join: Mastra's .parallel() delivers { [stepId]: stepOutput } — flatten all
+    // step outputs so downstream steps see a single-level state dict (no step-ID wrapper).
+    const _raw = inputData ?? {}
+    const _flat = Object.values(_raw)
+      .filter(v => v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v))
+      .reduce((acc, v) => ({ ...acc, ...v }), {})
+    return { ..._flat }"""
         return step_wrap(
             "z.record(z.unknown())",
-            "z.object({ merged: z.record(z.unknown()) })",
+            "z.record(z.unknown())",
             body,
         )
 
@@ -895,7 +943,7 @@ const {vid}Step = createStep({{
 # ─── Workflow chain builder ───────────────────────────────────────────────────
 
 
-def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
+def build_workflow_chain(spec: dict, warnings: list[str]) -> tuple[str, str]:
     """
     Walk the spec graph and emit the Mastra workflow builder chain.
 
@@ -903,6 +951,10 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
       - Linear sequences       → .then(step)
       - condition nodes        → .branch([{ condition, step }])
       - parallel_fork/join     → .parallel([step, step, ...])
+
+    Returns (extra_step_defs: str, chain_code: str).
+    extra_step_defs contains branch-flatten step definitions to be emitted
+    before the chain code.
     """
     nodes = spec.get("nodes", [])
     edges = spec.get("edges", [])
@@ -931,10 +983,11 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
     if not input_node:
         lines.append("  // No input node found — chain manually")
         lines.append("  .commit()")
-        return "\n".join(lines)
+        return "", "\n".join(lines)
 
     # Walk graph from input, emitting chain segments
     visited: set[str] = set()
+    extra_step_blocks: list[str] = []  # branch-flatten step definitions
     parallel_groups = find_parallel_groups(nodes, edges)
     fork_to_join: dict[str, str] = {}
 
@@ -1009,6 +1062,10 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
             branch_lines: list[str] = []
 
             _no_step_types = {"input", "output", "annotation", "parallel_fork", "condition"}
+            # Track condition exprs so the default can negate them (Mastra ^0.10 evaluates ALL
+            # branch conditions and runs every step whose condition returns true — so the default
+            # must be made mutually exclusive with all explicit conditions to avoid both running).
+            prior_exprs: list[str] = []
             for b in branches:
                 expr = (b.get("condition") or {}).get("expr", "true")
                 target = b.get("target", "")
@@ -1020,6 +1077,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
                     branch_lines.append(
                         f"    [async ({{ inputData }}) => Boolean({safe_expr}), {safe_id(target)}Step],"
                     )
+                    prior_exprs.append(safe_expr)
 
             def_condition_chain = False  # def_target is a condition — chain it directly
             if def_target and def_target in id_to_node:
@@ -1029,12 +1087,26 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
                     # instead walk into it directly after closing this .branch([]).
                     def_condition_chain = True
                 elif def_node_type not in _no_step_types:
-                    # Mastra ^0.10 branch() takes [conditionFn, step] tuples
-                    branch_lines.append(f"    [async () => true, {safe_id(def_target)}Step],  // default")
+                    # Default branch: negate all prior conditions so this step only runs when
+                    # none of the explicit branches matched (mutual exclusion).
+                    if prior_exprs:
+                        neg = " && ".join(f"!({e})" for e in prior_exprs)
+                        branch_lines.append(
+                            f"    [async ({{ inputData }}) => Boolean({neg}), {safe_id(def_target)}Step],  // default"
+                        )
+                    else:
+                        branch_lines.append(f"    [async () => true, {safe_id(def_target)}Step],  // default")
 
             lines.append("  .branch([")
             lines.extend(branch_lines)
             lines.append("  ])")
+
+            # Mastra ^0.10 delivers { [step_id]: step_output } to the next step after
+            # .branch() — same keyed format as .parallel().  Insert a thin flatten step
+            # so downstream steps always receive a flat state dict.
+            bf_fid = f"_bf_{safe_id(nid)}"
+            extra_step_blocks.append(gen_branch_flatten_step(nid))
+            lines.append(f"  .then({bf_fid}Step)")
 
             # Continue chain from def_target's successor (def_target itself is already
             # listed in the .branch([]) so we must not emit .then(def_target) again).
@@ -1069,7 +1141,7 @@ def build_workflow_chain(spec: dict, warnings: list[str]) -> str:
         walk(first_succs[0])
 
     lines.append("  .commit()")
-    return "\n".join(lines)
+    return "\n".join(extra_step_blocks), "\n".join(lines)
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -1125,12 +1197,14 @@ def compile_mastra(spec: dict) -> tuple[str, list[str]]:
 
         log_section(_log, "header+tools", flow_id=flow_id)
         log_section(_log, "workflow_chain", flow_id=flow_id)
+        extra_step_defs, chain_code = build_workflow_chain(spec, warnings)
         parts = [
             gen_header(spec),
             gen_tools(spec),
             "// ─── Steps ──────────────────────────────────────────────────────────────────\n",
             "\n".join(step_blocks),
-            build_workflow_chain(spec, warnings),
+            extra_step_defs,
+            chain_code,
         ]
 
         code = "\n".join(filter(None, parts))
