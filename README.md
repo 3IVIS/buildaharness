@@ -261,7 +261,6 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 | [docs/collab.md](docs/collab.md) | Real-time collaboration — Yjs setup and internals |
 | [docs/deployment.md](docs/deployment.md) | Docker, Helm, SSO/OIDC |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common startup errors |
-| [plan/harness_architecture.html](plan/harness_architecture.html) | Full harness — pseudo-code, 22 nodes, 11 layers, state model |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 
 ---
