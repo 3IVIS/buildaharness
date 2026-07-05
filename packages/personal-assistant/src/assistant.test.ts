@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse } from '@buildaharness/runtime'
+import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
@@ -23,6 +23,60 @@ class FakeLLMClient implements ILLMClient {
   async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
     return { content: this.reply }
+  }
+}
+
+/** ILLMClient whose callChatStructured is driven by a scripted callback — stands in for a model that calls tools. */
+class ScriptedToolLLMClient implements ILLMClient {
+  calls = 0
+  constructor(private readonly next: () => LLMStructuredResponse) {}
+
+  async *callChat(): AsyncIterable<string> {
+    yield ''
+  }
+
+  async callChatSync(): Promise<string> {
+    throw new Error('ScriptedToolLLMClient does not support callChatSync — this test path should only use callChatStructured')
+  }
+
+  async callChatStructured(): Promise<LLMStructuredResponse> {
+    this.calls++
+    return this.next()
+  }
+}
+
+function scriptedResponses(responses: LLMStructuredResponse[]): ScriptedToolLLMClient {
+  let i = 0
+  return new ScriptedToolLLMClient(() => {
+    if (i >= responses.length) throw new Error('ScriptedToolLLMClient: no more scripted responses')
+    return responses[i++]
+  })
+}
+
+/** In-memory FsBackend standing in for a real disk, for the fileTools tests below. */
+function makeFakeBackend(): FsBackend {
+  const files = new Map<string, string>()
+  return {
+    async readTextFile(path) {
+      return files.get(path)
+    },
+    async writeTextFile(path, contents) {
+      files.set(path, contents)
+    },
+    async removeFile(path) {
+      files.delete(path)
+    },
+    async mkdir() {
+      // Fake backend has no real directories to create.
+    },
+    async readDir(dir) {
+      const prefix = `${dir}/`
+      const names: string[] = []
+      for (const key of files.keys()) {
+        if (key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) names.push(key.slice(prefix.length))
+      }
+      return names
+    },
   }
 }
 
@@ -76,14 +130,31 @@ describe('PersonalAssistant', () => {
     expect(llm.receivedMessages[1].some(m => m.content.includes('My name is Ali.'))).toBe(true)
   })
 
+  it('answers a self-contained factual question via the triviality fast path, skipping the harness run', async () => {
+    const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).')
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'test-checkpoints' })
+    const assistant = new PersonalAssistant({ llmClient: llm, checkpointStore })
+
+    const result = await assistant.turn('What timezone is Tokyo in?', { sessionId: 'trivial-test' })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Tokyo is in Japan Standard Time (UTC+9).')
+    expect(result.harnessSkipped).toBe(true)
+    expect(result.stepsUsed).toBe(0)
+    expect(llm.calls).toBe(1)
+    // No harness run means no checkpoint was ever written for this turn.
+    expect(await loadHarnessCheckpoint(checkpointStore, 'turn:trivial-test')).toBeUndefined()
+  })
+
   it('cleans up its harness checkpoint once a turn completes normally', async () => {
     const llm = new FakeLLMClient('All done.')
     const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'test-checkpoints' })
     const assistant = new PersonalAssistant({ llmClient: llm, checkpointStore })
 
-    const result = await assistant.turn('What time is it in Tokyo?', { sessionId: 'cleanup-test' })
+    const result = await assistant.turn('Can you tell me what time it is in Tokyo right now?', { sessionId: 'cleanup-test' })
 
     expect(result.status).toBe('ok')
+    expect(result.harnessSkipped).toBe(false)
     expect(await loadHarnessCheckpoint(checkpointStore, 'turn:cleanup-test')).toBeUndefined()
   })
 
@@ -128,5 +199,98 @@ describe('PersonalAssistant', () => {
     // continued from that checkpoint instead of re-initializing from scratch.
     expect(result.stepsUsed).toBeGreaterThan(stepsUsedAtPause)
     expect(await loadHarnessCheckpoint(checkpointStore, runId)).toBeUndefined()
+  })
+})
+
+describe('PersonalAssistant file tools', () => {
+  const ROOT = '/workspace'
+
+  it('executes a read_file tool call for real and the final reply reflects the actual file content', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'the secret ingredient is basil')
+
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'The secret ingredient is basil.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('What does notes.txt say?')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('The secret ingredient is basil.')
+    expect(llm.calls).toBe(2)
+  })
+
+  it('a write_file tool call returns needs_approval with a pendingWriteId and creates no file', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'draft summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('Write a summary to summary.md')
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.riskLevel).toBe('HIGH')
+    expect(result.pendingWriteId).toBeTruthy()
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+  })
+
+  it('approving a pending write applies the exact staged content with zero additional LLM calls', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'final content' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    const callsAfterStaging = llm.calls
+
+    const applied = await assistant.turn('Write a summary to summary.md', { approved: true, pendingWriteId: staged.pendingWriteId })
+
+    expect(applied.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('final content')
+    expect(llm.calls).toBe(callsAfterStaging)
+  })
+
+  it('declining a pending write discards it — the file still does not exist', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'never applied' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    const declined = await assistant.turn('Write a summary to summary.md', { approved: false, pendingWriteId: staged.pendingWriteId })
+
+    expect(declined.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+  })
+
+  it('without fileTools configured, behavior is unchanged — no tool loop is entered', async () => {
+    const llm = new FakeLLMClient('Plain reply, no tools involved.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Read notes.txt for me')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Plain reply, no tools involved.')
+    expect(result.pendingWriteId).toBeUndefined()
+    expect(llm.calls).toBe(1)
+  })
+
+  it('exhausting the tool-loop iteration cap escalates instead of looping forever or returning a partial answer', async () => {
+    const backend = makeFakeBackend()
+    const llm = new ScriptedToolLLMClient(() => ({
+      content: '',
+      toolCalls: [{ id: 'toolu_x', name: 'list_directory', input: { path: '.' } }],
+    }))
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('Keep listing files forever')
+
+    expect(result.status).toBe('escalated')
+    expect(llm.calls).toBe(5)
   })
 })

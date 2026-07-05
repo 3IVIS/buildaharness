@@ -230,4 +230,139 @@ describe('LLMClient', () => {
       ).rejects.toThrow(FlowExecutionError)
     })
   })
+
+  describe('callChatStructured', () => {
+    function mockFetchJson(body: Record<string, unknown>): ReturnType<typeof vi.fn> {
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      )
+      vi.stubGlobal('fetch', mockFetch)
+      return mockFetch
+    }
+
+    it('parses text and tool_use blocks from an Anthropic-shaped response', async () => {
+      mockFetchJson({
+        content: [
+          { type: 'text', text: 'Let me check that file.' },
+          { type: 'tool_use', id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } },
+        ],
+      })
+
+      const result = await client.callChatStructured([{ role: 'user', content: 'read notes.txt' }])
+
+      expect(result.content).toBe('Let me check that file.')
+      expect(result.toolCalls).toEqual([{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }])
+    })
+
+    it('moves a system-role message to the top-level `system` field, not the messages array', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'ok' }] })
+
+      await client.callChatStructured([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'hi' },
+      ])
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.system).toBe('You are a helpful assistant.')
+      expect(body.messages.every((m: { role: string }) => m.role !== 'system')).toBe(true)
+      expect(body.messages).toEqual([{ role: 'user', content: 'hi' }])
+    })
+
+    it('serializes a tool-role message as a user message with a tool_result block referencing the correct tool_use_id', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'done' }] })
+
+      await client.callChatStructured([
+        { role: 'user', content: 'read notes.txt' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+        { role: 'tool', content: 'hello world', toolCallId: 'toolu_1' },
+      ])
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      const toolResultMessage = body.messages.at(-1)
+      expect(toolResultMessage).toEqual({
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'hello world' }],
+      })
+    })
+
+    it('serializes an assistant tool-call message as a tool_use content block', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'done' }] })
+
+      await client.callChatStructured([
+        { role: 'user', content: 'read notes.txt' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+      ])
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.messages[1]).toEqual({
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }],
+      })
+    })
+
+    it('batches consecutive tool-role messages into a single user message with multiple tool_result blocks', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'done' }] })
+
+      await client.callChatStructured([
+        { role: 'user', content: 'read two files' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            { id: 'toolu_1', name: 'read_file', input: { path: 'a.txt' } },
+            { id: 'toolu_2', name: 'read_file', input: { path: 'b.txt' } },
+          ],
+        },
+        { role: 'tool', content: 'content a', toolCallId: 'toolu_1' },
+        { role: 'tool', content: 'content b', toolCallId: 'toolu_2' },
+      ])
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.messages.at(-1)).toEqual({
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'toolu_1', content: 'content a' },
+          { type: 'tool_result', tool_use_id: 'toolu_2', content: 'content b' },
+        ],
+      })
+    })
+
+    it('includes tool definitions in the request body when tools are supplied', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'ok' }] })
+
+      await client.callChatStructured(
+        [{ role: 'user', content: 'hi' }],
+        [{ name: 'read_file', description: 'reads a file', input_schema: { type: 'object' } }],
+      )
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.tools).toEqual([{ name: 'read_file', description: 'reads a file', input_schema: { type: 'object' } }])
+    })
+
+    it('a second call including the prior tool call and result round-trips correctly (multi-turn tool use)', async () => {
+      const mockFetch = mockFetchJson({ content: [{ type: 'text', text: 'Tokyo is 9 hours ahead.' }] })
+
+      const result = await client.callChatStructured([
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'What timezone is Tokyo in?' },
+        { role: 'assistant', content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'tz.txt' } }] },
+        { role: 'tool', content: 'JST (UTC+9)', toolCallId: 'toolu_1' },
+      ])
+
+      expect(result.content).toBe('Tokyo is 9 hours ahead.')
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.system).toBe('You are a helpful assistant.')
+      expect(body.messages).toEqual([
+        { role: 'user', content: 'What timezone is Tokyo in?' },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_file', input: { path: 'tz.txt' } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'JST (UTC+9)' }] },
+      ])
+    })
+
+    it('throws FlowExecutionError when proxy returns non-OK status', async () => {
+      mockFetchError(502)
+
+      await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).rejects.toThrow(FlowExecutionError)
+    })
+  })
 })
