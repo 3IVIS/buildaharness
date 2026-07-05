@@ -45,22 +45,35 @@ function compressMemory(
   return { dropped, pruned }
 }
 
+// Matches adapter/harness/staleness.py's _DEFAULT_BELIEF_TTL (30 minutes).
+const BELIEF_TTL_MS = 30 * 60 * 1000
+
 function stalenessSweep(worldModel: WorldModel, environmentChangeLog: EnvironmentChange[]): void {
   const now = Date.now()
-  const TTL_MS = 5 * 60 * 1000  // 5 minute TTL
+  const staleFlags = worldModel.stale_flags
 
-  // TTL-based invalidation: mark stale observations in completeness_flags
-  for (const obs of worldModel.observations) {
-    const age = now - new Date(obs.recorded_at).getTime()
-    if (age > TTL_MS) {
-      worldModel.completeness_flags[obs.source] = false
+  for (const belief of worldModel.beliefs) {
+    if (staleFlags[belief.id]) continue
+
+    const beliefTs = new Date(belief.recorded_at).getTime()
+
+    // TTL-based invalidation
+    if (now - beliefTs > BELIEF_TTL_MS) {
+      staleFlags[belief.id] = true
+      continue
     }
-  }
 
-  // Environment-change-based invalidation
-  for (const change of environmentChangeLog) {
-    for (const path of change.affected_paths) {
-      worldModel.completeness_flags[path] = false
+    // Environment-change-based invalidation: a belief is stale once a change
+    // affecting one of its derivation sources is logged after it was recorded.
+    const beliefSources = new Set([...belief.derived_from, ...(belief.supporting_evidence ?? [])])
+    for (const change of environmentChangeLog) {
+      if (!change.affected_paths.some(p => beliefSources.has(p))) continue
+      const changeTs = new Date(change.timestamp).getTime()
+      if (Number.isNaN(changeTs)) continue
+      if (changeTs > beliefTs) {
+        staleFlags[belief.id] = true
+        break
+      }
     }
   }
 }

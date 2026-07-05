@@ -8,7 +8,7 @@ import { detectContradictions } from './detect-contradictions.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import { MemoryState } from '../state/memory-state.js'
-import { normalise, DimensionType } from '../normalise.js'
+import { checkAbstractionAlignment } from './update-diagnostics.js'
 
 const ADVERSARIAL_PROXIMITY_THRESHOLD = 0.5
 const ADVERSARIAL_MAX_SEEDS = 10
@@ -165,19 +165,13 @@ function adversarialLens(
 
 function recomputeAbstractionFit(
   taskGraph: TaskGraph,
+  worldModel: WorldModel,
   diagnostics: Diagnostics,
 ): void {
-  // Unconditionally recompute — reviewer pass has full execution history
-  if (taskGraph.tasks.length === 0) {
-    diagnostics.verification_health.feasibility = 1.0
-    return
-  }
-  const maxLevel = 2
-  const mean = taskGraph.tasks.reduce((acc, t) => acc + t.abstraction_level, 0) / taskGraph.tasks.length
-  diagnostics.verification_health.feasibility = normalise(
-    1 - mean / (maxLevel + 1),
-    DimensionType.ratio,
-  )
+  // force=true — the reviewer pass has full execution history, so it always
+  // recomputes regardless of taskGraph.changed (matches check_abstraction_alignment's
+  // force parameter, used only by the P9 reviewer pass in the Python ground truth).
+  diagnostics.verification_health.feasibility = checkAbstractionAlignment(taskGraph, worldModel, true)
 }
 
 export interface PropagationQueue {
@@ -214,7 +208,7 @@ export function reviewerPass(
   )
 
   // abstraction_fit recomputed unconditionally (not guarded by taskGraph.changed)
-  recomputeAbstractionFit(taskGraph, diagnostics)
+  recomputeAbstractionFit(taskGraph, worldModel, diagnostics)
 
   // After pass: propagate_beliefs, update hypothesis set, detect_contradictions
   propagateBeliefs(beliefDepGraph, depGraphBudget, worldModel)

@@ -6,12 +6,47 @@ import type { Diagnostics } from '../state/diagnostics.js'
 import { normalise, assertNormalised, DimensionType } from '../normalise.js'
 import { computeSourceEntropy } from './generate-update-hypotheses.js'
 
-function checkAbstractionAlignment(taskGraph: TaskGraph): number {
-  if (taskGraph.tasks.length === 0) return 1.0
-  const maxLevel = 2
-  const mean = taskGraph.tasks.reduce((acc, t) => acc + t.abstraction_level, 0) / taskGraph.tasks.length
-  // lower abstraction_level (more concrete) = better fit
-  return normalise(1 - mean / (maxLevel + 1), DimensionType.ratio)
+/**
+ * Matches adapter/harness/task_graph.py's estimate_world_model_granularity():
+ * 0 = module level (default), 1 = function level, 2 = statement level, inferred
+ * from marker keywords in the world model's belief statements.
+ */
+function estimateWorldModelGranularity(worldModel: WorldModel): number {
+  const beliefs = worldModel.beliefs
+  if (beliefs.length === 0) return 0
+
+  const statementMarkers = ['line ', 'line:', 'statement', 'expression', 'lineno']
+  const functionMarkers = ['function', 'method', 'def ', 'procedure', '()']
+
+  let statementCount = 0
+  let functionCount = 0
+  for (const b of beliefs) {
+    const stmt = b.statement.toLowerCase()
+    if (statementMarkers.some(m => stmt.includes(m))) statementCount++
+    else if (functionMarkers.some(m => stmt.includes(m))) functionCount++
+  }
+
+  if (statementCount / beliefs.length > 0.5) return 2
+  if (functionCount / beliefs.length > 0.5) return 1
+  return 0
+}
+
+/**
+ * Matches adapter/harness/task_graph.py's check_abstraction_alignment(): compares each
+ * task's abstraction_level against the world model's actual granularity, not a fixed
+ * ceiling. force=true (used by the reviewer pass) bypasses the taskGraph.changed
+ * short-circuit that otherwise skips recomputation.
+ */
+export function checkAbstractionAlignment(taskGraph: TaskGraph, worldModel: WorldModel, force = false): number {
+  if (!force && !taskGraph.changed) return 1.0
+
+  const wmGranularity = estimateWorldModelGranularity(worldModel)
+  const total = taskGraph.tasks.length
+  if (total === 0) return 1.0
+
+  const mismatched = taskGraph.tasks.filter(t => t.abstraction_level > wmGranularity + 1).length
+  const score = 1.0 - mismatched / total
+  return Math.max(0.0, Math.min(1.0, score))
 }
 
 function computeDepClassGapAnnotation(taskGraph: TaskGraph): string {
@@ -32,10 +67,12 @@ export function updateDiagnostics(
   failureDiagnostics: FailureDiagnostics,
   depGraph: BeliefDepGraph,
   diagnostics: Diagnostics,
+  force = false,
 ): void {
   // belief_health
-  const flags = Object.values(worldModel.completeness_flags)
-  const staleFlagRatio = flags.length > 0 ? flags.filter(f => !f).length / flags.length : 0
+  const staleValues = Object.values(worldModel.stale_flags)
+  const beliefCountForStaleness = Math.max(1, worldModel.beliefs.length)
+  const staleFlagRatio = staleValues.filter(Boolean).length / beliefCountForStaleness
   const freshness = normalise(1 - staleFlagRatio, DimensionType.ratio)
   assertNormalised(freshness, 'belief_health.freshness')
 
@@ -73,14 +110,9 @@ export function updateDiagnostics(
   const strength = normalise(1 - depGraph.unverified_edge_ratio, DimensionType.ratio)
   assertNormalised(strength, 'verification_health.strength')
 
-  // feasibility: based on tool/evidence adequacy + abstraction_fit (only recomputed when taskGraph.changed)
-  let abstractionFit: number
-  if (taskGraph.changed) {
-    abstractionFit = checkAbstractionAlignment(taskGraph)
-  } else {
-    // Approximate from current feasibility — avoids recomputing when unchanged
-    abstractionFit = diagnostics.verification_health.feasibility
-  }
+  // feasibility: based on tool/evidence adequacy + abstraction_fit
+  // (checkAbstractionAlignment itself short-circuits to 1.0 unless taskGraph.changed or force)
+  const abstractionFit = checkAbstractionAlignment(taskGraph, worldModel, force)
 
   const toolAdequacy = normalise(
     Object.keys(worldModel.completeness_flags).length > 0 ? 0.8 : 0.6,
