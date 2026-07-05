@@ -9,6 +9,7 @@ import {
   type VerificationPlanEntry,
   type RecoverySequenceEntry,
 } from '@buildaharness/harness'
+import { requestPersistentStorage } from '../storage-persistence'
 
 interface SnapshotRow {
   id: 'snapshot'
@@ -54,6 +55,7 @@ export class DexieExperienceStore implements ExperienceStore {
   static async create(opts: DexieExperienceStoreOptions = {}): Promise<DexieExperienceStore> {
     const namespace = opts.namespace ?? 'default'
     const db = new ExperienceDB(namespace)
+    void requestPersistentStorage()
     const row = await db.snapshots.get('snapshot')
     const inner = row ? InMemoryExperienceStore.fromJSON(row.data) : new InMemoryExperienceStore()
     return new DexieExperienceStore(inner, db)
