@@ -57,6 +57,19 @@ await memory.get('preferences') // { theme: 'dark' }
 search. Fine for small stores; if you need real semantic recall over a large
 memory store, that's not implemented here yet.
 
+### On persistence: IndexedDB is not permanent
+
+`IndexedDBAdapter` and `DexieExperienceStore` both call
+`requestPersistentStorage()` (wrapping `navigator.storage.persist()`) as soon
+as they touch real IndexedDB, so the origin is exempted from browsers'
+automatic eviction-under-disk-pressure policies where the browser grants it.
+This is a best-effort improvement, not a guarantee — it doesn't survive the
+user manually clearing site data, doesn't sync across devices/browsers, and
+grant behavior varies (Chrome grants liberally for engaged origins; Firefox
+prompts; Safari's support is limited). It's safe to call from Node/tests —
+`requestPersistentStorage()` resolves to `false` immediately when
+`navigator.storage` isn't available, and never throws.
+
 ## LLM client
 
 `LLMClient` implements `ILLMClient` (`callChat` streaming, `callChatSync`,

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type { MemoryAdapter, MemoryResult } from './adapter'
+import { requestPersistentStorage } from '../storage-persistence'
 
 interface MemoryRow {
   key: string
@@ -70,6 +71,7 @@ export class IndexedDBAdapter implements MemoryAdapter {
     this.idbAvailable = _isIDBAvailable()
     if (this.idbAvailable) {
       this.db = new MemoryDB(namespace)
+      void requestPersistentStorage()
     } else {
       console.warn(
         `IndexedDBAdapter: IndexedDB not available (namespace="${namespace}"); falling back to in-memory store`,
