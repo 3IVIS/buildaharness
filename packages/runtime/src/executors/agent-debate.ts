@@ -9,7 +9,7 @@ import { FlowState as FlowStateClass } from '../state'
 
 interface DebateTurn { agentRef: string; content: string; round: number }
 
-export async function agentDebateExecutor(node: Node, state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
+export async function agentDebateExecutor(node: Node, _state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
   if (node.type !== 'agent_debate') throw new Error(`agentDebateExecutor called with node type "${node.type}"`)
 
   context.eventBus.emit({ type: 'node:start', nodeId: node.id, nodeType: node.type })

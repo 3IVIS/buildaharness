@@ -1,0 +1,53 @@
+# @buildaharness/desktop
+
+Tauri v2 shell around `@buildaharness/chat-ui`. This package has no frontend
+of its own — `src-tauri/tauri.conf.json` points `devUrl` at chat-ui's Vite
+dev server (`http://localhost:3010`) and `frontendDist` at its built
+`../../chat-ui/dist`, and runs chat-ui's own `dev`/`build` scripts as
+`beforeDevCommand`/`beforeBuildCommand` (with `cwd` set to the repo root, since
+npm workspace commands need to run from there).
+
+Storage is filesystem-backed, not Dexie/IndexedDB: `packages/chat-ui/src/App.tsx`
+detects `isTauri()` and, if true, builds `FileSystemAdapter`/`FileSystemExperienceStore`
+(from `@buildaharness/runtime`) over a `@tauri-apps/plugin-fs`-backed `FsBackend`
+(`packages/chat-ui/src/tauri-fs-backend.ts`), rooted at `appLocalDataDir()` — on
+macOS that's `~/Library/Application Support/com.buildaharness.assistant/`. The
+`fs` plugin is registered in `src-tauri/src/lib.rs` and scoped in
+`src-tauri/capabilities/default.json` via the `fs:allow-applocaldata-*-recursive`
+permission sets. See Phase 3 of `plans/tauri_desktop_plan.html`.
+
+## Commands
+
+```bash
+npm run dev --workspace=packages/desktop     # opens the native window against chat-ui's dev server
+npm run build --workspace=packages/desktop   # release binary + installers under src-tauri/target/release
+```
+
+Requires a Rust toolchain (`rustup`) — Tauri 2.11's dependencies need
+`rustc >= 1.88`.
+
+## Distribution
+
+Tagged releases (`git tag desktop-v0.1.0 && git push origin desktop-v0.1.0`)
+build installers for macOS (universal), Linux (`.deb`/`.rpm`/`.AppImage`), and
+Windows (`.msi`/`.exe`) via `.github/workflows/build-desktop.yml`, attached as
+a draft GitHub Release.
+
+**These builds are unsigned.** No Apple notarization, no Windows code-signing
+cert — that's a distribution/cost decision deferred past getting a working
+build into contributors' hands (see Phase 4 of `plans/tauri_desktop_plan.html`).
+In practice:
+
+- **macOS**: Gatekeeper blocks the app as "damaged" or "from an unidentified
+  developer." Right-click → Open, or `xattr -d com.apple.quarantine
+  /Applications/buildaharness-assistant.app` once downloaded.
+- **Windows**: SmartScreen warns on first run. "More info" → "Run anyway."
+- **Linux**: no warning — nothing to bypass.
+
+## This is one of three front ends
+
+The browser build (`@buildaharness/chat-ui` on its own, Dexie/IndexedDB
+storage), this desktop app (same chat-ui, filesystem storage), and the CLI
+(`@buildaharness/personal-assistant`'s `cli.ts`, also filesystem storage) all
+run the identical `PersonalAssistant`/harness underneath — see that package's
+README for the full comparison table.

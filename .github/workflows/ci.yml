@@ -190,6 +190,69 @@ jobs:
         working-directory: packages/harness
         run: npm run build
 
+  personal-assistant-package:
+    name: '@buildaharness/personal-assistant — typecheck, test, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/personal-assistant
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: packages/personal-assistant
+        run: npm test
+
+      - name: Build
+        working-directory: packages/personal-assistant
+        run: npm run build
+
+  chat-ui-package:
+    name: '@buildaharness/chat-ui — typecheck, test, build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      - name: Type-check
+        working-directory: packages/chat-ui
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: packages/chat-ui
+        run: npm test
+
+      # chat-ui bundles its workspace dependencies rather than externalizing
+      # them (it's an app, not a library), so its own `vite build` needs their
+      # dist/ to actually exist on disk first — unlike typecheck/test, which
+      # resolve those packages via tsconfig/vitest source-path aliases instead.
+      - name: Build runtime dependency
+        run: npm run build:runtime
+
+      - name: Build harness dependency
+        run: npm run build:harness
+
+      - name: Build personal-assistant dependency
+        run: npm run build:personal-assistant
+
+      - name: Build
+        working-directory: packages/chat-ui
+        run: npm run build
+
   proxy-package:
     name: '@buildaharness/proxy — typecheck, test'
     runs-on: ubuntu-latest

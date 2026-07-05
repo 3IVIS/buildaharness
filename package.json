@@ -25,6 +25,12 @@
     "build:personal-assistant": "npm run build --workspace=packages/personal-assistant",
     "test:personal-assistant": "npm test --workspace=packages/personal-assistant",
     "typecheck:personal-assistant": "npm run typecheck --workspace=packages/personal-assistant",
+    "dev:chat-ui": "npm run dev --workspace=packages/chat-ui",
+    "build:chat-ui": "npm run build --workspace=packages/chat-ui",
+    "test:chat-ui": "npm test --workspace=packages/chat-ui",
+    "typecheck:chat-ui": "npm run typecheck --workspace=packages/chat-ui",
+    "dev:desktop": "npm run dev --workspace=packages/desktop",
+    "build:desktop": "npm run build --workspace=packages/desktop",
     "deploy:proxy": "npm run deploy --workspace=packages/proxy"
   },
   "dependencies": {

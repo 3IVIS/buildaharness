@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie'
 import type { MemoryAdapter, MemoryResult } from './adapter'
 import { requestPersistentStorage } from '../storage-persistence'
+import { applyMode, scoreEntries } from './scoring'
 
 interface MemoryRow {
   key: string
@@ -29,28 +30,6 @@ function getFallbackStore(namespace: string): Map<string, unknown> {
     _fallbackStores.set(namespace, new Map())
   }
   return _fallbackStores.get(namespace)!
-}
-
-function applyMode(existing: unknown, value: unknown, mode: string): unknown {
-  if (mode !== 'append') return value
-  if (existing === undefined) return [value]
-  if (Array.isArray(existing)) return [...existing, value]
-  return [existing, value]
-}
-
-function scoreEntries(entries: Iterable<[string, unknown]>, query: string, topK: number, minScore: number): MemoryResult[] {
-  const results: MemoryResult[] = []
-  for (const [key, value] of entries) {
-    let score = 0.0
-    try {
-      if (JSON.stringify(value).includes(query)) score = 1.0
-    } catch {
-      // non-serializable value — score stays 0
-    }
-    if (score >= minScore) results.push({ key, value, score })
-  }
-  results.sort((a, b) => b.score - a.score)
-  return results.slice(0, topK)
 }
 
 export interface IndexedDBAdapterOptions {
