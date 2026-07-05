@@ -14,6 +14,7 @@ export default defineConfig({
       '@buildaharness/canvas': resolve(__dirname, 'packages/canvas/src/spec/schema.ts'),
       '@buildaharness/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),
       '@buildaharness/react': resolve(__dirname, 'packages/react/src/index.ts'),
+      '@buildaharness/harness': resolve(__dirname, 'packages/harness/src/index.ts'),
     },
   },
   server: { port: 3000 },
