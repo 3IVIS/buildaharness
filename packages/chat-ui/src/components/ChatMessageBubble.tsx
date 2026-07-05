@@ -1,13 +1,79 @@
+import { useState } from 'react'
+import { nodeDisplayName, type RiskLevel, type AssistantTrace, type AssistantSource } from '@buildaharness/personal-assistant'
+
 interface Props {
   role: 'user' | 'assistant' | 'error'
   content: string
+  riskLevel?: RiskLevel
+  trace?: AssistantTrace
+  sources?: AssistantSource[]
+  onRetry?: () => void
 }
 
-export function ChatMessageBubble({ role, content }: Props): React.JSX.Element {
+// Buckets the harness's 0–1 verification scores into plain language rather than
+// surfacing raw floats — this is a confidence readout, not a debug metric.
+function verificationHealthLabel({ strength, feasibility }: AssistantTrace['verificationHealth']): string {
+  const confidence = Math.min(strength, feasibility)
+  if (confidence >= 0.7) return 'High confidence'
+  if (confidence >= 0.4) return 'Reasonably confident'
+  return 'Worth double-checking'
+}
+
+const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
+  read_file: 'Read',
+  list_directory: 'Listed',
+}
+
+export function ChatMessageBubble({ role, content, riskLevel, trace, sources, onRetry }: Props): React.JSX.Element {
+  const [showWhy, setShowWhy] = useState(false)
+  const [showSources, setShowSources] = useState(false)
+
   return (
     <div className={`bubble bubble--${role}`}>
-      <div className="bubble__role">{role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error'}</div>
+      <div className="bubble__role">
+        {role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error'}
+        {/* LOW is the common case — rendering nothing for it keeps the badge meaningful when it appears. */}
+        {riskLevel && riskLevel !== 'LOW' && (
+          <span className={`risk-badge risk-badge--${riskLevel.toLowerCase()}`}>{riskLevel}</span>
+        )}
+      </div>
       <div className="bubble__content">{content}</div>
+      {onRetry && (
+        <button type="button" className="bubble__retry" onClick={onRetry}>Retry</button>
+      )}
+      {sources && sources.length > 0 && (
+        <div className="bubble__why">
+          <button type="button" className="bubble__why-toggle" onClick={() => setShowSources((v) => !v)}>
+            {showSources ? 'Hide sources' : `Sources (${sources.length})`}
+          </button>
+          {showSources && (
+            <div className="bubble__why-detail">
+              <ul className="bubble__why-steps">
+                {sources.map((source, i) => (
+                  <li key={`${source.tool}-${source.path}-${i}`}>{SOURCE_TOOL_LABEL[source.tool]} <code>{source.path}</code></li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+      {trace && (
+        <div className="bubble__why">
+          <button type="button" className="bubble__why-toggle" onClick={() => setShowWhy((v) => !v)}>
+            {showWhy ? 'Hide why' : 'Why?'}
+          </button>
+          {showWhy && (
+            <div className="bubble__why-detail">
+              <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
+              <ol className="bubble__why-steps">
+                {trace.nodeExecutionOrder.map((node, i) => (
+                  <li key={`${node}-${i}`}>{nodeDisplayName(node)}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

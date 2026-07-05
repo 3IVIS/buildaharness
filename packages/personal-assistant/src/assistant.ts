@@ -37,13 +37,19 @@ function previewContent(content: string, maxLines = 20): string {
 }
 
 type ToolLoopResult =
-  | { kind: 'final'; content: string }
+  | { kind: 'final'; content: string; sources: AssistantSource[] }
   | { kind: 'needs_approval'; reason: string; pendingWriteId: string }
   | { kind: 'escalated'; reason: string }
 
 export interface AssistantTrace {
   nodeExecutionOrder: string[]
   verificationHealth: { strength: number; feasibility: number }
+}
+
+/** A real, non-mutating file tool call the model made while producing a reply — grounds a reply in something other than the model's own words. write_file is deliberately excluded: until approved, nothing was actually read or changed. */
+export interface AssistantSource {
+  tool: 'read_file' | 'list_directory'
+  path: string
 }
 
 export interface AssistantTurnResult {
@@ -59,6 +65,8 @@ export interface AssistantTurnResult {
   trace?: AssistantTrace
   /** Set only when `needs_approval` was triggered by a `write_file` tool call — pass back into `turn(message, { approved, pendingWriteId })` to apply or discard it. */
   pendingWriteId?: string
+  /** Real read_file/list_directory calls made while producing this reply, in call order. Only set when fileTools is configured and at least one such call happened this turn. */
+  sources?: AssistantSource[]
 }
 
 export interface AssistantProgress {
@@ -133,7 +141,21 @@ export class PersonalAssistant {
 
   async turn(
     userMessage: string,
-    options: { sessionId?: string; approved?: boolean; pendingWriteId?: string; onProgress?: (progress: AssistantProgress) => void } = {},
+    options: {
+      sessionId?: string
+      approved?: boolean
+      pendingWriteId?: string
+      onProgress?: (progress: AssistantProgress) => void
+      /**
+       * Called with each token as the model's reply streams in. Only fires for
+       * the plain chat path (no fileTools configured) — the file-tools ReAct
+       * loop drives callChatStructured, which isn't a streaming call for either
+       * backend, so a turn using file tools never streams. ClaudeCliLLMClient's
+       * callChat isn't real per-token streaming either (it yields the whole
+       * reply as one chunk) — this only reads token-by-token on the proxy backend.
+       */
+      onToken?: (token: string) => void
+    } = {},
   ): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
     const transcriptKey = `transcript:${sessionId}`
@@ -160,6 +182,7 @@ export class PersonalAssistant {
     }
 
     let draftReply: string
+    let sources: AssistantSource[] | undefined
     if (this.fileTools) {
       const loopResult = await this.runToolLoop(transcript, userMessage)
 
@@ -181,13 +204,21 @@ export class PersonalAssistant {
         return { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: classification.riskLevel }
       }
       draftReply = loopResult.content
+      sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
     } else {
       // The only real network call this turn makes — everything the harness does
       // around it (risk, gating, verification, recovery, review) is local bookkeeping.
-      draftReply = await this.llmClient.callChatSync(
+      // Read via callChat (not callChatSync) so a caller-supplied onToken sees each
+      // chunk as it arrives; accumulating here gives the exact same final string
+      // callChatSync would have returned when no listener is attached.
+      draftReply = ''
+      for await (const token of this.llmClient.callChat(
         [{ role: 'system', content: SYSTEM_PROMPT }, ...transcript, { role: 'user', content: userMessage }],
         { model: this.model },
-      )
+      )) {
+        draftReply += token
+        options.onToken?.(token)
+      }
     }
 
     // Self-contained factual questions ("what timezone is Tokyo in") skip the harness
@@ -197,7 +228,7 @@ export class PersonalAssistant {
     if (triviality.isTrivial) {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
-      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true }
+      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources }
     }
 
     const task: Task = {
@@ -265,7 +296,7 @@ export class PersonalAssistant {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
 
-      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace }
+      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources }
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -300,12 +331,13 @@ export class PersonalAssistant {
       ...transcript,
       { role: 'user', content: userMessage },
     ]
+    const sources: AssistantSource[] = []
 
     for (let iteration = 0; iteration < TOOL_LOOP_MAX_ITERATIONS; iteration++) {
       const response = await this.llmClient.callChatStructured(messages, FILE_TOOLS, { model: this.model })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
-        return { kind: 'final', content: response.content }
+        return { kind: 'final', content: response.content, sources }
       }
 
       // The Claude CLI backend's own agentic loop resolves read_file/list_directory
@@ -345,6 +377,12 @@ export class PersonalAssistant {
         try {
           const result = await executeFileTool(fileTools, call.name, call.input)
           resultText = result.kind === 'text' ? result.text : ''
+          // Only a call that actually succeeded grounds the reply in something
+          // real — a rejected path or tool error below is reported to the model
+          // but isn't a source.
+          if (call.name === 'read_file' || call.name === 'list_directory') {
+            sources.push({ tool: call.name, path: String(call.input.path) })
+          }
         } catch (err) {
           // A rejected path or tool error is reported back to the model as a
           // tool result, not thrown — matches the "clear decline, never a
