@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@buildaharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
+      '@buildaharness/harness': resolve(__dirname, '../harness/src/index.ts'),
     },
   },
 })
