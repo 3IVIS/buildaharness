@@ -28,9 +28,15 @@ import {
   type PropagationQueue,
 } from './reviewer-pass.js'
 import { outputValidation, OutputContractError } from './output-validation.js'
-import { HarnessRuntime, BUDGET_WARNING_FLOOR } from '../harness-runtime.js'
+import { HarnessRuntime, BUDGET_WARNING_FLOOR, type HarnessRunResult } from '../harness-runtime.js'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+async function runToCompletion(rt: HarnessRuntime, ...args: Parameters<HarnessRuntime['run']>): Promise<HarnessRunResult> {
+  const outcome = await rt.run(...args)
+  if (outcome.status !== 'complete') throw new Error(`expected run to complete, got status "${outcome.status}"`)
+  return outcome.result
+}
 
 function makeTask(id = 't1', status: 'PENDING' | 'RUNNING' | 'COMPLETE' = 'PENDING') {
   return {
@@ -229,21 +235,42 @@ describe('contextCompression', () => {
     expect(Array.isArray(memoryState.compression_risk.pruned_regions)).toBe(true)
   })
 
-  it('staleness_sweep() runs after compress_memory (TTL + environment-change-based invalidation)', () => {
+  it('staleness_sweep() flags beliefs past the TTL via stale_flags', () => {
     const wm = new WorldModel()
-    // Add an old observation
-    wm.observations.push({
-      id: 'obs1',
-      content: 'old observation',
-      source: 'tool_a',
-      recorded_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 min ago — past 5min TTL
+    // Add an old belief — 40 minutes ago, past the 30-minute TTL
+    wm.beliefs.push({
+      id: 'belief1',
+      statement: 'the cache is warm',
+      confidence: 0.9,
+      derived_from: ['tool_a'],
+      recorded_at: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
     })
-    wm.completeness_flags['tool_a'] = true
 
     const memoryState = new MemoryState({ token_budget: { total: 100, used: 50 } })
     contextCompression(memoryState, wm, new BeliefDepGraph(), new DepGraphBudget(), new HypothesisSet(), new TaskGraph(), new Diagnostics(), new ControlState(), new CallerState())
-    // Stale observation should have its completeness_flag marked false
-    expect(wm.completeness_flags['tool_a']).toBe(false)
+    expect(wm.stale_flags['belief1']).toBe(true)
+  })
+
+  it('staleness_sweep() flags a belief invalidated by a later environment change to one of its sources', () => {
+    const wm = new WorldModel()
+    const recordedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    wm.beliefs.push({
+      id: 'belief1',
+      statement: 'config.yaml sets debug=false',
+      confidence: 0.9,
+      derived_from: ['config.yaml'],
+      recorded_at: recordedAt,
+    })
+    wm.environment_change_log.push({
+      id: 'change1',
+      description: 'config.yaml edited',
+      affected_paths: ['config.yaml'],
+      timestamp: new Date().toISOString(), // after recorded_at
+    })
+
+    const memoryState = new MemoryState({ token_budget: { total: 100, used: 50 } })
+    contextCompression(memoryState, wm, new BeliefDepGraph(), new DepGraphBudget(), new HypothesisSet(), new TaskGraph(), new Diagnostics(), new ControlState(), new CallerState())
+    expect(wm.stale_flags['belief1']).toBe(true)
   })
 
   it('dep_graph decay applied after staleness_sweep (independently of content changes)', () => {
@@ -376,12 +403,13 @@ describe('outputValidation', () => {
   it('contract check uses current callerState.constraints (may differ from init if updated mid-run)', () => {
     const contract = new OutputContract({
       required_sections: ['summary'],
-      caller_specific_constraints: {},
+      caller_specific_constraints: [],
     })
     const callerState = new CallerState({
-      current_constraints: { format: 'json' },
+      current_constraints: ['response must be in json format'],
     })
-    // Should pass — required_sections satisfied
+    // Should pass — required_sections satisfied, and the constraint's negation check
+    // has no matching subject in the result, so it isn't flagged as violated
     const result = outputValidation({ summary: 'done' }, contract, callerState)
     expect(result.passed).toBe(true)
   })
@@ -408,9 +436,9 @@ describe('outputValidation', () => {
 // ─── P11.6 HarnessRuntime ─────────────────────────────────────────────────────
 
 describe('HarnessRuntime', () => {
-  it('worldModel.generation_id increments twice per iteration (sub-step A after observation update, sub-step B after execution)', () => {
+  it('worldModel.generation_id increments twice per iteration (sub-step A after observation update, sub-step B after execution)', async () => {
     const rt = new HarnessRuntime()
-    const result = rt.run('fix bug', ['task done'], {
+    const result = await runToCompletion(rt, 'fix bug', ['task done'], {
       initialTasks: [makeTask('t1', 'PENDING')],
       max_steps: 5,
     })
@@ -418,10 +446,10 @@ describe('HarnessRuntime', () => {
     expect(result.initResult.worldModel.generation_id).toBeGreaterThan(1)
   })
 
-  it('steps_used ≥ 0.8 × max_steps lowers diagnostics.verification_health.feasibility to BUDGET_WARNING_FLOOR', () => {
+  it('steps_used ≥ 0.8 × max_steps lowers diagnostics.verification_health.feasibility to BUDGET_WARNING_FLOOR', async () => {
     const rt = new HarnessRuntime()
     // Use a small max_steps so we hit 80% quickly
-    const result = rt.run('fix bug', [], {
+    const result = await runToCompletion(rt, 'fix bug', [], {
       initialTasks: [],
       max_steps: 3,
     })
@@ -431,25 +459,25 @@ describe('HarnessRuntime', () => {
     void result
   })
 
-  it('steps_used == max_steps → escalate("budget_exhausted") → halt() without further iteration', () => {
+  it('steps_used == max_steps → escalate("budget_exhausted") → halt() without further iteration', async () => {
     const rt = new HarnessRuntime()
     // Many tasks but tiny budget — will exhaust
     const tasks = Array.from({ length: 5 }, (_, i) => makeTask(`t${i}`, 'PENDING'))
     // With toolExecutors that always succeed, tasks complete; otherwise budget exhausted
-    expect(() =>
+    await expect(
       rt.run('fix bug', [], {
         initialTasks: tasks,
         max_steps: 1,
         // No tool executor — task will fail verification but budget runs out
       }),
-    ).toThrow()  // Either EscalationHalt or normal completion
+    ).rejects.toThrow()  // Either EscalationHalt or normal completion
   })
 
-  it('ExperienceStore.update() called after each task reaches COMPLETE status (when store available)', () => {
+  it('ExperienceStore.update() called after each task reaches COMPLETE status (when store available)', async () => {
     const store = new InMemoryExperienceStore()
     const updateSpy = vi.spyOn(store, 'updateExperienceStore')
     const rt = new HarnessRuntime()
-    rt.run('fix bug', ['done'], {
+    await rt.run('fix bug', ['done'], {
       initialTasks: [makeTask('t1', 'PENDING')],
       max_steps: 5,
       experienceStore: store,
@@ -462,9 +490,9 @@ describe('HarnessRuntime', () => {
     // (exact call count depends on verification pass outcome)
   })
 
-  it('all 22 nodes execute in correct sequence during end-to-end smoke test run', () => {
+  it('all 22 nodes execute in correct sequence during end-to-end smoke test run', async () => {
     const rt = new HarnessRuntime()
-    const result = rt.run('test objective', ['test passes'], {
+    const result = await runToCompletion(rt, 'test objective', ['test passes'], {
       initialTasks: [makeTask('t1', 'PENDING')],
       max_steps: 5,
       toolExecutors: {
@@ -478,8 +506,30 @@ describe('HarnessRuntime', () => {
     expect(order).toContain('detect_contradictions')
     expect(order).toContain('update_diagnostics')
     expect(order).toContain('resolve_control_state')
+    expect(order).toContain('gather_evidence')
+    expect(order).toContain('apply_tool_reliability')
     expect(order).toContain('reviewer_pass')
     expect(order).toContain('output_validation')
+  })
+
+  it('gather_evidence + apply_tool_reliability actually run post-execution, not just labels', async () => {
+    const rt = new HarnessRuntime()
+    const result = await runToCompletion(rt, 'test objective', ['test passes'], {
+      initialTasks: [makeTask('t1', 'PENDING')],
+      max_steps: 5,
+      toolExecutors: {
+        default: () => ({ completed: true }),
+      },
+    })
+    // gatherEvidence's addObservation() is the only thing that writes to
+    // evidenceStore.observations post-init — a prior version of this loop
+    // pushed the 'gather_evidence' label without ever calling the function,
+    // leaving observations empty.
+    const executionEvidence = result.initResult.evidenceStore.observations.find(
+      (o: { source: string }) => o.source === 'execution_engine',
+    )
+    expect(executionEvidence).toBeDefined()
+    expect(executionEvidence?.evidence_type).toBe('OBSERVATION')
   })
 })
 
@@ -514,7 +564,7 @@ describe('ExperienceStore integration', () => {
     expect(() => warmStart(store, strategyState, fd, depBudget, tg)).not.toThrow()
   })
 
-  it('HarnessRuntime smoke test: 3-task objective completes without error (mock tools)', () => {
+  it('HarnessRuntime smoke test: 3-task objective completes without error (mock tools)', async () => {
     const rt = new HarnessRuntime()
     const store = new InMemoryExperienceStore()
     const tasks = [
@@ -522,7 +572,7 @@ describe('ExperienceStore integration', () => {
       makeTask('t2', 'PENDING'),
       makeTask('t3', 'PENDING'),
     ]
-    expect(() =>
+    await expect(
       rt.run('smoke test objective', ['all done'], {
         initialTasks: tasks,
         max_steps: 10,
@@ -531,6 +581,6 @@ describe('ExperienceStore integration', () => {
           default: () => ({ success: true }),
         },
       }),
-    ).not.toThrow()
+    ).resolves.not.toThrow()
   })
 })
