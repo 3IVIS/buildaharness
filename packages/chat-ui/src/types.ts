@@ -1,8 +1,8 @@
-import type { RiskLevel } from '@buildaharness/personal-assistant'
+import type { RiskLevel, AssistantTrace, AssistantSource } from '@buildaharness/personal-assistant'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }
-  | { id: string; kind: 'assistant'; content: string }
+  | { id: string; kind: 'assistant'; content: string; riskLevel?: RiskLevel; trace?: AssistantTrace; sources?: AssistantSource[] }
   | {
       id: string
       kind: 'approval'
@@ -12,4 +12,4 @@ export type ChatEntry =
       resolution?: 'approved' | 'denied'
     }
   | { id: string; kind: 'escalation'; reason: string }
-  | { id: string; kind: 'error'; content: string }
+  | { id: string; kind: 'error'; content: string; retryable: boolean; retryMessage: string; retryApproved: boolean }

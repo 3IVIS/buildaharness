@@ -1,4 +1,5 @@
 interface Props {
+  pendingMessage: string
   reason: string
   riskLevel?: string
   resolution?: 'approved' | 'denied'
@@ -6,12 +7,13 @@ interface Props {
   onDeny: () => void
 }
 
-export function ApprovalCard({ reason, riskLevel, resolution, onApprove, onDeny }: Props): React.JSX.Element {
+export function ApprovalCard({ pendingMessage, reason, riskLevel, resolution, onApprove, onDeny }: Props): React.JSX.Element {
   return (
     <div className="approval-card">
       <div className="approval-card__header">
         Needs approval{riskLevel ? ` — ${riskLevel}` : ''}
       </div>
+      <blockquote className="approval-card__pending">{pendingMessage}</blockquote>
       <div className="approval-card__reason">{reason}</div>
       {resolution ? (
         <div className="approval-card__resolution">{resolution === 'approved' ? 'Approved.' : 'Denied.'}</div>

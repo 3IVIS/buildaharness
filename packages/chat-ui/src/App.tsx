@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { isTauri } from '@tauri-apps/api/core'
-import { PersonalAssistant } from '@buildaharness/personal-assistant'
+import { PersonalAssistant, nodeDisplayName, classifyError, type AssistantProgress } from '@buildaharness/personal-assistant'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore } from '@buildaharness/runtime'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
@@ -43,6 +43,8 @@ export function App(): React.JSX.Element {
   const [entries, setEntries] = useState<ChatEntry[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<AssistantProgress | null>(null)
+  const [streamingText, setStreamingText] = useState<string | null>(null)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -63,16 +65,29 @@ export function App(): React.JSX.Element {
   async function runTurn(message: string, approved: boolean): Promise<void> {
     const assistant = assistantRef.current
     if (!assistant) {
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Assistant is still starting up — try again in a moment.' }])
+      setEntries((prev) => [
+        ...prev,
+        { id: newId(), kind: 'error', content: 'Assistant is still starting up — try again in a moment.', retryable: true, retryMessage: message, retryApproved: approved },
+      ])
       return
     }
 
     setBusy(true)
+    setProgress(null)
+    setStreamingText(null)
     try {
-      const result = await assistant.turn(message, { sessionId: sessionIdRef.current, approved })
+      const result = await assistant.turn(message, {
+        sessionId: sessionIdRef.current,
+        approved,
+        onProgress: setProgress,
+        onToken: (token) => setStreamingText((prev) => (prev ?? '') + token),
+      })
 
       if (result.status === 'ok') {
-        setEntries((prev) => [...prev, { id: newId(), kind: 'assistant', content: result.reply ?? '' }])
+        setEntries((prev) => [
+          ...prev,
+          { id: newId(), kind: 'assistant', content: result.reply ?? '', riskLevel: result.riskLevel, trace: result.trace, sources: result.sources },
+        ])
       } else if (result.status === 'needs_approval') {
         setEntries((prev) => [
           ...prev,
@@ -82,9 +97,12 @@ export function App(): React.JSX.Element {
         setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.' }])
       }
     } catch (err) {
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: err instanceof Error ? err.message : 'Something went wrong.' }])
+      const { message: errorMessage, retryable } = classifyError(err)
+      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved }])
     } finally {
       setBusy(false)
+      setProgress(null)
+      setStreamingText(null)
     }
   }
 
@@ -106,6 +124,10 @@ export function App(): React.JSX.Element {
     setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'approval' ? { ...e, resolution: 'denied' } : e)))
   }
 
+  function handleRetry(message: string, approved: boolean): void {
+    void runTurn(message, approved)
+  }
+
   return (
     <div className="app">
       <header className="app__header">Assistant</header>
@@ -115,13 +137,30 @@ export function App(): React.JSX.Element {
             case 'user':
               return <ChatMessageBubble key={entry.id} role="user" content={entry.content} />
             case 'assistant':
-              return <ChatMessageBubble key={entry.id} role="assistant" content={entry.content} />
+              return (
+                <ChatMessageBubble
+                  key={entry.id}
+                  role="assistant"
+                  content={entry.content}
+                  riskLevel={entry.riskLevel}
+                  trace={entry.trace}
+                  sources={entry.sources}
+                />
+              )
             case 'error':
-              return <ChatMessageBubble key={entry.id} role="error" content={entry.content} />
+              return (
+                <ChatMessageBubble
+                  key={entry.id}
+                  role="error"
+                  content={entry.content}
+                  onRetry={entry.retryable ? () => handleRetry(entry.retryMessage, entry.retryApproved) : undefined}
+                />
+              )
             case 'approval':
               return (
                 <ApprovalCard
                   key={entry.id}
+                  pendingMessage={entry.pendingMessage}
                   reason={entry.reason}
                   riskLevel={entry.riskLevel}
                   resolution={entry.resolution}
@@ -133,7 +172,14 @@ export function App(): React.JSX.Element {
               return <EscalationBanner key={entry.id} reason={entry.reason} />
           }
         })}
-        {busy && <div className="app__typing">thinking…</div>}
+        {busy && streamingText && <ChatMessageBubble role="assistant" content={streamingText} />}
+        {busy && (!streamingText || progress) && (
+          <div className="app__typing">
+            {progress
+              ? `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
+              : 'thinking…'}
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
       <form className="app__composer" onSubmit={handleSubmit}>

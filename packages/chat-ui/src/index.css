@@ -104,10 +104,95 @@ body {
   letter-spacing: 0.05em;
   opacity: 0.7;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.risk-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  opacity: 1;
+}
+
+.risk-badge--medium {
+  background: rgba(240, 160, 75, 0.18);
+  color: var(--amber);
+}
+
+.risk-badge--high {
+  background: rgba(224, 92, 106, 0.18);
+  color: var(--red);
 }
 
 .bubble__content {
   white-space: pre-wrap;
+}
+
+.bubble__retry {
+  margin-top: 8px;
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bubble__why {
+  margin-top: 6px;
+}
+
+.bubble__why-toggle {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.bubble__why-toggle:hover {
+  color: var(--text);
+}
+
+.bubble__why-detail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12.5px;
+}
+
+.bubble__why-confidence {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.bubble__why-steps {
+  margin: 0 0 0 18px;
+  color: var(--muted);
+}
+
+.bubble__why-steps li {
+  margin-bottom: 2px;
+}
+
+.bubble__why-steps code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11.5px;
+  color: var(--text);
 }
 
 .approval-card, .escalation-banner {
@@ -125,6 +210,16 @@ body {
 .approval-card__header, .escalation-banner__title {
   font-weight: 700;
   margin-bottom: 6px;
+}
+
+.approval-card__pending {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--amber);
+  color: var(--text);
+  font-style: italic;
+  font-size: 13.5px;
+  white-space: pre-wrap;
 }
 
 .approval-card__actions {

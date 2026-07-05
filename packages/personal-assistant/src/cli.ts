@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, type ILLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant, type AssistantProgress, type AssistantTrace } from './assistant.js'
+import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource } from './assistant.js'
 import { nodeDisplayName } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
@@ -47,6 +47,7 @@ async function main(): Promise<void> {
   rl.prompt()
 
   let lastTrace: AssistantTrace | undefined
+  let lastSources: AssistantSource[] | undefined
 
   function verificationHealthLabel({ strength, feasibility }: AssistantTrace['verificationHealth']): string {
     const confidence = Math.min(strength, feasibility)
@@ -67,6 +68,20 @@ async function main(): Promise<void> {
     console.log('')
   }
 
+  const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = { read_file: 'Read', list_directory: 'Listed' }
+
+  function printSources(): void {
+    if (!lastSources || lastSources.length === 0) {
+      console.log('\nNo sources for the last turn (it used no file tool calls).\n')
+      return
+    }
+    console.log('')
+    for (const source of lastSources) {
+      console.log(`  - ${SOURCE_TOOL_LABEL[source.tool]} ${source.path}`)
+    }
+    console.log('')
+  }
+
   let lastProgressLineLength = 0
   function writeProgress(progress: AssistantProgress): void {
     const node = nodeDisplayName(progress.currentNode)
@@ -81,8 +96,21 @@ async function main(): Promise<void> {
   }
 
   async function handleTurn(message: string, approved = false, pendingWriteId?: string): Promise<void> {
+    // Set only once the first token of an actual streamed reply arrives — the
+    // message-level approval gate and the file-tools loop both produce a full
+    // reply with no streaming, so this stays false for those turns and the
+    // final branch below falls back to printing the whole reply at once.
+    let streamedAnyTokens = false
+    function writeToken(token: string): void {
+      if (!streamedAnyTokens) {
+        process.stdout.write('\nassistant> ')
+        streamedAnyTokens = true
+      }
+      process.stdout.write(token)
+    }
+
     try {
-      const result = await assistant.turn(message, { sessionId: 'cli', approved, pendingWriteId, onProgress: writeProgress })
+      const result = await assistant.turn(message, { sessionId: 'cli', approved, pendingWriteId, onProgress: writeProgress, onToken: writeToken })
       clearProgress()
 
       // A write_file tool call, gated at the point of the call itself rather than
@@ -111,8 +139,16 @@ async function main(): Promise<void> {
       }
 
       lastTrace = result.trace
+      lastSources = result.sources
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
-      console.log(`\nassistant>${riskSuffix} ${result.reply}\n`)
+      const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
+      if (streamedAnyTokens) {
+        // The reply text is already on screen, printed token-by-token as it
+        // streamed in — just append whatever suffix belongs after it.
+        process.stdout.write(`${riskSuffix}${sourcesHint}\n\n`)
+      } else {
+        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}\n`)
+      }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
       // crash the REPL via an unhandled rejection — just report it and keep going.
@@ -132,6 +168,7 @@ async function main(): Promise<void> {
     const message = line.trim()
     if (!message) { rl.prompt(); return }
     if (message === '/why') { printWhy(); rl.prompt(); return }
+    if (message === '/sources') { printSources(); rl.prompt(); return }
 
     void handleTurn(message).finally(() => rl.prompt())
   })

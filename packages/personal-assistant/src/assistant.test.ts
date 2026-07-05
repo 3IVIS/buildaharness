@@ -7,17 +7,22 @@ import { PersonalAssistant } from './assistant.js'
 class FakeLLMClient implements ILLMClient {
   calls = 0
   receivedMessages: ChatMessage[][] = []
-  constructor(private readonly reply: string = 'Here you go.') {}
+  /** Tokens as handed out by callChat, per call — lets streaming tests assert on chunk boundaries, not just the joined result. */
+  streamedChunks: string[][] = []
+  constructor(private readonly reply: string = 'Here you go.', private readonly chunks?: string[]) {}
 
-  async *callChat(): AsyncIterable<string> {
-    this.calls++
-    yield this.reply
-  }
-
-  async callChatSync(messages: ChatMessage[], _options?: ChatOptions): Promise<string> {
+  async *callChat(messages: ChatMessage[], _options?: ChatOptions): AsyncIterable<string> {
     this.calls++
     this.receivedMessages.push(messages)
-    return this.reply
+    const tokens = this.chunks ?? [this.reply]
+    this.streamedChunks.push(tokens)
+    for (const token of tokens) yield token
+  }
+
+  async callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+    const chunks: string[] = []
+    for await (const token of this.callChat(messages, options)) chunks.push(token)
+    return chunks.join('')
   }
 
   async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
@@ -91,6 +96,30 @@ describe('PersonalAssistant', () => {
     expect(result.reply).toBe('The forecast looks mild.')
     expect(result.riskLevel).toBe('LOW')
     expect(llm.calls).toBe(1)
+  })
+
+  it('streams the reply token-by-token via onToken, and the final reply matches the concatenated chunks', async () => {
+    const llm = new FakeLLMClient(undefined, ['The ', 'forecast ', 'looks mild.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const received: string[] = []
+
+    const result = await assistant.turn('What is the weather usually like in autumn?', {
+      onToken: (token) => received.push(token),
+    })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('The forecast looks mild.')
+    expect(received).toEqual(['The ', 'forecast ', 'looks mild.'])
+  })
+
+  it('does not require onToken — a turn with no listener behaves exactly as before streaming was added', async () => {
+    const llm = new FakeLLMClient(undefined, ['Partial, ', 'then whole.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Tell me something.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Partial, then whole.')
   })
 
   it('gates a consequential action behind approval without calling the LLM', async () => {
@@ -220,6 +249,40 @@ describe('PersonalAssistant file tools', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('The secret ingredient is basil.')
     expect(llm.calls).toBe(2)
+    expect(result.sources).toEqual([{ tool: 'read_file', path: 'notes.txt' }])
+  })
+
+  it('records a source per real, successful read_file/list_directory call, in call order, excluding write_file', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'basil')
+
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'list_directory', input: { path: '.' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_3', name: 'read_file', input: { path: 'missing.txt' } }] },
+      { content: 'Found notes.txt with the ingredient.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('What files are here, and what does notes.txt say?')
+
+    expect(result.status).toBe('ok')
+    // missing.txt errored (no such file) — not a real source, so it's excluded.
+    expect(result.sources).toEqual([
+      { tool: 'list_directory', path: '.' },
+      { tool: 'read_file', path: 'notes.txt' },
+    ])
+  })
+
+  it('does not set sources when the reply used no file tool calls', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([{ content: 'I did not need to look anything up.' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('Just say hello.')
+
+    expect(result.status).toBe('ok')
+    expect(result.sources).toBeUndefined()
   })
 
   it('a write_file tool call returns needs_approval with a pendingWriteId and creates no file', async () => {
