@@ -37,7 +37,7 @@ describe('IndexedDBAdapter (node env — fallback path)', () => {
     }
   })
 
-  it('search with no searchEndpoint does linear scan on fallback Map', async () => {
+  it('search does a linear scan on fallback Map', async () => {
     const adapter = new IndexedDBAdapter({ namespace: 'search-fallback' })
     await adapter.set('docA', 'the quick brown fox')
     await adapter.set('docB', 'lazy dog')
