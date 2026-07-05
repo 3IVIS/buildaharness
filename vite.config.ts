@@ -15,12 +15,17 @@ export default defineConfig({
       '@buildaharness/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),
       '@buildaharness/react': resolve(__dirname, 'packages/react/src/index.ts'),
       '@buildaharness/harness': resolve(__dirname, 'packages/harness/src/index.ts'),
+      '@buildaharness/personal-assistant': resolve(__dirname, 'packages/personal-assistant/src/index.ts'),
     },
   },
   server: { port: 3000 },
   test: {
     environment: 'jsdom',
     globals: true,
+    // packages/chat-ui's own tests need jest-dom matchers + a scrollIntoView
+    // polyfill (jsdom doesn't implement it) — root's blanket test run picks up
+    // that package's *.test.* files too, so it needs the same setup.
+    setupFiles: ['./packages/chat-ui/src/test-setup.ts'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
