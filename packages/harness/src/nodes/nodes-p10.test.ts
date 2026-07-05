@@ -19,6 +19,7 @@ import { execute } from './execute.js'
 import { verify } from './verify.js'
 import { rollbackAndReplan, cannotMakeProgress, buildStrategyOrdering, STALL_WINDOW } from './rollback-replan.js'
 import { makeSurfaceBlocker, awaitClarification, EscalationHalt, handleEscalationResponse } from './escalate.js'
+import { applyConstraintChangePropagation, revalidateTaskGraph } from './check-caller-updates.js'
 import { resolveControlState } from './resolve-control-state.js'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -405,7 +406,7 @@ describe('verify', () => {
     expect(result.has_critical_failure).toBe(false)
   })
 
-  it('unavailable tool layers excluded from enabled_layers (already penalised upstream; no double-count)', () => {
+  it('unavailable tool layers are reported SKIPPED, not dropped from layer_results', () => {
     const es = new EvidenceStore({
       tool_availability_manifest: {
         linter: { available: false, fallback_tool: null },  // disabled
@@ -413,11 +414,14 @@ describe('verify', () => {
       },
     })
     const result = verify('output', [], [], es, 'LOW')
-    // syntax layer (requires linter) not in result — excluded by post-filter
+    // syntax layer (requires linter) still appears, marked SKIPPED — matches
+    // verification.py's per-layer _tool_available() gating (never drops the layer)
     const layers = result.layer_results.map(lr => lr.layer)
-    expect(layers).not.toContain('syntax')
-    // unit layer (pytest available) present
-    expect(layers).toContain('unit')
+    expect(layers).toContain('syntax')
+    expect(result.layer_results.find(lr => lr.layer === 'syntax')?.status).toBe('SKIPPED')
+    // unit layer (pytest available) runs normally
+    const unit = result.layer_results.find(lr => lr.layer === 'unit')
+    expect(unit?.status).toBe('PASS')
   })
 
   it('evidence_sufficiency threshold is claim-scoped — local claim requires less evidence than global claim', () => {
@@ -584,10 +588,49 @@ describe('escalate', () => {
     }
     const genIdBefore = wm.generation_id
     // Human response with new constraints
-    handleEscalationResponse(callerState, { new_constraint: 'only touch auth module' }, ctx)
+    handleEscalationResponse(callerState, { current_constraints: ['only touch auth module'] }, ctx)
     // constraints were changed → applyConstraintChangePropagation → generation_id++
     expect(wm.generation_id).toBe(genIdBefore + 1)
-    expect(callerState.current_constraints['new_constraint']).toBe('only touch auth module')
+    expect(callerState.current_constraints).toEqual(['only touch auth module'])
     expect(callerState.constraints_changed).toBe(false)  // reset after propagation
+  })
+
+  it('applyConstraintChangePropagation() actually flags stale beliefs and revalidates the task graph, not just a generation_id bump', () => {
+    const callerState = new CallerState({ success_criteria: ['ship the login page'] })
+    const wm = makeWorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'payment gateway configured', confidence: 0.9, derived_from: ['o1'], recorded_at: new Date().toISOString() })
+    const taskGraph = new TaskGraph({
+      tasks: [
+        { id: 't1', description: 'wire up payment gateway', status: 'PENDING', risk_level: 'MEDIUM', depends_on: [], parallel_write_domains: [], abstraction_level: 1, assigned_strategy: null },
+      ],
+    })
+
+    applyConstraintChangePropagation(callerState, {
+      worldModel: wm,
+      hypothesisSet: new HypothesisSet(),
+      taskGraph,
+      diagnostics: makeDiagnostics(),
+      failureDiagnostics: new FailureDiagnostics(),
+    })
+
+    // Belief shares no token with the new success criterion → flagged stale
+    expect(wm.stale_flags['b1']).toBe(true)
+    // Existing task is out of scope of the new criterion → blocked
+    const t1 = taskGraph.getTask('t1')!
+    expect(t1.status).toBe('BLOCKED')
+    expect(t1.block_reason).toBe('scope_eliminated')
+    // New criterion isn't covered by any task → a new task is added for it
+    expect(taskGraph.tasks.some(t => t.description === 'ship the login page')).toBe(true)
+  })
+
+  it('revalidateTaskGraph() leaves in-scope, in-progress tasks alone', () => {
+    const callerState = new CallerState({ success_criteria: ['ship the login page'] })
+    const taskGraph = new TaskGraph({
+      tasks: [
+        { id: 't1', description: 'ship the login page end to end', status: 'RUNNING', risk_level: 'MEDIUM', depends_on: [], parallel_write_domains: [], abstraction_level: 1, assigned_strategy: null },
+      ],
+    })
+    revalidateTaskGraph(taskGraph, callerState)
+    expect(taskGraph.getTask('t1')!.status).toBe('RUNNING')
   })
 })

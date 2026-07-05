@@ -12,6 +12,7 @@ import { OutputContract } from '../state/output-contract.js'
 import { resolveControlState, RECOVERY_ACTION_DEPENDENCIES } from './resolve-control-state.js'
 import { normalise, DimensionType } from '../normalise.js'
 import { DEFAULT_REGISTRY, type ProcessRegistry } from '../process-registry.js'
+import { checkAbstractionAlignment } from './update-diagnostics.js'
 
 export class SelfReferentialDependencyError extends Error {
   constructor(actionClass: string) {
@@ -52,13 +53,6 @@ export function validateTaskGraph(taskGraph: TaskGraph): string[] {
   return errors
 }
 
-function checkAbstractionAlignment(taskGraph: TaskGraph): number {
-  if (taskGraph.tasks.length === 0) return 1.0
-  const maxLevel = 2
-  const mean = taskGraph.tasks.reduce((acc, t) => acc + t.abstraction_level, 0) / taskGraph.tasks.length
-  return normalise(1 - mean / (maxLevel + 1), DimensionType.ratio)
-}
-
 export interface ToolConfig {
   available: boolean
   fallback_tool?: string | null
@@ -69,13 +63,14 @@ export interface HarnessInitOptions {
   toolConfigs?: Record<string, ToolConfig>
   initialTasks?: Task[]
   successCriteria?: string[]
-  callerConstraints?: Record<string, unknown>
+  callerConstraints?: string[]
   outputContract?: Partial<{
     format: string
     required_sections: string[]
+    required_interface_fields: string[]
     interface_constraints: Record<string, unknown>
     validation_rules: string[]
-    caller_specific_constraints: Record<string, unknown>
+    caller_specific_constraints: string[]
   }>
   processConceptId?: string
   processRegistry?: ProcessRegistry
@@ -112,7 +107,7 @@ export function initializeHarness(
     toolConfigs = {},
     initialTasks = [],
     successCriteria = [],
-    callerConstraints = {},
+    callerConstraints = [],
     outputContract: outputContractOptions,
     processConceptId,
     processRegistry = DEFAULT_REGISTRY,
@@ -155,6 +150,12 @@ export function initializeHarness(
       available: config.available,
       fallback_tool: config.fallback_tool ?? null,
     }
+  }
+
+  // The execution engine itself is always a valid evidence source for
+  // post-execution observations, unless a caller explicitly overrides it.
+  if (!('execution_engine' in toolManifest)) {
+    toolManifest['execution_engine'] = { available: true, fallback_tool: null }
   }
 
   const evidenceStore = new EvidenceStore({
@@ -209,7 +210,7 @@ export function initializeHarness(
   }
 
   // Initial diagnostics setup
-  diagnostics.verification_health.feasibility = checkAbstractionAlignment(taskGraph)
+  diagnostics.verification_health.feasibility = checkAbstractionAlignment(taskGraph, worldModel)
   diagnostics.coverage_health.symptom_coverage = normalise(0.5, DimensionType.ratio)
   diagnostics.coverage_health.explanation_coverage = normalise(0.5, DimensionType.ratio)
 

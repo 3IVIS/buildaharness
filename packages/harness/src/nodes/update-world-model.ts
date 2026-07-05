@@ -57,10 +57,9 @@ export function updateWorldModel(
 }
 
 export function recomputeBeliefHealth(worldModel: WorldModel, diagnostics: Diagnostics): void {
-  const flags = Object.values(worldModel.completeness_flags)
-  const staleFlagRatio = flags.length > 0
-    ? flags.filter(f => !f).length / flags.length
-    : 0
+  const staleValues = Object.values(worldModel.stale_flags)
+  const beliefCountForStaleness = Math.max(1, worldModel.beliefs.length)
+  const staleFlagRatio = staleValues.filter(Boolean).length / beliefCountForStaleness
   diagnostics.belief_health.freshness = normalise(1 - staleFlagRatio, DimensionType.ratio)
 
   const contradictionDensity = worldModel.beliefs.length > 0
