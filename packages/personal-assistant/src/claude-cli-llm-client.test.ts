@@ -5,9 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const spawnMock = vi.fn()
-vi.mock('node:child_process', () => ({
-  spawn: (...args: unknown[]) => spawnMock(...args),
-}))
+vi.mock('node:child_process', () => {
+  const spawn = (...args: unknown[]) => spawnMock(...args)
+  // Both named and default exports: the root (jsdom) vitest config's module
+  // interop expects a "default" export on a mocked node builtin, which a
+  // package-scoped run doesn't require — without it: "[vitest] No 'default'
+  // export is defined on the 'node:child_process' mock."
+  return { spawn, default: { spawn } }
+})
 
 const { ClaudeCliLLMClient } = await import('./claude-cli-llm-client.js')
 
