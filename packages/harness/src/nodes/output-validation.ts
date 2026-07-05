@@ -66,12 +66,30 @@ export function outputValidation(
     }
   }
 
-  // Check caller_specific_constraints from current callerState (may differ from init if updated mid-run)
-  const currentConstraints = callerState.current_constraints
-  for (const [key, expected] of Object.entries(outputContract.caller_specific_constraints)) {
-    const callerConstraint = currentConstraints[key]
-    if (callerConstraint !== undefined && callerConstraint !== expected) {
-      violations.push(`caller_specific_constraints: constraint "${key}" not satisfied — caller expects ${String(callerConstraint)}`)
+  // Check caller_specific_constraints against the live caller_state.current_constraints
+  // (may differ from init if updated mid-run) — matches output_contract.py's
+  // check_caller_specific_constraints(): a "must not/never/no/without/exclude" constraint
+  // is violated when its subject (the words following the negation keyword) shows up in the result.
+  const NEGATION_KEYWORDS = ['not', 'never', 'no', 'without', 'exclude', 'must not']
+  const resultText = (
+    (typeof finalResult === 'string' ? finalResult : '') + ' ' +
+    Object.values(result).map(v => String(v)).join(' ')
+  ).toLowerCase()
+
+  for (const constraint of callerState.current_constraints) {
+    const constraintLower = constraint.toLowerCase()
+    const constraintTokens = new Set(constraintLower.split(/\s+/))
+    if (![...constraintTokens].some(t => NEGATION_KEYWORDS.includes(t))) continue
+
+    for (const kw of NEGATION_KEYWORDS) {
+      const idx = constraintLower.indexOf(kw)
+      if (idx === -1) continue
+      const subject = constraintLower.slice(idx + kw.length).trim()
+      const subjectTokens = subject.split(/\s+/).slice(0, 4).filter(t => t.length > 3)
+      if (subjectTokens.length > 0 && subjectTokens.some(t => resultText.includes(t))) {
+        violations.push(`caller_specific_constraints: constraint violated: "${constraint}"`)
+        break
+      }
     }
   }
 

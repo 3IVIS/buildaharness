@@ -16,6 +16,10 @@ export const BeliefSchema = z.object({
   supporting_evidence: z.array(z.string()).optional(),
   reliability: z.string().optional(),
   recorded_at: z.string(),
+  // Tracks which contradiction ids have already been applied to this belief's
+  // confidence, so apply_resolution_policy() stays idempotent across repeated calls.
+  applied_contradiction_ids: z.array(z.string()).optional(),
+  pending_sweep: z.boolean().optional(),
 })
 export type Belief = z.infer<typeof BeliefSchema>
 
@@ -139,6 +143,10 @@ export class DepGraphBudget {
       refresh_policy: this.refresh_policy,
       confidence_decay_rate: this.confidence_decay_rate,
     }
+  }
+
+  static fromJSON(json: DepGraphBudgetData): DepGraphBudget {
+    return new DepGraphBudget(json)
   }
 }
 

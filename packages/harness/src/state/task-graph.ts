@@ -12,6 +12,7 @@ export const TaskSchema = z.object({
   parallel_write_domains: z.array(z.string()),
   abstraction_level: z.number().int().nonnegative(),
   assigned_strategy: z.string().nullable(),
+  block_reason: z.string().optional(),
 })
 export type Task = z.infer<typeof TaskSchema>
 
