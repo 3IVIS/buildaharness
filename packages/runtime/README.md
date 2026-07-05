@@ -43,6 +43,7 @@ auto-creates an `InMemoryAdapter` for any `in_memory`-backed store declared in
 |---|---|---|
 | `InMemoryAdapter` | A `Map`, scoped by `global`/`thread`/`resource` | Node, tests, or anything that doesn't need to survive a reload |
 | `IndexedDBAdapter` | IndexedDB via Dexie | Browser data that should survive a page reload. Falls back to an in-memory `Map` outside a browser (Node/tests) — it self-detects `typeof indexedDB` and logs a warning when it falls back. |
+| `FileSystemAdapter` | Real files, one JSON file per key | Node (CLI) or Tauri (desktop app) data that should survive a restart — see "Filesystem-backed storage" below. |
 
 ```ts
 import { IndexedDBAdapter } from '@buildaharness/runtime'
@@ -52,7 +53,7 @@ await memory.set('preferences', { theme: 'dark' })
 await memory.get('preferences') // { theme: 'dark' }
 ```
 
-`search(query, topK, minScore)` on both adapters is a linear scan doing
+`search(query, topK, minScore)` on all three adapters is a linear scan doing
 `JSON.stringify(value).includes(query)` — a keyword match, not semantic
 search. Fine for small stores; if you need real semantic recall over a large
 memory store, that's not implemented here yet.
@@ -69,6 +70,44 @@ grant behavior varies (Chrome grants liberally for engaged origins; Firefox
 prompts; Safari's support is limited). It's safe to call from Node/tests —
 `requestPersistentStorage()` resolves to `false` immediately when
 `navigator.storage` isn't available, and never throws.
+
+### Filesystem-backed storage
+
+`FileSystemAdapter implements MemoryAdapter` and `FileSystemExperienceStore
+implements ExperienceStore` (the latter using the same sync-wrapper pattern as
+`DexieExperienceStore` above — an in-memory store is the real synchronous
+source of truth, persisted to disk in the background after every mutation)
+give real, restart-surviving storage to code that isn't running in a browser:
+the CLI (`@buildaharness/personal-assistant`) and the Tauri desktop app
+(`@buildaharness/desktop`, via `@buildaharness/chat-ui`).
+
+Neither class imports a filesystem API directly. Both take an injected
+`FsBackend`:
+
+```ts
+export interface FsBackend {
+  readTextFile(path: string): Promise<string | undefined>  // undefined if missing, not a throw
+  writeTextFile(path: string, contents: string): Promise<void>
+  removeFile(path: string): Promise<void>                  // no-op if missing
+  mkdir(path: string): Promise<void>                        // recursive, no-op if it exists
+  readDir(path: string): Promise<string[]>                  // file names only
+}
+```
+
+That's what let both classes ship here without this package ever depending on
+`@tauri-apps/plugin-fs` or Node's `fs` — the concrete backends live at the
+edges instead, each unreachable from the other's build so neither leaks into
+a bundle that doesn't need it:
+
+- `node:fs/promises` backend: `packages/personal-assistant/src/node-fs-backend.ts`, imported only by that package's `cli.ts` (never re-exported from its `index.ts`, so chat-ui's browser bundle never sees a Node builtin).
+- `@tauri-apps/plugin-fs` backend: `packages/chat-ui/src/tauri-fs-backend.ts`, dynamically imported only when `isTauri()` (so a plain browser build never loads it).
+
+```ts
+import { FileSystemAdapter, FileSystemExperienceStore } from '@buildaharness/runtime'
+
+const memory = new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' })
+const experienceStore = await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' })
+```
 
 ## LLM client
 
@@ -110,8 +149,8 @@ const outcome = await new HarnessRuntime().run(objective, successCriteria, { exp
 | `src/graph.ts`, `state.ts` | `FlowGraph` (topology) and `FlowState` (schema-validated run state) |
 | `src/context.ts` | `createExecutionContext`, `ToolRegistry`, `ExecutionContext` type |
 | `src/executors/` | One executor per FlowSpec node type |
-| `src/memory/` | `InMemoryAdapter`, `IndexedDBAdapter` |
-| `src/experience-store/` | `DexieExperienceStore` |
+| `src/memory/` | `InMemoryAdapter`, `IndexedDBAdapter`, `FileSystemAdapter`, `FsBackend` |
+| `src/experience-store/` | `DexieExperienceStore`, `FileSystemExperienceStore` |
 | `src/llm-client.ts` | `LLMClient` / `ILLMClient` |
 | `src/events.ts` | `EventBus` + runtime event types |
 | `src/tools/` | `BUILT_IN_TOOLS`, tool registry |

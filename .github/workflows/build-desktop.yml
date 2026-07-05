@@ -1,0 +1,96 @@
+name: Build desktop app
+
+# Triggers on tags matching desktop-v* pushed to the repo.
+#
+#   git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
+#
+# Builds unsigned installers for macOS (universal), Linux (.deb/.rpm/.AppImage),
+# and Windows (.msi/.exe) via tauri-apps/tauri-action, and attaches them to a
+# draft GitHub Release. Unsigned means macOS/Windows show a security warning on
+# first launch (Gatekeeper / SmartScreen) — signing is a distribution decision
+# for later, not an engineering blocker. See plans/tauri_desktop_plan.html Phase 4.
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+
+jobs:
+  check-version:
+    name: Check version matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tauri.conf.json version matches tag
+        run: |
+          PKG_VERSION=$(node -p "require('./packages/desktop/src-tauri/tauri.conf.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/desktop/src-tauri/tauri.conf.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+  publish-desktop:
+    name: Build and publish (${{ matrix.platform }})
+    needs: check-version
+    permissions:
+      contents: write   # required to create the release and upload artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-latest'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Linux system deps (WebKitGTK etc.) ───────────────────────────────────
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      # ── Node ────────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # ── Rust (needs >= 1.88 for Tauri 2.11's dependency tree; dtolnay's
+      #    action always installs the current stable, so no explicit version
+      #    pin is needed — see plans/tauri_desktop_plan.html Phase 2) ─────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+
+      # ── Install deps (root + workspaces) ─────────────────────────────────────
+      - name: Install deps
+        run: npm ci
+
+      # ── Build + publish release ──────────────────────────────────────────────
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'buildaharness assistant ${{ github.ref_name }}'
+          releaseBody: 'Unsigned build — macOS/Windows will show a security warning on first launch. See packages/desktop/README.md.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

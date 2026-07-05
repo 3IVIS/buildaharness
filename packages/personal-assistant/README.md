@@ -81,14 +81,40 @@ const assistant = await PersonalAssistant.create({
 })
 ```
 
-Outside a browser (e.g. the CLI) `create()` falls back to the same in-memory
-defaults as the plain constructor.
+`create()` only supplies a default for storage the caller didn't already pass
+in — outside a browser it falls back to the same in-memory defaults as the
+plain constructor *unless* the caller passes its own `memory`/`experienceStore`/
+`checkpointStore`, which is exactly what the CLI and the Tauri desktop app do
+(see "Front ends" below) to get real persistence without either of them
+needing a browser.
+
+## Front ends
+
+Three front ends share this one package and harness underneath — none is more
+"real" than the others, and each picks the storage backend that fits where it
+runs:
+
+| Front end | Where | Storage |
+|---|---|---|
+| This package's `PersonalAssistant` class | Any Node/browser code | In-memory by default; bring your own `MemoryAdapter`/`ExperienceStore` |
+| CLI (`cli.ts`, below) | Terminal | `FileSystemAdapter`/`FileSystemExperienceStore` (`@buildaharness/runtime`) over `node:fs/promises`, under `~/.buildaharness/personal-assistant/` |
+| `@buildaharness/chat-ui` | Browser | `IndexedDBAdapter`/`DexieExperienceStore` via `PersonalAssistant.create()` (best-effort — see `packages/runtime/README.md`'s persistence section) |
+| `@buildaharness/desktop` | Native window (Tauri, wraps chat-ui) | Same `FileSystemAdapter`/`FileSystemExperienceStore` classes as the CLI, but over `@tauri-apps/plugin-fs` instead of `node:fs`, under `appLocalDataDir()` |
+
+Both filesystem backends are the *same* `FileSystemAdapter`/`FileSystemExperienceStore`
+classes — see `packages/runtime/README.md`'s "Filesystem-backed storage"
+section for how the file-I/O seam that makes that possible works.
 
 ## CLI
 
 ```bash
 ASSISTANT_PROXY_URL=http://localhost:8787 ASSISTANT_PROXY_TOKEN=... npm run cli --workspace=packages/personal-assistant
 ```
+
+Transcript, learned experience, and any in-flight turn's checkpoint persist as
+real files under `~/.buildaharness/personal-assistant/` (`transcripts/`,
+`experience/`, `checkpoints/`), so conversation history and learning survive
+between runs — quit and restart the CLI and it remembers.
 
 ## Commands
 
