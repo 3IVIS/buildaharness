@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, unlink } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, readdir, unlink, realpath } from 'node:fs/promises'
 import type { FsBackend } from '@buildaharness/runtime'
 
 function isEnoent(err: unknown): boolean {
@@ -41,6 +41,9 @@ export function createNodeFsBackend(): FsBackend {
         if (isEnoent(err)) return []
         throw err
       }
+    },
+    async realpath(path) {
+      return realpath(path)
     },
   }
 }

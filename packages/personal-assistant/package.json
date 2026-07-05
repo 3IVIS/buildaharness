@@ -12,21 +12,23 @@
     "personal-assistant": "./dist/cli.js"
   },
   "scripts": {
-    "build": "vite build --config vite.config.lib.ts",
+    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts"
   },
   "dependencies": {
     "@buildaharness/harness": "*",
-    "@buildaharness/runtime": "*"
+    "@buildaharness/runtime": "*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "typescript": "^5.4.5",
     "tsx": "^4.16.0",
+    "typescript": "^5.4.5",
     "vite": "^5.3.4",
-    "vitest": "^1.6.0",
-    "vite-plugin-dts": "^4.5.4"
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^1.6.0"
   }
 }

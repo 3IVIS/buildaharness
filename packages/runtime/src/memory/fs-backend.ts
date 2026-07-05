@@ -15,4 +15,12 @@ export interface FsBackend {
   mkdir(path: string): Promise<void>
   /** File names only, non-recursive. */
   readDir(path: string): Promise<string[]>
+  /**
+   * Resolves symlinks and returns the canonical path. Optional — only backends
+   * that sit on a real filesystem (and callers that need to detect a symlink
+   * escaping a sandboxed directory, e.g. personal-assistant's file-tools) need
+   * to implement it. Should reject/throw if `path` doesn't exist, matching
+   * node:fs/promises.realpath's behavior.
+   */
+  realpath?(path: string): Promise<string>
 }
