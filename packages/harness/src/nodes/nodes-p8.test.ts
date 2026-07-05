@@ -12,7 +12,7 @@ import { applyToolReliability } from './apply-tool-reliability.js'
 import { updateWorldModel, propagateBeliefs } from './update-world-model.js'
 import { detectContradictions } from './detect-contradictions.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
-import { updateDiagnostics } from './update-diagnostics.js'
+import { updateDiagnostics, checkAbstractionAlignment } from './update-diagnostics.js'
 
 // ─── gather_evidence ───────────────────────────────────────────────────────
 
@@ -127,13 +127,14 @@ describe('update_world_model', () => {
   })
 
   it('belief_health.freshness = normalise(1 - stale_flag_ratio, ratio)', () => {
-    const wm = new WorldModel({
-      completeness_flags: { region_a: true, region_b: false, region_c: false },
-    })
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'x', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'y', confidence: 1.0, derived_from: ['o2'], recorded_at: '' })
+    wm.stale_flags = { b1: true, b2: false }
     const diagnostics = new Diagnostics()
     const evidence = { id: 'e1', obs: 'obs', reliability: 'LOW' as const, source: 'src', evidence_type: 'OBSERVATION' as const, freshness: new Date().toISOString() }
     updateWorldModel(evidence, wm, diagnostics)
-    // After the update: region_a=true, region_b=false, region_c=false, src=true → 2/4 stale → stale_flag_ratio=0.5
+    // 1 stale / 2 beliefs = 0.5 stale_flag_ratio → freshness = normalise(0.5, ratio)
     const expectedFreshness = normalise(1 - 0.5, DimensionType.ratio)
     expect(diagnostics.belief_health.freshness).toBeCloseTo(expectedFreshness)
   })
@@ -231,50 +232,57 @@ describe('propagate_beliefs', () => {
 describe('detect_contradictions', () => {
   it('SYSTEM_BREAKING enters contradictions[] — does NOT throw, does NOT halt loop', () => {
     const wm = new WorldModel()
-    // Both HIGH confidence → SYSTEM_BREAKING
-    wm.beliefs.push({ id: 'b1', statement: 'system is stable', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
-    wm.beliefs.push({ id: 'b2', statement: 'NOT: system is stable', confidence: 1.0, derived_from: ['o2'], recorded_at: '' })
+    // Both HIGH confidence, semantically opposed (success/failure antonym pair)
+    wm.beliefs.push({ id: 'b1', statement: 'the deployment was a success', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the deployment was a failure', confidence: 1.0, derived_from: ['o2'], recorded_at: '' })
     const store = new EvidenceStore()
-    const hyps = new HypothesisSet()
+    // An active hypothesis that predicts this exact belief pair as a conflict upgrades HIGH → SYSTEM_BREAKING
+    const hyps = new HypothesisSet({
+      active: [{ id: 'h1', explanation: '', confidence: 0.9, predicted_observations: [], discriminating_evidence: ['b1', 'b2'], generation_sources: [], diversity_score: 0 }],
+    })
     expect(() => detectContradictions(wm, store, hyps)).not.toThrow()
     expect(wm.contradictions).toHaveLength(1)
     expect(wm.contradictions[0].severity).toBe('SYSTEM_BREAKING')
   })
 
-  it('pairwise type detected on two directly conflicting beliefs', () => {
+  it('pairwise type detected on two semantically opposed beliefs', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'b1', statement: 'cache is valid', confidence: 0.0, derived_from: ['o1'], recorded_at: '' })
-    wm.beliefs.push({ id: 'b2', statement: 'NOT: cache is valid', confidence: 0.0, derived_from: ['o2'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b1', statement: 'the service is available', confidence: 0.6, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the service is unavailable', confidence: 0.6, derived_from: ['o2'], recorded_at: '' })
     detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
     expect(wm.contradictions).toHaveLength(1)
     expect(wm.contradictions[0].type).toBe('pairwise')
   })
 
-  it('temporal type detected on belief that conflicts with its prior-version entry', () => {
+  it('temporal type detected when an environment change invalidates a belief\'s source', () => {
     const wm = new WorldModel()
-    wm.beliefs.push({ id: 'state_v1', statement: 'state is A', confidence: 1.0, derived_from: ['o1'], recorded_at: '2024-01-01T00:00:00Z' })
-    wm.beliefs.push({ id: 'state_v2', statement: 'state is B', confidence: 1.0, derived_from: ['o2'], recorded_at: '2024-01-02T00:00:00Z' })
+    const recordedAt = '2024-01-01T00:00:00Z'
+    wm.beliefs.push({ id: 'b1', statement: 'config.yaml sets debug=false', confidence: 1.0, derived_from: ['config.yaml'], recorded_at: recordedAt })
+    wm.environment_change_log.push({ id: 'change1', description: 'config.yaml edited', affected_paths: ['config.yaml'], timestamp: '2024-01-02T00:00:00Z' })
     detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
     expect(wm.contradictions).toHaveLength(1)
     expect(wm.contradictions[0].type).toBe('temporal')
-    expect(wm.contradictions[0].involved_belief_ids).toContain('state_v1')
-    expect(wm.contradictions[0].involved_belief_ids).toContain('state_v2')
+    expect(wm.contradictions[0].involved_belief_ids).toContain('b1')
+    // change post-dates the belief → MEDIUM severity
+    expect(wm.contradictions[0].severity).toBe('MEDIUM')
   })
 
-  it('scope=local for single-task contradiction; scope=global for objective-level', () => {
-    // local scope: no global/objective keywords
-    const wmLocal = new WorldModel()
-    wmLocal.beliefs.push({ id: 'b1', statement: 'cache hit rate is high', confidence: 0.0, derived_from: ['o1'], recorded_at: '' })
-    wmLocal.beliefs.push({ id: 'b2', statement: 'NOT: cache hit rate is high', confidence: 0.0, derived_from: ['o2'], recorded_at: '' })
-    detectContradictions(wmLocal, new EvidenceStore(), new HypothesisSet())
-    expect(wmLocal.contradictions[0].scope).toBe('local')
+  it('pairwise/set-level/temporal/abstraction contradictions are always scope=local; only a resolved SYSTEM_BREAKING contradiction is promoted to scope=global', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the config file was found', confidence: 0.6, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the config file was not found', confidence: 0.6, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions[0].scope).toBe('local')
 
-    // global scope: statement contains "objective"
-    const wmGlobal = new WorldModel()
-    wmGlobal.beliefs.push({ id: 'b3', statement: 'objective: system is healthy', confidence: 0.0, derived_from: ['o3'], recorded_at: '' })
-    wmGlobal.beliefs.push({ id: 'b4', statement: 'NOT: objective: system is healthy', confidence: 0.0, derived_from: ['o4'], recorded_at: '' })
-    detectContradictions(wmGlobal, new EvidenceStore(), new HypothesisSet())
-    expect(wmGlobal.contradictions[0].scope).toBe('global')
+    const wmBreaking = new WorldModel()
+    wmBreaking.beliefs.push({ id: 'b3', statement: 'the deployment was a success', confidence: 1.0, derived_from: ['o3'], recorded_at: '' })
+    wmBreaking.beliefs.push({ id: 'b4', statement: 'the deployment was a failure', confidence: 1.0, derived_from: ['o4'], recorded_at: '' })
+    const hyps = new HypothesisSet({
+      active: [{ id: 'h1', explanation: '', confidence: 0.9, predicted_observations: [], discriminating_evidence: ['b3', 'b4'], generation_sources: [], diversity_score: 0 }],
+    })
+    detectContradictions(wmBreaking, new EvidenceStore(), hyps)
+    expect(wmBreaking.contradictions[0].severity).toBe('SYSTEM_BREAKING')
+    expect(wmBreaking.contradictions[0].scope).toBe('global')
   })
 })
 
@@ -439,32 +447,51 @@ describe('update_diagnostics', () => {
 
   it('abstraction_fit recalculated only when task_graph.changed flag is set', () => {
     const { wm, hyps, fd, dg, diagnostics } = makeAll()
-    // Task graph with changed=false — feasibility should remain at its previous value
+    // wm has no beliefs → estimateWorldModelGranularity() = 0 (module level), so any task
+    // with abstraction_level > 1 is mismatched.
+
+    // Task graph with changed=false — check_abstraction_alignment() short-circuits to 1.0
+    // regardless of how mismatched the tasks are.
     const tgUnchanged = new TaskGraph({
       tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'HIGH', depends_on: [], parallel_write_domains: [], abstraction_level: 2, assigned_strategy: null }],
       changed: false,
     })
-    const prevFeasibility = 0.99
-    diagnostics.verification_health = { strength: 1.0, feasibility: prevFeasibility }
+    diagnostics.verification_health = { strength: 1.0, feasibility: 0.5 }
     updateDiagnostics(wm, hyps, tgUnchanged, fd, dg, diagnostics)
-    // When !changed, abstraction_fit uses diagnostics.verification_health.feasibility as-is
-    // The feasibility is recomputed using prevFeasibility as the abstraction_fit component
-    // It should change from prevFeasibility only due to the composite (not abstraction recalc)
     const feasibilityAfterUnchanged = diagnostics.verification_health.feasibility
 
-    // Now with changed=true — abstraction_fit recomputed from tasks (level=2 out of max 2)
+    // Same mismatched task graph, but changed=true — abstraction_fit is actually recomputed
+    // from world-model granularity vs task abstraction_level (level=2 > granularity(0)+1 → fit=0.0)
     const tgChanged = new TaskGraph({
-      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'HIGH', depends_on: [], parallel_write_domains: [], abstraction_level: 0, assigned_strategy: null }],
+      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'HIGH', depends_on: [], parallel_write_domains: [], abstraction_level: 2, assigned_strategy: null }],
       changed: true,
     })
-    diagnostics.verification_health = { strength: 1.0, feasibility: prevFeasibility }
+    diagnostics.verification_health = { strength: 1.0, feasibility: 0.5 }
     updateDiagnostics(wm, hyps, tgChanged, fd, dg, diagnostics)
     const feasibilityAfterChanged = diagnostics.verification_health.feasibility
 
-    // The feasibility values should differ because abstraction_fit is recomputed on changed=true
-    // abstraction_level=0 → fit=1.0 (concrete), abstraction_level=2 → fit=0.0 (abstract)
-    // With changed=false we used prevFeasibility=0.99 as abstraction_fit → higher feasibility
-    // With changed=true we used checkAbstractionAlignment() → different value
     expect(feasibilityAfterChanged).not.toBeCloseTo(feasibilityAfterUnchanged, 3)
+    expect(feasibilityAfterChanged).toBeLessThan(feasibilityAfterUnchanged)
+  })
+
+  it('checkAbstractionAlignment() scores against world-model granularity, not a fixed constant', () => {
+    // Beliefs stated at function-level granularity → estimateWorldModelGranularity() = 1
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the parseConfig() function throws on malformed input', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the loadSettings method validates types', confidence: 0.8, derived_from: ['o2'], recorded_at: '' })
+
+    // A task at abstraction_level=1 fits within granularity(1)+1=2 → no mismatch → fit=1.0
+    const fittingGraph = new TaskGraph({
+      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'LOW', depends_on: [], parallel_write_domains: [], abstraction_level: 1, assigned_strategy: null }],
+      changed: true,
+    })
+    expect(checkAbstractionAlignment(fittingGraph, wm, true)).toBeCloseTo(1.0)
+
+    // A task at abstraction_level=3 exceeds granularity(1)+1=2 → mismatched → fit=0.0
+    const mismatchedGraph = new TaskGraph({
+      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'LOW', depends_on: [], parallel_write_domains: [], abstraction_level: 3, assigned_strategy: null }],
+      changed: true,
+    })
+    expect(checkAbstractionAlignment(mismatchedGraph, wm, true)).toBeCloseTo(0.0)
   })
 })

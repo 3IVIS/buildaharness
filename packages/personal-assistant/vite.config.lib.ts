@@ -11,18 +11,16 @@ export default defineConfig({
     }),
   ],
 
-  resolve: {
-    alias: {
-      '@buildaharness/canvas': resolve(__dirname, '../canvas/src/spec/schema.ts'),
-      '@buildaharness/harness': resolve(__dirname, '../harness/src/index.ts'),
-    },
-  },
-
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        cli: resolve(__dirname, 'src/cli.ts'),
+      },
       formats: ['es'],
-      fileName: 'index',
+    },
+    rollupOptions: {
+      external: ['@buildaharness/harness', '@buildaharness/runtime', 'node:readline', 'node:process'],
     },
     minify: false,
     sourcemap: true,

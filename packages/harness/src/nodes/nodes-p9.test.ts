@@ -386,9 +386,9 @@ describe('select_task', () => {
 
   it('parallel branch merge runs contradiction detection on merged world model', () => {
     const wm1 = new WorldModel({ generation_id: 2 })
-    wm1.beliefs.push({ id: 'b1', statement: 'system is stable', confidence: 1.0, derived_from: ['o1'], recorded_at: NOW })
+    wm1.beliefs.push({ id: 'b1', statement: 'the deployment was a success', confidence: 1.0, derived_from: ['o1'], recorded_at: NOW })
     const wm2 = new WorldModel({ generation_id: 3 })
-    wm2.beliefs.push({ id: 'b2', statement: 'NOT: system is stable', confidence: 1.0, derived_from: ['o2'], recorded_at: NOW })
+    wm2.beliefs.push({ id: 'b2', statement: 'the deployment was a failure', confidence: 1.0, derived_from: ['o2'], recorded_at: NOW })
 
     const result = reconcileParallelBranches(
       [

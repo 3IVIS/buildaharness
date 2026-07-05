@@ -28,7 +28,8 @@ export interface VerificationResult {
   adversarial_passed: boolean | null
 }
 
-// Required tool per verification layer
+// Required tool per verification layer — matches adapter/harness/verification.py's
+// per-function _tool_available() gating (linter, pytest, consistency_checker, etc.)
 const LAYER_TO_TOOL: Record<VerificationLayer, string> = {
   syntax: 'linter',
   unit: 'pytest',
@@ -41,18 +42,6 @@ const LAYER_TO_TOOL: Record<VerificationLayer, string> = {
   output_contract_partial: 'contract_checker',
 }
 
-const ALL_LAYERS: VerificationLayer[] = [
-  'syntax',
-  'unit',
-  'integration',
-  'consistency',
-  'requirements',
-  'assumptions',
-  'goal_correctness',
-  'evidence_sufficiency',
-  'output_contract_partial',
-]
-
 function isToolAvailable(tool: string, toolManifest: Record<string, { available: boolean }> | undefined): boolean {
   if (!toolManifest) return true
   const entry = toolManifest[tool]
@@ -60,41 +49,57 @@ function isToolAvailable(tool: string, toolManifest: Record<string, { available:
   return entry.available
 }
 
-function runSyntax(result: unknown): LayerResult {
+function skipped(layer: VerificationLayer): LayerResult {
+  return { layer, status: 'SKIPPED', detail: `${LAYER_TO_TOOL[layer]} not available` }
+}
+
+function runSyntax(result: unknown, manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.syntax, manifest)) return skipped('syntax')
   if (result === null || result === undefined) {
     return { layer: 'syntax', status: 'FAIL', detail: 'Result is null — syntax check failed' }
   }
   return { layer: 'syntax', status: 'PASS', detail: 'Syntax check passed' }
 }
 
-function runUnit(): LayerResult {
+function runUnit(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.unit, manifest)) return skipped('unit')
   return { layer: 'unit', status: 'PASS', detail: 'Unit verification passed' }
 }
 
-function runIntegration(): LayerResult {
+function runIntegration(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.integration, manifest)) return skipped('integration')
   return { layer: 'integration', status: 'PASS', detail: 'Integration verification passed' }
 }
 
-function runConsistency(): LayerResult {
+function runConsistency(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.consistency, manifest)) return skipped('consistency')
   return { layer: 'consistency', status: 'PASS', detail: 'Consistency check passed' }
 }
 
-function runRequirements(successCriteria: string[]): LayerResult {
+function runRequirements(successCriteria: string[], manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.requirements, manifest)) return skipped('requirements')
   if (successCriteria.length === 0) {
     return { layer: 'requirements', status: 'PASS', detail: 'No criteria to check' }
   }
   return { layer: 'requirements', status: 'PASS', detail: 'Requirements check passed' }
 }
 
-function runAssumptions(): LayerResult {
+function runAssumptions(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.assumptions, manifest)) return skipped('assumptions')
   return { layer: 'assumptions', status: 'PASS', detail: 'Assumptions check passed' }
 }
 
-function runGoalCorrectness(): LayerResult {
+function runGoalCorrectness(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.goal_correctness, manifest)) return skipped('goal_correctness')
   return { layer: 'goal_correctness', status: 'PASS', detail: 'Goal correctness check passed' }
 }
 
-function runEvidenceSufficiency(evidenceStore: EvidenceStore | null, scope: 'local' | 'global'): LayerResult {
+function runEvidenceSufficiency(
+  evidenceStore: EvidenceStore | null,
+  scope: 'local' | 'global',
+  manifest: Record<string, { available: boolean }> | undefined,
+): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.evidence_sufficiency, manifest)) return skipped('evidence_sufficiency')
   if (evidenceStore === null) {
     return { layer: 'evidence_sufficiency', status: 'FAIL', detail: 'No evidence store provided' }
   }
@@ -121,7 +126,12 @@ function runEvidenceSufficiency(evidenceStore: EvidenceStore | null, scope: 'loc
   return { layer: 'evidence_sufficiency', status: 'PASS', detail: 'Evidence sufficiency check passed' }
 }
 
-function runOutputContractPartial(result: unknown, outputContract: OutputContract | null): LayerResult {
+function runOutputContractPartial(
+  result: unknown,
+  outputContract: OutputContract | null,
+  manifest: Record<string, { available: boolean }> | undefined,
+): LayerResult {
+  if (!isToolAvailable(LAYER_TO_TOOL.output_contract_partial, manifest)) return skipped('output_contract_partial')
   if (outputContract === null) {
     return { layer: 'output_contract_partial', status: 'PASS', detail: 'No output contract to check' }
   }
@@ -162,25 +172,20 @@ export function verify(
 ): VerificationResult {
   const manifest = toolManifest?.tool_availability_manifest
 
-  // Run all 9 layers internally — never skip at execution
-  const internalResults: LayerResult[] = [
-    runSyntax(result),
-    runUnit(),
-    runIntegration(),
-    runConsistency(),
-    runRequirements(successCriteria),
-    runAssumptions(),
-    runGoalCorrectness(),
-    runEvidenceSufficiency(evidenceStore ?? null, scope),
-    runOutputContractPartial(result, outputContract ?? null),
+  // All 9 layers always appear in layer_results — a layer whose tool isn't
+  // available is reported as SKIPPED rather than dropped from the array.
+  const layer_results: LayerResult[] = [
+    runSyntax(result, manifest),
+    runUnit(manifest),
+    runIntegration(manifest),
+    runConsistency(manifest),
+    runRequirements(successCriteria, manifest),
+    runAssumptions(manifest),
+    runGoalCorrectness(manifest),
+    runEvidenceSufficiency(evidenceStore ?? null, scope, manifest),
+    runOutputContractPartial(result, outputContract ?? null, manifest),
   ]
 
-  // Post-filter: enabled_layers = layers whose required tool is available
-  const enabledLayers = new Set<VerificationLayer>(
-    ALL_LAYERS.filter(layer => isToolAvailable(LAYER_TO_TOOL[layer], manifest)),
-  )
-
-  const layer_results = internalResults.filter(lr => enabledLayers.has(lr.layer))
   const has_critical_failure = layer_results.some(lr => lr.status === 'FAIL')
 
   let adversarial_passed: boolean | null = null

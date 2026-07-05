@@ -22,6 +22,9 @@
     "test:runtime": "npm test --workspace=packages/runtime",
     "test:react": "npm test --workspace=packages/react",
     "test:harness": "npm test --workspace=packages/harness",
+    "build:personal-assistant": "npm run build --workspace=packages/personal-assistant",
+    "test:personal-assistant": "npm test --workspace=packages/personal-assistant",
+    "typecheck:personal-assistant": "npm run typecheck --workspace=packages/personal-assistant",
     "deploy:proxy": "npm run deploy --workspace=packages/proxy"
   },
   "dependencies": {

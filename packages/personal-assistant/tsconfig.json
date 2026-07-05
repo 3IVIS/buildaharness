@@ -7,10 +7,12 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "resolveJsonModule": true,
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@buildaharness/canvas": ["../canvas/src/spec/schema.ts"],
-      "@buildaharness/harness": ["../harness/src/index.ts"]
+      "@buildaharness/harness": ["../harness/src/index.ts"],
+      "@buildaharness/runtime": ["../runtime/src/index.ts"],
+      "@buildaharness/canvas": ["../canvas/src/spec/schema.ts"]
     }
   },
   "include": ["src", "*.ts"],

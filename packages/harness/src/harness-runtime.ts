@@ -1,4 +1,6 @@
 import { type ExperienceStore, UnavailableExperienceStore } from './state/experience-store.js'
+import { gatherEvidence } from './nodes/gather-evidence.js'
+import { applyToolReliability } from './nodes/apply-tool-reliability.js'
 import { resolveControlState } from './nodes/resolve-control-state.js'
 import { updateDiagnostics } from './nodes/update-diagnostics.js'
 import { detectContradictions } from './nodes/detect-contradictions.js'
@@ -20,13 +22,22 @@ import { warmStart } from './nodes/warm-start.js'
 import { reviewerPass, type PropagationQueue } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
+import { HarnessRunState } from './harness-run-state.js'
+import { DepGraphBudget } from './state/world-model.js'
+import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData } from './harness-checkpoint.js'
 
 export const BUDGET_WARNING_FLOOR = 0.5
 
 export interface HarnessRunOptions extends HarnessInitOptions {
+  /** Identifies this run for checkpointing. Auto-generated if omitted. */
+  runId?: string
   experienceStore?: ExperienceStore
   updateChannel?: UpdateChannel
   toolExecutors?: Record<string, () => unknown>
+  /** Called after every checkpointable main-loop iteration. Persist the checkpoint here to support resume(). */
+  onCheckpoint?: (checkpoint: HarnessCheckpoint) => void | Promise<void>
+  /** Return true to stop the run at the next checkpoint instead of running to completion. */
+  shouldPause?: (checkpoint: HarnessCheckpoint) => boolean
 }
 
 export interface HarnessRunResult {
@@ -37,353 +48,526 @@ export interface HarnessRunResult {
   nodeExecutionOrder: string[]
 }
 
-export class HarnessRuntime {
-  run(
-    objective: string,
-    successCriteria: string[],
-    options: HarnessRunOptions = {},
-  ): HarnessRunResult {
-    const {
-      experienceStore = new UnavailableExperienceStore(),
-      updateChannel = new NoOpUpdateChannel(),
-      toolExecutors = {},
-    } = options
+export type HarnessRunOutcome =
+  | { status: 'complete'; result: HarnessRunResult }
+  | { status: 'paused'; checkpoint: HarnessCheckpoint }
 
-    // Initialize all 13 state objects
-    const initResult = initializeHarness(objective, {
-      ...options,
-      successCriteria,
-    })
+function generateRunId(): string {
+  const g = globalThis as { crypto?: { randomUUID?: () => string } }
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID()
+  return `run-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
-    if (!initResult.valid) {
-      throw new Error(`HarnessRuntime: init failed — ${initResult.errors.join('; ')}`)
-    }
+/** All mutable state threaded through the main loop — the live counterpart of HarnessCheckpoint. */
+interface LoopContext {
+  runId: string
+  objective: string
+  successCriteria: string[]
+  maxSteps: number
+  depGraphBudget: DepGraphBudget
+  processConceptId: string | null
 
-    const {
-      worldModel,
-      callerState,
-      controlState,
-      taskGraph,
-      diagnostics,
-      hypothesisSet,
-      evidenceStore,
-      memoryState,
-      strategyState,
-      failureDiagnostics,
-      outputContract,
-      beliefDepGraph,
-      depGraphBudget,
-      maxSteps,
-    } = initResult
+  worldModel: HarnessInitResult['worldModel']
+  callerState: HarnessInitResult['callerState']
+  controlState: HarnessInitResult['controlState']
+  taskGraph: HarnessInitResult['taskGraph']
+  diagnostics: HarnessInitResult['diagnostics']
+  hypothesisSet: HarnessInitResult['hypothesisSet']
+  evidenceStore: HarnessInitResult['evidenceStore']
+  memoryState: HarnessInitResult['memoryState']
+  strategyState: HarnessInitResult['strategyState']
+  failureDiagnostics: HarnessInitResult['failureDiagnostics']
+  outputContract: HarnessInitResult['outputContract']
+  beliefDepGraph: HarnessInitResult['beliefDepGraph']
 
-    // Warm start from ExperienceStore (no-op if unavailable)
-    warmStart(experienceStore, strategyState, failureDiagnostics, depGraphBudget, taskGraph)
+  stepsUsed: number
+  nodeExecutionOrder: string[]
+  finalResult: unknown
+  consecutiveReviewFailures: Map<string, number>
+  propagationQueue: PropagationQueue
 
-    const propagationQueue: PropagationQueue = { reopenedTaskIds: [] }
-    let stepsUsed = 0
-    let finalResult: unknown = null
-    const nodeExecutionOrder: string[] = []
-    const consecutiveReviewFailures = new Map<string, number>()
+  experienceStore: ExperienceStore
+  updateChannel: UpdateChannel
+  toolExecutors: Record<string, () => unknown>
+}
 
-    const resolveAndStamp = (): void => {
-      const newCS = resolveControlState(diagnostics, worldModel, failureDiagnostics)
-      controlState.generation_id = newCS.generation_id
-      controlState.risk_state = newCS.risk_state
-      controlState.escalation_reason = newCS.escalation_reason
-      controlState.block_mask = [...newCS.block_mask]
-      controlState.notes = [...newCS.notes]
-    }
+function buildInitialContext(
+  objective: string,
+  successCriteria: string[],
+  options: HarnessRunOptions,
+  runId: string,
+): LoopContext {
+  const initResult = initializeHarness(objective, { ...options, successCriteria })
+  if (!initResult.valid) {
+    throw new Error(`HarnessRuntime: init failed — ${initResult.errors.join('; ')}`)
+  }
 
-    const runMainLoop = (): void => {
-      while (true) {
-        stepsUsed++
-        nodeExecutionOrder.push('context_compression')
+  const experienceStore = options.experienceStore ?? new UnavailableExperienceStore()
+  const ctx: LoopContext = {
+    runId,
+    objective,
+    successCriteria,
+    maxSteps: initResult.maxSteps,
+    depGraphBudget: initResult.depGraphBudget,
+    processConceptId: initResult.processConceptId,
 
-        // Context compression at top of each iteration
-        contextCompression(
-          memoryState, worldModel, beliefDepGraph, depGraphBudget,
-          hypothesisSet, taskGraph, diagnostics, controlState, callerState,
-        )
+    worldModel: initResult.worldModel,
+    callerState: initResult.callerState,
+    controlState: initResult.controlState,
+    taskGraph: initResult.taskGraph,
+    diagnostics: initResult.diagnostics,
+    hypothesisSet: initResult.hypothesisSet,
+    evidenceStore: initResult.evidenceStore,
+    memoryState: initResult.memoryState,
+    strategyState: initResult.strategyState,
+    failureDiagnostics: initResult.failureDiagnostics,
+    outputContract: initResult.outputContract,
+    beliefDepGraph: initResult.beliefDepGraph,
 
-        // Non-blocking caller update check
-        nodeExecutionOrder.push('check_caller_updates')
-        const updateResult = checkCallerUpdates(callerState, updateChannel, {
-          worldModel, hypothesisSet, taskGraph, diagnostics, failureDiagnostics,
-        })
-        if (updateResult === RESTART_ITERATION) {
-          resolveAndStamp()
-          continue
-        }
+    stepsUsed: 0,
+    nodeExecutionOrder: [],
+    finalResult: null,
+    consecutiveReviewFailures: new Map(),
+    propagationQueue: { reopenedTaskIds: [] },
 
-        // ─── SUB-STEP A ───────────────────────────────────────────────────────
+    experienceStore,
+    updateChannel: options.updateChannel ?? new NoOpUpdateChannel(),
+    toolExecutors: options.toolExecutors ?? {},
+  }
 
-        nodeExecutionOrder.push('gather_evidence')
-        nodeExecutionOrder.push('update_world_model')
-        nodeExecutionOrder.push('detect_contradictions')
-        detectContradictions(worldModel, evidenceStore, hypothesisSet)
+  // Warm start from ExperienceStore (no-op if unavailable) — only on a fresh run.
+  warmStart(experienceStore, ctx.strategyState, ctx.failureDiagnostics, ctx.depGraphBudget, ctx.taskGraph)
 
-        nodeExecutionOrder.push('generate_update_hypotheses')
-        generateUpdateHypotheses(worldModel, evidenceStore, hypothesisSet, failureDiagnostics, memoryState)
+  return ctx
+}
 
-        nodeExecutionOrder.push('update_diagnostics')
-        updateDiagnostics(worldModel, hypothesisSet, taskGraph, failureDiagnostics, beliefDepGraph, diagnostics)
+function buildResumedContext(checkpoint: HarnessCheckpoint, options: HarnessRunOptions): LoopContext {
+  const hydrated = HarnessRunState.fromJSON(checkpoint.runState)
 
-        // Sub-step A: worldModel.generation_id++ then resolve_control_state
-        worldModel.incrementGenerationId()
-        nodeExecutionOrder.push('resolve_control_state')
-        resolveAndStamp()
+  return {
+    runId: checkpoint.runId,
+    objective: checkpoint.runConfig.objective,
+    successCriteria: checkpoint.runConfig.successCriteria,
+    maxSteps: checkpoint.runConfig.maxSteps,
+    depGraphBudget: DepGraphBudget.fromJSON(checkpoint.runConfig.depGraphBudget),
+    processConceptId: checkpoint.runConfig.processConceptId,
 
-        // Completion check: all tasks complete?
-        const allComplete = taskGraph.tasks.length > 0 &&
-          taskGraph.tasks.every(t => t.status === 'COMPLETE')
-        if (allComplete) break
+    worldModel: hydrated.worldModel,
+    callerState: hydrated.callerState,
+    controlState: hydrated.controlState,
+    taskGraph: hydrated.taskGraph,
+    diagnostics: hydrated.diagnostics,
+    hypothesisSet: hydrated.hypothesisSet,
+    evidenceStore: hydrated.evidenceStore,
+    memoryState: hydrated.memoryState,
+    strategyState: hydrated.strategyState,
+    failureDiagnostics: hydrated.failureDiagnostics,
+    outputContract: hydrated.outputContract,
+    beliefDepGraph: hydrated.beliefDepGraph,
 
-        nodeExecutionOrder.push('update_task_graph')
-        updateTaskGraph(objective, worldModel, hypothesisSet, taskGraph)
+    stepsUsed: checkpoint.progress.stepsUsed,
+    nodeExecutionOrder: [...checkpoint.progress.nodeExecutionOrder],
+    finalResult: checkpoint.progress.finalResult,
+    consecutiveReviewFailures: new Map(checkpoint.progress.consecutiveReviewFailures),
+    propagationQueue: { reopenedTaskIds: [...checkpoint.progress.propagationQueue.reopenedTaskIds] },
 
-        nodeExecutionOrder.push('select_task')
-        const selectResult = selectTask(taskGraph, controlState)
+    // Live objects are never serialized — the caller re-attaches them on resume,
+    // same as Python's state_store expecting a fresh db_session_factory after load.
+    experienceStore: options.experienceStore ?? new UnavailableExperienceStore(),
+    updateChannel: options.updateChannel ?? new NoOpUpdateChannel(),
+    toolExecutors: options.toolExecutors ?? {},
+  }
+}
 
-        if (selectResult.escalate) {
-          throw new EscalationHalt({
-            reason: 'cannot_make_progress',
-            missing_info: ['HUMAN_REQUIRED escalation from select_task'],
-            current_task_summary: 'task selection triggered escalation',
-            escalated_at: new Date().toISOString(),
-          })
-        }
+function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
+  const runState = new HarnessRunState({
+    worldModel: ctx.worldModel,
+    callerState: ctx.callerState,
+    controlState: ctx.controlState,
+    diagnostics: ctx.diagnostics,
+    taskGraph: ctx.taskGraph,
+    outputContract: ctx.outputContract,
+    evidenceStore: ctx.evidenceStore,
+    hypothesisSet: ctx.hypothesisSet,
+    memoryState: ctx.memoryState,
+    strategyState: ctx.strategyState,
+    failureDiagnostics: ctx.failureDiagnostics,
+    experienceStore: ctx.experienceStore,
+    beliefDepGraph: ctx.beliefDepGraph,
+  }).toJSON()
 
-        if (selectResult.task === null) break  // No task available
+  const runConfig: HarnessRunConfigData = {
+    objective: ctx.objective,
+    successCriteria: ctx.successCriteria,
+    maxSteps: ctx.maxSteps,
+    depGraphBudget: ctx.depGraphBudget.toJSON(),
+    processConceptId: ctx.processConceptId,
+  }
 
-        const currentTask = selectResult.task
-        taskGraph.setStatus(currentTask.id, 'RUNNING')
+  const progress: HarnessRunProgressData = {
+    stepsUsed: ctx.stepsUsed,
+    nodeExecutionOrder: [...ctx.nodeExecutionOrder],
+    finalResult: ctx.finalResult,
+    consecutiveReviewFailures: [...ctx.consecutiveReviewFailures.entries()],
+    propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
+  }
 
-        // estimate_risk
-        nodeExecutionOrder.push('estimate_risk')
-        const riskAction: RiskableAction = {
-          module_type: 'business_logic',
-          metadata: {},
-        }
-        estimateRisk(riskAction, taskGraph, worldModel)
+  return { runId: ctx.runId, runState, runConfig, progress }
+}
 
-        // estimate_voi
-        nodeExecutionOrder.push('estimate_voi')
-        estimateVOI(diagnostics, worldModel, hypothesisSet, evidenceStore.tool_availability_manifest)
+function toInitResultShape(ctx: LoopContext): HarnessInitResult {
+  return {
+    worldModel: ctx.worldModel,
+    callerState: ctx.callerState,
+    controlState: ctx.controlState,
+    taskGraph: ctx.taskGraph,
+    diagnostics: ctx.diagnostics,
+    hypothesisSet: ctx.hypothesisSet,
+    evidenceStore: ctx.evidenceStore,
+    memoryState: ctx.memoryState,
+    strategyState: ctx.strategyState,
+    failureDiagnostics: ctx.failureDiagnostics,
+    outputContract: ctx.outputContract,
+    beliefDepGraph: ctx.beliefDepGraph,
+    depGraphBudget: ctx.depGraphBudget,
+    maxSteps: ctx.maxSteps,
+    decompositionGate: ctx.controlState.risk_state !== 'BLOCKED',
+    valid: true,
+    errors: [],
+    processConceptId: ctx.processConceptId,
+  }
+}
 
-        // review_proposed_change
-        nodeExecutionOrder.push('review_proposed_change')
-        const reviewResult = reviewProposedChange(
-          { description: currentTask.description },
-          currentTask,
-          worldModel,
-          outputContract,
-          hypothesisSet,
-          evidenceStore,
-          consecutiveReviewFailures,
-        )
+function resolveAndStamp(ctx: LoopContext): void {
+  const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics)
+  ctx.controlState.generation_id = newCS.generation_id
+  ctx.controlState.risk_state = newCS.risk_state
+  ctx.controlState.escalation_reason = newCS.escalation_reason
+  ctx.controlState.block_mask = [...newCS.block_mask]
+  ctx.controlState.notes = [...newCS.notes]
+}
 
-        if (!reviewResult.passed) {
-          taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
-          if (reviewResult.escalation_triggered) {
-            throw new EscalationHalt({
-              reason: 'review_failure',
-              missing_info: reviewResult.failed_dimensions.map(d => d.reason),
-              current_task_summary: currentTask.description,
-              escalated_at: new Date().toISOString(),
-            })
-          }
-          continue
-        }
+/**
+ * One full pass of the harness main loop, expressed as an async generator so a
+ * caller can suspend between iterations. Yields a checkpoint after every
+ * iteration that reaches the bottom of the loop body (an iteration that takes
+ * an early `continue` — e.g. RESTART_ITERATION — made no task progress, so it
+ * isn't checkpointed; the next iteration through this same point will be).
+ * Returns normally when the loop exits via `break` (all tasks complete, or no
+ * task available). EscalationHalt still propagates as a thrown/rejected error.
+ */
+async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoint, void, void> {
+  while (true) {
+    ctx.stepsUsed++
+    ctx.nodeExecutionOrder.push('context_compression')
 
-        // action_gate
-        nodeExecutionOrder.push('action_gate')
-        const gateResult = actionGate(
-          { required_resources: [] },
-          controlState,
-          worldModel,
-          diagnostics,
-          failureDiagnostics,
-          resolveControlState,
-        )
-
-        if (gateResult === 'ESCALATE' || gateResult === 'BLOCK') {
-          taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
-          if (cannotMakeProgress(strategyState, failureDiagnostics)) {
-            throw new EscalationHalt({
-              reason: 'cannot_make_progress',
-              missing_info: [strategyState.stall_reason ?? 'unknown'],
-              current_task_summary: currentTask.description,
-              escalated_at: new Date().toISOString(),
-            })
-          }
-          continue
-        }
-
-        // execute
-        nodeExecutionOrder.push('execute')
-        const proposedChange: ProposedExecutionChange = {
-          description: currentTask.description,
-          change_type: 'file_mutation',
-        }
-        const toolFn = toolExecutors[currentTask.id] ?? toolExecutors['default'] ?? (() => ({ completed: true }))
-        const execResult = execute(proposedChange, toolFn, {
-          worldModel,
-          evidenceStore,
-          taskGraph,
-          currentTask,
-          memoryState,
-          beliefDepGraph,
-        })
-
-        // ─── SUB-STEP B ───────────────────────────────────────────────────────
-
-        // Sub-step B: worldModel.generation_id++
-        worldModel.incrementGenerationId()
-
-        // update_world_model (post-execution)
-        nodeExecutionOrder.push('update_world_model_post_exec')
-        if (execResult.success) {
-          const evidence = {
-            id: `exec-${currentTask.id}-${stepsUsed}`,
-            obs: `Task executed: ${currentTask.description}`,
-            reliability: 'HIGH' as const,
-            source: currentTask.id,
-            evidence_type: 'OBSERVATION' as const,
-            freshness: new Date().toISOString(),
-          }
-          updateWorldModel(evidence, worldModel, diagnostics)
-        }
-
-        // update_diagnostics (post-exec)
-        nodeExecutionOrder.push('update_diagnostics_post_exec')
-        updateDiagnostics(worldModel, hypothesisSet, taskGraph, failureDiagnostics, beliefDepGraph, diagnostics)
-
-        // resolve_control_state (sub-step B)
-        nodeExecutionOrder.push('resolve_control_state_b')
-        resolveAndStamp()
-
-        // verify
-        nodeExecutionOrder.push('verify')
-        const verifyResult = verify(
-          execResult.output,
-          successCriteria,
-          worldModel.assumptions,
-          evidenceStore,
-          currentTask.risk_level,
-          evidenceStore,
-          worldModel,
-          outputContract,
-          hypothesisSet,
-        )
-
-        // post_exec_gate
-        nodeExecutionOrder.push('post_exec_gate')
-        const postGatePassed = postExecGate(
-          execResult.output,
-          verifyResult,
-          controlState,
-          worldModel,
-          diagnostics,
-          failureDiagnostics,
-          outputContract,
-          resolveControlState,
-        )
-
-        // update_task_state
-        nodeExecutionOrder.push('update_task_state')
-        if (postGatePassed && execResult.success) {
-          taskGraph.setStatus(currentTask.id, 'COMPLETE', { fromExecutionLayer: true })
-          finalResult = execResult.output
-
-          if (experienceStore.available) {
-            experienceStore.updateExperienceStore(
-              `${currentTask.id}-step-${stepsUsed}`,
-              { task_id: currentTask.id, outcome: 'COMPLETE', step: stepsUsed },
-            )
-          }
-        } else {
-          nodeExecutionOrder.push('rollback_replan')
-          rollbackAndReplan(
-            currentTask,
-            strategyState,
-            failureDiagnostics,
-            taskGraph,
-            worldModel,
-            callerState,
-            experienceStore.available ? experienceStore : null,
-          )
-        }
-
-        // Track history for cannot_make_progress detection
-        strategyState.completion_history.push(
-          taskGraph.tasks.filter(t => t.status === 'COMPLETE').length,
-        )
-        strategyState.risk_state_history.push(controlState.risk_state)
-
-        // Budget warning: approaching max_steps
-        if (stepsUsed >= Math.floor(0.8 * maxSteps)) {
-          diagnostics.verification_health.feasibility = Math.min(
-            diagnostics.verification_health.feasibility,
-            BUDGET_WARNING_FLOOR,
-          )
-        }
-
-        // Budget exhausted
-        if (stepsUsed >= maxSteps) {
-          const exhaust = escalateBudgetExhausted(stepsUsed, maxSteps)
-          throw new EscalationHalt({
-            reason: 'budget_exhausted',
-            missing_info: exhaust.missing_info,
-            current_task_summary: `Exhausted at step ${stepsUsed}`,
-            escalated_at: new Date().toISOString(),
-          })
-        }
-      }
-    }
-
-    // Run main loop
-    runMainLoop()
-
-    // Reviewer pass
-    nodeExecutionOrder.push('reviewer_pass')
-    const reviewPassResult = reviewerPass(
-      worldModel, successCriteria, failureDiagnostics, beliefDepGraph,
-      depGraphBudget, hypothesisSet, taskGraph, diagnostics, evidenceStore, propagationQueue,
+    contextCompression(
+      ctx.memoryState, ctx.worldModel, ctx.beliefDepGraph, ctx.depGraphBudget,
+      ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.controlState, ctx.callerState,
     )
 
-    // If reviewer re-opened tasks, re-enter main loop
-    if (reviewPassResult.reopened_task_ids.length > 0) {
-      for (const taskId of reviewPassResult.reopened_task_ids) {
-        const task = taskGraph.getTask(taskId)
-        if (task) {
-          task.status = 'PENDING'
-          taskGraph.changed = true
-        }
-      }
-      runMainLoop()
+    ctx.nodeExecutionOrder.push('check_caller_updates')
+    const updateResult = checkCallerUpdates(ctx.callerState, ctx.updateChannel, {
+      worldModel: ctx.worldModel, hypothesisSet: ctx.hypothesisSet, taskGraph: ctx.taskGraph,
+      diagnostics: ctx.diagnostics, failureDiagnostics: ctx.failureDiagnostics,
+      evidenceStore: ctx.evidenceStore, outputContract: ctx.outputContract,
+    })
+    if (updateResult === RESTART_ITERATION) {
+      resolveAndStamp(ctx)
+      continue
+    }
 
-      // Second reviewer pass after re-loop
-      nodeExecutionOrder.push('reviewer_pass_2')
-      reviewerPass(
-        worldModel, successCriteria, failureDiagnostics, beliefDepGraph,
-        depGraphBudget, hypothesisSet, taskGraph, diagnostics, evidenceStore, propagationQueue,
+    // ─── SUB-STEP A ───────────────────────────────────────────────────────
+
+    ctx.nodeExecutionOrder.push('detect_contradictions')
+    detectContradictions(ctx.worldModel, ctx.evidenceStore, ctx.hypothesisSet, undefined, ctx.beliefDepGraph)
+
+    ctx.nodeExecutionOrder.push('generate_update_hypotheses')
+    generateUpdateHypotheses(ctx.worldModel, ctx.evidenceStore, ctx.hypothesisSet, ctx.failureDiagnostics, ctx.memoryState)
+
+    ctx.nodeExecutionOrder.push('update_diagnostics')
+    updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
+
+    ctx.worldModel.incrementGenerationId()
+    ctx.nodeExecutionOrder.push('resolve_control_state')
+    resolveAndStamp(ctx)
+
+    const allComplete = ctx.taskGraph.tasks.length > 0 &&
+      ctx.taskGraph.tasks.every(t => t.status === 'COMPLETE')
+    if (allComplete) return
+
+    ctx.nodeExecutionOrder.push('update_task_graph')
+    updateTaskGraph(ctx.objective, ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph)
+
+    ctx.nodeExecutionOrder.push('select_task')
+    const selectResult = selectTask(ctx.taskGraph, ctx.controlState)
+
+    if (selectResult.escalate) {
+      throw new EscalationHalt({
+        reason: 'cannot_make_progress',
+        missing_info: ['HUMAN_REQUIRED escalation from select_task'],
+        current_task_summary: 'task selection triggered escalation',
+        escalated_at: new Date().toISOString(),
+      })
+    }
+
+    if (selectResult.task === null) return
+
+    const currentTask = selectResult.task
+    ctx.taskGraph.setStatus(currentTask.id, 'RUNNING')
+
+    ctx.nodeExecutionOrder.push('estimate_risk')
+    const riskAction: RiskableAction = { module_type: 'business_logic', metadata: {} }
+    estimateRisk(riskAction, ctx.taskGraph, ctx.worldModel)
+
+    ctx.nodeExecutionOrder.push('estimate_voi')
+    estimateVOI(ctx.diagnostics, ctx.worldModel, ctx.hypothesisSet, ctx.evidenceStore.tool_availability_manifest)
+
+    ctx.nodeExecutionOrder.push('review_proposed_change')
+    const reviewResult = reviewProposedChange(
+      { description: currentTask.description },
+      currentTask,
+      ctx.worldModel,
+      ctx.outputContract,
+      ctx.hypothesisSet,
+      ctx.evidenceStore,
+      ctx.consecutiveReviewFailures,
+    )
+
+    if (!reviewResult.passed) {
+      ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
+      if (reviewResult.escalation_triggered) {
+        throw new EscalationHalt({
+          reason: 'review_failure',
+          missing_info: reviewResult.failed_dimensions.map(d => d.reason),
+          current_task_summary: currentTask.description,
+          escalated_at: new Date().toISOString(),
+        })
+      }
+      continue
+    }
+
+    ctx.nodeExecutionOrder.push('action_gate')
+    const gateResult = actionGate(
+      { required_resources: [] },
+      ctx.controlState,
+      ctx.worldModel,
+      ctx.diagnostics,
+      ctx.failureDiagnostics,
+      resolveControlState,
+    )
+
+    if (gateResult === 'ESCALATE' || gateResult === 'BLOCK') {
+      ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
+      if (cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)) {
+        throw new EscalationHalt({
+          reason: 'cannot_make_progress',
+          missing_info: [ctx.strategyState.stall_reason ?? 'unknown'],
+          current_task_summary: currentTask.description,
+          escalated_at: new Date().toISOString(),
+        })
+      }
+      continue
+    }
+
+    ctx.nodeExecutionOrder.push('execute')
+    const proposedChange: ProposedExecutionChange = {
+      description: currentTask.description,
+      change_type: 'file_mutation',
+    }
+    const toolFn = ctx.toolExecutors[currentTask.id] ?? ctx.toolExecutors['default'] ?? (() => ({ completed: true }))
+    const execResult = execute(proposedChange, toolFn, {
+      worldModel: ctx.worldModel,
+      evidenceStore: ctx.evidenceStore,
+      taskGraph: ctx.taskGraph,
+      currentTask,
+      memoryState: ctx.memoryState,
+      beliefDepGraph: ctx.beliefDepGraph,
+    })
+
+    // ─── SUB-STEP B ───────────────────────────────────────────────────────
+
+    ctx.worldModel.incrementGenerationId()
+
+    ctx.nodeExecutionOrder.push('gather_evidence')
+    ctx.nodeExecutionOrder.push('apply_tool_reliability')
+    ctx.nodeExecutionOrder.push('update_world_model_post_exec')
+    if (execResult.success) {
+      const gathered = gatherEvidence(
+        {
+          id: `exec-${currentTask.id}-${ctx.stepsUsed}`,
+          obs: `Task executed: ${currentTask.description}`,
+          source: 'execution_engine',
+          evidence_type: 'OBSERVATION',
+          reliability: 'HIGH',
+        },
+        ctx.evidenceStore,
+      )
+      if (gathered) {
+        const capped = applyToolReliability(gathered, ctx.evidenceStore, ctx.diagnostics)
+        updateWorldModel(capped, ctx.worldModel, ctx.diagnostics)
+      }
+    }
+
+    ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
+    updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
+
+    ctx.nodeExecutionOrder.push('resolve_control_state_b')
+    resolveAndStamp(ctx)
+
+    ctx.nodeExecutionOrder.push('verify')
+    const verifyResult = verify(
+      execResult.output,
+      ctx.successCriteria,
+      ctx.worldModel.assumptions,
+      ctx.evidenceStore,
+      currentTask.risk_level,
+      ctx.evidenceStore,
+      ctx.worldModel,
+      ctx.outputContract,
+      ctx.hypothesisSet,
+    )
+
+    ctx.nodeExecutionOrder.push('post_exec_gate')
+    const postGatePassed = postExecGate(
+      execResult.output,
+      verifyResult,
+      ctx.controlState,
+      ctx.worldModel,
+      ctx.diagnostics,
+      ctx.failureDiagnostics,
+      ctx.outputContract,
+      resolveControlState,
+    )
+
+    ctx.nodeExecutionOrder.push('update_task_state')
+    if (postGatePassed && execResult.success) {
+      ctx.taskGraph.setStatus(currentTask.id, 'COMPLETE', { fromExecutionLayer: true })
+      ctx.finalResult = execResult.output
+
+      if (ctx.experienceStore.available) {
+        ctx.experienceStore.updateExperienceStore(
+          `${currentTask.id}-step-${ctx.stepsUsed}`,
+          { task_id: currentTask.id, outcome: 'COMPLETE', step: ctx.stepsUsed },
+        )
+      }
+    } else {
+      ctx.nodeExecutionOrder.push('rollback_replan')
+      rollbackAndReplan(
+        currentTask,
+        ctx.strategyState,
+        ctx.failureDiagnostics,
+        ctx.taskGraph,
+        ctx.worldModel,
+        ctx.callerState,
+        ctx.experienceStore.available ? ctx.experienceStore : null,
       )
     }
 
-    // output_validation
-    nodeExecutionOrder.push('output_validation')
-    let validationResult: OutputValidationResult | null = null
-    validationResult = outputValidation(finalResult, outputContract, callerState)
+    ctx.strategyState.completion_history.push(
+      ctx.taskGraph.tasks.filter(t => t.status === 'COMPLETE').length,
+    )
+    ctx.strategyState.risk_state_history.push(ctx.controlState.risk_state)
 
-    // propagateBeliefs available for introspection but not part of the return
-    void propagateBeliefs
-
-    return {
-      finalResult,
-      outputValidation: validationResult,
-      stepsUsed,
-      initResult,
-      nodeExecutionOrder,
+    if (ctx.stepsUsed >= Math.floor(0.8 * ctx.maxSteps)) {
+      ctx.diagnostics.verification_health.feasibility = Math.min(
+        ctx.diagnostics.verification_health.feasibility,
+        BUDGET_WARNING_FLOOR,
+      )
     }
+
+    if (ctx.stepsUsed >= ctx.maxSteps) {
+      const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
+      throw new EscalationHalt({
+        reason: 'budget_exhausted',
+        missing_info: exhaust.missing_info,
+        current_task_summary: `Exhausted at step ${ctx.stepsUsed}`,
+        escalated_at: new Date().toISOString(),
+      })
+    }
+
+    yield toCheckpoint(ctx)
+  }
+}
+
+async function runMainLoopWithCheckpoints(
+  ctx: LoopContext,
+  options: HarnessRunOptions,
+): Promise<{ status: 'completed' } | { status: 'paused'; checkpoint: HarnessCheckpoint }> {
+  const gen = driveMainLoop(ctx)
+  while (true) {
+    const { value: checkpoint, done } = await gen.next()
+    if (done) return { status: 'completed' }
+
+    if (options.onCheckpoint) await options.onCheckpoint(checkpoint)
+    if (options.shouldPause?.(checkpoint)) return { status: 'paused', checkpoint }
+  }
+}
+
+async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<HarnessRunOutcome> {
+  const first = await runMainLoopWithCheckpoints(ctx, options)
+  if (first.status === 'paused') return first
+
+  ctx.nodeExecutionOrder.push('reviewer_pass')
+  const reviewPassResult = reviewerPass(
+    ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
+    ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
+  )
+
+  if (reviewPassResult.reopened_task_ids.length > 0) {
+    for (const taskId of reviewPassResult.reopened_task_ids) {
+      const task = ctx.taskGraph.getTask(taskId)
+      if (task) {
+        task.status = 'PENDING'
+        ctx.taskGraph.changed = true
+      }
+    }
+
+    const second = await runMainLoopWithCheckpoints(ctx, options)
+    if (second.status === 'paused') return second
+
+    ctx.nodeExecutionOrder.push('reviewer_pass_2')
+    reviewerPass(
+      ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
+      ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
+    )
+  }
+
+  ctx.nodeExecutionOrder.push('output_validation')
+  const validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState)
+
+  // propagateBeliefs available for introspection but not part of the return
+  void propagateBeliefs
+
+  const result: HarnessRunResult = {
+    finalResult: ctx.finalResult,
+    outputValidation: validationResult,
+    stepsUsed: ctx.stepsUsed,
+    initResult: toInitResultShape(ctx),
+    nodeExecutionOrder: ctx.nodeExecutionOrder,
+  }
+
+  // Always emit one final checkpoint on completion so a caller persisting
+  // checkpoints ends up with a snapshot of the terminal state, not just the
+  // last mid-loop one.
+  if (options.onCheckpoint) await options.onCheckpoint(toCheckpoint(ctx))
+
+  return { status: 'complete', result }
+}
+
+export class HarnessRuntime {
+  async run(
+    objective: string,
+    successCriteria: string[],
+    options: HarnessRunOptions = {},
+  ): Promise<HarnessRunOutcome> {
+    const runId = options.runId ?? generateRunId()
+    const ctx = buildInitialContext(objective, successCriteria, options, runId)
+    return drive(ctx, options)
+  }
+
+  async resume(checkpoint: HarnessCheckpoint, options: HarnessRunOptions = {}): Promise<HarnessRunOutcome> {
+    const ctx = buildResumedContext(checkpoint, options)
+    return drive(ctx, options)
   }
 }
