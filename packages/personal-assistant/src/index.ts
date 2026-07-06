@@ -14,10 +14,19 @@ export {
   WRITE_FILE_TOOL,
   resolveInWorkspace,
   executeFileTool,
-  stagePendingWrite,
-  loadPendingWrite,
-  applyPendingWrite,
-  discardPendingWrite,
+  stagePendingAction,
+  loadPendingAction,
+  applyPendingAction,
+  discardPendingAction,
   PathOutsideWorkspaceError,
 } from './file-tools.js'
-export type { FileToolsContext, FileToolResult, PendingWriteRecord } from './file-tools.js'
+export type {
+  FileToolsContext,
+  FileToolResult,
+  PendingActionRecord,
+  PendingActionPayload,
+  ApplyPendingActionResult,
+  ShellExecutionResult,
+} from './file-tools.js'
+export { SHELL_TOOLS, RUN_SHELL_COMMAND_TOOL, executeShellTool } from './shell-tools.js'
+export type { ShellToolsContext, ShellStagingContext, ShellToolResult, ShellCommandExecutor } from './shell-tools.js'

@@ -8,15 +8,17 @@ import { nodeDisplayName } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
+import { runApprovedShellCommand } from './shell-executor.js'
+import { duckDuckGoSearch } from './web-search-provider.js'
 
 const proxyUrl = process.env.ASSISTANT_PROXY_URL ?? 'http://localhost:8787'
 const authToken = process.env.ASSISTANT_PROXY_TOKEN ?? ''
 const model = process.env.ASSISTANT_MODEL
 const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 
-// Sandbox root for the read_file/list_directory/write_file tools — mirrors how
-// `claude` itself defaults to the launch directory. Everything outside this
-// directory is off-limits to those tools, regardless of backend.
+// Sandbox root for the read_file/list_directory/write_file/run_shell_command tools —
+// mirrors how `claude` itself defaults to the launch directory. Everything outside
+// this directory is off-limits to those tools, regardless of backend.
 const workspaceRoot = process.env.ASSISTANT_WORKSPACE_DIR ?? process.cwd()
 
 // Must match the exact path a FileSystemAdapter({ baseDir: dataDir, namespace:
@@ -27,11 +29,23 @@ const workspaceRoot = process.env.ASSISTANT_WORKSPACE_DIR ?? process.cwd()
 // and "reminders" sanitizes to itself (no special characters).
 const remindersFile = join(dataDir, 'reminders', 'reminders.json')
 
+// Both capabilities are opt-in and off by default — absent, turn() behaves exactly as
+// before these options existed. ASSISTANT_ENABLE_SHELL must be exactly "1" (not just
+// truthy) — a copy-pasted ASSISTANT_ENABLE_SHELL=0 left in an env file must not silently
+// enable the highest-risk tool this assistant has.
+const enableWeb = process.env.ASSISTANT_ENABLE_WEB === '1'
+const enableShell = process.env.ASSISTANT_ENABLE_SHELL === '1'
+const shellTimeoutMs = process.env.ASSISTANT_SHELL_TIMEOUT_MS ? Number(process.env.ASSISTANT_SHELL_TIMEOUT_MS) : undefined
+
 // ASSISTANT_LLM_BACKEND=claude-cli routes turns through a local `claude -p` subprocess
 // (your already-authenticated Claude Code CLI session) instead of the proxy + API key.
+// Note: unlike the proxy backend, this backend has no web_search/fetch_url wiring for
+// ASSISTANT_ENABLE_WEB yet — web_search has no default backend on this path either (see
+// claude-cli-llm-client.ts's doc comment), so ASSISTANT_ENABLE_WEB only takes effect on
+// the proxy (LLMClient) backend below.
 const llmClient: ILLMClient =
   process.env.ASSISTANT_LLM_BACKEND === 'claude-cli'
-    ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile })
+    ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: enableShell ? { workspaceRoot } : undefined })
     : new LLMClient({ proxyUrl, authToken })
 
 async function main(): Promise<void> {
@@ -48,11 +62,22 @@ async function main(): Promise<void> {
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
     reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
     fileTools: { backend, workspaceRoot },
+    webTools: enableWeb ? { search: (query) => duckDuckGoSearch(query) } : undefined,
+    // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
+    // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
+    shellTools: enableShell ? { backend, workspaceRoot, timeoutMs: shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
   })
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
 
-  console.log('Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.\n')
+  // No silent default: capabilities only appear in the banner when actually configured,
+  // so the banner never implies something is available that isn't.
+  const enabledCapabilities: string[] = []
+  if (enableWeb) enabledCapabilities.push('web search/fetch')
+  if (enableShell) enabledCapabilities.push('shell commands (approval-gated)')
+  const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
+
+  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n`)
   rl.prompt()
 
   let lastTrace: AssistantTrace | undefined
@@ -109,7 +134,7 @@ async function main(): Promise<void> {
     lastProgressLineLength = 0
   }
 
-  async function handleTurn(message: string, approved = false, pendingWriteId?: string): Promise<void> {
+  async function handleTurn(message: string, approved = false, pendingActionId?: string): Promise<void> {
     // Set only once the first token of an actual streamed reply arrives — the
     // message-level approval gate and the file-tools loop both produce a full
     // reply with no streaming, so this stays false for those turns and the
@@ -124,17 +149,18 @@ async function main(): Promise<void> {
     }
 
     try {
-      const result = await assistant.turn(message, { sessionId: 'cli', approved, pendingWriteId, onProgress: writeProgress, onToken: writeToken })
+      const result = await assistant.turn(message, { sessionId: 'cli', approved, pendingActionId, onProgress: writeProgress, onToken: writeToken })
       clearProgress()
 
-      // A write_file tool call, gated at the point of the call itself rather than
-      // by the message text — see the file-tools plan's Diagnosis tab. Unlike the
-      // message-level gate below, both a yes and a no need to re-call turn() (to
-      // apply or discard the staged write), not just a yes.
-      if (result.status === 'needs_approval' && result.pendingWriteId) {
-        console.log(`\n[needs approval — write] ${result.reason}`)
-        const confirmed = await askYesNo('Apply this write? (y/N) ')
-        await handleTurn(message, confirmed, result.pendingWriteId)
+      // A write_file/run_shell_command tool call, gated at the point of the call itself
+      // rather than by the message text — see the file-tools and web+shell-tools plans'
+      // Diagnosis tabs. Unlike the message-level gate below, both a yes and a no need to
+      // re-call turn() (to apply or discard the staged action), not just a yes.
+      if (result.status === 'needs_approval' && result.pendingActionId) {
+        const isShell = result.pendingActionKind === 'shell'
+        console.log(`\n[needs approval — ${isShell ? 'shell command' : 'write'}] ${result.reason}`)
+        const confirmed = await askYesNo(isShell ? 'Run this command? (y/N) ' : 'Apply this write? (y/N) ')
+        await handleTurn(message, confirmed, result.pendingActionId)
         return
       }
 
