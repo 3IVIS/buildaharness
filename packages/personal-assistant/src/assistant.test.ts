@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend } from '@buildaharness/runtime'
+import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
@@ -554,5 +555,53 @@ describe('PersonalAssistant dynamic decomposition', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Handled anyway.')
     expect(llm.structuredCalls).toBe(1)
+  })
+})
+
+describe('PersonalAssistant onTrace', () => {
+  it('emits turn_start, risk_classified, triviality_classified, and turn_end for a trivial turn', async () => {
+    const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).')
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) })
+
+    await assistant.turn('What timezone is Tokyo in?', { sessionId: 'trace-trivial' })
+
+    expect(events.map(e => e.kind)).toEqual(['turn_start', 'risk_classified', 'triviality_classified', 'turn_end'])
+    expect(events[0]).toMatchObject({ kind: 'turn_start', sessionId: 'trace-trivial' })
+    expect(events[2]).toMatchObject({ kind: 'triviality_classified', isTrivial: true })
+    expect(events[3]).toMatchObject({ kind: 'turn_end', status: 'ok' })
+  })
+
+  it('emits at least one harness_node event for a non-trivial turn that runs the full harness', async () => {
+    const llm = new FakeLLMClient('Here are a few ideas.')
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) })
+
+    await assistant.turn('Can you help me plan something?', { sessionId: 'trace-harness' })
+
+    expect(events[0].kind).toBe('turn_start')
+    expect(events.some(e => e.kind === 'triviality_classified' && !e.isTrivial)).toBe(true)
+    expect(events.some(e => e.kind === 'harness_node')).toBe(true)
+    expect(events.at(-1)).toMatchObject({ kind: 'turn_end', status: 'ok' })
+  })
+
+  it('emits a tool_call event for each tool invocation in the tool loop', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile('/workspace/notes.txt', 'basil')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'The secret ingredient is basil.' },
+    ])
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      fileTools: { backend, workspaceRoot: '/workspace' },
+      onTrace: (e) => events.push(e),
+    })
+
+    await assistant.turn('What does notes.txt say?', { sessionId: 'trace-tools' })
+
+    expect(events).toContainEqual({ kind: 'tool_call', tool: 'read_file', ok: true })
+    expect(events.at(-1)).toMatchObject({ kind: 'turn_end', status: 'ok' })
   })
 })
