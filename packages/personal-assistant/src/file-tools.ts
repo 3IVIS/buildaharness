@@ -160,7 +160,7 @@ export async function executeFileTool(ctx: FileToolsContext, toolName: string, i
       // Validate now — a proposal for an out-of-scope path fails immediately
       // rather than getting staged for approval.
       await resolveAndVerify(ctx, path)
-      const { id } = await stagePendingWrite(ctx.backend, ctx.workspaceRoot, { path, content })
+      const { id } = await stagePendingAction(ctx.backend, ctx.workspaceRoot, { kind: 'write', path, content })
       return { kind: 'staged_write', id, path, content }
     }
     default:
@@ -168,60 +168,91 @@ export async function executeFileTool(ctx: FileToolsContext, toolName: string, i
   }
 }
 
-// ── Pending-write staging (T2) ──────────────────────────────────────────────
+// ── Pending-action staging (generalized from pending-write staging, T2 of the file-tools plan) ──
 
-export interface PendingWriteRecord {
-  id: string
-  /** Workspace-relative (or absolute-but-inside-workspace), exactly as the model proposed it. */
-  path: string
-  content: string
-  stagedAt: string
+export type PendingActionPayload =
+  | { kind: 'write'; path: string; content: string }
+  | { kind: 'shell'; command: string; cwd: string }
+
+export type PendingActionRecord = { id: string; stagedAt: string } & PendingActionPayload
+
+/** Result of actually running a previously staged shell command — see shell-executor.ts. */
+export interface ShellExecutionResult {
+  /** Combined stdout+stderr, truncated to a byte cap. */
+  output: string
+  exitCode: number | null
+  timedOut: boolean
 }
 
-const PENDING_WRITES_DIR = '.pending-writes'
+export type ApplyPendingActionResult =
+  | ({ kind: 'write' } & PendingActionRecord)
+  | ({ kind: 'shell' } & PendingActionRecord & { execution: ShellExecutionResult })
 
-function pendingWritesDir(workspaceRoot: string): string {
-  return `${workspaceRoot}/${PENDING_WRITES_DIR}`
+const PENDING_ACTIONS_DIR = '.pending-actions'
+
+function pendingActionsDir(workspaceRoot: string): string {
+  return `${workspaceRoot}/${PENDING_ACTIONS_DIR}`
 }
 
-function pendingWritePath(workspaceRoot: string, id: string): string {
-  return `${pendingWritesDir(workspaceRoot)}/${id}.json`
+function pendingActionPath(workspaceRoot: string, id: string): string {
+  return `${pendingActionsDir(workspaceRoot)}/${id}.json`
 }
 
-/** Stages a write for later approval. `id` is a random UUID, not derived from the session — see T4. */
-export async function stagePendingWrite(
+/** Stages an action for later approval. `id` is a random UUID, not derived from the session — see T4 of the file-tools plan. */
+export async function stagePendingAction(
   backend: FsBackend,
   workspaceRoot: string,
-  proposal: { path: string; content: string },
+  payload: PendingActionPayload,
 ): Promise<{ id: string }> {
   const id = crypto.randomUUID()
-  const record: PendingWriteRecord = { id, path: proposal.path, content: proposal.content, stagedAt: new Date().toISOString() }
-  await backend.mkdir(pendingWritesDir(workspaceRoot))
-  await backend.writeTextFile(pendingWritePath(workspaceRoot, id), JSON.stringify(record))
+  const record: PendingActionRecord = { id, stagedAt: new Date().toISOString(), ...payload }
+  await backend.mkdir(pendingActionsDir(workspaceRoot))
+  await backend.writeTextFile(pendingActionPath(workspaceRoot, id), JSON.stringify(record))
   return { id }
 }
 
-export async function loadPendingWrite(backend: FsBackend, workspaceRoot: string, id: string): Promise<PendingWriteRecord | undefined> {
-  const raw = await backend.readTextFile(pendingWritePath(workspaceRoot, id))
-  return raw === undefined ? undefined : (JSON.parse(raw) as PendingWriteRecord)
+export async function loadPendingAction(backend: FsBackend, workspaceRoot: string, id: string): Promise<PendingActionRecord | undefined> {
+  const raw = await backend.readTextFile(pendingActionPath(workspaceRoot, id))
+  return raw === undefined ? undefined : (JSON.parse(raw) as PendingActionRecord)
 }
 
-/** Applies a previously staged write for real, then deletes its staging record. Throws if `id` isn't staged. */
-export async function applyPendingWrite(backend: FsBackend, workspaceRoot: string, id: string): Promise<PendingWriteRecord> {
-  const record = await loadPendingWrite(backend, workspaceRoot, id)
-  if (!record) throw new Error(`No pending write staged with id "${id}"`)
+/**
+ * Applies a previously staged action for real, then deletes its staging record. Throws if `id`
+ * isn't staged. `kind: 'write'` is applied directly (pure FsBackend I/O, safe in any environment
+ * this package runs in). `kind: 'shell'` requires an injected `executeShell` callback instead of
+ * this module spawning a process itself — file-tools.ts has no Node dependency of its own (it's
+ * bundled into the browser build via assistant.ts/index.ts), so the real child_process.spawn call
+ * lives in shell-executor.ts and is only ever wired in by Node-only callers (cli.ts).
+ */
+export async function applyPendingAction(
+  backend: FsBackend,
+  workspaceRoot: string,
+  id: string,
+  options: { executeShell?: (command: string, cwd: string) => Promise<ShellExecutionResult> } = {},
+): Promise<ApplyPendingActionResult> {
+  const record = await loadPendingAction(backend, workspaceRoot, id)
+  if (!record) throw new Error(`No pending action staged with id "${id}"`)
 
-  // Defense in depth — the workspace root shouldn't have changed between
-  // staging and approval, but don't trust that; re-validate before writing.
-  const resolved = resolveInWorkspace(workspaceRoot, record.path)
-  await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+  if (record.kind === 'write') {
+    // Defense in depth — the workspace root shouldn't have changed between
+    // staging and approval, but don't trust that; re-validate before writing.
+    const resolved = resolveInWorkspace(workspaceRoot, record.path)
+    await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
 
-  await backend.writeTextFile(resolved, record.content)
-  await backend.removeFile(pendingWritePath(workspaceRoot, id))
-  return record
+    await backend.writeTextFile(resolved, record.content)
+    await backend.removeFile(pendingActionPath(workspaceRoot, id))
+    return record as ApplyPendingActionResult
+  }
+
+  if (!options.executeShell) {
+    throw new Error(`Cannot apply a staged shell action ("${id}") — no executeShell callback was provided`)
+  }
+  const execution = await options.executeShell(record.command, record.cwd)
+  await backend.removeFile(pendingActionPath(workspaceRoot, id))
+  return { ...record, execution }
 }
 
-/** Deletes a staged write without applying it. Used when the user declines. No-op if `id` isn't staged. */
-export async function discardPendingWrite(backend: FsBackend, workspaceRoot: string, id: string): Promise<void> {
-  await backend.removeFile(pendingWritePath(workspaceRoot, id))
+/** Deletes a staged action without applying it. Used when the user declines. No-op if `id` isn't staged. */
+export async function discardPendingAction(backend: FsBackend, workspaceRoot: string, id: string): Promise<void> {
+  await backend.removeFile(pendingActionPath(workspaceRoot, id))
 }
