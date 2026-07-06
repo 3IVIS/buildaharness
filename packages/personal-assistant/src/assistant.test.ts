@@ -34,11 +34,13 @@ class FakeLLMClient implements ILLMClient {
 /** ILLMClient whose callChatStructured is driven by a scripted callback — stands in for a model that calls tools. */
 class ScriptedToolLLMClient implements ILLMClient {
   calls = 0
+  streamCalls = 0
   receivedMessages: ChatMessage[][] = []
-  constructor(private readonly next: () => LLMStructuredResponse) {}
+  constructor(private readonly next: () => LLMStructuredResponse, private readonly streamChunks: string[] = ['']) {}
 
   async *callChat(): AsyncIterable<string> {
-    yield ''
+    this.streamCalls++
+    for (const chunk of this.streamChunks) yield chunk
   }
 
   async callChatSync(): Promise<string> {
@@ -52,12 +54,12 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
 }
 
-function scriptedResponses(responses: LLMStructuredResponse[]): ScriptedToolLLMClient {
+function scriptedResponses(responses: LLMStructuredResponse[], streamChunks?: string[]): ScriptedToolLLMClient {
   let i = 0
   return new ScriptedToolLLMClient(() => {
     if (i >= responses.length) throw new Error('ScriptedToolLLMClient: no more scripted responses')
     return responses[i++]
-  })
+  }, streamChunks)
 }
 
 /** In-memory FsBackend standing in for a real disk, for the fileTools tests below. */
@@ -370,6 +372,43 @@ describe('PersonalAssistant file tools', () => {
     expect(result.reply).toBe('Plain reply, no tools involved.')
     expect(result.pendingWriteId).toBeUndefined()
     expect(llm.calls).toBe(1)
+  })
+
+  it('streams the final answer via onToken once the tool loop stops calling tools, at the cost of one extra LLM call', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'basil')
+    const llm = scriptedResponses(
+      [
+        { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+        { content: 'The ingredient is basil.' },
+      ],
+      ['The ', 'ingredient ', 'is basil.'],
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+    const received: string[] = []
+
+    const result = await assistant.turn('What does notes.txt say?', { onToken: (t) => received.push(t) })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('The ingredient is basil.')
+    expect(received).toEqual(['The ', 'ingredient ', 'is basil.'])
+    // 1 tool-call round trip + 1 final non-streaming round trip (whose content is
+    // discarded in favor of the streamed re-request) + 1 streamed re-request.
+    expect(llm.calls).toBe(2)
+    expect(llm.streamCalls).toBe(1)
+  })
+
+  it('does not pay for an extra LLM call when no onToken listener is attached, even with tools active', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([{ content: 'No lookup needed.' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('Just say hello.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('No lookup needed.')
+    expect(llm.calls).toBe(1)
+    expect(llm.streamCalls).toBe(0)
   })
 
   it('exhausting the tool-loop iteration cap escalates instead of looping forever or returning a partial answer', async () => {

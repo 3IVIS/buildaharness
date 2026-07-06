@@ -178,12 +178,16 @@ export class PersonalAssistant {
       pendingWriteId?: string
       onProgress?: (progress: AssistantProgress) => void
       /**
-       * Called with each token as the model's reply streams in. Only fires for
-       * the plain chat path (no fileTools configured) — the file-tools ReAct
-       * loop drives callChatStructured, which isn't a streaming call for either
-       * backend, so a turn using file tools never streams. ClaudeCliLLMClient's
-       * callChat isn't real per-token streaming either (it yields the whole
-       * reply as one chunk) — this only reads token-by-token on the proxy backend.
+       * Called with each token as the model's reply streams in. On the plain chat
+       * path (no tool loop active) this is the turn's one real LLM call, read via
+       * callChat. On the tool-loop path (fileTools/webTools configured), every
+       * tool-bearing round trip stays non-streaming — callChatStructured isn't a
+       * streaming call for either backend — but once the model stops calling tools,
+       * one extra callChat request re-asks for that same final answer as a real
+       * streamed completion, *only when `onToken` is supplied* (so a caller who
+       * doesn't listen never pays for it). ClaudeCliLLMClient's callChat isn't real
+       * per-token streaming either way (it yields the whole reply as one chunk) —
+       * this only reads token-by-token on the proxy backend.
        */
       onToken?: (token: string) => void
     } = {},
@@ -232,7 +236,7 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (this.fileTools || this.webTools) {
-      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt)
+      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -382,7 +386,12 @@ export class PersonalAssistant {
    * configured (reminder tools ride along whenever either does, since `reminderStore`
    * always exists).
    */
-  private async runToolLoop(transcript: ChatMessage[], userMessage: string, systemPrompt: string): Promise<ToolLoopResult> {
+  private async runToolLoop(
+    transcript: ChatMessage[],
+    userMessage: string,
+    systemPrompt: string,
+    onToken?: (token: string) => void,
+  ): Promise<ToolLoopResult> {
     const tools = [...(this.fileTools ? FILE_TOOLS : []), ...(this.webTools ? WEB_TOOLS : []), ...REMINDER_TOOLS]
 
     const messages: ChatMessage[] = [
@@ -396,7 +405,19 @@ export class PersonalAssistant {
       const response = await this.llmClient.callChatStructured(messages, tools, { model: this.model })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
-        return { kind: 'final', content: response.content, sources }
+        if (!onToken) return { kind: 'final', content: response.content, sources }
+
+        // Re-request the same final answer as a real streamed completion — only
+        // done when a listener is attached, so a caller who never streams never
+        // pays for this extra call. messages here excludes the just-received
+        // assistant response (never pushed since there were no tool calls to act
+        // on), so this re-asks the same question the non-streaming call just answered.
+        let streamed = ''
+        for await (const token of this.llmClient.callChat(messages, { model: this.model })) {
+          streamed += token
+          onToken(token)
+        }
+        return { kind: 'final', content: streamed, sources }
       }
 
       // The Claude CLI backend's own agentic loop resolves read_file/list_directory
