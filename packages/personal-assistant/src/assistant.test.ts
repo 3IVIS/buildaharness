@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend } from '@buildaharness/runtime'
-import { InMemoryAdapter } from '@buildaharness/runtime'
+import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
 
@@ -169,6 +169,21 @@ describe('PersonalAssistant', () => {
     const secondCallSystemMessage = llm.receivedMessages[1].find(m => m.role === 'system')
     expect(secondCallSystemMessage?.content).toContain('Known facts about the user:')
     expect(secondCallSystemMessage?.content).toContain('My name is Ali.')
+  })
+
+  it('stores a reminder-shaped MEDIUM-risk request without blocking on approval', async () => {
+    const llm = new FakeLLMClient('Sure, noted.')
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'reminder-test' }))
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+
+    const result = await assistant.turn('Remind me to call mom tomorrow.')
+
+    expect(result.status).toBe('ok')
+    expect(result.riskLevel).toBe('MEDIUM')
+    const reminders = await reminderStore.list()
+    expect(reminders).toHaveLength(1)
+    expect(reminders[0].rawText).toBe('Remind me to call mom tomorrow.')
+    expect(reminders[0].dueAt).toBeNull()
   })
 
   it('answers a self-contained factual question via the triviality fast path, skipping the harness run', async () => {

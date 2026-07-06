@@ -14,9 +14,11 @@ import {
   InMemoryAdapter,
   IndexedDBAdapter,
   DexieExperienceStore,
+  InMemoryReminderStore,
   type MemoryAdapter,
   type ILLMClient,
   type ChatMessage,
+  type ReminderStore,
 } from '@buildaharness/runtime'
 import { classifyRisk, type RiskClassification } from './risk-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
@@ -99,6 +101,8 @@ export interface PersonalAssistantOptions {
    * returns `needs_approval` with a `pendingWriteId`.
    */
   fileTools?: FileToolsContext
+  /** Stores reminders detected from "remind me"/"set a reminder"-shaped requests — defaults to an in-process store. See ReminderStore's `dueAt` doc: v1 stores raw text only, no time parsing, so `listDue()` won't return these yet. */
+  reminderStore?: ReminderStore
 }
 
 /**
@@ -117,6 +121,7 @@ export class PersonalAssistant {
   private readonly checkpointStore: CheckpointStore
   private readonly maxSteps: number
   private readonly fileTools?: FileToolsContext
+  private readonly reminderStore: ReminderStore
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -126,6 +131,7 @@ export class PersonalAssistant {
     this.checkpointStore = options.checkpointStore ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-checkpoints' })
     this.maxSteps = options.maxSteps ?? 5
     this.fileTools = options.fileTools
+    this.reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
   }
 
   /**
@@ -185,6 +191,14 @@ export class PersonalAssistant {
     const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
 
     const classification = classifyRisk(userMessage)
+
+    // A reminder-shaped MEDIUM request stores a record immediately — detection,
+    // not action gating, so it happens whether or not the rest of the turn is
+    // ultimately approved/completed. v1 stores raw text with no time parsing
+    // (dueAt: null) — see ReminderStore's doc comment.
+    if (classification.riskLevel === 'MEDIUM' && classification.reason.includes('reminder')) {
+      await this.reminderStore.create(userMessage, null)
+    }
 
     if (classification.requiresApproval && !options.approved) {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
