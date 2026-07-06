@@ -2,7 +2,7 @@
 import { createInterface } from 'node:readline'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, type ILLMClient } from '@buildaharness/runtime'
+import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource } from './assistant.js'
 import { nodeDisplayName } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
@@ -19,11 +19,19 @@ const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 // directory is off-limits to those tools, regardless of backend.
 const workspaceRoot = process.env.ASSISTANT_WORKSPACE_DIR ?? process.cwd()
 
+// Must match the exact path a FileSystemAdapter({ baseDir: dataDir, namespace:
+// 'reminders' }) uses for the key "reminders" — see file-tools-mcp-server.mjs's
+// doc comment — so the claude-cli backend's MCP subprocess and this process's
+// own reminderStore (below) read/write the same file instead of two disconnected
+// reminder lists. FileSystemAdapter's path formula is `${baseDir}/${namespace}/${sanitize(key)}.json`,
+// and "reminders" sanitizes to itself (no special characters).
+const remindersFile = join(dataDir, 'reminders', 'reminders.json')
+
 // ASSISTANT_LLM_BACKEND=claude-cli routes turns through a local `claude -p` subprocess
 // (your already-authenticated Claude Code CLI session) instead of the proxy + API key.
 const llmClient: ILLMClient =
   process.env.ASSISTANT_LLM_BACKEND === 'claude-cli'
-    ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+    ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile })
     : new LLMClient({ proxyUrl, authToken })
 
 async function main(): Promise<void> {
@@ -38,6 +46,7 @@ async function main(): Promise<void> {
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
+    reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
     fileTools: { backend, workspaceRoot },
   })
 
