@@ -1,8 +1,10 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::time::SystemTime;
 use tauri::Emitter;
+use tauri_plugin_dialog::DialogExt;
 
 /// The monorepo root, computed from this crate's compile-time location
 /// (`packages/desktop/src-tauri`) rather than the process's runtime cwd — dev-mode-only
@@ -35,6 +37,25 @@ fn dev_file_tools_mcp_server_path() -> Result<PathBuf, String> {
 #[tauri::command]
 fn get_dev_workspace_root() -> Result<String, String> {
   Ok(dev_workspace_root()?.to_string_lossy().to_string())
+}
+
+/// Opens a native folder-picker dialog and returns the chosen path, or `None` if the user
+/// cancelled. Backs the settings screen's Workspace section (chat-ui's SettingsScreen) — the
+/// path returned here is what persists via tauri-config-store.ts's `workspaceRoot`, taking
+/// over from get_dev_workspace_root() as the source of truth once a user has picked one.
+/// The dialog plugin's callback fires on its own thread, not this command's async context, so
+/// a channel bridges it back to the `await`-able return value the frontend expects.
+#[tauri::command]
+async fn pick_workspace_directory(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+  let (tx, rx) = mpsc::channel();
+  app_handle.dialog().file().pick_folder(move |folder| {
+    let _ = tx.send(folder);
+  });
+  let folder = tauri::async_runtime::spawn_blocking(move || rx.recv())
+    .await
+    .map_err(|e| format!("Internal error waiting on folder picker: {e}"))?
+    .map_err(|e| format!("Folder picker channel closed unexpectedly: {e}"))?;
+  Ok(folder.map(|p| p.to_string()))
 }
 
 #[derive(serde::Serialize)]
@@ -299,10 +320,12 @@ async fn run_claude_prompt(
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
+    .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
       run_claude_prompt,
       run_claude_prompt_with_file_tools,
-      get_dev_workspace_root
+      get_dev_workspace_root,
+      pick_workspace_directory
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

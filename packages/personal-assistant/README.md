@@ -192,10 +192,15 @@ const assistant = new PersonalAssistant({
 ```
 
 `WebToolsContext.search` has no built-in default (the caller supplies a real
-backend, an API client, etc.) — `web-search-provider.ts`'s `duckDuckGoSearch`
-is a ready-made one (queries DuckDuckGo's HTML endpoint, no API key needed —
-the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed `web_search`
-uses), wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set.
+backend, an API client, etc.) — `web-search-provider.ts` ships two ready-made
+ones, both wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set:
+
+- `duckDuckGoSearch` (default) — queries DuckDuckGo's HTML endpoint, no API
+  key needed (the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed
+  `web_search` uses).
+- `braveSearch` — queries the [Brave Search API](https://api.search.brave.com/app/keys),
+  opt-in via `ASSISTANT_SEARCH_BACKEND=brave` plus `BRAVE_SEARCH_API_KEY`
+  (see below).
 
 Both `web_search` and `fetch_url` results are wrapped in
 `<untrusted_external_content>` (with a warning prefix if a regex heuristic
@@ -298,7 +303,7 @@ the same way, printing the exact command and resolved `cwd` instead.
 
 Set `ASSISTANT_ENABLE_WEB=1` to give the model real `web_search`/`fetch_url`
 tools (no approval needed — see "Web access via tools" above; on the proxy
-backend this wires in `duckDuckGoSearch` as the search implementation) and
+backend this defaults to `duckDuckGoSearch` as the search implementation) and
 `ASSISTANT_ENABLE_SHELL=1` to give it a real, approval-gated
 `run_shell_command` tool scoped to `ASSISTANT_WORKSPACE_DIR`. Both are off by
 default; `ASSISTANT_ENABLE_SHELL` must be exactly `"1"` (a stray
@@ -315,6 +320,28 @@ Note: `ASSISTANT_ENABLE_WEB` only takes effect on the proxy backend for
 now — the Claude CLI backend has no web_search wiring yet (see
 `claude-cli-llm-client.ts`'s doc comment).
 
+#### Using Brave Search instead of DuckDuckGo
+
+By default, `ASSISTANT_ENABLE_WEB=1` uses the free, keyless `duckDuckGoSearch`
+provider. To use the [Brave Search API](https://api.search.brave.com/app/keys)
+instead, opt in explicitly with `ASSISTANT_SEARCH_BACKEND=brave` and supply
+`BRAVE_SEARCH_API_KEY`:
+
+```bash
+ASSISTANT_ENABLE_WEB=1 ASSISTANT_SEARCH_BACKEND=brave BRAVE_SEARCH_API_KEY=your-key \
+  npm run cli --workspace=packages/personal-assistant
+```
+
+`ASSISTANT_SEARCH_BACKEND` must be exactly `"brave"` to switch providers —
+any other value (or leaving it unset) keeps the DuckDuckGo default. If
+`ASSISTANT_SEARCH_BACKEND=brave` is set without `BRAVE_SEARCH_API_KEY`, the
+CLI fails fast at startup with an error rather than silently falling back to
+DuckDuckGo, since a missing key there is almost always a misconfiguration.
+The active backend is shown in the startup banner (e.g. `web search/fetch
+(brave)`). Both `searchBackend` and `braveApiKey` can also be set from inside
+a running session with `/config set` instead of an env var — see
+"Configuration" below.
+
 Set `ASSISTANT_LLM_BACKEND=claude-cli` to skip the proxy entirely and run turns
 through a local `claude -p` subprocess instead, using your already-authenticated
 Claude Code CLI session rather than an API key (`CLAUDE_PATH` overrides the
@@ -329,6 +356,61 @@ persist as real files under `~/.buildaharness/personal-assistant/`
 (`transcripts/`, `experience/`, `reminders/`, `checkpoints/`), so conversation
 history and learning survive between runs — quit and restart the CLI and it
 remembers.
+
+## Configuration
+
+Every env var documented above (`ASSISTANT_ENABLE_WEB`, `ASSISTANT_SEARCH_BACKEND`,
+`BRAVE_SEARCH_API_KEY`, `ASSISTANT_ENABLE_SHELL`, `ASSISTANT_SHELL_TIMEOUT_MS`,
+`ASSISTANT_LLM_BACKEND`, `ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`,
+`ASSISTANT_MODEL`, `ASSISTANT_WORKSPACE_DIR`) keeps working exactly as
+described — nothing here is a breaking change. What's new is a persisted
+settings layer *beneath* those env vars, editable from inside a running CLI
+session with `/config`, so a setting survives across runs without needing an
+env var set every time:
+
+```
+you> /config
+  llmBackend     proxy
+  proxyUrl       http://localhost:8787
+  authToken      (not set)
+  model          (not set)
+  enableWeb      true    (env-pinned: ASSISTANT_ENABLE_WEB)
+  searchBackend  ddg
+  braveApiKey    (not set)
+  enableShell    false
+  shellTimeoutMs (not set)
+  workspaceRoot  (not set)
+
+you> /config set searchBackend brave
+✗ searchBackend "brave" requires braveApiKey to be set.
+
+you> /config set braveApiKey sk-...
+✓ braveApiKey updated (took effect immediately, no restart needed)
+
+you> /config set searchBackend brave
+✓ searchBackend updated (took effect immediately, no restart needed)
+
+you> /config reset searchBackend
+✓ Reset searchBackend to default
+```
+
+- `/config` lists every field's current (resolved) value. A field currently
+  pinned by an env var shows `(env-pinned: VAR_NAME)` and cannot be changed
+  with `/config set` — unset the env var first.
+- `/config set <key> <value>` validates the change (e.g. `searchBackend brave`
+  is rejected without a `braveApiKey` already set) before persisting it, then
+  rebuilds the running assistant so the change applies to the very next turn —
+  no restart needed.
+- `/config reset [key]` clears one persisted key (or, with no key, every
+  persisted key), reverting to the env var if still set, or the built-in
+  default otherwise.
+
+**Precedence**: env var > persisted config > built-in default, evaluated
+independently per field. Settings persist as plain JSON at
+`~/.buildaharness/personal-assistant/config.json` — like the rest of this
+package's persistence, it's a real file, not encrypted, so `authToken` and
+`braveApiKey` are stored in plaintext there. This is the same trust boundary
+the repo's root `.env` already has, not a new one.
 
 ## Commands
 

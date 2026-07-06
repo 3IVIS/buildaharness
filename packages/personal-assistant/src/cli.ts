@@ -3,24 +3,20 @@ import { createInterface } from 'node:readline'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource } from './assistant.js'
+import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
 import { nodeDisplayName } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
 import { runApprovedShellCommand } from './shell-executor.js'
-import { duckDuckGoSearch } from './web-search-provider.js'
+import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
+import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig } from './config.js'
+import { NodeConfigStore } from './node-config-store.js'
+import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 
-const proxyUrl = process.env.ASSISTANT_PROXY_URL ?? 'http://localhost:8787'
-const authToken = process.env.ASSISTANT_PROXY_TOKEN ?? ''
-const model = process.env.ASSISTANT_MODEL
 const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
-
-// Sandbox root for the read_file/list_directory/write_file/run_shell_command tools —
-// mirrors how `claude` itself defaults to the launch directory. Everything outside
-// this directory is off-limits to those tools, regardless of backend.
-const workspaceRoot = process.env.ASSISTANT_WORKSPACE_DIR ?? process.cwd()
+const configStore = new NodeConfigStore(join(dataDir, 'config.json'))
 
 // Must match the exact path a FileSystemAdapter({ baseDir: dataDir, namespace:
 // 'reminders' }) uses for the key "reminders" — see file-tools-mcp-server.mjs's
@@ -30,59 +26,99 @@ const workspaceRoot = process.env.ASSISTANT_WORKSPACE_DIR ?? process.cwd()
 // and "reminders" sanitizes to itself (no special characters).
 const remindersFile = join(dataDir, 'reminders', 'reminders.json')
 
-// Both capabilities are opt-in and off by default — absent, turn() behaves exactly as
-// before these options existed. ASSISTANT_ENABLE_SHELL must be exactly "1" (not just
-// truthy) — a copy-pasted ASSISTANT_ENABLE_SHELL=0 left in an env file must not silently
-// enable the highest-risk tool this assistant has.
-const enableWeb = process.env.ASSISTANT_ENABLE_WEB === '1'
-const enableShell = process.env.ASSISTANT_ENABLE_SHELL === '1'
-const shellTimeoutMs = process.env.ASSISTANT_SHELL_TIMEOUT_MS ? Number(process.env.ASSISTANT_SHELL_TIMEOUT_MS) : undefined
+// Env vars still win over persisted config — see cli-config.ts's envOverridesFromProcessEnv
+// and config.ts's resolveConfig — so this stays a behavior-preserving migration for anyone
+// who already sets ASSISTANT_ENABLE_WEB etc. and never touches /config.
+const envOverrides = envOverridesFromProcessEnv(process.env)
 
-// ASSISTANT_LLM_BACKEND=claude-cli routes turns through a local `claude -p` subprocess
-// (your already-authenticated Claude Code CLI session) instead of the proxy + API key.
-// Note: unlike the proxy backend, this backend has no web_search/fetch_url wiring for
-// ASSISTANT_ENABLE_WEB yet — web_search has no default backend on this path either (see
-// claude-cli-llm-client.ts's doc comment), so ASSISTANT_ENABLE_WEB only takes effect on
-// the proxy (LLMClient) backend below.
-const llmClient: ILLMClient =
-  process.env.ASSISTANT_LLM_BACKEND === 'claude-cli'
-    ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: enableShell ? { workspaceRoot } : undefined })
-    : new LLMClient({ proxyUrl, authToken })
+// create() only supplies a default for storage the caller didn't already pass in (and falls
+// back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
+// what gives the CLI real persistence across runs. See plans/tauri_desktop_plan.html Phase 3.
+const backend = createNodeFsBackend()
 
-async function main(): Promise<void> {
-  // create() only supplies a default for storage the caller didn't already pass
-  // in (and falls back to in-memory outside a browser) — passing these explicit,
-  // filesystem-backed stores is what gives the CLI real persistence across runs.
-  // See plans/tauri_desktop_plan.html Phase 3.
-  const backend = createNodeFsBackend()
-  const assistant = await PersonalAssistant.create({
+/**
+ * Builds a fresh PersonalAssistant (and the llmClient/search function it depends on) from a
+ * resolved AssistantConfig — called once at startup and again after any /config change that
+ * takes effect, so nothing requires a process restart. Reuses the same dataDir-backed stores
+ * each time, so transcripts/experience/checkpoints/reminders carry over across a rebuild.
+ */
+async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
+  const workspaceRoot = config.workspaceRoot ?? process.cwd()
+  const search =
+    config.searchBackend === 'brave'
+      ? (query: string) => braveSearch(query, config.braveApiKey as string)
+      : (query: string) => duckDuckGoSearch(query)
+
+  // Note: unlike the proxy backend, claude-cli has no web_search/fetch_url wiring for
+  // enableWeb yet — web_search has no default backend on this path either (see
+  // claude-cli-llm-client.ts's doc comment), so enableWeb only takes effect on the proxy
+  // (LLMClient) backend below.
+  const llmClient: ILLMClient =
+    config.llmBackend === 'claude-cli'
+      ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
+      : new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+
+  return PersonalAssistant.create({
     llmClient,
-    model,
+    model: config.model,
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
     reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
     fileTools: { backend, workspaceRoot },
-    webTools: enableWeb ? { search: (query) => duckDuckGoSearch(query) } : undefined,
+    webTools: config.enableWeb ? { search } : undefined,
     // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
     // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
-    shellTools: enableShell ? { backend, workspaceRoot, timeoutMs: shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
+    shellTools: config.enableShell ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
   })
+}
+
+async function main(): Promise<void> {
+  const persisted = await configStore.load()
+  let { config, overriddenKeys } = resolveConfig(persisted, envOverrides)
+
+  try {
+    validateConfig({}, config)
+  } catch (err) {
+    if (!(err instanceof ConfigValidationError)) throw err
+    console.error(err.message)
+    process.exit(1)
+  }
+
+  let assistant = await buildAssistant(config)
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
 
   // No silent default: capabilities only appear in the banner when actually configured,
   // so the banner never implies something is available that isn't.
   const enabledCapabilities: string[] = []
-  if (enableWeb) enabledCapabilities.push('web search/fetch')
-  if (enableShell) enabledCapabilities.push('shell commands (approval-gated)')
+  if (config.enableWeb) enabledCapabilities.push(`web search/fetch (${config.searchBackend})`)
+  if (config.enableShell) enabledCapabilities.push('shell commands (approval-gated)')
   const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
 
   console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n`)
+  console.log('Type /config to view settings.\n')
   rl.prompt()
 
   let lastTrace: AssistantTrace | undefined
   let lastSources: AssistantSource[] | undefined
+  let lastPlanStatus: AssistantTurnResult['planStatus']
+
+  const PLAN_TASK_STATUS_ICON: Record<string, string> = {
+    PENDING: '○', RUNNING: '▶', COMPLETE: '✓', FAILED: '✗', BLOCKED: '✗', HUMAN_REQUIRED: '~',
+  }
+
+  function printPlan(): void {
+    if (!lastPlanStatus) {
+      console.log('\nNo active plan for this session.\n')
+      return
+    }
+    console.log(`\nPlan: ${lastPlanStatus.templateName} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`)
+    for (const task of lastPlanStatus.tasks) {
+      console.log(`  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`)
+    }
+    console.log(`\nSuccess criteria: ${lastPlanStatus.successCriteria}\n`)
+  }
 
   function verificationHealthLabel({ strength, feasibility }: AssistantTrace['verificationHealth']): string {
     const confidence = Math.min(strength, feasibility)
@@ -197,14 +233,16 @@ async function main(): Promise<void> {
 
       lastTrace = result.trace
       lastSources = result.sources
+      lastPlanStatus = result.planStatus
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
+      const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''
       if (streamedAnyTokens) {
         // The reply text is already on screen, printed token-by-token as it
         // streamed in — just append whatever suffix belongs after it.
-        process.stdout.write(`${riskSuffix}${sourcesHint}\n\n`)
+        process.stdout.write(`${riskSuffix}${sourcesHint}${planHint}\n\n`)
       } else {
-        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}\n`)
+        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
@@ -221,13 +259,111 @@ async function main(): Promise<void> {
     })
   }
 
+  // Refreshes `config`/`overriddenKeys` from disk and rebuilds `assistant` so a persisted
+  // change (set or reset) takes effect on the very next turn — no restart needed. Cheap
+  // enough to call unconditionally rather than special-casing which keys "matter": it's
+  // just re-running the same wiring buildAssistant/main already do once at startup.
+  async function reloadAssistant(): Promise<void> {
+    const nextPersisted = await configStore.load()
+    ;({ config, overriddenKeys } = resolveConfig(nextPersisted, envOverrides))
+    assistant = await buildAssistant(config)
+  }
+
+  async function handleConfigCommand(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      console.log(`\n${formatConfigListing(config, overriddenKeys)}\n`)
+      return
+    }
+
+    if (args[0] === 'set') {
+      const key = args[1]
+      const raw = args.slice(2).join(' ')
+      if (!key || !isConfigKey(key)) {
+        console.log(`\n✗ Unknown config key "${key ?? ''}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
+        return
+      }
+      if (!raw) {
+        console.log(`\nUsage: /config set ${key} <value>\n`)
+        return
+      }
+      if (overriddenKeys.has(key)) {
+        console.log(`\n✗ "${key}" is pinned by ${ENV_VAR_FOR_CONFIG_KEY[key]} — unset that env var to change it here.\n`)
+        return
+      }
+
+      let value: unknown
+      try {
+        value = parseConfigValue(key, raw)
+      } catch (err) {
+        if (!(err instanceof ConfigValueParseError)) throw err
+        console.log(`\n✗ ${err.message}\n`)
+        return
+      }
+
+      const patch = { [key]: value } as Partial<AssistantConfig>
+      try {
+        validateConfig(patch, config)
+      } catch (err) {
+        if (!(err instanceof ConfigValidationError)) throw err
+        console.log(`\n✗ ${err.message}\n`)
+        return
+      }
+
+      await configStore.save(patch)
+      await reloadAssistant()
+      console.log(`\n✓ ${key} updated (took effect immediately, no restart needed)\n`)
+      return
+    }
+
+    if (args[0] === 'reset') {
+      const key = args[1]
+      if (key && !isConfigKey(key)) {
+        console.log(`\n✗ Unknown config key "${key}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
+        return
+      }
+      const clearPatch = key
+        ? ({ [key]: undefined } as Partial<AssistantConfig>)
+        : (Object.fromEntries(CONFIG_KEYS.map((k) => [k, undefined])) as Partial<AssistantConfig>)
+      await configStore.save(clearPatch)
+      await reloadAssistant()
+      console.log(`\n✓ Reset ${key ?? 'all settings'} to default\n`)
+      return
+    }
+
+    console.log('\nUsage: /config | /config set <key> <value> | /config reset [key]\n')
+  }
+
+  // readline's 'line' event fires for every buffered line as soon as it's parsed — it does
+  // not wait for a previous line's async handler to finish, so piped/pasted multi-line input
+  // can dispatch several commands concurrently. That's harmless for read-only commands
+  // (/why, /sources, a plain turn) but not for /config: two concurrent handleConfigCommand
+  // calls read and validate against the same in-memory `config` before either's update lands,
+  // which can both corrupt the on-screen result and validate against stale state. Chaining
+  // every dispatch onto `dispatchQueue` makes the loop a real REPL — one command fully
+  // resolves before the next begins — matching what a human typing into the prompt would
+  // experience anyway.
+  let dispatchQueue: Promise<void> = Promise.resolve()
   rl.on('line', (line) => {
     const message = line.trim()
     if (!message) { rl.prompt(); return }
-    if (message === '/why') { printWhy(); rl.prompt(); return }
-    if (message === '/sources') { printSources(); rl.prompt(); return }
-
-    void handleTurn(message).finally(() => rl.prompt())
+    dispatchQueue = dispatchQueue
+      .then(async () => {
+        if (message === '/why') { printWhy(); rl.prompt(); return }
+        if (message === '/sources') { printSources(); rl.prompt(); return }
+        if (message === '/plan') { printPlan(); rl.prompt(); return }
+        if (message === '/config' || message.startsWith('/config ')) {
+          await handleConfigCommand(message.split(/\s+/).slice(1))
+          rl.prompt()
+          return
+        }
+        await handleTurn(message)
+        rl.prompt()
+      })
+      // An unexpected throw here must not poison the queue for lines typed after it.
+      .catch((err) => {
+        console.error('[unexpected error]', err)
+        rl.prompt()
+      })
   })
 }
 

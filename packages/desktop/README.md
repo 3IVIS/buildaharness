@@ -26,6 +26,19 @@ npm run build --workspace=packages/desktop   # release binary + installers under
 Requires a Rust toolchain (`rustup`) — Tauri 2.11's dependencies need
 `rustc >= 1.88`.
 
+## Settings and the workspace picker
+
+chat-ui's gear-icon Settings screen (see `packages/chat-ui/README.md`) is
+identical here, plus a desktop-only Workspace section: "Choose…" opens a
+native folder-picker dialog via the `pick_workspace_directory` Tauri command
+(`src-tauri/src/lib.rs`, backed by `tauri-plugin-dialog`, permissioned via
+`dialog:allow-open` in `src-tauri/capabilities/default.json`). The chosen
+path persists through `tauri-config-store.ts` (the same `FileSystemAdapter`
+already used for transcripts) and becomes `fileTools`' `workspaceRoot` for
+`read_file`/`list_directory`/`write_file`, taking over from
+`get_dev_workspace_root()` — the compile-time monorepo root, dev-mode-only —
+which remains the fallback until a user picks a real directory.
+
 ## Distribution
 
 Tagged releases (`git tag desktop-v0.1.0 && git push origin desktop-v0.1.0`)

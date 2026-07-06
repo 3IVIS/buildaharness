@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from './App'
@@ -28,6 +28,11 @@ vi.mock('@buildaharness/personal-assistant', async () => {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    localStorage.clear()
   })
 
   it('sends a message and renders the assistant reply', async () => {
@@ -55,5 +60,34 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Approved.')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText('echo: needs approval please')).toBeInTheDocument())
+  })
+
+  it('opens Settings via the gear icon, saves a change, and returns to the chat view', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByText('Settings')).toBeInTheDocument()
+
+    const proxyInput = screen.getByDisplayValue('http://localhost:8787')
+    await user.clear(proxyInput)
+    await user.type(proxyInput, 'http://saved-proxy:9')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument())
+    expect(JSON.parse(localStorage.getItem('buildaharness.personal-assistant.config') ?? '{}')).toMatchObject({
+      proxyUrl: 'http://saved-proxy:9',
+    })
+  })
+
+  it('Cancel from Settings returns to chat without persisting anything', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+    expect(localStorage.getItem('buildaharness.personal-assistant.config')).toBeNull()
   })
 })

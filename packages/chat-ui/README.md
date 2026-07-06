@@ -31,6 +31,35 @@ Renders each `AssistantTurnResult` status distinctly:
 - `escalated` — a halt banner; the harness needs more information than the
   turn provided and there's nothing to approve.
 
+## Settings
+
+The gear icon in the header swaps the whole screen for `SettingsScreen.tsx` —
+not a modal — covering Connection (proxy URL/auth token/model), Web Search
+(enable, ddg/brave, Brave API key), Shell (enable, timeout), and, on the
+Tauri desktop build only, Workspace (a native folder picker, via the Rust
+`pick_workspace_directory` command in `packages/desktop/src-tauri`). The
+Connection section is hidden on desktop since it always talks to the user's
+own already-authenticated `claude -p` session, not the proxy.
+
+Settings persist through a `ConfigStore` (`@buildaharness/personal-assistant`'s
+shared `AssistantConfig`/`resolveConfig`) — `browser-config-store.ts`
+(`localStorage`) in a plain browser, `tauri-config-store.ts` (the same
+`FileSystemAdapter` already used for transcripts, under a `config`
+namespace) on desktop. `VITE_ASSISTANT_PROXY_URL`/`_TOKEN`/`_MODEL` still win
+over whatever's persisted — see `browser-config.ts` — so an existing deployed
+build with those baked in behaves exactly as before; Settings only changes
+the default that applies when none of those are set. Saving tears down and
+recreates the `PersonalAssistant` instance so a change applies to the very
+next turn, no reload needed.
+
+**Known limitation**: `enableWeb`/`enableShell`/`searchBackend`/`braveApiKey`
+are shown and persisted for schema consistency with the CLI, but chat-ui has
+no `web_search`/`fetch_url`/`run_shell_command` wiring of its own yet (see
+`App.tsx`'s doc comment) — those toggles don't change behavior here until
+that capability is added separately. Secrets (`authToken`, `braveApiKey`) are
+stored in plaintext (`localStorage` or an unencrypted JSON file), same trust
+boundary as the CLI's `config.json` — not an OS keychain.
+
 ## Usage
 
 ```bash

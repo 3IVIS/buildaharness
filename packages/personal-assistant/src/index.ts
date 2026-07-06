@@ -51,3 +51,5 @@ export {
   isAbandonPhrase,
 } from './plan-store.js'
 export type { PlanRecord, PlanTaskRecord } from './plan-store.js'
+export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'
+export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'

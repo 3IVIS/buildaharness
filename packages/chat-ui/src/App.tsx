@@ -1,19 +1,43 @@
 import { useEffect, useRef, useState } from 'react'
 import { isTauri, invoke } from '@tauri-apps/api/core'
-import { PersonalAssistant, nodeDisplayName, classifyError, type AssistantProgress, type AssistantToolStep } from '@buildaharness/personal-assistant'
+import {
+  PersonalAssistant,
+  nodeDisplayName,
+  classifyError,
+  resolveConfig,
+  type AssistantProgress,
+  type AssistantToolStep,
+  type AssistantConfig,
+  type ConfigStore,
+} from '@buildaharness/personal-assistant'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore } from '@buildaharness/runtime'
 import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
+import { SettingsScreen } from './components/SettingsScreen'
+import { BrowserConfigStore } from './browser-config-store'
+import { TauriConfigStore } from './tauri-config-store'
+import { envOverridesFromImportMetaEnv } from './browser-config'
 import type { ChatEntry } from './types'
 
-const proxyUrl = import.meta.env.VITE_ASSISTANT_PROXY_URL ?? 'http://localhost:8787'
-const authToken = import.meta.env.VITE_ASSISTANT_PROXY_TOKEN ?? ''
-const model = import.meta.env.VITE_ASSISTANT_MODEL || undefined
+// Env/build-time vars still win over persisted config — see browser-config.ts and
+// config.ts's resolveConfig — so nothing changes for a deployed build that already sets
+// VITE_ASSISTANT_PROXY_URL/_TOKEN/_MODEL and never opens Settings.
+const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
 
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+}
+
+/** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
+async function createConfigStore(): Promise<ConfigStore> {
+  if (!isTauri()) return new BrowserConfigStore()
+  const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
+    import('@tauri-apps/api/path'),
+    import('./tauri-fs-backend'),
+  ])
+  return new TauriConfigStore({ backend: createTauriFsBackend(), baseDir: await appLocalDataDir() })
 }
 
 /**
@@ -30,30 +54,37 @@ function newId(): string {
  * already-authenticated Claude Code CLI session instead, the same way personal-assistant's
  * own CLI front end does with ASSISTANT_LLM_BACKEND=claude-cli.
  *
- * fileTools is wired to `get_dev_workspace_root()` — the monorepo root, computed on the
- * Rust side from this crate's compile-time location, not a real per-user sandboxed
- * workspace (see that Rust command's doc comment). This is dev-mode-only wiring so the
- * assistant has real files to read/list when asked about "this repo"; a production
- * desktop build would need a real user-chosen workspace directory instead, the same way
- * the CLI's ASSISTANT_WORKSPACE_DIR works. web/shell tools still aren't wired in.
+ * fileTools is wired to `config.workspaceRoot` if the user has picked one via the Settings
+ * screen's Workspace section, falling back to `get_dev_workspace_root()` (the monorepo root,
+ * computed on the Rust side from this crate's compile-time location — see that command's own
+ * doc comment) otherwise. Note: `config.enableWeb`/`enableShell`/`searchBackend` are
+ * persisted and shown in Settings for schema consistency with the CLI, but chat-ui has no
+ * web_search/fetch_url/run_shell_command wiring of its own yet — those toggles don't change
+ * behavior here until that capability is added, the same pre-existing gap this doc comment
+ * already noted before Settings existed.
  */
-async function createTauriBackedAssistant(): Promise<PersonalAssistant> {
+async function createTauriBackedAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
   const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('./tauri-fs-backend'),
   ])
   const baseDir = await appLocalDataDir()
   const backend = createTauriFsBackend()
-  const workspaceRoot = await invoke<string>('get_dev_workspace_root')
+  const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
 
   return PersonalAssistant.create({
     llmClient: new TauriClaudeCliLLMClient({ fileTools: true }),
-    model,
+    model: config.model,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
     fileTools: { backend, workspaceRoot },
   })
+}
+
+async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
+  if (isTauri()) return createTauriBackedAssistant(config)
+  return PersonalAssistant.create({ llmClient: new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken }), model: config.model })
 }
 
 export function App(): React.JSX.Element {
@@ -63,18 +94,48 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
+  const [view, setView] = useState<'chat' | 'settings'>('chat')
+  // Optimistic default so Settings is usable immediately — refreshed to the real persisted
+  // value once createConfigStore().load() resolves, a moment later (see the mount effect).
+  const initialResolved = resolveConfig({}, envOverrides)
+  const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
+  const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
   const assistantRef = useRef<PersonalAssistant | null>(null)
+  const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    const create = isTauri() ? createTauriBackedAssistant() : PersonalAssistant.create({ llmClient: new LLMClient({ proxyUrl, authToken }), model })
-    void create.then((assistant) => {
+    void (async () => {
+      const store = await createConfigStore()
+      const persisted = await store.load()
+      const resolved = resolveConfig(persisted, envOverrides)
+      if (cancelled) return
+      configStoreRef.current = store
+      setConfig(resolved.config)
+      setOverriddenKeys(resolved.overriddenKeys)
+      const assistant = await buildAssistant(resolved.config)
       if (!cancelled) assistantRef.current = assistant
-    })
+    })()
     return () => { cancelled = true }
   }, [])
+
+  async function handleSaveSettings(patch: Partial<AssistantConfig>): Promise<void> {
+    const store = configStoreRef.current
+    if (!store) return
+    await store.save(patch)
+    const persisted = await store.load()
+    const resolved = resolveConfig(persisted, envOverrides)
+    setConfig(resolved.config)
+    setOverriddenKeys(resolved.overriddenKeys)
+    assistantRef.current = await buildAssistant(resolved.config)
+    setView('chat')
+  }
+
+  async function handlePickWorkspaceDirectory(): Promise<string | null> {
+    return invoke<string | null>('pick_workspace_directory')
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -161,9 +222,26 @@ export function App(): React.JSX.Element {
     void runTurn(message, approved)
   }
 
+  if (view === 'settings') {
+    return (
+      <SettingsScreen
+        config={config}
+        overriddenKeys={overriddenKeys}
+        isDesktop={isTauri()}
+        busy={busy}
+        onSave={handleSaveSettings}
+        onCancel={() => setView('chat')}
+        onPickWorkspaceDirectory={isTauri() ? handlePickWorkspaceDirectory : undefined}
+      />
+    )
+  }
+
   return (
     <div className="app">
-      <header className="app__header">Assistant</header>
+      <header className="app__header">
+        <span className="app__header-title">Assistant</span>
+        <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => setView('settings')}>⚙</button>
+      </header>
       <div className="app__messages">
         {entries.map((entry) => {
           switch (entry.kind) {
