@@ -62,6 +62,33 @@ function scriptedResponses(responses: LLMStructuredResponse[], streamChunks?: st
   }, streamChunks)
 }
 
+/**
+ * ILLMClient whose callChat (plain-chat reply) and callChatStructured (used only
+ * by decomposeObjective, since no fileTools/webTools are configured in the tests
+ * that use this) return independently scripted content — lets a decomposition
+ * test assert on both the final reply and the decomposition call in one turn.
+ */
+class DecompositionAwareLLMClient implements ILLMClient {
+  calls = 0
+  structuredCalls = 0
+  constructor(private readonly reply: string, private readonly decompositionResponseContent: string) {}
+
+  async *callChat(): AsyncIterable<string> {
+    this.calls++
+    yield this.reply
+  }
+
+  async callChatSync(): Promise<string> {
+    this.calls++
+    return this.reply
+  }
+
+  async callChatStructured(): Promise<LLMStructuredResponse> {
+    this.structuredCalls++
+    return { content: this.decompositionResponseContent }
+  }
+}
+
 /** In-memory FsBackend standing in for a real disk, for the fileTools tests below. */
 function makeFakeBackend(): FsBackend {
   const files = new Map<string, string>()
@@ -487,5 +514,45 @@ describe('PersonalAssistant web + reminder tools', () => {
     expect(result.status).toBe('ok')
     const reminders = await reminderStore.list()
     expect(reminders.some(r => r.rawText === 'water the plants')).toBe(true)
+  })
+})
+
+describe('PersonalAssistant dynamic decomposition', () => {
+  it('spends one extra LLM call decomposing a compound request, and still completes the turn', async () => {
+    const decompositionJson = JSON.stringify({
+      tasks: [
+        { id: 'step-1', description: 'Book the flight', depends_on: [] },
+        { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
+      ],
+    })
+    const llm = new DecompositionAwareLLMClient('All booked.', decompositionJson)
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('First book my flight to Paris, then book a hotel near the Louvre.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('All booked.')
+    expect(llm.structuredCalls).toBe(1)
+  })
+
+  it('does not spend a decomposition call on an ordinary short request', async () => {
+    const llm = new DecompositionAwareLLMClient('Sure.', '{}')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Can you help me plan something?')
+
+    expect(result.status).toBe('ok')
+    expect(llm.structuredCalls).toBe(0)
+  })
+
+  it('falls back to the single-task graph when decomposition returns malformed JSON', async () => {
+    const llm = new DecompositionAwareLLMClient('Handled anyway.', 'not valid json')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('First do this, then do that, then wrap it all up nicely for me please.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Handled anyway.')
+    expect(llm.structuredCalls).toBe(1)
   })
 })

@@ -28,6 +28,7 @@ import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikely } from './trust-tagging.js'
+import { classifyDecompositionCandidate, decomposeObjective } from './decomposition-classifier.js'
 
 const SYSTEM_PROMPT =
   'You are a helpful, concise personal assistant. Answer directly; ask a clarifying question only when the request is genuinely ambiguous. ' +
@@ -295,6 +296,28 @@ export class PersonalAssistant {
       assigned_strategy: null,
     }
 
+    // A compound-looking request spends one extra LLM call decomposing itself into
+    // multiple tasks — gated by a zero-cost pre-classifier, so an ordinary single-step
+    // turn never pays for this. Falls back to the single-task graph above on a parse
+    // failure or a single-task result (decomposeObjective's own load-bearing fallback).
+    let initialTasks: Task[] = [task]
+    const decompositionCandidate = classifyDecompositionCandidate(userMessage)
+    if (decompositionCandidate.isCandidate) {
+      const decomposed = await decomposeObjective(this.llmClient, userMessage, this.model)
+      if (decomposed) {
+        initialTasks = decomposed.map((d): Task => ({
+          id: d.id,
+          description: d.description,
+          status: 'PENDING',
+          risk_level: classification.riskLevel,
+          depends_on: d.depends_on,
+          parallel_write_domains: [],
+          abstraction_level: 0,
+          assigned_strategy: null,
+        }))
+      }
+    }
+
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under
     // if this turn's process died mid-run before reaching the `finally` cleanup below.
@@ -304,7 +327,12 @@ export class PersonalAssistant {
 
     try {
       const runOptions = {
-        initialTasks: [task],
+        initialTasks,
+        // Every task in a decomposed graph executes against the same single
+        // draftReply — PersonalAssistant still makes only one real content-generating
+        // LLM call per turn (plus decomposeObjective's own call, when it ran).
+        // Decomposition changes the harness's task-graph *shape* (visible in
+        // stepsUsed/nodeExecutionOrder), not the number of distinct replies produced.
         toolExecutors: { default: () => draftReply },
         experienceStore: this.experienceStore,
         max_steps: this.maxSteps,
