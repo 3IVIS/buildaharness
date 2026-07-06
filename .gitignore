@@ -58,3 +58,4 @@ packages/canvas/node_modules/
 # Private plugin files — live in private repo only, not tracked here
 adapter/private_tool_impls.py
 src/spec/flows/coaching.ts
+CLAUDE.md
