@@ -89,6 +89,31 @@ describe('ClaudeCliLLMClient', () => {
       }
       expect(mcpConfig.mcpServers['file-tools'].env.WORKSPACE_ROOT).toBe(workspaceRoot)
       expect(mcpConfig.mcpServers['file-tools'].args[0]).toMatch(/file-tools-mcp-server\.mjs$/)
+      // No remindersFile was configured on this client — REMINDERS_FILE must stay absent
+      // rather than present-but-undefined, so the MCP server's own env-var check (a plain
+      // `if (remindersFile)`) sees it as truly unset.
+      expect(mcpConfig.mcpServers['file-tools'].env.REMINDERS_FILE).toBeUndefined()
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('passes REMINDERS_FILE through --mcp-config when remindersFile is configured', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'reminder set' })))
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile: '/data/reminders/reminders.json' })
+
+      await client.callChatStructured(
+        [{ role: 'user', content: 'remind me to call mom' }],
+        [{ name: 'create_reminder', input_schema: {} }],
+      )
+
+      const args = spawnMock.mock.calls[0][1] as string[]
+      const mcpConfig = JSON.parse(args[args.indexOf('--mcp-config') + 1]) as {
+        mcpServers: Record<string, { env: Record<string, string> }>
+      }
+      expect(mcpConfig.mcpServers['file-tools'].env.REMINDERS_FILE).toBe('/data/reminders/reminders.json')
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

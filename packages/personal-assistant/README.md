@@ -203,10 +203,11 @@ Claude Code CLI session rather than an API key (`CLAUDE_PATH` overrides the
 ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
 ```
 
-Transcript, learned experience, and any in-flight turn's checkpoint persist as
-real files under `~/.buildaharness/personal-assistant/` (`transcripts/`,
-`experience/`, `checkpoints/`), so conversation history and learning survive
-between runs — quit and restart the CLI and it remembers.
+Transcript, learned experience, reminders, and any in-flight turn's checkpoint
+persist as real files under `~/.buildaharness/personal-assistant/`
+(`transcripts/`, `experience/`, `reminders/`, `checkpoints/`), so conversation
+history and learning survive between runs — quit and restart the CLI and it
+remembers.
 
 ## Commands
 

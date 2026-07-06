@@ -17,6 +17,19 @@ export interface ClaudeCliLLMClientOptions {
    * turn through this backend stays fully tool-free, exactly as before.
    */
   fileTools?: { workspaceRoot: string }
+  /**
+   * When set (and fileTools is also set — the MCP server only starts at all
+   * when fileTools is configured), also registers create_reminder/list_reminders
+   * on the same MCP server, backed by this file. Must point at the exact file a
+   * `FileSystemAdapter` (namespace "reminders") would use for the key
+   * "reminders" — see file-tools-mcp-server.mjs's doc comment — so this
+   * subprocess and the parent process's own ReminderStore share one reminder
+   * list instead of drifting into two disconnected ones. Absent by default —
+   * those two tools stay unregistered, same as before this option existed.
+   * fetch_url needs no such option: it's registered unconditionally whenever
+   * fileTools is set, since it has no shared-state dependency to configure.
+   */
+  remindersFile?: string
 }
 
 function buildPrompt(messages: ChatMessage[]): { systemPrompt: string; prompt: string } {
@@ -63,10 +76,12 @@ function invokeClaude(claudePath: string, args: string[]): Promise<string> {
 export class ClaudeCliLLMClient implements ILLMClient {
   private readonly claudePath: string
   private readonly fileTools?: { workspaceRoot: string }
+  private readonly remindersFile?: string
 
   constructor(options: ClaudeCliLLMClientOptions = {}) {
     this.claudePath = options.claudePath ?? process.env.CLAUDE_PATH ?? 'claude'
     this.fileTools = options.fileTools
+    this.remindersFile = options.remindersFile
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -84,13 +99,22 @@ export class ClaudeCliLLMClient implements ILLMClient {
   /**
    * When `tools` is non-empty and `fileTools` was configured, wires the file-tools
    * MCP server into a single `claude -p` call and lets Claude Code's own agentic
-   * loop call read_file/list_directory/write_file autonomously — we don't get to
-   * intercept each call the way the proxy backend's manual tool loop does (see
-   * plans/personal_assistant_file_tools_plan.html, T6). Two possible outcomes:
-   * a final text reply (no tool call this backend needs to surface), or a write
-   * staged by the MCP server mid-call, surfaced as a synthetic `__staged_write`
-   * tool call so assistant.ts's tool loop treats it the same as a manually staged
-   * write without staging it a second time.
+   * loop call read_file/list_directory/write_file/fetch_url/create_reminder/
+   * list_reminders autonomously — we don't get to intercept each call the way
+   * the proxy backend's manual tool loop does (see
+   * plans/personal_assistant_file_tools_plan.html, T6). fetch_url is always
+   * registered on that server; create_reminder/list_reminders only when
+   * `remindersFile` is also set. web_search is never registered — there is no
+   * default search backend to call on either LLM backend (see web-tools.ts).
+   * Three possible outcomes: a final text reply (no tool call this backend
+   * needs to surface), a write staged by the MCP server mid-call (surfaced as
+   * a synthetic `__staged_write` tool call so assistant.ts's tool loop treats
+   * it the same as a manually staged write without staging it a second time),
+   * or — for fetch_url/create_reminder/list_reminders — the tool's result text
+   * folded directly into Claude Code's own reply, since (unlike the proxy
+   * backend's `executeToolCall`) there's no outer loop here to intercept each
+   * call and re-apply trust-tagging itself; the MCP server tags fetch_url's
+   * result before Claude Code ever sees it instead (see file-tools-mcp-server.mjs).
    */
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     if (!tools || tools.length === 0) {
@@ -113,7 +137,10 @@ export class ClaudeCliLLMClient implements ILLMClient {
         'file-tools': {
           command: 'node',
           args: [mcpServerPath],
-          env: { WORKSPACE_ROOT: this.fileTools.workspaceRoot },
+          env: {
+            WORKSPACE_ROOT: this.fileTools.workspaceRoot,
+            ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile } : {}),
+          },
         },
       },
     })
