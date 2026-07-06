@@ -29,7 +29,20 @@ import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, type ShellToolsContext } from './shell-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikely } from './trust-tagging.js'
-import { classifyDecompositionCandidate, decomposeObjective } from './decomposition-classifier.js'
+import { classifyDecompositionCandidate, decomposeObjective, type DecomposedTaskSpec } from './decomposition-classifier.js'
+import { classifyPlanningCandidate } from './planning-classifier.js'
+import { buildPlanFromTemplate } from './plan-builder.js'
+import { loadTemplate } from './plan-templates/index.js'
+import {
+  loadActivePlan,
+  createPlanRecord,
+  savePlan,
+  abandonPlan,
+  updatePlanFromRun,
+  planCompletionPct,
+  isAbandonPhrase,
+  type PlanRecord,
+} from './plan-store.js'
 import type { TraceEvent } from './trace-events.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 
@@ -52,6 +65,32 @@ function previewContent(content: string, maxLines = 20): string {
   const lines = content.split('\n')
   if (lines.length <= maxLines) return content
   return `${lines.slice(0, maxLines).join('\n')}\n… (truncated)`
+}
+
+/**
+ * Builds a fresh harness Task[] from a flat task-spec list — shared by the single-task
+ * fallback, the ad hoc decomposition path, a newly built plan, and a resumed plan.
+ * `status` defaults to 'PENDING' when omitted (decomposeObjective's and
+ * buildPlanFromTemplate's output never carries one). A resumed plan passes its tasks'
+ * real statuses through *including* COMPLETE ones — TaskGraph.selectUnblockedLeaf
+ * resolves depends_on by looking up each dependency's status in the current graph, so
+ * a completed dependency that got filtered out of initialTasks would never register as
+ * satisfied and its dependents would stay permanently blocked.
+ */
+function toHarnessTasks(
+  tasks: { id: string; description: string; depends_on: string[]; status?: Task['status'] }[],
+  riskLevel: Task['risk_level'],
+): Task[] {
+  return tasks.map((t): Task => ({
+    id: t.id,
+    description: t.description,
+    status: t.status ?? 'PENDING',
+    risk_level: riskLevel,
+    depends_on: t.depends_on,
+    parallel_write_domains: [],
+    abstraction_level: 0,
+    assigned_strategy: null,
+  }))
 }
 
 type ToolLoopResult =
@@ -92,6 +131,19 @@ export interface AssistantTurnResult {
   pendingActionKind?: 'write' | 'shell'
   /** Real read_file/list_directory calls made while producing this reply, in call order. Only set when fileTools is configured and at least one such call happened this turn. */
   sources?: AssistantSource[]
+  /**
+   * Structured, durable plan progress — present whenever a templated plan (new or
+   * resumed) drove this turn's initialTasks, absent otherwise (same "absent when
+   * unused" convention as trace/sources). Unlike trace, this can be non-null across
+   * many consecutive turns in the same session: the plan persists in `memory` until
+   * every task is COMPLETE or the user abandons it. See plan-store.ts.
+   */
+  planStatus?: {
+    templateName: string
+    successCriteria: string
+    completionPct: number
+    tasks: { id: string; description: string; status: string }[]
+  }
 }
 
 export interface AssistantProgress {
@@ -339,36 +391,44 @@ export class PersonalAssistant {
       return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources }
     }
 
-    const task: Task = {
-      id: 'respond',
-      description: userMessage,
-      status: 'PENDING',
-      risk_level: classification.riskLevel,
-      depends_on: [],
-      parallel_write_domains: [],
-      abstraction_level: 0,
-      assigned_strategy: null,
-    }
-
     // A compound-looking request spends one extra LLM call decomposing itself into
     // multiple tasks — gated by a zero-cost pre-classifier, so an ordinary single-step
-    // turn never pays for this. Falls back to the single-task graph above on a parse
+    // turn never pays for this. Falls back to the single-task graph below on a parse
     // failure or a single-task result (decomposeObjective's own load-bearing fallback).
-    let initialTasks: Task[] = [task]
+    let initialTasks: Task[] = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], classification.riskLevel)
+    let decomposed: DecomposedTaskSpec[] | null = null
     const decompositionCandidate = classifyDecompositionCandidate(userMessage)
     if (decompositionCandidate.isCandidate) {
-      const decomposed = await decomposeObjective(this.llmClient, userMessage, this.model)
+      decomposed = await decomposeObjective(this.llmClient, userMessage, this.model)
       if (decomposed) {
-        initialTasks = decomposed.map((d): Task => ({
-          id: d.id,
-          description: d.description,
-          status: 'PENDING',
-          risk_level: classification.riskLevel,
-          depends_on: d.depends_on,
-          parallel_write_domains: [],
-          abstraction_level: 0,
-          assigned_strategy: null,
-        }))
+        initialTasks = toHarnessTasks(decomposed, classification.riskLevel)
+      }
+    }
+
+    // Structured planning: an active plan for this session takes precedence over
+    // re-classifying every turn, so an unrelated aside mid-plan doesn't get silently
+    // reinterpreted as "start a new plan" — see plan-store.ts / planning-classifier.ts.
+    let activePlan: PlanRecord | null = await loadActivePlan(this.memory, sessionId)
+    if (activePlan && isAbandonPhrase(userMessage)) {
+      await abandonPlan(this.memory, sessionId, activePlan)
+      activePlan = null
+    }
+
+    if (activePlan) {
+      initialTasks = toHarnessTasks(activePlan.tasks, classification.riskLevel)
+    } else {
+      const planningCandidate = classifyPlanningCandidate(userMessage, decomposed)
+      this.onTrace?.({ kind: 'plan_classified', isCandidate: planningCandidate.isCandidate, matchedTemplate: planningCandidate.matchedTemplate })
+      if (planningCandidate.isCandidate && planningCandidate.matchedTemplate) {
+        const template = loadTemplate(planningCandidate.matchedTemplate)
+        const plan = await buildPlanFromTemplate(this.llmClient, userMessage, template, this.model)
+        if (plan) {
+          activePlan = createPlanRecord(plan)
+          await savePlan(this.memory, sessionId, activePlan)
+          initialTasks = toHarnessTasks(activePlan.tasks, classification.riskLevel)
+        }
+        // plan is null (malformed/insufficient LLM response): fall through to
+        // whatever initialTasks decomposition already produced above, unchanged.
       }
     }
 
@@ -430,11 +490,29 @@ export class PersonalAssistant {
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
 
+      // Write the harness's resulting task statuses back onto the plan only on this
+      // success path — an aborted/errored turn leaves the stored plan as-is, so a
+      // crash mid-turn can't corrupt plan state; the plan simply gets resumed and
+      // re-driven next turn instead.
+      let planStatus: AssistantTurnResult['planStatus']
+      if (activePlan) {
+        activePlan = updatePlanFromRun(activePlan, result.initResult.taskGraph.tasks)
+        await savePlan(this.memory, sessionId, activePlan)
+        const completionPct = planCompletionPct(activePlan)
+        this.onTrace?.({ kind: 'plan_updated', templateName: activePlan.templateName, completionPct })
+        planStatus = {
+          templateName: activePlan.templateName,
+          successCriteria: activePlan.successCriteria,
+          completionPct,
+          tasks: activePlan.tasks.map((t) => ({ id: t.id, description: t.description, status: t.status })),
+        }
+      }
+
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
       await this.recordFacts(sessionId, userMessage)
 
-      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources }
+      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus }
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')

@@ -33,3 +33,21 @@ export type { ShellToolsContext, ShellStagingContext, ShellToolResult, ShellComm
 export { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
 export { stripMcpToolPrefix, summarizeToolStep } from './tool-step.js'
 export type { AssistantToolStep } from './tool-step.js'
+export type { DecomposedTaskSpec } from './decomposition-classifier.js'
+export { classifyPlanningCandidate } from './planning-classifier.js'
+export type { PlanningCandidateClassification } from './planning-classifier.js'
+export { buildPlanFromTemplate } from './plan-builder.js'
+export type { Plan } from './plan-builder.js'
+export { loadTemplate, listTemplateNames, pickTemplateForTask, matchTemplateIfConfident } from './plan-templates/index.js'
+export type { PlanTask, PlanTemplate } from './plan-templates/index.js'
+export {
+  loadActivePlan,
+  createPlanRecord,
+  savePlan,
+  abandonPlan,
+  updatePlanFromRun,
+  planCompletionPct,
+  formatPlanProgress,
+  isAbandonPhrase,
+} from './plan-store.js'
+export type { PlanRecord, PlanTaskRecord } from './plan-store.js'

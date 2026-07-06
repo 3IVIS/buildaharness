@@ -1,0 +1,72 @@
+{
+  "name": "content_creation",
+  "version": "1.0.0",
+  "success_criteria": "A polished, peer-reviewed piece of content is finalised and ready for publication or delivery.",
+  "tags": ["content", "writing", "communication"],
+  "tasks": [
+    {
+      "id": "brief",
+      "title": "Define brief",
+      "description": "Clarify the content goal, target audience, format, tone, length, and success metrics.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "outline",
+      "title": "Create outline",
+      "description": "Structure the content: define sections, key messages per section, and the logical flow.",
+      "depends_on": ["brief"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "draft",
+      "title": "Write draft",
+      "description": "Produce the first full draft following the outline. Focus on completeness over perfection.",
+      "depends_on": ["outline"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["draft"]
+    },
+    {
+      "id": "gather_references",
+      "title": "Gather references",
+      "description": "Collect supporting sources, data, quotes, and visuals that will strengthen the content.",
+      "depends_on": ["outline"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["references"]
+    },
+    {
+      "id": "peer_review",
+      "title": "Peer review",
+      "description": "Have at least one reviewer assess the draft for accuracy, clarity, tone, and completeness.",
+      "depends_on": ["draft", "gather_references"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "revise",
+      "title": "Revise",
+      "description": "Incorporate review feedback. Address all critical comments before finalisation.",
+      "depends_on": ["peer_review"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "finalise",
+      "title": "Finalise",
+      "description": "Apply final formatting, proofread, and approve for publication or delivery.",
+      "depends_on": ["revise"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

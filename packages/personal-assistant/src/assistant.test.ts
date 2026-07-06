@@ -709,6 +709,137 @@ describe('PersonalAssistant dynamic decomposition', () => {
   })
 })
 
+describe('PersonalAssistant structured planning', () => {
+  const planningMessage =
+    'Plan and launch the Q3 onboarding redesign project, then build the rollout schedule and deliver the milestone roadmap.'
+
+  function decompositionResponse(count = 4): LLMStructuredResponse {
+    const tasks = Array.from({ length: count }, (_, i) => ({
+      id: `step-${i + 1}`,
+      description: `Step ${i + 1}`,
+      depends_on: i > 0 ? [`step-${i}`] : [],
+    }))
+    return { content: JSON.stringify({ tasks }) }
+  }
+
+  function planBuilderResponse(): LLMStructuredResponse {
+    const tasks = [
+      { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [] },
+      { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'] },
+      { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'] },
+      { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'] },
+      { id: 'schedule', description: 'Build the redesign schedule', depends_on: ['resource_planning', 'risk_assessment'] },
+      { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'] },
+    ]
+    return { content: JSON.stringify({ tasks }) }
+  }
+
+  it('creates a PlanRecord and reports planStatus for a planning-shaped request that decomposes into 4+ tasks', async () => {
+    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+
+    expect(result.status).toBe('ok')
+    expect(result.planStatus).toBeDefined()
+    expect(result.planStatus!.templateName).toBe('project_planning')
+    expect(result.planStatus!.tasks.map((t) => t.id)).toEqual([
+      'scope_definition', 'work_breakdown', 'resource_planning', 'risk_assessment', 'schedule', 'kickoff',
+    ])
+    expect(llm.calls).toBe(2) // decomposition + plan-builder structured calls
+  })
+
+  it('does not build a plan when decomposition produces fewer than 4 tasks, even with template keywords present', async () => {
+    const llm = scriptedResponses([decompositionResponse(2)], ['Sure.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+
+    expect(result.status).toBe('ok')
+    expect(result.planStatus).toBeUndefined()
+    expect(llm.calls).toBe(1) // decomposition only — plan-builder never called
+  })
+
+  it('resumes an active plan on the next turn instead of re-classifying', async () => {
+    const llm = scriptedResponses(
+      [decompositionResponse(), planBuilderResponse(), decompositionResponse(), planBuilderResponse()],
+      ['All set.'],
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    expect(llm.calls).toBe(2)
+
+    // An unrelated short follow-up wouldn't classify as planning-shaped on its own —
+    // but the active plan from the previous turn should still drive this turn, with
+    // no fresh decomposition/plan-builder calls spent re-classifying it. Phrased to
+    // avoid the triviality fast path (which starts with "What"/"How" etc. and would
+    // skip the harness — and the plan resume logic — entirely; see triviality-classifier.ts).
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
+
+    expect(result.status).toBe('ok')
+    expect(result.planStatus).toBeDefined()
+    expect(result.planStatus!.templateName).toBe('project_planning')
+    expect(llm.calls).toBe(2) // unchanged — no new structured calls for the resumed turn
+  })
+
+  it('does not resume a plan from a different session', async () => {
+    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn(planningMessage, { sessionId: 'plan-session-a' })
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session-b' })
+
+    expect(result.planStatus).toBeUndefined()
+  })
+
+  it('abandons the active plan on an explicit abandon phrase, then falls back to ordinary decomposition on the next turn', async () => {
+    const llm = scriptedResponses(
+      [decompositionResponse(), planBuilderResponse(), decompositionResponse(4)],
+      ['All set.'],
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    expect(llm.calls).toBe(2)
+
+    const result = await assistant.turn('Forget this plan, let\'s do something else.', { sessionId: 'plan-session' })
+
+    expect(result.planStatus).toBeUndefined()
+    // The abandon-phrase message is short with no sequencing marker, so
+    // classifyDecompositionCandidate never triggers (no extra structured call), and
+    // with decomposed staying null, classifyPlanningCandidate can't reach its
+    // task-count threshold either — no plan-builder call. Call count is unchanged
+    // from the first turn.
+    expect(llm.calls).toBe(2)
+  })
+
+  it('falls back silently to the ad hoc decomposition graph when the plan-builder call returns malformed JSON', async () => {
+    const llm = scriptedResponses([decompositionResponse(), { content: 'not valid json' }], ['Handled anyway.'])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Handled anyway.')
+    expect(result.planStatus).toBeUndefined()
+    expect(llm.calls).toBe(2)
+  })
+
+  it('emits plan_classified and plan_updated trace events when a plan is created', async () => {
+    const events: TraceEvent[] = []
+    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) })
+
+    await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+
+    const classified = events.find((e) => e.kind === 'plan_classified')
+    expect(classified).toMatchObject({ kind: 'plan_classified', isCandidate: true, matchedTemplate: 'project_planning' })
+    const updated = events.find((e) => e.kind === 'plan_updated')
+    expect(updated).toMatchObject({ kind: 'plan_updated', templateName: 'project_planning' })
+  })
+})
+
 describe('PersonalAssistant onTrace', () => {
   it('emits turn_start, risk_classified, triviality_classified, and turn_end for a trivial turn', async () => {
     const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).')

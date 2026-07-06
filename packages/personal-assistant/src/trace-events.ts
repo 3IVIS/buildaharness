@@ -10,6 +10,8 @@ export type TraceEvent =
   | { kind: 'turn_end'; sessionId: string; status: 'ok' | 'needs_approval' | 'escalated' }
   | { kind: 'risk_classified'; riskLevel: RiskLevel; requiresApproval: boolean }
   | { kind: 'triviality_classified'; isTrivial: boolean }
+  | { kind: 'plan_classified'; isCandidate: boolean; matchedTemplate: string | null }
+  | { kind: 'plan_updated'; templateName: string; completionPct: number }
   | { kind: 'harness_node'; node: string; stepsUsed: number }
   | { kind: 'tool_call'; tool: string; ok: boolean }
   | { kind: 'escalation'; reason: string }
