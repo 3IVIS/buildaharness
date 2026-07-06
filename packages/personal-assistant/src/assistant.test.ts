@@ -159,6 +159,18 @@ describe('PersonalAssistant', () => {
     expect(llm.receivedMessages[1].some(m => m.content.includes('My name is Ali.'))).toBe(true)
   })
 
+  it('injects a fact captured on an earlier turn into a later turn\'s system prompt', async () => {
+    const llm = new FakeLLMClient('Nice to meet you, Ali.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('My name is Ali.', { sessionId: 'facts-test' })
+    await assistant.turn('What can you help with today?', { sessionId: 'facts-test' })
+
+    const secondCallSystemMessage = llm.receivedMessages[1].find(m => m.role === 'system')
+    expect(secondCallSystemMessage?.content).toContain('Known facts about the user:')
+    expect(secondCallSystemMessage?.content).toContain('My name is Ali.')
+  })
+
   it('answers a self-contained factual question via the triviality fast path, skipping the harness run', async () => {
     const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).')
     const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'test-checkpoints' })
