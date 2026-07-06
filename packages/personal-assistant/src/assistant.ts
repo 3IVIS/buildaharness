@@ -21,8 +21,14 @@ import {
 import { classifyRisk, type RiskClassification } from './risk-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
 import { FILE_TOOLS, executeFileTool, applyPendingWrite, discardPendingWrite, type FileToolsContext } from './file-tools.js'
+import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
+import { compactTranscript } from './transcript-compaction.js'
 
 const SYSTEM_PROMPT = 'You are a helpful, concise personal assistant. Answer directly; ask a clarifying question only when the request is genuinely ambiguous.'
+
+// Most-recent facts injected into the system prompt each turn — a hard cap,
+// not a summary, so this stays cheap even as the fact store grows.
+const FACT_CAP = 20
 
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
@@ -167,7 +173,16 @@ export class PersonalAssistant {
       return this.resolvePendingWrite(transcriptKey, options.pendingWriteId, options.approved ?? false)
     }
 
-    const transcript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
+    const rawTranscript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
+    const { transcript, compacted } = compactTranscript(rawTranscript)
+    if (compacted) await this.memory.set(transcriptKey, transcript)
+
+    const factsKey = `facts:${sessionId}`
+    const facts = ((await this.memory.get(factsKey)) as UserFact[] | undefined) ?? []
+    const factsBlock = facts.length > 0
+      ? `\nKnown facts about the user:\n${facts.slice(-FACT_CAP).map(f => `- ${f.text}`).join('\n')}`
+      : ''
+    const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
 
     const classification = classifyRisk(userMessage)
 
@@ -184,7 +199,7 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (this.fileTools) {
-      const loopResult = await this.runToolLoop(transcript, userMessage)
+      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -213,7 +228,7 @@ export class PersonalAssistant {
       // callChatSync would have returned when no listener is attached.
       draftReply = ''
       for await (const token of this.llmClient.callChat(
-        [{ role: 'system', content: SYSTEM_PROMPT }, ...transcript, { role: 'user', content: userMessage }],
+        [{ role: 'system', content: systemPrompt }, ...transcript, { role: 'user', content: userMessage }],
         { model: this.model },
       )) {
         draftReply += token
@@ -228,6 +243,7 @@ export class PersonalAssistant {
     if (triviality.isTrivial) {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
+      await this.recordFacts(sessionId, userMessage)
       return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources }
     }
 
@@ -295,6 +311,7 @@ export class PersonalAssistant {
 
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+      await this.recordFacts(sessionId, userMessage)
 
       return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources }
     } catch (err) {
@@ -316,18 +333,26 @@ export class PersonalAssistant {
     }
   }
 
+  /** Captures a durable fact from the user's message, if any, into the session's fact store. A no-op for ordinary turns. */
+  private async recordFacts(sessionId: string, userMessage: string): Promise<void> {
+    const facts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
+    for (const fact of facts) {
+      await this.memory.set(`facts:${sessionId}`, fact, 'append')
+    }
+  }
+
   /**
    * Bounded ReAct loop: calls callChatStructured with the file tools, executing
    * real (non-mutating) tool calls and looping, until either a final text reply
    * comes back, a write_file call needs staging + approval, or the iteration
    * cap is hit. Only ever invoked when `fileTools` is configured.
    */
-  private async runToolLoop(transcript: ChatMessage[], userMessage: string): Promise<ToolLoopResult> {
+  private async runToolLoop(transcript: ChatMessage[], userMessage: string, systemPrompt: string): Promise<ToolLoopResult> {
     const fileTools = this.fileTools
     if (!fileTools) throw new Error('runToolLoop() requires fileTools to be configured')
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...transcript,
       { role: 'user', content: userMessage },
     ]
