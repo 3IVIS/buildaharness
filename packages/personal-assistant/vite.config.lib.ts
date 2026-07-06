@@ -20,7 +20,7 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['@buildaharness/harness', '@buildaharness/runtime', 'node:readline', 'node:process', 'node:fs/promises', 'node:os', 'node:path', 'node:child_process', 'node:url'],
+      external: ['@buildaharness/harness', '@buildaharness/runtime', 'node:readline', 'node:process', 'node:fs/promises', 'node:os', 'node:path', 'node:child_process', 'node:url', 'node:dns/promises'],
     },
     minify: false,
     sourcemap: true,

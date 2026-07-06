@@ -56,7 +56,7 @@ describe('ClaudeCliLLMClient', () => {
     expect(spawnMock).toHaveBeenCalledTimes(1)
   })
 
-  it('callChatStructured throws when tools are supplied without fileTools configured', async () => {
+  it('callChatStructured throws when tools are supplied without fileTools/shellTools configured', async () => {
     const client = new ClaudeCliLLMClient()
 
     await expect(
@@ -119,7 +119,7 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
-  it('detects a write staged by the MCP server during the call and surfaces it as a __staged_write tool call, not write_file', async () => {
+  it('detects a write staged by the MCP server during the call and surfaces it as a __staged_action tool call, not write_file', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
       spawnMock.mockImplementation(() => {
@@ -128,11 +128,11 @@ describe('ClaudeCliLLMClient', () => {
         proc.stderr = new EventEmitter()
         void (async () => {
           // Simulate the MCP server (running inside the claude subprocess) staging a write mid-call.
-          const dir = join(workspaceRoot, '.pending-writes')
+          const dir = join(workspaceRoot, '.pending-actions')
           await mkdir(dir, { recursive: true })
           await writeFile(
             join(dir, 'abc-123.json'),
-            JSON.stringify({ id: 'abc-123', path: 'summary.md', content: 'draft summary', stagedAt: new Date().toISOString() }),
+            JSON.stringify({ id: 'abc-123', kind: 'write', path: 'summary.md', content: 'draft summary', stagedAt: new Date().toISOString() }),
           )
           proc.stdout.emit('data', Buffer.from(JSON.stringify({ result: '' })))
           proc.emit('close', 0)
@@ -147,14 +147,14 @@ describe('ClaudeCliLLMClient', () => {
       )
 
       expect(result.toolCalls).toHaveLength(1)
-      expect(result.toolCalls?.[0].name).toBe('__staged_write')
-      expect(result.toolCalls?.[0].input).toMatchObject({ id: 'abc-123', path: 'summary.md', content: 'draft summary' })
+      expect(result.toolCalls?.[0].name).toBe('__staged_action')
+      expect(result.toolCalls?.[0].input).toMatchObject({ id: 'abc-123', kind: 'write', path: 'summary.md', content: 'draft summary' })
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }
   })
 
-  it('returns plain text content when no write was staged during the call', async () => {
+  it('returns plain text content when no action was staged during the call', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
       spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'here is a summary of the file' })))
@@ -166,6 +166,88 @@ describe('ClaudeCliLLMClient', () => {
       )
 
       expect(result).toEqual({ content: 'here is a summary of the file' })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('shellTools configured adds ENABLE_SHELL_TOOLS to the MCP config, not to --tools', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'listed files' })))
+      const client = new ClaudeCliLLMClient({ shellTools: { workspaceRoot } })
+
+      await client.callChatStructured(
+        [{ role: 'user', content: 'list files here' }],
+        [{ name: 'run_shell_command', input_schema: {} }],
+      )
+
+      const args = spawnMock.mock.calls[0][1] as string[]
+      expect(args[args.indexOf('--tools') + 1]).toBe('')
+      const mcpConfig = JSON.parse(args[args.indexOf('--mcp-config') + 1]) as {
+        mcpServers: Record<string, { env: Record<string, string>; args: string[] }>
+      }
+      expect(mcpConfig.mcpServers['file-tools'].env.WORKSPACE_ROOT).toBe(workspaceRoot)
+      expect(mcpConfig.mcpServers['file-tools'].env.ENABLE_SHELL_TOOLS).toBe('1')
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('a shell command staged by the MCP server mid-call is detected and surfaced as __staged_action with kind: shell', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => {
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const dir = join(workspaceRoot, '.pending-actions')
+          await mkdir(dir, { recursive: true })
+          await writeFile(
+            join(dir, 'shell-1.json'),
+            JSON.stringify({ id: 'shell-1', kind: 'shell', command: 'ls -la', cwd: workspaceRoot, stagedAt: new Date().toISOString() }),
+          )
+          proc.stdout.emit('data', Buffer.from(JSON.stringify({ result: '' })))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ shellTools: { workspaceRoot } })
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'list files here' }],
+        [{ name: 'run_shell_command', input_schema: {} }],
+      )
+
+      expect(result.toolCalls).toHaveLength(1)
+      expect(result.toolCalls?.[0].name).toBe('__staged_action')
+      expect(result.toolCalls?.[0].input).toMatchObject({ id: 'shell-1', kind: 'shell', command: 'ls -la', cwd: workspaceRoot })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('invariant: Bash never appears in --tools under any combination of fileTools/shellTools/remindersFile', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'ok' })))
+
+      const configs = [
+        { fileTools: { workspaceRoot } },
+        { shellTools: { workspaceRoot } },
+        { fileTools: { workspaceRoot }, remindersFile: join(workspaceRoot, 'reminders', 'reminders.json') },
+        { fileTools: { workspaceRoot }, shellTools: { workspaceRoot } },
+      ]
+
+      for (const config of configs) {
+        spawnMock.mockClear()
+        const client = new ClaudeCliLLMClient(config)
+        await client.callChatStructured([{ role: 'user', content: 'hi' }], [{ name: 'read_file', input_schema: {} }])
+        const args = spawnMock.mock.calls[0][1] as string[]
+        const toolsValue = args[args.indexOf('--tools') + 1]
+        expect(toolsValue).not.toMatch(/\bBash\b/)
+      }
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

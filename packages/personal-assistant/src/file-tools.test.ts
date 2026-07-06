@@ -4,10 +4,10 @@ import {
   resolveInWorkspace,
   PathOutsideWorkspaceError,
   executeFileTool,
-  stagePendingWrite,
-  loadPendingWrite,
-  applyPendingWrite,
-  discardPendingWrite,
+  stagePendingAction,
+  loadPendingAction,
+  applyPendingAction,
+  discardPendingAction,
   type FileToolsContext,
 } from './file-tools.js'
 
@@ -131,7 +131,7 @@ describe('executeFileTool', () => {
     expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBeUndefined()
     // The only writeTextFile call should be the staging record itself, not the real target.
     expect(writeSpy).toHaveBeenCalledTimes(1)
-    expect(writeSpy.mock.calls[0][0]).toContain('.pending-writes/')
+    expect(writeSpy.mock.calls[0][0]).toContain('.pending-actions/')
   })
 
   it('write_file rejects and stages nothing for an out-of-scope path', async () => {
@@ -141,43 +141,71 @@ describe('executeFileTool', () => {
     await expect(executeFileTool(ctx, 'write_file', { path: '../../etc/passwd', content: 'x' })).rejects.toThrow(
       PathOutsideWorkspaceError,
     )
-    expect(await backend.readDir(`${ROOT}/.pending-writes`)).toEqual([])
+    expect(await backend.readDir(`${ROOT}/.pending-actions`)).toEqual([])
   })
 })
 
-describe('pending-write staging (T2)', () => {
-  it('stagePendingWrite writes a record that loadPendingWrite can read back', async () => {
+describe('pending-action staging', () => {
+  it('stagePendingAction writes a write-kind record that loadPendingAction can read back', async () => {
     const backend = makeFakeBackend()
-    const { id } = await stagePendingWrite(backend, ROOT, { path: 'notes/summary.md', content: 'draft' })
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'draft' })
 
-    const record = await loadPendingWrite(backend, ROOT, id)
-    expect(record).toMatchObject({ id, path: 'notes/summary.md', content: 'draft' })
+    const record = await loadPendingAction(backend, ROOT, id)
+    expect(record).toMatchObject({ id, kind: 'write', path: 'notes/summary.md', content: 'draft' })
     expect(record?.stagedAt).toBeTruthy()
   })
 
-  it('applyPendingWrite writes exactly the staged content and deletes the staging record', async () => {
+  it('stagePendingAction writes a shell-kind record that loadPendingAction can read back', async () => {
     const backend = makeFakeBackend()
-    const { id } = await stagePendingWrite(backend, ROOT, { path: 'notes/summary.md', content: 'final content' })
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'ls -la', cwd: ROOT })
 
-    const applied = await applyPendingWrite(backend, ROOT, id)
+    const record = await loadPendingAction(backend, ROOT, id)
+    expect(record).toMatchObject({ id, kind: 'shell', command: 'ls -la', cwd: ROOT })
+  })
 
-    expect(applied.content).toBe('final content')
+  it('applyPendingAction writes exactly the staged content and deletes the staging record for kind: write', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'final content' })
+
+    const applied = await applyPendingAction(backend, ROOT, id)
+
+    expect(applied.kind).toBe('write')
+    expect((applied as { content: string }).content).toBe('final content')
     expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBe('final content')
-    expect(await loadPendingWrite(backend, ROOT, id)).toBeUndefined()
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
   })
 
-  it('applyPendingWrite throws for an unknown id and writes nothing', async () => {
+  it('applyPendingAction throws for an unknown id and writes nothing', async () => {
     const backend = makeFakeBackend()
-    await expect(applyPendingWrite(backend, ROOT, 'no-such-id')).rejects.toThrow()
+    await expect(applyPendingAction(backend, ROOT, 'no-such-id')).rejects.toThrow()
   })
 
-  it('discardPendingWrite deletes the staging record and performs no write', async () => {
+  it('applyPendingAction throws for a staged shell action with no executeShell callback provided', async () => {
     const backend = makeFakeBackend()
-    const { id } = await stagePendingWrite(backend, ROOT, { path: 'notes/summary.md', content: 'never applied' })
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
 
-    await discardPendingWrite(backend, ROOT, id)
+    await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow(/executeShell/)
+  })
 
-    expect(await loadPendingWrite(backend, ROOT, id)).toBeUndefined()
+  it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
+
+    const executeShell = vi.fn().mockResolvedValue({ output: 'hi\n', exitCode: 0, timedOut: false })
+    const applied = await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    expect(executeShell).toHaveBeenCalledWith('echo hi', ROOT)
+    expect(applied).toMatchObject({ kind: 'shell', execution: { output: 'hi\n', exitCode: 0, timedOut: false } })
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+  })
+
+  it('discardPendingAction deletes the staging record and performs no write', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'never applied' })
+
+    await discardPendingAction(backend, ROOT, id)
+
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
     expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBeUndefined()
   })
 })
