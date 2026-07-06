@@ -134,7 +134,7 @@ export type FileToolResult =
   | { kind: 'text'; text: string }
   | { kind: 'staged_write'; id: string; path: string; content: string }
 
-function requireStringArg(input: Record<string, unknown>, key: string): string {
+export function requireStringArg(input: Record<string, unknown>, key: string): string {
   const value = input[key]
   if (typeof value !== 'string') throw new Error(`"${key}" argument must be a string`)
   return value

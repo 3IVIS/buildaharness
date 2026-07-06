@@ -68,11 +68,16 @@ async function main(): Promise<void> {
     console.log('')
   }
 
-  const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = { read_file: 'Read', list_directory: 'Listed' }
+  const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
+    read_file: 'Read',
+    list_directory: 'Listed',
+    web_search: 'Searched',
+    fetch_url: 'Fetched',
+  }
 
   function printSources(): void {
     if (!lastSources || lastSources.length === 0) {
-      console.log('\nNo sources for the last turn (it used no file tool calls).\n')
+      console.log('\nNo sources for the last turn (it used no file/web tool calls).\n')
       return
     }
     console.log('')
