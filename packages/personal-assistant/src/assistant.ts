@@ -29,6 +29,7 @@ import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikely } from './trust-tagging.js'
 import { classifyDecompositionCandidate, decomposeObjective } from './decomposition-classifier.js'
+import type { TraceEvent } from './trace-events.js'
 
 const SYSTEM_PROMPT =
   'You are a helpful, concise personal assistant. Answer directly; ask a clarifying question only when the request is genuinely ambiguous. ' +
@@ -94,6 +95,26 @@ export interface AssistantProgress {
   currentNode?: string
 }
 
+export interface TurnOptions {
+  sessionId?: string
+  approved?: boolean
+  pendingWriteId?: string
+  onProgress?: (progress: AssistantProgress) => void
+  /**
+   * Called with each token as the model's reply streams in. On the plain chat
+   * path (no tool loop active) this is the turn's one real LLM call, read via
+   * callChat. On the tool-loop path (fileTools/webTools configured), every
+   * tool-bearing round trip stays non-streaming — callChatStructured isn't a
+   * streaming call for either backend — but once the model stops calling tools,
+   * one extra callChat request re-asks for that same final answer as a real
+   * streamed completion, *only when `onToken` is supplied* (so a caller who
+   * doesn't listen never pays for it). ClaudeCliLLMClient's callChat isn't real
+   * per-token streaming either way (it yields the whole reply as one chunk) —
+   * this only reads token-by-token on the proxy backend.
+   */
+  onToken?: (token: string) => void
+}
+
 export interface PersonalAssistantOptions {
   llmClient: ILLMClient
   model?: string
@@ -121,6 +142,8 @@ export interface PersonalAssistantOptions {
   webTools?: WebToolsContext
   /** Stores reminders detected from "remind me"/"set a reminder"-shaped requests — defaults to an in-process store. See ReminderStore's `dueAt` doc: v1 stores raw text only, no time parsing, so `listDue()` won't return these yet. */
   reminderStore?: ReminderStore
+  /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
+  onTrace?: (event: TraceEvent) => void
 }
 
 /**
@@ -141,6 +164,7 @@ export class PersonalAssistant {
   private readonly fileTools?: FileToolsContext
   private readonly webTools?: WebToolsContext
   private readonly reminderStore: ReminderStore
+  private readonly onTrace?: (event: TraceEvent) => void
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -152,6 +176,7 @@ export class PersonalAssistant {
     this.fileTools = options.fileTools
     this.webTools = options.webTools
     this.reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
+    this.onTrace = options.onTrace
   }
 
   /**
@@ -171,29 +196,25 @@ export class PersonalAssistant {
     return new PersonalAssistant({ ...options, memory, experienceStore, checkpointStore })
   }
 
-  async turn(
-    userMessage: string,
-    options: {
-      sessionId?: string
-      approved?: boolean
-      pendingWriteId?: string
-      onProgress?: (progress: AssistantProgress) => void
-      /**
-       * Called with each token as the model's reply streams in. On the plain chat
-       * path (no tool loop active) this is the turn's one real LLM call, read via
-       * callChat. On the tool-loop path (fileTools/webTools configured), every
-       * tool-bearing round trip stays non-streaming — callChatStructured isn't a
-       * streaming call for either backend — but once the model stops calling tools,
-       * one extra callChat request re-asks for that same final answer as a real
-       * streamed completion, *only when `onToken` is supplied* (so a caller who
-       * doesn't listen never pays for it). ClaudeCliLLMClient's callChat isn't real
-       * per-token streaming either way (it yields the whole reply as one chunk) —
-       * this only reads token-by-token on the proxy backend.
-       */
-      onToken?: (token: string) => void
-    } = {},
-  ): Promise<AssistantTurnResult> {
+  /**
+   * Thin wrapper around runTurn(): emits turn_start/turn_end/error trace events
+   * around the actual logic, so every one of runTurn's return paths gets a
+   * matching turn_end without instrumenting each one individually.
+   */
+  async turn(userMessage: string, options: TurnOptions = {}): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
+    this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
+    try {
+      const result = await this.runTurn(userMessage, options, sessionId)
+      this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
+      return result
+    } catch (err) {
+      this.onTrace?.({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
+      throw err
+    }
+  }
+
+  private async runTurn(userMessage: string, options: TurnOptions, sessionId: string): Promise<AssistantTurnResult> {
     const transcriptKey = `transcript:${sessionId}`
 
     // A staged write is resumed by ID, not re-derived from a second LLM call —
@@ -215,6 +236,7 @@ export class PersonalAssistant {
     const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
 
     const classification = classifyRisk(userMessage)
+    this.onTrace?.({ kind: 'risk_classified', riskLevel: classification.riskLevel, requiresApproval: classification.requiresApproval })
 
     // A reminder-shaped MEDIUM request stores a record immediately — detection,
     // not action gating, so it happens whether or not the rest of the turn is
@@ -254,6 +276,7 @@ export class PersonalAssistant {
       }
       if (loopResult.kind === 'escalated') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        this.onTrace?.({ kind: 'escalation', reason: loopResult.reason })
         return { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: classification.riskLevel }
       }
       draftReply = loopResult.content
@@ -278,6 +301,7 @@ export class PersonalAssistant {
     // run entirely — no verification/reviewer pass/checkpoint for this turn. Deliberately
     // conservative: see triviality-classifier.ts for what disqualifies a turn from this path.
     const triviality = classifyTriviality(userMessage, classification.riskLevel)
+    this.onTrace?.({ kind: 'triviality_classified', isTrivial: triviality.isTrivial })
     if (triviality.isTrivial) {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
@@ -343,6 +367,8 @@ export class PersonalAssistant {
             maxSteps: this.maxSteps,
             currentNode: checkpoint.progress.nodeExecutionOrder.at(-1),
           })
+          const node = checkpoint.progress.nodeExecutionOrder.at(-1)
+          if (node) this.onTrace?.({ kind: 'harness_node', node, stepsUsed: checkpoint.progress.stepsUsed })
           return saveHarnessCheckpoint(this.checkpointStore, checkpoint)
         },
       }
@@ -382,10 +408,12 @@ export class PersonalAssistant {
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        const reason = err.blocker.missing_info.join('; ') || err.blocker.reason
+        this.onTrace?.({ kind: 'escalation', reason })
         return {
           status: 'escalated',
           reply: null,
-          reason: err.blocker.missing_info.join('; ') || err.blocker.reason,
+          reason,
           riskLevel: classification.riskLevel,
           stepsUsed,
         }
@@ -485,6 +513,7 @@ export class PersonalAssistant {
         let resultText: string
         try {
           resultText = await this.executeToolCall(call.name, call.input)
+          this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: true })
           // Only a call that actually succeeded grounds the reply in something
           // real — a rejected path/URL or tool error below is reported to the
           // model but isn't a source.
@@ -497,6 +526,7 @@ export class PersonalAssistant {
           // A rejected path or tool error is reported back to the model as a
           // tool result, not thrown — matches the "clear decline, never a
           // silent no-op dressed up as success" baseline this plan preserves.
+          this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
