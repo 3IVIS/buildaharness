@@ -1,11 +1,23 @@
 import { spawn } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse } from '@buildaharness/runtime'
+import { tmpdir } from 'node:os'
+import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
+import { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
+import { stripMcpToolPrefix } from './tool-step.js'
 
-/** Synthetic tool name ClaudeCliLLMClient uses to signal "an action was already staged by the MCP server during this call" — distinct from `write_file`/`run_shell_command` so assistant.ts's tool loop doesn't try to stage it a second time. */
-const ALREADY_STAGED_ACTION_TOOL = '__staged_action'
+/**
+ * `--tools ""` only disables Claude Code's own built-in tools (Read/Write/Bash/etc.) — it
+ * has no effect on MCP servers, which are controlled entirely by --mcp-config/
+ * --strict-mcp-config. Without this, a plain callChatSync call silently inherits whatever
+ * MCP servers happen to be configured ambiently (a project .mcp.json, or the user's own
+ * global Claude Code config) — an ordinary PersonalAssistant chat turn must not pick up
+ * unrelated tools the user happens to have configured for their own interactive sessions.
+ * An empty --mcp-config plus --strict-mcp-config guarantees zero MCP servers, the same way
+ * --tools "" guarantees zero built-ins.
+ */
+const EMPTY_MCP_CONFIG = JSON.stringify({ mcpServers: {} })
 
 export interface ClaudeCliLLMClientOptions {
   /** Path to the claude binary. Defaults to CLAUDE_PATH env var, then 'claude' on PATH. */
@@ -42,20 +54,18 @@ export interface ClaudeCliLLMClientOptions {
   shellTools?: { workspaceRoot: string }
 }
 
-function buildPrompt(messages: ChatMessage[]): { systemPrompt: string; prompt: string } {
-  const systemParts: string[] = []
-  const turns: string[] = []
-  for (const m of messages) {
-    if (m.role === 'system') systemParts.push(m.content)
-    else if (m.role === 'assistant') turns.push(`Assistant: ${m.content}`)
-    else turns.push(m.content)
-  }
-  return { systemPrompt: systemParts.join('\n\n') || ' ', prompt: turns.join('\n\n') }
-}
-
+/**
+ * Runs `claude` with cwd pinned to the OS temp directory, never the caller's actual
+ * working directory — `claude` has no flag to suppress project-context loading, it
+ * infers it entirely from the process's cwd (project CLAUDE.md, .mcp.json, skills, all
+ * auto-loaded regardless of --system-prompt/--tools). Since PersonalAssistant's whole
+ * point is a plain personal-assistant persona, not a coding agent scoped to whatever
+ * repo happens to be the launch directory, every invocation runs from a directory that's
+ * essentially guaranteed to have none of that project-level config to auto-load.
+ */
 function invokeClaude(claudePath: string, args: string[]): Promise<string> {
   return new Promise((resolvePromise, reject) => {
-    const proc = spawn(claudePath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
     proc.stdout.on('data', (chunk) => { stdout += chunk })
@@ -66,20 +76,65 @@ function invokeClaude(claudePath: string, args: string[]): Promise<string> {
         reject(new Error(stderr.trim() || `claude exited with code ${code}`))
         return
       }
-      try {
-        const data = JSON.parse(stdout.trim()) as { result?: string; content?: string }
-        resolvePromise(data.result ?? data.content ?? stdout.trim())
-      } catch {
-        resolvePromise(stdout.trim())
-      }
+      resolvePromise(parseClaudeCliOutput(stdout))
     })
   })
 }
 
-/** Reduces a staged record down to the synthetic __staged_action tool call's input shape. */
-function stagedActionInput(record: PendingActionRecord): { id: string; kind: 'write' | 'shell' } & Record<string, unknown> {
-  if (record.kind === 'write') return { id: record.id, kind: 'write', path: record.path, content: record.content }
-  return { id: record.id, kind: 'shell', command: record.command, cwd: record.cwd }
+/**
+ * Same subprocess-invocation contract as invokeClaude, but for a `--output-format
+ * stream-json` call (requires `--verbose` — enforced by whichever caller builds `args`):
+ * parses newline-delimited JSON events as they arrive so tool_use blocks can be reported
+ * live via onToolStep — otherwise invisible, since Claude Code's own agentic loop resolves
+ * every tool call inside this one subprocess call before returning. The final answer still
+ * comes from the last `result`-type event, in the exact same shape/field names
+ * --output-format json's single object uses, so parseClaudeCliOutput's existing
+ * result/content/fallback logic covers it unchanged — just handed one line instead of the
+ * whole stdout.
+ */
+function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: (event: ToolStepEvent) => void): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
+    let buffer = ''
+    let stderr = ''
+    let finalResultLine: string | undefined
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString('utf-8')
+      let newlineIndex: number
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex)
+        buffer = buffer.slice(newlineIndex + 1)
+        if (!line.trim()) continue
+
+        let event: { type?: string; message?: { content?: unknown[] } }
+        try {
+          event = JSON.parse(line)
+        } catch {
+          continue // stream-json is one complete JSON object per line — an unparseable line is never expected, but must never crash the stream
+        }
+
+        if (event.type === 'assistant' && onToolStep) {
+          for (const block of event.message?.content ?? []) {
+            if ((block as { type?: string }).type !== 'tool_use') continue
+            const toolUse = block as { name: string; input?: Record<string, unknown> }
+            onToolStep({ tool: stripMcpToolPrefix(toolUse.name), input: toolUse.input ?? {} })
+          }
+        } else if (event.type === 'result') {
+          finalResultLine = line
+        }
+      }
+    })
+    proc.stderr.on('data', (chunk) => { stderr += chunk })
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `claude exited with code ${code}`))
+        return
+      }
+      resolvePromise(parseClaudeCliOutput(finalResultLine ?? ''))
+    })
+  })
 }
 
 /**
@@ -112,8 +167,16 @@ export class ClaudeCliLLMClient implements ILLMClient {
   }
 
   async callChatSync(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
-    const { systemPrompt, prompt } = buildPrompt(messages)
-    const args = ['--print', '--output-format', 'json', '--tools', '', '--no-session-persistence', '--system-prompt', systemPrompt]
+    const { systemPrompt, prompt } = buildClaudePrompt(messages)
+    const args = [
+      '--print',
+      '--output-format', 'json',
+      '--tools', '',
+      '--no-session-persistence',
+      '--system-prompt', systemPrompt,
+      '--mcp-config', EMPTY_MCP_CONFIG,
+      '--strict-mcp-config', // ignore any ambient project/user MCP config — see EMPTY_MCP_CONFIG's doc comment
+    ]
     if (options.model) args.push('--model', options.model)
     args.push(prompt)
     return invokeClaude(this.claudePath, args)
@@ -148,7 +211,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
       throw new Error('ClaudeCliLLMClient does not support tool calls unless constructed with fileTools or shellTools configured')
     }
 
-    const { systemPrompt, prompt } = buildPrompt(messages)
+    const { systemPrompt, prompt } = buildClaudePrompt(messages)
     const workspaceRoot = (this.fileTools ?? this.shellTools)!.workspaceRoot
     // Deliberately not `new URL('./file-tools-mcp-server.mjs', import.meta.url)` as a
     // single literal — Vite's asset-URL plugin statically detects that exact pattern
@@ -173,7 +236,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
 
     const args = [
       '--print',
-      '--output-format', 'json',
+      '--output-format', 'stream-json', // streamed (not the single-object 'json') so tool_use events can be reported live via onToolStep — see invokeClaudeStreaming
+      '--verbose', // required by --print when --output-format is stream-json
       '--tools', '', // still disable Claude Code's own built-in Read/Write/Bash tools — Bash is never added, regardless of shellTools
       '--no-session-persistence',
       '--system-prompt', systemPrompt,
@@ -185,7 +249,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     args.push(prompt)
 
     const callStartedAt = Date.now()
-    const content = await invokeClaude(this.claudePath, args)
+    const content = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
     const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)
 
     if (staged) {

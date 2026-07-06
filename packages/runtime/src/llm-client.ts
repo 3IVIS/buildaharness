@@ -14,6 +14,22 @@ export interface ChatOptions {
   temperature?: number
   maxTokens?: number
   structuredOutput?: { schema: Record<string, unknown> }
+  /**
+   * Called once per tool call as a backend's own internal agentic loop makes it — only
+   * meaningful for a backend whose tool loop is otherwise invisible to the caller, e.g.
+   * Claude Code's own loop resolving read_file/list_directory/etc. autonomously inside a
+   * single `claude -p` subprocess call (see ClaudeCliLLMClient). A backend that doesn't run
+   * an internal tool loop itself (the plain Anthropic API client, one call per tool round
+   * trip) never calls this — the caller already sees each tool call directly and reports
+   * it itself. Raw event, no human-readable summary — that's computed by the caller (see
+   * personal-assistant's summarizeToolStep) so this stays a thin, dependency-free type.
+   */
+  onToolStep?: (event: ToolStepEvent) => void
+}
+
+export interface ToolStepEvent {
+  tool: string
+  input: Record<string, unknown>
 }
 
 export interface ToolCallResult {

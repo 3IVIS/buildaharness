@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { nodeDisplayName, type RiskLevel, type AssistantTrace, type AssistantSource } from '@buildaharness/personal-assistant'
+import { nodeDisplayName, type RiskLevel, type AssistantTrace, type AssistantSource, type AssistantToolStep } from '@buildaharness/personal-assistant'
 
 interface Props {
   role: 'user' | 'assistant' | 'error'
@@ -7,6 +7,7 @@ interface Props {
   riskLevel?: RiskLevel
   trace?: AssistantTrace
   sources?: AssistantSource[]
+  toolSteps?: AssistantToolStep[]
   onRetry?: () => void
 }
 
@@ -31,9 +32,10 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, sources, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, sources, toolSteps, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
+  const [showSteps, setShowSteps] = useState(false)
 
   return (
     <div className={`bubble bubble--${role}`}>
@@ -63,6 +65,22 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, on
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+        </div>
+      )}
+      {toolSteps && toolSteps.length > 0 && (
+        <div className="bubble__why">
+          <button type="button" className="bubble__why-toggle" onClick={() => setShowSteps((v) => !v)}>
+            {showSteps ? 'Hide steps' : `Steps (${toolSteps.length})`}
+          </button>
+          {showSteps && (
+            <div className="bubble__why-detail">
+              <ol className="bubble__why-steps">
+                {toolSteps.map((step, i) => (
+                  <li key={i}>{step.summary}</li>
+                ))}
+              </ol>
             </div>
           )}
         </div>

@@ -333,6 +333,29 @@ describe('PersonalAssistant file tools', () => {
     ])
   })
 
+  it('calls onToolStep once per tool call, in order, with a human-readable summary, before the loop resolves', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'basil')
+
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'list_directory', input: { path: '.' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'Found it.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const steps: { tool: string; summary: string }[] = []
+    const result = await assistant.turn('What does notes.txt say?', {
+      onToolStep: (step) => steps.push({ tool: step.tool, summary: step.summary }),
+    })
+
+    expect(result.status).toBe('ok')
+    expect(steps).toEqual([
+      { tool: 'list_directory', summary: 'Listing .' },
+      { tool: 'read_file', summary: 'Reading notes.txt' },
+    ])
+  })
+
   it('does not set sources when the reply used no file tool calls', async () => {
     const backend = makeFakeBackend()
     const llm = scriptedResponses([{ content: 'I did not need to look anything up.' }])
@@ -425,6 +448,24 @@ describe('PersonalAssistant file tools', () => {
     // discarded in favor of the streamed re-request) + 1 streamed re-request.
     expect(llm.calls).toBe(2)
     expect(llm.streamCalls).toBe(1)
+  })
+
+  it('does not re-request via callChat when the first response already has no tool calls (the claude-cli backend shape) — a re-request there would lose all tool grounding, since messages was never enriched with tool results', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/secrets.txt`, 'the launch code is 4471')
+    // Only one scripted response — a second (mistaken) callChatStructured call would throw
+    // "no more scripted responses", failing the test outright.
+    const llm = scriptedResponses([{ content: 'The file says: the launch code is 4471' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+    const received: string[] = []
+
+    const result = await assistant.turn('Read secrets.txt and tell me what it says.', { onToken: (t) => received.push(t) })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('The file says: the launch code is 4471')
+    expect(received).toEqual(['The file says: the launch code is 4471'])
+    expect(llm.calls).toBe(1)
+    expect(llm.streamCalls).toBe(0)
   })
 
   it('does not pay for an extra LLM call when no onToken listener is attached, even with tools active', async () => {

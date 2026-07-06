@@ -46,6 +46,18 @@ body {
   font-size: 13px;
 }
 
+.app__tool-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app__tool-step {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: monospace;
+}
+
 .app__composer {
   display: flex;
   gap: 8px;

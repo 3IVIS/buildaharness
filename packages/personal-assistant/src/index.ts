@@ -30,3 +30,6 @@ export type {
 } from './file-tools.js'
 export { SHELL_TOOLS, RUN_SHELL_COMMAND_TOOL, executeShellTool } from './shell-tools.js'
 export type { ShellToolsContext, ShellStagingContext, ShellToolResult, ShellCommandExecutor } from './shell-tools.js'
+export { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
+export { stripMcpToolPrefix, summarizeToolStep } from './tool-step.js'
+export type { AssistantToolStep } from './tool-step.js'

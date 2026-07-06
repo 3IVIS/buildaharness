@@ -28,6 +28,16 @@ function fakeClaudeProcess(stdout: string, exitCode = 0): EventEmitter & { stdou
   return proc
 }
 
+/** A `--output-format stream-json` final result line (callChatStructured's format) — one bare tool_use/tool_result line per intermediate tool call would precede this in a real call; tests that only care about the final content/staged-action outcome can skip straight to this line. */
+function streamJsonResult(resultText: string): string {
+  return `${JSON.stringify({ type: 'result', result: resultText })}\n`
+}
+
+/** A `--output-format stream-json` assistant tool_use line, as Claude Code CLI emits it for an MCP-registered tool (name prefixed `mcp__<server>__`). */
+function streamJsonToolUse(mcpQualifiedName: string, input: Record<string, unknown>): string {
+  return `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_stream_1', name: mcpQualifiedName, input }] } })}\n`
+}
+
 describe('ClaudeCliLLMClient', () => {
   beforeEach(() => {
     spawnMock.mockReset()
@@ -43,7 +53,28 @@ describe('ClaudeCliLLMClient', () => {
     const args = spawnMock.mock.calls[0][1] as string[]
     expect(args).toContain('--tools')
     expect(args[args.indexOf('--tools') + 1]).toBe('')
-    expect(args).not.toContain('--mcp-config')
+  })
+
+  it('callChatSync passes an empty --mcp-config plus --strict-mcp-config, so no ambient/global MCP servers leak into a plain chat turn', async () => {
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'hi there' })))
+    const client = new ClaudeCliLLMClient()
+
+    await client.callChatSync([{ role: 'user', content: 'hello' }])
+
+    const args = spawnMock.mock.calls[0][1] as string[]
+    expect(args).toContain('--strict-mcp-config')
+    const mcpConfig = JSON.parse(args[args.indexOf('--mcp-config') + 1])
+    expect(mcpConfig).toEqual({ mcpServers: {} })
+  })
+
+  it('callChatSync spawns claude with cwd pinned to the OS temp dir, never the caller\'s own working directory', async () => {
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'hi there' })))
+    const client = new ClaudeCliLLMClient()
+
+    await client.callChatSync([{ role: 'user', content: 'hello' }])
+
+    const spawnOptions = spawnMock.mock.calls[0][2] as { cwd?: string }
+    expect(spawnOptions.cwd).toBe(tmpdir())
   })
 
   it('callChatStructured with no tools delegates to a plain chat call', async () => {
@@ -68,7 +99,7 @@ describe('ClaudeCliLLMClient', () => {
   it('callChatStructured with fileTools configured passes --mcp-config, --strict-mcp-config, --dangerously-skip-permissions, and still --tools ""', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
-      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'read the file for you' })))
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('read the file for you')))
       const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
 
       const result = await client.callChatStructured(
@@ -93,6 +124,45 @@ describe('ClaudeCliLLMClient', () => {
       // rather than present-but-undefined, so the MCP server's own env-var check (a plain
       // `if (remindersFile)`) sees it as truly unset.
       expect(mcpConfig.mcpServers['file-tools'].env.REMINDERS_FILE).toBeUndefined()
+      // stream-json (not the single-object 'json') is what makes tool_use events visible
+      // as they happen — --verbose is required by --print whenever --output-format is
+      // stream-json (the CLI errors otherwise).
+      expect(args[args.indexOf('--output-format') + 1]).toBe('stream-json')
+      expect(args).toContain('--verbose')
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('reports each tool_use event from the stream via onToolStep, with the mcp__<server>__ prefix stripped', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => {
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        queueMicrotask(() => {
+          proc.stdout.emit('data', Buffer.from(streamJsonToolUse('mcp__file-tools__list_directory', { path: '.' })))
+          proc.stdout.emit('data', Buffer.from(streamJsonToolUse('mcp__file-tools__read_file', { path: 'notes.txt' })))
+          proc.stdout.emit('data', Buffer.from(streamJsonResult('here is the file')))
+          proc.emit('close', 0)
+        })
+        return proc
+      })
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const steps: { tool: string; input: Record<string, unknown> }[] = []
+
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'read notes.txt' }],
+        [{ name: 'read_file', input_schema: {} }],
+        { onToolStep: (step) => steps.push(step) },
+      )
+
+      expect(result).toEqual({ content: 'here is the file' })
+      expect(steps).toEqual([
+        { tool: 'list_directory', input: { path: '.' } },
+        { tool: 'read_file', input: { path: 'notes.txt' } },
+      ])
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }
@@ -101,7 +171,7 @@ describe('ClaudeCliLLMClient', () => {
   it('passes REMINDERS_FILE through --mcp-config when remindersFile is configured', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
-      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'reminder set' })))
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('reminder set')))
       const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile: '/data/reminders/reminders.json' })
 
       await client.callChatStructured(
@@ -157,7 +227,7 @@ describe('ClaudeCliLLMClient', () => {
   it('returns plain text content when no action was staged during the call', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
-      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'here is a summary of the file' })))
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('here is a summary of the file')))
       const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
 
       const result = await client.callChatStructured(
@@ -174,7 +244,7 @@ describe('ClaudeCliLLMClient', () => {
   it('shellTools configured adds ENABLE_SHELL_TOOLS to the MCP config, not to --tools', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
-      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'listed files' })))
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('listed files')))
       const client = new ClaudeCliLLMClient({ shellTools: { workspaceRoot } })
 
       await client.callChatStructured(
@@ -231,7 +301,7 @@ describe('ClaudeCliLLMClient', () => {
   it('invariant: Bash never appears in --tools under any combination of fileTools/shellTools/remindersFile', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {
-      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'ok' })))
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('ok')))
 
       const configs = [
         { fileTools: { workspaceRoot } },

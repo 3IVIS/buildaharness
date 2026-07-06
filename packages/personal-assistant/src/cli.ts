@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource } from './assistant.js'
+import type { AssistantToolStep } from './tool-step.js'
 import { nodeDisplayName } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
@@ -134,6 +135,15 @@ async function main(): Promise<void> {
     lastProgressLineLength = 0
   }
 
+  // A discrete event, not a progress bar — each call gets its own scrolled-past line
+  // (unlike writeProgress's single overwritten \r line), the way Claude Code's own CLI
+  // shows a running log of what it's doing. Clears the progress line first so a tool step
+  // never gets mangled mid-overwrite.
+  function writeToolStep(step: AssistantToolStep): void {
+    clearProgress()
+    console.log(`  ⚙ ${step.summary}`)
+  }
+
   async function handleTurn(message: string, approved = false, pendingActionId?: string): Promise<void> {
     // Set only once the first token of an actual streamed reply arrives — the
     // message-level approval gate and the file-tools loop both produce a full
@@ -149,7 +159,14 @@ async function main(): Promise<void> {
     }
 
     try {
-      const result = await assistant.turn(message, { sessionId: 'cli', approved, pendingActionId, onProgress: writeProgress, onToken: writeToken })
+      const result = await assistant.turn(message, {
+        sessionId: 'cli',
+        approved,
+        pendingActionId,
+        onProgress: writeProgress,
+        onToken: writeToken,
+        onToolStep: writeToolStep,
+      })
       clearProgress()
 
       // A write_file/run_shell_command tool call, gated at the point of the call itself

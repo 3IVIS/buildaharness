@@ -31,6 +31,7 @@ import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikely } from './trust-tagging.js'
 import { classifyDecompositionCandidate, decomposeObjective } from './decomposition-classifier.js'
 import type { TraceEvent } from './trace-events.js'
+import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 
 const SYSTEM_PROMPT =
   'You are a helpful, concise personal assistant. Answer directly; ask a clarifying question only when the request is genuinely ambiguous. ' +
@@ -117,6 +118,15 @@ export interface TurnOptions {
    * this only reads token-by-token on the proxy backend.
    */
   onToken?: (token: string) => void
+  /**
+   * Called once per tool call as it happens, with a human-readable summary — the "what
+   * step is the assistant on right now" signal, distinct from onTrace's name/status-only
+   * telemetry. Fires for every backend: the proxy backend's tool loop reports each call it
+   * dispatches directly; the claude-cli backend reports calls its own agentic loop makes
+   * autonomously inside a single subprocess call, via ChatOptions.onToolStep (see
+   * ClaudeCliLLMClient).
+   */
+  onToolStep?: (step: AssistantToolStep) => void
 }
 
 export interface PersonalAssistantOptions {
@@ -277,7 +287,7 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (this.fileTools || this.webTools || this.shellTools) {
-      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken)
+      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken, options.onToolStep)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -467,6 +477,7 @@ export class PersonalAssistant {
     userMessage: string,
     systemPrompt: string,
     onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
   ): Promise<ToolLoopResult> {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -482,17 +493,54 @@ export class PersonalAssistant {
     ]
     const sources: AssistantSource[] = []
 
+    // Reports a step immediately, before the call executes — a caller wants to see "reading
+    // notes.txt" while it's happening, not just after the fact.
+    const reportStep = (tool: string, input: Record<string, unknown>): void => {
+      onToolStep?.({ tool, input, summary: summarizeToolStep(tool, input) })
+    }
+
+    // True once this loop has manually dispatched at least one tool call and pushed its
+    // result into `messages` (the proxy backend's shape — one call per tool round trip,
+    // enriching `messages` with real tool_use/tool_result blocks each time). Stays false
+    // for the claude-cli backend's typical shape, where Claude Code's own agentic loop
+    // resolves every tool call invisibly inside a single callChatStructured call and
+    // `messages` is never touched — see the "no more tool calls" branch below for why this
+    // distinction matters.
+    let dispatchedAnyToolCall = false
+
     for (let iteration = 0; iteration < TOOL_LOOP_MAX_ITERATIONS; iteration++) {
-      const response = await this.llmClient.callChatStructured(messages, tools, { model: this.model })
+      // For the claude-cli backend, this one call may run several tool round trips
+      // internally (Claude Code's own agentic loop) before returning — onToolStep here is
+      // what makes those otherwise-invisible calls show up live; for the proxy backend,
+      // this backend option is simply never invoked (one call = one round trip, already
+      // visible below), so reportStep covers it there instead.
+      const response = await this.llmClient.callChatStructured(messages, tools, {
+        model: this.model,
+        onToolStep: onToolStep ? (event) => reportStep(event.tool, event.input) : undefined,
+      })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
         if (!onToken) return { kind: 'final', content: response.content, sources }
 
+        if (!dispatchedAnyToolCall) {
+          // No tool result was ever manually folded into `messages` this turn — true for
+          // the claude-cli backend, whose own agentic loop resolves every tool call
+          // invisibly inside the one callChatStructured call already made above. Re-asking
+          // via callChat here would replay the *original* question with none of that
+          // context (and, for ClaudeCliLLMClient specifically, --mcp-config stripped back
+          // to zero tools — see EMPTY_MCP_CONFIG), so it isn't "the same answer, streamed"
+          // at all — it's the model's ungrounded blind guess, silently overwriting a
+          // correct, tool-grounded reply with a wrong one. Just deliver the already-correct
+          // content through onToken directly; no second call, no risk of losing grounding.
+          onToken(response.content)
+          return { kind: 'final', content: response.content, sources }
+        }
+
         // Re-request the same final answer as a real streamed completion — only
-        // done when a listener is attached, so a caller who never streams never
-        // pays for this extra call. messages here excludes the just-received
-        // assistant response (never pushed since there were no tool calls to act
-        // on), so this re-asks the same question the non-streaming call just answered.
+        // reached once this loop has actually dispatched a tool call itself (the proxy
+        // backend's shape), where `messages` already carries the enriched tool-result
+        // history, so re-asking here gets an equally-grounded answer, just delivered
+        // token-by-token instead of all at once.
         let streamed = ''
         for await (const token of this.llmClient.callChat(messages, { model: this.model })) {
           streamed += token
@@ -531,6 +579,7 @@ export class PersonalAssistant {
       const writeCall = response.toolCalls.find(call => call.name === 'write_file')
       if (writeCall) {
         if (!this.fileTools) throw new Error('write_file tool call received but fileTools is not configured')
+        reportStep('write_file', writeCall.input)
         // Stop immediately — don't execute any other tool calls from this same
         // response — and stage the write rather than ever touching real disk.
         const result = await executeFileTool(this.fileTools, 'write_file', writeCall.input)
@@ -548,6 +597,7 @@ export class PersonalAssistant {
       const shellCall = response.toolCalls.find(call => call.name === 'run_shell_command')
       if (shellCall) {
         if (!this.shellTools) throw new Error('run_shell_command tool call received but shellTools is not configured')
+        reportStep('run_shell_command', shellCall.input)
         // Every run_shell_command call is gated, full stop — there is no "safe subset"
         // that skips staging (see the web+shell-tools plan's Diagnosis tab).
         const result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
@@ -560,7 +610,9 @@ export class PersonalAssistant {
       }
 
       messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
+      dispatchedAnyToolCall = true
       for (const call of response.toolCalls) {
+        reportStep(call.name, call.input)
         let resultText: string
         try {
           resultText = await this.executeToolCall(call.name, call.input)

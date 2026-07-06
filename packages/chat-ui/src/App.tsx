@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { isTauri } from '@tauri-apps/api/core'
-import { PersonalAssistant, nodeDisplayName, classifyError, type AssistantProgress } from '@buildaharness/personal-assistant'
+import { isTauri, invoke } from '@tauri-apps/api/core'
+import { PersonalAssistant, nodeDisplayName, classifyError, type AssistantProgress, type AssistantToolStep } from '@buildaharness/personal-assistant'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore } from '@buildaharness/runtime'
+import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
@@ -21,6 +22,20 @@ function newId(): string {
  * desktop build real persistence instead of the IndexedDB it'd otherwise pick.
  * @tauri-apps/plugin-fs is dynamically imported so a plain (non-Tauri) browser
  * build never has to load it. See plans/tauri_desktop_plan.html Phase 3.
+ *
+ * Uses TauriClaudeCliLLMClient (the desktop shell's `run_claude_prompt`/
+ * `run_claude_prompt_with_file_tools` Rust commands), not the LLMClient/proxy backend the
+ * plain browser build uses below — the desktop app has no LLM proxy running by default
+ * and no ANTHROPIC_API_KEY to stand one up with, so it runs against the user's
+ * already-authenticated Claude Code CLI session instead, the same way personal-assistant's
+ * own CLI front end does with ASSISTANT_LLM_BACKEND=claude-cli.
+ *
+ * fileTools is wired to `get_dev_workspace_root()` — the monorepo root, computed on the
+ * Rust side from this crate's compile-time location, not a real per-user sandboxed
+ * workspace (see that Rust command's doc comment). This is dev-mode-only wiring so the
+ * assistant has real files to read/list when asked about "this repo"; a production
+ * desktop build would need a real user-chosen workspace directory instead, the same way
+ * the CLI's ASSISTANT_WORKSPACE_DIR works. web/shell tools still aren't wired in.
  */
 async function createTauriBackedAssistant(): Promise<PersonalAssistant> {
   const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
@@ -29,13 +44,15 @@ async function createTauriBackedAssistant(): Promise<PersonalAssistant> {
   ])
   const baseDir = await appLocalDataDir()
   const backend = createTauriFsBackend()
+  const workspaceRoot = await invoke<string>('get_dev_workspace_root')
 
   return PersonalAssistant.create({
-    llmClient: new LLMClient({ proxyUrl, authToken }),
+    llmClient: new TauriClaudeCliLLMClient({ fileTools: true }),
     model,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
+    fileTools: { backend, workspaceRoot },
   })
 }
 
@@ -45,6 +62,7 @@ export function App(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
+  const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -75,18 +93,32 @@ export function App(): React.JSX.Element {
     setBusy(true)
     setProgress(null)
     setStreamingText(null)
+    setLiveToolSteps([])
+    const toolSteps: AssistantToolStep[] = []
     try {
       const result = await assistant.turn(message, {
         sessionId: sessionIdRef.current,
         approved,
         onProgress: setProgress,
         onToken: (token) => setStreamingText((prev) => (prev ?? '') + token),
+        onToolStep: (step) => {
+          toolSteps.push(step)
+          setLiveToolSteps((prev) => [...prev, step])
+        },
       })
 
       if (result.status === 'ok') {
         setEntries((prev) => [
           ...prev,
-          { id: newId(), kind: 'assistant', content: result.reply ?? '', riskLevel: result.riskLevel, trace: result.trace, sources: result.sources },
+          {
+            id: newId(),
+            kind: 'assistant',
+            content: result.reply ?? '',
+            riskLevel: result.riskLevel,
+            trace: result.trace,
+            sources: result.sources,
+            toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+          },
         ])
       } else if (result.status === 'needs_approval') {
         setEntries((prev) => [
@@ -103,6 +135,7 @@ export function App(): React.JSX.Element {
       setBusy(false)
       setProgress(null)
       setStreamingText(null)
+      setLiveToolSteps([])
     }
   }
 
@@ -145,6 +178,7 @@ export function App(): React.JSX.Element {
                   riskLevel={entry.riskLevel}
                   trace={entry.trace}
                   sources={entry.sources}
+                  toolSteps={entry.toolSteps}
                 />
               )
             case 'error':
@@ -178,6 +212,13 @@ export function App(): React.JSX.Element {
             {progress
               ? `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
               : 'thinking…'}
+          </div>
+        )}
+        {busy && liveToolSteps.length > 0 && (
+          <div className="app__tool-steps">
+            {liveToolSteps.map((step, i) => (
+              <div key={i} className="app__tool-step">⚙ {step.summary}</div>
+            ))}
           </div>
         )}
         <div ref={bottomRef} />
