@@ -195,6 +195,11 @@ body {
   color: var(--text);
 }
 
+.bubble__source-external {
+  color: var(--amber);
+  font-size: 11px;
+}
+
 .approval-card, .escalation-banner {
   border: 1px solid var(--amber);
   border-radius: 10px;

@@ -22,7 +22,14 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
 const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
   read_file: 'Read',
   list_directory: 'Listed',
+  web_search: 'Searched',
+  fetch_url: 'Fetched',
 }
+
+// web_search/fetch_url pull in untrusted external content (see trust-tagging.ts) —
+// flagged distinctly so a reply's sources make clear which ones the assistant
+// doesn't vouch for the same way it does its own workspace files.
+const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
 export function ChatMessageBubble({ role, content, riskLevel, trace, sources, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
@@ -50,7 +57,10 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, on
             <div className="bubble__why-detail">
               <ul className="bubble__why-steps">
                 {sources.map((source, i) => (
-                  <li key={`${source.tool}-${source.path}-${i}`}>{SOURCE_TOOL_LABEL[source.tool]} <code>{source.path}</code></li>
+                  <li key={`${source.tool}-${source.path}-${i}`}>
+                    {SOURCE_TOOL_LABEL[source.tool]} <code>{source.path}</code>
+                    {EXTERNAL_SOURCE_TOOLS.has(source.tool) && <span className="bubble__source-external"> (external)</span>}
+                  </li>
                 ))}
               </ul>
             </div>
