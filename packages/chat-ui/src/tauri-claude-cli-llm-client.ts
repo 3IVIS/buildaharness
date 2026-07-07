@@ -47,7 +47,9 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
   async callChatSync(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
     const stdout = await invoke<string>('run_claude_prompt', { systemPrompt, prompt, model: options.model ?? null })
-    return parseClaudeCliOutput(stdout)
+    const { reply, usage } = parseClaudeCliOutput(stdout)
+    if (usage) options.onUsage?.(usage)
+    return reply
   }
 
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
@@ -84,6 +86,8 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
         toolCalls: [{ id: `tauri-staged-${record.id}`, name: ALREADY_STAGED_ACTION_TOOL, input: stagedActionInput(record) }],
       }
     }
-    return { content: parseClaudeCliOutput(outcome.stdout) }
+    const { reply, usage } = parseClaudeCliOutput(outcome.stdout)
+    if (usage) options.onUsage?.(usage)
+    return { content: reply }
   }
 }

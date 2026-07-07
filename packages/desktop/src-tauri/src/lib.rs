@@ -39,6 +39,31 @@ fn get_dev_workspace_root() -> Result<String, String> {
   Ok(dev_workspace_root()?.to_string_lossy().to_string())
 }
 
+/// Desktop equivalent of personal-assistant's doctor-checks.ts checkClaudeCli — backs the
+/// Settings screen's Diagnostics > Health section (see chat-ui's gui-doctor-checks.ts). Same
+/// `claude --version` probe and CLAUDE_PATH resolution as run_claude_prompt/
+/// run_claude_prompt_with_file_tools, just checking exit status rather than running a real
+/// turn. Returns `Ok(false)` (not an `Err`) for "the binary isn't there or didn't exit 0" —
+/// that's an expected, common outcome for a health check, not an internal failure; only a
+/// genuine inability to spawn a process at all is treated as an error here.
+///
+/// Known simplification vs. the CLI's checkClaudeCli: no hard timeout on a hung binary — `Command::status()`
+/// blocks synchronously with no easy cancellation short of a polling wait_timeout loop, and `claude --version`
+/// returning near-instantly is the overwhelmingly common case. Accepted tradeoff for a Settings-screen
+/// diagnostic check, not treated as equivalent to the CLI's 3s-timeout guarantee.
+#[tauri::command]
+async fn check_claude_available() -> Result<bool, String> {
+  tauri::async_runtime::spawn_blocking(|| {
+    let claude_path = std::env::var("CLAUDE_PATH").unwrap_or_else(|_| "claude".to_string());
+    match Command::new(&claude_path).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status() {
+      Ok(status) => Ok(status.success()),
+      Err(_) => Ok(false),
+    }
+  })
+  .await
+  .map_err(|e| format!("Internal error checking claude availability: {e}"))?
+}
+
 /// Opens a native folder-picker dialog and returns the chosen path, or `None` if the user
 /// cancelled. Backs the settings screen's Workspace section (chat-ui's SettingsScreen) — the
 /// path returned here is what persists via tauri-config-store.ts's `workspaceRoot`, taking
@@ -325,6 +350,7 @@ pub fn run() {
       run_claude_prompt,
       run_claude_prompt_with_file_tools,
       get_dev_workspace_root,
+      check_claude_available,
       pick_workspace_directory
     ])
     .setup(|app| {

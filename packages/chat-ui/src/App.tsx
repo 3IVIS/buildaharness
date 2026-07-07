@@ -5,12 +5,17 @@ import {
   nodeDisplayName,
   classifyError,
   resolveConfig,
+  estimateCostUsd,
+  formatTranscriptMarkdown,
+  defaultExportFilename,
   type AssistantProgress,
   type AssistantToolStep,
   type AssistantConfig,
   type ConfigStore,
+  type MemorySummary,
+  type DoctorCheck,
 } from '@buildaharness/personal-assistant'
-import { LLMClient, FileSystemAdapter, FileSystemExperienceStore } from '@buildaharness/runtime'
+import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, type TokenUsage } from '@buildaharness/runtime'
 import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
@@ -19,7 +24,19 @@ import { SettingsScreen } from './components/SettingsScreen'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
+import { checkProxyReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
+
+/** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's llm-client.ts) — used only to pick a pricing tier when no model is explicitly configured. */
+const DEFAULT_PROXY_MODEL = 'claude-3-5-sonnet-20241022'
+
+function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): TokenUsage {
+  return {
+    inputTokens: (prev?.inputTokens ?? 0) + usage.inputTokens,
+    outputTokens: (prev?.outputTokens ?? 0) + usage.outputTokens,
+    costUsd: usage.costUsd !== undefined ? (prev?.costUsd ?? 0) + usage.costUsd : prev?.costUsd,
+  }
+}
 
 // Env/build-time vars still win over persisted config — see browser-config.ts and
 // config.ts's resolveConfig — so nothing changes for a deployed build that already sets
@@ -100,10 +117,125 @@ export function App(): React.JSX.Element {
   const initialResolved = resolveConfig({}, envOverrides)
   const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
   const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
+  // GUI equivalents of the CLI's /cost, /memory, /doctor, and /status (transcript length) —
+  // populated on demand (usage as each turn completes; memory/health/transcript length when
+  // Settings opens) rather than kept live at all times, the same "compute when asked for"
+  // spirit the CLI commands have.
+  const [lastTurnUsage, setLastTurnUsage] = useState<TokenUsage | undefined>(undefined)
+  const [sessionUsage, setSessionUsage] = useState<TokenUsage | undefined>(undefined)
+  const [memorySummary, setMemorySummary] = useState<MemorySummary | null>(null)
+  const [healthChecks, setHealthChecks] = useState<DoctorCheck[] | null>(null)
+  const [transcriptLength, setTranscriptLength] = useState(0)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * On the proxy backend (plain browser), usage never arrives with a real dollar cost — see
+   * model-pricing.ts's doc comment — so this fills in the same static-table estimate the CLI's
+   * /cost uses. On desktop (claude-cli backend via TauriClaudeCliLLMClient), costUsd is already
+   * real, so this is a no-op.
+   */
+  function withCostEstimate(usage: TokenUsage): TokenUsage {
+    if (isTauri() || usage.costUsd !== undefined) return usage
+    const estimated = estimateCostUsd(config.model ?? DEFAULT_PROXY_MODEL, usage)
+    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  }
+
+  /** Runs the platform-appropriate health checks — proxy reachability in a plain browser, claude/workspace/data-dir on desktop (see gui-doctor-checks.ts). */
+  async function runHealthChecks(): Promise<DoctorCheck[]> {
+    if (!isTauri()) return [await checkProxyReachable(config.proxyUrl)]
+
+    const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
+      import('@tauri-apps/api/path'),
+      import('./tauri-fs-backend'),
+    ])
+    const baseDir = await appLocalDataDir()
+    const backend = createTauriFsBackend()
+    return Promise.all([
+      checkClaudeAvailable(),
+      Promise.resolve(checkWorkspaceConfigured(config.workspaceRoot)),
+      checkDataDirWritable(backend, baseDir),
+    ])
+  }
+
+  /** Populates the Diagnostics section's data — called when Settings opens, not kept live, since Settings and the chat view are mutually exclusive (no risk of it going stale while both are visible). */
+  async function loadDiagnostics(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    const [summary, transcript, checks] = await Promise.all([
+      assistant.getMemorySummary(sessionIdRef.current),
+      assistant.getTranscript(sessionIdRef.current),
+      runHealthChecks(),
+    ])
+    setMemorySummary(summary)
+    setTranscriptLength(transcript.length)
+    setHealthChecks(checks)
+  }
+
+  async function handleOpenSettings(): Promise<void> {
+    setView('settings')
+    void loadDiagnostics()
+  }
+
+  /** GUI equivalent of /clear — ends the conversation and resets every piece of derived UI state alongside it, so nothing shows stale data for the fresh session. */
+  async function handleClearConversation(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    await assistant.clearSession(sessionIdRef.current)
+    setEntries([])
+    setLastTurnUsage(undefined)
+    setSessionUsage(undefined)
+    setMemorySummary(null)
+    setHealthChecks(null)
+    setTranscriptLength(0)
+  }
+
+  /** GUI equivalent of /export — downloads the transcript as a markdown file via a throwaway Blob URL (works the same in a plain browser tab and inside the Tauri webview, so desktop doesn't need a separate native-save-dialog path). */
+  async function handleExportTranscript(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    const transcript = await assistant.getTranscript(sessionIdRef.current)
+    if (transcript.length === 0) return
+    const blob = new Blob([formatTranscriptMarkdown(transcript)], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = defaultExportFilename()
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * GUI equivalent of /undo — peeks the transcript before calling undoLastTurn to know which
+   * UI entries correspond to what just got removed (mirrors cli.ts's handleUndo): a completed
+   * turn's last 'assistant' entry and the 'user' entry immediately before it, or — if the turn
+   * was still awaiting approval — just the last 'approval' entry (no reply was ever appended).
+   */
+  async function handleUndoLastTurn(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    const transcriptBefore = await assistant.getTranscript(sessionIdRef.current)
+    if (transcriptBefore.length === 0) return
+    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+
+    const result = await assistant.undoLastTurn(sessionIdRef.current)
+    if (!result.undone) return
+
+    setEntries((prev) => {
+      const kinds = prev.map((e) => e.kind)
+      if (wasPendingApproval) {
+        const approvalIdx = kinds.lastIndexOf('approval')
+        return approvalIdx === -1 ? prev : prev.filter((_, i) => i !== approvalIdx)
+      }
+      const assistantIdx = kinds.lastIndexOf('assistant')
+      if (assistantIdx === -1) return prev
+      let userIdx = assistantIdx - 1
+      while (userIdx >= 0 && kinds[userIdx] !== 'user') userIdx--
+      return prev.filter((_, i) => i !== assistantIdx && i !== userIdx)
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -181,6 +313,13 @@ export function App(): React.JSX.Element {
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
           },
         ])
+        if (result.usage) {
+          const withCost = withCostEstimate(result.usage)
+          setLastTurnUsage(withCost)
+          setSessionUsage((prev) => accumulateUsage(prev, withCost))
+        } else {
+          setLastTurnUsage(undefined)
+        }
       } else if (result.status === 'needs_approval') {
         setEntries((prev) => [
           ...prev,
@@ -232,6 +371,11 @@ export function App(): React.JSX.Element {
         onSave={handleSaveSettings}
         onCancel={() => setView('chat')}
         onPickWorkspaceDirectory={isTauri() ? handlePickWorkspaceDirectory : undefined}
+        transcriptLength={transcriptLength}
+        memorySummary={memorySummary}
+        lastTurnUsage={lastTurnUsage}
+        sessionUsage={sessionUsage}
+        healthChecks={healthChecks}
       />
     )
   }
@@ -240,7 +384,12 @@ export function App(): React.JSX.Element {
     <div className="app">
       <header className="app__header">
         <span className="app__header-title">Assistant</span>
-        <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => setView('settings')}>⚙</button>
+        <div className="app__header-actions">
+          <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
+          <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
+          <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
+          <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
+        </div>
       </header>
       <div className="app__messages">
         {entries.map((entry) => {

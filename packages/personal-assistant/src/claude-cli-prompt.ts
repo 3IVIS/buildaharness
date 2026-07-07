@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@buildaharness/runtime'
+import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
 
 /**
@@ -41,16 +41,37 @@ export function buildClaudePrompt(messages: ChatMessage[]): { systemPrompt: stri
   return { systemPrompt: systemParts.join('\n\n') || 'You are a helpful assistant.', prompt: turns.join('\n\n') }
 }
 
+export interface ParsedClaudeCliOutput {
+  reply: string
+  /** Real usage/cost from Claude's own accounting — absent when stdout wasn't valid JSON (e.g. a plain-text error). See ClaudeCliLLMClient's doc comment for the Pro/Max-subscription caveat on costUsd. */
+  usage?: TokenUsage
+}
+
 /**
- * Parses `claude --output-format json`'s stdout into the reply text, falling back to the raw
- * stdout if it isn't valid JSON (e.g. the CLI printed a plain-text error before reaching
- * --output-format handling). Shared for the same reason buildClaudePrompt above is.
+ * Parses `claude --output-format json`'s stdout into the reply text plus usage, falling back
+ * to just the raw stdout as the reply if it isn't valid JSON (e.g. the CLI printed a
+ * plain-text error before reaching --output-format handling). Shared for the same reason
+ * buildClaudePrompt above is.
  */
-export function parseClaudeCliOutput(stdout: string): string {
+export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
   try {
-    const data = JSON.parse(stdout.trim()) as { result?: string; content?: string }
-    return data.result ?? data.content ?? stdout.trim()
+    const data = JSON.parse(stdout.trim()) as {
+      result?: string
+      content?: string
+      total_cost_usd?: number
+      usage?: { input_tokens?: number; output_tokens?: number }
+    }
+    const reply = data.result ?? data.content ?? stdout.trim()
+    const usage =
+      typeof data.usage?.input_tokens === 'number' && typeof data.usage.output_tokens === 'number'
+        ? {
+            inputTokens: data.usage.input_tokens,
+            outputTokens: data.usage.output_tokens,
+            ...(typeof data.total_cost_usd === 'number' ? { costUsd: data.total_cost_usd } : {}),
+          }
+        : undefined
+    return { reply, usage }
   } catch {
-    return stdout.trim()
+    return { reply: stdout.trim() }
   }
 }

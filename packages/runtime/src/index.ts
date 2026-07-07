@@ -1,6 +1,6 @@
 export { FlowExecutionError, NodeExecutionError, GraphCycleError, UnknownNodeTypeError, AbortedError, UnknownToolError, HITLTimeoutError } from './errors'
 export { LLMClient } from './llm-client'
-export type { ILLMClient, ChatMessage, ChatOptions, ToolCallResult, LLMStructuredResponse, ToolDefinition, ToolStepEvent } from './llm-client'
+export type { ILLMClient, ChatMessage, ChatOptions, ToolCallResult, LLMStructuredResponse, ToolDefinition, ToolStepEvent, TokenUsage } from './llm-client'
 export { EventBus } from './events'
 export type { RuntimeEvent, NodeStartEvent, NodeCompleteEvent, NodeErrorEvent, TokenChunkEvent, FlowPausedEvent, FlowCompleteEvent, FlowErrorEvent } from './events'
 export { FlowGraph } from './graph'

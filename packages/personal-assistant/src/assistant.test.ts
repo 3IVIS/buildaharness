@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend } from '@buildaharness/runtime'
+import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage } from '@buildaharness/runtime'
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
@@ -10,11 +10,12 @@ class FakeLLMClient implements ILLMClient {
   receivedMessages: ChatMessage[][] = []
   /** Tokens as handed out by callChat, per call — lets streaming tests assert on chunk boundaries, not just the joined result. */
   streamedChunks: string[][] = []
-  constructor(private readonly reply: string = 'Here you go.', private readonly chunks?: string[]) {}
+  constructor(private readonly reply: string = 'Here you go.', private readonly chunks?: string[], private readonly usagePerCall?: TokenUsage) {}
 
-  async *callChat(messages: ChatMessage[], _options?: ChatOptions): AsyncIterable<string> {
+  async *callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
     this.calls++
     this.receivedMessages.push(messages)
+    if (this.usagePerCall) options?.onUsage?.(this.usagePerCall)
     const tokens = this.chunks ?? [this.reply]
     this.streamedChunks.push(tokens)
     for (const token of tokens) yield token
@@ -48,9 +49,12 @@ class ScriptedToolLLMClient implements ILLMClient {
     throw new Error('ScriptedToolLLMClient does not support callChatSync — this test path should only use callChatStructured')
   }
 
-  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+  async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
     this.receivedMessages.push(messages)
+    // Fixed per-call usage — lets a usage-accumulation test assert on `calls * usagePerCall`
+    // without needing a dedicated LLM client stub just for that.
+    options?.onUsage?.({ inputTokens: 10, outputTokens: 5 })
     return this.next()
   }
 }
@@ -287,6 +291,208 @@ describe('PersonalAssistant', () => {
     // continued from that checkpoint instead of re-initializing from scratch.
     expect(result.stepsUsed).toBeGreaterThan(stepsUsedAtPause)
     expect(await loadHarnessCheckpoint(checkpointStore, runId)).toBeUndefined()
+  })
+})
+
+describe('PersonalAssistant session management', () => {
+  it('getTranscript returns [] for a session with no history', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    expect(await assistant.getTranscript('nobody')).toEqual([])
+  })
+
+  it('getTranscript reflects turns already taken', async () => {
+    const llm = new FakeLLMClient('Sure thing.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    await assistant.turn('Hello there', { sessionId: 'transcript-test' })
+
+    const transcript = await assistant.getTranscript('transcript-test')
+    expect(transcript).toEqual([
+      { role: 'user', content: 'Hello there' },
+      { role: 'assistant', content: 'Sure thing.' },
+    ])
+  })
+
+  it('clearSession deletes transcript, facts, and plan state but leaves experience/reminders untouched', async () => {
+    const llm = new FakeLLMClient('Noted, Ali.')
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'clear-reminders' }))
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+    const sessionId = 'clear-test'
+
+    await assistant.turn('My name is Ali.', { sessionId })
+    await assistant.turn('Remind me to call mom tomorrow.', { sessionId })
+    expect(await assistant.getTranscript(sessionId)).not.toEqual([])
+    const remindersBefore = await reminderStore.list()
+    expect(remindersBefore).toHaveLength(1)
+
+    await assistant.clearSession(sessionId)
+
+    expect(await assistant.getTranscript(sessionId)).toEqual([])
+    const summary = await assistant.getMemorySummary(sessionId)
+    expect(summary.facts).toEqual([])
+    // Reminders are durable, cross-conversation learning — clearSession must not touch them.
+    expect(await reminderStore.list()).toEqual(remindersBefore)
+  })
+
+  it('clearSession deletes a leftover in-flight-turn checkpoint', async () => {
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'clear-checkpoints' })
+    const sessionId = 'clear-checkpoint-test'
+    const staleTask: Task = {
+      id: 'respond', description: 'leftover objective', status: 'PENDING', risk_level: 'LOW',
+      depends_on: [], parallel_write_domains: [], abstraction_level: 0, assigned_strategy: null,
+    }
+    const rt = new HarnessRuntime()
+    const paused = await rt.run('leftover objective', ['done'], {
+      initialTasks: [staleTask], max_steps: 5,
+      toolExecutors: { default: () => 'stale draft' },
+      runId: `turn:${sessionId}`, shouldPause: () => true,
+    })
+    if (paused.status !== 'paused') throw new Error('unreachable')
+    await saveHarnessCheckpoint(checkpointStore, paused.checkpoint)
+
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient(), checkpointStore })
+    await assistant.clearSession(sessionId)
+
+    expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeUndefined()
+  })
+
+  it('undoLastTurn on an empty transcript returns { undone: false } without throwing', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    expect(await assistant.undoLastTurn('nobody')).toEqual({ undone: false })
+  })
+
+  it('undoLastTurn drops the last user+assistant pair from a completed turn', async () => {
+    const llm = new FakeLLMClient('Second reply.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const sessionId = 'undo-test'
+    await assistant.turn('First message', { sessionId })
+    await assistant.turn('Second message', { sessionId })
+
+    const result = await assistant.undoLastTurn(sessionId)
+
+    expect(result).toEqual({ undone: true })
+    expect(await assistant.getTranscript(sessionId)).toEqual([
+      { role: 'user', content: 'First message' },
+      { role: 'assistant', content: 'Second reply.' },
+    ])
+  })
+
+  it('undoLastTurn drops only the pending user message when the last turn ended in needs_approval', async () => {
+    const llm = new FakeLLMClient('irrelevant')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const sessionId = 'undo-pending-test'
+    const staged = await assistant.turn('Send an email to my boss saying I quit.', { sessionId })
+    expect(staged.status).toBe('needs_approval')
+
+    const transcriptBeforeUndo = await assistant.getTranscript(sessionId)
+    expect(transcriptBeforeUndo).toEqual([{ role: 'user', content: 'Send an email to my boss saying I quit.' }])
+
+    const result = await assistant.undoLastTurn(sessionId)
+
+    expect(result).toEqual({ undone: true })
+    expect(await assistant.getTranscript(sessionId)).toEqual([])
+  })
+
+  it('getMemorySummary reflects seeded facts, reminders, and experience-store counts', async () => {
+    const llm = new FakeLLMClient('Got it.')
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'memory-summary-reminders' }))
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+    const sessionId = 'memory-summary-test'
+
+    await assistant.turn('My name is Ali.', { sessionId })
+    await reminderStore.create('Water the plants', null)
+
+    const summary = await assistant.getMemorySummary(sessionId)
+
+    expect(summary.facts).toHaveLength(1)
+    expect(summary.facts[0].text).toBe('My name is Ali.')
+    expect(summary.reminders).toHaveLength(1)
+    expect(summary.reminders[0].rawText).toBe('Water the plants')
+    expect(summary.experience).toEqual({ strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 })
+  })
+
+  it('getMemorySummary returns empty collections and zero counts when nothing has happened yet', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const summary = await assistant.getMemorySummary('fresh-session')
+    expect(summary).toEqual({
+      facts: [],
+      reminders: [],
+      experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
+    })
+  })
+
+  it('setModel changes the model passed to the llmClient on the next turn, mid-session', async () => {
+    const receivedModels: (string | undefined)[] = []
+    class ModelRecordingLLMClient implements ILLMClient {
+      async *callChat(_messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+        receivedModels.push(options?.model)
+        yield 'ok'
+      }
+      async callChatSync(_messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+        receivedModels.push(options?.model)
+        return 'ok'
+      }
+      async callChatStructured(): Promise<LLMStructuredResponse> {
+        return { content: 'ok' }
+      }
+    }
+    const assistant = new PersonalAssistant({ llmClient: new ModelRecordingLLMClient(), model: 'model-a' })
+
+    await assistant.turn('first', { sessionId: 'set-model-test' })
+    assistant.setModel('model-b')
+    await assistant.turn('second', { sessionId: 'set-model-test' })
+
+    expect(receivedModels).toEqual(['model-a', 'model-b'])
+  })
+})
+
+describe('PersonalAssistant usage tracking', () => {
+  it('returns usage from the one real call the triviality fast path makes', async () => {
+    const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).', undefined, { inputTokens: 42, outputTokens: 18 })
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('What timezone is Tokyo in?', { sessionId: 'usage-trivial' })
+
+    expect(result.harnessSkipped).toBe(true)
+    expect(result.usage).toEqual({ inputTokens: 42, outputTokens: 18 })
+  })
+
+  it('sums usage across every tool-loop iteration in a single turn', async () => {
+    const backend = makeFakeBackend()
+    const ROOT = '/workspace'
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'the launch code is 4471')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'list_directory', input: { path: '.' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'The launch code is 4471.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const result = await assistant.turn('What is the launch code, from notes.txt?')
+
+    expect(result.status).toBe('ok')
+    expect(llm.calls).toBe(3)
+    // ScriptedToolLLMClient reports a fixed { inputTokens: 10, outputTokens: 5 } per call.
+    expect(result.usage).toEqual({ inputTokens: 30, outputTokens: 15 })
+  })
+
+  it('does not set usage on a needs_approval result', async () => {
+    const llm = new FakeLLMClient('irrelevant', undefined, { inputTokens: 99, outputTokens: 99 })
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Send an email to my boss saying I quit.')
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.usage).toBeUndefined()
+  })
+
+  it('leaves usage undefined when the backend never reports it', async () => {
+    const llm = new FakeLLMClient('A plain reply, no usage.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('What is the capital of France?')
+
+    expect(result.status).toBe('ok')
+    expect(result.usage).toBeUndefined()
   })
 })
 

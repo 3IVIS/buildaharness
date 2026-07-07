@@ -231,6 +231,50 @@ describe('LLMClient', () => {
     })
   })
 
+  describe('callChat usage (onUsage)', () => {
+    it('reports usage accumulated from Anthropic message_start/message_delta events', async () => {
+      mockFetchOk([
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":42,"output_tokens":0}}}',
+        'data: {"delta":{"text":"hi"}}',
+        'data: {"type":"message_delta","delta":{},"usage":{"output_tokens":7}}',
+        'data: [DONE]',
+      ])
+
+      const onUsage = vi.fn()
+      const tokens: string[] = []
+      for await (const token of client.callChat([{ role: 'user', content: 'hi' }], { onUsage })) {
+        tokens.push(token)
+      }
+
+      expect(tokens.join('')).toBe('hi')
+      expect(onUsage).toHaveBeenCalledTimes(1)
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 42, outputTokens: 7 })
+    })
+
+    it('never calls onUsage when the stream has no usage fields (e.g. an OpenAI stream without stream_options)', async () => {
+      mockFetchOk([
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: [DONE]',
+      ])
+
+      const onUsage = vi.fn()
+      for await (const _ of client.callChat([{ role: 'user', content: 'hi' }], { onUsage })) {
+        // drain
+      }
+
+      expect(onUsage).not.toHaveBeenCalled()
+    })
+
+    it('does not throw when no onUsage callback is supplied', async () => {
+      mockFetchOk([
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":1,"output_tokens":0}}}',
+        'data: [DONE]',
+      ])
+
+      await expect(client.callChatSync([{ role: 'user', content: 'hi' }])).resolves.toBe('')
+    })
+  })
+
   describe('callChatStructured', () => {
     function mockFetchJson(body: Record<string, unknown>): ReturnType<typeof vi.fn> {
       const mockFetch = vi.fn().mockResolvedValue(
@@ -363,6 +407,31 @@ describe('LLMClient', () => {
       mockFetchError(502)
 
       await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).rejects.toThrow(FlowExecutionError)
+    })
+
+    it('reports usage from the response body via onUsage', async () => {
+      mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100, output_tokens: 25 } })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).toHaveBeenCalledTimes(1)
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 100, outputTokens: 25 })
+    })
+
+    it('never calls onUsage when the response has no usage field', async () => {
+      mockFetchJson({ content: [{ type: 'text', text: 'ok' }] })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).not.toHaveBeenCalled()
+    })
+
+    it('does not throw when no onUsage callback is supplied', async () => {
+      mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } })
+
+      await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).resolves.toEqual({ content: 'ok', toolCalls: undefined })
     })
   })
 })

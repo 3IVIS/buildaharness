@@ -15,6 +15,9 @@ function renderSettings(overrides: Partial<React.ComponentProps<typeof SettingsS
       busy={false}
       onSave={onSave}
       onCancel={onCancel}
+      transcriptLength={0}
+      memorySummary={null}
+      healthChecks={null}
       {...overrides}
     />,
   )
@@ -34,10 +37,32 @@ describe('SettingsScreen', () => {
 
   it('shows the Workspace section only on the desktop path', () => {
     const { rerender } = render(
-      <SettingsScreen config={DEFAULT_CONFIG} overriddenKeys={new Set()} isDesktop={false} busy={false} onSave={vi.fn()} onCancel={vi.fn()} />,
+      <SettingsScreen
+        config={DEFAULT_CONFIG}
+        overriddenKeys={new Set()}
+        isDesktop={false}
+        busy={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        transcriptLength={0}
+        memorySummary={null}
+        healthChecks={null}
+      />,
     )
     expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
-    rerender(<SettingsScreen config={DEFAULT_CONFIG} overriddenKeys={new Set()} isDesktop busy={false} onSave={vi.fn()} onCancel={vi.fn()} />)
+    rerender(
+      <SettingsScreen
+        config={DEFAULT_CONFIG}
+        overriddenKeys={new Set()}
+        isDesktop
+        busy={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        transcriptLength={0}
+        memorySummary={null}
+        healthChecks={null}
+      />,
+    )
     expect(screen.getByText('Workspace')).toBeInTheDocument()
   })
 
@@ -88,5 +113,42 @@ describe('SettingsScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.getByText(/requires braveApiKey/)).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  describe('Diagnostics section', () => {
+    it('shows "Loading…"/"Checking…" placeholders while memory/health data has not arrived yet', () => {
+      renderSettings({ memorySummary: null, healthChecks: null })
+      expect(screen.getByText('Loading…')).toBeInTheDocument()
+      expect(screen.getByText('Checking…')).toBeInTheDocument()
+    })
+
+    it('renders memory summary once loaded', () => {
+      renderSettings({
+        memorySummary: {
+          facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test' }],
+          reminders: [],
+          experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
+        },
+      })
+      expect(screen.getByText(/My name is Ali\./)).toBeInTheDocument()
+    })
+
+    it('renders session transcript length', () => {
+      renderSettings({ transcriptLength: 4 })
+      expect(screen.getByText(/4 messages this session/)).toBeInTheDocument()
+    })
+
+    it('renders health checks once loaded, including a failing one', () => {
+      renderSettings({ healthChecks: [{ label: 'proxy reachable', ok: false, detail: 'timed out' }] })
+      expect(screen.getByText(/proxy reachable — timed out/)).toBeInTheDocument()
+    })
+
+    it('renders usage/cost once a turn has completed', () => {
+      renderSettings({
+        lastTurnUsage: { inputTokens: 100, outputTokens: 50 },
+        sessionUsage: { inputTokens: 100, outputTokens: 50 },
+      })
+      expect(screen.getByText(/100 in \/ 50 out tokens/)).toBeInTheDocument()
+    })
   })
 })

@@ -39,6 +39,17 @@ already used for transcripts) and becomes `fileTools`' `workspaceRoot` for
 `get_dev_workspace_root()` — the compile-time monorepo root, dev-mode-only —
 which remains the fallback until a user picks a real directory.
 
+## Diagnostics health check
+
+Settings' Diagnostics > Health section (see `packages/chat-ui/README.md`)
+checks the `claude` binary here via a new `check_claude_available` Tauri
+command (`src-tauri/src/lib.rs`) — the desktop equivalent of the CLI's
+`/doctor` running `claude --version`. Returns `Ok(false)` rather than an
+error for "not found"/non-zero exit, since that's an expected health-check
+outcome, not an internal failure; no hard timeout on a hung binary (accepted
+simplification vs. the CLI's 3s-timeout version — see that command's doc
+comment).
+
 ## Distribution
 
 Tagged releases (`git tag desktop-v0.1.0 && git push origin desktop-v0.1.0`)

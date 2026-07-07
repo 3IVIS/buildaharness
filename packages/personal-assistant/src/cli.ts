@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline'
+import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient } from '@buildaharness/runtime'
+import { join, resolve as resolvePath } from 'node:path'
+import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient, type TokenUsage } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
 import { nodeDisplayName } from './node-display-names.js'
@@ -14,6 +15,9 @@ import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatCostSummary, formatDoctorReport } from './cli-session.js'
+import { estimateCostUsd } from './model-pricing.js'
+import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 
 const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const configStore = new NodeConfigStore(join(dataDir, 'config.json'))
@@ -97,12 +101,29 @@ async function main(): Promise<void> {
   const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
 
   console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n`)
-  console.log('Type /config to view settings.\n')
+  console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 
   let lastTrace: AssistantTrace | undefined
   let lastSources: AssistantSource[] | undefined
   let lastPlanStatus: AssistantTurnResult['planStatus']
+  let lastTurnUsage: TokenUsage | undefined
+  let sessionUsage: TokenUsage | undefined
+
+  /** On the proxy backend (which never returns a real dollar cost — see model-pricing.ts), attaches an approximate estimate; leaves a real claude-cli cost untouched. */
+  function withCostEstimate(usage: TokenUsage): TokenUsage {
+    if (config.llmBackend !== 'proxy' || usage.costUsd !== undefined) return usage
+    const estimated = estimateCostUsd(config.model ?? 'claude-3-5-sonnet-20241022', usage)
+    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  }
+
+  function accumulateSessionUsage(usage: TokenUsage): void {
+    sessionUsage = {
+      inputTokens: (sessionUsage?.inputTokens ?? 0) + usage.inputTokens,
+      outputTokens: (sessionUsage?.outputTokens ?? 0) + usage.outputTokens,
+      costUsd: usage.costUsd !== undefined ? (sessionUsage?.costUsd ?? 0) + usage.costUsd : sessionUsage?.costUsd,
+    }
+  }
 
   const PLAN_TASK_STATUS_ICON: Record<string, string> = {
     PENDING: '○', RUNNING: '▶', COMPLETE: '✓', FAILED: '✗', BLOCKED: '✗', HUMAN_REQUIRED: '~',
@@ -156,6 +177,96 @@ async function main(): Promise<void> {
       console.log(`  - ${SOURCE_TOOL_LABEL[source.tool]} ${source.path}`)
     }
     console.log('')
+  }
+
+  function printHelp(): void {
+    console.log(`\n${formatHelp()}\n`)
+  }
+
+  /** Ends the current conversation: clears transcript/facts/plan state and resets local display state so /why, /sources, /plan immediately reflect the fresh session instead of showing stale data. */
+  async function handleClear(): Promise<void> {
+    await assistant.clearSession('cli')
+    lastTrace = undefined
+    lastSources = undefined
+    lastPlanStatus = undefined
+    lastTurnUsage = undefined
+    sessionUsage = undefined
+    console.log('\n✓ Started a fresh conversation.\n')
+  }
+
+  async function printStatus(): Promise<void> {
+    const transcript = await assistant.getTranscript('cli')
+    console.log(`\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined })}\n`)
+  }
+
+  /** Writes the session transcript to a markdown file — an explicit argument overrides the default filename, resolved relative to process.cwd() if not absolute. */
+  async function handleExport(args: string[]): Promise<void> {
+    const transcript = await assistant.getTranscript('cli')
+    if (transcript.length === 0) {
+      console.log('\nNothing to export yet.\n')
+      return
+    }
+    const filename = resolvePath(process.cwd(), args[0] ?? defaultExportFilename())
+    try {
+      await writeFile(filename, formatTranscriptMarkdown(transcript), 'utf-8')
+      console.log(`\n✓ Exported ${transcript.length} message${transcript.length === 1 ? '' : 's'} to ${filename}\n`)
+    } catch (err) {
+      // Mirrors handleTurn's catch convention (below) — a failed write is reported, not thrown.
+      const { message } = classifyError(err)
+      console.log(`\n[error] ${message}\n`)
+    }
+  }
+
+  /**
+   * Removes the last exchange from conversation history. Only affects what the model
+   * remembers — a real write_file/run_shell_command effect from the undone turn is not
+   * reversed (see the plan's Known limitations). Peeks at the transcript before calling
+   * undoLastTurn so the confirmation message can name which side was removed, without
+   * changing undoLastTurn's return shape just for that.
+   */
+  async function handleUndo(): Promise<void> {
+    const transcriptBefore = await assistant.getTranscript('cli')
+    if (transcriptBefore.length === 0) {
+      console.log('\nNothing to undo.\n')
+      return
+    }
+    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+
+    const result = await assistant.undoLastTurn('cli')
+    if (!result.undone) {
+      console.log('\nNothing to undo.\n')
+      return
+    }
+    // The display state described the now-undone turn — there's no cheap way to recover the
+    // exact prior turn's trace/sources without storing turn-scoped snapshots (accepted limitation).
+    lastTrace = undefined
+    lastSources = undefined
+    lastPlanStatus = undefined
+    console.log(
+      `\n✓ Removed ${wasPendingApproval ? 'the pending message awaiting approval' : 'the last exchange (1 user message, 1 assistant reply)'}.\n`,
+    )
+  }
+
+  async function printMemory(): Promise<void> {
+    const summary = await assistant.getMemorySummary('cli')
+    console.log(`\n${formatMemorySummary(summary)}\n`)
+  }
+
+  function printCost(): void {
+    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 }, backend: config.llmBackend })}\n`)
+  }
+
+  async function handleDoctor(): Promise<void> {
+    const workspaceRoot = config.workspaceRoot ?? process.cwd()
+    const checks = await Promise.all([
+      // Backend-specific checks only run for the backend actually in use — skipped, not
+      // reported as failing, for the one that's inactive.
+      ...(config.llmBackend === 'proxy' ? [checkProxyHealth(config.proxyUrl)] : []),
+      ...(config.llmBackend === 'claude-cli' ? [checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')] : []),
+      checkWorkspaceRoot(workspaceRoot),
+      checkDataDirWritable(backend, dataDir),
+    ])
+    console.log(`\n${formatDoctorReport(checks)}\n`)
   }
 
   let lastProgressLineLength = 0
@@ -234,6 +345,8 @@ async function main(): Promise<void> {
       lastTrace = result.trace
       lastSources = result.sources
       lastPlanStatus = result.planStatus
+      lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
+      if (lastTurnUsage) accumulateSessionUsage(lastTurnUsage)
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
       const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''
@@ -333,6 +446,37 @@ async function main(): Promise<void> {
     console.log('\nUsage: /config | /config set <key> <value> | /config reset [key]\n')
   }
 
+  /** Thin convenience wrapper over /config set model — not a second mechanism. Bare /model shows the current value. */
+  async function handleModel(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      console.log(`\n${config.model ?? "(using each backend's default)"}\n`)
+      return
+    }
+    await handleConfigCommand(['set', 'model', args.join(' ')])
+  }
+
+  // A lookup keyed by the message's first whitespace-separated token — replaces what used to
+  // be a growing `if (message === '/why') ... if (message === '/sources') ...` chain. Each
+  // handler receives the remaining tokens as `args` (empty for commands that take none).
+  // Rebuilt on every dispatch rather than hoisted to module scope because several handlers
+  // close over `config`/`overriddenKeys`/`assistant`, which reloadAssistant() reassigns.
+  const commands: Record<string, (args: string[]) => void | Promise<void>> = {
+    '/why': () => printWhy(),
+    '/sources': () => printSources(),
+    '/plan': () => printPlan(),
+    '/help': () => printHelp(),
+    '/clear': () => handleClear(),
+    '/new': () => handleClear(),
+    '/status': () => printStatus(),
+    '/export': (args) => handleExport(args),
+    '/undo': () => handleUndo(),
+    '/memory': () => printMemory(),
+    '/model': (args) => handleModel(args),
+    '/cost': () => printCost(),
+    '/doctor': () => handleDoctor(),
+    '/config': (args) => handleConfigCommand(args),
+  }
+
   // readline's 'line' event fires for every buffered line as soon as it's parsed — it does
   // not wait for a previous line's async handler to finish, so piped/pasted multi-line input
   // can dispatch several commands concurrently. That's harmless for read-only commands
@@ -348,11 +492,10 @@ async function main(): Promise<void> {
     if (!message) { rl.prompt(); return }
     dispatchQueue = dispatchQueue
       .then(async () => {
-        if (message === '/why') { printWhy(); rl.prompt(); return }
-        if (message === '/sources') { printSources(); rl.prompt(); return }
-        if (message === '/plan') { printPlan(); rl.prompt(); return }
-        if (message === '/config' || message.startsWith('/config ')) {
-          await handleConfigCommand(message.split(/\s+/).slice(1))
+        const [token, ...args] = message.split(/\s+/)
+        const handler = commands[token]
+        if (handler) {
+          await handler(args)
           rl.prompt()
           return
         }

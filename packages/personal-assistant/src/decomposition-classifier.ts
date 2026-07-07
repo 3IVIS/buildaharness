@@ -1,4 +1,4 @@
-import type { ILLMClient } from '@buildaharness/runtime'
+import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 
 export interface DecompositionCandidateClassification {
   isCandidate: boolean
@@ -77,7 +77,12 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
  * single-task result returns null, meaning "fall back to the caller's own
  * single-task graph" rather than throwing.
  */
-export async function decomposeObjective(llmClient: ILLMClient, message: string, model?: string): Promise<DecomposedTaskSpec[] | null> {
+export async function decomposeObjective(
+  llmClient: ILLMClient,
+  message: string,
+  model?: string,
+  onUsage?: (usage: TokenUsage) => void,
+): Promise<DecomposedTaskSpec[] | null> {
   try {
     const response = await llmClient.callChatStructured(
       [
@@ -85,7 +90,7 @@ export async function decomposeObjective(llmClient: ILLMClient, message: string,
         { role: 'user', content: message },
       ],
       undefined,
-      { model, structuredOutput: { schema: DECOMPOSITION_SCHEMA } },
+      { model, onUsage, structuredOutput: { schema: DECOMPOSITION_SCHEMA } },
     )
     const parsed = JSON.parse(response.content) as { tasks?: unknown }
     if (!Array.isArray(parsed.tasks)) return null

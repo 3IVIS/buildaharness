@@ -19,6 +19,8 @@ import {
   type ILLMClient,
   type ChatMessage,
   type ReminderStore,
+  type ReminderRecord,
+  type TokenUsage,
 } from '@buildaharness/runtime'
 import { classifyRisk, type RiskClassification } from './risk-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
@@ -103,6 +105,13 @@ export interface AssistantTrace {
   verificationHealth: { strength: number; feasibility: number }
 }
 
+/** Read-only snapshot returned by `getMemorySummary()` — see that method's doc comment. */
+export interface MemorySummary {
+  facts: UserFact[]
+  reminders: ReminderRecord[]
+  experience: { strategyWeightCount: number; decompositionCount: number; recoverySequenceCount: number }
+}
+
 /**
  * A real, non-mutating tool call the model made while producing a reply — grounds a reply in something other
  * than the model's own words. write_file is deliberately excluded: until approved, nothing was actually read or
@@ -144,6 +153,14 @@ export interface AssistantTurnResult {
     completionPct: number
     tasks: { id: string; description: string; status: string }[]
   }
+  /**
+   * Token usage accumulated across every real LLM call this turn made (can be more than one:
+   * decomposition, plan-building, up to TOOL_LOOP_MAX_ITERATIONS tool-loop round trips).
+   * Absent when the backend/response never reported usage at all (e.g. the claude-cli backend
+   * with no usage field) — same "absent when unused" convention as trace/sources. Never set on
+   * needs_approval/escalated, matching how trace/sources already behave.
+   */
+  usage?: TokenUsage
 }
 
 export interface AssistantProgress {
@@ -233,7 +250,7 @@ export interface PersonalAssistantOptions {
  */
 export class PersonalAssistant {
   private readonly llmClient: ILLMClient
-  private readonly model?: string
+  private model?: string
   private readonly memory: MemoryAdapter
   private readonly experienceStore: ExperienceStore
   private readonly checkpointStore: CheckpointStore
@@ -293,8 +310,87 @@ export class PersonalAssistant {
     }
   }
 
+  /** The session's conversation transcript, oldest first — same array `turn()` reads/appends to. Used by `/export`. */
+  async getTranscript(sessionId: string): Promise<ChatMessage[]> {
+    return ((await this.memory.get(`transcript:${sessionId}`)) as ChatMessage[] | undefined) ?? []
+  }
+
+  /**
+   * Ends the current conversation: deletes the transcript, extracted facts, and any active
+   * plan for this session, plus a leftover in-flight-turn checkpoint if one exists (from an
+   * abandoned turn that never reached its normal cleanup). Deliberately leaves
+   * `experienceStore`/`reminderStore` untouched — those are durable, cross-conversation
+   * learning, not per-conversation scratch state (see the README's "Three things live
+   * outside a single harness run" section).
+   */
+  async clearSession(sessionId: string): Promise<void> {
+    await this.memory.delete(`transcript:${sessionId}`)
+    await this.memory.delete(`facts:${sessionId}`)
+    await this.memory.delete(`plan:${sessionId}`)
+    await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
+  }
+
+  /**
+   * Removes the most recent exchange from conversation history — a completed turn drops its
+   * user message and assistant reply (2 entries); a turn that ended in `needs_approval` before
+   * any reply was appended drops just the pending user message (1 entry). Only affects what the
+   * model remembers: a real `write_file`/`run_shell_command` effect from the undone turn is not
+   * reversed. Returns `{ undone: false }` on an empty transcript instead of throwing.
+   */
+  async undoLastTurn(sessionId: string): Promise<{ undone: boolean }> {
+    const transcriptKey = `transcript:${sessionId}`
+    const transcript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
+    if (transcript.length === 0) return { undone: false }
+
+    const last = transcript[transcript.length - 1]
+    const dropCount = last.role === 'assistant' ? 2 : 1
+    await this.memory.set(transcriptKey, transcript.slice(0, Math.max(0, transcript.length - dropCount)))
+    return { undone: true }
+  }
+
+  /**
+   * Read-only snapshot of what this session/assistant has learned: durable facts extracted
+   * from the user's own messages, reminders created so far, and summary counts (not the raw
+   * weights, which aren't meaningfully human-readable on their own) from the learning-layer
+   * `ExperienceStore`. Used by `/memory`.
+   */
+  async getMemorySummary(sessionId: string): Promise<MemorySummary> {
+    const facts = ((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []
+    const reminders = await this.reminderStore.list()
+    const experienceData = this.experienceStore.toJSON()
+    return {
+      facts,
+      reminders,
+      experience: {
+        strategyWeightCount: Object.keys(experienceData.strategy_weights).length,
+        decompositionCount: experienceData.decompositions.length,
+        recoverySequenceCount: experienceData.recovery_sequences.length,
+      },
+    }
+  }
+
+  /** Changes the model used by every subsequent `turn()` call, mid-session — no reconstruction needed. Used by `/model`. */
+  setModel(model: string | undefined): void {
+    this.model = model
+  }
+
   private async runTurn(userMessage: string, options: TurnOptions, sessionId: string): Promise<AssistantTurnResult> {
     const transcriptKey = `transcript:${sessionId}`
+
+    // Accumulates usage across every real LLM call this turn makes — a turn can make several
+    // (decomposition, plan-building, up to TOOL_LOOP_MAX_ITERATIONS tool-loop round trips) —
+    // into one turn-level total attached to a successful AssistantTurnResult. Absent (stays
+    // undefined) on a turn that never calls onUsage at all, e.g. the claude-cli backend
+    // producing no usage field, or a needs_approval/escalated turn — same "absent when
+    // unused" convention trace/sources already follow.
+    let usageTotal: TokenUsage | undefined
+    const accumulateUsage = (u: TokenUsage): void => {
+      usageTotal = {
+        inputTokens: (usageTotal?.inputTokens ?? 0) + u.inputTokens,
+        outputTokens: (usageTotal?.outputTokens ?? 0) + u.outputTokens,
+        costUsd: u.costUsd !== undefined ? (usageTotal?.costUsd ?? 0) + u.costUsd : usageTotal?.costUsd,
+      }
+    }
 
     // A staged action is resumed by ID, not re-derived from a second LLM call —
     // see T4 in plans/personal_assistant_file_tools_plan.html for why a second
@@ -339,7 +435,7 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (this.fileTools || this.webTools || this.shellTools) {
-      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken, options.onToolStep)
+      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -372,7 +468,7 @@ export class PersonalAssistant {
       draftReply = ''
       for await (const token of this.llmClient.callChat(
         [{ role: 'system', content: systemPrompt }, ...transcript, { role: 'user', content: userMessage }],
-        { model: this.model },
+        { model: this.model, onUsage: accumulateUsage },
       )) {
         draftReply += token
         options.onToken?.(token)
@@ -388,7 +484,7 @@ export class PersonalAssistant {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
       await this.recordFacts(sessionId, userMessage)
-      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources }
+      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources, usage: usageTotal }
     }
 
     // A compound-looking request spends one extra LLM call decomposing itself into
@@ -399,7 +495,7 @@ export class PersonalAssistant {
     let decomposed: DecomposedTaskSpec[] | null = null
     const decompositionCandidate = classifyDecompositionCandidate(userMessage)
     if (decompositionCandidate.isCandidate) {
-      decomposed = await decomposeObjective(this.llmClient, userMessage, this.model)
+      decomposed = await decomposeObjective(this.llmClient, userMessage, this.model, accumulateUsage)
       if (decomposed) {
         initialTasks = toHarnessTasks(decomposed, classification.riskLevel)
       }
@@ -421,7 +517,7 @@ export class PersonalAssistant {
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planningCandidate.isCandidate, matchedTemplate: planningCandidate.matchedTemplate })
       if (planningCandidate.isCandidate && planningCandidate.matchedTemplate) {
         const template = loadTemplate(planningCandidate.matchedTemplate)
-        const plan = await buildPlanFromTemplate(this.llmClient, userMessage, template, this.model)
+        const plan = await buildPlanFromTemplate(this.llmClient, userMessage, template, this.model, accumulateUsage)
         if (plan) {
           activePlan = createPlanRecord(plan)
           await savePlan(this.memory, sessionId, activePlan)
@@ -512,7 +608,7 @@ export class PersonalAssistant {
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
       await this.recordFacts(sessionId, userMessage)
 
-      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus }
+      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, usage: usageTotal }
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -556,6 +652,7 @@ export class PersonalAssistant {
     systemPrompt: string,
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
   ): Promise<ToolLoopResult> {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -595,6 +692,7 @@ export class PersonalAssistant {
       const response = await this.llmClient.callChatStructured(messages, tools, {
         model: this.model,
         onToolStep: onToolStep ? (event) => reportStep(event.tool, event.input) : undefined,
+        onUsage,
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
@@ -620,7 +718,7 @@ export class PersonalAssistant {
         // history, so re-asking here gets an equally-grounded answer, just delivered
         // token-by-token instead of all at once.
         let streamed = ''
-        for await (const token of this.llmClient.callChat(messages, { model: this.model })) {
+        for await (const token of this.llmClient.callChat(messages, { model: this.model, onUsage })) {
           streamed += token
           onToken(token)
         }

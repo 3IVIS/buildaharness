@@ -77,6 +77,29 @@ describe('ClaudeCliLLMClient', () => {
     expect(spawnOptions.cwd).toBe(tmpdir())
   })
 
+  it('callChatSync fires onUsage with parsed token counts and cost', async () => {
+    spawnMock.mockImplementation(() =>
+      fakeClaudeProcess(JSON.stringify({ result: 'hi there', usage: { input_tokens: 312, output_tokens: 148 }, total_cost_usd: 0.0019 })),
+    )
+    const client = new ClaudeCliLLMClient()
+    const onUsage = vi.fn()
+
+    await client.callChatSync([{ role: 'user', content: 'hello' }], { onUsage })
+
+    expect(onUsage).toHaveBeenCalledTimes(1)
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 312, outputTokens: 148, costUsd: 0.0019 })
+  })
+
+  it('callChatSync never calls onUsage when the response has no usage field', async () => {
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'hi there' })))
+    const client = new ClaudeCliLLMClient()
+    const onUsage = vi.fn()
+
+    await client.callChatSync([{ role: 'user', content: 'hello' }], { onUsage })
+
+    expect(onUsage).not.toHaveBeenCalled()
+  })
+
   it('callChatStructured with no tools delegates to a plain chat call', async () => {
     spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'plain reply' })))
     const client = new ClaudeCliLLMClient()
@@ -219,6 +242,29 @@ describe('ClaudeCliLLMClient', () => {
       expect(result.toolCalls).toHaveLength(1)
       expect(result.toolCalls?.[0].name).toBe('__staged_action')
       expect(result.toolCalls?.[0].input).toMatchObject({ id: 'abc-123', kind: 'write', path: 'summary.md', content: 'draft summary' })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('callChatStructured (streaming tool-loop path) fires onUsage with parsed token counts', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      const resultLine = `${JSON.stringify({
+        type: 'result', result: 'here is the file', usage: { input_tokens: 500, output_tokens: 90 }, total_cost_usd: 0.004,
+      })}\n`
+      spawnMock.mockImplementation(() => fakeClaudeProcess(resultLine))
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured(
+        [{ role: 'user', content: 'read notes.txt' }],
+        [{ name: 'read_file', input_schema: {} }],
+        { onUsage },
+      )
+
+      expect(onUsage).toHaveBeenCalledTimes(1)
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 500, outputTokens: 90, costUsd: 0.004 })
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

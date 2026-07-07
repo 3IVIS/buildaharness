@@ -60,6 +60,42 @@ that capability is added separately. Secrets (`authToken`, `braveApiKey`) are
 stored in plaintext (`localStorage` or an unencrypted JSON file), same trust
 boundary as the CLI's `config.json` — not an OS keychain.
 
+## Session actions & Diagnostics
+
+The header (next to the gear icon) has three buttons — the GUI equivalents
+of the CLI's `/clear`, `/export`, and `/undo`:
+
+- **New chat** — ends the current conversation (`PersonalAssistant.clearSession()`)
+  and resets every piece of derived UI state (usage, memory, health) so
+  nothing shows stale data for the fresh session.
+- **Export** — downloads the transcript as a markdown file (a `Blob` URL +
+  a throwaway `<a download>`, works the same in a plain browser tab and
+  inside the Tauri webview). Disabled with no conversation yet.
+- **Undo** — removes the last exchange from conversation history
+  (`PersonalAssistant.undoLastTurn()`), adjusting the visible message list to
+  match: a completed turn drops both bubbles, a still-pending approval card
+  drops just that one. Disabled with no conversation yet.
+
+`SettingsScreen.tsx` has a **Diagnostics** section (below Shell, above the
+Save/Cancel footer) — the GUI equivalents of `/status` (transcript length),
+`/memory`, `/cost`, and `/doctor`. Populated once, when Settings opens (not
+kept live — Settings and the chat view are mutually exclusive, so there's no
+risk of it going stale while both are visible), and rendered with the exact
+same formatters (`formatMemorySummary`/`formatCostSummary`/`formatDoctorReport`
+from `@buildaharness/personal-assistant`) the CLI's `/memory`/`/cost`/`/doctor`
+use, so the two front ends never drift into two descriptions of the same
+facts. Health checks are platform-specific (`src/gui-doctor-checks.ts`): a
+plain browser checks proxy reachability via `fetch`; the Tauri desktop build
+checks the `claude` binary (a new `check_claude_available` Rust command),
+workspace configuration, and data-dir writability instead, since desktop has
+no proxy to check.
+
+Cost estimation follows the same real-vs-approximate split the CLI's `/cost`
+documents: real on desktop (`claude`'s own accounting), a static-table
+estimate on the proxy backend (`estimateCostUsd`, from `model-pricing.ts`) —
+see the personal-assistant README's "`/cost` and real vs. estimated dollar
+figures" section for the full explanation.
+
 ## Usage
 
 ```bash

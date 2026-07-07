@@ -1,4 +1,4 @@
-import type { ILLMClient } from '@buildaharness/runtime'
+import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import type { PlanTemplate } from './plan-templates/index.js'
 
@@ -65,6 +65,7 @@ export async function buildPlanFromTemplate(
   message: string,
   template: PlanTemplate,
   model?: string,
+  onUsage?: (usage: TokenUsage) => void,
 ): Promise<Plan | null> {
   try {
     const response = await llmClient.callChatStructured(
@@ -73,7 +74,7 @@ export async function buildPlanFromTemplate(
         { role: 'user', content: message },
       ],
       undefined,
-      { model, structuredOutput: { schema: PLAN_SCHEMA } },
+      { model, onUsage, structuredOutput: { schema: PLAN_SCHEMA } },
     )
     const parsed = JSON.parse(response.content) as { tasks?: unknown }
     if (!Array.isArray(parsed.tasks)) return null

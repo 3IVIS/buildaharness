@@ -25,6 +25,14 @@ export interface ChatOptions {
    * personal-assistant's summarizeToolStep) so this stays a thin, dependency-free type.
    */
   onToolStep?: (event: ToolStepEvent) => void
+  /**
+   * Called once per call with token usage, when the backend/response actually reports it —
+   * optional and best-effort, same "no-op if the caller doesn't listen" convention as
+   * onToolStep, chosen over changing callChatSync/callChat's return type so every existing
+   * call site and mock keeps compiling unchanged. See LLMClient's doc comments for exactly
+   * when each backend can/can't supply this.
+   */
+  onUsage?: (usage: TokenUsage) => void
 }
 
 export interface ToolStepEvent {
@@ -41,6 +49,13 @@ export interface ToolCallResult {
 export interface LLMStructuredResponse {
   content: string
   toolCalls?: ToolCallResult[]
+}
+
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+  /** Real dollar cost, when the backend can supply one (e.g. Claude CLI's --output-format json). Absent when only token counts are known — a caller wanting a dollar figure regardless must derive one from a pricing table itself. */
+  costUsd?: number
 }
 
 export interface ToolDefinition {
@@ -145,6 +160,20 @@ export class LLMClient implements ILLMClient {
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    // Anthropic's stream always includes usage (message_start's input_tokens, message_delta's
+    // running output_tokens — each message_delta supersedes the last, so this is an overwrite,
+    // not an accumulation). OpenAI's stream only includes it when the request opts in via
+    // `stream_options: { include_usage: true }`, which this call doesn't set (to avoid changing
+    // request behavior for a nice-to-have) — usage capture on this streaming path is therefore
+    // best-effort, guaranteed only for Anthropic models. callChatStructured's non-streaming path
+    // always gets real usage regardless of provider.
+    let inputTokens: number | undefined
+    let outputTokens: number | undefined
+    const reportUsage = (): void => {
+      if (inputTokens !== undefined || outputTokens !== undefined) {
+        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 })
+      }
+    }
 
     while (true) {
       const { done, value } = await reader.read()
@@ -155,9 +184,11 @@ export class LLMClient implements ILLMClient {
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim()
-          if (data === '[DONE]') return
+          if (data === '[DONE]') { reportUsage(); return }
           try {
             const parsed = JSON.parse(data)
+            if (typeof parsed?.message?.usage?.input_tokens === 'number') inputTokens = parsed.message.usage.input_tokens
+            if (typeof parsed?.usage?.output_tokens === 'number') outputTokens = parsed.usage.output_tokens
             // Anthropic
             const anthropicDelta = parsed?.delta?.text
             if (typeof anthropicDelta === 'string') { yield anthropicDelta; continue }
@@ -170,6 +201,7 @@ export class LLMClient implements ILLMClient {
         }
       }
     }
+    reportUsage()
   }
 
   async callChatSync(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
@@ -212,6 +244,12 @@ export class LLMClient implements ILLMClient {
           toolCalls.push({ id: block.id, name: block.name, input: block.input ?? {} })
         }
       }
+    }
+    // Anthropic's non-streaming response always includes usage — reliable regardless of
+    // provider, unlike callChat's best-effort streaming capture above.
+    const usage = json.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
+      options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
     }
     return { content: contentParts.join(''), toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
   }

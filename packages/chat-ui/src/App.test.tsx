@@ -8,19 +8,45 @@ vi.mock('@buildaharness/runtime', async () => {
   return { ...actual, LLMClient: vi.fn() }
 })
 
+/** A transcript entry shape close enough to ChatMessage for these tests' purposes. */
+interface FakeTranscriptEntry {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 vi.mock('@buildaharness/personal-assistant', async () => {
   const actual = await vi.importActual<typeof import('@buildaharness/personal-assistant')>('@buildaharness/personal-assistant')
   return {
     ...actual,
     PersonalAssistant: {
-      create: vi.fn(async () => ({
-        turn: vi.fn(async (message: string, options?: { approved?: boolean }) => {
-          if (message.includes('approval') && !options?.approved) {
-            return { status: 'needs_approval', reply: null, reason: 'looks risky', riskLevel: 'HIGH' }
-          }
-          return { status: 'ok', reply: `echo: ${message}`, riskLevel: 'LOW' }
-        }),
-      })),
+      create: vi.fn(async () => {
+        let transcript: FakeTranscriptEntry[] = []
+        return {
+          turn: vi.fn(async (message: string, options?: { approved?: boolean }) => {
+            if (message.includes('approval') && !options?.approved) {
+              transcript.push({ role: 'user', content: message })
+              return { status: 'needs_approval', reply: null, reason: 'looks risky', riskLevel: 'HIGH' }
+            }
+            transcript.push({ role: 'user', content: message })
+            const reply = `echo: ${message}`
+            transcript.push({ role: 'assistant', content: reply })
+            return { status: 'ok', reply, riskLevel: 'LOW', usage: { inputTokens: 10, outputTokens: 5 } }
+          }),
+          getTranscript: vi.fn(async () => transcript),
+          clearSession: vi.fn(async () => { transcript = [] }),
+          undoLastTurn: vi.fn(async () => {
+            if (transcript.length === 0) return { undone: false }
+            const dropCount = transcript[transcript.length - 1].role === 'assistant' ? 2 : 1
+            transcript = transcript.slice(0, transcript.length - dropCount)
+            return { undone: true }
+          }),
+          getMemorySummary: vi.fn(async () => ({
+            facts: [],
+            reminders: [],
+            experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
+          })),
+        }
+      }),
     },
   }
 })
@@ -29,10 +55,14 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    // Opening Settings now runs a health check (checkProxyReachable) that hits a real
+    // network URL — stub fetch so tests never depend on (or wait on) an actual network call.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
   })
 
   afterEach(() => {
     localStorage.clear()
+    vi.unstubAllGlobals()
   })
 
   it('sends a message and renders the assistant reply', async () => {
@@ -89,5 +119,76 @@ describe('App', () => {
 
     expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
     expect(localStorage.getItem('buildaharness.personal-assistant.config')).toBeNull()
+  })
+
+  it('"New chat" clears the conversation from the screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'New chat' }))
+
+    await waitFor(() => expect(screen.queryByText('hello there')).not.toBeInTheDocument())
+    expect(screen.queryByText('echo: hello there')).not.toBeInTheDocument()
+  })
+
+  it('"Export" downloads the transcript as a markdown file', async () => {
+    const user = userEvent.setup()
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+    URL.revokeObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    render(<App />)
+
+    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Export transcript' }))
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1))
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+  })
+
+  it('"Export" is disabled with no conversation yet', async () => {
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Export transcript' })).toBeDisabled()
+  })
+
+  it('"Undo" removes the last exchange from the screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'first message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Undo last exchange' }))
+
+    await waitFor(() => expect(screen.queryByText('first message')).not.toBeInTheDocument())
+    expect(screen.queryByText('echo: first message')).not.toBeInTheDocument()
+  })
+
+  it('"Undo" is disabled with no conversation yet', async () => {
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Undo last exchange' })).toBeDisabled()
+  })
+
+  it('Settings shows Diagnostics data once loaded (memory, usage, health)', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+
+    await waitFor(() => expect(screen.getByText(/10 in \/ 5 out tokens/)).toBeInTheDocument())
+    expect(screen.getByText(/2 messages this session/)).toBeInTheDocument()
+    expect(screen.getByText(/proxy reachable/)).toBeInTheDocument()
   })
 })

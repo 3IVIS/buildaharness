@@ -105,6 +105,14 @@ Both filesystem backends are the *same* `FileSystemAdapter`/`FileSystemExperienc
 classes — see `packages/runtime/README.md`'s "Filesystem-backed storage"
 section for how the file-I/O seam that makes that possible works.
 
+The REPL commands below (`/clear`, `/export`, `/undo`, `/memory`, `/cost`,
+`/doctor`) have GUI equivalents in chat-ui/desktop too — a header button for
+each action, and a Settings > Diagnostics section for the read-only ones —
+reusing this package's `formatMemorySummary`/`formatCostSummary`/`formatDoctorReport`/
+`formatTranscriptMarkdown`/`estimateCostUsd` exports so both front ends render
+identical data, never two descriptions of the same facts. See
+`packages/chat-ui/README.md`'s "Session actions & Diagnostics" section.
+
 ## File access via tools
 
 `PersonalAssistant` can give the model real `read_file`/`list_directory`/`write_file`
@@ -411,6 +419,44 @@ independently per field. Settings persist as plain JSON at
 package's persistence, it's a real file, not encrypted, so `authToken` and
 `braveApiKey` are stored in plaintext there. This is the same trust boundary
 the repo's root `.env` already has, not a new one.
+
+## REPL commands
+
+Type `/help` inside a running CLI session for this list. All of them read or
+change local session/config state — none of them make an LLM call themselves.
+
+| Command | What it does |
+|---|---|
+| `/help` | Show this list |
+| `/clear` (alias `/new`) | Start a fresh conversation — deletes this session's transcript, extracted facts, and active plan. Leaves learned reminders/experience untouched (those are durable, cross-conversation learning, not conversation-scoped state) |
+| `/status` | Show the resolved config (model, backend, workspace, enabled capabilities — same as the startup banner) plus this session's transcript length and whether a plan is active |
+| `/export [file]` | Save this session's transcript to a markdown file (default: `assistant-transcript-<timestamp>.md` in the current directory) |
+| `/undo` | Remove the last exchange from conversation history — a completed turn drops both the user message and the reply; a turn still awaiting approval drops just the pending message. Only affects what the model remembers: a real `write_file`/`run_shell_command` effect from that turn is **not** reversed |
+| `/memory` | Show facts learned about you, reminders created so far, and summary counts from the learning-layer `ExperienceStore` |
+| `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
+| `/cost` | Show token usage for the last turn and the running session total |
+| `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health |
+| `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
+| `/sources` | List files/URLs the last turn actually consulted |
+| `/plan` | Show the active structured plan's task status |
+
+### `/cost` and real vs. estimated dollar figures
+
+Token counts are always real, on both backends. The dollar figure attached to
+them is not always the same kind of number:
+
+- **claude-cli backend**: `costUsd` comes straight from `claude
+  --output-format json`'s own `total_cost_usd` field — real Anthropic
+  accounting. It may read `$0` if the underlying `claude` session is
+  authenticated against a Pro/Max subscription rather than API billing, in
+  which case `$0` does *not* mean "this turn was free" — `/cost`'s output
+  says so explicitly.
+- **proxy backend**: `@buildaharness/proxy` is a thin pass-through to
+  Anthropic/OpenAI (see `packages/proxy/src/forward.ts`) and never computes a
+  cost itself — only the raw token counts each provider's response already
+  includes. `/cost` falls back to a small static, hand-maintained pricing
+  table (`model-pricing.ts`, Sonnet/Opus/Haiku list prices) to show an
+  *approximate* estimate, clearly labeled as such, not real billing data.
 
 ## Commands
 

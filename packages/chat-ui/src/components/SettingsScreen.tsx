@@ -1,5 +1,16 @@
 import { useState } from 'react'
-import { validateConfig, ConfigValidationError, CONFIG_KEYS, type AssistantConfig } from '@buildaharness/personal-assistant'
+import {
+  validateConfig,
+  ConfigValidationError,
+  CONFIG_KEYS,
+  formatMemorySummary,
+  formatCostSummary,
+  formatDoctorReport,
+  type AssistantConfig,
+  type MemorySummary,
+  type DoctorCheck,
+} from '@buildaharness/personal-assistant'
+import type { TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
 
 interface Props {
@@ -13,6 +24,12 @@ interface Props {
   onCancel: () => void
   /** Desktop-only: opens the native folder picker (Tauri's pick_workspace_directory command). Resolves null if the user cancelled. */
   onPickWorkspaceDirectory?: () => Promise<string | null>
+  /** GUI equivalents of the CLI's /status (transcript length), /memory, /cost, and /doctor — App.tsx populates these when Settings opens (see loadDiagnostics). null/undefined means "still loading", not "empty". */
+  transcriptLength: number
+  memorySummary: MemorySummary | null
+  lastTurnUsage?: TokenUsage
+  sessionUsage?: TokenUsage
+  healthChecks: DoctorCheck[] | null
 }
 
 function isPinned(overriddenKeys: ReadonlySet<keyof AssistantConfig>, key: keyof AssistantConfig): boolean {
@@ -31,7 +48,20 @@ function FieldRow({ label, pinnedBy, children }: { label: string; pinnedBy?: str
   )
 }
 
-export function SettingsScreen({ config, overriddenKeys, isDesktop, busy, onSave, onCancel, onPickWorkspaceDirectory }: Props): React.JSX.Element {
+export function SettingsScreen({
+  config,
+  overriddenKeys,
+  isDesktop,
+  busy,
+  onSave,
+  onCancel,
+  onPickWorkspaceDirectory,
+  transcriptLength,
+  memorySummary,
+  lastTurnUsage,
+  sessionUsage,
+  healthChecks,
+}: Props): React.JSX.Element {
   const [form, setForm] = useState<AssistantConfig>(config)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -163,6 +193,27 @@ export function SettingsScreen({ config, overriddenKeys, isDesktop, busy, onSave
             </FieldRow>
           </section>
         )}
+
+        <section className="settings__section">
+          <h2>Diagnostics</h2>
+          <div className="settings__field-label">Session</div>
+          <pre className="settings__diagnostics-block">{transcriptLength} message{transcriptLength === 1 ? '' : 's'} this session</pre>
+
+          <div className="settings__field-label">Memory</div>
+          <pre className="settings__diagnostics-block">{memorySummary ? formatMemorySummary(memorySummary) : 'Loading…'}</pre>
+
+          <div className="settings__field-label">Usage</div>
+          <pre className="settings__diagnostics-block">
+            {formatCostSummary({
+              lastTurn: lastTurnUsage,
+              session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 },
+              backend: isDesktop ? 'claude-cli' : 'proxy',
+            })}
+          </pre>
+
+          <div className="settings__field-label">Health</div>
+          <pre className="settings__diagnostics-block">{healthChecks ? formatDoctorReport(healthChecks) : 'Checking…'}</pre>
+        </section>
 
         {error && <div className="settings__error">{error}</div>}
       </div>

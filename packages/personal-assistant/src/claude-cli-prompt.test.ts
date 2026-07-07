@@ -23,14 +23,37 @@ describe('buildClaudePrompt', () => {
 
 describe('parseClaudeCliOutput', () => {
   it('extracts the "result" field from --output-format json stdout', () => {
-    expect(parseClaudeCliOutput('{"result": "hello there"}')).toBe('hello there')
+    expect(parseClaudeCliOutput('{"result": "hello there"}').reply).toBe('hello there')
   })
 
   it('falls back to "content" when "result" is absent', () => {
-    expect(parseClaudeCliOutput('{"content": "fallback text"}')).toBe('fallback text')
+    expect(parseClaudeCliOutput('{"content": "fallback text"}').reply).toBe('fallback text')
   })
 
   it('falls back to raw trimmed stdout when it is not valid JSON', () => {
-    expect(parseClaudeCliOutput('  plain text reply  \n')).toBe('plain text reply')
+    const parsed = parseClaudeCliOutput('  plain text reply  \n')
+    expect(parsed.reply).toBe('plain text reply')
+    expect(parsed.usage).toBeUndefined()
+  })
+
+  it('parses usage and total_cost_usd when present', () => {
+    const parsed = parseClaudeCliOutput(
+      JSON.stringify({ result: 'hi', usage: { input_tokens: 312, output_tokens: 148 }, total_cost_usd: 0.0019 }),
+    )
+    expect(parsed.usage).toEqual({ inputTokens: 312, outputTokens: 148, costUsd: 0.0019 })
+  })
+
+  it('omits usage when the JSON has no usage field', () => {
+    expect(parseClaudeCliOutput('{"result": "hi"}').usage).toBeUndefined()
+  })
+
+  it('omits usage when usage is present but incomplete (missing output_tokens)', () => {
+    const parsed = parseClaudeCliOutput(JSON.stringify({ result: 'hi', usage: { input_tokens: 10 } }))
+    expect(parsed.usage).toBeUndefined()
+  })
+
+  it('omits costUsd when total_cost_usd is absent even though usage is present', () => {
+    const parsed = parseClaudeCliOutput(JSON.stringify({ result: 'hi', usage: { input_tokens: 10, output_tokens: 5 } }))
+    expect(parsed.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
   })
 })

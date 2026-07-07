@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
-import { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
+import { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
 
 /**
@@ -63,7 +63,7 @@ export interface ClaudeCliLLMClientOptions {
  * repo happens to be the launch directory, every invocation runs from a directory that's
  * essentially guaranteed to have none of that project-level config to auto-load.
  */
-function invokeClaude(claudePath: string, args: string[]): Promise<string> {
+function invokeClaude(claudePath: string, args: string[]): Promise<ParsedClaudeCliOutput> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
@@ -92,7 +92,7 @@ function invokeClaude(claudePath: string, args: string[]): Promise<string> {
  * result/content/fallback logic covers it unchanged — just handed one line instead of the
  * whole stdout.
  */
-function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: (event: ToolStepEvent) => void): Promise<string> {
+function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: (event: ToolStepEvent) => void): Promise<ParsedClaudeCliOutput> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
     let buffer = ''
@@ -148,6 +148,14 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  * exactly like write_file: once a built-in like Bash is active, Claude Code's own
  * agentic loop would execute it autonomously within the single `claude -p` call, with
  * no point at which our code sees the command before it runs.
+ *
+ * **onUsage's costUsd caveat:** token counts (`inputTokens`/`outputTokens`) are always real —
+ * they come straight from `claude --output-format json`'s `usage` field. `costUsd` comes from
+ * that same response's `total_cost_usd`, which reflects real API billing when the underlying
+ * `claude` session is authenticated with an API key, but may read `0` when it's authenticated
+ * against a Pro/Max subscription instead (no per-call dollar cost to report). A caller
+ * presenting this to a user (see personal-assistant's /cost) must not read a `0` here as "this
+ * turn was free" without that context.
  */
 export class ClaudeCliLLMClient implements ILLMClient {
   private readonly claudePath: string
@@ -179,7 +187,9 @@ export class ClaudeCliLLMClient implements ILLMClient {
     ]
     if (options.model) args.push('--model', options.model)
     args.push(prompt)
-    return invokeClaude(this.claudePath, args)
+    const { reply, usage } = await invokeClaude(this.claudePath, args)
+    if (usage) options.onUsage?.(usage)
+    return reply
   }
 
   /**
@@ -249,7 +259,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
     args.push(prompt)
 
     const callStartedAt = Date.now()
-    const content = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+    const { reply, usage } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+    if (usage) options.onUsage?.(usage)
     const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)
 
     if (staged) {
@@ -258,7 +269,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
         toolCalls: [{ id: `cli-staged-${staged.id}`, name: ALREADY_STAGED_ACTION_TOOL, input: stagedActionInput(staged) }],
       }
     }
-    return { content }
+    return { content: reply }
   }
 
   /** Diffs .pending-actions/ against the call's start time to detect a write or shell command the MCP server staged during this subprocess call. */
