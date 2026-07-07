@@ -272,11 +272,16 @@ async fn run_claude_prompt_with_file_tools(
 
     if !status.success() {
       let stderr_text = stderr_text.trim().to_string();
-      return Err(if stderr_text.is_empty() {
-        format!("claude exited with status {status}")
-      } else {
-        stderr_text
-      });
+      let err = if stderr_text.is_empty() { format!("claude exited with status {status}") } else { stderr_text };
+      // invoke() rejections reach the frontend as a bare string with no code/name, and the
+      // catch site only shows classifyError's generic fallback copy — this is the only place
+      // the real cause is visible. Goes to this process's stderr, i.e. the `tauri dev` terminal.
+      eprintln!("[run_claude_prompt_with_file_tools] {err}");
+      return Err(err);
+    }
+
+    if final_result_line.is_none() {
+      eprintln!("[run_claude_prompt_with_file_tools] stream ended with no `result` event (stderr: {stderr_text:?})");
     }
 
     let staged_action = find_staged_action(&workspace_root, call_started_at);
@@ -345,11 +350,10 @@ async fn run_claude_prompt(
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-      return Err(if stderr.is_empty() {
-        format!("claude exited with status {}", output.status)
-      } else {
-        stderr
-      });
+      let err = if stderr.is_empty() { format!("claude exited with status {}", output.status) } else { stderr };
+      // See run_claude_prompt_with_file_tools's matching eprintln! — same reasoning.
+      eprintln!("[run_claude_prompt] {err}");
+      return Err(err);
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

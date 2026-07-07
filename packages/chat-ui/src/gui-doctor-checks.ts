@@ -47,10 +47,16 @@ export function checkWorkspaceConfigured(workspaceRoot: string | undefined): Doc
   return workspaceRoot ? { label: `${label} (${workspaceRoot})`, ok: true } : { label, ok: false, detail: 'not resolved' }
 }
 
-/** Desktop-only: write+remove a throwaway probe file via the same FsBackend transcripts/config already use — parity with the CLI's checkDataDirWritable. */
+/**
+ * Desktop-only: write+remove a throwaway probe file via the same FsBackend transcripts/config
+ * already use — parity with the CLI's checkDataDirWritable. Unlike the CLI's `.doctor-check`,
+ * this one avoids a leading dot: Tauri's fs scope defaults `require_literal_leading_dot` to
+ * true on Unix (dotfiles aren't exposed by `$APPLOCALDATA/**` globs without it), so a dotfile
+ * probe would always report a false "forbidden path" failure regardless of real writability.
+ */
 export async function checkDataDirWritable(backend: FsBackend, dataDir: string): Promise<DoctorCheck> {
   const label = `data dir writable (${dataDir})`
-  const probePath = `${dataDir}/.doctor-check`
+  const probePath = `${dataDir}/doctor-check.tmp`
   try {
     await backend.mkdir(dataDir)
     await backend.writeTextFile(probePath, 'ok')

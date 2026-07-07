@@ -34,12 +34,32 @@ Renders each `AssistantTurnResult` status distinctly:
 ## Settings
 
 The gear icon in the header swaps the whole screen for `SettingsScreen.tsx` —
-not a modal — covering Connection (proxy URL/auth token/model), Web Search
-(enable, ddg/brave, Brave API key), Shell (enable, timeout), and, on the
-Tauri desktop build only, Workspace (a native folder picker, via the Rust
-`pick_workspace_directory` command in `packages/desktop/src-tauri`). The
-Connection section is hidden on desktop since it always talks to the user's
-own already-authenticated `claude -p` session, not the proxy.
+not a modal — covering Provider (LLM backend picker + whatever fields that
+backend needs, see below), Web Search (enable, ddg/brave, Brave API key),
+Shell (enable, timeout), and, on the Tauri desktop build only, Workspace (a
+native folder picker, via the Rust `pick_workspace_directory` command in
+`packages/desktop/src-tauri`).
+
+The Provider section's backend picker (`llmBackend`) offers five values —
+`proxy`, `claude-cli`, `anthropic`, `openai`, `openrouter` — with `claude-cli`
+only listed as an option on the desktop build (a plain browser tab has no way
+to spawn `claude -p`; see `App.tsx`'s `createLlmClient`). Fields below the
+picker change per backend: Proxy URL + Auth token only for `proxy`; a single
+masked API key field (plus a plaintext-storage warning, same styling as the
+`dangerouslySkipPermissions` callout) for `anthropic`/`openai`/`openrouter`;
+nothing beyond the picker itself for `claude-cli`, which relies on the host's
+already-authenticated `claude` session. A free-text Model field is always
+shown, with a backend-specific placeholder (e.g. `gpt-4o-mini` for `openai`) —
+leaving it blank falls through to that backend's own hardcoded default rather
+than writing a value into the form.
+
+This used to be a `Connection` section that was hidden outright on desktop
+(desktop could only ever run `claude-cli`, unconditionally, regardless of
+`config.llmBackend`) — `createLlmClient` (`App.tsx`) is now shared between
+the plain-browser and desktop build paths, so desktop can use any of the 5
+backends, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
+behave identically on both surfaces since they're just `fetch()` calls to the
+provider, which works the same inside Tauri's webview as in a browser tab.
 
 Settings persist through a `ConfigStore` (`@buildaharness/personal-assistant`'s
 shared `AssistantConfig`/`resolveConfig`) — `browser-config-store.ts`
@@ -60,9 +80,12 @@ separately. `enableShell` *is* wired on the desktop build (Tauri's
 `run_shell_command` command, gated the same way the CLI gates it) — see
 `packages/desktop/README.md`'s Shell section; it remains a no-op in a plain
 browser tab, which has no way to execute anything at all. Secrets
-(`authToken`, `braveApiKey`) are stored in plaintext (`localStorage` or an
-unencrypted JSON file), same trust boundary as the CLI's `config.json` — not
-an OS keychain.
+(`authToken`, `apiKey`, `braveApiKey`) are stored in plaintext (`localStorage`
+or an unencrypted JSON file), same trust boundary as the CLI's `config.json`
+— not an OS keychain. `apiKey` is a real Anthropic/OpenAI/OpenRouter
+provider key rather than a self-hosted proxy token, so that plaintext-storage
+tradeoff is materially bigger here than for `authToken` — the Settings screen
+says so next to the field.
 
 ## Session actions & Diagnostics
 
@@ -95,10 +118,14 @@ workspace configuration, and data-dir writability instead, since desktop has
 no proxy to check.
 
 Cost estimation follows the same real-vs-approximate split the CLI's `/cost`
-documents: real on desktop (`claude`'s own accounting), a static-table
-estimate on the proxy backend (`estimateCostUsd`, from `model-pricing.ts`) —
-see the personal-assistant README's "`/cost` and real vs. estimated dollar
-figures" section for the full explanation.
+documents: real cost only for the `claude-cli` backend (`claude`'s own
+accounting) — every other backend, including `proxy` and now the three
+direct-API ones, gets the same static-table estimate (`estimateCostUsd`, from
+`model-pricing.ts`). This is keyed off `config.llmBackend` directly, not
+`isTauri()` — desktop is no longer synonymous with claude-cli, see
+`App.tsx`'s `withCostEstimate`. See the personal-assistant README's
+"`/cost` and real vs. estimated dollar figures" section for the full
+explanation.
 
 ## Usage
 

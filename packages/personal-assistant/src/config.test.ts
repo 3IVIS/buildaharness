@@ -50,4 +50,22 @@ describe('validateConfig', () => {
   it('does not throw for patches unrelated to search backend', () => {
     expect(() => validateConfig({ enableShell: true }, DEFAULT_CONFIG)).not.toThrow()
   })
+
+  it.each(['anthropic', 'openai', 'openrouter'] as const)('rejects llmBackend "%s" with no apiKey in the patch or existing config', (backend) => {
+    expect(() => validateConfig({ llmBackend: backend }, DEFAULT_CONFIG)).toThrow(ConfigValidationError)
+  })
+
+  it('accepts a patch that sets apiKey and a direct llmBackend together', () => {
+    expect(() => validateConfig({ llmBackend: 'openai', apiKey: 'sk-test' }, DEFAULT_CONFIG)).not.toThrow()
+  })
+
+  it('accepts a direct llmBackend when apiKey is already present on the existing config', () => {
+    const existing = { ...DEFAULT_CONFIG, apiKey: 'sk-test' }
+    expect(() => validateConfig({ llmBackend: 'anthropic' }, existing)).not.toThrow()
+  })
+
+  it('does not require apiKey for proxy or claude-cli backends', () => {
+    expect(() => validateConfig({ llmBackend: 'proxy' }, DEFAULT_CONFIG)).not.toThrow()
+    expect(() => validateConfig({ llmBackend: 'claude-cli' }, DEFAULT_CONFIG)).not.toThrow()
+  })
 })

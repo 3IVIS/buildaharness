@@ -47,6 +47,18 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'bing' })).toEqual({ searchBackend: 'ddg' })
     expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'brave' })).toEqual({ searchBackend: 'brave' })
   })
+
+  it.each(['claude-cli', 'anthropic', 'openai', 'openrouter'] as const)('accepts ASSISTANT_LLM_BACKEND=%s', (backend) => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_LLM_BACKEND: backend })).toEqual({ llmBackend: backend })
+  })
+
+  it('falls back to "proxy" for an invalid/typo\'d ASSISTANT_LLM_BACKEND value', () => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_LLM_BACKEND: 'anthropik' })).toEqual({ llmBackend: 'proxy' })
+  })
+
+  it('picks up ASSISTANT_API_KEY', () => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_API_KEY: 'sk-test' })).toEqual({ apiKey: 'sk-test' })
+  })
 })
 
 describe('parseConfigValue', () => {
@@ -79,6 +91,10 @@ describe('parseConfigValue', () => {
     expect(parseConfigValue('llmBackend', 'claude-cli')).toBe('claude-cli')
   })
 
+  it.each(['anthropic', 'openai', 'openrouter'] as const)('accepts llmBackend "%s"', (backend) => {
+    expect(parseConfigValue('llmBackend', backend)).toBe(backend)
+  })
+
   it('passes free-form string fields through unchanged', () => {
     expect(parseConfigValue('proxyUrl', 'http://example.com')).toBe('http://example.com')
   })
@@ -89,6 +105,12 @@ describe('formatConfigListing', () => {
     const listing = formatConfigListing({ ...DEFAULT_CONFIG, braveApiKey: 'sk-super-secret' }, new Set())
     expect(listing).toContain('********')
     expect(listing).not.toContain('sk-super-secret')
+  })
+
+  it('masks apiKey the same as the other secret keys', () => {
+    const listing = formatConfigListing({ ...DEFAULT_CONFIG, apiKey: 'sk-ant-super-secret' }, new Set())
+    expect(listing).toContain('********')
+    expect(listing).not.toContain('sk-ant-super-secret')
   })
 
   it('shows "(not set)" for an absent optional field', () => {

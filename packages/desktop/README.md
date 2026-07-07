@@ -50,6 +50,33 @@ var was always derived from the ignored value. `App.tsx` now passes
 `workspaceRoot` through `TauriClaudeCliLLMClient` to the Tauri command
 explicitly, so both sides of a turn agree on the same directory.
 
+## LLM backend
+
+The desktop build supports all 5 `llmBackend` values now, not just
+`claude-cli` — `App.tsx`'s `createLlmClient()` is shared between the
+plain-browser and desktop build paths, and picks the `ILLMClient` from
+`config.llmBackend` the same way on both. `claude-cli` remains desktop-only
+(it's `TauriClaudeCliLLMClient`, a Rust command that spawns `claude -p` on
+the host — see above); the other four behave identically to the browser
+build:
+
+- `proxy` — `LLMClient`, talks to a self-hosted `@buildaharness/proxy`
+  deployment, same as chat-ui's plain-browser build.
+- `anthropic`/`openai`/`openrouter` — `AnthropicLLMClient`/
+  `OpenAICompatibleLLMClient` (`@buildaharness/runtime`), calling the
+  provider directly with a user-supplied API key. These are plain `fetch()`
+  calls, which work the same inside Tauri's webview as in a browser tab — no
+  Rust command involved, and no CORS issue in practice, since
+  `tauri.conf.json`'s `security.csp` is unset. Set the key and pick a
+  backend from the Provider section in Settings (see
+  `packages/chat-ui/README.md`).
+
+Before this, `createTauriBackedAssistant` unconditionally constructed a
+`TauriClaudeCliLLMClient` and never read `config.llmBackend` at all — picking
+a different backend in Settings had no effect on desktop. That's the one
+part of this app where the fix genuinely changed desktop's behavior, not
+just added new options to it.
+
 ## Shell
 
 Turning "Shell" on in Settings (`config.enableShell`) does two things on the

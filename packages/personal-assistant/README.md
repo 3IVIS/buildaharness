@@ -374,6 +374,31 @@ Claude Code CLI session rather than an API key (`CLAUDE_PATH` overrides the
 ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
 ```
 
+Or skip both the proxy and claude-cli and call a provider directly with your
+own API key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus
+`ASSISTANT_API_KEY`:
+
+```bash
+ASSISTANT_LLM_BACKEND=anthropic ASSISTANT_API_KEY=sk-ant-... \
+  npm run cli --workspace=packages/personal-assistant
+
+ASSISTANT_LLM_BACKEND=openai ASSISTANT_API_KEY=sk-... \
+  npm run cli --workspace=packages/personal-assistant
+
+ASSISTANT_LLM_BACKEND=openrouter ASSISTANT_API_KEY=sk-or-... \
+  npm run cli --workspace=packages/personal-assistant
+```
+
+These three go straight from this process to the provider's own API
+(`AnthropicLLMClient`/`OpenAICompatibleLLMClient` in `@buildaharness/runtime`)
+— no proxy deployment needed, but unlike `authToken` (a self-hosted proxy's
+own bearer token), `ASSISTANT_API_KEY`/`apiKey` is a *real* provider key.
+It's stored the same way as every other secret field here — plaintext in
+`config.json`, not an OS keychain — so treat that file accordingly. `openai`
+defaults to `gpt-4o-mini` and `openrouter` to `anthropic/claude-3.5-sonnet`
+when `ASSISTANT_MODEL`/`/config set model` isn't set; `anthropic` defaults to
+the same `claude-3-5-sonnet-20241022` the proxy backend does.
+
 Transcript, learned experience, reminders, and any in-flight turn's checkpoint
 persist as real files under `~/.buildaharness/personal-assistant/`
 (`transcripts/`, `experience/`, `reminders/`, `checkpoints/`), so conversation
@@ -385,7 +410,7 @@ remembers.
 Every env var documented above (`ASSISTANT_ENABLE_WEB`, `ASSISTANT_SEARCH_BACKEND`,
 `BRAVE_SEARCH_API_KEY`, `ASSISTANT_ENABLE_SHELL`, `ASSISTANT_SHELL_TIMEOUT_MS`,
 `ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS`, `ASSISTANT_LLM_BACKEND`,
-`ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`,
+`ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`, `ASSISTANT_API_KEY`,
 `ASSISTANT_MODEL`, `ASSISTANT_WORKSPACE_DIR`) keeps working exactly as
 described — nothing here is a breaking change. What's new is a persisted
 settings layer *beneath* those env vars, editable from inside a running CLI
@@ -397,6 +422,7 @@ you> /config
   llmBackend     proxy
   proxyUrl       http://localhost:8787
   authToken      (not set)
+  apiKey         (not set)
   model          (not set)
   enableWeb      true    (env-pinned: ASSISTANT_ENABLE_WEB)
   searchBackend  ddg
@@ -452,14 +478,14 @@ change local session/config state — none of them make an LLM call themselves.
 | `/memory` | Show facts learned about you, reminders created so far, and summary counts from the learning-layer `ExperienceStore` |
 | `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
 | `/cost` | Show token usage for the last turn and the running session total |
-| `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health |
+| `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
 | `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
 | `/sources` | List files/URLs the last turn actually consulted |
 | `/plan` | Show the active structured plan's task status |
 
 ### `/cost` and real vs. estimated dollar figures
 
-Token counts are always real, on both backends. The dollar figure attached to
+Token counts are always real, on every backend. The dollar figure attached to
 them is not always the same kind of number:
 
 - **claude-cli backend**: `costUsd` comes straight from `claude
@@ -468,12 +494,14 @@ them is not always the same kind of number:
   authenticated against a Pro/Max subscription rather than API billing, in
   which case `$0` does *not* mean "this turn was free" — `/cost`'s output
   says so explicitly.
-- **proxy backend**: `@buildaharness/proxy` is a thin pass-through to
-  Anthropic/OpenAI (see `packages/proxy/src/forward.ts`) and never computes a
-  cost itself — only the raw token counts each provider's response already
-  includes. `/cost` falls back to a small static, hand-maintained pricing
-  table (`model-pricing.ts`, Sonnet/Opus/Haiku list prices) to show an
-  *approximate* estimate, clearly labeled as such, not real billing data.
+- **every other backend** (`proxy`, `anthropic`, `openai`, `openrouter`):
+  none of these compute a dollar cost themselves — only the raw token counts
+  each provider's response already includes (`@buildaharness/proxy` is a thin
+  pass-through, see `packages/proxy/src/forward.ts`; the three direct clients
+  in `@buildaharness/runtime` are the same). `/cost` falls back to a small
+  static, hand-maintained pricing table (`model-pricing.ts`, Sonnet/Opus/Haiku
+  list prices) to show an *approximate* estimate, clearly labeled as such,
+  not real billing data.
 
 ## Commands
 

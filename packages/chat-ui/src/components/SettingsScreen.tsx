@@ -10,8 +10,28 @@ import {
   type MemorySummary,
   type DoctorCheck,
 } from '@buildaharness/personal-assistant'
-import type { TokenUsage } from '@buildaharness/runtime'
+import { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
+
+const BACKEND_LABEL: Record<AssistantConfig['llmBackend'], string> = {
+  proxy: 'Self-hosted proxy',
+  'claude-cli': "Claude CLI (this device's claude session)",
+  anthropic: 'Claude API (direct)',
+  openai: 'OpenAI API (direct)',
+  openrouter: 'OpenRouter API (direct)',
+}
+
+/** Shown as the model input's placeholder, not written into the form — an empty field still falls through to each backend's own hardcoded default (LLMClient/AnthropicLLMClient/OpenAICompatibleLLMClient). */
+const MODEL_PLACEHOLDER: Record<AssistantConfig['llmBackend'], string> = {
+  proxy: 'claude-3-5-sonnet-20241022',
+  'claude-cli': '(your Claude Code default)',
+  anthropic: 'claude-3-5-sonnet-20241022',
+  openai: OPENAI_DEFAULT_MODEL,
+  openrouter: OPENROUTER_DEFAULT_MODEL,
+}
+
+/** The three backends where the user pastes in their own provider key — see config.ts's AssistantConfig.apiKey doc comment for the trust-boundary tradeoff this implies. */
+const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
 
 interface Props {
   config: AssistantConfig
@@ -114,25 +134,63 @@ export function SettingsScreen({
       </div>
 
       <div className="settings__body">
-        {!isDesktop && (
-          <section className="settings__section">
-            <h2>Connection</h2>
-            <FieldRow label="Proxy URL" pinnedBy={pinned('proxyUrl') ? ENV_VAR_FOR_CONFIG_KEY.proxyUrl : undefined}>
-              <input value={form.proxyUrl} disabled={disabled || pinned('proxyUrl')} onChange={(e) => set('proxyUrl', e.target.value)} />
-            </FieldRow>
-            <FieldRow label="Auth token" pinnedBy={pinned('authToken') ? ENV_VAR_FOR_CONFIG_KEY.authToken : undefined}>
-              <input type="password" value={form.authToken} disabled={disabled || pinned('authToken')} onChange={(e) => set('authToken', e.target.value)} />
-            </FieldRow>
-            <FieldRow label="Model" pinnedBy={pinned('model') ? ENV_VAR_FOR_CONFIG_KEY.model : undefined}>
-              <input
-                value={form.model ?? ''}
-                disabled={disabled || pinned('model')}
-                placeholder="(provider default)"
-                onChange={(e) => set('model', e.target.value || undefined)}
-              />
-            </FieldRow>
-          </section>
-        )}
+        <section className="settings__section">
+          <h2>Provider</h2>
+          <FieldRow label="LLM backend" pinnedBy={pinned('llmBackend') ? ENV_VAR_FOR_CONFIG_KEY.llmBackend : undefined}>
+            <select
+              aria-label="LLM backend"
+              value={form.llmBackend}
+              disabled={disabled || pinned('llmBackend')}
+              onChange={(e) => set('llmBackend', e.target.value as AssistantConfig['llmBackend'])}
+            >
+              <option value="proxy">{BACKEND_LABEL.proxy}</option>
+              {/* claude-cli needs a real host process to spawn `claude -p` — unavailable in a plain browser tab, see App.tsx's createLlmClient. */}
+              {isDesktop && <option value="claude-cli">{BACKEND_LABEL['claude-cli']}</option>}
+              <option value="anthropic">{BACKEND_LABEL.anthropic}</option>
+              <option value="openai">{BACKEND_LABEL.openai}</option>
+              <option value="openrouter">{BACKEND_LABEL.openrouter}</option>
+            </select>
+          </FieldRow>
+
+          {form.llmBackend === 'proxy' && (
+            <>
+              <FieldRow label="Proxy URL" pinnedBy={pinned('proxyUrl') ? ENV_VAR_FOR_CONFIG_KEY.proxyUrl : undefined}>
+                <input value={form.proxyUrl} disabled={disabled || pinned('proxyUrl')} onChange={(e) => set('proxyUrl', e.target.value)} />
+              </FieldRow>
+              <FieldRow label="Auth token" pinnedBy={pinned('authToken') ? ENV_VAR_FOR_CONFIG_KEY.authToken : undefined}>
+                <input type="password" value={form.authToken} disabled={disabled || pinned('authToken')} onChange={(e) => set('authToken', e.target.value)} />
+              </FieldRow>
+            </>
+          )}
+
+          {DIRECT_API_BACKENDS.has(form.llmBackend) && (
+            <>
+              <FieldRow label="API key" pinnedBy={pinned('apiKey') ? ENV_VAR_FOR_CONFIG_KEY.apiKey : undefined}>
+                <input
+                  type="password"
+                  value={form.apiKey ?? ''}
+                  disabled={disabled || pinned('apiKey')}
+                  onChange={(e) => set('apiKey', e.target.value || undefined)}
+                />
+              </FieldRow>
+              <p className="settings__warning">
+                Stored in plain text on this device, not an OS keychain — same trust boundary as the other secret
+                fields on this screen, but this is a real {BACKEND_LABEL[form.llmBackend]} key, not a self-hosted
+                proxy token, so a leaked config file is a bigger deal. Only enter a key you're comfortable having
+                sit in a local settings file.
+              </p>
+            </>
+          )}
+
+          <FieldRow label="Model" pinnedBy={pinned('model') ? ENV_VAR_FOR_CONFIG_KEY.model : undefined}>
+            <input
+              value={form.model ?? ''}
+              disabled={disabled || pinned('model')}
+              placeholder={MODEL_PLACEHOLDER[form.llmBackend]}
+              onChange={(e) => set('model', e.target.value || undefined)}
+            />
+          </FieldRow>
+        </section>
 
         <section className="settings__section">
           <h2>Web search</h2>
@@ -226,7 +284,7 @@ export function SettingsScreen({
             {formatCostSummary({
               lastTurn: lastTurnUsage,
               session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 },
-              backend: isDesktop ? 'claude-cli' : 'proxy',
+              backend: config.llmBackend,
             })}
           </pre>
 

@@ -3,7 +3,21 @@ import { createInterface } from 'node:readline'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
-import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, InMemoryReminderStore, type ILLMClient, type TokenUsage } from '@buildaharness/runtime'
+import {
+  LLMClient,
+  AnthropicLLMClient,
+  OpenAICompatibleLLMClient,
+  OPENAI_BASE_URL,
+  OPENAI_DEFAULT_MODEL,
+  OPENROUTER_BASE_URL,
+  OPENROUTER_DEFAULT_MODEL,
+  OPENROUTER_EXTRA_HEADERS,
+  FileSystemAdapter,
+  FileSystemExperienceStore,
+  InMemoryReminderStore,
+  type ILLMClient,
+  type TokenUsage,
+} from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
 import { nodeDisplayName } from './node-display-names.js'
@@ -41,6 +55,34 @@ const envOverrides = envOverridesFromProcessEnv(process.env)
 const backend = createNodeFsBackend()
 
 /**
+ * Picks the ILLMClient for config.llmBackend — one branch per backend, shared in shape with
+ * chat-ui's App.tsx createLlmClient() (both switch over the same 5 values), but this one stays
+ * CLI-only: claude-cli here is a real node:child_process subprocess (ClaudeCliLLMClient), not
+ * the Tauri-bridged equivalent chat-ui's desktop build uses, and it's the only backend always
+ * available on this surface (no "unsupported on this platform" branch needed, unlike a plain
+ * browser tab which can't spawn `claude` at all).
+ */
+function buildLlmClient(config: AssistantConfig, workspaceRoot: string): ILLMClient {
+  switch (config.llmBackend) {
+    case 'claude-cli':
+      return new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
+    case 'anthropic':
+      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
+    case 'openai':
+      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL })
+    case 'openrouter':
+      return new OpenAICompatibleLLMClient({
+        apiKey: config.apiKey ?? '',
+        baseUrl: OPENROUTER_BASE_URL,
+        defaultModel: OPENROUTER_DEFAULT_MODEL,
+        extraHeaders: OPENROUTER_EXTRA_HEADERS,
+      })
+    case 'proxy':
+      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+  }
+}
+
+/**
  * Builds a fresh PersonalAssistant (and the llmClient/search function it depends on) from a
  * resolved AssistantConfig — called once at startup and again after any /config change that
  * takes effect, so nothing requires a process restart. Reuses the same dataDir-backed stores
@@ -57,10 +99,7 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   // enableWeb yet — web_search has no default backend on this path either (see
   // claude-cli-llm-client.ts's doc comment), so enableWeb only takes effect on the proxy
   // (LLMClient) backend below.
-  const llmClient: ILLMClient =
-    config.llmBackend === 'claude-cli'
-      ? new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
-      : new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+  const llmClient = buildLlmClient(config, workspaceRoot)
 
   return PersonalAssistant.create({
     llmClient,
@@ -94,6 +133,19 @@ async function main(): Promise<void> {
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
 
+  // Display-only defaults, mirroring each backend's own fallback so the banner shows the
+  // model that will actually be used even when config.model is unset — not authoritative
+  // (each llmClient picks its own default independently), just kept in sync by hand the same
+  // way chat-ui/App.tsx's DEFAULT_PROXY_MODEL already does for the proxy backend.
+  const backendDisplayModel: Record<AssistantConfig['llmBackend'], string> = {
+    proxy: 'claude-3-5-sonnet-20241022',
+    'claude-cli': '(your Claude Code default)',
+    anthropic: 'claude-3-5-sonnet-20241022',
+    openai: OPENAI_DEFAULT_MODEL,
+    openrouter: OPENROUTER_DEFAULT_MODEL,
+  }
+  console.log(`backend: ${config.llmBackend} (${config.model ?? backendDisplayModel[config.llmBackend]})`)
+
   // No silent default: capabilities only appear in the banner when actually configured,
   // so the banner never implies something is available that isn't.
   const enabledCapabilities: string[] = []
@@ -116,9 +168,9 @@ async function main(): Promise<void> {
   let lastTurnUsage: TokenUsage | undefined
   let sessionUsage: TokenUsage | undefined
 
-  /** On the proxy backend (which never returns a real dollar cost — see model-pricing.ts), attaches an approximate estimate; leaves a real claude-cli cost untouched. */
+  /** claude-cli is the only backend that returns a real dollar cost (--output-format json's total_cost_usd) — every other backend (proxy, and now anthropic/openai/openrouter, none of which surface billing via TokenUsage.costUsd) gets an approximate estimate instead, see model-pricing.ts. */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (config.llmBackend !== 'proxy' || usage.costUsd !== undefined) return usage
+    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
     const estimated = estimateCostUsd(config.model ?? 'claude-3-5-sonnet-20241022', usage)
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
   }

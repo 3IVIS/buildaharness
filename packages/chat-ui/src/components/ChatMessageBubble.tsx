@@ -1,5 +1,14 @@
 import { useState } from 'react'
+import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { nodeDisplayName, type RiskLevel, type AssistantTrace, type AssistantSource, type AssistantToolStep } from '@buildaharness/personal-assistant'
+
+// A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
+// container — putting overflow-x directly on the <table> element instead breaks browsers'
+// table column-width algorithm (columns render collapsed/skewed rather than content-sized).
+const MARKDOWN_COMPONENTS: Components = {
+  table: ({ children }) => <div className="bubble__table-scroll"><table>{children}</table></div>,
+}
 
 interface Props {
   role: 'user' | 'assistant' | 'error'
@@ -36,9 +45,19 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy(): Promise<void> {
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <div className={`bubble bubble--${role}`}>
+      <button type="button" className="bubble__copy" onClick={handleCopy} aria-label="Copy message">
+        {copied ? 'Copied' : 'Copy'}
+      </button>
       <div className="bubble__role">
         {role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error'}
         {/* LOW is the common case — rendering nothing for it keeps the badge meaningful when it appears. */}
@@ -46,7 +65,16 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
           <span className={`risk-badge risk-badge--${riskLevel.toLowerCase()}`}>{riskLevel}</span>
         )}
       </div>
-      <div className="bubble__content">{content}</div>
+      {/* Only assistant replies are markdown — a user's own typed text and our own fixed error copy are shown verbatim. */}
+      {role === 'assistant' ? (
+        <div className="bubble__content bubble__content--markdown">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      ) : (
+        <div className="bubble__content">{content}</div>
+      )}
       {onRetry && (
         <button type="button" className="bubble__retry" onClick={onRetry}>Retry</button>
       )}

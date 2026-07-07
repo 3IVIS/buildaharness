@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { LLMClient, AnthropicLLMClient, OpenAICompatibleLLMClient } from '@buildaharness/runtime'
+import { PersonalAssistant } from '@buildaharness/personal-assistant'
 import { App } from './App'
 
 vi.mock('@buildaharness/runtime', async () => {
@@ -190,5 +192,52 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText(/10 in \/ 5 out tokens/)).toBeInTheDocument())
     expect(screen.getByText(/2 messages this session/)).toBeInTheDocument()
     expect(screen.getByText(/proxy reachable/)).toBeInTheDocument()
+  })
+
+  describe('createLlmClient backend selection (plain browser — isTauri() is false in jsdom)', () => {
+    function seedConfig(patch: Record<string, unknown>): void {
+      localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify(patch))
+    }
+
+    function lastLlmClient(): unknown {
+      const calls = (PersonalAssistant.create as unknown as { mock: { calls: Array<[{ llmClient: unknown }]> } }).mock.calls
+      return calls.at(-1)?.[0]?.llmClient
+    }
+
+    it('llmBackend "proxy" (default) constructs LLMClient', async () => {
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastLlmClient()).toBeInstanceOf(LLMClient)
+    })
+
+    it('llmBackend "anthropic" constructs AnthropicLLMClient', async () => {
+      seedConfig({ llmBackend: 'anthropic', apiKey: 'sk-ant-test' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastLlmClient()).toBeInstanceOf(AnthropicLLMClient)
+    })
+
+    it('llmBackend "openai" constructs OpenAICompatibleLLMClient', async () => {
+      seedConfig({ llmBackend: 'openai', apiKey: 'sk-openai-test' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastLlmClient()).toBeInstanceOf(OpenAICompatibleLLMClient)
+    })
+
+    it('llmBackend "openrouter" constructs OpenAICompatibleLLMClient', async () => {
+      seedConfig({ llmBackend: 'openrouter', apiKey: 'sk-or-test' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastLlmClient()).toBeInstanceOf(OpenAICompatibleLLMClient)
+    })
+
+    it('llmBackend "claude-cli" degrades to LLMClient (proxy) with a console warning — a plain browser tab can\'t run `claude -p`', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      seedConfig({ llmBackend: 'claude-cli' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastLlmClient()).toBeInstanceOf(LLMClient)
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('claude-cli'))
+    })
   })
 })

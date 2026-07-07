@@ -11,13 +11,14 @@ import { CONFIG_KEYS } from './config.js'
 export { CONFIG_KEYS }
 
 /** Never printed in full by formatConfigValue — /config shows these masked regardless of value. */
-export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'braveApiKey'])
+export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey'])
 
 /** Which env var, if any, can pin a given key — shown next to a value in /config's listing when that var is set. */
 export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
   llmBackend: 'ASSISTANT_LLM_BACKEND',
   proxyUrl: 'ASSISTANT_PROXY_URL',
   authToken: 'ASSISTANT_PROXY_TOKEN',
+  apiKey: 'ASSISTANT_API_KEY',
   model: 'ASSISTANT_MODEL',
   enableWeb: 'ASSISTANT_ENABLE_WEB',
   searchBackend: 'ASSISTANT_SEARCH_BACKEND',
@@ -40,9 +41,24 @@ export function isConfigKey(key: string): key is keyof AssistantConfig {
  */
 export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<AssistantConfig> {
   const overrides: Partial<AssistantConfig> = {}
-  if (env.ASSISTANT_LLM_BACKEND !== undefined) overrides.llmBackend = env.ASSISTANT_LLM_BACKEND === 'claude-cli' ? 'claude-cli' : 'proxy'
+  if (env.ASSISTANT_LLM_BACKEND !== undefined) {
+    switch (env.ASSISTANT_LLM_BACKEND) {
+      case 'claude-cli':
+      case 'anthropic':
+      case 'openai':
+      case 'openrouter':
+        overrides.llmBackend = env.ASSISTANT_LLM_BACKEND
+        break
+      default:
+        // Unset or an unrecognized value (including a typo of a valid one) both fall back to
+        // 'proxy', the existing default — a typo must never silently resolve to some *other*
+        // valid-looking backend the user didn't ask for.
+        overrides.llmBackend = 'proxy'
+    }
+  }
   if (env.ASSISTANT_PROXY_URL !== undefined) overrides.proxyUrl = env.ASSISTANT_PROXY_URL
   if (env.ASSISTANT_PROXY_TOKEN !== undefined) overrides.authToken = env.ASSISTANT_PROXY_TOKEN
+  if (env.ASSISTANT_API_KEY !== undefined) overrides.apiKey = env.ASSISTANT_API_KEY
   if (env.ASSISTANT_MODEL !== undefined) overrides.model = env.ASSISTANT_MODEL
   if (env.ASSISTANT_ENABLE_WEB !== undefined) overrides.enableWeb = env.ASSISTANT_ENABLE_WEB === '1'
   if (env.ASSISTANT_SEARCH_BACKEND !== undefined) overrides.searchBackend = env.ASSISTANT_SEARCH_BACKEND === 'brave' ? 'brave' : 'ddg'
@@ -71,7 +87,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return n
     }
     case 'llmBackend':
-      if (raw !== 'proxy' && raw !== 'claude-cli') throw new ConfigValueParseError('llmBackend must be "proxy" or "claude-cli"')
+      if (raw !== 'proxy' && raw !== 'claude-cli' && raw !== 'anthropic' && raw !== 'openai' && raw !== 'openrouter') {
+        throw new ConfigValueParseError('llmBackend must be one of "proxy", "claude-cli", "anthropic", "openai", "openrouter"')
+      }
       return raw
     case 'searchBackend':
       if (raw !== 'ddg' && raw !== 'brave') throw new ConfigValueParseError('searchBackend must be "ddg" or "brave"')

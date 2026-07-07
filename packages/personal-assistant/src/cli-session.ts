@@ -94,7 +94,7 @@ export interface CostSummaryInfo {
   lastTurn?: TokenUsage
   /** Running total across the session — {inputTokens: 0, outputTokens: 0} before any usage has ever been reported. */
   session: TokenUsage
-  backend: 'proxy' | 'claude-cli'
+  backend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
 }
 
 function formatUsageLine(usage: TokenUsage): string {
@@ -102,7 +102,7 @@ function formatUsageLine(usage: TokenUsage): string {
   return usage.costUsd !== undefined ? `${tokens}  (~$${usage.costUsd.toFixed(4)})` : tokens
 }
 
-/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing); the proxy backend's cost, when shown, is a static-table estimate, never real billing data — see model-pricing.ts. */
+/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing); every other backend's cost, when shown, is a static-table estimate (see cli.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
 export function formatCostSummary(info: CostSummaryInfo): string {
   if (!info.lastTurn && info.session.inputTokens === 0 && info.session.outputTokens === 0) {
     return 'No usage yet this session.'

@@ -7,9 +7,22 @@
  */
 
 export interface AssistantConfig {
-  llmBackend: 'proxy' | 'claude-cli'
+  llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
   proxyUrl: string
   authToken: string
+  /**
+   * API key for the three direct-to-provider backends (anthropic/openai/openrouter) — one
+   * generic field reused across all three, mirroring authToken already being a single field
+   * for the proxy's bearer token rather than one field per possible deployment. Switching
+   * backends means re-entering the key, an accepted simplification consistent with this
+   * app's "keep config flat" convention.
+   *
+   * Stored at the same (low) trust boundary as authToken/braveApiKey — plaintext, not an OS
+   * keychain. Unlike those two, this is a *real* provider key, not a self-hosted proxy token,
+   * so the risk of a leaked config file is materially bigger; SettingsScreen must warn about
+   * this plainly next to the input (see dangerouslySkipPermissions' warning callout).
+   */
+  apiKey?: string
   model?: string
   enableWeb: boolean
   searchBackend: 'ddg' | 'brave'
@@ -35,6 +48,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'llmBackend',
   'proxyUrl',
   'authToken',
+  'apiKey',
   'model',
   'enableWeb',
   'searchBackend',
@@ -102,9 +116,14 @@ export class ConfigValidationError extends Error {}
  * from an earlier `set`, and invalid if not. Callers (CLI's /config set, chat-ui's SettingsScreen)
  * run this before persisting, so a broken combination is rejected before it's ever written.
  */
+const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
+
 export function validateConfig(patch: Partial<AssistantConfig>, existing: AssistantConfig): void {
   const merged = { ...existing, ...patch }
   if (merged.searchBackend === 'brave' && !merged.braveApiKey) {
     throw new ConfigValidationError('searchBackend "brave" requires braveApiKey to be set.')
+  }
+  if (DIRECT_API_BACKENDS.has(merged.llmBackend) && !merged.apiKey) {
+    throw new ConfigValidationError(`llmBackend "${merged.llmBackend}" requires apiKey to be set.`)
   }
 }

@@ -15,7 +15,20 @@ import {
   type MemorySummary,
   type DoctorCheck,
 } from '@buildaharness/personal-assistant'
-import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, type TokenUsage } from '@buildaharness/runtime'
+import {
+  LLMClient,
+  AnthropicLLMClient,
+  OpenAICompatibleLLMClient,
+  OPENAI_BASE_URL,
+  OPENAI_DEFAULT_MODEL,
+  OPENROUTER_BASE_URL,
+  OPENROUTER_DEFAULT_MODEL,
+  OPENROUTER_EXTRA_HEADERS,
+  FileSystemAdapter,
+  FileSystemExperienceStore,
+  type ILLMClient,
+  type TokenUsage,
+} from '@buildaharness/runtime'
 import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { tauriExecuteShellCommand } from './tauri-shell-executor'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
@@ -59,18 +72,52 @@ async function createConfigStore(): Promise<ConfigStore> {
 }
 
 /**
+ * Picks the ILLMClient for config.llmBackend — shared by the plain-browser and desktop build
+ * paths (buildAssistant / createTauriBackedAssistant below) so both surfaces resolve the same
+ * 5 backend values identically instead of the desktop path hardcoding claude-cli as the only
+ * option, which it used to (see git history — createTauriBackedAssistant previously always
+ * constructed a TauriClaudeCliLLMClient, ignoring config.llmBackend entirely).
+ *
+ * 'claude-cli' only works on the desktop build (a Tauri Rust command runs `claude -p` on the
+ * host) — a plain browser tab has no way to spawn a subprocess at all, so requesting it there
+ * degrades to 'proxy' with a console warning rather than throwing an unhandled error the user
+ * would just see as "Something went wrong" with no actionable cause.
+ *
+ * The three direct-API backends (anthropic/openai/openrouter) work identically on both
+ * surfaces — `fetch()` to the provider is available in a plain browser tab and inside Tauri's
+ * webview alike, so this is the one part of client selection that needs no isDesktop branch.
+ */
+function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: { isDesktop: boolean; workspaceRoot: string }): ILLMClient {
+  switch (config.llmBackend) {
+    case 'claude-cli':
+      if (isDesktop) return new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell })
+      console.warn('llmBackend "claude-cli" isn\'t available in a plain browser tab (no way to run `claude -p`) — falling back to "proxy".')
+      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+    case 'anthropic':
+      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
+    case 'openai':
+      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL })
+    case 'openrouter':
+      return new OpenAICompatibleLLMClient({
+        apiKey: config.apiKey ?? '',
+        baseUrl: OPENROUTER_BASE_URL,
+        defaultModel: OPENROUTER_DEFAULT_MODEL,
+        extraHeaders: OPENROUTER_EXTRA_HEADERS,
+      })
+    case 'proxy':
+      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+  }
+}
+
+/**
  * PersonalAssistant.create() only defaults storage that isn't already supplied
  * (browser → Dexie), so passing filesystem-backed stores here is what gives the
  * desktop build real persistence instead of the IndexedDB it'd otherwise pick.
  * @tauri-apps/plugin-fs is dynamically imported so a plain (non-Tauri) browser
  * build never has to load it. See plans/tauri_desktop_plan.html Phase 3.
  *
- * Uses TauriClaudeCliLLMClient (the desktop shell's `run_claude_prompt`/
- * `run_claude_prompt_with_file_tools` Rust commands), not the LLMClient/proxy backend the
- * plain browser build uses below — the desktop app has no LLM proxy running by default
- * and no ANTHROPIC_API_KEY to stand one up with, so it runs against the user's
- * already-authenticated Claude Code CLI session instead, the same way personal-assistant's
- * own CLI front end does with ASSISTANT_LLM_BACKEND=claude-cli.
+ * llmClient now comes from the shared createLlmClient() — desktop can use any of the 5
+ * backends, not just claude-cli (see that function's doc comment for why this changed).
  *
  * fileTools is wired to `config.workspaceRoot` if the user has picked one via the Settings
  * screen's Workspace section, falling back to `get_dev_workspace_root()` (the monorepo root,
@@ -92,7 +139,7 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
 
   return PersonalAssistant.create({
-    llmClient: new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell }),
+    llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot }),
     model: config.model,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
@@ -108,7 +155,7 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
 async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
   if (isTauri()) return createTauriBackedAssistant(config)
   return PersonalAssistant.create({
-    llmClient: new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken }),
+    llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
     model: config.model,
     // No fileTools/shellTools in a plain browser build (no filesystem/process access at all),
     // so this only ever affects the message-level risk gate here — still worth honoring for
@@ -145,13 +192,14 @@ export function App(): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   /**
-   * On the proxy backend (plain browser), usage never arrives with a real dollar cost — see
-   * model-pricing.ts's doc comment — so this fills in the same static-table estimate the CLI's
-   * /cost uses. On desktop (claude-cli backend via TauriClaudeCliLLMClient), costUsd is already
-   * real, so this is a no-op.
+   * claude-cli (via TauriClaudeCliLLMClient, desktop-only) is the only backend that returns a
+   * real dollar cost — every other backend (proxy, and now anthropic/openai/openrouter, which
+   * work identically on both browser and desktop — see createLlmClient) gets the same
+   * static-table estimate the CLI's /cost uses instead. Used to be gated on isTauri() alone,
+   * back when desktop could only ever be running claude-cli; that's no longer true.
    */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (isTauri() || usage.costUsd !== undefined) return usage
+    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
     const estimated = estimateCostUsd(config.model ?? DEFAULT_PROXY_MODEL, usage)
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
   }
@@ -342,6 +390,10 @@ export function App(): React.JSX.Element {
         setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.' }])
       }
     } catch (err) {
+      // classifyError maps to friendly copy for the UI, which is often too coarse to debug
+      // from — the raw error (and on desktop, invoke() rejections carry only a string with
+      // no code/name) is otherwise never surfaced anywhere, not even devtools. Log it.
+      console.error('[assistant turn failed]', err)
       const { message: errorMessage, retryable } = classifyError(err)
       setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved }])
     } finally {

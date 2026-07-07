@@ -1,4 +1,5 @@
 import { FlowExecutionError } from './errors'
+import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -62,60 +63,6 @@ export interface ToolDefinition {
   name: string
   description?: string
   input_schema: Record<string, unknown>
-}
-
-type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string }
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant'
-  content: string | AnthropicContentBlock[]
-}
-
-/**
- * Anthropic's Messages API takes `system` as a separate top-level string (not a
- * message with role 'system'), and expects a tool result back as a `user`
- * message containing a `tool_result` block keyed by `tool_use_id` — not a
- * message with role 'tool'. This reshapes our role-based ChatMessage[] into
- * that wire format. Consecutive 'tool' messages are batched into a single
- * user message with multiple tool_result blocks, matching how the API expects
- * the results of a multi-tool-call turn to come back in one round trip.
- */
-function buildAnthropicMessages(messages: ChatMessage[]): { system?: string; messages: AnthropicMessage[] } {
-  const systemParts: string[] = []
-  const anthropicMessages: AnthropicMessage[] = []
-
-  for (const m of messages) {
-    if (m.role === 'system') {
-      systemParts.push(m.content)
-      continue
-    }
-
-    if (m.role === 'tool') {
-      const block: AnthropicContentBlock = { type: 'tool_result', tool_use_id: m.toolCallId ?? '', content: m.content }
-      const last = anthropicMessages[anthropicMessages.length - 1]
-      if (last && last.role === 'user' && Array.isArray(last.content) && last.content.every(b => b.type === 'tool_result')) {
-        last.content.push(block)
-      } else {
-        anthropicMessages.push({ role: 'user', content: [block] })
-      }
-      continue
-    }
-
-    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
-      const blocks: AnthropicContentBlock[] = []
-      if (m.content) blocks.push({ type: 'text', text: m.content })
-      for (const tc of m.toolCalls) blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input })
-      anthropicMessages.push({ role: 'assistant', content: blocks })
-      continue
-    }
-
-    anthropicMessages.push({ role: m.role as 'user' | 'assistant', content: m.content })
-  }
-
-  return { system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined, messages: anthropicMessages }
 }
 
 export interface ILLMClient {
@@ -234,23 +181,13 @@ export class LLMClient implements ILLMClient {
       throw new FlowExecutionError({ nodeId: 'llm-client', message: 'proxy error', cause: { status: response.status } })
     }
     const json = await response.json() as Record<string, unknown>
-    // Parse Anthropic response format
-    const contentParts: string[] = []
-    const toolCalls: ToolCallResult[] = []
-    if (Array.isArray(json.content)) {
-      for (const block of json.content as Array<{type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown>}>) {
-        if (block.type === 'text' && block.text) contentParts.push(block.text)
-        else if (block.type === 'tool_use' && block.id && block.name) {
-          toolCalls.push({ id: block.id, name: block.name, input: block.input ?? {} })
-        }
-      }
-    }
+    const { content, toolCalls } = parseAnthropicContentBlocks(json.content)
     // Anthropic's non-streaming response always includes usage — reliable regardless of
     // provider, unlike callChat's best-effort streaming capture above.
     const usage = json.usage as { input_tokens?: number; output_tokens?: number } | undefined
     if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
       options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
     }
-    return { content: contentParts.join(''), toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
+    return { content, toolCalls }
   }
 }
