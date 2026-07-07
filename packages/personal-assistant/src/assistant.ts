@@ -22,7 +22,7 @@ import {
   type ReminderRecord,
   type TokenUsage,
 } from '@buildaharness/runtime'
-import { classifyRisk, type RiskClassification } from './risk-classifier.js'
+import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
 import { FILE_TOOLS, executeFileTool, applyPendingAction, discardPendingAction, type FileToolsContext } from './file-tools.js'
 import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
@@ -43,6 +43,8 @@ import {
   updatePlanFromRun,
   planCompletionPct,
   isAbandonPhrase,
+  isAbandonPhraseWithLLM,
+  looksLikeAbandonAttempt,
   type PlanRecord,
 } from './plan-store.js'
 import type { TraceEvent } from './trace-events.js'
@@ -411,7 +413,15 @@ export class PersonalAssistant {
       : ''
     const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
 
-    const classification = classifyRisk(userMessage)
+    // classifyRisk's exact keyword lists catch the obvious cases for free; a message that
+    // slips through as LOW but still *looks* like it's asking the assistant to act in the
+    // world (looksActionOriented) gets one extra LLM call as a second opinion — see
+    // risk-classifier.ts's doc comments for why this stays gated instead of running on
+    // every LOW-classified message (most of which are just ordinary conversation).
+    let classification = classifyRisk(userMessage)
+    if (classification.riskLevel === 'LOW' && looksActionOriented(userMessage)) {
+      classification = await classifyRiskWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
+    }
     this.onTrace?.({ kind: 'risk_classified', riskLevel: classification.riskLevel, requiresApproval: classification.requiresApproval })
 
     // A reminder-shaped MEDIUM request stores a record immediately — detection,
@@ -505,9 +515,15 @@ export class PersonalAssistant {
     // re-classifying every turn, so an unrelated aside mid-plan doesn't get silently
     // reinterpreted as "start a new plan" — see plan-store.ts / planning-classifier.ts.
     let activePlan: PlanRecord | null = await loadActivePlan(this.memory, sessionId)
-    if (activePlan && isAbandonPhrase(userMessage)) {
-      await abandonPlan(this.memory, sessionId, activePlan)
-      activePlan = null
+    if (activePlan) {
+      let abandon = isAbandonPhrase(userMessage)
+      if (!abandon && looksLikeAbandonAttempt(userMessage)) {
+        abandon = await isAbandonPhraseWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
+      }
+      if (abandon) {
+        await abandonPlan(this.memory, sessionId, activePlan)
+        activePlan = null
+      }
     }
 
     if (activePlan) {

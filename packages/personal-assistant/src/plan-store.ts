@@ -1,4 +1,4 @@
-import type { MemoryAdapter } from '@buildaharness/runtime'
+import type { MemoryAdapter, ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { TaskStatus } from '@buildaharness/harness'
 import type { Plan } from './plan-builder.js'
 
@@ -25,6 +25,54 @@ const ABANDON_PHRASES = [/forget (this|the) plan/i, /start over/i, /never mind t
 
 export function isAbandonPhrase(message: string): boolean {
   return ABANDON_PHRASES.some((re) => re.test(message))
+}
+
+// Deliberately looser than ABANDON_PHRASES — only decides whether a message worth an extra
+// LLM-backed look for a paraphrased abandon request, not a verdict itself. A plan can run
+// for many turns, and most of those are routine progress-check turns ("give me an update",
+// "what's next") that must never spend an extra call just because a plan happens to be
+// active — this keeps the LLM fallback scoped to turns that actually look like they might
+// be trying to stop the plan.
+const ABANDON_SHAPE = /\b(stop|cancel|quit|drop|skip|pause|scrap|kill (this|the)|don'?t (need|want)|no longer (need|want))\b/i
+
+export function looksLikeAbandonAttempt(message: string): boolean {
+  return ABANDON_SHAPE.test(message)
+}
+
+const ABANDON_SCHEMA = {
+  type: 'object',
+  properties: { abandon: { type: 'boolean' } },
+  required: ['abandon'],
+}
+
+const ABANDON_SYSTEM_PROMPT =
+  'The user has an active multi-step plan running. Decide whether their latest message is asking to ' +
+  'abandon, cancel, or scrap that plan entirely — as opposed to a question about it, a tweak to one of its ' +
+  "tasks, or an unrelated aside. Respond with JSON only: {\"abandon\": boolean}"
+
+/**
+ * Second opinion for a message isAbandonPhrase's fixed phrase list didn't match but
+ * looksLikeAbandonAttempt flagged as worth double-checking (see assistant.ts) — gated the
+ * same way risk-classifier.ts's classifyRiskWithLLM is, so a plan's routine progress-check
+ * turns never pay for this. Falls back to `false`
+ * (don't abandon) on any parse failure or LLM error — losing an abandon signal just means the
+ * user has to say it more plainly next turn, safer than abandoning an active plan by mistake.
+ */
+export async function isAbandonPhraseWithLLM(message: string, llmClient: ILLMClient, model?: string, onUsage?: (usage: TokenUsage) => void): Promise<boolean> {
+  try {
+    const response = await llmClient.callChatStructured(
+      [
+        { role: 'system', content: ABANDON_SYSTEM_PROMPT },
+        { role: 'user', content: message },
+      ],
+      undefined,
+      { model, onUsage, structuredOutput: { schema: ABANDON_SCHEMA } },
+    )
+    const parsed = JSON.parse(response.content) as { abandon?: unknown }
+    return parsed.abandon === true
+  } catch {
+    return false
+  }
 }
 
 function planKey(sessionId: string): string {
