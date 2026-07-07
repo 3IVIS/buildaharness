@@ -427,6 +427,16 @@ body {
   color: var(--red);
 }
 
+.settings__warning {
+  border: 1px solid var(--red);
+  background: rgba(224, 92, 106, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--red);
+  margin: -4px 0 12px;
+}
+
 .settings__footer {
   display: flex;
   gap: 8px;

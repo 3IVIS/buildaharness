@@ -74,6 +74,7 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
     // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
     shellTools: config.enableShell ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
+    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
   })
 }
 
@@ -97,10 +98,15 @@ async function main(): Promise<void> {
   // so the banner never implies something is available that isn't.
   const enabledCapabilities: string[] = []
   if (config.enableWeb) enabledCapabilities.push(`web search/fetch (${config.searchBackend})`)
-  if (config.enableShell) enabledCapabilities.push('shell commands (approval-gated)')
+  if (config.enableShell) enabledCapabilities.push(`shell commands (${config.dangerouslySkipPermissions ? 'NOT approval-gated' : 'approval-gated'})`)
   const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
+  // Loud and separate from the capability list above (which is easy to skim past) —
+  // this changes the trust model for every HIGH-risk action, not just shell.
+  const dangerBanner = config.dangerouslySkipPermissions
+    ? '\n⚠ dangerouslySkipPermissions is ON — every approval prompt (risky messages, file writes, shell commands) is skipped automatically.\n'
+    : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n`)
+  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 

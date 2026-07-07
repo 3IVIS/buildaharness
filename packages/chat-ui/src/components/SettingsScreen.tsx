@@ -182,6 +182,25 @@ export function SettingsScreen({
           )}
         </section>
 
+        <section className="settings__section">
+          <h2>Advanced</h2>
+          <FieldRow label="⚠ Dangerously skip permissions">
+            <input
+              type="checkbox"
+              checked={form.dangerouslySkipPermissions}
+              disabled={disabled}
+              onChange={(e) => set('dangerouslySkipPermissions', e.target.checked)}
+            />
+          </FieldRow>
+          {form.dangerouslySkipPermissions && (
+            <p className="settings__warning">
+              Every approval prompt — risky-message confirmation, file-write review, shell-command review — is
+              skipped automatically. Sandboxing itself (workspace scoping, timeouts, output limits) still applies;
+              only the "ask first" step is gone. Equivalent to Claude Code's own --dangerously-skip-permissions.
+            </p>
+          )}
+        </section>
+
         {isDesktop && (
           <section className="settings__section">
             <h2>Workspace</h2>

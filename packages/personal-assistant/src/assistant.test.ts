@@ -170,6 +170,17 @@ describe('PersonalAssistant', () => {
     expect(llm.calls).toBe(0)
   })
 
+  it('dangerouslySkipPermissions bypasses the message-level risk gate entirely — proceeds without needs_approval', async () => {
+    const llm = new FakeLLMClient('Draft sent.')
+    const assistant = new PersonalAssistant({ llmClient: llm, dangerouslySkipPermissions: true })
+
+    const result = await assistant.turn('Please send an email to my boss telling him I quit.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Draft sent.')
+    expect(result.riskLevel).toBe('HIGH')
+  })
+
   it('proceeds once the gated action is explicitly approved', async () => {
     const llm = new FakeLLMClient('Draft sent.')
     const assistant = new PersonalAssistant({ llmClient: llm })
@@ -589,6 +600,19 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 
+  it('dangerouslySkipPermissions auto-applies a staged write_file with no needs_approval round trip', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'auto-applied content' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, dangerouslySkipPermissions: true })
+
+    const result = await assistant.turn('Write a summary to summary.md')
+
+    expect(result.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('auto-applied content')
+  })
+
   it('approving a pending write applies the exact staged content with zero additional LLM calls', async () => {
     const backend = makeFakeBackend()
     const llm = scriptedResponses([
@@ -794,6 +818,21 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.pendingActionKind).toBe('shell')
     expect(result.reason).toContain('ls -la')
     expect(executeCommand).not.toHaveBeenCalled()
+  })
+
+  it('dangerouslySkipPermissions auto-executes a staged run_shell_command with no needs_approval round trip', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, dangerouslySkipPermissions: true })
+
+    const result = await assistant.turn('List the files here')
+
+    expect(result.status).toBe('ok')
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+    expect(result.reply).toContain('a.txt')
   })
 
   it('approving a pending shell action executes the exact staged command with zero additional LLM calls, and wraps the output as untrusted content', async () => {

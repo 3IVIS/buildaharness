@@ -92,7 +92,7 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
 
   return PersonalAssistant.create({
-    llmClient: new TauriClaudeCliLLMClient({ fileTools: true, shellTools: config.enableShell }),
+    llmClient: new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell }),
     model: config.model,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
@@ -101,12 +101,20 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
     shellTools: config.enableShell
       ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
       : undefined,
+    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
   })
 }
 
 async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
   if (isTauri()) return createTauriBackedAssistant(config)
-  return PersonalAssistant.create({ llmClient: new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken }), model: config.model })
+  return PersonalAssistant.create({
+    llmClient: new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken }),
+    model: config.model,
+    // No fileTools/shellTools in a plain browser build (no filesystem/process access at all),
+    // so this only ever affects the message-level risk gate here — still worth honoring for
+    // consistency with the desktop build rather than silently ignoring the setting.
+    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+  })
 }
 
 export function App(): React.JSX.Element {

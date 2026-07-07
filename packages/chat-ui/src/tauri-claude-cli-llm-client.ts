@@ -16,10 +16,13 @@ export interface TauriClaudeCliLLMClientOptions {
   /**
    * When set, callChatStructured wires personal-assistant's file-tools MCP server into the
    * `claude -p` call (via the `run_claude_prompt_with_file_tools` Tauri command) instead of
-   * throwing when tools are supplied. Absent by default — an ordinary chat turn stays
-   * fully tool-free, exactly as before this option existed.
+   * throwing when tools are supplied. Absent by default — an ordinary chat turn stays fully
+   * tool-free, exactly as before this option existed. `workspaceRoot` is forwarded to the Rust
+   * command verbatim — it used to always recompute the compile-time monorepo root itself,
+   * silently ignoring a workspace the user picked via Settings; passing it explicitly here is
+   * the fix (see run_claude_prompt_with_file_tools's doc comment in src-tauri/src/lib.rs).
    */
-  fileTools?: boolean
+  fileTools?: { workspaceRoot: string }
   /**
    * When set (fileTools must also be set — the MCP server only starts at all when fileTools
    * is), passes `enable_shell_tools: true` to `run_claude_prompt_with_file_tools` so the MCP
@@ -41,11 +44,11 @@ export interface TauriClaudeCliLLMClientOptions {
  * two implementations.
  */
 export class TauriClaudeCliLLMClient implements ILLMClient {
-  private readonly fileTools: boolean
+  private readonly fileTools?: { workspaceRoot: string }
   private readonly shellTools: boolean
 
   constructor(options: TauriClaudeCliLLMClientOptions = {}) {
-    this.fileTools = options.fileTools ?? false
+    this.fileTools = options.fileTools
     this.shellTools = options.shellTools ?? false
   }
 
@@ -84,6 +87,7 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
         prompt,
         model: options.model ?? null,
         enableShellTools: this.shellTools,
+        workspaceRoot: this.fileTools.workspaceRoot,
       })
     } finally {
       unlisten?.()

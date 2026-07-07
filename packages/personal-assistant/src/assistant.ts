@@ -240,6 +240,16 @@ export interface PersonalAssistantOptions {
   reminderStore?: ReminderStore
   /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
   onTrace?: (event: TraceEvent) => void
+  /**
+   * Equivalent of Claude Code's own --dangerously-skip-permissions (see AssistantConfig's doc
+   * comment in config.ts). When true, both the message-level risk gate and write_file/
+   * run_shell_command's per-call staging resolve as if the user had already said yes, instead
+   * of returning `needs_approval` — turn() auto-applies a staged action the same way a second
+   * turn() call with `approved: true` would. The underlying sandboxing (path validation, SSRF
+   * guard, shell env allowlist, output truncation, timeout) is never skipped — only the ask.
+   * Off by default.
+   */
+  dangerouslySkipPermissions?: boolean
 }
 
 /**
@@ -262,6 +272,7 @@ export class PersonalAssistant {
   private readonly shellTools?: ShellToolsContext
   private readonly reminderStore: ReminderStore
   private readonly onTrace?: (event: TraceEvent) => void
+  private readonly dangerouslySkipPermissions: boolean
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -275,6 +286,7 @@ export class PersonalAssistant {
     this.shellTools = options.shellTools
     this.reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
     this.onTrace = options.onTrace
+    this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
   }
 
   /**
@@ -432,7 +444,7 @@ export class PersonalAssistant {
       await this.reminderStore.create(userMessage, null)
     }
 
-    if (classification.requiresApproval && !options.approved) {
+    if (classification.requiresApproval && !options.approved && !this.dangerouslySkipPermissions) {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       return {
         status: 'needs_approval',
@@ -449,6 +461,12 @@ export class PersonalAssistant {
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        // dangerouslySkipPermissions auto-applies the staged action the same way a second
+        // turn() call with `approved: true` would — resolvePendingAction is exactly that
+        // path, just invoked immediately instead of waiting for the caller to resume it.
+        if (this.dangerouslySkipPermissions) {
+          return this.resolvePendingAction(transcriptKey, loopResult.pendingActionId, true)
+        }
         return {
           status: 'needs_approval',
           reply: null,

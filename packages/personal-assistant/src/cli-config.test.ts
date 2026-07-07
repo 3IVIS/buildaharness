@@ -38,6 +38,11 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_SHELL_TIMEOUT_MS: '5000' })).toEqual({ shellTimeoutMs: 5000 })
   })
 
+  it('ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS must be exactly "1"', () => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS: '1' })).toEqual({ dangerouslySkipPermissions: true })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS: 'yes' })).toEqual({ dangerouslySkipPermissions: false })
+  })
+
   it('defaults ASSISTANT_SEARCH_BACKEND to ddg for any value other than "brave"', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'bing' })).toEqual({ searchBackend: 'ddg' })
     expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'brave' })).toEqual({ searchBackend: 'brave' })
@@ -45,9 +50,10 @@ describe('envOverridesFromProcessEnv', () => {
 })
 
 describe('parseConfigValue', () => {
-  it('parses valid booleans for enableWeb/enableShell', () => {
+  it('parses valid booleans for enableWeb/enableShell/dangerouslySkipPermissions', () => {
     expect(parseConfigValue('enableWeb', 'true')).toBe(true)
     expect(parseConfigValue('enableShell', 'false')).toBe(false)
+    expect(parseConfigValue('dangerouslySkipPermissions', 'true')).toBe(true)
   })
 
   it('rejects a non-boolean value for enableWeb', () => {

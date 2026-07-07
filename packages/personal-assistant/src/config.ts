@@ -17,6 +17,17 @@ export interface AssistantConfig {
   enableShell: boolean
   shellTimeoutMs?: number
   workspaceRoot?: string
+  /**
+   * Equivalent of Claude Code's own --dangerously-skip-permissions: when true, both approval
+   * gates PersonalAssistant otherwise always enforces — the message-level risk gate
+   * (risk-classifier.ts) and write_file/run_shell_command's per-call staging (file-tools.ts/
+   * shell-tools.ts) — execute immediately instead of returning `needs_approval`. The
+   * sandboxing itself (workspace-root path validation, SSRF guard, shell env allowlist,
+   * output truncation, timeout) is unaffected — this only skips asking, never the underlying
+   * safety limits. Off by default; named to match Claude Code's own flag so it reads as
+   * exactly as dangerous as it is.
+   */
+  dangerouslySkipPermissions: boolean
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -31,6 +42,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'enableShell',
   'shellTimeoutMs',
   'workspaceRoot',
+  'dangerouslySkipPermissions',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, ddg search, web/shell off) — this plan changes nothing for a caller that never touches config. */
@@ -41,6 +53,7 @@ export const DEFAULT_CONFIG: AssistantConfig = {
   enableWeb: false,
   searchBackend: 'ddg',
   enableShell: false,
+  dangerouslySkipPermissions: false,
 }
 
 /** A persistence backend for AssistantConfig — one implementation per surface (Node JSON file, localStorage, Tauri fs). */

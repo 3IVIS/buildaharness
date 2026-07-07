@@ -39,6 +39,17 @@ already used for transcripts) and becomes `fileTools`' `workspaceRoot` for
 `get_dev_workspace_root()` — the compile-time monorepo root, dev-mode-only —
 which remains the fallback until a user picks a real directory.
 
+**Fixed bug**: `run_claude_prompt_with_file_tools` used to call
+`dev_workspace_root()` itself, unconditionally, instead of accepting the
+resolved workspace root as a parameter — so picking a directory in Settings
+changed what `fileTools`/`shellTools` used for *applying* an approved write or
+shell command, but the model's `read_file`/`list_directory`/`write_file`/
+`run_shell_command` calls during the turn itself stayed scoped to the
+monorepo root regardless, since the MCP server config's `WORKSPACE_ROOT` env
+var was always derived from the ignored value. `App.tsx` now passes
+`workspaceRoot` through `TauriClaudeCliLLMClient` to the Tauri command
+explicitly, so both sides of a turn agree on the same directory.
+
 ## Shell
 
 Turning "Shell" on in Settings (`config.enableShell`) does two things on the

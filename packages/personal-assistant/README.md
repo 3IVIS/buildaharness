@@ -328,6 +328,21 @@ Note: `ASSISTANT_ENABLE_WEB` only takes effect on the proxy backend for
 now — the Claude CLI backend has no web_search wiring yet (see
 `claude-cli-llm-client.ts`'s doc comment).
 
+#### `--dangerously-skip-permissions` equivalent
+
+Set `ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS=1` (or `/config set
+dangerouslySkipPermissions true`) to skip *every* approval prompt automatically
+— the message-level risk gate (a HIGH-risk message like "send an email...")
+and `write_file`/`run_shell_command`'s per-call staging both resolve as if you
+had already said yes. Off by default, and named to match Claude Code's own
+flag: it is exactly as dangerous as it sounds — a proposed shell command or
+file write executes with zero chance to review it first. The underlying
+sandboxing (workspace-root path scoping, the shell env allowlist, output
+truncation, the timeout) is unaffected; this only skips the ask, never the
+limits underneath it. The startup banner switches shell's capability label
+from "approval-gated" to "NOT approval-gated" and prints an extra `⚠` line
+whenever this is on, so it's never silently in effect.
+
 #### Using Brave Search instead of DuckDuckGo
 
 By default, `ASSISTANT_ENABLE_WEB=1` uses the free, keyless `duckDuckGoSearch`
@@ -369,7 +384,8 @@ remembers.
 
 Every env var documented above (`ASSISTANT_ENABLE_WEB`, `ASSISTANT_SEARCH_BACKEND`,
 `BRAVE_SEARCH_API_KEY`, `ASSISTANT_ENABLE_SHELL`, `ASSISTANT_SHELL_TIMEOUT_MS`,
-`ASSISTANT_LLM_BACKEND`, `ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`,
+`ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS`, `ASSISTANT_LLM_BACKEND`,
+`ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`,
 `ASSISTANT_MODEL`, `ASSISTANT_WORKSPACE_DIR`) keeps working exactly as
 described — nothing here is a breaking change. What's new is a persisted
 settings layer *beneath* those env vars, editable from inside a running CLI
@@ -388,6 +404,7 @@ you> /config
   enableShell    false
   shellTimeoutMs (not set)
   workspaceRoot  (not set)
+  dangerouslySkipPermissions false
 
 you> /config set searchBackend brave
 ✗ searchBackend "brave" requires braveApiKey to be set.

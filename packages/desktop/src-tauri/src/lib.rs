@@ -146,10 +146,16 @@ const TOOL_STEP_EVENT: &str = "claude-tool-step";
 /// The desktop-app equivalent of ClaudeCliLLMClient.callChatStructured's MCP-wiring branch:
 /// wires personal-assistant's file-tools MCP server into a single `claude -p` call and lets
 /// Claude Code's own agentic loop call read_file/list_directory/write_file autonomously —
-/// scoped to dev_workspace_root() (see that function's doc comment on the dev-only
-/// tradeoff). write_file/run_shell_command only ever stage (never execute inline), exactly
-/// like the CLI backend; a staged action is detected via find_staged_action and surfaced to
-/// the frontend as raw JSON instead of applied here — actually running an approved shell
+/// scoped to whatever `workspace_root` the frontend resolved (config.workspaceRoot if the user
+/// picked one via Settings' Workspace section, otherwise get_dev_workspace_root()'s fallback —
+/// see App.tsx's createTauriBackedAssistant). Fix: this command used to call dev_workspace_root()
+/// itself unconditionally here, silently ignoring a user-picked workspace and always scoping the
+/// MCP server (and thus every read_file/list_directory/write_file/run_shell_command call) to the
+/// monorepo root regardless of Settings — the JS side's own fileTools.workspaceRoot (used for
+/// applying an approved write/shell action) was already correct, so the two could point at
+/// different directories. write_file/run_shell_command only ever stage (never execute inline),
+/// exactly like the CLI backend; a staged action is detected via find_staged_action and surfaced
+/// to the frontend as raw JSON instead of applied here — actually running an approved shell
 /// command happens later, via run_shell_command below, once the user approves. Uses
 /// --output-format stream-json (not the single-object 'json') and reads stdout line-by-line
 /// as the process runs, emitting a TOOL_STEP_EVENT for every tool_use block as soon as it
@@ -165,10 +171,11 @@ async fn run_claude_prompt_with_file_tools(
   prompt: String,
   model: Option<String>,
   enable_shell_tools: bool,
+  workspace_root: String,
 ) -> Result<ToolCallOutcome, String> {
   tauri::async_runtime::spawn_blocking(move || {
     let claude_path = std::env::var("CLAUDE_PATH").unwrap_or_else(|_| "claude".to_string());
-    let workspace_root = dev_workspace_root()?;
+    let workspace_root = PathBuf::from(workspace_root);
     let mcp_server_path = dev_file_tools_mcp_server_path()?;
 
     let mut mcp_env = serde_json::json!({ "WORKSPACE_ROOT": workspace_root.to_string_lossy() });

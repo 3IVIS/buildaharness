@@ -25,6 +25,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   enableShell: 'ASSISTANT_ENABLE_SHELL',
   shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
   workspaceRoot: 'ASSISTANT_WORKSPACE_DIR',
+  dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -49,6 +50,7 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_ENABLE_SHELL !== undefined) overrides.enableShell = env.ASSISTANT_ENABLE_SHELL === '1'
   if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
   if (env.ASSISTANT_WORKSPACE_DIR !== undefined) overrides.workspaceRoot = env.ASSISTANT_WORKSPACE_DIR
+  if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
   return overrides
 }
 
@@ -60,6 +62,7 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
   switch (key) {
     case 'enableWeb':
     case 'enableShell':
+    case 'dangerouslySkipPermissions':
       if (raw !== 'true' && raw !== 'false') throw new ConfigValueParseError(`${key} must be "true" or "false"`)
       return raw === 'true'
     case 'shellTimeoutMs': {
