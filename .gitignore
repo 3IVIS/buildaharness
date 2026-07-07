@@ -10,6 +10,10 @@ dist/
 dist-ssr/
 *.local
 
+# personal-assistant's file-tools/shell-tools staged-but-not-yet-approved actions —
+# runtime state, created wherever a dev/test run points fileTools.workspaceRoot
+.pending-actions/
+
 # Environment files — NEVER commit secrets
 .env
 .env.bak

@@ -52,13 +52,17 @@ the default that applies when none of those are set. Saving tears down and
 recreates the `PersonalAssistant` instance so a change applies to the very
 next turn, no reload needed.
 
-**Known limitation**: `enableWeb`/`enableShell`/`searchBackend`/`braveApiKey`
-are shown and persisted for schema consistency with the CLI, but chat-ui has
-no `web_search`/`fetch_url`/`run_shell_command` wiring of its own yet (see
-`App.tsx`'s doc comment) — those toggles don't change behavior here until
-that capability is added separately. Secrets (`authToken`, `braveApiKey`) are
-stored in plaintext (`localStorage` or an unencrypted JSON file), same trust
-boundary as the CLI's `config.json` — not an OS keychain.
+**Known limitation**: `enableWeb`/`searchBackend`/`braveApiKey` are shown and
+persisted for schema consistency with the CLI, but chat-ui has no
+`web_search`/`fetch_url` wiring of its own yet (see `App.tsx`'s doc comment) —
+that toggle doesn't change behavior here until the capability is added
+separately. `enableShell` *is* wired on the desktop build (Tauri's
+`run_shell_command` command, gated the same way the CLI gates it) — see
+`packages/desktop/README.md`'s Shell section; it remains a no-op in a plain
+browser tab, which has no way to execute anything at all. Secrets
+(`authToken`, `braveApiKey`) are stored in plaintext (`localStorage` or an
+unencrypted JSON file), same trust boundary as the CLI's `config.json` — not
+an OS keychain.
 
 ## Session actions & Diagnostics
 

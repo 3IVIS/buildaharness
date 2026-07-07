@@ -147,31 +147,41 @@ const TOOL_STEP_EVENT: &str = "claude-tool-step";
 /// wires personal-assistant's file-tools MCP server into a single `claude -p` call and lets
 /// Claude Code's own agentic loop call read_file/list_directory/write_file autonomously —
 /// scoped to dev_workspace_root() (see that function's doc comment on the dev-only
-/// tradeoff). write_file only ever stages (never executes inline), exactly like the CLI
-/// backend; a staged write is detected via find_staged_action and surfaced to the frontend
-/// as raw JSON instead of applied here. Uses --output-format stream-json (not the
-/// single-object 'json') and reads stdout line-by-line as the process runs, emitting a
-/// TOOL_STEP_EVENT for every tool_use block as soon as it appears — otherwise these calls
-/// are invisible until the whole subprocess call finishes, since Claude Code's own agentic
-/// loop resolves them internally. Mirrors claude-cli-llm-client.ts's invokeClaudeStreaming.
+/// tradeoff). write_file/run_shell_command only ever stage (never execute inline), exactly
+/// like the CLI backend; a staged action is detected via find_staged_action and surfaced to
+/// the frontend as raw JSON instead of applied here — actually running an approved shell
+/// command happens later, via run_shell_command below, once the user approves. Uses
+/// --output-format stream-json (not the single-object 'json') and reads stdout line-by-line
+/// as the process runs, emitting a TOOL_STEP_EVENT for every tool_use block as soon as it
+/// appears — otherwise these calls are invisible until the whole subprocess call finishes,
+/// since Claude Code's own agentic loop resolves them internally. Mirrors
+/// claude-cli-llm-client.ts's invokeClaudeStreaming. `enable_shell_tools` mirrors the CLI's
+/// `config.enableShell` gate (see cli.ts) — run_shell_command is only registered on the MCP
+/// server when the user has turned Shell on in Settings, same opt-in as everywhere else.
 #[tauri::command]
 async fn run_claude_prompt_with_file_tools(
   app_handle: tauri::AppHandle,
   system_prompt: String,
   prompt: String,
   model: Option<String>,
+  enable_shell_tools: bool,
 ) -> Result<ToolCallOutcome, String> {
   tauri::async_runtime::spawn_blocking(move || {
     let claude_path = std::env::var("CLAUDE_PATH").unwrap_or_else(|_| "claude".to_string());
     let workspace_root = dev_workspace_root()?;
     let mcp_server_path = dev_file_tools_mcp_server_path()?;
 
+    let mut mcp_env = serde_json::json!({ "WORKSPACE_ROOT": workspace_root.to_string_lossy() });
+    if enable_shell_tools {
+      mcp_env["ENABLE_SHELL_TOOLS"] = serde_json::Value::String("1".to_string());
+    }
+
     let mcp_config = serde_json::json!({
       "mcpServers": {
         "file-tools": {
           "command": "node",
           "args": [mcp_server_path.to_string_lossy()],
-          "env": { "WORKSPACE_ROOT": workspace_root.to_string_lossy() }
+          "env": mcp_env
         }
       }
     })
@@ -341,6 +351,120 @@ async fn run_claude_prompt(
   .map_err(|e| format!("Internal error running claude: {e}"))?
 }
 
+#[derive(serde::Serialize)]
+struct ShellCommandOutcome {
+  /// Combined stdout+stderr, truncated to SHELL_MAX_OUTPUT_BYTES — mirrors
+  /// shell-executor.ts's ShellExecutionResult shape exactly, so the frontend can hand this
+  /// straight to personal-assistant's applyPendingAction without reshaping it.
+  output: String,
+  exit_code: Option<i32>,
+  timed_out: bool,
+}
+
+const SHELL_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const SHELL_MAX_OUTPUT_BYTES: usize = 20_000;
+/// Never the app's own full env (which could carry unrelated secrets into the command) —
+/// only these, mirroring shell-executor.ts's ALLOWED_ENV_VARS. USERPROFILE is Windows' HOME.
+const SHELL_ALLOWED_ENV_VARS: [&str; 4] = ["PATH", "HOME", "USERPROFILE", "LANG"];
+
+fn truncate_output(text: String, max_bytes: usize) -> String {
+  if text.len() <= max_bytes {
+    return text;
+  }
+  let mut end = max_bytes.min(text.len());
+  while end > 0 && !text.is_char_boundary(end) {
+    end -= 1;
+  }
+  format!("{}\n… (truncated)", &text[..end])
+}
+
+/// Actually runs a previously staged, already-sandboxed command — the Rust equivalent of
+/// personal-assistant's shell-executor.ts (which can't run inside a webview because it needs
+/// node:child_process). Invoked only at approval time, via the frontend's ShellCommandExecutor
+/// (tauri-shell-executor.ts) passed into PersonalAssistant's `shellTools.executeCommand` — the
+/// same generic resolvePendingAction path the CLI uses, just backed by a Tauri command instead
+/// of a direct node:child_process.spawn call. `cwd` is the staged (already-validated-in-workspace)
+/// path from the pending-action record, not user input taken fresh here. No process-group kill
+/// on timeout (unlike shell-executor.ts's `detached` + negative-pid kill) — accepted simplification
+/// for a first cut, same tradeoff already noted on check_claude_available's doc comment; a killed
+/// shell's own unwaited grandchildren can outlive the timeout.
+#[tauri::command]
+async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>) -> Result<ShellCommandOutcome, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let timeout = std::time::Duration::from_millis(timeout_ms.unwrap_or(SHELL_DEFAULT_TIMEOUT_MS));
+
+    #[cfg(unix)]
+    let mut cmd = {
+      let mut c = Command::new("/bin/sh");
+      c.arg("-c").arg(&command);
+      c
+    };
+    #[cfg(windows)]
+    let mut cmd = {
+      let mut c = Command::new("cmd");
+      c.arg("/C").arg(&command);
+      c
+    };
+
+    cmd.current_dir(&cwd).env_clear();
+    for key in SHELL_ALLOWED_ENV_VARS {
+      if let Ok(value) = std::env::var(key) {
+        cmd.env(key, value);
+      }
+    }
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Couldn't run the command: {e}"))?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_handle = std::thread::spawn(move || {
+      use std::io::Read;
+      let mut s = String::new();
+      if let Some(mut o) = stdout {
+        let _ = o.read_to_string(&mut s);
+      }
+      s
+    });
+    let stderr_handle = std::thread::spawn(move || {
+      use std::io::Read;
+      let mut s = String::new();
+      if let Some(mut e) = stderr {
+        let _ = e.read_to_string(&mut s);
+      }
+      s
+    });
+
+    let start = std::time::Instant::now();
+    let mut timed_out = false;
+    let exit_status = loop {
+      match child.try_wait() {
+        Ok(Some(status)) => break Some(status),
+        Ok(None) => {
+          if start.elapsed() >= timeout {
+            timed_out = true;
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+          }
+          std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        Err(_) => break None,
+      }
+    };
+
+    let stdout_text = stdout_handle.join().unwrap_or_default();
+    let stderr_text = stderr_handle.join().unwrap_or_default();
+
+    Ok(ShellCommandOutcome {
+      output: truncate_output(format!("{stdout_text}{stderr_text}"), SHELL_MAX_OUTPUT_BYTES),
+      exit_code: if timed_out { None } else { exit_status.and_then(|s| s.code()) },
+      timed_out,
+    })
+  })
+  .await
+  .map_err(|e| format!("Internal error running shell command: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -349,6 +473,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       run_claude_prompt,
       run_claude_prompt_with_file_tools,
+      run_shell_command,
       get_dev_workspace_root,
       check_claude_available,
       pick_workspace_directory

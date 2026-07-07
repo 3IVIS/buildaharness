@@ -20,6 +20,13 @@ export interface TauriClaudeCliLLMClientOptions {
    * fully tool-free, exactly as before this option existed.
    */
   fileTools?: boolean
+  /**
+   * When set (fileTools must also be set — the MCP server only starts at all when fileTools
+   * is), passes `enable_shell_tools: true` to `run_claude_prompt_with_file_tools` so the MCP
+   * server also registers run_shell_command — mirrors ClaudeCliLLMClient's own `shellTools`
+   * option gating the same env var on its MCP subprocess. Absent by default.
+   */
+  shellTools?: boolean
 }
 
 /**
@@ -35,9 +42,11 @@ export interface TauriClaudeCliLLMClientOptions {
  */
 export class TauriClaudeCliLLMClient implements ILLMClient {
   private readonly fileTools: boolean
+  private readonly shellTools: boolean
 
   constructor(options: TauriClaudeCliLLMClientOptions = {}) {
     this.fileTools = options.fileTools ?? false
+    this.shellTools = options.shellTools ?? false
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -74,6 +83,7 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
         systemPrompt,
         prompt,
         model: options.model ?? null,
+        enableShellTools: this.shellTools,
       })
     } finally {
       unlisten?.()

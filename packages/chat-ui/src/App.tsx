@@ -17,6 +17,7 @@ import {
 } from '@buildaharness/personal-assistant'
 import { LLMClient, FileSystemAdapter, FileSystemExperienceStore, type TokenUsage } from '@buildaharness/runtime'
 import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
+import { tauriExecuteShellCommand } from './tauri-shell-executor'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
@@ -74,11 +75,12 @@ async function createConfigStore(): Promise<ConfigStore> {
  * fileTools is wired to `config.workspaceRoot` if the user has picked one via the Settings
  * screen's Workspace section, falling back to `get_dev_workspace_root()` (the monorepo root,
  * computed on the Rust side from this crate's compile-time location — see that command's own
- * doc comment) otherwise. Note: `config.enableWeb`/`enableShell`/`searchBackend` are
- * persisted and shown in Settings for schema consistency with the CLI, but chat-ui has no
- * web_search/fetch_url/run_shell_command wiring of its own yet — those toggles don't change
- * behavior here until that capability is added, the same pre-existing gap this doc comment
- * already noted before Settings existed.
+ * doc comment) otherwise. shellTools follows the same enableShell gate the CLI uses
+ * (cli.ts) — `run_shell_command` is only registered on the MCP server, and only wired into
+ * PersonalAssistant, when the user has turned Shell on in Settings. Note:
+ * `config.enableWeb`/`searchBackend` are still persisted and shown in Settings for schema
+ * consistency with the CLI but chat-ui has no web_search/fetch_url wiring of its own yet —
+ * that toggle alone doesn't change behavior here.
  */
 async function createTauriBackedAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
   const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
@@ -90,12 +92,15 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
 
   return PersonalAssistant.create({
-    llmClient: new TauriClaudeCliLLMClient({ fileTools: true }),
+    llmClient: new TauriClaudeCliLLMClient({ fileTools: true, shellTools: config.enableShell }),
     model: config.model,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
     fileTools: { backend, workspaceRoot },
+    shellTools: config.enableShell
+      ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
+      : undefined,
   })
 }
 

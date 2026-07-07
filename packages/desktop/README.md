@@ -39,6 +39,27 @@ already used for transcripts) and becomes `fileTools`' `workspaceRoot` for
 `get_dev_workspace_root()` — the compile-time monorepo root, dev-mode-only —
 which remains the fallback until a user picks a real directory.
 
+## Shell
+
+Turning "Shell" on in Settings (`config.enableShell`) does two things on the
+desktop build: `run_claude_prompt_with_file_tools` passes `enable_shell_tools:
+true`, which sets `ENABLE_SHELL_TOOLS=1` on the file-tools MCP server's env so
+it registers `run_shell_command` (`file-tools-mcp-server.mjs`) alongside
+read/list/write; and `App.tsx` wires `shellTools.executeCommand` to
+`tauri-shell-executor.ts`, which invokes a new `run_shell_command` Tauri
+command (`src-tauri/src/lib.rs`) — a Rust port of personal-assistant's
+`shell-executor.ts`, since the webview can't spawn processes itself. A
+proposed command is always staged first via the same pending-action flow
+`write_file` already uses — nothing runs until the user approves it in the
+UI. The Rust executor caps output at 20 000 bytes, reduces the child's env to
+`PATH`/`HOME`/`USERPROFILE`/`LANG`, and kills the process on timeout
+(`config.shellTimeoutMs`, default 30 s) — it does not kill the whole process
+group on timeout the way `shell-executor.ts`'s Node implementation does
+(`detached` + a negative-pid signal), so a killed shell's own unwaited
+grandchildren can outlive the timeout; accepted simplification for a first
+cut, same tradeoff `check_claude_available`'s doc comment already accepts
+elsewhere in this crate.
+
 ## Diagnostics health check
 
 Settings' Diagnostics > Health section (see `packages/chat-ui/README.md`)
