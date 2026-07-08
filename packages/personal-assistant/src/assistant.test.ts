@@ -1249,4 +1249,45 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
     expect(second.status).toBe('ok')
     expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
   })
+
+  it('detects a contradiction from a natural-language build/test status flip with no personal-fact phrasing', async () => {
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    // Neither message uses "my name is"/"i prefer"/"remember that" phrasing — before widening
+    // extractFactsFromTurn to also admit looksLikeCodingFact statements, this pair produced zero
+    // beliefs and thus zero contradiction detection at any layer, lexical or LLM.
+    await assistant.turn('The tests passed on the CI pipeline for the auth service.', { sessionId: 'coding-fact-flip' })
+    const second = await assistant.turn('The tests failed on the CI pipeline for the auth service.', { sessionId: 'coding-fact-flip' })
+
+    expect(second.status).toBe('ok')
+    expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
+  })
+})
+
+describe('PersonalAssistant world_model layer_activity reporting', () => {
+  it('reports the fact newly stated this turn, not a stale re-seeded one, on the "Remembered: ..." line', async () => {
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('My name is Alex and I live in Austin, Texas.', { sessionId: 'world-model-report' })
+    const second = await assistant.turn('I prefer tea over coffee.', { sessionId: 'world-model-report' })
+
+    const worldModelEvent = second.trace?.layerActivity.find((e) => e.layer === 'world_model')
+    expect(worldModelEvent?.fired).toBe(true)
+    expect(worldModelEvent?.reason).toBe('Remembered: I prefer tea over coffee.')
+  })
+
+  it('reports fired=false with an honest "carried forward" reason when a turn adds no new fact', async () => {
+    const llm = new FakeLLMClient('Here are a few ideas.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('My name is Alex and I live in Austin, Texas.', { sessionId: 'world-model-no-new-fact' })
+    // Non-trivial (so the full harness runs) but states no new personal or coding fact.
+    const second = await assistant.turn('Can you help me plan something?', { sessionId: 'world-model-no-new-fact' })
+
+    const worldModelEvent = second.trace?.layerActivity.find((e) => e.layer === 'world_model')
+    expect(worldModelEvent?.fired).toBe(false)
+    expect(worldModelEvent?.reason).toContain('carried forward')
+  })
 })

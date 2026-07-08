@@ -675,8 +675,12 @@ export class PersonalAssistant {
     // once per turn (not once per task, unlike the current-turn extraction below) — every task
     // in a multi-task turn re-deriving the same prior beliefs would just duplicate them.
     let priorFactsSeeded = false
-    const factExtractor = (objective: string): Array<{ statement: string }> => {
-      const currentTurnFacts = extractFactsFromTurn(objective, runId).map(f => ({ statement: f.text }))
+    const factExtractor = (objective: string): Array<{ statement: string; isNew?: boolean }> => {
+      // isNew:true marks a fact this turn's message actually stated — see harness-runtime.ts's
+      // world_model layer_activity report, which only surfaces one of these as "Remembered:
+      // ...". Prior facts are re-seeded so the contradiction checker has something to compare
+      // against, but they're not new this turn and shouldn't be reported as if they were.
+      const currentTurnFacts = extractFactsFromTurn(objective, runId).map(f => ({ statement: f.text, isNew: true }))
       if (priorFactsSeeded) return currentTurnFacts
       priorFactsSeeded = true
       const priorFacts = facts.slice(-FACT_CAP).map(f => ({ statement: f.text }))

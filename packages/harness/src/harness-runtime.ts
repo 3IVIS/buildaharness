@@ -75,8 +75,13 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * Model/Contradiction/Reviewer real content instead of the observation-only default. The
    * harness itself has no fact-extraction logic of its own — this stays a caller-supplied hook
    * so the generic runtime never depends on any one caller's extraction heuristic.
+   *
+   * `isNew` (optional, defaults falsy) distinguishes a fact genuinely stated this turn from one
+   * the caller re-seeded from prior turns for the contradiction checker's benefit — see the
+   * world_model layer_activity report below, which only surfaces an `isNew` fact as "Remembered:
+   * ...", not whichever carried-over fact happens to be first in the array.
    */
-  factExtractor?: (objective: string) => Array<{ statement: string }>
+  factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   /** See TurnComplexitySignal — absent means every Phase 2 gate reads its own conservative default. */
   complexitySignal?: TurnComplexitySignal
   /** Fired or skipped, every one of the 11 harness layers reports itself here each iteration — see LayerActivityEvent. */
@@ -194,7 +199,7 @@ interface LoopContext {
   experienceStore: ExperienceStore
   updateChannel: UpdateChannel
   toolExecutors: Record<string, () => unknown>
-  factExtractor?: (objective: string) => Array<{ statement: string }>
+  factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
   rollbackExecutors?: Record<string, () => void>
@@ -768,7 +773,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // trail even with no extracted fact — a plain LOW-risk single task stays observation-only.
       const worldModelShouldFire = facts.length > 0 || (sig?.taskCount ?? 1) > 1 || (sig?.riskLevel ?? 'LOW') !== 'LOW'
       if (worldModelShouldFire) {
-        facts.forEach((fact: { statement: string }, i: number) => {
+        facts.forEach((fact: { statement: string; isNew?: boolean }, i: number) => {
           const factEvidence = gatherEvidence(
             {
               id: `fact-${currentTask.id}-${ctx.stepsUsed}-${i}`,
@@ -810,9 +815,20 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             }
           }
         }
-        reportLayer(ctx, 'world_model', true, facts[0]
-          ? `Remembered: ${facts[0].statement}`
-          : 'recorded a belief trail for a multi-step/consequential turn')
+        // facts[0] is usually a prior-turn fact re-seeded for the contradiction checker's
+        // benefit (see PersonalAssistant's factExtractor), not something that just happened —
+        // only an isNew fact is worth surfacing as "Remembered: ...". A turn that carried
+        // forward known facts without stating a new one reports fired=false, matching how the
+        // Contradiction layer reports "checked — no conflicts found" rather than claiming a
+        // false positive.
+        const newFact = facts.find((f) => f.isNew)
+        if (newFact) {
+          reportLayer(ctx, 'world_model', true, `Remembered: ${newFact.statement}`)
+        } else if (facts.length > 0) {
+          reportLayer(ctx, 'world_model', false, `no new fact this turn — ${facts.length} known fact(s) carried forward`)
+        } else {
+          reportLayer(ctx, 'world_model', true, 'recorded a belief trail for a multi-step/consequential turn')
+        }
       } else {
         reportLayer(ctx, 'world_model', false, 'single LOW-risk task, no durable fact stated — observation only')
       }

@@ -27,4 +27,10 @@ describe('extractFactsFromTurn', () => {
   it('returns no facts for a consequential request with no self-statement', () => {
     expect(extractFactsFromTurn('Please send an email to my boss telling him I quit.', 'turn:5')).toEqual([])
   })
+
+  it('captures a build/test/service-status statement even with no personal-fact phrasing', () => {
+    const facts = extractFactsFromTurn('The tests passed on the CI pipeline for the auth service.', 'turn:6')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('The tests passed on the CI pipeline for the auth service.')
+  })
 })
