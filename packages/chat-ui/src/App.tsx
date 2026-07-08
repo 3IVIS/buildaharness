@@ -8,12 +8,16 @@ import {
   estimateCostUsd,
   formatTranscriptMarkdown,
   defaultExportFilename,
+  duckDuckGoSearch,
+  braveSearch,
   type AssistantProgress,
   type AssistantToolStep,
   type AssistantConfig,
   type ConfigStore,
   type MemorySummary,
   type DoctorCheck,
+  type WebSearchResult,
+  type DnsResolver,
 } from '@buildaharness/personal-assistant'
 import {
   LLMClient,
@@ -59,6 +63,37 @@ const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
 
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+}
+
+/**
+ * Builds the webTools context (search, fetchImpl, dns) for web_search/fetch_url.
+ *
+ * fetchImpl: DuckDuckGo's HTML-scraping endpoint (and Brave's/fetch_url's arbitrary target)
+ * aren't CORS-enabled for arbitrary browser origins, so a plain `fetch()` from inside this
+ * app fails outright with "Failed to fetch" (verified live). On desktop this is fixed by
+ * routing through @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no
+ * CORS involved, scoped to html.duckduckgo.com/api.search.brave.com via capabilities/
+ * default.json's `http:default` entry (fetch_url's arbitrary targets aren't in that scope,
+ * so still CORS-blocked on desktop today — search was the immediate ask). A plain browser
+ * tab has no equivalent escape hatch and is left on native fetch.
+ *
+ * dns: fetch_url's SSRF guard (web-tools.ts's assertPublicHttpUrl) defaults to
+ * `node:dns/promises`, which doesn't exist in any webview or browser tab — without an
+ * override it throws on every fetch_url call, not just an occasional failure. Desktop gets
+ * a real resolver (tauriDnsResolver, backed by the dns_lookup Tauri command); a plain
+ * browser tab has no DNS API available at all and is left on the (always-failing) default,
+ * same "capability absent, not a crash" degradation as everywhere else this app can't fully
+ * support something — the failure is caught by assistant.ts's tool dispatch and reported to
+ * the model as an error result, never a crashed turn.
+ */
+async function createWebTools(config: AssistantConfig, isDesktop: boolean): Promise<{ search: (query: string) => Promise<WebSearchResult[]>; fetchImpl?: typeof fetch; dns?: DnsResolver }> {
+  const fetchImpl = isDesktop ? (await import('@tauri-apps/plugin-http')).fetch : undefined
+  const dns = isDesktop ? (await import('./tauri-dns-resolver')).tauriDnsResolver : undefined
+  const search =
+    config.searchBackend === 'brave'
+      ? (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
+      : (query: string) => duckDuckGoSearch(query, { fetchImpl })
+  return { search, fetchImpl, dns }
 }
 
 /** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
@@ -128,15 +163,25 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: 
  * `config.enableWeb`/`searchBackend` are still persisted and shown in Settings for schema
  * consistency with the CLI but chat-ui has no web_search/fetch_url wiring of its own yet —
  * that toggle alone doesn't change behavior here.
+ *
+ * fileTools/shellTools deliberately use a *different* FsBackend (createTauriWorkspaceFsBackend)
+ * than memory/experienceStore/checkpointStore do (createTauriFsBackend) — the former is
+ * workspace-root-scoped via raw Rust std::fs commands, the latter is $APPLOCALDATA-scoped via
+ * @tauri-apps/plugin-fs's capability system. Using the $APPLOCALDATA-scoped one against a
+ * workspaceRoot path (which is never under $APPLOCALDATA) used to fail every write_file/
+ * run_shell_command call with a "forbidden path" error — see tauri-workspace-fs-backend.ts's
+ * doc comment for the full story.
  */
 async function createTauriBackedAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
-  const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
+  const [{ appLocalDataDir }, { createTauriFsBackend }, { createTauriWorkspaceFsBackend }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('./tauri-fs-backend'),
+    import('./tauri-workspace-fs-backend'),
   ])
   const baseDir = await appLocalDataDir()
   const backend = createTauriFsBackend()
   const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
+  const workspaceBackend = createTauriWorkspaceFsBackend(workspaceRoot)
 
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot }),
@@ -144,9 +189,10 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
-    fileTools: { backend, workspaceRoot },
+    fileTools: { backend: workspaceBackend, workspaceRoot },
+    webTools: config.enableWeb ? await createWebTools(config, true) : undefined,
     shellTools: config.enableShell
-      ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
+      ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
       : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
   })
@@ -157,9 +203,10 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
     model: config.model,
-    // No fileTools/shellTools in a plain browser build (no filesystem/process access at all),
-    // so this only ever affects the message-level risk gate here — still worth honoring for
-    // consistency with the desktop build rather than silently ignoring the setting.
+    // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
+    // still worth honoring dangerouslySkipPermissions for consistency with the desktop build,
+    // since it also affects the message-level risk gate, independent of file/shell tools.
+    webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
   })
 }

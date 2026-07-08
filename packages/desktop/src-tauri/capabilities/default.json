@@ -9,6 +9,13 @@
     "core:default",
     "fs:allow-applocaldata-read-recursive",
     "fs:allow-applocaldata-write-recursive",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://html.duckduckgo.com/*" },
+        { "url": "https://api.search.brave.com/*" }
+      ]
+    }
   ]
 }

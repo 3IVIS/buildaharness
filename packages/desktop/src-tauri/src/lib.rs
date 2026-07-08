@@ -476,18 +476,247 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
   .map_err(|e| format!("Internal error running shell command: {e}"))?
 }
 
+// ── Workspace-scoped file I/O (raw std::fs, not @tauri-apps/plugin-fs) ──
+//
+// personal-assistant's fileTools/shellTools (read_file/list_directory/write_file/
+// run_shell_command, and the .pending-actions staging both share) need real read/write
+// access to `workspaceRoot` — a path chosen at runtime (the dev fallback from
+// get_dev_workspace_root, or a directory the user picks via Settings), never known at
+// build time. @tauri-apps/plugin-fs's capability system requires a *static* scope
+// declared in capabilities/default.json ($APPLOCALDATA only, for transcripts/config/
+// experience — see tauri-fs-backend.ts) — there's no way to declare a scope for "whatever
+// directory gets picked later" short of a wildcard covering the whole filesystem, which
+// would be a real security regression (every file the OS account can read/write becomes
+// reachable from the webview's JS, not just the one workspace the user chose).
+//
+// So these commands bypass the fs plugin entirely and do raw std::fs I/O instead, with
+// their own containment check (assert_within_workspace, mirroring file-tools.ts's
+// resolveInWorkspace/assertRealPathInWorkspace and file-tools-mcp-server.mjs's equivalent
+// for the claude-cli backend) as the only gate — the same tradeoff run_claude_prompt/
+// run_shell_command already made for their own custom commands. Bug this fixes: before
+// this, fileTools/shellTools on desktop used tauri-fs-backend.ts (the $APPLOCALDATA-scoped
+// one) directly against workspaceRoot paths, which always failed with a "forbidden path"
+// error — invisible as long as claude-cli was the only backend (its file tools run inside
+// a Rust-spawned Node subprocess via file-tools-mcp-server.mjs, never touching this JS
+// backend at all), but broke the moment desktop could use the anthropic/openai/openrouter
+// backends too, since those route file tools through the generic JS-side dispatch.
+//
+// Resolves the nearest *existing* ancestor of `path` and canonicalizes it — `path` itself
+// often doesn't exist yet (write_file on a new file, mkdir on a new directory), so it can't
+// be canonicalized directly; its closest real ancestor can. Mirrors file-tools.ts's
+// realpathOfNearestExistingAncestor exactly, just in Rust.
+fn nearest_existing_ancestor(path: &Path) -> std::io::Result<PathBuf> {
+  if path.exists() {
+    return path.canonicalize();
+  }
+  match path.parent() {
+    Some(parent) if parent != path => {
+      let real_parent = nearest_existing_ancestor(parent)?;
+      Ok(match path.file_name() {
+        Some(name) => real_parent.join(name),
+        None => real_parent,
+      })
+    }
+    _ => Ok(path.to_path_buf()),
+  }
+}
+
+/// Validates `path` resolves inside `workspace_root` (following symlinks on whichever
+/// prefix of it already exists) before any of the commands below touch disk. Returns the
+/// original (non-canonicalized) `path` as a `PathBuf` — I/O still happens against the path
+/// as given, this only gates whether it's allowed to.
+fn assert_within_workspace(workspace_root: &str, path: &str) -> Result<PathBuf, String> {
+  let root = Path::new(workspace_root)
+    .canonicalize()
+    .map_err(|e| format!("Couldn't resolve workspace root \"{workspace_root}\": {e}"))?;
+  let target = Path::new(path);
+  let real_target = nearest_existing_ancestor(target).map_err(|e| format!("Couldn't resolve \"{path}\": {e}"))?;
+  if real_target != root && !real_target.starts_with(&root) {
+    return Err(format!("Path \"{path}\" resolves outside the workspace root."));
+  }
+  Ok(target.to_path_buf())
+}
+
+/// Desktop equivalent of tauri-fs-backend.ts's readTextFile: resolves `undefined` (here,
+/// `None`) for a missing file rather than erroring — matches FsBackend's contract exactly.
+#[tauri::command]
+async fn workspace_read_text_file(workspace_root: String, path: String) -> Result<Option<String>, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    match std::fs::read_to_string(&target) {
+      Ok(contents) => Ok(Some(contents)),
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+      Err(e) => Err(format!("Couldn't read \"{path}\": {e}")),
+    }
+  })
+  .await
+  .map_err(|e| format!("Internal error reading a workspace file: {e}"))?
+}
+
+#[tauri::command]
+async fn workspace_write_text_file(workspace_root: String, path: String, contents: String) -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    // stagePendingAction (file-tools.ts) calls mkdir(.pending-actions) then
+    // writeTextFile(.pending-actions/<id>.json) as two separate FsBackend calls, so this
+    // create_dir_all is usually a no-op by the time it runs — kept anyway so this command
+    // is a correct standalone FsBackend.writeTextFile implementation on its own.
+    if let Some(parent) = target.parent() {
+      std::fs::create_dir_all(parent).map_err(|e| format!("Couldn't create parent directory for \"{path}\": {e}"))?;
+    }
+    std::fs::write(&target, contents).map_err(|e| format!("Couldn't write \"{path}\": {e}"))
+  })
+  .await
+  .map_err(|e| format!("Internal error writing a workspace file: {e}"))?
+}
+
+/// No-op if the file doesn't exist — matches FsBackend.removeFile's contract.
+#[tauri::command]
+async fn workspace_remove_file(workspace_root: String, path: String) -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    match std::fs::remove_file(&target) {
+      Ok(()) => Ok(()),
+      Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+      Err(e) => Err(format!("Couldn't remove \"{path}\": {e}")),
+    }
+  })
+  .await
+  .map_err(|e| format!("Internal error removing a workspace file: {e}"))?
+}
+
+/// Recursive; no-op if the directory already exists — matches FsBackend.mkdir's contract.
+#[tauri::command]
+async fn workspace_mkdir(workspace_root: String, path: String) -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    std::fs::create_dir_all(&target).map_err(|e| format!("Couldn't create directory \"{path}\": {e}"))
+  })
+  .await
+  .map_err(|e| format!("Internal error creating a workspace directory: {e}"))?
+}
+
+/// File names only, non-recursive — matches FsBackend.readDir's contract and
+/// tauri-fs-backend.ts's own `.filter(e => e.isFile)` behavior exactly (list_directory
+/// should list files, not subdirectory names, on either backend).
+#[tauri::command]
+async fn workspace_read_dir(workspace_root: String, path: String) -> Result<Vec<String>, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    let entries = std::fs::read_dir(&target).map_err(|e| format!("Couldn't list \"{path}\": {e}"))?;
+    let mut names = Vec::new();
+    for entry in entries {
+      let entry = entry.map_err(|e| format!("Couldn't read a directory entry in \"{path}\": {e}"))?;
+      let file_type = entry.file_type().map_err(|e| format!("Couldn't stat an entry in \"{path}\": {e}"))?;
+      if file_type.is_file() {
+        if let Some(name) = entry.file_name().to_str() {
+          names.push(name.to_string());
+        }
+      }
+    }
+    Ok(names)
+  })
+  .await
+  .map_err(|e| format!("Internal error listing a workspace directory: {e}"))?
+}
+
+/// Resolves symlinks and returns the canonical path — matches FsBackend.realpath's
+/// contract (rejects if `path` doesn't exist). Wired as fileTools'/shellTools' backend's
+/// `realpath`, which is what makes assertRealPathInWorkspace's symlink-escape defense (in
+/// file-tools.ts, on the JS side) actually active for this backend instead of a silent
+/// no-op — see that function's own doc comment.
+#[tauri::command]
+async fn workspace_realpath(workspace_root: String, path: String) -> Result<String, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    let real = target.canonicalize().map_err(|e| format!("Couldn't resolve real path of \"{path}\": {e}"))?;
+    Ok(real.to_string_lossy().to_string())
+  })
+  .await
+  .map_err(|e| format!("Internal error resolving a workspace path: {e}"))?
+}
+
+/// Resolves `hostname` to its IP addresses — backs fetch_url's SSRF guard (web-tools.ts's
+/// assertPublicHttpUrl) on desktop, where the guard's default resolver (`node:dns/promises`)
+/// doesn't exist at all — a webview has no DNS API exposed to its JS, of any kind. Without
+/// this, fetch_url doesn't degrade gracefully so much as never work at all on desktop: every
+/// call throws before the fetch itself even happens. `ToSocketAddrs` needs a port to resolve
+/// against; `:0` is a placeholder — only the resolved IP addresses are used here, never the
+/// port.
+#[tauri::command]
+async fn dns_lookup(hostname: String) -> Result<Vec<String>, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    use std::net::ToSocketAddrs;
+    let addrs = format!("{hostname}:0")
+      .to_socket_addrs()
+      .map_err(|e| format!("Couldn't resolve \"{hostname}\": {e}"))?;
+    Ok(addrs.map(|addr| addr.ip().to_string()).collect())
+  })
+  .await
+  .map_err(|e| format!("Internal error during DNS resolution: {e}"))?
+}
+
+#[cfg(test)]
+mod workspace_fs_tests {
+  use super::assert_within_workspace;
+  use std::fs;
+
+  #[test]
+  fn allows_a_path_inside_the_workspace() {
+    let dir = std::env::temp_dir().join(format!("waw-test-{}", std::process::id()));
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    let root = dir.to_str().unwrap();
+    assert!(assert_within_workspace(root, &format!("{root}/sub/file.txt")).is_ok());
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn rejects_a_path_outside_the_workspace_via_traversal() {
+    let dir = std::env::temp_dir().join(format!("waw-test-outside-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let root = dir.to_str().unwrap();
+    let escaped = format!("{root}/../etc/passwd");
+    assert!(assert_within_workspace(root, &escaped).is_err());
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn rejects_a_symlink_that_escapes_the_workspace() {
+    let base = std::env::temp_dir().join(format!("waw-test-symlink-{}", std::process::id()));
+    let root = base.join("workspace");
+    let outside = base.join("outside");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    let link = root.join("escape");
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+
+    let root_str = root.to_str().unwrap();
+    let escape_str = link.join("secret.txt").to_str().unwrap().to_string();
+    assert!(assert_within_workspace(root_str, &escape_str).is_err());
+    fs::remove_dir_all(&base).ok();
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_http::init())
     .invoke_handler(tauri::generate_handler![
       run_claude_prompt,
       run_claude_prompt_with_file_tools,
       run_shell_command,
       get_dev_workspace_root,
       check_claude_available,
-      pick_workspace_directory
+      pick_workspace_directory,
+      workspace_read_text_file,
+      workspace_write_text_file,
+      workspace_remove_file,
+      workspace_mkdir,
+      workspace_read_dir,
+      workspace_realpath,
+      dns_lookup
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

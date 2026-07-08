@@ -868,6 +868,11 @@ export class PersonalAssistant {
           // A rejected path or tool error is reported back to the model as a
           // tool result, not thrown — matches the "clear decline, never a
           // silent no-op dressed up as success" baseline this plan preserves.
+          // Also logged here (not just fed to the model) — this catch otherwise leaves the
+          // real cause invisible everywhere: it never reaches App.tsx's own catch (no
+          // exception propagates past this point), and the model's own paraphrase of the
+          // error in its final reply is rarely the actual message.
+          console.error(`[tool call failed] ${call.name}`, err)
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
         }
