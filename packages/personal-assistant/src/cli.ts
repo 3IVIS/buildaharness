@@ -456,9 +456,24 @@ async function main(): Promise<void> {
     }
   }
 
+  // Fails closed: a non-TTY (piped/scripted) stdin is read and closed eagerly by readline,
+  // often before a slow turn (one that ran tool calls before hitting a risk gate) even reaches
+  // this prompt — rl.question() then throws ERR_USE_AFTER_CLOSE instead of ever reading an
+  // answer. Left uncaught, that exception unwound past this function entirely: the caller's
+  // `confirmed` was never assigned, "Cancelled." was never logged, and the line meant as the
+  // answer was left to be dispatched as its own ordinary chat turn instead (readline had already
+  // queued it as a 'line' event before this prompt ever ran) — a HIGH-risk/destructive request
+  // was silently neither approved nor declined rather than being safely stopped. Any failure to
+  // read a real answer must resolve to "no" (never "yes"), so a broken/absent confirmation
+  // channel can't be mistaken for approval.
   function askYesNo(question: string): Promise<boolean> {
     return new Promise((resolve) => {
-      rl.question(question, (answer) => resolve(answer.trim().toLowerCase().startsWith('y')))
+      try {
+        rl.question(question, (answer) => resolve(answer.trim().toLowerCase().startsWith('y')))
+      } catch {
+        console.log(`\n[could not read a response — treating as declined]`)
+        resolve(false)
+      }
     })
   }
 

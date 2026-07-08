@@ -33,4 +33,10 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
     expect(facts[0].text).toBe('The tests passed on the CI pipeline for the auth service.')
   })
+
+  it('does not capture a request/command that merely mentions a coding-domain word', () => {
+    // Contains "files" (a CODING_FACT_MARKERS word) but is a request, not a claim about the
+    // world — admitting it would let an imperative turn into a persisted "known fact".
+    expect(extractFactsFromTurn('Please delete the old backup files in the workspace to free up space.', 'turn:7')).toEqual([])
+  })
 })
