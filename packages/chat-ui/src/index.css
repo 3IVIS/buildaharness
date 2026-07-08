@@ -396,8 +396,33 @@ body {
   font-size: 11px;
 }
 
-.bubble__why-checked {
-  margin-top: 8px;
+/* The "Why?" chain — only the harness layers that fired this turn, in order, as short codes
+   (WM, EV, HY, ...) with their reason inline. Wraps onto multiple lines rather than scrolling
+   since a turn touching most layers can run long. */
+.bubble__why-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  color: var(--muted);
+}
+
+.bubble__why-chain-arrow {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.bubble__why-chain-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bubble__why-chain-reason {
+  font-size: 12px;
 }
 
 /* Phase 3.3 of the harness layer activation plan: an 11-cell glanceable grid, one per harness
@@ -463,6 +488,15 @@ body {
 .bubble__layer-cell:hover .bubble__layer-tooltip,
 .bubble__layer-cell:focus-visible .bubble__layer-tooltip {
   display: block;
+}
+
+/* The grid's first couple of cells (WM, EV, ...) sit near the left edge of the chat panel —
+   a centered tooltip up to 220px wide overhangs further left than the panel has room for and
+   gets clipped by the scrollable message list's edge. Anchoring those to the cell's own left
+   edge instead keeps the tooltip growing rightward, into space that's actually available. */
+.bubble__layer-cell:nth-child(-n + 3) .bubble__layer-tooltip {
+  left: 0;
+  transform: none;
 }
 
 .bubble__plan-checklist-item--active {

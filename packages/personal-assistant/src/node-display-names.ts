@@ -1,3 +1,5 @@
+import type { LayerActivityEvent } from '@buildaharness/harness'
+
 // Maps internal HarnessRuntime node identifiers (packages/harness/src/*.ts
 // `nodeExecutionOrder.push(...)` call sites) to short human-readable status
 // copy, so step-progress UI reads as prose instead of a debug log.
@@ -108,4 +110,26 @@ const NODE_TO_LAYER: Record<string, LayerSlug> = {
 export function nodeToLayer(node: string | undefined): LayerSlug | undefined {
   if (!node) return undefined
   return NODE_TO_LAYER[node]
+}
+
+export interface WhyChainItem {
+  layer: LayerSlug
+  reason: string
+}
+
+/**
+ * Collapses a turn's raw layerActivity (one event per layer per main-loop iteration — see
+ * harness-runtime.ts's onLayerActivity doc comment) down to just the layers that fired, in the
+ * order they fired, merging consecutive re-fires of the same layer (back-to-back loop
+ * iterations) into a single link. Shared by the CLI's `/why` and chat-ui's "Why?" panel so both
+ * surfaces summarize a turn identically instead of drifting apart.
+ */
+export function buildWhyChain(layerActivity: LayerActivityEvent[]): WhyChainItem[] {
+  const chain: WhyChainItem[] = []
+  for (const event of layerActivity) {
+    if (!event.fired) continue
+    if (chain.at(-1)?.layer === event.layer) continue
+    chain.push({ layer: event.layer, reason: event.reason })
+  }
+  return chain
 }

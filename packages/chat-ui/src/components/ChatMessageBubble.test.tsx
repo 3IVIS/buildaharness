@@ -14,7 +14,7 @@ function makeTrace(overrides: Partial<AssistantTrace> = {}): AssistantTrace {
 }
 
 describe('ChatMessageBubble', () => {
-  it('shows "What I checked" only for layers that fired, inside Why?', async () => {
+  it('shows a short-code chain of only the layers that fired, inside Why?', async () => {
     const trace = makeTrace({
       layerActivity: [
         { layer: 'world_model', fired: true, reason: 'Remembered: user prefers dark mode' },
@@ -26,13 +26,33 @@ describe('ChatMessageBubble', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Why?' }))
 
-    expect(screen.getByText('What I checked')).toBeInTheDocument()
-    expect(screen.getByText(/World Model:.*Remembered: user prefers dark mode/)).toBeInTheDocument()
-    // A skipped layer's reason must not leak into the "what I checked" list — only fired ones.
-    expect(screen.queryByText(/Hypothesis:/)).not.toBeInTheDocument()
+    expect(screen.getByText('WM')).toBeInTheDocument()
+    expect(screen.getByText('WM').closest('span')).toHaveAttribute('title', 'World Model')
+    expect(screen.getByText(/Remembered: user prefers dark mode/)).toBeInTheDocument()
+    // A skipped layer must not appear in the chain at all — only fired ones.
+    expect(screen.queryByText('HY')).not.toBeInTheDocument()
+    expect(screen.queryByText('CT')).not.toBeInTheDocument()
   })
 
-  it('stays quiet about "What I checked" when nothing fired', async () => {
+  it('collapses the same layer firing on back-to-back loop iterations into one chain link', async () => {
+    const trace = makeTrace({
+      layerActivity: [
+        { layer: 'evidence_reasoning', fired: true, reason: 'gathered file contents' },
+        { layer: 'evidence_reasoning', fired: true, reason: 'gathered web result' },
+        { layer: 'verification', fired: true, reason: 'checks passed' },
+      ],
+    })
+    render(<ChatMessageBubble role="assistant" content="Done." trace={trace} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Why?' }))
+
+    expect(screen.getAllByText('EV')).toHaveLength(1)
+    expect(screen.getByText(/gathered file contents/)).toBeInTheDocument()
+    expect(screen.queryByText(/gathered web result/)).not.toBeInTheDocument()
+    expect(screen.getByText('VF')).toBeInTheDocument()
+  })
+
+  it('shows no chain when nothing fired', async () => {
     const trace = makeTrace({
       layerActivity: [
         { layer: 'hypothesis', fired: false, reason: 'single clear LOW-risk task' },
@@ -42,7 +62,7 @@ describe('ChatMessageBubble', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Why?' }))
 
-    expect(screen.queryByText('What I checked')).not.toBeInTheDocument()
+    expect(screen.queryByText('HY')).not.toBeInTheDocument()
   })
 
   it('Run detail shows all 11 layers, fired ones distinguished from skipped ones', async () => {

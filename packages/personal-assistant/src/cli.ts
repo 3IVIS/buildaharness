@@ -20,7 +20,7 @@ import {
 } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
-import { nodeDisplayName, nodeToLayer, LAYER_ORDER, LAYER_DISPLAY_NAME } from './node-display-names.js'
+import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
@@ -212,19 +212,13 @@ async function main(): Promise<void> {
       return
     }
     console.log(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
-    for (const node of lastTrace.nodeExecutionOrder) {
-      console.log(`  - ${nodeDisplayName(node)}`)
-    }
-    // "What I checked" — only the layers that actually fired with something worth reading,
-    // quiet otherwise (Design Principle 3 of the harness layer activation plan: the common,
-    // unremarkable case stays quiet, matching the existing "don't badge LOW risk" convention).
-    // Use /layers for the full fired/skipped picture across all 11.
-    const notable = lastTrace.layerActivity.filter((e) => e.fired)
-    if (notable.length > 0) {
-      console.log('\nWhat I checked:')
-      for (const e of notable) {
-        console.log(`  - ${LAYER_DISPLAY_NAME[e.layer]}: ${e.reason}`)
-      }
+    // Only the layers that actually fired, chained in the order they fired — quiet otherwise
+    // (Design Principle 3 of the harness layer activation plan: the common, unremarkable case
+    // stays quiet, matching the existing "don't badge LOW risk" convention). Use /layers for
+    // the full fired/skipped picture across all 11.
+    const chain = buildWhyChain(lastTrace.layerActivity)
+    if (chain.length > 0) {
+      console.log('  ' + chain.map((item) => `${LAYER_SHORT_CODE[item.layer]} (${item.reason})`).join(' > '))
     }
     console.log('')
   }

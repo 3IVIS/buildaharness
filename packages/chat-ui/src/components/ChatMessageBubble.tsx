@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  nodeDisplayName,
+  buildWhyChain,
   LAYER_ORDER,
   LAYER_SHORT_CODE,
   LAYER_DISPLAY_NAME,
@@ -46,6 +46,7 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
   if (confidence >= 0.4) return 'Reasonably confident'
   return 'Worth double-checking'
 }
+
 
 const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
   read_file: 'Read',
@@ -140,26 +141,27 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
           {showWhy && (
             <div className="bubble__why-detail">
               <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
-              <ol className="bubble__why-steps">
-                {trace.nodeExecutionOrder.map((node, i) => (
-                  <li key={`${node}-${i}`}>{nodeDisplayName(node)}</li>
-                ))}
-              </ol>
-              {/* "What I checked" — only layers that actually fired with something worth
-                  reading, quiet otherwise (Phase 3.1 of the harness layer activation plan:
-                  the common, unremarkable turn stays quiet, matching the "don't badge LOW
-                  risk" convention above). The full fired/skipped picture for all 11 is one
-                  toggle down, in "Run detail". */}
-              {trace.layerActivity.some((e) => e.fired) && (
-                <>
-                  <div className="bubble__why-confidence bubble__why-checked">What I checked</div>
-                  <ul className="bubble__why-steps">
-                    {trace.layerActivity.filter((e) => e.fired).map((e) => (
-                      <li key={e.layer}>{LAYER_DISPLAY_NAME[e.layer]}: {e.reason}</li>
+              {/* Only layers that actually fired, chained in the order they fired — quiet
+                  otherwise (Phase 3.1 of the harness layer activation plan: the common,
+                  unremarkable turn stays quiet, matching the "don't badge LOW risk"
+                  convention above). The full fired/skipped picture for all 11 is one toggle
+                  down, in "Run detail". */}
+              {(() => {
+                const chain = buildWhyChain(trace.layerActivity)
+                return chain.length > 0 ? (
+                  <div className="bubble__why-chain">
+                    {chain.map((item, i) => (
+                      <span key={`${item.layer}-${i}`} className="bubble__why-chain-item">
+                        {i > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
+                        <span className="bubble__why-chain-code" title={LAYER_DISPLAY_NAME[item.layer]}>
+                          {LAYER_SHORT_CODE[item.layer]}
+                        </span>
+                        <span className="bubble__why-chain-reason"> ({item.reason})</span>
+                      </span>
                     ))}
-                  </ul>
-                </>
-              )}
+                  </div>
+                ) : null
+              })()}
             </div>
           )}
         </div>
