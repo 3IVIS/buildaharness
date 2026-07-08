@@ -11,6 +11,7 @@ import {
   type CheckpointStore,
   type TurnComplexitySignal,
   type LayerActivityEvent,
+  type HarnessCheckpoint,
 } from '@buildaharness/harness'
 import {
   InMemoryAdapter,
@@ -44,10 +45,13 @@ import {
   abandonPlan,
   updatePlanFromRun,
   planCompletionPct,
+  computePlanPosition,
+  nextPendingTask,
   isAbandonPhrase,
   isAbandonPhraseWithLLM,
   looksLikeAbandonAttempt,
   type PlanRecord,
+  type PlanPosition,
 } from './plan-store.js'
 import type { TraceEvent } from './trace-events.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
@@ -82,21 +86,32 @@ function previewContent(content: string, maxLines = 20): string {
  * resolves depends_on by looking up each dependency's status in the current graph, so
  * a completed dependency that got filtered out of initialTasks would never register as
  * satisfied and its dependents would stay permanently blocked.
+ *
+ * `riskLevel` accepts either one flat level (broadcast to every task — the ad hoc
+ * single-task/decomposed-turn shape) or a per-task function keyed off each task's own
+ * description (a durable plan's shape — see Phase 4.2 of the harness layer activation
+ * plan: a plan step like "delete the draft file" shouldn't inherit step 1's risk profile
+ * just because they're rendered from the same turn-level classification).
  */
 function toHarnessTasks(
   tasks: { id: string; description: string; depends_on: string[]; status?: Task['status'] }[],
-  riskLevel: Task['risk_level'],
+  riskLevel: Task['risk_level'] | ((description: string) => Task['risk_level']),
 ): Task[] {
   return tasks.map((t): Task => ({
     id: t.id,
     description: t.description,
     status: t.status ?? 'PENDING',
-    risk_level: riskLevel,
+    risk_level: typeof riskLevel === 'function' ? riskLevel(t.description) : riskLevel,
     depends_on: t.depends_on,
     parallel_write_domains: [],
     abstraction_level: 0,
     assigned_strategy: null,
   }))
+}
+
+/** Per-task risk for a durable plan's steps — reuses classifyRisk's own keyword patterns against each step's own description, instead of broadcasting the turn-level classification (based on the original request, e.g. "what's next?") across every step. */
+function planTaskRiskLevel(description: string): Task['risk_level'] {
+  return classifyRisk(description).riskLevel
 }
 
 type ToolLoopResult =
@@ -107,6 +122,8 @@ type ToolLoopResult =
 export interface AssistantTrace {
   nodeExecutionOrder: string[]
   verificationHealth: { strength: number; feasibility: number }
+  /** Every one of the 11 harness layers' fired/skipped report for this turn — see LayerActivityEvent. Powers the "Why?" panel's "What I checked" list and the 11-layer status grid (Phase 3.1/3.3). */
+  layerActivity: LayerActivityEvent[]
 }
 
 /** Read-only snapshot returned by `getMemorySummary()` — see that method's doc comment. */
@@ -171,6 +188,8 @@ export interface AssistantProgress {
   stepsUsed: number
   maxSteps: number
   currentNode?: string
+  /** Live, mid-run position within a durable plan — set only while a plan is actually driving this turn (Phase 3.2). Absent for an ad hoc single-task/decomposed turn, same "absent when unused" convention as AssistantTurnResult.planStatus. */
+  planPosition?: PlanPosition
 }
 
 export interface TurnOptions {
@@ -547,7 +566,7 @@ export class PersonalAssistant {
     }
 
     if (activePlan) {
-      initialTasks = toHarnessTasks(activePlan.tasks, classification.riskLevel)
+      initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
     } else {
       const planningCandidate = classifyPlanningCandidate(userMessage, decomposed)
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planningCandidate.isCandidate, matchedTemplate: planningCandidate.matchedTemplate })
@@ -557,7 +576,7 @@ export class PersonalAssistant {
         if (plan) {
           activePlan = createPlanRecord(plan)
           await savePlan(this.memory, sessionId, activePlan)
-          initialTasks = toHarnessTasks(activePlan.tasks, classification.riskLevel)
+          initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
         }
         // plan is null (malformed/insufficient LLM response): fall through to
         // whatever initialTasks decomposition already produced above, unchanged.
@@ -585,6 +604,26 @@ export class PersonalAssistant {
       consequentialTools: new Set(sources?.map(s => s.tool) ?? []),
     }
 
+    // Phase 4 of the harness layer activation plan: pace a durable plan one MEDIUM/HIGH-risk
+    // step at a time across turns instead of running its whole unblocked frontier in a single
+    // turn — shouldPause below reads riskById/lastStatusById to decide when to stop. A LOW-risk
+    // step never sets a pause point, so an all-LOW-risk plan still batches straight through
+    // (matches Phase 4.1: "pacing is risk-scaled, not a blanket one-task-per-turn rule").
+    // null for an ad hoc single-task/decomposed turn — those resolve within one turn by design.
+    const planPacing = activePlan
+      ? {
+          riskById: new Map(initialTasks.map((t) => [t.id, t.risk_level] as const)),
+          lastStatusById: new Map(initialTasks.map((t) => [t.id, t.status] as const)),
+        }
+      : null
+
+    // Every layer's fired/skipped report this turn, structured (not just forwarded to onTrace)
+    // so AssistantTrace.layerActivity is populated the same "absent caller, still works" way
+    // nodeExecutionOrder/verificationHealth already are (Phase 3.1).
+    const layerActivityThisTurn: LayerActivityEvent[] = []
+
+    let pausedThisTurn = false
+
     try {
       const runOptions = {
         initialTasks,
@@ -608,13 +647,40 @@ export class PersonalAssistant {
         complexitySignal,
         // Phase 3.1 of the harness layer activation plan: forward every layer's fired/skipped
         // report onto the same onTrace channel harness_node/tool_call events already use — no
-        // new transport, just a new TraceEvent kind a "Why?" panel can key off of.
-        onLayerActivity: (event: LayerActivityEvent) => this.onTrace?.({ kind: 'layer_activity', layer: event.layer, fired: event.fired, reason: event.reason }),
+        // new transport, just a new TraceEvent kind a "Why?" panel can key off of — and also
+        // collect it into AssistantTrace.layerActivity for a caller that never wires onTrace.
+        onLayerActivity: (event: LayerActivityEvent) => {
+          layerActivityThisTurn.push(event)
+          this.onTrace?.({ kind: 'layer_activity', layer: event.layer, fired: event.fired, reason: event.reason })
+        },
+        // Phase 4.1: stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or
+        // FAILED), before the loop would go pick the next one — undefined for a non-plan turn,
+        // so shouldPause is simply never checked and behavior is unchanged from before Phase 4.
+        shouldPause: planPacing
+          ? (cp: HarnessCheckpoint) => {
+              if (cp.progress.nodeExecutionOrder.at(-1) !== 'update_task_state') return false
+              let pause = false
+              for (const t of cp.runState.taskGraph.tasks) {
+                const prevStatus = planPacing.lastStatusById.get(t.id)
+                if (prevStatus !== t.status && (t.status === 'COMPLETE' || t.status === 'FAILED')) {
+                  const risk = planPacing.riskById.get(t.id)
+                  if (risk === 'MEDIUM' || risk === 'HIGH') pause = true
+                }
+                planPacing.lastStatusById.set(t.id, t.status)
+              }
+              return pause
+            }
+          : undefined,
         onCheckpoint: (checkpoint: Parameters<typeof saveHarnessCheckpoint>[1]) => {
+          // Phase 3.2: live, mid-run plan position — computed from the same live task-graph
+          // snapshot updatePlanFromRun uses post-turn, just run once per checkpoint instead of
+          // once at the very end, so a caller sees "step 3/7" while the run is still going.
+          const planPosition = activePlan ? computePlanPosition(activePlan, checkpoint.runState.taskGraph.tasks) ?? undefined : undefined
           options.onProgress?.({
             stepsUsed: checkpoint.progress.stepsUsed,
             maxSteps: this.maxSteps,
             currentNode: checkpoint.progress.nodeExecutionOrder.at(-1),
+            planPosition,
           })
           const node = checkpoint.progress.nodeExecutionOrder.at(-1)
           if (node) this.onTrace?.({ kind: 'harness_node', node, stepsUsed: checkpoint.progress.stepsUsed })
@@ -631,11 +697,59 @@ export class PersonalAssistant {
             runOptions,
           )
 
-      // PersonalAssistant never asks the harness to pause mid-turn, so a 'paused'
-      // outcome here would mean a bug in the driving code, not a real HITL wait.
-      if (outcome.status !== 'complete') {
-        throw new Error(`harness run for "${runId}" paused unexpectedly instead of completing`)
+      if (outcome.status === 'paused') {
+        // An intentional plan-pacing stop (Phase 4.1) — not a bug. Persist the plan's current
+        // task statuses (same as the success path below) so the next turn's pacing/position
+        // computations start from up-to-date state, keep the checkpoint (resume() picks it up
+        // via the priorCheckpoint branch above on the next turn() call), and surface a plain
+        // "ready to continue?" reply instead of the harness's own draft/final result.
+        pausedThisTurn = true
+        let planStatus: AssistantTurnResult['planStatus']
+        let reply = 'Paused.'
+        if (activePlan) {
+          activePlan = updatePlanFromRun(activePlan, outcome.checkpoint.runState.taskGraph.tasks)
+          await savePlan(this.memory, sessionId, activePlan)
+          const completionPct = planCompletionPct(activePlan)
+          this.onTrace?.({ kind: 'plan_updated', templateName: activePlan.templateName, completionPct })
+          planStatus = {
+            templateName: activePlan.templateName,
+            successCriteria: activePlan.successCriteria,
+            completionPct,
+            tasks: activePlan.tasks.map((t) => ({ id: t.id, description: t.description, status: t.status })),
+          }
+          const next = nextPendingTask(activePlan)
+          reply = next
+            ? `Ready to continue with: ${next.description}? (reply to proceed)`
+            : 'All plan steps have run — let me know if you want anything else.'
+        }
+
+        const trace: AssistantTrace = {
+          nodeExecutionOrder: outcome.checkpoint.progress.nodeExecutionOrder,
+          verificationHealth: { ...outcome.checkpoint.runState.diagnostics.verification_health },
+          layerActivity: layerActivityThisTurn,
+        }
+
+        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+        await this.recordFacts(sessionId, userMessage)
+
+        return {
+          status: 'ok',
+          reply,
+          riskLevel: classification.riskLevel,
+          controlState: {
+            riskState: outcome.checkpoint.runState.controlState.risk_state,
+            escalationReason: outcome.checkpoint.runState.controlState.escalation_reason,
+          },
+          stepsUsed: outcome.checkpoint.progress.stepsUsed,
+          harnessSkipped: false,
+          trace,
+          sources,
+          planStatus,
+          usage: usageTotal,
+        }
       }
+
       const result = outcome.result
       stepsUsed = result.stepsUsed
       controlState = {
@@ -645,6 +759,7 @@ export class PersonalAssistant {
       const trace: AssistantTrace = {
         nodeExecutionOrder: result.nodeExecutionOrder,
         verificationHealth: { ...result.initResult.diagnostics.verification_health },
+        layerActivity: layerActivityThisTurn,
       }
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
@@ -687,9 +802,13 @@ export class PersonalAssistant {
       }
       throw err
     } finally {
-      // The turn either completed or escalated (a terminal halt, not a resumable
-      // pause) — either way there's nothing left to resume, so drop the checkpoint.
-      await deleteHarnessCheckpoint(this.checkpointStore, runId).catch(() => {})
+      // A completed or genuinely-escalated (terminal halt) turn has nothing left to resume,
+      // so drop the checkpoint — but an intentional plan-pacing pause (Phase 4.1) must keep
+      // it, so the next turn() call's priorCheckpoint branch resumes this same run instead of
+      // starting a fresh one.
+      if (!pausedThisTurn) {
+        await deleteHarnessCheckpoint(this.checkpointStore, runId).catch(() => {})
+      }
     }
   }
 

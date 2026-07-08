@@ -1,7 +1,17 @@
 import { useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { nodeDisplayName, type RiskLevel, type AssistantTrace, type AssistantSource, type AssistantToolStep } from '@buildaharness/personal-assistant'
+import {
+  nodeDisplayName,
+  LAYER_ORDER,
+  LAYER_SHORT_CODE,
+  LAYER_DISPLAY_NAME,
+  type RiskLevel,
+  type AssistantTrace,
+  type AssistantSource,
+  type AssistantToolStep,
+  type AssistantTurnResult,
+} from '@buildaharness/personal-assistant'
 
 // A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
 // container — putting overflow-x directly on the <table> element instead breaks browsers'
@@ -17,7 +27,15 @@ interface Props {
   trace?: AssistantTrace
   sources?: AssistantSource[]
   toolSteps?: AssistantToolStep[]
+  planStatus?: AssistantTurnResult['planStatus']
   onRetry?: () => void
+}
+
+// Same icon convention plan-store.ts's STATUS_ICON / cli.ts's PLAN_TASK_STATUS_ICON already
+// use — kept in sync by hand rather than importing a string-keyed const across the package
+// boundary just for four glyphs.
+const PLAN_TASK_STATUS_ICON: Record<string, string> = {
+  PENDING: '○', RUNNING: '▶', COMPLETE: '✓', FAILED: '✗', BLOCKED: '✗', HUMAN_REQUIRED: '~',
 }
 
 // Buckets the harness's 0–1 verification scores into plain language rather than
@@ -41,10 +59,11 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, sources, toolSteps, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, sources, toolSteps, planStatus, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
+  const [showRunDetail, setShowRunDetail] = useState(false)
   const [copied, setCopied] = useState(false)
 
   async function handleCopy(): Promise<void> {
@@ -126,6 +145,58 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
                   <li key={`${node}-${i}`}>{nodeDisplayName(node)}</li>
                 ))}
               </ol>
+              {/* "What I checked" — only layers that actually fired with something worth
+                  reading, quiet otherwise (Phase 3.1 of the harness layer activation plan:
+                  the common, unremarkable turn stays quiet, matching the "don't badge LOW
+                  risk" convention above). The full fired/skipped picture for all 11 is one
+                  toggle down, in "Run detail". */}
+              {trace.layerActivity.some((e) => e.fired) && (
+                <>
+                  <div className="bubble__why-confidence bubble__why-checked">What I checked</div>
+                  <ul className="bubble__why-steps">
+                    {trace.layerActivity.filter((e) => e.fired).map((e) => (
+                      <li key={e.layer}>{LAYER_DISPLAY_NAME[e.layer]}: {e.reason}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {(trace || planStatus) && (
+        <div className="bubble__why">
+          <button type="button" className="bubble__why-toggle" onClick={() => setShowRunDetail((v) => !v)}>
+            {showRunDetail ? 'Hide run detail' : 'Run detail ▾'}
+          </button>
+          {showRunDetail && (
+            <div className="bubble__why-detail">
+              {trace && (
+                <div className="bubble__layer-grid">
+                  {LAYER_ORDER.map((layer) => {
+                    const event = trace.layerActivity.find((e) => e.layer === layer)
+                    const fired = event?.fired ?? false
+                    return (
+                      <div
+                        key={layer}
+                        className={`bubble__layer-cell ${fired ? 'bubble__layer-cell--fired' : 'bubble__layer-cell--disabled'}`}
+                        title={`${LAYER_DISPLAY_NAME[layer]}: ${event?.reason ?? 'not evaluated this turn'}`}
+                      >
+                        {LAYER_SHORT_CODE[layer]}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {planStatus && (
+                <ul className="bubble__why-steps bubble__plan-checklist">
+                  {planStatus.tasks.map((t) => (
+                    <li key={t.id} className={t.status === 'RUNNING' ? 'bubble__plan-checklist-item--active' : undefined}>
+                      {PLAN_TASK_STATUS_ICON[t.status] ?? '?'} {t.description}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep } from '@buildaharness/personal-assistant'
+import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult } from '@buildaharness/personal-assistant'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }
@@ -10,6 +10,8 @@ export type ChatEntry =
       trace?: AssistantTrace
       sources?: AssistantSource[]
       toolSteps?: AssistantToolStep[]
+      /** Durable plan progress as of this turn — see AssistantTurnResult.planStatus. Powers the plan checklist in the "Run detail" panel (Phase 3.3 of the harness layer activation plan). */
+      planStatus?: AssistantTurnResult['planStatus']
     }
   | {
       id: string

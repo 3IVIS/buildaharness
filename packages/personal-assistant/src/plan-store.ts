@@ -140,6 +140,47 @@ export function planCompletionPct(plan: PlanRecord): number {
   return (plan.tasks.filter((t) => t.status === 'COMPLETE').length / plan.tasks.length) * 100
 }
 
+/**
+ * Live, mid-run position within a durable plan — see the harness layer activation plan's
+ * Phase 3.2. `stepIndex` is 1-based: the task currently RUNNING, or (once nothing is running)
+ * the last COMPLETE task, or the first task before anything has started.
+ */
+export interface PlanPosition {
+  templateName: string
+  stepIndex: number
+  stepCount: number
+  currentTaskDescription: string
+  completionPct: number
+}
+
+/** Computes live plan position from a live (possibly mid-run) task-status list — `plan.tasks`' own order is authoritative; `taskGraphTasks` only supplies current status per id. */
+export function computePlanPosition(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[]): PlanPosition | null {
+  if (plan.tasks.length === 0) return null
+  const statusById = new Map(taskGraphTasks.map((t) => [t.id, t.status]))
+
+  let idx = plan.tasks.findIndex((t) => statusById.get(t.id) === 'RUNNING')
+  if (idx === -1) {
+    for (let i = plan.tasks.length - 1; i >= 0; i--) {
+      if (statusById.get(plan.tasks[i].id) === 'COMPLETE') { idx = i; break }
+    }
+  }
+  if (idx === -1) idx = 0
+
+  const completedCount = plan.tasks.filter((t) => statusById.get(t.id) === 'COMPLETE').length
+  return {
+    templateName: plan.templateName,
+    stepIndex: idx + 1,
+    stepCount: plan.tasks.length,
+    currentTaskDescription: plan.tasks[idx].description,
+    completionPct: (completedCount / plan.tasks.length) * 100,
+  }
+}
+
+/** The next not-yet-COMPLETE task in plan order — used to phrase a pause/resume prompt ("Ready to continue with: <description>?"). Returns null once every task is COMPLETE. */
+export function nextPendingTask(plan: PlanRecord): PlanTaskRecord | null {
+  return plan.tasks.find((t) => t.status !== 'COMPLETE') ?? null
+}
+
 const STATUS_ICON: Record<TaskStatus, string> = {
   PENDING: '○',
   RUNNING: '▶',

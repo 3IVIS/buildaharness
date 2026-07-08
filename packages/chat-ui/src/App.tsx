@@ -18,6 +18,7 @@ import {
   type DoctorCheck,
   type WebSearchResult,
   type DnsResolver,
+  type AssistantTurnResult,
 } from '@buildaharness/personal-assistant'
 import {
   LLMClient,
@@ -233,6 +234,11 @@ export function App(): React.JSX.Element {
   const [memorySummary, setMemorySummary] = useState<MemorySummary | null>(null)
   const [healthChecks, setHealthChecks] = useState<DoctorCheck[] | null>(null)
   const [transcriptLength, setTranscriptLength] = useState(0)
+  // Phase 3.2 of the harness layer activation plan: a persistent strip above the composer,
+  // visible only while a durable plan is actually driving the session — set from each turn's
+  // planStatus (present whenever a plan drove that turn, including a Phase-4 pause), cleared
+  // once a turn completes with no plan behind it (finished/abandoned).
+  const [activePlanStatus, setActivePlanStatus] = useState<AssistantTurnResult['planStatus']>(undefined)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
@@ -298,6 +304,7 @@ export function App(): React.JSX.Element {
     setMemorySummary(null)
     setHealthChecks(null)
     setTranscriptLength(0)
+    setActivePlanStatus(undefined)
   }
 
   /** GUI equivalent of /export — downloads the transcript as a markdown file via a throwaway Blob URL (works the same in a plain browser tab and inside the Tauri webview, so desktop doesn't need a separate native-save-dialog path). */
@@ -419,8 +426,10 @@ export function App(): React.JSX.Element {
             trace: result.trace,
             sources: result.sources,
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+            planStatus: result.planStatus,
           },
         ])
+        setActivePlanStatus(result.planStatus)
         if (result.usage) {
           const withCost = withCostEstimate(result.usage)
           setLastTurnUsage(withCost)
@@ -518,6 +527,7 @@ export function App(): React.JSX.Element {
                   trace={entry.trace}
                   sources={entry.sources}
                   toolSteps={entry.toolSteps}
+                  planStatus={entry.planStatus}
                 />
               )
             case 'error':
@@ -549,7 +559,12 @@ export function App(): React.JSX.Element {
         {busy && (!streamingText || progress) && (
           <div className="app__typing">
             {progress
-              ? `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
+              ? progress.planPosition
+                // Phase 3.2: a plan-driven turn shows live position instead of the generic
+                // step counter for the duration of the run — harness-internal node detail is
+                // still available via the "Why?" panel once the turn finishes.
+                ? `${progress.planPosition.templateName} — step ${progress.planPosition.stepIndex} of ${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
+                : `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
               : 'thinking…'}
           </div>
         )}
@@ -562,6 +577,15 @@ export function App(): React.JSX.Element {
         )}
         <div ref={bottomRef} />
       </div>
+      {/* Phase 3.2: persistent, visible only while a durable plan is actually active — chat-ui
+          had zero plan awareness before this (closes a total gap, not an enhancement). */}
+      {activePlanStatus && (
+        <div className="app__plan-strip">
+          Following plan: {activePlanStatus.templateName} — step{' '}
+          {activePlanStatus.tasks.filter((t) => t.status === 'COMPLETE').length + 1} of {activePlanStatus.tasks.length}{' '}
+          ({activePlanStatus.completionPct.toFixed(0)}%)
+        </div>
+      )}
       <form className="app__composer" onSubmit={handleSubmit}>
         <input
           value={input}

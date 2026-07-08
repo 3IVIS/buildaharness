@@ -20,7 +20,7 @@ import {
 } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
-import { nodeDisplayName } from './node-display-names.js'
+import { nodeDisplayName, nodeToLayer, LAYER_ORDER, LAYER_DISPLAY_NAME } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
@@ -215,6 +215,34 @@ async function main(): Promise<void> {
     for (const node of lastTrace.nodeExecutionOrder) {
       console.log(`  - ${nodeDisplayName(node)}`)
     }
+    // "What I checked" — only the layers that actually fired with something worth reading,
+    // quiet otherwise (Design Principle 3 of the harness layer activation plan: the common,
+    // unremarkable case stays quiet, matching the existing "don't badge LOW risk" convention).
+    // Use /layers for the full fired/skipped picture across all 11.
+    const notable = lastTrace.layerActivity.filter((e) => e.fired)
+    if (notable.length > 0) {
+      console.log('\nWhat I checked:')
+      for (const e of notable) {
+        console.log(`  - ${LAYER_DISPLAY_NAME[e.layer]}: ${e.reason}`)
+      }
+    }
+    console.log('')
+  }
+
+  /** Full fired/skipped picture across all 11 harness layers for the last turn — pure text rendering of the same layer_activity data /why's "What I checked" summarizes selectively. */
+  function printLayers(): void {
+    if (!lastTrace) {
+      console.log('\nNo harness trace for the last turn (nothing to explain yet, or it took the fast path).\n')
+      return
+    }
+    console.log('')
+    const byLayer = new Map(lastTrace.layerActivity.map((e) => [e.layer, e]))
+    for (const layer of LAYER_ORDER) {
+      const e = byLayer.get(layer)
+      const mark = e?.fired ? '✓' : '·'
+      const reason = e?.reason ?? 'not evaluated this turn'
+      console.log(`  [${mark}] ${LAYER_DISPLAY_NAME[layer].padEnd(22)} ${reason}`)
+    }
     console.log('')
   }
 
@@ -329,8 +357,18 @@ async function main(): Promise<void> {
 
   let lastProgressLineLength = 0
   function writeProgress(progress: AssistantProgress): void {
-    const node = nodeDisplayName(progress.currentNode)
-    const line = `[step ${progress.stepsUsed}/${progress.maxSteps}]${node ? ` ${node}…` : ''}`
+    // Layer name instead of the raw node id even on a non-plan turn (Phase 3.3: "Step 3/5 —
+    // Verification…" reads better than "Step 3/5 — verify…") — falls back to the node's own
+    // display name for loop-scaffolding nodes (context_compression etc.) that map to no layer.
+    const layer = nodeToLayer(progress.currentNode)
+    const label = layer ? LAYER_DISPLAY_NAME[layer] : nodeDisplayName(progress.currentNode)
+    // A plan-driven turn gets a plan-aware prefix instead of the generic step counter for the
+    // duration of the run (Phase 3.2) — the node/layer name is still shown after it, and full
+    // harness-internal detail is still available via /why once the turn finishes.
+    const prefix = progress.planPosition
+      ? `[${progress.planPosition.templateName} — step ${progress.planPosition.stepIndex}/${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)]`
+      : `[step ${progress.stepsUsed}/${progress.maxSteps}]`
+    const line = `${prefix}${label ? ` ${label}…` : ''}`
     process.stdout.write(`\r${line.padEnd(lastProgressLineLength)}`)
     lastProgressLineLength = line.length
   }
@@ -520,6 +558,7 @@ async function main(): Promise<void> {
   // close over `config`/`overriddenKeys`/`assistant`, which reloadAssistant() reassigns.
   const commands: Record<string, (args: string[]) => void | Promise<void>> = {
     '/why': () => printWhy(),
+    '/layers': () => printLayers(),
     '/sources': () => printSources(),
     '/plan': () => printPlan(),
     '/help': () => printHelp(),

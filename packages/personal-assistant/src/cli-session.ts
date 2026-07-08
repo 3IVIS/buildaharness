@@ -27,6 +27,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/cost', description: 'Show token usage for the last turn and this session' },
   { command: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health' },
   { command: '/why', description: 'Explain the harness path the last turn took' },
+  { command: '/layers', description: 'Show all 11 harness layers — fired/skipped and why, for the last turn' },
   { command: '/sources', description: 'List files/URLs the last turn actually consulted' },
   { command: '/plan', description: "Show the active structured plan's task status" },
   { command: '/config ...', description: 'View or change persisted settings' },

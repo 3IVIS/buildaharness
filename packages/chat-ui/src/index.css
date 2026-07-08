@@ -396,6 +396,57 @@ body {
   font-size: 11px;
 }
 
+.bubble__why-checked {
+  margin-top: 8px;
+}
+
+/* Phase 3.3 of the harness layer activation plan: an 11-cell glanceable grid, one per harness
+   layer, inside the "Run detail" toggle — dim for a layer whose trigger condition didn't hold
+   this turn, highlighted for one that fired (hover/title shows the reason either way). */
+.bubble__layer-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.bubble__layer-cell {
+  width: 30px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: default;
+}
+
+.bubble__layer-cell--disabled {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.bubble__layer-cell--fired {
+  background: rgba(91, 141, 238, 0.18);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.bubble__plan-checklist-item--active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.app__plan-strip {
+  padding: 8px 20px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .approval-card, .escalation-banner {
   border: 1px solid var(--amber);
   border-radius: 10px;

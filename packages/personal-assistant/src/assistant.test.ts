@@ -1005,32 +1005,31 @@ describe('PersonalAssistant structured planning', () => {
     expect(llm.calls).toBe(1) // decomposition only — plan-builder never called
   })
 
-  it('drives an all-LOW-risk plan to completion in one turn, then treats a follow-up as ordinary conversation', async () => {
-    const llm = scriptedResponses(
-      [decompositionResponse(), planBuilderResponse(), decompositionResponse(), planBuilderResponse()],
-      ['All set.'],
-    )
+  it('paces a plan across turns when a step looks MEDIUM/HIGH-risk, then resumes to completion', async () => {
+    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
     const assistant = new PersonalAssistant({ llmClient: llm })
 
-    // Since the harness's own success accounting was fixed (see the harness layer
-    // activation plan, Phase 0), a plan with no consequential/HIGH-risk step and few
-    // enough tasks to fit one turn's budget runs to completion in that same turn —
-    // pacing a durable plan one step at a time across turns is Phase 4's job, not yet
-    // built. So there's no still-active plan left for a follow-up turn to resume.
+    // planBuilderResponse's 'schedule' step description ("Build the redesign schedule")
+    // matches classifyRisk's MEDIUM-risk `schedule` keyword — Phase 4 of the harness layer
+    // activation plan assesses each plan step's own risk from its own description (not the
+    // turn's message) and pauses right after a MEDIUM/HIGH-risk step resolves, so this plan
+    // runs 5 of its 6 steps in the first turn and stops for confirmation before 'kickoff'
+    // (the harness's own success accounting was fixed in Phase 0, so this plan does genuinely
+    // execute — Phase 4 is what stops it running to completion in one shot regardless).
     const first = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
     expect(llm.calls).toBe(2)
-    expect(first.planStatus?.completionPct).toBe(100)
+    expect(first.status).toBe('ok')
+    expect(first.planStatus?.completionPct).toBeCloseTo(83.33, 1)
+    expect(first.reply).toContain('Kick off the redesign')
 
-    // An unrelated short follow-up doesn't classify as planning-shaped on its own, and
-    // with no active plan left to drive it, it's answered as ordinary conversation —
-    // no fresh decomposition/plan-builder calls. Phrased to avoid the triviality fast
-    // path (which starts with "What"/"How" etc. and would skip the harness entirely;
-    // see triviality-classifier.ts).
-    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
-
-    expect(result.status).toBe('ok')
-    expect(result.planStatus).toBeUndefined()
-    expect(llm.calls).toBe(2) // unchanged — no new structured calls for the follow-up
+    // Any next message resumes the paused harness run (Phase 4.1 keeps the checkpoint
+    // instead of deleting it) and completes the plan's one remaining LOW-risk step — no
+    // fresh decomposition/plan-builder calls, and no re-pausing since 'kickoff' isn't
+    // MEDIUM/HIGH risk.
+    const second = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
+    expect(second.status).toBe('ok')
+    expect(second.planStatus?.completionPct).toBe(100)
+    expect(llm.calls).toBe(2)
   })
 
   it('does not resume a plan from a different session', async () => {

@@ -4,7 +4,8 @@ export { classifyRisk } from './risk-classifier.js'
 export type { RiskLevel, RiskClassification } from './risk-classifier.js'
 export { classifyTriviality } from './triviality-classifier.js'
 export type { TrivialityClassification } from './triviality-classifier.js'
-export { nodeDisplayName } from './node-display-names.js'
+export { nodeDisplayName, nodeToLayer, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
+export type { LayerSlug } from './node-display-names.js'
 export { classifyError } from './error-classifier.js'
 export type { ErrorClassification } from './error-classifier.js'
 export {
@@ -52,10 +53,12 @@ export {
   abandonPlan,
   updatePlanFromRun,
   planCompletionPct,
+  computePlanPosition,
+  nextPendingTask,
   formatPlanProgress,
   isAbandonPhrase,
 } from './plan-store.js'
-export type { PlanRecord, PlanTaskRecord } from './plan-store.js'
+export type { PlanRecord, PlanTaskRecord, PlanPosition } from './plan-store.js'
 export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
 // Pure, browser-safe formatters — deliberately NOT cli-config.ts/cli-session.ts's env-var-specific

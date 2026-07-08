@@ -8,6 +8,8 @@ import {
   abandonPlan,
   updatePlanFromRun,
   planCompletionPct,
+  computePlanPosition,
+  nextPendingTask,
   formatPlanProgress,
   isAbandonPhrase,
   isAbandonPhraseWithLLM,
@@ -202,5 +204,58 @@ describe('isAbandonPhraseWithLLM', () => {
   it('returns false when the LLM call itself throws', async () => {
     const llm = new ThrowingLLMClient()
     expect(await isAbandonPhraseWithLLM('anything', llm)).toBe(false)
+  })
+})
+
+describe('computePlanPosition', () => {
+  it('reports the first task before anything has started', () => {
+    const plan = createPlanRecord(makePlan())
+    const pos = computePlanPosition(plan, plan.tasks)
+    expect(pos).toEqual({ templateName: 'project_planning', stepIndex: 1, stepCount: 3, currentTaskDescription: 'Gather requirements', completionPct: 0 })
+  })
+
+  it('reports the RUNNING task mid-run', () => {
+    const plan = createPlanRecord(makePlan())
+    const live = [
+      { id: 't1', status: 'COMPLETE' as const },
+      { id: 't2', status: 'RUNNING' as const },
+      { id: 't3', status: 'PENDING' as const },
+    ]
+    const pos = computePlanPosition(plan, live)
+    expect(pos?.stepIndex).toBe(2)
+    expect(pos?.currentTaskDescription).toBe('Build the thing')
+    expect(pos?.completionPct).toBeCloseTo(100 / 3)
+  })
+
+  it('falls back to the last COMPLETE task once nothing is RUNNING', () => {
+    const plan = createPlanRecord(makePlan())
+    const live = [
+      { id: 't1', status: 'COMPLETE' as const },
+      { id: 't2', status: 'COMPLETE' as const },
+      { id: 't3', status: 'PENDING' as const },
+    ]
+    const pos = computePlanPosition(plan, live)
+    expect(pos?.stepIndex).toBe(2)
+    expect(pos?.currentTaskDescription).toBe('Build the thing')
+    expect(pos?.completionPct).toBeCloseTo((2 / 3) * 100)
+  })
+
+  it('returns null for a plan with no tasks', () => {
+    const plan: PlanRecord = { ...createPlanRecord(makePlan()), tasks: [] }
+    expect(computePlanPosition(plan, [])).toBeNull()
+  })
+})
+
+describe('nextPendingTask', () => {
+  it('returns the first not-yet-COMPLETE task in plan order', () => {
+    const plan = createPlanRecord(makePlan())
+    plan.tasks[0].status = 'COMPLETE'
+    expect(nextPendingTask(plan)?.id).toBe('t2')
+  })
+
+  it('returns null once every task is COMPLETE', () => {
+    const plan = createPlanRecord(makePlan())
+    for (const t of plan.tasks) t.status = 'COMPLETE'
+    expect(nextPendingTask(plan)).toBeNull()
   })
 })
