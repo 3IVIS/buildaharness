@@ -39,4 +39,10 @@ describe('extractFactsFromTurn', () => {
     // world — admitting it would let an imperative turn into a persisted "known fact".
     expect(extractFactsFromTurn('Please delete the old backup files in the workspace to free up space.', 'turn:7')).toEqual([])
   })
+
+  it('does not capture a question that merely mentions a coding-domain word', () => {
+    // Contains "missing" (a CODING_FACT_MARKERS word, via "missing.txt") but is a question, not
+    // a claim about the world — admitting it would let a lookup turn into a persisted "known fact".
+    expect(extractFactsFromTurn('What does missing.txt say?', 'turn:8')).toEqual([])
+  })
 })
