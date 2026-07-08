@@ -835,7 +835,7 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.reply).toContain('a.txt')
   })
 
-  it('approving a pending shell action executes the exact staged command with zero additional LLM calls, and wraps the output as untrusted content', async () => {
+  it('approving a pending shell action executes the exact staged command with zero additional LLM calls, and shows the human a clean reply with no raw trust-boundary markup', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
@@ -843,17 +843,31 @@ describe('PersonalAssistant shell tools', () => {
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
 
-    const staged = await assistant.turn('List the files here')
+    const staged = await assistant.turn('List the files here', { sessionId: 'shell-reply-test' })
     const callsAfterStaging = llm.calls
 
-    const approved = await assistant.turn('List the files here', { approved: true, pendingActionId: staged.pendingActionId })
+    const approved = await assistant.turn('List the files here', {
+      sessionId: 'shell-reply-test',
+      approved: true,
+      pendingActionId: staged.pendingActionId,
+    })
 
     expect(approved.status).toBe('ok')
     expect(approved.reply).toContain('a.txt')
-    expect(approved.reply).toContain('<untrusted_external_content>')
+    // The <untrusted_external_content> boundary is for a future model call reading this back
+    // out of the transcript, not for the human — showing it verbatim in the chat bubble reads
+    // as garbled raw markup (see the harness layer activation plan's follow-up bugfix).
+    expect(approved.reply).not.toContain('<untrusted_external_content>')
     expect(executeCommand).toHaveBeenCalledTimes(1)
     expect(executeCommand.mock.calls[0][0]).toBe('ls -la')
     expect(llm.calls).toBe(callsAfterStaging)
+
+    // The transcript (what a later turn's model call reads back) still carries the trust
+    // boundary, so historical shell output is never misread as instructions.
+    const transcript = await assistant.getTranscript('shell-reply-test')
+    const savedReply = transcript.at(-1)
+    expect(savedReply?.content).toContain('<untrusted_external_content>')
+    expect(savedReply?.content).toContain('a.txt')
   })
 
   it('flags shell output that looks like a prompt-injection attempt, without dropping it', async () => {

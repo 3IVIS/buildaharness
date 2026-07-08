@@ -10,6 +10,7 @@
     "fs:allow-applocaldata-read-recursive",
     "fs:allow-applocaldata-write-recursive",
     "dialog:allow-open",
+    "log:default",
     {
       "identifier": "http:default",
       "allow": [

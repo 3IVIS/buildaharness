@@ -19,6 +19,7 @@ import {
   type WebSearchResult,
   type DnsResolver,
   type AssistantTurnResult,
+  type DebugLogEntry,
 } from '@buildaharness/personal-assistant'
 import {
   LLMClient,
@@ -48,6 +49,24 @@ import type { ChatEntry } from './types'
 
 /** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's llm-client.ts) — used only to pick a pricing tier when no model is explicitly configured. */
 const DEFAULT_PROXY_MODEL = 'claude-3-5-sonnet-20241022'
+
+/**
+ * Full conversation content (user messages, assistant replies, real tool calls with their
+ * actual results) for live debugging — deliberately opt-in and separate from onTrace (see
+ * DebugLogEntry's doc comment). On desktop, forwarded through @tauri-apps/plugin-log's `info`
+ * to the Rust logger already registered in src-tauri/src/lib.rs (`tauri_plugin_log`, debug
+ * builds only) — that's what makes it show up in the terminal running `tauri dev`, not just
+ * this webview's own (otherwise invisible from outside) DevTools console. A plain browser tab
+ * has no such bridge, so it falls back to console.debug there.
+ */
+function debugLog(entry: DebugLogEntry): void {
+  const line = `[assistant:${entry.kind}] ${entry.content}`
+  if (isTauri()) {
+    void import('@tauri-apps/plugin-log').then(({ info }) => info(line))
+  } else {
+    console.debug(line)
+  }
+}
 
 function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): TokenUsage {
   return {
@@ -196,6 +215,7 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
       ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
       : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    onDebugLog: debugLog,
   })
 }
 
@@ -209,6 +229,7 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // since it also affects the message-level risk gate, independent of file/shell tools.
     webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    onDebugLog: debugLog,
   })
 }
 

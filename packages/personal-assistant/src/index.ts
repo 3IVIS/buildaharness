@@ -1,5 +1,5 @@
 export { PersonalAssistant } from './assistant.js'
-export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary } from './assistant.js'
+export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, DebugLogEntry } from './assistant.js'
 export { classifyRisk } from './risk-classifier.js'
 export type { RiskLevel, RiskClassification } from './risk-classifier.js'
 export { classifyTriviality } from './triviality-classifier.js'

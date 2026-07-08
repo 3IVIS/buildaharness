@@ -192,6 +192,19 @@ export interface AssistantProgress {
   planPosition?: PlanPosition
 }
 
+/**
+ * Full conversation content, for a caller that wants live visibility while debugging — a
+ * user's message, the assistant's final reply/reason, or one real tool call's name/input/
+ * result. Not privacy-scrubbed and not truncated to name-only the way TraceEvent is; a
+ * caller opts into this explicitly (see PersonalAssistantOptions.onDebugLog) knowing it
+ * carries real content, not just metadata.
+ */
+export interface DebugLogEntry {
+  kind: 'user_message' | 'assistant_reply' | 'tool_call'
+  sessionId: string
+  content: string
+}
+
 export interface TurnOptions {
   sessionId?: string
   approved?: boolean
@@ -262,6 +275,13 @@ export interface PersonalAssistantOptions {
   /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
   onTrace?: (event: TraceEvent) => void
   /**
+   * Full message/tool content for live debugging — deliberately separate from `onTrace`
+   * (which is name/status-only by design, safe to hand to an arbitrary sink; see its own doc
+   * comment) since this one carries the actual conversation. Off by default: nothing is
+   * logged anywhere unless a caller wires this in. See DebugLogEntry.
+   */
+  onDebugLog?: (entry: DebugLogEntry) => void
+  /**
    * Equivalent of Claude Code's own --dangerously-skip-permissions (see AssistantConfig's doc
    * comment in config.ts). When true, both the message-level risk gate and write_file/
    * run_shell_command's per-call staging resolve as if the user had already said yes, instead
@@ -293,6 +313,7 @@ export class PersonalAssistant {
   private readonly shellTools?: ShellToolsContext
   private readonly reminderStore: ReminderStore
   private readonly onTrace?: (event: TraceEvent) => void
+  private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
 
   constructor(options: PersonalAssistantOptions) {
@@ -307,6 +328,7 @@ export class PersonalAssistant {
     this.shellTools = options.shellTools
     this.reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
     this.onTrace = options.onTrace
+    this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
   }
 
@@ -335,12 +357,20 @@ export class PersonalAssistant {
   async turn(userMessage: string, options: TurnOptions = {}): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
+    this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
+      this.onDebugLog?.({
+        kind: 'assistant_reply',
+        sessionId,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''} ${result.reply ?? result.reason ?? '(no reply)'}`,
+      })
       return result
     } catch (err) {
-      this.onTrace?.({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
+      const message = err instanceof Error ? err.message : String(err)
+      this.onTrace?.({ kind: 'error', message })
+      this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[threw] ${message}` })
       throw err
     }
   }
@@ -478,7 +508,7 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (this.fileTools || this.webTools || this.shellTools) {
-      const loopResult = await this.runToolLoop(transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
+      const loopResult = await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -829,6 +859,7 @@ export class PersonalAssistant {
    * those does, since `reminderStore` always exists).
    */
   private async runToolLoop(
+    sessionId: string,
     transcript: ChatMessage[],
     userMessage: string,
     systemPrompt: string,
@@ -975,6 +1006,11 @@ export class PersonalAssistant {
         try {
           resultText = await this.executeToolCall(call.name, call.input)
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: true })
+          this.onDebugLog?.({
+            kind: 'tool_call',
+            sessionId,
+            content: `${call.name}(${JSON.stringify(call.input)}) →\n${resultText.slice(0, 4000)}${resultText.length > 4000 ? `\n… (truncated, ${resultText.length} chars total)` : ''}`,
+          })
           // Only a call that actually succeeded grounds the reply in something
           // real — a rejected path/URL or tool error below is reported to the
           // model but isn't a source.
@@ -994,6 +1030,7 @@ export class PersonalAssistant {
           console.error(`[tool call failed] ${call.name}`, err)
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
+          this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${call.name}(${JSON.stringify(call.input)}) → ${resultText}` })
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
       }
@@ -1060,24 +1097,31 @@ export class PersonalAssistant {
     })
 
     let reply: string
+    let transcriptContent: string
     if (applied.kind === 'write') {
       reply = `Wrote "${applied.path}".`
+      transcriptContent = reply
     } else {
       // Command output is untrusted external content exactly the same way a fetched web
       // page is — it can carry the same injection-shaped text (e.g. a `cat`'d file or a
-      // `curl`'d page) — so it gets the same wrapUntrusted/detectInjectionLikely treatment
-      // as web_search/fetch_url results before it's saved into the transcript, where a
-      // later turn could otherwise misread it as instructions (see trust-tagging.ts).
+      // `curl`'d page) — so it gets the same detectInjectionLikely treatment as web_search/
+      // fetch_url results. The <untrusted_external_content> boundary tags themselves are a
+      // signal for a *future model call* reading this back out of the transcript (see
+      // trust-tagging.ts and SYSTEM_PROMPT) — not for the human, who would otherwise see
+      // literal tag markup printed into their chat bubble, indistinguishable from a garbled
+      // raw page dump. So the tags go into what's saved to transcript memory, not into the
+      // reply actually shown to the user.
       const rawOutput = applied.execution.output || '(no output)'
       const injection = detectInjectionLikely(rawOutput)
       const body = injection.flagged
         ? `[Warning: this content contains instruction-like text and may be an injection attempt — ${injection.reason}]\n${rawOutput}`
         : rawOutput
       const statusLine = `Ran \`${applied.command}\` (exit code ${applied.execution.exitCode ?? 'n/a'}${applied.execution.timedOut ? ', timed out' : ''}):`
-      reply = `${statusLine}\n${wrapUntrusted(body)}`
+      reply = `${statusLine}\n${body}`
+      transcriptContent = `${statusLine}\n${wrapUntrusted(body)}`
     }
 
-    await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+    await this.memory.set(transcriptKey, { role: 'assistant', content: transcriptContent } satisfies ChatMessage, 'append')
     return { status: 'ok', reply }
   }
 }
