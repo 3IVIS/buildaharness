@@ -254,6 +254,37 @@ describe('detect_contradictions', () => {
     expect(wm.contradictions[0].type).toBe('pairwise')
   })
 
+  // These pairs mirror personal-assistant's CODING_FACT_MARKERS gate (contradiction-checker.ts):
+  // that gate skips the LLM-backed semantic contradiction check for statements matching it, on
+  // the assumption this lexical check already covers build/test/service-state claims — so each
+  // status word the gate recognizes needs its antonym covered here too.
+  it('pairwise contradiction detected on passed/failed status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the tests passed', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the tests failed', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
+  it('pairwise contradiction detected on running/stopped status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the server is running', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the server is stopped', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
+  it('pairwise contradiction detected on online/offline status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the database is online', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the database is offline', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
   it('temporal type detected when an environment change invalidates a belief\'s source', () => {
     const wm = new WorldModel()
     const recordedAt = '2024-01-01T00:00:00Z'

@@ -261,6 +261,34 @@ def test_t11_pairwise_and_set_level_detected_independently():
         assert sl_ids not in pairwise_id_sets, "Set-level triple should not duplicate as pairwise"
 
 
+# These pairs mirror personal-assistant's CODING_FACT_MARKERS gate (contradiction-checker.ts):
+# that gate skips the LLM-backed semantic contradiction check for statements matching it, on the
+# assumption this lexical check already covers build/test/service-state claims — so each status
+# word the gate recognizes needs its antonym covered here too.
+def test_pairwise_contradiction_detected_on_passed_failed_status_flip():
+    b_a = _belief("the tests passed", confidence=0.9)
+    b_b = _belief("the tests failed", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
+def test_pairwise_contradiction_detected_on_running_stopped_status_flip():
+    b_a = _belief("the server is running", confidence=0.9)
+    b_b = _belief("the server is stopped", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
+def test_pairwise_contradiction_detected_on_online_offline_status_flip():
+    b_a = _belief("the database is online", confidence=0.9)
+    b_b = _belief("the database is offline", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
 def test_t12_temporal_contradiction_from_env_change():
     """T12: A belief invalidated by an environment_change_log entry generates a temporal
     contradiction with severity MEDIUM or HIGH."""

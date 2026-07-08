@@ -6,6 +6,15 @@ export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
 type ConfidenceClass = 'HIGH' | 'MEDIUM' | 'LOW'
 
 // Matches adapter/harness/contradiction.py's _NEGATION_PAIRS.
+//
+// passed/failed, passing/failing, running/stopped, and online/offline exist as
+// literal words in contradiction-checker.ts's CODING_FACT_MARKERS (personal-assistant
+// package) — that regex skips the LLM-backed semantic contradiction check whenever a
+// belief statement matches it, on the assumption this lexical pass already covers
+// build/test/service-state claims. That assumption only holds for the antonym pairs
+// actually listed here, so any status word added to CODING_FACT_MARKERS needs its
+// opposite pair added here too, or a statement using it (e.g. "the tests passed" vs.
+// "the tests failed") silently gets neither check.
 const NEGATION_PAIRS: Array<[string, string]> = [
   ['present', 'absent'],
   ['true', 'false'],
@@ -15,6 +24,10 @@ const NEGATION_PAIRS: Array<[string, string]> = [
   ['enabled', 'disabled'],
   ['found', 'not found'],
   ['is', 'is not'],
+  ['passed', 'failed'],
+  ['passing', 'failing'],
+  ['running', 'stopped'],
+  ['online', 'offline'],
 ]
 
 const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'at'])

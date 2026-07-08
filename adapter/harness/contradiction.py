@@ -20,6 +20,16 @@ from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
 from .world_model import Belief, Contradiction, ContradictionSeverity, WorldModel
 
+# Matches packages/harness/src/nodes/detect-contradictions.ts's NEGATION_PAIRS.
+#
+# passed/failed, passing/failing, running/stopped, and online/offline exist as literal
+# words in contradiction-checker.ts's CODING_FACT_MARKERS (personal-assistant package)
+# — that regex skips the LLM-backed semantic contradiction check whenever a belief
+# statement matches it, on the assumption this lexical pass already covers
+# build/test/service-state claims. That assumption only holds for the antonym pairs
+# actually listed here, so any status word added to CODING_FACT_MARKERS needs its
+# opposite pair added here too, or a statement using it (e.g. "the tests passed" vs.
+# "the tests failed") silently gets neither check.
 _NEGATION_PAIRS = [
     ("present", "absent"),
     ("true", "false"),
@@ -29,6 +39,10 @@ _NEGATION_PAIRS = [
     ("enabled", "disabled"),
     ("found", "not found"),
     ("is", "is not"),
+    ("passed", "failed"),
+    ("passing", "failing"),
+    ("running", "stopped"),
+    ("online", "offline"),
 ]
 
 
