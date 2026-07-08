@@ -152,10 +152,15 @@ export function initializeHarness(
     }
   }
 
-  // The execution engine itself is always a valid evidence source for
-  // post-execution observations, unless a caller explicitly overrides it.
-  if (!('execution_engine' in toolManifest)) {
-    toolManifest['execution_engine'] = { available: true, fallback_tool: null }
+  // These internal evidence sources are always valid — gatherEvidence's own availability
+  // check (EvidenceStore.isToolAvailable) defaults an *unlisted* source to unavailable, so
+  // without this every post-exec evidence/belief write in harness-runtime.ts (result
+  // inspection, caller-extracted facts, the layer-1 belief trail) would silently no-op.
+  // A caller can still explicitly override any of these to disable it.
+  for (const internalSource of ['execution_engine', 'result_inspection', 'fact_extraction', 'world_model_trail']) {
+    if (!(internalSource in toolManifest)) {
+      toolManifest[internalSource] = { available: true, fallback_tool: null }
+    }
   }
 
   const evidenceStore = new EvidenceStore({

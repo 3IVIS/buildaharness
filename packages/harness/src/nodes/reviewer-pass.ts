@@ -196,16 +196,18 @@ export function reviewerPass(
   diagnostics: Diagnostics,
   evidenceStore: EvidenceStore,
   propagationQueue: PropagationQueue,
+  // Adversarial lens is the expensive BFS-over-beliefs one (seedAdversarialPrior below) —
+  // a caller can skip it on a low-stakes, single-task turn that has nothing worth an
+  // adversarial challenge (see Phase 2, layer 11 of the harness layer activation plan).
+  // Defaults true so every existing call site keeps running all 3 lenses unchanged.
+  runAdversarialLens = true,
 ): ReviewPassResult {
-  // 3 lenses in fixed sequence
+  // 3 lenses in fixed sequence (adversarial conditionally)
   const implResult = implementerLens(worldModel, successCriteria)
   const reviewResult = reviewerLens(worldModel, successCriteria)
-  const adversarialResult = adversarialLens(
-    worldModel,
-    successCriteria,
-    failureDiagnostics,
-    beliefDepGraph,
-  )
+  const adversarialResult = runAdversarialLens
+    ? adversarialLens(worldModel, successCriteria, failureDiagnostics, beliefDepGraph)
+    : { findings: [], reopened_task_ids: [] }
 
   // abstraction_fit recomputed unconditionally (not guarded by taskGraph.changed)
   recomputeAbstractionFit(taskGraph, worldModel, diagnostics)

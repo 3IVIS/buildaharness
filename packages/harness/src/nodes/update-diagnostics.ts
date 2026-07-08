@@ -136,10 +136,16 @@ export function updateDiagnostics(
   const failedTasks = taskGraph.tasks.filter(t => t.status === 'FAILED').length
   const attemptedTasks = completedTasks + failedTasks
 
-  // progress_rate: higher=better; return 1.0 until tasks have been attempted
-  // (matches Python: only update from journal when journal is non-empty)
+  // progress_rate: success rate of tasks *attempted* so far, not completed/total-in-graph —
+  // matches Python's diagnostics.py: `completed / max(1, total)` where `total` is
+  // `len(execution_journal)` (tasks actually attempted), not the whole task graph. Dividing
+  // by totalTasks instead (a prior bug here) made progress_rate start artificially low on any
+  // multi-task graph the moment a single task completed (e.g. 1/6), which could trip Tier 2's
+  // BLOCKED and — since action_gate then refuses every further task — deadlock permanently,
+  // since the only way to raise the ratio is to complete more tasks. 1.0 until anything has
+  // been attempted (matches Python: only updates once the journal is non-empty).
   const progressRate = normalise(
-    attemptedTasks > 0 ? completedTasks / totalTasks : 1.0,
+    attemptedTasks > 0 ? completedTasks / attemptedTasks : 1.0,
     DimensionType.ratio,
   )
   assertNormalised(progressRate, 'execution_health.progress_rate')

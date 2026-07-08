@@ -9,6 +9,8 @@ import {
   type Task,
   type RiskState,
   type CheckpointStore,
+  type TurnComplexitySignal,
+  type LayerActivityEvent,
 } from '@buildaharness/harness'
 import {
   InMemoryAdapter,
@@ -569,6 +571,20 @@ export class PersonalAssistant {
     let stepsUsed = 0
     let controlState: AssistantTurnResult['controlState']
 
+    // One shared per-turn signal instead of each Phase 2 harness layer inventing its own
+    // gating heuristic (see plans/harness_layer_activation_plan.html, Design Principle 2).
+    // write_file/run_shell_command never reach this point today — a pending approval for
+    // either always returns needs_approval/is auto-applied before the harness run starts
+    // (see runToolLoop/resolvePendingAction above) — so consequentialTools only ever holds
+    // the read-only tool kinds actually exercised via `sources`, included for the day a
+    // harness-driven mutation path exists.
+    const complexitySignal: TurnComplexitySignal = {
+      riskLevel: classification.riskLevel,
+      taskCount: initialTasks.length,
+      hasDurablePlan: activePlan !== null,
+      consequentialTools: new Set(sources?.map(s => s.tool) ?? []),
+    }
+
     try {
       const runOptions = {
         initialTasks,
@@ -579,8 +595,21 @@ export class PersonalAssistant {
         // stepsUsed/nodeExecutionOrder), not the number of distinct replies produced.
         toolExecutors: { default: () => draftReply },
         experienceStore: this.experienceStore,
-        max_steps: this.maxSteps,
+        // One harness main-loop iteration attempts at most one task, so a flat maxSteps
+        // could never let a decomposed/plan-driven task graph even be *attempted* in full
+        // once tasks genuinely reach COMPLETE (Phase 0's fix) — this only ever raises the
+        // budget for a turn with more tasks than the configured default, never lowers it.
+        max_steps: Math.max(this.maxSteps, initialTasks.length),
         runId,
+        // Reuses the same extraction pass recordFacts() already runs post-turn — this feeds
+        // the harness's world model with real INFERENCE beliefs in addition to (not instead
+        // of) the separate `facts:${sessionId}` store recordFacts() writes to.
+        factExtractor: (objective: string) => extractFactsFromTurn(objective, runId).map(f => ({ statement: f.text })),
+        complexitySignal,
+        // Phase 3.1 of the harness layer activation plan: forward every layer's fired/skipped
+        // report onto the same onTrace channel harness_node/tool_call events already use — no
+        // new transport, just a new TraceEvent kind a "Why?" panel can key off of.
+        onLayerActivity: (event: LayerActivityEvent) => this.onTrace?.({ kind: 'layer_activity', layer: event.layer, fired: event.fired, reason: event.reason }),
         onCheckpoint: (checkpoint: Parameters<typeof saveHarnessCheckpoint>[1]) => {
           options.onProgress?.({
             stepsUsed: checkpoint.progress.stepsUsed,

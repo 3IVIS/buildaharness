@@ -16,3 +16,11 @@ export type TraceEvent =
   | { kind: 'tool_call'; tool: string; ok: boolean }
   | { kind: 'escalation'; reason: string }
   | { kind: 'error'; message: string }
+  /**
+   * One of the harness's 11 layers did (or explicitly skipped) real work this step —
+   * see plans/harness_layer_activation_plan.html Phase 2/3.1. `layer` is a stable slug
+   * ('world_model' | 'evidence_reasoning' | 'hypothesis' | 'contradiction' | 'diagnostics' |
+   * 'control_state' | 'planning' | 'execution' | 'verification' | 'recovery' | 'reviewer_pass'),
+   * not a free-text name, so a "Why?"/`/layers` renderer can key off it directly.
+   */
+  | { kind: 'layer_activity'; layer: string; fired: boolean; reason: string }

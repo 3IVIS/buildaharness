@@ -1005,27 +1005,32 @@ describe('PersonalAssistant structured planning', () => {
     expect(llm.calls).toBe(1) // decomposition only — plan-builder never called
   })
 
-  it('resumes an active plan on the next turn instead of re-classifying', async () => {
+  it('drives an all-LOW-risk plan to completion in one turn, then treats a follow-up as ordinary conversation', async () => {
     const llm = scriptedResponses(
       [decompositionResponse(), planBuilderResponse(), decompositionResponse(), planBuilderResponse()],
       ['All set.'],
     )
     const assistant = new PersonalAssistant({ llmClient: llm })
 
-    await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    // Since the harness's own success accounting was fixed (see the harness layer
+    // activation plan, Phase 0), a plan with no consequential/HIGH-risk step and few
+    // enough tasks to fit one turn's budget runs to completion in that same turn —
+    // pacing a durable plan one step at a time across turns is Phase 4's job, not yet
+    // built. So there's no still-active plan left for a follow-up turn to resume.
+    const first = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
     expect(llm.calls).toBe(2)
+    expect(first.planStatus?.completionPct).toBe(100)
 
-    // An unrelated short follow-up wouldn't classify as planning-shaped on its own —
-    // but the active plan from the previous turn should still drive this turn, with
-    // no fresh decomposition/plan-builder calls spent re-classifying it. Phrased to
-    // avoid the triviality fast path (which starts with "What"/"How" etc. and would
-    // skip the harness — and the plan resume logic — entirely; see triviality-classifier.ts).
+    // An unrelated short follow-up doesn't classify as planning-shaped on its own, and
+    // with no active plan left to drive it, it's answered as ordinary conversation —
+    // no fresh decomposition/plan-builder calls. Phrased to avoid the triviality fast
+    // path (which starts with "What"/"How" etc. and would skip the harness entirely;
+    // see triviality-classifier.ts).
     const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
 
     expect(result.status).toBe('ok')
-    expect(result.planStatus).toBeDefined()
-    expect(result.planStatus!.templateName).toBe('project_planning')
-    expect(llm.calls).toBe(2) // unchanged — no new structured calls for the resumed turn
+    expect(result.planStatus).toBeUndefined()
+    expect(llm.calls).toBe(2) // unchanged — no new structured calls for the follow-up
   })
 
   it('does not resume a plan from a different session', async () => {
