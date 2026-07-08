@@ -411,6 +411,7 @@ body {
 }
 
 .bubble__layer-cell {
+  position: relative;
   width: 30px;
   height: 22px;
   display: flex;
@@ -433,6 +434,35 @@ body {
   background: rgba(91, 141, 238, 0.18);
   color: var(--accent);
   border: 1px solid var(--accent);
+}
+
+/* Visible immediately on hover — the native `title` attribute (kept for accessibility) has a
+   browser-default delay that makes the layer name easy to miss at a glance. */
+.bubble__layer-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: normal;
+  color: var(--text);
+  text-align: left;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.bubble__layer-cell:hover .bubble__layer-tooltip,
+.bubble__layer-cell:focus-visible .bubble__layer-tooltip {
+  display: block;
 }
 
 .bubble__plan-checklist-item--active {

@@ -10,7 +10,7 @@ import { normalise, DimensionType } from '../normalise.js'
 import { gatherEvidence } from './gather-evidence.js'
 import { applyToolReliability } from './apply-tool-reliability.js'
 import { updateWorldModel, propagateBeliefs } from './update-world-model.js'
-import { detectContradictions } from './detect-contradictions.js'
+import { detectContradictions, recordExternalContradiction } from './detect-contradictions.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
 import { updateDiagnostics, checkAbstractionAlignment } from './update-diagnostics.js'
 
@@ -283,6 +283,51 @@ describe('detect_contradictions', () => {
     detectContradictions(wmBreaking, new EvidenceStore(), hyps)
     expect(wmBreaking.contradictions[0].severity).toBe('SYSTEM_BREAKING')
     expect(wmBreaking.contradictions[0].scope).toBe('global')
+  })
+})
+
+describe('record_external_contradiction', () => {
+  it('records a semantically-detected contradiction the lexical detector would miss (no shared negation-pair keyword)', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the user lives in Boston', confidence: 0.5, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the user lives in Seattle', confidence: 0.5, derived_from: ['o2'], recorded_at: '' })
+
+    const recorded = recordExternalContradiction(wm, {
+      beliefIds: ['b1', 'b2'],
+      description: 'The user cannot live in both Boston and Seattle at once.',
+    })
+
+    expect(recorded).not.toBeNull()
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].severity).toBe('MEDIUM') // default when the caller omits severity
+    expect(wm.contradictions[0].involved_belief_ids).toEqual(['b1', 'b2'])
+    // Goes through the same resolution policy a lexically-found contradiction does —
+    // MEDIUM reduces confidence by 25%.
+    expect(wm.beliefs[0].confidence).toBeCloseTo(0.375)
+  })
+
+  it('skips a group already recorded (same beliefs, any order) instead of double-applying confidence decay', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the user lives in Boston', confidence: 0.5, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the user lives in Seattle', confidence: 0.5, derived_from: ['o2'], recorded_at: '' })
+
+    recordExternalContradiction(wm, { beliefIds: ['b1', 'b2'], description: 'first pass' })
+    const confidenceAfterFirst = wm.beliefs[0].confidence
+    const second = recordExternalContradiction(wm, { beliefIds: ['b2', 'b1'], description: 're-checked, same pair, different order' })
+
+    expect(second).toBeNull()
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.beliefs[0].confidence).toBe(confidenceAfterFirst)
+  })
+
+  it('respects an explicit severity from the caller', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'a', confidence: 1.0, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'b', confidence: 1.0, derived_from: ['o2'], recorded_at: '' })
+
+    recordExternalContradiction(wm, { beliefIds: ['b1', 'b2'], description: 'high severity example', severity: 'HIGH' })
+
+    expect(wm.contradictions[0].severity).toBe('HIGH')
   })
 })
 

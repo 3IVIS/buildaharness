@@ -13,7 +13,7 @@ import { MemoryState } from '../state/memory-state.js'
 import { InMemoryExperienceStore, UnavailableExperienceStore } from '../state/experience-store.js'
 import { Diagnostics } from '../state/diagnostics.js'
 
-import { reviewProposedChange } from './review-proposed-change.js'
+import { reviewProposedChange, applyReviewOutcome } from './review-proposed-change.js'
 import { actionGate, postExecGate, contractShadowCheck } from './policy-gates.js'
 import { execute } from './execute.js'
 import { verify } from './verify.js'
@@ -167,6 +167,34 @@ describe('reviewProposedChange', () => {
     const result2 = reviewProposedChange(change, task, wm, null, null, null, map)  // second failure
     expect(result2.escalation_triggered).toBe(true)
     expect(result2.consecutive_failures).toBe(2)
+  })
+})
+
+describe('applyReviewOutcome', () => {
+  it('resets the counter and returns a clean pass', () => {
+    const map = new Map<string, number>([['task-a', 3]])
+    const result = applyReviewOutcome('task-a', true, map)
+    expect(result).toEqual({ passed: true, failed_dimensions: [], consecutive_failures: 0, escalation_triggered: false })
+    expect(map.get('task-a')).toBe(0)
+  })
+
+  it('increments the same per-task counter reviewProposedChange itself uses, so an external (e.g. semantic) failure compounds with a prior lexical one', () => {
+    const map = new Map<string, number>()
+    const dim = { dimension: 'world_model_consistency' as const, passed: false, reason: 'semantic conflict' }
+
+    const first = applyReviewOutcome('task-a', false, map, dim)
+    expect(first).toEqual({ passed: false, failed_dimensions: [dim], consecutive_failures: 1, escalation_triggered: false })
+
+    const second = applyReviewOutcome('task-a', false, map, dim)
+    expect(second.consecutive_failures).toBe(2)
+    expect(second.escalation_triggered).toBe(true)
+  })
+
+  it('keeps separate counters per task id', () => {
+    const map = new Map<string, number>()
+    applyReviewOutcome('task-a', false, map, { dimension: 'code_quality', passed: false, reason: 'x' })
+    const taskB = applyReviewOutcome('task-b', false, map, { dimension: 'code_quality', passed: false, reason: 'y' })
+    expect(taskB.consecutive_failures).toBe(1)
   })
 })
 

@@ -2,7 +2,7 @@ import type { WorldModel, Contradiction, Belief, BeliefDepGraph, EnvironmentChan
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
 
-type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
+export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
 type ConfidenceClass = 'HIGH' | 'MEDIUM' | 'LOW'
 
 // Matches adapter/harness/contradiction.py's _NEGATION_PAIRS.
@@ -309,4 +309,42 @@ export function detectContradictions(
     worldModel.contradictions.push(c)
     applyResolutionPolicy(c, worldModel, beliefDepGraph)
   }
+}
+
+export interface ExternalContradictionInput {
+  beliefIds: string[]
+  description: string
+  severity?: Severity
+}
+
+/**
+ * Records a contradiction found by an external (e.g. LLM-based semantic) check — not one this
+ * file's own lexical/negation-pair detectors found. Goes through the same push +
+ * apply_resolution_policy pipeline as a lexically-detected one, so it gets identical treatment
+ * (confidence decay, invalidation frontier, SYSTEM_BREAKING handling). Skips a group already
+ * recorded (same involved_belief_ids, order-independent) so re-checking a belief set that
+ * hasn't changed doesn't double-apply confidence decay for the same underlying conflict.
+ */
+export function recordExternalContradiction(
+  worldModel: WorldModel,
+  input: ExternalContradictionInput,
+  beliefDepGraph?: BeliefDepGraph,
+): Contradiction | null {
+  const key = [...input.beliefIds].sort().join('|')
+  const alreadyRecorded = worldModel.contradictions.some(
+    c => [...c.involved_belief_ids].sort().join('|') === key,
+  )
+  if (alreadyRecorded) return null
+
+  const contradiction: Contradiction = {
+    id: makeId(),
+    type: 'pairwise',
+    severity: input.severity ?? 'MEDIUM',
+    scope: 'local',
+    description: input.description,
+    involved_belief_ids: input.beliefIds,
+  }
+  worldModel.contradictions.push(contradiction)
+  applyResolutionPolicy(contradiction, worldModel, beliefDepGraph)
+  return contradiction
 }

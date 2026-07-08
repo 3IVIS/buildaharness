@@ -10,6 +10,7 @@ import { EvidenceStore } from './evidence-store.js'
 import { MemoryState } from './memory-state.js'
 import { StrategyState, DEFAULT_STRATEGY_ORDER } from './strategy-state.js'
 import { HypothesisSet } from './hypothesis-set.js'
+import { FailureModeLibrary } from './failure-diagnostics.js'
 
 describe('WorldModel', () => {
   it('full toJSON/fromJSON round-trip preserves all fields including contradictions and completeness_flags', () => {
@@ -222,5 +223,28 @@ describe('EliminationPolicy — HypothesisSet', () => {
     // K=3, so h1 evicted, kept h2, h3, h4
     expect(hs.eliminated).toHaveLength(3)
     expect(hs.eliminated.map(h => h.id)).toEqual(['h2', 'h3', 'h4'])
+  })
+})
+
+describe('FailureModeLibrary', () => {
+  it('getEntries returns the curated entries passed to the constructor', () => {
+    const entries = [
+      { id: 'fm1', failure_class: 'timeout', symptoms: ['request timed out'], pattern_description: 'x' },
+    ]
+    const library = new FailureModeLibrary(entries)
+    expect(library.getEntries()).toEqual(entries)
+  })
+
+  it('getEntries returns an empty array for a library with no curated entries', () => {
+    const library = new FailureModeLibrary()
+    expect(library.getEntries()).toEqual([])
+  })
+
+  it('match() still requires exact string overlap — a paraphrased symptom finds nothing (the gap semanticFailureMatcher is layered on top to close)', () => {
+    const library = new FailureModeLibrary([
+      { id: 'fm1', failure_class: 'timeout', symptoms: ['request timed out'], pattern_description: 'x' },
+    ])
+    expect(library.match(['the request took too long and timed out eventually'])).toBeNull()
+    expect(library.match(['request timed out'])).not.toBeNull()
   })
 })

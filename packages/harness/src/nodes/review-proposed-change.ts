@@ -143,6 +143,34 @@ function checkHypothesisCompatibility(proposedChange: ProposedChange, hypothesis
   return { dimension: 'hypothesis_compatibility', passed: true, reason: 'Compatible with active hypotheses' }
 }
 
+/**
+ * Records a single review dimension's outcome into the per-task consecutive-failure counter
+ * and derives escalation_triggered from it — the same bookkeeping reviewProposedChange itself
+ * uses for its 5 lexical dimensions, exposed so an *additional* check (e.g. a semantic
+ * consistency check layered on top — see harness-runtime.ts) gets identical
+ * consecutive-failure/escalation treatment instead of a second, divergent mechanism.
+ */
+export function applyReviewOutcome(
+  taskId: string,
+  passed: boolean,
+  consecutiveFailuresMap: Map<string, number>,
+  failedDimension?: DimensionResult,
+): ReviewResult {
+  if (passed) {
+    consecutiveFailuresMap.set(taskId, 0)
+    return { passed: true, failed_dimensions: [], consecutive_failures: 0, escalation_triggered: false }
+  }
+  const prev = consecutiveFailuresMap.get(taskId) ?? 0
+  const consec = prev + 1
+  consecutiveFailuresMap.set(taskId, consec)
+  return {
+    passed: false,
+    failed_dimensions: failedDimension ? [failedDimension] : [],
+    consecutive_failures: consec,
+    escalation_triggered: consec >= ESCALATION_THRESHOLD,
+  }
+}
+
 export function reviewProposedChange(
   proposedChange: ProposedChange,
   currentTask: Task | null,
@@ -165,23 +193,9 @@ export function reviewProposedChange(
   for (const check of checks) {
     const result = check()
     if (!result.passed) {
-      const prev = consecutiveFailuresMap.get(taskId) ?? 0
-      const consec = prev + 1
-      consecutiveFailuresMap.set(taskId, consec)
-      return {
-        passed: false,
-        failed_dimensions: [result],
-        consecutive_failures: consec,
-        escalation_triggered: consec >= ESCALATION_THRESHOLD,
-      }
+      return applyReviewOutcome(taskId, false, consecutiveFailuresMap, result)
     }
   }
 
-  consecutiveFailuresMap.set(taskId, 0)
-  return {
-    passed: true,
-    failed_dimensions: [],
-    consecutive_failures: 0,
-    escalation_triggered: false,
-  }
+  return applyReviewOutcome(taskId, true, consecutiveFailuresMap)
 }

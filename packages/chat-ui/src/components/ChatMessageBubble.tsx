@@ -181,8 +181,17 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
                         key={layer}
                         className={`bubble__layer-cell ${fired ? 'bubble__layer-cell--fired' : 'bubble__layer-cell--disabled'}`}
                         title={`${LAYER_DISPLAY_NAME[layer]}: ${event?.reason ?? 'not evaluated this turn'}`}
+                        tabIndex={0}
                       >
                         {LAYER_SHORT_CODE[layer]}
+                        {/* A visible, immediate tooltip — the native `title` attribute above is
+                            kept for accessibility, but its browser-default hover delay makes the
+                            layer name easy to miss at a glance. */}
+                        <span className="bubble__layer-tooltip">
+                          <strong>{LAYER_DISPLAY_NAME[layer]}</strong>
+                          <br />
+                          {event?.reason ?? 'not evaluated this turn'}
+                        </span>
                       </div>
                     )
                   })}

@@ -33,6 +33,11 @@ export class FailureModeLibrary {
     this.class_priors = class_priors
   }
 
+  /** Read-only view of the curated entries — used by a semantic (e.g. LLM-based) matcher layered on top of this class's own exact-string-overlap match() (see harness-runtime.ts's semanticFailureMatcher). */
+  getEntries(): readonly FailureModeEntry[] {
+    return this.entries
+  }
+
   match(symptoms: string[]): MatchResult | null {
     let best: MatchResult | null = null
     let bestScore = -1

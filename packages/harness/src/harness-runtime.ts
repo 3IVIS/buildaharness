@@ -3,14 +3,14 @@ import { gatherEvidence } from './nodes/gather-evidence.js'
 import { applyToolReliability } from './nodes/apply-tool-reliability.js'
 import { resolveControlState, CAUTION_THRESHOLD } from './nodes/resolve-control-state.js'
 import { updateDiagnostics } from './nodes/update-diagnostics.js'
-import { detectContradictions } from './nodes/detect-contradictions.js'
+import { detectContradictions, recordExternalContradiction, type ExternalContradictionInput } from './nodes/detect-contradictions.js'
 import { generateUpdateHypotheses } from './nodes/generate-update-hypotheses.js'
 import { updateWorldModel, propagateBeliefs } from './nodes/update-world-model.js'
 import { updateTaskGraph } from './nodes/update-task-graph.js'
 import { selectTask, reconcileParallelBranches } from './nodes/select-task.js'
 import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
-import { reviewProposedChange } from './nodes/review-proposed-change.js'
+import { reviewProposedChange, applyReviewOutcome } from './nodes/review-proposed-change.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange } from './nodes/execute.js'
 import { verify } from './nodes/verify.js'
@@ -25,6 +25,8 @@ import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } fr
 import { HarnessRunState } from './harness-run-state.js'
 import { DepGraphBudget, WorldModel } from './state/world-model.js'
 import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData } from './harness-checkpoint.js'
+import type { FailureModeEntry } from './state/failure-diagnostics.js'
+import { normalise, DimensionType } from './normalise.js'
 
 export const BUDGET_WARNING_FLOOR = 0.5
 
@@ -86,6 +88,51 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * ran before (Phase 2, layer 10 of the harness layer activation plan).
    */
   rollbackExecutors?: Record<string, () => void>
+  /**
+   * Optional semantic contradiction check, layered on top of (never replacing) the always-on
+   * lexical/negation-pair check detectContradictions already does for free. Called at most
+   * once per iteration, only when the belief set actually grew since the last call — never
+   * per-pair, and never re-sent beliefs already covered by a prior call. Receives exactly the
+   * beliefs added since the last check (`newBeliefs`) and everything already known
+   * (`existingBeliefs`); returns any contradictions found among newBeliefs∪existingBeliefs
+   * (new-vs-existing or new-vs-new — old-vs-old was already cleared by a previous call, so
+   * never needs re-checking). A caller can cheaply return `[]` without an LLM call at all for
+   * a delta it judges the lexical check already covers — see personal-assistant's
+   * looksLikeCodingFact for that routing.
+   */
+  contradictionChecker?: (
+    newBeliefs: Array<{ id: string; statement: string }>,
+    existingBeliefs: Array<{ id: string; statement: string }>,
+  ) => Promise<ExternalContradictionInput[]>
+  /**
+   * Optional semantic escalation layered on top of review-proposed-change.ts's lexical
+   * `isNegation` check (fixed phrases like "not X"/"removes X"/"no longer X") — called only
+   * when the lexical checks already passed, and only when there's a HIGH-confidence belief or
+   * an active hypothesis prediction to actually check the proposed change against. A conflict
+   * a paraphrase would let slip past the lexical check gets identical treatment (consecutive-
+   * failure tracking, escalation) via applyReviewOutcome. A caller can cheaply return
+   * `{ conflict: false }` without an LLM call for a change description it judges the lexical
+   * check already covers.
+   */
+  semanticChangeReviewer?: (input: {
+    changeDescription: string
+    highConfidenceBeliefs: Array<{ id: string; statement: string }>
+    hypothesisPredictions: string[]
+  }) => Promise<{ conflict: boolean; reason?: string }>
+  /**
+   * Optional semantic escalation layered on top of FailureModeLibrary's own exact-string-
+   * overlap `match()` — called only when the exact match found nothing (matched_pattern is
+   * still null) and there are both symptoms and library entries to check. Assigning a real
+   * failure_class here (instead of leaving matched_pattern null) feeds Hypothesis generation's
+   * failure_mode_library source and Reviewer Pass's failure-class priors, which otherwise stay
+   * essentially inert for organically-generated observations (exact string equality against a
+   * curated symptom list almost never happens by chance). A caller can cheaply return `null`
+   * without an LLM call for a symptom set it judges the exact match already covers.
+   */
+  semanticFailureMatcher?: (
+    symptoms: string[],
+    libraryEntries: readonly FailureModeEntry[],
+  ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
 }
 
 export interface HarnessRunResult {
@@ -151,6 +198,23 @@ interface LoopContext {
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
   rollbackExecutors?: Record<string, () => void>
+  contradictionChecker?: (
+    newBeliefs: Array<{ id: string; statement: string }>,
+    existingBeliefs: Array<{ id: string; statement: string }>,
+  ) => Promise<ExternalContradictionInput[]>
+  /** How many of worldModel.beliefs were already covered by the last contradictionChecker call — everything from this index onward is "new" (see the delta-check block in driveMainLoop). */
+  lastContradictionCheckCount: number
+  semanticChangeReviewer?: (input: {
+    changeDescription: string
+    highConfidenceBeliefs: Array<{ id: string; statement: string }>
+    hypothesisPredictions: string[]
+  }) => Promise<{ conflict: boolean; reason?: string }>
+  semanticFailureMatcher?: (
+    symptoms: string[],
+    libraryEntries: readonly FailureModeEntry[],
+  ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
+  /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
+  lastFailureMatchSymptomCount: number
 }
 
 function buildInitialContext(
@@ -199,6 +263,11 @@ function buildInitialContext(
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     rollbackExecutors: options.rollbackExecutors,
+    contradictionChecker: options.contradictionChecker,
+    lastContradictionCheckCount: 0,
+    semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticFailureMatcher: options.semanticFailureMatcher,
+    lastFailureMatchSymptomCount: 0,
   }
 
   // Warm start from ExperienceStore (no-op if unavailable) — only on a fresh run.
@@ -246,6 +315,15 @@ function buildResumedContext(checkpoint: HarnessCheckpoint, options: HarnessRunO
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     rollbackExecutors: options.rollbackExecutors,
+    contradictionChecker: options.contradictionChecker,
+    // Not part of HarnessCheckpoint — resets to 0 on resume, so the first check after a
+    // resume treats every current belief as "new" once. Harmless: recordExternalContradiction
+    // already dedupes by involved_belief_ids, so re-covering old-but-already-cleared pairs
+    // just costs one slightly larger delta on the first post-resume check, never a duplicate.
+    lastContradictionCheckCount: 0,
+    semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticFailureMatcher: options.semanticFailureMatcher,
+    lastFailureMatchSymptomCount: 0,
   }
 }
 
@@ -386,6 +464,31 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // with fewer, so no separate gate is needed; Phase 1's belief-writing fix is what makes
     // this stop being permanently a no-op (Phase 2, layer 4).
     detectContradictions(ctx.worldModel, ctx.evidenceStore, ctx.hypothesisSet, undefined, ctx.beliefDepGraph)
+
+    // Semantic check, layered on top of the lexical one above — one call for whatever's new
+    // since the last check (never per-pair, never a full re-scan: old-vs-old was already
+    // cleared by a previous call and never changes). Only actually reaches an LLM when the
+    // caller's contradictionChecker decides the delta warrants it (e.g. it isn't all
+    // coding/system-state facts the lexical check already handles — see personal-assistant's
+    // looksLikeCodingFact).
+    if (ctx.contradictionChecker) {
+      const newBeliefs = ctx.worldModel.beliefs.slice(ctx.lastContradictionCheckCount)
+      const existingBeliefs = ctx.worldModel.beliefs.slice(0, ctx.lastContradictionCheckCount)
+      if (newBeliefs.length > 0 && (existingBeliefs.length > 0 || newBeliefs.length >= 2)) {
+        const found = await ctx.contradictionChecker(
+          newBeliefs.map(b => ({ id: b.id, statement: b.statement })),
+          existingBeliefs.map(b => ({ id: b.id, statement: b.statement })),
+        )
+        for (const input of found) {
+          recordExternalContradiction(ctx.worldModel, input, ctx.beliefDepGraph)
+        }
+      }
+      // Marks these beliefs covered regardless of whether the checker actually called an LLM
+      // — a "these are coding facts, skip" decision is still a completed check, courtesy of
+      // the always-on lexical pass above.
+      ctx.lastContradictionCheckCount = ctx.worldModel.beliefs.length
+    }
+
     if (ctx.worldModel.contradictions.length > contradictionsBefore) {
       reportLayer(ctx, 'contradiction', true, `Heads up — this seems to conflict with something you told me earlier: ${ctx.worldModel.contradictions.at(-1)?.description ?? ''}`)
     } else {
@@ -458,7 +561,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     const voiResult = estimateVOI(ctx.diagnostics, ctx.worldModel, ctx.hypothesisSet, ctx.evidenceStore.tool_availability_manifest)
 
     ctx.nodeExecutionOrder.push('review_proposed_change')
-    const reviewResult = reviewProposedChange(
+    let reviewResult = reviewProposedChange(
       { description: currentTask.description },
       currentTask,
       ctx.worldModel,
@@ -467,6 +570,32 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.evidenceStore,
       ctx.consecutiveReviewFailures,
     )
+
+    // Semantic escalation layered on top of the lexical isNegation check above — only when
+    // the lexical checks already passed (a lexical failure is already the strongest signal
+    // available; no need to also ask an LLM), and only when there's a HIGH-confidence belief
+    // or hypothesis prediction to actually check the change against. Never called per
+    // candidate pair — one call reviewing the change against everything relevant at once.
+    if (reviewResult.passed && ctx.semanticChangeReviewer) {
+      const highConfidenceBeliefs = ctx.worldModel.beliefs
+        .filter(b => b.confidence >= 0.8)
+        .map(b => ({ id: b.id, statement: b.statement }))
+      const hypothesisPredictions = ctx.hypothesisSet.active.flatMap(h => h.predicted_observations)
+      if (highConfidenceBeliefs.length > 0 || hypothesisPredictions.length > 0) {
+        const semanticResult = await ctx.semanticChangeReviewer({
+          changeDescription: currentTask.description,
+          highConfidenceBeliefs,
+          hypothesisPredictions,
+        })
+        if (semanticResult.conflict) {
+          reviewResult = applyReviewOutcome(currentTask.id, false, ctx.consecutiveReviewFailures, {
+            dimension: 'world_model_consistency',
+            passed: false,
+            reason: semanticResult.reason ?? 'Semantic review found a conflict with known context',
+          })
+        }
+      }
+    }
 
     if (!reviewResult.passed) {
       ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
@@ -702,6 +831,25 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
+
+    // Semantic escalation layered on top of FailureModeLibrary's own exact-string-overlap
+    // match() above — only when the exact match found nothing, there are symptoms and library
+    // entries to check, and the symptom set actually changed since the last attempt (avoids
+    // re-asking the same question every iteration when nothing new happened).
+    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null) {
+      const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
+      const symptoms = ctx.worldModel.observations.map(o => o.content)
+      if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
+        ctx.lastFailureMatchSymptomCount = symptoms.length
+        const semanticMatch = await ctx.semanticFailureMatcher(symptoms, libraryEntries)
+        if (semanticMatch) {
+          ctx.failureDiagnostics.matched_pattern = {
+            ...semanticMatch,
+            confidence: normalise(semanticMatch.confidence, DimensionType.match_confidence),
+          }
+        }
+      }
+    }
 
     ctx.nodeExecutionOrder.push('resolve_control_state_b')
     resolveAndStamp(ctx)

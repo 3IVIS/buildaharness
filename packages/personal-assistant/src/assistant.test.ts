@@ -37,16 +37,31 @@ class FakeLLMClient implements ILLMClient {
 class ScriptedToolLLMClient implements ILLMClient {
   calls = 0
   streamCalls = 0
+  syncCalls = 0
   receivedMessages: ChatMessage[][] = []
-  constructor(private readonly next: () => LLMStructuredResponse, private readonly streamChunks: string[] = ['']) {}
+  receivedSyncMessages: ChatMessage[][] = []
+  constructor(
+    private readonly next: () => LLMStructuredResponse,
+    private readonly streamChunks: string[] = [''],
+    // Only set by tests exercising resolvePendingAction's post-approval synthesis call
+    // (see assistant.ts) — absent, this throws, so every other test path (which should only
+    // ever reach callChatStructured/callChat) still fails loudly if it hits this by mistake.
+    private readonly syncReply?: string,
+  ) {}
 
   async *callChat(): AsyncIterable<string> {
     this.streamCalls++
     for (const chunk of this.streamChunks) yield chunk
   }
 
-  async callChatSync(): Promise<string> {
-    throw new Error('ScriptedToolLLMClient does not support callChatSync — this test path should only use callChatStructured')
+  async callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+    if (this.syncReply === undefined) {
+      throw new Error('ScriptedToolLLMClient does not support callChatSync — this test path should only use callChatStructured')
+    }
+    this.syncCalls++
+    this.receivedSyncMessages.push(messages)
+    options?.onUsage?.({ inputTokens: 20, outputTokens: 15 })
+    return this.syncReply
   }
 
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
@@ -59,12 +74,12 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
 }
 
-function scriptedResponses(responses: LLMStructuredResponse[], streamChunks?: string[]): ScriptedToolLLMClient {
+function scriptedResponses(responses: LLMStructuredResponse[], streamChunks?: string[], syncReply?: string): ScriptedToolLLMClient {
   let i = 0
   return new ScriptedToolLLMClient(() => {
     if (i >= responses.length) throw new Error('ScriptedToolLLMClient: no more scripted responses')
     return responses[i++]
-  }, streamChunks)
+  }, streamChunks, syncReply)
 }
 
 /**
@@ -835,7 +850,7 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.reply).toContain('a.txt')
   })
 
-  it('approving a pending shell action executes the exact staged command with zero additional LLM calls, and shows the human a clean reply with no raw trust-boundary markup', async () => {
+  it('approving a pending shell action executes the exact staged command with zero additional structured-call LLM calls', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
@@ -853,21 +868,80 @@ describe('PersonalAssistant shell tools', () => {
     })
 
     expect(approved.status).toBe('ok')
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+    expect(executeCommand.mock.calls[0][0]).toBe('ls -la')
+    // The staged command itself is never re-derived via callChatStructured (see T4 of the
+    // file-tools plan) — only the synthesis call below (callChatSync) may follow it.
+    expect(llm.calls).toBe(callsAfterStaging)
+  })
+
+  it('falls back to a clean, untagged raw dump when the post-approval synthesis call fails', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    // scriptedResponses with no syncReply configured makes callChatSync throw — simulating a
+    // synthesis-call failure (network error, backend down, etc.) — reply must still be usable.
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+
+    const staged = await assistant.turn('List the files here', { sessionId: 'shell-fallback-test' })
+    const approved = await assistant.turn('List the files here', {
+      sessionId: 'shell-fallback-test',
+      approved: true,
+      pendingActionId: staged.pendingActionId,
+    })
+
+    expect(approved.status).toBe('ok')
     expect(approved.reply).toContain('a.txt')
     // The <untrusted_external_content> boundary is for a future model call reading this back
     // out of the transcript, not for the human — showing it verbatim in the chat bubble reads
     // as garbled raw markup (see the harness layer activation plan's follow-up bugfix).
     expect(approved.reply).not.toContain('<untrusted_external_content>')
-    expect(executeCommand).toHaveBeenCalledTimes(1)
-    expect(executeCommand.mock.calls[0][0]).toBe('ls -la')
-    expect(llm.calls).toBe(callsAfterStaging)
 
     // The transcript (what a later turn's model call reads back) still carries the trust
     // boundary, so historical shell output is never misread as instructions.
-    const transcript = await assistant.getTranscript('shell-reply-test')
+    const transcript = await assistant.getTranscript('shell-fallback-test')
     const savedReply = transcript.at(-1)
     expect(savedReply?.content).toContain('<untrusted_external_content>')
     expect(savedReply?.content).toContain('a.txt')
+  })
+
+  it('synthesizes an actual answer from the real command output instead of handing back the raw dump', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({
+      output: 'nodes-p11.test.ts\nharness-checkpoint.ts\nharness-runtime.ts\n',
+      exitCode: 0,
+      timedOut: false,
+    })
+    const { ctx } = makeShellTools(executeCommand)
+    const synthesizedAnswer = 'Yes — nodeExecutionOrder is threaded through harness-runtime.ts and harness-checkpoint.ts consistently, plus one test file.'
+    const llm = scriptedResponses(
+      [{ content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'grep -rl "nodeExecutionOrder" packages/harness/src' } }] }],
+      undefined,
+      synthesizedAnswer,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+
+    const staged = await assistant.turn('are these wired reasonably?', { sessionId: 'synthesis-test' })
+    const approved = await assistant.turn('are these wired reasonably?', {
+      sessionId: 'synthesis-test',
+      approved: true,
+      pendingActionId: staged.pendingActionId,
+    })
+
+    expect(approved.status).toBe('ok')
+    expect(approved.reply).toBe(synthesizedAnswer)
+    expect(approved.usage).toEqual({ inputTokens: 20, outputTokens: 15 })
+    expect(llm.syncCalls).toBe(1)
+    // The synthesis call gets the user's actual original request and the real command output.
+    const [sentMessages] = llm.receivedSyncMessages
+    expect(sentMessages.some((m) => m.content.includes('are these wired reasonably?'))).toBe(true)
+    expect(sentMessages.some((m) => m.content.includes('nodes-p11.test.ts'))).toBe(true)
+
+    // The model's own synthesized answer is stored plainly (it's the assistant's own words,
+    // not raw untrusted content) — no tag markup needed for a future turn to read it safely.
+    const transcript = await assistant.getTranscript('synthesis-test')
+    expect(transcript.at(-1)?.content).toBe(synthesizedAnswer)
   })
 
   it('flags shell output that looks like a prompt-injection attempt, without dropping it', async () => {
@@ -1148,5 +1222,31 @@ describe('PersonalAssistant onTrace', () => {
 
     expect(events).toContainEqual({ kind: 'tool_call', tool: 'read_file', ok: true })
     expect(events.at(-1)).toMatchObject({ kind: 'turn_end', status: 'ok' })
+  })
+})
+
+describe('PersonalAssistant cross-turn belief seeding', () => {
+  it('does not report a contradiction on the very first turn — nothing yet to conflict with', async () => {
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const first = await assistant.turn('Remember that the server is available.', { sessionId: 'belief-seed-first-turn' })
+
+    expect(first.status).toBe('ok')
+    expect(first.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(false)
+  })
+
+  it('seeds beliefs from facts stated in earlier turns, so a later contradiction is actually detected', async () => {
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    // Without cross-turn belief seeding, the harness's WorldModel is rebuilt empty every turn
+    // — this second turn's message alone would never have anything to conflict with, since
+    // the first turn's belief lived only in that turn's now-discarded scratch WorldModel.
+    await assistant.turn('Remember that the server is available.', { sessionId: 'belief-seed-test' })
+    const second = await assistant.turn('Remember that the server is unavailable now.', { sessionId: 'belief-seed-test' })
+
+    expect(second.status).toBe('ok')
+    expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
   })
 })
