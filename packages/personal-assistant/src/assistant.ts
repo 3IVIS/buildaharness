@@ -73,7 +73,12 @@ const SYSTEM_PROMPT =
   'A user message like "exit" or "goodbye" is never a reason to call a tool. ' +
   'Never address the user by a name, unless they have stated their own name earlier in this exact ' +
   'conversation (shown above) — inventing a plausible-sounding name for a warmer tone is a hallucination, ' +
-  'not a personalization, since no such fact exists to invent it from.'
+  'not a personalization, since no such fact exists to invent it from. ' +
+  'A user referring back to something you said — "your suggestions", "those fixes", "what you recommended" — ' +
+  'means an analysis, list, or recommendation YOU wrote earlier in this exact conversation (shown above), not ' +
+  'a tool result. Re-read your own prior messages above to find it before doing anything else; never call a ' +
+  'tool to "search for" or "look up" something you already said in this conversation, and never claim you ' +
+  'lack context for it without first checking your own earlier replies.'
 
 // Used to compose an actual answer from an approved shell command's real output, instead of
 // just handing the user the raw dump — a bare `grep`/`ls` result often can't answer what was
