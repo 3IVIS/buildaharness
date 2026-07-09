@@ -167,6 +167,10 @@ async function main(): Promise<void> {
   let lastPlanStatus: AssistantTurnResult['planStatus']
   let lastTurnUsage: TokenUsage | undefined
   let sessionUsage: TokenUsage | undefined
+  // Tool calls made by the most recent turn — used only so /undo can warn about a real
+  // side effect (e.g. a created reminder) it's about to claim to have removed but can't
+  // actually reverse. Reset at the start of every handleTurn call, see writeToolStep below.
+  let lastTurnToolSteps: AssistantToolStep[] = []
   // Set whenever the last turn was blocked on an approval gate (message-level risk or a
   // staged write/shell command) and then declined, or escalated — lastTrace stays whatever it
   // was before in either case (neither path ever runs the harness), so without this /why and
@@ -311,6 +315,14 @@ async function main(): Promise<void> {
    * reversed (see the plan's Known limitations). Peeks at the transcript before calling
    * undoLastTurn so the confirmation message can name which side was removed, without
    * changing undoLastTurn's return shape just for that.
+   *
+   * create_reminder is the one tool call this reversible-sounding command can silently fail
+   * to revert without the user realizing it — reminders need no approval (see risk-classifier.ts),
+   * so unlike write_file/run_shell_command there's no prior "Proceed?" prompt that already told
+   * the user this was consequential. ReminderStore has no delete/remove method to actually undo
+   * it with (adding one is a packages/runtime change, out of scope here), so the best available
+   * fix is surfacing the caveat explicitly instead of letting "Removed the last exchange" imply
+   * the reminder went away too.
    */
   async function handleUndo(): Promise<void> {
     const transcriptBefore = await assistant.getTranscript('cli')
@@ -319,6 +331,7 @@ async function main(): Promise<void> {
       return
     }
     const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+    const undoneReminders = lastTurnToolSteps.filter((s) => s.tool === 'create_reminder')
 
     const result = await assistant.undoLastTurn('cli')
     if (!result.undone) {
@@ -330,8 +343,12 @@ async function main(): Promise<void> {
     lastTrace = undefined
     lastSources = undefined
     lastPlanStatus = undefined
+    lastTurnToolSteps = []
+    const caveat = undoneReminders.length > 0
+      ? ` Note: ${undoneReminders.length === 1 ? 'a reminder' : `${undoneReminders.length} reminders`} created in that exchange (${undoneReminders.map((s) => `"${s.input.text}"`).join(', ')}) ${undoneReminders.length === 1 ? 'is' : 'are'} still active — /undo only removes chat history, not that side effect.`
+      : ''
     console.log(
-      `\n✓ Removed ${wasPendingApproval ? 'the pending message awaiting approval' : 'the last exchange (1 user message, 1 assistant reply)'}.\n`,
+      `\n✓ Removed ${wasPendingApproval ? 'the pending message awaiting approval' : 'the last exchange (1 user message, 1 assistant reply)'}.${caveat}\n`,
     )
   }
 
@@ -387,9 +404,11 @@ async function main(): Promise<void> {
   function writeToolStep(step: AssistantToolStep): void {
     clearProgress()
     console.log(`  ⚙ ${step.summary}`)
+    lastTurnToolSteps.push(step)
   }
 
   async function handleTurn(message: string, approved = false, pendingActionId?: string): Promise<void> {
+    lastTurnToolSteps = []
     // Set only once the first token of an actual streamed reply arrives — the
     // message-level approval gate and the file-tools loop both produce a full
     // reply with no streaming, so this stays false for those turns and the

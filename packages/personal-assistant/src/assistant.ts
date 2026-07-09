@@ -70,7 +70,10 @@ const SYSTEM_PROMPT =
   'the word "again" there refers to repeating information back, not repeating an action. Only call the tool again if the user\'s new message ' +
   'explicitly asks for the underlying action itself to happen a second time (e.g. "run it again", "re-check the current time"), or describes ' +
   'something that could have changed since the last run (e.g. asking for a live status). ' +
-  'A user message like "exit" or "goodbye" is never a reason to call a tool.'
+  'A user message like "exit" or "goodbye" is never a reason to call a tool. ' +
+  'Never address the user by a name, unless they have stated their own name earlier in this exact ' +
+  'conversation (shown above) — inventing a plausible-sounding name for a warmer tone is a hallucination, ' +
+  'not a personalization, since no such fact exists to invent it from.'
 
 // Used to compose an actual answer from an approved shell command's real output, instead of
 // just handing the user the raw dump — a bare `grep`/`ls` result often can't answer what was

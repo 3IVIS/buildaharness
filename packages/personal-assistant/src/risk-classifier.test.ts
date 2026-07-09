@@ -14,6 +14,17 @@ describe('classifyRisk', () => {
   it('classifies ordinary conversation as LOW', () => {
     expect(classifyRisk('What timezone is Tokyo in?').riskLevel).toBe('LOW')
   })
+
+  it('flags a genuine purchase request using "order" as a verb', () => {
+    expect(classifyRisk('Can you order me a pizza').riskLevel).toBe('HIGH')
+    expect(classifyRisk('please order the parts from the supplier').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a stated preference using "order" as a noun', () => {
+    expect(classifyRisk('My favorite coffee order is an oat milk cortado.').riskLevel).toBe('LOW')
+    expect(classifyRisk('My usual order was a cortado.').riskLevel).toBe('LOW')
+    expect(classifyRisk('in order to finish this I need more time').riskLevel).toBe('LOW')
+  })
 })
 
 describe('looksActionOriented', () => {

@@ -16,6 +16,14 @@ describe('classifyDecompositionCandidate', () => {
   it('does not flag a short, single-step request', () => {
     expect(classifyDecompositionCandidate('What timezone is Tokyo in?').isCandidate).toBe(false)
   })
+
+  it('flags a comma-separated enumeration with no sequencing words and under the word limit', () => {
+    const result = classifyDecompositionCandidate(
+      'I have a job interview next Tuesday for a product manager role. Help me get ready: I need to research the ' +
+        'company, prepare answers to behavioral questions, pick out what to wear, and plan my route so I am not late.',
+    )
+    expect(result.isCandidate).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

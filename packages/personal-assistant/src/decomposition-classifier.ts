@@ -13,6 +13,17 @@ export interface DecompositionCandidateClassification {
 const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|finally,)\b/i
 const WORD_LIMIT = 40
 
+// A comma-separated enumeration ("I need to research the company, prepare answers, pick out
+// what to wear, and plan my route") is just as much a multi-step request as one using
+// then/first/next — it just never uses any of those words. Found via live testing: a 4-subtask
+// interview-prep request phrased this way (and landing at exactly 40 words, under WORD_LIMIT)
+// fell through both signals, so decomposeObjective never ran and /layers reported "one eligible
+// task" even though the model itself went on to create 4 separate reminders for it. At least 2
+// commas before a closing "and" is a cheap, deliberately loose signal — a false positive here
+// only costs one wasted decomposeObjective call (which itself falls back to a single task), the
+// same tradeoff WORD_LIMIT already makes.
+const ENUMERATED_LIST_MARKER = /(?:,[^,]*){2,}\band\b/i
+
 /** Zero-LLM-call gate deciding whether a request is worth spending decomposeObjective's extra call on. */
 export function classifyDecompositionCandidate(message: string): DecompositionCandidateClassification {
   const trimmed = message.trim()
@@ -20,6 +31,9 @@ export function classifyDecompositionCandidate(message: string): DecompositionCa
 
   if (SEQUENCING_MARKERS.test(trimmed)) {
     return { isCandidate: true, reason: 'contains a sequencing marker (then/first/next/step ...)' }
+  }
+  if (ENUMERATED_LIST_MARKER.test(trimmed)) {
+    return { isCandidate: true, reason: 'contains a comma-separated enumeration of multiple items' }
   }
   if (wordCount > WORD_LIMIT) {
     return { isCandidate: true, reason: `long request (${wordCount} words) — worth checking for multiple steps` }

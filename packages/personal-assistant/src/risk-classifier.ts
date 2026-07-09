@@ -13,12 +13,21 @@ interface RiskPattern {
   reason: string
 }
 
+// "order" alone is ambiguous between the purchase verb ("order me a pizza") and the noun
+// describing an existing/preferred item ("my coffee order is an oat milk cortado", "my usual
+// order was a cortado", "in order to finish this") — only the verb usage is a purchase request.
+// Found via live testing: a stated coffee-order preference tripped the bare \border\b match and
+// got silently auto-declined (fails-closed, no live approver) as a HIGH-risk money-spending
+// request, with the fact never making it into the transcript at all.
+const ORDER_VERB_PATTERN = /(?<!\b(?:my|his|her|their|our|your)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
+
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
 const HIGH_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\bsend\b.{0,30}\b(email|e-mail|message|text|dm)\b/i, reason: "sends a message on the user's behalf" },
   { pattern: /\b(delete|remove|wipe|erase)\b/i, reason: 'deletes or removes something, possibly irreversibly' },
-  { pattern: /\b(pay|purchase|buy|order|checkout|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
+  { pattern: /\b(pay|purchase|buy|checkout|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
+  { pattern: ORDER_VERB_PATTERN, reason: 'spends money or moves funds' },
   { pattern: /\b(post|publish|tweet|share publicly)\b/i, reason: 'publishes content publicly' },
   { pattern: /\b(cancel|unsubscribe)\b/i, reason: 'cancels a subscription or commitment' },
   { pattern: /\b(sign|submit|approve)\b.{0,30}\b(contract|form|application|agreement)\b/i, reason: 'signs or submits a binding document' },
