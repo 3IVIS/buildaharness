@@ -103,6 +103,40 @@ describe('reviewProposedChange', () => {
     expect(result.failed_dimensions[0].dimension).toBe('world_model_consistency')
   })
 
+  // Regression: isNegation used to require changeDesc to literally contain "removes <full belief
+  // statement>" — a paraphrase describing the same subject in different words never matched. The
+  // fallback fires on a negation trigger word plus significant shared vocabulary with the belief.
+  it('world-model consistency check catches a paraphrased negation, not just a literal one', () => {
+    const wm = makeWorldModel()
+    wm.beliefs.push({
+      id: 'b1',
+      statement: 'the login feature is required',
+      confidence: 1.0,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    const change = { description: 'remove the old login feature entirely from the app' }
+    const map = new Map<string, number>()
+    const result = reviewProposedChange(change, null, wm, null, null, null, map)
+    expect(result.passed).toBe(false)
+    expect(result.failed_dimensions[0].dimension).toBe('world_model_consistency')
+  })
+
+  it('world-model consistency check does not flag a change merely sharing a trigger word with an unrelated belief', () => {
+    const wm = makeWorldModel()
+    wm.beliefs.push({
+      id: 'b1',
+      statement: 'the login feature is required',
+      confidence: 1.0,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    const change = { description: 'delete the temporary cache directory before redeploying' }
+    const map = new Map<string, number>()
+    const result = reviewProposedChange(change, null, wm, null, null, null, map)
+    expect(result.passed).toBe(true)
+  })
+
   it('linter check skipped silently when linter absent from tool_availability_manifest', () => {
     const es = new EvidenceStore()  // empty manifest → no linter
     const change = { description: 'syntax error in code' }  // would fail if linter present
@@ -360,6 +394,42 @@ describe('execute', () => {
     expect(sysErr!.reliability).toBe('HIGH')
     // World model updated with error observation
     expect(wm.observations.some(o => o.content.includes('SYSTEM_ERROR'))).toBe(true)
+  })
+
+  it('classifies recognized error signatures into a canonical symptom prefix on the SYSTEM_ERROR observation', () => {
+    const cases: Array<[string, string]> = [
+      ["ENOENT: no such file or directory, open '/x'", 'file not found'],
+      ['ETIMEDOUT: request timed out after 30s', 'request timed out'],
+      ['connect ECONNREFUSED 127.0.0.1:8080', 'connection refused'],
+    ]
+
+    for (const [message, expectedSymptom] of cases) {
+      const wm = makeWorldModel()
+      const ms = new MemoryState()
+      const es = new EvidenceStore()
+      const tg = new TaskGraph({ tasks: [makeTask()] })
+      const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
+
+      execute({}, () => { throw new Error(message) }, ctx)
+
+      const sysErr = es.observations.find(e => e.evidence_type === 'SYSTEM_ERROR')
+      expect(sysErr).toBeDefined()
+      expect(sysErr!.obs).toBe(`${expectedSymptom} — Tool execution failed: ${message}`)
+    }
+  })
+
+  it('unrecognized error signature leaves the SYSTEM_ERROR observation unprefixed', () => {
+    const wm = makeWorldModel()
+    const ms = new MemoryState()
+    const es = new EvidenceStore()
+    const tg = new TaskGraph({ tasks: [makeTask()] })
+    const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
+
+    execute({}, () => { throw new Error('something bespoke went sideways') }, ctx)
+
+    const sysErr = es.observations.find(e => e.evidence_type === 'SYSTEM_ERROR')
+    expect(sysErr).toBeDefined()
+    expect(sysErr!.obs).toBe('Tool execution failed: something bespoke went sideways')
   })
 
   it('environment_change_log.record(result) called for every execution regardless of outcome', () => {

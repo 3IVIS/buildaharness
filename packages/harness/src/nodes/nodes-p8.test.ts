@@ -298,6 +298,18 @@ describe('detect_contradictions', () => {
     expect(wm.contradictions[0].severity).toBe('MEDIUM')
   })
 
+  // Regression: statementsOpposed used to flag any pair each containing one half of a
+  // NEGATION_PAIRS entry, with no requirement that they share a subject — so two totally
+  // unrelated coding-fact statements (both admissible via CODING_FACT_MARKERS in
+  // personal-assistant's contradiction-checker.ts) got falsely flagged as contradicting.
+  it('does not flag two unrelated statements that merely each contain one half of a negation pair', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the login tests passed after the refactor', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the payment integration build failed this morning', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(0)
+  })
+
   it('pairwise/set-level/temporal/abstraction contradictions are always scope=local; only a resolved SYSTEM_BREAKING contradiction is promoted to scope=global', () => {
     const wm = new WorldModel()
     wm.beliefs.push({ id: 'b1', statement: 'the config file was found', confidence: 0.6, derived_from: ['o1'], recorded_at: '' })

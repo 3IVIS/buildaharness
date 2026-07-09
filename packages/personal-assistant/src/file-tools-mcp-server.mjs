@@ -271,6 +271,14 @@ export async function fetchUrlSafely(url) {
 // they already share workspaceRoot for file tools. Mirrors FileSystemAdapter's
 // on-disk `{ key, value }` entry shape exactly (packages/runtime/src/memory/filesystem.ts).
 
+// Mirrors fact-extraction.ts's FACT_MARKERS byte-for-byte — kept in sync by hand since this
+// file is a standalone script copied verbatim to dist, not bundled through the TS build.
+const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
+
+function looksLikeDurableFact(text) {
+  return FACT_MARKERS.test(text)
+}
+
 async function readRemindersFile(remindersFile) {
   const raw = await readFile(remindersFile, 'utf-8').catch((err) => {
     if (isEnoent(err)) return undefined
@@ -386,7 +394,11 @@ async function main() {
           'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
           'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
           'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-          '`cwd` outside the workspace is rejected immediately, before anything is staged.',
+          '`cwd` outside the workspace is rejected immediately, before anything is staged. Every call — including a ' +
+          'repeat of a command you already ran earlier in this conversation — costs the user a fresh approval ' +
+          'prompt. Before calling this, check whether the command\'s output is already visible earlier in this ' +
+          'conversation; if it is, answer the current question from that instead of calling this tool again for ' +
+          'the same command.',
         inputSchema: {
           command: z.string().describe('The shell command to run.'),
           cwd: z
@@ -439,12 +451,33 @@ async function main() {
       'create_reminder',
       {
         description:
-          'Create a reminder for the user. Stores the raw text only — there is no due-date/time parsing yet, so ' +
-          'this reminder will not surface as "due" anywhere until that lands.',
+          'Create a reminder for something the user wants to be reminded to DO later (e.g. "remind me to call ' +
+          'the dentist", "remind me to buy milk") — a to-do item. Do NOT use this for a durable fact about the ' +
+          'user (their name, a preference, an allergy, where they live, ...); those are captured automatically ' +
+          'elsewhere from the conversation and don\'t need — and shouldn\'t get — a reminder entry. If a message ' +
+          'is a fact about the user rather than an action to take, just acknowledge it in your reply instead of ' +
+          'calling this tool. Stores the raw text only — there is no due-date/time parsing yet, so this reminder ' +
+          'will not surface as "due" anywhere until that lands.',
         inputSchema: { text: z.string().describe('What to remind the user about.') },
       },
       async ({ text }) => {
         try {
+          // Deterministic backstop for the description's guidance above — checked against
+          // both the tool call's own `text` argument and CURRENT_USER_MESSAGE (the turn's
+          // raw, unreworded user message — see claude-cli-llm-client.ts's doc comment on why
+          // `text` alone isn't reliable enough). Kept in sync by hand with
+          // fact-extraction.ts's FACT_MARKERS (this file is a standalone script copied
+          // verbatim to dist, not bundled, so it can't import that module directly).
+          if (looksLikeDurableFact(text) || looksLikeDurableFact(process.env.CURRENT_USER_MESSAGE ?? '')) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.',
+                },
+              ],
+            }
+          }
           const record = await createReminder(remindersFile, text)
           return { content: [{ type: 'text', text: `Reminder created: "${record.rawText}" (id ${record.id}).` }] }
         } catch (err) {

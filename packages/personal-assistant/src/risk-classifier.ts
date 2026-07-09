@@ -24,17 +24,37 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\b(sign|submit|approve)\b.{0,30}\b(contract|form|application|agreement)\b/i, reason: 'signs or submits a binding document' },
 ]
 
+// A reminder/event request names what to be reminded about, not an action to carry out right
+// now — checked before HIGH_RISK_PATTERNS below so "remind me to buy milk" or "remind me to
+// delete the old invoices" reads as creating a reminder, not as buying/deleting on the user's
+// behalf this instant (found via live testing: this false positive blocked an everyday reminder
+// behind an unnecessary HIGH-risk approval gate).
+const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set a reminder|create (a |an )?event)\b/i, reason: 'creates a calendar or reminder entry' }
+
 // Reversible or low-stakes actions that still change state in the world —
 // surfaced in diagnostics but not blocked on approval.
 const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\b(schedule|book|reserve)\b/i, reason: 'books or schedules something' },
-  { pattern: /\b(remind me|set a reminder|create (a |an )?event)\b/i, reason: 'creates a calendar or reminder entry' },
+  REMINDER_PATTERN,
 ]
 
+// A question about whether/how a past action already happened ("did that send?", "was it
+// deleted?") is asking about the past, not requesting the action now — only a leading
+// past-tense/completed auxiliary paired with a trailing "?" counts, so an imperative phrased as
+// a question ("Could you delete these?") still gates normally. Found via live testing: "Did
+// that actually send a real email just now?" (a follow-up question, not a request) tripped the
+// send-a-message HIGH pattern and forced an approval prompt for a question with no side effects.
+const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have)\b.*\?\s*$/i
+
 export function classifyRisk(message: string): RiskClassification {
-  for (const { pattern, reason } of HIGH_RISK_PATTERNS) {
-    if (pattern.test(message)) {
-      return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }
+  if (REMINDER_PATTERN.pattern.test(message)) {
+    return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${REMINDER_PATTERN.reason}.` }
+  }
+  if (!PAST_TENSE_QUESTION.test(message)) {
+    for (const { pattern, reason } of HIGH_RISK_PATTERNS) {
+      if (pattern.test(message)) {
+        return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }
+      }
     }
   }
   for (const { pattern, reason } of MEDIUM_RISK_PATTERNS) {

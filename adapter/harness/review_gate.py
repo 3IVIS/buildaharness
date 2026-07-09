@@ -272,8 +272,25 @@ def _get_change_description(proposed_change: Any) -> str:
     return str(getattr(proposed_change, "description", "") or "")
 
 
+_NEGATION_STOPWORDS = {"the", "a", "an", "is", "are", "was", "were", "in", "at", "to", "of", "and"}
+_NEGATION_TRIGGERS = [
+    "not ", "removes ", "remove ", "delete ", "revert ", "contradicts ", "negate ", "negates ", "no longer ",
+]
+
+
 def _is_negation(change_desc: str, belief_stmt: str) -> bool:
-    """Check if change_desc negates belief_stmt via simple text patterns."""
+    """Check if change_desc negates belief_stmt via simple text patterns.
+
+    Primary check: change_desc literally contains "not <belief_stmt>" etc. — a real hit, but
+    belief_stmt is usually a full sentence-shaped belief statement or predicted observation, so
+    change_desc containing it byte-for-byte almost never happens with real freeform text (a
+    paraphrase like "dropping the login requirement" for a belief "login is required" never
+    matches "removes login is required"). Fallback: a negation trigger word is present in
+    change_desc *and* change_desc shares significant (non-stopword) vocabulary with belief_stmt —
+    the same shared-subject requirement _statements_opposed() (contradiction.py) uses, so this
+    doesn't regress into over-firing on a change that's merely topically related rather than
+    opposed.
+    """
     if not belief_stmt or not change_desc:
         return False
     negation_patterns = [
@@ -287,4 +304,14 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
         f"negates {belief_stmt}",
         f"no longer {belief_stmt}",
     ]
-    return any(pat in change_desc for pat in negation_patterns)
+    if any(pat in change_desc for pat in negation_patterns):
+        return True
+
+    if not any(trigger in change_desc for trigger in _NEGATION_TRIGGERS):
+        return False
+    stmt_words = [w for w in belief_stmt.split() if len(w) > 3 and w not in _NEGATION_STOPWORDS]
+    if not stmt_words:
+        return False
+    change_words = set(change_desc.split())
+    overlap = [w for w in stmt_words if w in change_words]
+    return len(overlap) >= min(2, len(stmt_words))

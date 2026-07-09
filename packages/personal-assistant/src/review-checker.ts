@@ -22,7 +22,11 @@ const SYSTEM_PROMPT =
 /**
  * One LLM call checking a proposed change against everything relevant at once (never one call
  * per belief/prediction) — layered on top of review-proposed-change.ts's lexical `isNegation`
- * check, which only catches an explicit phrase like "not X"/"removes X"/"no longer X". A
+ * check, which only catches an explicit phrase like "not X"/"removes X"/"no longer X". That check
+ * also requires the change description and the belief it's compared against to share a concrete
+ * subject before it fires (see looksLikeCodingFact's doc comment in contradiction-checker.ts) —
+ * which is why decomposition-classifier.ts and plan-builder.ts prompt task descriptions to lead
+ * with their subject. A
  * paraphrased conflict ("we're dropping the login feature" vs. a belief that login is required)
  * slips past that phrase list entirely. Skipped when the change description itself reads like a
  * structured/technical (coding) action — see looksLikeCodingFact's doc comment for why that's

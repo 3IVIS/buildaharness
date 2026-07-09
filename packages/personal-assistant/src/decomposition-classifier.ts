@@ -54,7 +54,10 @@ const DECOMPOSITION_SCHEMA = {
 
 const DECOMPOSITION_SYSTEM_PROMPT =
   "Decompose the user's request into a short, ordered list of concrete sub-tasks. If the request is really just " +
-  'one step, return a single task. Respond with JSON only, no prose: {"tasks":[{"id": string, "description": ' +
+  'one step, return a single task. Phrase each `description` starting with the concrete subject or object it ' +
+  'acts on (e.g. "the login tests: rerun after the config fix" rather than "rerun the login tests after the ' +
+  "config fix\"), so later comparisons against this task's completion/failure beliefs share matching vocabulary. " +
+  'Respond with JSON only, no prose: {"tasks":[{"id": string, "description": ' +
   'string, "depends_on": string[]}]}. `id` values must be unique; `depends_on` lists the ids of tasks that must ' +
   'complete first (usually just the previous task, or empty for the first one).'
 
@@ -97,6 +100,58 @@ export async function decomposeObjective(
     const tasks = parsed.tasks.filter(isDecomposedTaskSpec)
     if (tasks.length <= 1) return null
     return tasks
+  } catch {
+    return null
+  }
+}
+
+const REFRAME_SCHEMA = {
+  type: 'object',
+  properties: {
+    description: { type: 'string' },
+  },
+  required: ['description'],
+}
+
+const REFRAME_SYSTEM_PROMPT =
+  "Restate the user's message as a single task description, starting with the concrete subject " +
+  'or object it acts on (e.g. "the login tests: rerun after the config fix" rather than "rerun the ' +
+  'login tests after the config fix"), so later comparisons against this task\'s completion/failure ' +
+  'beliefs share matching vocabulary. Preserve the original meaning exactly — do not add, drop, or ' +
+  'invent information. Respond with JSON only: {"description": string}.'
+
+/**
+ * Reframes a single-task turn's description to lead with its subject — the same phrasing
+ * decomposeObjective and buildPlanFromTemplate (plan-builder.ts) already ask their own LLM calls
+ * for, applied here for the much more common case where a turn goes through neither: an ad hoc
+ * single-task turn whose description otherwise stays the raw verbatim userMessage (see
+ * assistant.ts's initialTasks fallback). Without this, only decomposed/planned tasks got
+ * subject-first descriptions, so the "Completed: <description>" belief statementsOpposed/
+ * isNegation compare against was structured for some tasks and not others. Deliberately not
+ * called unconditionally — the caller gates this behind looksLikeCodingFact AND riskLevel !==
+ * 'LOW' (the actual precondition for a single task's description to ever reach that belief; see
+ * assistant.ts's call site for why looksLikeCodingFact alone isn't a safe gate for a new call).
+ * Falls back to null (caller keeps the original message) on any parse failure or LLM error,
+ * matching this codebase's other LLM-backed classifiers.
+ */
+export async function reframeTaskDescriptionWithLLM(
+  message: string,
+  llmClient: ILLMClient,
+  model?: string,
+  onUsage?: (usage: TokenUsage) => void,
+): Promise<string | null> {
+  try {
+    const response = await llmClient.callChatStructured(
+      [
+        { role: 'system', content: REFRAME_SYSTEM_PROMPT },
+        { role: 'user', content: message },
+      ],
+      undefined,
+      { model, onUsage, structuredOutput: { schema: REFRAME_SCHEMA } },
+    )
+    const parsed = JSON.parse(response.content) as { description?: unknown }
+    if (typeof parsed.description !== 'string' || !parsed.description.trim()) return null
+    return parsed.description.trim()
   } catch {
     return null
   }

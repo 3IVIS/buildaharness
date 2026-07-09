@@ -240,11 +240,27 @@ describe('FailureModeLibrary', () => {
     expect(library.getEntries()).toEqual([])
   })
 
-  it('match() still requires exact string overlap — a paraphrased symptom finds nothing (the gap semanticFailureMatcher is layered on top to close)', () => {
+  it('match() uses substring containment, not exact equality — a paraphrase sharing no contiguous phrase with the curated symptom still finds nothing (the gap semanticFailureMatcher is layered on top to close)', () => {
     const library = new FailureModeLibrary([
       { id: 'fm1', failure_class: 'timeout', symptoms: ['request timed out'], pattern_description: 'x' },
     ])
     expect(library.match(['the request took too long and timed out eventually'])).toBeNull()
     expect(library.match(['request timed out'])).not.toBeNull()
+  })
+
+  it('match() finds a curated short phrase inside a longer free-text observation (e.g. a raw error message), case-insensitively', () => {
+    const library = new FailureModeLibrary([
+      { id: 'e1', failure_class: 'TIMEOUT', symptoms: ['request timed out'], pattern_description: 'x' },
+    ])
+    const result = library.match(['Tool execution failed: Error: request timed out after 30000ms'])
+    expect(result).not.toBeNull()
+    expect(result?.failure_class).toBe('TIMEOUT')
+  })
+
+  it('match() returns null when the observation shares no curated phrase with any entry', () => {
+    const library = new FailureModeLibrary([
+      { id: 'e1', failure_class: 'TIMEOUT', symptoms: ['request timed out'], pattern_description: 'x' },
+    ])
+    expect(library.match(['Tool execution failed: Error: permission denied writing to /etc/hosts'])).toBeNull()
   })
 })

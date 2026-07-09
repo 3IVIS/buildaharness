@@ -44,6 +44,36 @@ function makeRollbackRef(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
+interface SymptomPattern {
+  test: (lowerMessage: string) => boolean
+  symptom: string
+}
+
+// Ordered most-specific first — the first matching pattern wins.
+const SYSTEM_ERROR_SYMPTOM_PATTERNS: SymptomPattern[] = [
+  { test: (m) => m.includes('enoent') || m.includes('no such file or directory'), symptom: 'file not found' },
+  { test: (m) => m.includes('etimedout') || m.includes('timed out') || m.includes('timeout'), symptom: 'request timed out' },
+  { test: (m) => m.includes('econnrefused') || m.includes('connection refused'), symptom: 'connection refused' },
+  { test: (m) => m.includes('eacces') || m.includes('permission denied'), symptom: 'permission denied' },
+  { test: (m) => m.includes('enotfound') || m.includes('getaddrinfo'), symptom: 'host not found' },
+  { test: (m) => m.includes('econnreset'), symptom: 'connection reset' },
+  { test: (m) => m.includes('404') || m.includes('not found'), symptom: 'not found' },
+  { test: (m) => m.includes('401') || m.includes('403') || m.includes('unauthorized') || m.includes('forbidden'), symptom: 'access denied' },
+  { test: (m) => /\b5\d{2}\b/.test(m) || m.includes('internal server error'), symptom: 'server error' },
+  { test: (m) => m.includes('exited with code') || /non-?zero exit/.test(m), symptom: 'command failed' },
+]
+
+// Raw error text (e.g. "ENOENT: no such file or directory") rarely shares literal
+// vocabulary with a curated FailureModeEntry symptom phrase (e.g. "file not found"),
+// so this bridges the two before SYSTEM_ERROR evidence is written.
+function classifySystemErrorSymptom(message: string): string | null {
+  const lower = message.toLowerCase()
+  for (const { test, symptom } of SYSTEM_ERROR_SYMPTOM_PATTERNS) {
+    if (test(lower)) return symptom
+  }
+  return null
+}
+
 export function execute(
   proposedChange: ProposedExecutionChange,
   toolFn: (() => unknown),
@@ -90,11 +120,12 @@ export function execute(
     success = true
   } catch (err) {
     error = err instanceof Error ? err.message : String(err)
+    const symptom = classifySystemErrorSymptom(error)
 
     // Tool error → Evidence(HIGH, SYSTEM_ERROR) in evidence store
     ctx.evidenceStore.observations.push({
       id: `sys-err-${makeRollbackRef()}`,
-      obs: `Tool execution failed: ${error}`,
+      obs: symptom ? `${symptom} — Tool execution failed: ${error}` : `Tool execution failed: ${error}`,
       reliability: 'HIGH',
       source: 'execution_engine',
       evidence_type: 'SYSTEM_ERROR',

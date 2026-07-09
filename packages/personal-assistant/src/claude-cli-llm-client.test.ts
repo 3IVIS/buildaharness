@@ -207,6 +207,10 @@ describe('ClaudeCliLLMClient', () => {
         mcpServers: Record<string, { env: Record<string, string> }>
       }
       expect(mcpConfig.mcpServers['file-tools'].env.REMINDERS_FILE).toBe('/data/reminders/reminders.json')
+      // The MCP server's create_reminder handler checks this against fact-shaped markers
+      // (see file-tools-mcp-server.mjs) since the tool call's own `text` argument is
+      // routinely reworded by the model and can't be relied on alone.
+      expect(mcpConfig.mcpServers['file-tools'].env.CURRENT_USER_MESSAGE).toBe('remind me to call mom')
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

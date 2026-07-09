@@ -36,6 +36,9 @@ function buildSystemPrompt(template: PlanTemplate): string {
     `Here is the template's task skeleton — keep the exact same ids and depends_on structure, ` +
     `one output task per skeleton task, but personalize each description to the actual request:\n${skeleton}\n\n` +
     `Success criteria for this kind of plan: ${template.success_criteria}\n\n` +
+    'Phrase each `description` starting with the concrete subject or object it acts on (e.g. "the login tests: ' +
+    'rerun after the config fix" rather than "rerun the login tests after the config fix"), so later comparisons ' +
+    "against this task's completion/failure beliefs share matching vocabulary. " +
     'Respond with JSON only, no prose: {"tasks":[{"id": string, "description": string, "depends_on": ' +
     'string[]}]}. `id` and `depends_on` values must exactly match the skeleton above.'
   )

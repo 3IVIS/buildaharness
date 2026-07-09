@@ -33,16 +33,26 @@ export class FailureModeLibrary {
     this.class_priors = class_priors
   }
 
-  /** Read-only view of the curated entries — used by a semantic (e.g. LLM-based) matcher layered on top of this class's own exact-string-overlap match() (see harness-runtime.ts's semanticFailureMatcher). */
+  /** Read-only view of the curated entries — used by a semantic (e.g. LLM-based) matcher layered on top of this class's own substring-overlap match() (see harness-runtime.ts's semanticFailureMatcher). */
   getEntries(): readonly FailureModeEntry[] {
     return this.entries
   }
 
+  // Curated `symptoms` are short hand-written phrases, but observed `symptoms` passed in here are
+  // free-text (e.g. raw error messages) that will almost never equal a curated phrase byte-for-byte —
+  // so matching has to look for the curated phrase *within* the free text (or vice versa), case-insensitively.
+  // Mirrors adapter/harness/failure_modes.py's FailureModeLibrary.match(), which does the same via
+  // substring containment against a joined free-text context blob.
   match(symptoms: string[]): MatchResult | null {
     let best: MatchResult | null = null
     let bestScore = -1
     for (const entry of this.entries) {
-      const overlap = entry.symptoms.filter(s => symptoms.includes(s)).length
+      const overlap = entry.symptoms.filter(curated =>
+        curated.length > 0 &&
+        symptoms.some(
+          s => s.toLowerCase().includes(curated.toLowerCase()) || curated.toLowerCase().includes(s.toLowerCase()),
+        ),
+      ).length
       if (overlap > 0) {
         const confidence = overlap / Math.max(entry.symptoms.length, symptoms.length)
         if (confidence > bestScore) {

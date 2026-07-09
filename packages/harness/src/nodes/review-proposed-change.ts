@@ -37,6 +37,19 @@ function getChangeDescription(proposedChange: ProposedChange): string {
   return (proposedChange.description ?? '').toLowerCase()
 }
 
+const NEGATION_STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'at', 'to', 'of', 'and'])
+const NEGATION_TRIGGERS = ['not ', 'removes ', 'remove ', 'delete ', 'revert ', 'contradicts ', 'negate ', 'negates ', 'no longer ']
+
+/**
+ * True when changeDesc negates stmt. Primary check: changeDesc literally contains "not <stmt>"
+ * etc. — a real hit, but stmt is usually a full sentence-shaped belief statement or predicted
+ * observation, so changeDesc containing it byte-for-byte almost never happens with real freeform
+ * text (a paraphrase like "dropping the login requirement" for a belief "login is required"
+ * never matches "removes login is required"). Fallback: a negation trigger word is present in
+ * changeDesc *and* changeDesc shares significant (non-stopword) vocabulary with stmt — the same
+ * shared-subject requirement statementsOpposed (detect-contradictions.ts) uses, so this doesn't
+ * regress into over-firing on a change that's merely topically related rather than opposed.
+ */
 function isNegation(changeDesc: string, stmt: string): boolean {
   if (!changeDesc || !stmt) return false
   const patterns = [
@@ -50,7 +63,14 @@ function isNegation(changeDesc: string, stmt: string): boolean {
     `negates ${stmt}`,
     `no longer ${stmt}`,
   ]
-  return patterns.some(p => changeDesc.includes(p))
+  if (patterns.some(p => changeDesc.includes(p))) return true
+
+  if (!NEGATION_TRIGGERS.some(t => changeDesc.includes(t))) return false
+  const stmtWords = stmt.split(/\s+/).filter(w => w.length > 3 && !NEGATION_STOPWORDS.has(w))
+  if (stmtWords.length === 0) return false
+  const changeWords = new Set(changeDesc.split(/\s+/))
+  const overlap = stmtWords.filter(w => changeWords.has(w))
+  return overlap.length >= Math.min(2, stmtWords.length)
 }
 
 function checkTaskAlignment(proposedChange: ProposedChange, currentTask: Task | null): DimensionResult {

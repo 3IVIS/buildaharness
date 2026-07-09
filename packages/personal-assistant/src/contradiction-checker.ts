@@ -14,6 +14,11 @@ export interface BeliefCandidate {
 const CODING_FACT_MARKERS =
   /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch|commit|pipeline|ci\/cd|ci|environment|variable|package|library|repo|repository|script|command|log|status|bug|pass(ed|ing)?|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
+// This substring match, and the shared-subject gate in detect-contradictions.ts's
+// statementsOpposed (packages/harness), only catch a real contradiction when the two compared
+// statements lead with the same concrete subject ("the login tests" vs "the login tests", not
+// "the login tests" vs "the auth suite") — which is why decomposition-classifier.ts and
+// plan-builder.ts prompt task descriptions to be phrased subject-first.
 /** Zero-LLM-call gate: true when a belief statement reads like a structured/technical (build, test, service, file) claim rather than a natural-language personal fact. */
 export function looksLikeCodingFact(statement: string): boolean {
   return CODING_FACT_MARKERS.test(statement)

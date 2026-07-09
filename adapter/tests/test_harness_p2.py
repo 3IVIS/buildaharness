@@ -289,6 +289,17 @@ def test_pairwise_contradiction_detected_on_online_offline_status_flip():
     assert pairwise[0].type == "pairwise"
 
 
+# Regression: _statements_opposed() used to flag any pair each containing one half of a
+# _NEGATION_PAIRS entry, with no requirement that they share a subject — so two totally unrelated
+# coding-fact statements (both admissible via CODING_FACT_MARKERS in personal-assistant's
+# contradiction-checker.ts) got falsely flagged as contradicting.
+def test_no_contradiction_between_unrelated_statements_sharing_a_negation_pair_word():
+    b_a = _belief("the login tests passed after the refactor", confidence=0.9)
+    b_b = _belief("the payment integration build failed this morning", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 0
+
+
 def test_t12_temporal_contradiction_from_env_change():
     """T12: A belief invalidated by an environment_change_log entry generates a temporal
     contradiction with severity MEDIUM or HIGH."""

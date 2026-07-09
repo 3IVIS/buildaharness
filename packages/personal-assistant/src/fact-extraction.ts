@@ -10,8 +10,12 @@ export interface UserFact {
 // something durable about themselves are captured. Deliberately dumb (verbatim
 // capture of the whole message, no dedup/merge) — see transcript-compaction.ts's
 // sibling tradeoff note in the personal-assistant README for why this stays
-// free rather than spending a second LLM call per turn.
-const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
+// free rather than spending a second LLM call per turn. Exported: reminder-tools.ts
+// reuses this exact gate to refuse create_reminder for the same fact-shaped text,
+// so a durable fact (an allergy, a preference, ...) can't end up filed as a to-do
+// item in the reminders store — see that module's doc comment for why relying on
+// the create_reminder tool description alone wasn't reliable enough on its own.
+export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
 
 // looksLikeCodingFact is a pure keyword match, so "please delete the old backup files" and
 // "what does missing.txt say?" admit just as readily as "the tests passed" — the first is a

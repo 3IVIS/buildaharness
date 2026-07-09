@@ -24,7 +24,11 @@ const SYSTEM_PROMPT =
 /**
  * One LLM call checking a symptom set against the whole failure-mode library at once (never
  * one call per entry) — layered on top of FailureModeLibrary.match()'s own exact-string-overlap
- * check, which requires a symptom to be byte-for-byte identical to a curated one. Since
+ * check, which requires a symptom to be byte-for-byte identical to a curated one. That exact-match
+ * floor (and the shared-subject gates in detect-contradictions.ts / review-proposed-change.ts —
+ * see looksLikeCodingFact's doc comment in contradiction-checker.ts) is why decomposition-classifier.ts
+ * and plan-builder.ts prompt task descriptions to lead with their concrete subject: consistent
+ * subject vocabulary gives every lexical layer, not just this one, real overlap to match on. Since
  * observations are free text ("Task executed: ...", "Result: ..."), exact equality against a
  * curated list almost never happens by chance — this is what actually lets the library
  * recognize a known failure pattern described in different words. Falls back to "no match" on

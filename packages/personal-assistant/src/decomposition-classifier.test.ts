@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { classifyDecompositionCandidate, decomposeObjective } from './decomposition-classifier.js'
+import { classifyDecompositionCandidate, decomposeObjective, reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
 
 describe('classifyDecompositionCandidate', () => {
   it('flags a request with a sequencing marker', () => {
@@ -78,5 +78,33 @@ describe('decomposeObjective', () => {
     const llm = new StructuredOnlyLLMClient(json)
 
     expect(await decomposeObjective(llm, 'Anything')).toBeNull()
+  })
+})
+
+describe('reframeTaskDescriptionWithLLM', () => {
+  it('returns the subject-first description on a well-formed response', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ description: 'the login tests: rerun after the config fix' }))
+
+    const result = await reframeTaskDescriptionWithLLM('rerun the login tests after the config fix', llm)
+
+    expect(result).toBe('the login tests: rerun after the config fix')
+  })
+
+  it('returns null for malformed JSON instead of throwing', async () => {
+    const llm = new StructuredOnlyLLMClient('not json at all')
+
+    expect(await reframeTaskDescriptionWithLLM('Anything', llm)).toBeNull()
+  })
+
+  it('returns null when the JSON is well-formed but missing the description field', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ notDescription: 'x' }))
+
+    expect(await reframeTaskDescriptionWithLLM('Anything', llm)).toBeNull()
+  })
+
+  it('returns null for a blank description instead of an empty string', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ description: '   ' }))
+
+    expect(await reframeTaskDescriptionWithLLM('Anything', llm)).toBeNull()
   })
 })

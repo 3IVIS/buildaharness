@@ -10,6 +10,35 @@ from typing import Any, Literal
 
 ReversibilityStrategy = Literal["snapshot", "git-revert", "patch-rollback", "ephemeral"]
 
+# Ordered most-specific first — the first matching pattern wins.
+_SYSTEM_ERROR_SYMPTOM_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("enoent", "no such file or directory"), "file not found"),
+    (("etimedout", "timed out", "timeout"), "request timed out"),
+    (("econnrefused", "connection refused"), "connection refused"),
+    (("eacces", "permission denied"), "permission denied"),
+    (("enotfound", "getaddrinfo"), "host not found"),
+    (("econnreset",), "connection reset"),
+    (("404", "not found"), "not found"),
+    (("401", "403", "unauthorized", "forbidden"), "access denied"),
+    (("500", "502", "503", "504", "internal server error"), "server error"),
+    (("exited with code", "non-zero exit", "nonzero exit"), "command failed"),
+]
+
+
+def _classify_system_error_symptom(message: str) -> str | None:
+    """Map a raw error message to a canonical short symptom phrase.
+
+    Raw error text (e.g. a Python OSError's "No such file or directory") rarely
+    shares literal vocabulary with a curated FailureModeEntry symptom phrase
+    (e.g. "file not found"), so this bridges the two before SYSTEM_ERROR
+    evidence is written.
+    """
+    lower = message.lower()
+    for needles, symptom in _SYSTEM_ERROR_SYMPTOM_PATTERNS:
+        if any(needle in lower for needle in needles):
+            return symptom
+    return None
+
 
 @dataclass
 class ExecutionResult:
@@ -90,10 +119,15 @@ def execute(
             output = tool_workflow
     except Exception as exc:
         error_msg = str(exc)
+        symptom = _classify_system_error_symptom(error_msg)
         # Create SYSTEM_ERROR evidence
         err_evidence = Evidence(
             id=f"sys-err-{uuid.uuid4().hex[:8]}",
-            obs=f"Tool execution failed: {error_msg}",
+            obs=(
+                f"{symptom} — Tool execution failed: {error_msg}"
+                if symptom
+                else f"Tool execution failed: {error_msg}"
+            ),
             reliability="HIGH",
             source="execution_engine",
             evidence_type="SYSTEM_ERROR",

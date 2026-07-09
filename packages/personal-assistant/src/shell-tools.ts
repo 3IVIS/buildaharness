@@ -19,7 +19,10 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
     'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
     'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
     'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-    '`cwd` outside the workspace is rejected immediately, before anything is staged.',
+    '`cwd` outside the workspace is rejected immediately, before anything is staged. Every call — including a ' +
+    'repeat of a command you already ran earlier in this conversation — costs the user a fresh approval prompt. ' +
+    'Before calling this, check whether the command\'s output is already visible earlier in this conversation; ' +
+    'if it is, answer the current question from that instead of calling this tool again for the same command.',
   input_schema: {
     type: 'object',
     properties: {

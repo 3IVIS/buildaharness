@@ -47,9 +47,23 @@ _NEGATION_PAIRS = [
 
 
 def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
-    """Simple keyword negation check: returns True when two statements are semantically opposed."""
+    """Simple keyword negation check: returns True when two statements are semantically opposed.
+
+    Requires the two statements to share a subject (some non-stopword vocabulary) before treating
+    any polarity difference as a real opposition. Without this gate, two statements about entirely
+    different things each containing one half of _NEGATION_PAIRS were flagged as contradicting
+    purely by coincidence — e.g. "the login tests passed" / "the payment build failed" — because
+    belief statements are free text (verbatim user messages, LLM-authored task descriptions), not
+    a controlled vocabulary that only differs by its status word.
+    """
     a = stmt_a.lower()
     b = stmt_b.lower()
+
+    words_a = set(a.split())
+    words_b = set(b.split())
+    common = words_a & words_b - {"the", "a", "an", "is", "are", "was", "were", "in", "at"}
+    if not common:
+        return False
 
     # Check direct negation pairs
     for pos, neg in _NEGATION_PAIRS:
@@ -59,16 +73,12 @@ def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
             return True
 
     # Check "not X" vs "X" pattern
-    words_a = set(a.split())
-    words_b = set(b.split())
-    common = words_a & words_b - {"the", "a", "an", "is", "are", "was", "were", "in", "at"}
-    if common:
-        if ("not" in words_a) != ("not" in words_b):
-            return True
-        if ("absent" in words_a) != ("absent" in words_b):
-            return True
-        if ("no" in words_a) != ("no" in words_b):
-            return True
+    if ("not" in words_a) != ("not" in words_b):
+        return True
+    if ("absent" in words_a) != ("absent" in words_b):
+        return True
+    if ("no" in words_a) != ("no" in words_b):
+        return True
 
     return False
 

@@ -223,6 +223,13 @@ export class ClaudeCliLLMClient implements ILLMClient {
 
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
     const workspaceRoot = (this.fileTools ?? this.shellTools)!.workspaceRoot
+    // The current turn's raw user message, before Claude Code's own agentic loop (and any
+    // rewording it does before calling a tool) ever sees it — passed through to the MCP
+    // server so create_reminder can check the *original* phrasing against fact-shaped
+    // markers, not just whatever `text` the model decided to pass as the tool argument
+    // (which is routinely reworded to third person, e.g. "I'm allergic to peanuts, please
+    // remember that" → "User is allergic to peanuts", dodging a check against `text` alone).
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
     // Deliberately not `new URL('./file-tools-mcp-server.mjs', import.meta.url)` as a
     // single literal — Vite's asset-URL plugin statically detects that exact pattern
     // and inlines the whole file as a base64 data: URL at build time, which
@@ -237,7 +244,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
           args: [mcpServerPath],
           env: {
             WORKSPACE_ROOT: workspaceRoot,
-            ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile } : {}),
+            ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile, CURRENT_USER_MESSAGE: lastUserMessage } : {}),
             ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
           },
         },

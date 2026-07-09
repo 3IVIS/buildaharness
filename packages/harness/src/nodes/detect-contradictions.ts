@@ -32,24 +32,33 @@ const NEGATION_PAIRS: Array<[string, string]> = [
 
 const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'at'])
 
-/** Matches _statements_opposed(): a keyword-negation check for semantic opposition. */
+/**
+ * Matches _statements_opposed(): a keyword-negation check for semantic opposition.
+ *
+ * Requires the two statements to share a subject (some non-stopword vocabulary) before treating
+ * any polarity difference as a real opposition. Without this gate, two statements about entirely
+ * different things each containing one half of a NEGATION_PAIRS entry were flagged as
+ * contradicting purely by coincidence — e.g. "the login tests passed" / "the payment build
+ * failed" — because belief statements are free text (verbatim user messages, LLM-authored task
+ * descriptions), not a controlled vocabulary that only differs by its status word.
+ */
 function statementsOpposed(stmtA: string, stmtB: string): boolean {
   const a = stmtA.toLowerCase()
   const b = stmtB.toLowerCase()
+
+  const wordsA = new Set(a.split(/\s+/))
+  const wordsB = new Set(b.split(/\s+/))
+  const common = [...wordsA].filter(w => wordsB.has(w) && !STOPWORDS.has(w))
+  if (common.length === 0) return false
 
   for (const [pos, neg] of NEGATION_PAIRS) {
     if (a.includes(pos) && b.includes(neg)) return true
     if (a.includes(neg) && b.includes(pos)) return true
   }
 
-  const wordsA = new Set(a.split(/\s+/))
-  const wordsB = new Set(b.split(/\s+/))
-  const common = [...wordsA].filter(w => wordsB.has(w) && !STOPWORDS.has(w))
-  if (common.length > 0) {
-    if (wordsA.has('not') !== wordsB.has('not')) return true
-    if (wordsA.has('absent') !== wordsB.has('absent')) return true
-    if (wordsA.has('no') !== wordsB.has('no')) return true
-  }
+  if (wordsA.has('not') !== wordsB.has('not')) return true
+  if (wordsA.has('absent') !== wordsB.has('absent')) return true
+  if (wordsA.has('no') !== wordsB.has('no')) return true
 
   return false
 }

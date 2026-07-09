@@ -384,6 +384,34 @@ def test_T07_low_reliability_belief_no_failure():
     assert result.passed is True
 
 
+# Regression: _is_negation used to require change_desc to literally contain "removes <full
+# belief statement>" — a paraphrase describing the same subject in different words never
+# matched. The fallback fires on a negation trigger word plus significant shared vocabulary.
+def test_T07_paraphrased_negation_of_high_reliability_belief_fails():
+    wm = WorldModel()
+    high_belief = _belief("b1", "the login feature is required", reliability="HIGH")
+    wm.beliefs.append(high_belief)
+
+    proposed_change = {"description": "remove the old login feature entirely from the app"}
+
+    result = check_world_model_consistency(proposed_change, wm)
+
+    assert result.passed is False
+    assert "HIGH-reliability" in result.reason
+
+
+def test_T07_unrelated_change_sharing_only_a_trigger_word_does_not_fail():
+    wm = WorldModel()
+    high_belief = _belief("b1", "the login feature is required", reliability="HIGH")
+    wm.beliefs.append(high_belief)
+
+    proposed_change = {"description": "delete the temporary cache directory before redeploying"}
+
+    result = check_world_model_consistency(proposed_change, wm)
+
+    assert result.passed is True
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # T08  Change removing required_interface_field fails dimension 3
 # ══════════════════════════════════════════════════════════════════════════════
@@ -537,6 +565,64 @@ def test_T10_tool_error_adds_to_observations_not_beliefs():
     assert any("SYSTEM_ERROR" in o.content or "error" in o.content.lower() for o in wm.observations)
     # No beliefs added (beliefs require derivation chains that errors don't have)
     assert len(wm.beliefs) == 0
+
+
+def test_T10c_system_error_evidence_prefixed_with_canonical_symptom():
+    """T10c — recognized error signatures get a canonical symptom prefix on the obs text."""
+
+    cases = [
+        ("FileNotFoundError: [Errno 2] No such file or directory: '/x'", "file not found"),
+        ("socket.timeout: The read operation timed out", "request timed out"),
+        ("ConnectionRefusedError: [Errno 61] Connection refused", "connection refused"),
+    ]
+
+    for message, expected_symptom in cases:
+
+        def failing_workflow(message: str = message) -> None:
+            raise RuntimeError(message)
+
+        wm = WorldModel()
+        task = _task("t10c", risk_level="LOW")
+        tg = TaskGraph(tasks=[task])
+        evidence_store = EvidenceStore()
+
+        execute(
+            proposed_change={"change_type": "file_mutation"},
+            tool_workflow=failing_workflow,
+            world_model=wm,
+            task_graph=tg,
+            current_task=task,
+            evidence_store=evidence_store,
+        )
+
+        sys_errors = [e for e in evidence_store.entries if e.evidence_type == "SYSTEM_ERROR"]
+        assert len(sys_errors) == 1
+        assert sys_errors[0].obs == f"{expected_symptom} — Tool execution failed: {message}"
+
+
+def test_T10d_system_error_evidence_unprefixed_when_unrecognized():
+    """T10d — an unrecognized error signature leaves the obs text unprefixed."""
+
+    def failing_workflow():
+        raise RuntimeError("something bespoke went sideways")
+
+    wm = WorldModel()
+    task = _task("t10d", risk_level="LOW")
+    tg = TaskGraph(tasks=[task])
+    evidence_store = EvidenceStore()
+
+    execute(
+        proposed_change={"change_type": "file_mutation"},
+        tool_workflow=failing_workflow,
+        world_model=wm,
+        task_graph=tg,
+        current_task=task,
+        evidence_store=evidence_store,
+    )
+
+    sys_errors = [e for e in evidence_store.entries if e.evidence_type == "SYSTEM_ERROR"]
+    assert len(sys_errors) == 1
+    assert sys_errors[0].obs == "Tool execution failed: something bespoke went sideways"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -400,11 +400,26 @@ async function main(): Promise<void> {
         sessionId: 'cli',
         approved,
         pendingActionId,
-        onProgress: writeProgress,
+        // Gated on streamedAnyTokens: onProgress keeps firing for layers (Memory,
+        // Verification) that run after the LLM call, i.e. after writeToken has already put
+        // the reply on the current line with no trailing newline. writeProgress's \r-based
+        // overwrite doesn't know that — on a real TTY it wrote the "[step N/5] ..." text
+        // over the tail of the just-streamed reply, and the following clearProgress() then
+        // blanked that same line, so the end of the assistant's answer visibly vanished
+        // right after it finished streaming. Once streaming has started this turn, further
+        // progress has nothing safe to overwrite, so it's dropped instead.
+        onProgress: (progress) => {
+          if (!streamedAnyTokens) writeProgress(progress)
+        },
         onToken: writeToken,
         onToolStep: writeToolStep,
       })
-      clearProgress()
+      // Same streamedAnyTokens gate as onProgress above: lastProgressLineLength describes a
+      // pre-streaming progress line that a leading "\n" in writeToken already scrolled past,
+      // not the current line (the tail of the streamed reply) — clearing unconditionally here
+      // would \r back onto the reply's last line and blank the start of it with stale-length
+      // spaces.
+      if (!streamedAnyTokens) clearProgress()
 
       // A write_file/run_shell_command tool call, gated at the point of the call itself
       // rather than by the message text — see the file-tools and web+shell-tools plans'

@@ -402,19 +402,26 @@ describe('PersonalAssistant session management', () => {
     ])
   })
 
-  it('undoLastTurn drops only the pending user message when the last turn ended in needs_approval', async () => {
+  it('a message-level needs_approval turn persists nothing until the retry resolves it, so undo has nothing to drop', async () => {
+    // Regression test: this gate used to append the user message to the transcript the
+    // moment approval was requested, before the outcome was known. A decline never calls
+    // turn() again for this gate (unlike the pendingActionId gate, which always resolves via
+    // resolvePendingAction), so that eager append left a dangling, un-replied-to user turn —
+    // one a later, unrelated turn's tool-enabled LLM call would see in context and could act
+    // on, bypassing the decline entirely. An approve-retry re-enters turn() from scratch and
+    // appends the message itself via the normal path, so the eager append also produced a
+    // duplicate entry on the approved side. Fix: don't persist until the outcome is known.
     const llm = new FakeLLMClient('irrelevant')
     const assistant = new PersonalAssistant({ llmClient: llm })
     const sessionId = 'undo-pending-test'
     const staged = await assistant.turn('Send an email to my boss saying I quit.', { sessionId })
     expect(staged.status).toBe('needs_approval')
 
-    const transcriptBeforeUndo = await assistant.getTranscript(sessionId)
-    expect(transcriptBeforeUndo).toEqual([{ role: 'user', content: 'Send an email to my boss saying I quit.' }])
+    expect(await assistant.getTranscript(sessionId)).toEqual([])
 
     const result = await assistant.undoLastTurn(sessionId)
 
-    expect(result).toEqual({ undone: true })
+    expect(result).toEqual({ undone: false })
     expect(await assistant.getTranscript(sessionId)).toEqual([])
   })
 
@@ -1035,6 +1042,56 @@ describe('PersonalAssistant dynamic decomposition', () => {
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('First do this, then do that, then wrap it all up nicely for me please.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Handled anyway.')
+    expect(llm.structuredCalls).toBe(1)
+  })
+})
+
+describe('PersonalAssistant single-task description reframing', () => {
+  it('spends one extra LLM call reframing a coding-fact-shaped, non-LOW-risk single task, and still completes the turn', async () => {
+    const reframeJson = JSON.stringify({ description: 'the deploy tests: schedule a rerun tonight' })
+    const llm = new DecompositionAwareLLMClient('Scheduled.', reframeJson)
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Please schedule a rerun of the deploy tests tonight.')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Scheduled.')
+    expect(llm.structuredCalls).toBe(1)
+  })
+
+  // Regression: looksLikeCodingFact alone is a loose keyword list (built for a lower-stakes
+  // purpose — skipping an already-cheap semantic check) and false-positives on common
+  // non-technical words it also happens to contain ("online", "available", ...). Gating a *new*
+  // LLM call on it alone spent an unnecessary call on plain conversation; riskLevel !== 'LOW' is
+  // the actual precondition (see assistant.ts's call site comment) and rules this out.
+  it('does not spend a reframe call on a LOW-risk request that merely contains coding-flavored words', async () => {
+    const llm = new DecompositionAwareLLMClient('Still playing in some theaters.', '{}')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Please look up whether the movie is still available online.')
+
+    expect(result.status).toBe('ok')
+    expect(llm.structuredCalls).toBe(0)
+  })
+
+  it('does not spend a reframe call on an ordinary non-technical request', async () => {
+    const llm = new DecompositionAwareLLMClient('How about Whiskers?', '{}')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Please help me pick a good name for my new cat.')
+
+    expect(result.status).toBe('ok')
+    expect(llm.structuredCalls).toBe(0)
+  })
+
+  it('falls back to the original description when the reframe call returns malformed content', async () => {
+    const llm = new DecompositionAwareLLMClient('Handled anyway.', 'not valid json')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn('Please schedule a rerun of the deploy tests tonight.')
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Handled anyway.')
