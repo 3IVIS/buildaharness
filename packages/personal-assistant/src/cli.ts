@@ -167,6 +167,13 @@ async function main(): Promise<void> {
   let lastPlanStatus: AssistantTurnResult['planStatus']
   let lastTurnUsage: TokenUsage | undefined
   let sessionUsage: TokenUsage | undefined
+  // Set whenever the last turn was blocked on an approval gate (message-level risk or a
+  // staged write/shell command) and then declined, or escalated — lastTrace stays whatever it
+  // was before in either case (neither path ever runs the harness), so without this /why and
+  // /layers would fall back to the generic "nothing to explain yet, or it took the fast path"
+  // message even right after a real, user-visible decline. That reads as if nothing happened,
+  // when something very much did. Cleared whenever a turn actually produces a trace, and on /new.
+  let lastNoTraceReason: string | undefined
 
   /** claude-cli is the only backend that returns a real dollar cost (--output-format json's total_cost_usd) — every other backend (proxy, and now anthropic/openai/openrouter, none of which surface billing via TokenUsage.costUsd) gets an approximate estimate instead, see model-pricing.ts. */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
@@ -208,7 +215,7 @@ async function main(): Promise<void> {
 
   function printWhy(): void {
     if (!lastTrace) {
-      console.log('\nNo harness trace for the last turn (nothing to explain yet, or it took the fast path).\n')
+      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
       return
     }
     console.log(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
@@ -226,7 +233,7 @@ async function main(): Promise<void> {
   /** Full fired/skipped picture across all 11 harness layers for the last turn — pure text rendering of the same layer_activity data /why's "What I checked" summarizes selectively. */
   function printLayers(): void {
     if (!lastTrace) {
-      console.log('\nNo harness trace for the last turn (nothing to explain yet, or it took the fast path).\n')
+      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
       return
     }
     console.log('')
@@ -271,6 +278,7 @@ async function main(): Promise<void> {
     lastPlanStatus = undefined
     lastTurnUsage = undefined
     sessionUsage = undefined
+    lastNoTraceReason = undefined
     console.log('\n✓ Started a fresh conversation.\n')
   }
 
@@ -429,6 +437,7 @@ async function main(): Promise<void> {
         const isShell = result.pendingActionKind === 'shell'
         console.log(`\n[needs approval — ${isShell ? 'shell command' : 'write'}] ${result.reason}`)
         const confirmed = await askYesNo(isShell ? 'Run this command? (y/N) ' : 'Apply this write? (y/N) ')
+        lastNoTraceReason = `No harness trace — the last turn was a staged ${isShell ? 'shell command' : 'write'} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
         await handleTurn(message, confirmed, result.pendingActionId)
         return
       }
@@ -437,17 +446,23 @@ async function main(): Promise<void> {
         console.log(`\n[needs approval — ${result.riskLevel}] ${result.reason}`)
         console.log(`  "${message}"`)
         const confirmed = await askYesNo('Proceed? (y/N) ')
-        if (confirmed) await handleTurn(message, true)
-        else console.log('Cancelled.\n')
+        if (confirmed) {
+          await handleTurn(message, true)
+        } else {
+          lastNoTraceReason = 'No harness trace — the last turn was blocked on an approval gate and declined before the harness ran.'
+          console.log('Cancelled.\n')
+        }
         return
       }
 
       if (result.status === 'escalated') {
+        lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
         console.log(`\n[escalated] ${result.reason}\n`)
         return
       }
 
       lastTrace = result.trace
+      lastNoTraceReason = undefined
       lastSources = result.sources
       lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined

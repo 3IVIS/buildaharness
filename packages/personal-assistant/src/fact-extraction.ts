@@ -17,6 +17,14 @@ export interface UserFact {
 // the create_reminder tool description alone wasn't reliable enough on its own.
 export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
 
+// Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
+// safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement
+// phrasing ("my name is", "i'm a", ...) — same gap looksLikeCodingFact was added to close for
+// build/test/service-state claims. Kept separate from FACT_MARKERS (rather than folded in)
+// since it's a different semantic category with its own phrasing shape.
+const HEALTH_OR_DIETARY_MARKERS =
+  /\b(i'?m|i am) (allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+
 // looksLikeCodingFact is a pure keyword match, so "please delete the old backup files" and
 // "what does missing.txt say?" admit just as readily as "the tests passed" — the first is a
 // request, the second a question; merely mentioning "files"/"missing" doesn't make either a
@@ -40,6 +48,7 @@ const NON_CLAIM_MARKERS = /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(plea
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
   const trimmed = userMessage.trim()
   const isCodingFact = looksLikeCodingFact(trimmed) && !NON_CLAIM_MARKERS.test(trimmed)
-  if (!FACT_MARKERS.test(trimmed) && !isCodingFact) return []
+  const isHealthOrDietaryFact = HEALTH_OR_DIETARY_MARKERS.test(trimmed) && !NON_CLAIM_MARKERS.test(trimmed)
+  if (!FACT_MARKERS.test(trimmed) && !isCodingFact && !isHealthOrDietaryFact) return []
   return [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn }]
 }

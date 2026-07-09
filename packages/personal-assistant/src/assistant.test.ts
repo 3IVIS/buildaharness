@@ -813,7 +813,12 @@ describe('PersonalAssistant web + reminder tools', () => {
 
     expect(result.status).toBe('ok')
     const reminders = await reminderStore.list()
-    expect(reminders.some(r => r.rawText === 'water the plants')).toBe(true)
+    // Exact length, not just .some(...) — this message is also reminder-shaped MEDIUM risk,
+    // so before the toolLoopWillRun guard this created a *second*, raw-text duplicate
+    // ("Remind me to water the plants using the tool.") alongside the tool's own
+    // "water the plants", and a weaker .some() assertion here missed it.
+    expect(reminders).toHaveLength(1)
+    expect(reminders[0].rawText).toBe('water the plants')
   })
 })
 

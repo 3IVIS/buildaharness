@@ -45,4 +45,19 @@ describe('extractFactsFromTurn', () => {
     // a claim about the world — admitting it would let a lookup turn into a persisted "known fact".
     expect(extractFactsFromTurn('What does missing.txt say?', 'turn:8')).toEqual([])
   })
+
+  it('captures a health/dietary self-statement with no FACT_MARKERS phrasing', () => {
+    // "I'm allergic to shellfish." matches none of FACT_MARKERS' identity-statement phrases
+    // ("my name is", "i'm a", ...) — this was filed only as a reminder, never as a known fact,
+    // until HEALTH_OR_DIETARY_MARKERS was added.
+    const facts = extractFactsFromTurn("I'm allergic to shellfish.", 'turn:9')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe("I'm allergic to shellfish.")
+  })
+
+  it('captures other health/dietary phrasings', () => {
+    expect(extractFactsFromTurn('I am vegetarian.', 'turn:10')).toHaveLength(1)
+    expect(extractFactsFromTurn("I don't eat pork.", 'turn:11')).toHaveLength(1)
+    expect(extractFactsFromTurn('I have a peanut allergy.', 'turn:12')).toHaveLength(1)
+  })
 })
