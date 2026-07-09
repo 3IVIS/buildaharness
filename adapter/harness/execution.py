@@ -124,9 +124,7 @@ def execute(
         err_evidence = Evidence(
             id=f"sys-err-{uuid.uuid4().hex[:8]}",
             obs=(
-                f"{symptom} — Tool execution failed: {error_msg}"
-                if symptom
-                else f"Tool execution failed: {error_msg}"
+                f"{symptom} — Tool execution failed: {error_msg}" if symptom else f"Tool execution failed: {error_msg}"
             ),
             reliability="HIGH",
             source="execution_engine",

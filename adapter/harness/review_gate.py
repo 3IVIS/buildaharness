@@ -274,7 +274,15 @@ def _get_change_description(proposed_change: Any) -> str:
 
 _NEGATION_STOPWORDS = {"the", "a", "an", "is", "are", "was", "were", "in", "at", "to", "of", "and"}
 _NEGATION_TRIGGERS = [
-    "not ", "removes ", "remove ", "delete ", "revert ", "contradicts ", "negate ", "negates ", "no longer ",
+    "not ",
+    "removes ",
+    "remove ",
+    "delete ",
+    "revert ",
+    "contradicts ",
+    "negate ",
+    "negates ",
+    "no longer ",
 ]
 
 
