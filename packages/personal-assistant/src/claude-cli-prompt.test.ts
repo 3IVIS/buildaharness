@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildClaudePrompt, parseClaudeCliOutput } from './claude-cli-prompt.js'
+import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence } from './claude-cli-prompt.js'
 import type { ChatMessage } from '@buildaharness/runtime'
 
 describe('buildClaudePrompt', () => {
@@ -55,5 +55,24 @@ describe('parseClaudeCliOutput', () => {
   it('omits costUsd when total_cost_usd is absent even though usage is present', () => {
     const parsed = parseClaudeCliOutput(JSON.stringify({ result: 'hi', usage: { input_tokens: 10, output_tokens: 5 } }))
     expect(parsed.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
+  })
+})
+
+describe('stripJsonCodeFence', () => {
+  it('strips a ```json ... ``` fence wrapping the whole reply', () => {
+    expect(stripJsonCodeFence('```json\n{"tasks":[]}\n```')).toBe('{"tasks":[]}')
+  })
+
+  it('strips a bare ``` ... ``` fence with no "json" language tag', () => {
+    expect(stripJsonCodeFence('```\n{"riskLevel":"LOW"}\n```')).toBe('{"riskLevel":"LOW"}')
+  })
+
+  it('leaves already-bare JSON untouched other than trimming', () => {
+    expect(stripJsonCodeFence('  {"riskLevel":"LOW"}  ')).toBe('{"riskLevel":"LOW"}')
+  })
+
+  it('leaves prose with an embedded code fence untouched, since it does not wrap the whole reply', () => {
+    const text = 'Here is an example:\n```js\nconsole.log(1)\n```\nThat is all.'
+    expect(stripJsonCodeFence(text)).toBe(text)
   })
 })

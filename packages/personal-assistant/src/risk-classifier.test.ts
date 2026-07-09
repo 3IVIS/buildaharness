@@ -25,6 +25,29 @@ describe('classifyRisk', () => {
     expect(classifyRisk('My usual order was a cortado.').riskLevel).toBe('LOW')
     expect(classifyRisk('in order to finish this I need more time').riskLevel).toBe('LOW')
   })
+
+  it('does not flag an informational statement using "order" as a noun preceded by an article/demonstrative', () => {
+    // ORDER_VERB_PATTERN's lookbehind originally only excluded a possessive pronoun before
+    // "order" — a definite/indefinite article or demonstrative is just as clearly a noun usage.
+    expect(classifyRisk('The order arrived yesterday, thanks for the update.').riskLevel).toBe('LOW')
+    expect(classifyRisk('An order came in this morning.').riskLevel).toBe('LOW')
+    expect(classifyRisk('That order was wrong.').riskLevel).toBe('LOW')
+  })
+
+  it('still flags a genuine purchase request phrased with an article before "order"', () => {
+    expect(classifyRisk('Please order the parts from the supplier').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a declarative sentence reporting a third party\'s reported/hypothetical action', () => {
+    // The user isn't asking the assistant to cancel or pay anything here — they're relaying
+    // what someone else said they would do.
+    const result = classifyRisk("My landlord said he will cancel my lease if I don't pay rent by Friday.")
+    expect(result.riskLevel).not.toBe('HIGH')
+  })
+
+  it('still flags a first-person or imperative request even near reported-speech-shaped words', () => {
+    expect(classifyRisk('Please cancel my gym membership.').riskLevel).toBe('HIGH')
+  })
 })
 
 describe('looksActionOriented', () => {

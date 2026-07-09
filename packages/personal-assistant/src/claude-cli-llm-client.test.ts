@@ -110,6 +110,29 @@ describe('ClaudeCliLLMClient', () => {
     expect(spawnMock).toHaveBeenCalledTimes(1)
   })
 
+  it('callChatStructured strips a markdown code fence the model wrapped its JSON reply in, when a schema was requested', async () => {
+    // This backend has no real schema-constrained output mode — the model routinely wraps its
+    // JSON reply in ```json ... ``` despite the system prompt saying "no prose", which silently
+    // broke every caller's bare JSON.parse(response.content) (decomposeObjective returning null
+    // for a genuinely multi-step request, indistinguishable from the model choosing a single
+    // task) until this was traced back to the fence rather than the classifier or the model.
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: '```json\n{"tasks":[{"id":"1"}]}\n```' })))
+    const client = new ClaudeCliLLMClient()
+
+    const result = await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { structuredOutput: { schema: {} } })
+
+    expect(result).toEqual({ content: '{"tasks":[{"id":"1"}]}' })
+  })
+
+  it('callChatStructured does not touch content when no structuredOutput schema was requested, even if it looks fenced', async () => {
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: '```js\nconsole.log(1)\n```' })))
+    const client = new ClaudeCliLLMClient()
+
+    const result = await client.callChatStructured([{ role: 'user', content: 'hi' }])
+
+    expect(result).toEqual({ content: '```js\nconsole.log(1)\n```' })
+  })
+
   it('callChatStructured throws when tools are supplied without fileTools/shellTools configured', async () => {
     const client = new ClaudeCliLLMClient()
 

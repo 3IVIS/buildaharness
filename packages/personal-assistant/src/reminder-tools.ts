@@ -1,6 +1,6 @@
 import type { ToolDefinition, ReminderStore } from '@buildaharness/runtime'
 import { requireStringArg } from './file-tools.js'
-import { FACT_MARKERS } from './fact-extraction.js'
+import { FACT_MARKERS, HEALTH_OR_DIETARY_MARKERS } from './fact-extraction.js'
 
 export const CREATE_REMINDER_TOOL: ToolDefinition = {
   name: 'create_reminder',
@@ -47,11 +47,14 @@ export async function executeReminderTool(
       // Deterministic backstop for the tool description's guidance above: a durable fact
       // about the user (an allergy, a preference, ...) still occasionally gets routed here
       // despite the description saying not to — the description alone wasn't reliable
-      // enough in testing. fact-extraction.ts's own gate (FACT_MARKERS) already captures
-      // fact-shaped text as a UserFact on every turn regardless of tool calls, so refusing
-      // here loses nothing — it just stops the same statement from also landing in the
-      // reminders store under a to-do-shaped store it doesn't belong in.
-      if (FACT_MARKERS.test(text) || (sourceUserMessage !== undefined && FACT_MARKERS.test(sourceUserMessage))) {
+      // enough in testing. fact-extraction.ts's own gates (FACT_MARKERS, HEALTH_OR_DIETARY_MARKERS)
+      // already capture fact-shaped text as a UserFact on every turn regardless of tool calls, so
+      // refusing here loses nothing — it just stops the same statement from also landing in the
+      // reminders store under a to-do-shaped store it doesn't belong in. Checks both markers (not
+      // just FACT_MARKERS) so a health/dietary statement ("I'm allergic to shellfish") gets the
+      // same backstop an identity statement ("my name is...") already had.
+      const isFactShaped = (t: string): boolean => FACT_MARKERS.test(t) || HEALTH_OR_DIETARY_MARKERS.test(t)
+      if (isFactShaped(text) || (sourceUserMessage !== undefined && isFactShaped(sourceUserMessage))) {
         return `Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.`
       }
       const record = await store.create(text, null)

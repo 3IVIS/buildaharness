@@ -60,4 +60,24 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn("I don't eat pork.", 'turn:11')).toHaveLength(1)
     expect(extractFactsFromTurn('I have a peanut allergy.', 'turn:12')).toHaveLength(1)
   })
+
+  it('captures a health/dietary fact even when a later clause in the same message is a polite request', () => {
+    // "please remind me..." used to make NON_CLAIM_MARKERS reject the whole message, dropping
+    // the diabetic fact stated in the first clause entirely.
+    const facts = extractFactsFromTurn(
+      "I'm diabetic, so please remind me to always check the sugar content before buying snacks.",
+      'turn:13',
+    )
+    expect(facts).toHaveLength(1)
+
+    const facts2 = extractFactsFromTurn("I'm allergic to peanuts, so please don't suggest any recipes with peanuts in them.", 'turn:14')
+    expect(facts2).toHaveLength(1)
+  })
+
+  it('captures a negated correction to a previously-stated dietary/health fact', () => {
+    // "not"/"no longer" used to break adjacency to the marker word, silently dropping the
+    // correction and leaving the stale original fact unchallenged.
+    expect(extractFactsFromTurn("I'm not vegetarian anymore, I started eating meat again last month.", 'turn:15')).toHaveLength(1)
+    expect(extractFactsFromTurn("I'm no longer allergic to shellfish, I got treated for it last year.", 'turn:16')).toHaveLength(1)
+  })
 })

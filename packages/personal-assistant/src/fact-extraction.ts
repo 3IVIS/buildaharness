@@ -21,9 +21,17 @@ export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement
 // phrasing ("my name is", "i'm a", ...) — same gap looksLikeCodingFact was added to close for
 // build/test/service-state claims. Kept separate from FACT_MARKERS (rather than folded in)
-// since it's a different semantic category with its own phrasing shape.
-const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am) (allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+// since it's a different semantic category with its own phrasing shape. The optional "not "/"no
+// longer " lets a correction to a previously-stated fact ("I'm not vegetarian anymore", "I'm no
+// longer allergic to shellfish") still match — the corrected state is itself exactly the kind of
+// durable fact this store exists to capture, and without it the negation broke adjacency to the
+// marker word and the whole regex silently failed to match, dropping the correction entirely.
+// Exported so reminder-tools.ts and file-tools-mcp-server.mjs (the claude-cli backend's separate
+// tool implementation, kept in sync by hand) can both refuse create_reminder for the same
+// fact-shaped text this module captures as a UserFact — mirroring how FACT_MARKERS is already
+// shared for that purpose.
+export const HEALTH_OR_DIETARY_MARKERS =
+  /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // looksLikeCodingFact is a pure keyword match, so "please delete the old backup files" and
 // "what does missing.txt say?" admit just as readily as "the tests passed" — the first is a
@@ -32,6 +40,23 @@ const HEALTH_OR_DIETARY_MARKERS =
 // actual state claims; FACT_MARKERS' phrases ("my name is", "remember that", ...) are already
 // declarative by construction and don't need this filter.
 const NON_CLAIM_MARKERS = /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me|delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
+
+// NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
+// message that merely contains a request-shaped clause anywhere — but scanning the whole
+// message let an unrelated trailing clause's "please"/"can you" suppress a genuine fact-bearing
+// clause elsewhere in the same sentence ("I'm diabetic, so please remind me to check sugar
+// content" lost the diabetic fact entirely, because "please" appears later in the sentence).
+// Splitting on clause boundaries (sentence punctuation, or a comma before a coordinating
+// conjunction) and checking NON_CLAIM_MARKERS per clause keeps the request clause's words from
+// reaching across into a separate, independent claim clause.
+const CLAUSE_BOUNDARY = /[.!?;]+|,\s*(?:so|but|and|because|although|while|whereas)\b/i
+
+function splitClauses(text: string): string[] {
+  return text
+    .split(CLAUSE_BOUNDARY)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+}
 
 /**
  * Extracts at most one durable fact from a user message — verbatim, not summarized. Returns []
@@ -47,8 +72,12 @@ const NON_CLAIM_MARKERS = /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(plea
  */
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
   const trimmed = userMessage.trim()
-  const isCodingFact = looksLikeCodingFact(trimmed) && !NON_CLAIM_MARKERS.test(trimmed)
-  const isHealthOrDietaryFact = HEALTH_OR_DIETARY_MARKERS.test(trimmed) && !NON_CLAIM_MARKERS.test(trimmed)
-  if (!FACT_MARKERS.test(trimmed) && !isCodingFact && !isHealthOrDietaryFact) return []
-  return [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn }]
+  const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn }]
+  // FACT_MARKERS' phrases are declarative by construction (unaffected by NON_CLAIM_MARKERS, as
+  // before this change) and matched against the whole message, not per clause.
+  if (FACT_MARKERS.test(trimmed)) return admit()
+  const isClaimClause = splitClauses(trimmed).some(
+    (clause) => (looksLikeCodingFact(clause) || HEALTH_OR_DIETARY_MARKERS.test(clause)) && !NON_CLAIM_MARKERS.test(clause),
+  )
+  return isClaimClause ? admit() : []
 }

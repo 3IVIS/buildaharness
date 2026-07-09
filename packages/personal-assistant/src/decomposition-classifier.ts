@@ -19,10 +19,24 @@ const WORD_LIMIT = 40
 // interview-prep request phrased this way (and landing at exactly 40 words, under WORD_LIMIT)
 // fell through both signals, so decomposeObjective never ran and /layers reported "one eligible
 // task" even though the model itself went on to create 4 separate reminders for it. At least 2
-// commas before a closing "and" is a cheap, deliberately loose signal — a false positive here
+// commas before a closing "and"/"or" is a cheap, deliberately loose signal — a false positive here
 // only costs one wasted decomposeObjective call (which itself falls back to a single task), the
-// same tradeoff WORD_LIMIT already makes.
-const ENUMERATED_LIST_MARKER = /(?:,[^,]*){2,}\band\b/i
+// same tradeoff WORD_LIMIT already makes. Also accepts "or" (not just "and") as the closing word —
+// "email the landlord, text my sister, or call the plumber" is just as enumerated a list.
+const ENUMERATED_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
+
+// Two more enumeration shapes found via live testing that ENUMERATED_LIST_MARKER's comma-based
+// match doesn't cover: a semicolon-separated list with no "and"/"or" at all ("research the
+// company; prepare answers; iron my suit; plan my route"), and a numbered list with no commas and
+// no SEQUENCING_MARKERS word like "step" ("1. Call the moving company 2. Buy packing boxes ...").
+// Both slipped through the same way the comma-list gap originally did.
+const SEMICOLON_LIST_MARKER = /;.*;/
+const NUMBERED_LIST_ITEM = /\b\d{1,2}[.)]\s+\S/g
+
+function hasNumberedList(text: string): boolean {
+  const matches = text.match(NUMBERED_LIST_ITEM)
+  return matches !== null && matches.length >= 2
+}
 
 /** Zero-LLM-call gate deciding whether a request is worth spending decomposeObjective's extra call on. */
 export function classifyDecompositionCandidate(message: string): DecompositionCandidateClassification {
@@ -34,6 +48,12 @@ export function classifyDecompositionCandidate(message: string): DecompositionCa
   }
   if (ENUMERATED_LIST_MARKER.test(trimmed)) {
     return { isCandidate: true, reason: 'contains a comma-separated enumeration of multiple items' }
+  }
+  if (SEMICOLON_LIST_MARKER.test(trimmed)) {
+    return { isCandidate: true, reason: 'contains a semicolon-separated enumeration of multiple items' }
+  }
+  if (hasNumberedList(trimmed)) {
+    return { isCandidate: true, reason: 'contains a numbered list of multiple items' }
   }
   if (wordCount > WORD_LIMIT) {
     return { isCandidate: true, reason: `long request (${wordCount} words) — worth checking for multiple steps` }

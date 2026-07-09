@@ -456,6 +456,7 @@ async function main(): Promise<void> {
         const isShell = result.pendingActionKind === 'shell'
         console.log(`\n[needs approval — ${isShell ? 'shell command' : 'write'}] ${result.reason}`)
         const confirmed = await askYesNo(isShell ? 'Run this command? (y/N) ' : 'Apply this write? (y/N) ')
+        lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn was a staged ${isShell ? 'shell command' : 'write'} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
         await handleTurn(message, confirmed, result.pendingActionId)
         return
@@ -468,6 +469,12 @@ async function main(): Promise<void> {
         if (confirmed) {
           await handleTurn(message, true)
         } else {
+          // Without clearing lastTrace here, /why and /layers only fall back to
+          // lastNoTraceReason when lastTrace is unset — so once any earlier turn in the
+          // session had produced a real trace, a later decline left that stale trace in
+          // place and printWhy/printLayers displayed the wrong (already-finished) turn's
+          // explanation instead of this decline's reason.
+          lastTrace = undefined
           lastNoTraceReason = 'No harness trace — the last turn was blocked on an approval gate and declined before the harness ran.'
           console.log('Cancelled.\n')
         }
@@ -475,6 +482,7 @@ async function main(): Promise<void> {
       }
 
       if (result.status === 'escalated') {
+        lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
         console.log(`\n[escalated] ${result.reason}\n`)
         return

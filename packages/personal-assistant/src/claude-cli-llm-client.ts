@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
-import { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
+import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
 
 /**
@@ -215,7 +215,12 @@ export class ClaudeCliLLMClient implements ILLMClient {
    */
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     if (!tools || tools.length === 0) {
-      return { content: await this.callChatSync(messages, options) }
+      // See stripJsonCodeFence's doc comment: this backend has no real schema-constrained
+      // output mode, so a caller expecting bare JSON in `content` (per options.structuredOutput)
+      // needs any markdown fence the model wrapped it in removed here, once, rather than in
+      // every individual JSON.parse(response.content) call site.
+      const content = await this.callChatSync(messages, options)
+      return { content: options.structuredOutput ? stripJsonCodeFence(content) : content }
     }
     if (!this.fileTools && !this.shellTools) {
       throw new Error('ClaudeCliLLMClient does not support tool calls unless constructed with fileTools or shellTools configured')

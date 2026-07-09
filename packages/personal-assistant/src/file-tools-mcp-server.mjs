@@ -271,12 +271,15 @@ export async function fetchUrlSafely(url) {
 // they already share workspaceRoot for file tools. Mirrors FileSystemAdapter's
 // on-disk `{ key, value }` entry shape exactly (packages/runtime/src/memory/filesystem.ts).
 
-// Mirrors fact-extraction.ts's FACT_MARKERS byte-for-byte — kept in sync by hand since this
-// file is a standalone script copied verbatim to dist, not bundled through the TS build.
+// Mirrors fact-extraction.ts's FACT_MARKERS and HEALTH_OR_DIETARY_MARKERS byte-for-byte — kept in
+// sync by hand since this file is a standalone script copied verbatim to dist, not bundled
+// through the TS build.
 const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
+const HEALTH_OR_DIETARY_MARKERS =
+  /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 function looksLikeDurableFact(text) {
-  return FACT_MARKERS.test(text)
+  return FACT_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
 }
 
 async function readRemindersFile(remindersFile) {

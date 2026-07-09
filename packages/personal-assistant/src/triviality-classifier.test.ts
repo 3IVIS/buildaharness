@@ -54,6 +54,14 @@ describe('classifyTriviality', () => {
     expect(result.reason).toMatch(/compound/)
   })
 
+  it('rejects a compound question joined by a bare "and" with only one trailing "?"', () => {
+    // Neither "and also" nor a second "?" appears here, but this is just as much a two-fact
+    // compound question as the double-"?" case above.
+    const result = classifyTriviality("What's the capital of France and what's the capital of Germany?", 'LOW')
+    expect(result.isTrivial).toBe(false)
+    expect(result.reason).toMatch(/compound/)
+  })
+
   it("rejects requests that don't open with a factual-question shape", () => {
     const result = classifyTriviality('Tell me something interesting about Tokyo.', 'LOW')
     expect(result.isTrivial).toBe(false)

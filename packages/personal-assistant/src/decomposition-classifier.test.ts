@@ -24,6 +24,30 @@ describe('classifyDecompositionCandidate', () => {
     )
     expect(result.isCandidate).toBe(true)
   })
+
+  it('flags a comma-separated enumeration ending in "or" instead of "and"', () => {
+    const result = classifyDecompositionCandidate('Could you email the landlord, text my sister, or call the plumber about the leak?')
+    expect(result.isCandidate).toBe(true)
+  })
+
+  it('flags a semicolon-separated enumeration', () => {
+    const result = classifyDecompositionCandidate(
+      'Before my interview tomorrow I need to research the company; prepare answers to common questions; iron my suit; plan my route to the office.',
+    )
+    expect(result.isCandidate).toBe(true)
+  })
+
+  it('flags a numbered-list enumeration with no commas and no "step" word', () => {
+    const result = classifyDecompositionCandidate(
+      'Can you help me get ready for the move? 1. Call the moving company 2. Pack the boxes 3. Schedule a cleaning service 4. Update my mailing address.',
+    )
+    expect(result.isCandidate).toBe(true)
+  })
+
+  it('does not flag a single sentence containing one semicolon or a lone "N." that looks like a decimal/abbreviation', () => {
+    expect(classifyDecompositionCandidate('The meeting is at 3; let me know if that works.').isCandidate).toBe(false)
+    expect(classifyDecompositionCandidate('Section 1. covers the basics.').isCandidate).toBe(false)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

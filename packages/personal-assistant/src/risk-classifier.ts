@@ -15,11 +15,15 @@ interface RiskPattern {
 
 // "order" alone is ambiguous between the purchase verb ("order me a pizza") and the noun
 // describing an existing/preferred item ("my coffee order is an oat milk cortado", "my usual
-// order was a cortado", "in order to finish this") — only the verb usage is a purchase request.
-// Found via live testing: a stated coffee-order preference tripped the bare \border\b match and
-// got silently auto-declined (fails-closed, no live approver) as a HIGH-risk money-spending
-// request, with the fact never making it into the transcript at all.
-const ORDER_VERB_PATTERN = /(?<!\b(?:my|his|her|their|our|your)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
+// order was a cortado", "in order to finish this", "the order arrived yesterday") — only the verb
+// usage is a purchase request. Found via live testing: a stated coffee-order preference tripped
+// the bare \border\b match and got silently auto-declined (fails-closed, no live approver) as a
+// HIGH-risk money-spending request, with the fact never making it into the transcript at all.
+// The lookbehind originally only excluded a possessive pronoun before "order" — a definite/
+// indefinite article or demonstrative ("the order arrived", "an order came in", "that order was
+// wrong") is just as clearly a noun usage and was still slipping through.
+const ORDER_VERB_PATTERN =
+  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
 
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
@@ -55,11 +59,21 @@ const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
 // send-a-message HIGH pattern and forced an approval prompt for a question with no side effects.
 const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have)\b.*\?\s*$/i
 
+// A message can report a THIRD PARTY's action/threat/plan rather than ask the assistant to do
+// anything — "my landlord said he will cancel my lease if I don't pay rent" contains "cancel" and
+// "pay", but the acting subject in both cases is someone else, relayed as reported speech, not a
+// live instruction from the user. Narrow and modeled on PAST_TENSE_QUESTION: a speech-report verb
+// (said/told me/mentioned/warned/threatened) followed reasonably closely by a third-person
+// subject (he/she/they/it) and a future/conditional auxiliary. An imperative ("cancel my
+// subscription") or first-person intent ("I will cancel it") has no third-person subject here and
+// still gates normally.
+const REPORTED_THIRD_PARTY_SPEECH = /\b(said|told me|mentioned|warned|threatened)\b.{0,30}\b(he|she|they|it)\b\s*(?:'ll|will|would|might|could)\b/i
+
 export function classifyRisk(message: string): RiskClassification {
   if (REMINDER_PATTERN.pattern.test(message)) {
     return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${REMINDER_PATTERN.reason}.` }
   }
-  if (!PAST_TENSE_QUESTION.test(message)) {
+  if (!PAST_TENSE_QUESTION.test(message) && !REPORTED_THIRD_PARTY_SPEECH.test(message)) {
     for (const { pattern, reason } of HIGH_RISK_PATTERNS) {
       if (pattern.test(message)) {
         return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }

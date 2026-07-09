@@ -11,7 +11,12 @@ const WORD_LIMIT = 15
 // the full harness whenever the request isn't unambiguously a one-shot fact.
 const HISTORY_MARKERS = /\b(earlier|before|you said|remember|again|previously|as I mentioned|still)\b/i
 const GENERATIVE_MARKERS = /\b(write|draft|give me a|create|generate|compose|plan|design|pitch|summarize|explain|compare|pros and cons|recommend|best way|should I|how do I decide)\b/i
-const COMPOUND_MARKERS = /\band also\b|\?.*\?/
+// Found via live testing: "What's the capital of France and what's the capital of Germany?" is
+// two separate factual questions joined by a bare "and" with only one trailing "?" — neither
+// the "and also" phrase nor the two-"?" shape catches it. The third branch below catches a
+// second interrogative word reappearing after "and", the same shape FACTUAL_SHAPE itself looks
+// for at the start of the message.
+const COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how many|how much|is|are|does|do|who|which)\b/i
 
 // A trivial candidate must additionally look like a single, self-contained
 // factual question — not a fixed topic list (timezone, unit conversion, ...),
