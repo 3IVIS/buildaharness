@@ -8,6 +8,8 @@ export type ChatEntry =
       content: string
       riskLevel?: RiskLevel
       trace?: AssistantTrace
+      /** Set when this turn skipped the harness entirely (a self-contained trivial question) — see AssistantTurnResult.harnessSkipped. Tells the "Why?" panel to explain the skip instead of showing a confidence readout. */
+      harnessSkipped?: boolean
       sources?: AssistantSource[]
       toolSteps?: AssistantToolStep[]
       /** Durable plan progress as of this turn — see AssistantTurnResult.planStatus. Powers the plan checklist in the "Run detail" panel (Phase 3.3 of the harness layer activation plan). */

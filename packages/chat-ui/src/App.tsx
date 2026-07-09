@@ -445,6 +445,7 @@ export function App(): React.JSX.Element {
             content: result.reply ?? '',
             riskLevel: result.riskLevel,
             trace: result.trace,
+            harnessSkipped: result.harnessSkipped,
             sources: result.sources,
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
             planStatus: result.planStatus,
@@ -546,6 +547,7 @@ export function App(): React.JSX.Element {
                   content={entry.content}
                   riskLevel={entry.riskLevel}
                   trace={entry.trace}
+                  harnessSkipped={entry.harnessSkipped}
                   sources={entry.sources}
                   toolSteps={entry.toolSteps}
                   planStatus={entry.planStatus}

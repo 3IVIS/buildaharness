@@ -25,6 +25,7 @@ interface Props {
   content: string
   riskLevel?: RiskLevel
   trace?: AssistantTrace
+  harnessSkipped?: boolean
   sources?: AssistantSource[]
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
@@ -60,7 +61,7 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, sources, toolSteps, planStatus, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -140,28 +141,38 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, sources, to
           </button>
           {showWhy && (
             <div className="bubble__why-detail">
-              <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
-              {/* Only layers that actually fired, chained in the order they fired — quiet
-                  otherwise (Phase 3.1 of the harness layer activation plan: the common,
-                  unremarkable turn stays quiet, matching the "don't badge LOW risk"
-                  convention above). The full fired/skipped picture for all 11 is one toggle
-                  down, in "Run detail". */}
-              {(() => {
-                const chain = buildWhyChain(trace.layerActivity)
-                return chain.length > 0 ? (
-                  <div className="bubble__why-chain">
-                    {chain.map((item, i) => (
-                      <span key={`${item.layer}-${i}`} className="bubble__why-chain-item">
-                        {i > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
-                        <span className="bubble__why-chain-code" title={LAYER_DISPLAY_NAME[item.layer]}>
-                          {LAYER_SHORT_CODE[item.layer]}
-                        </span>
-                        <span className="bubble__why-chain-reason"> ({item.reason})</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : null
-              })()}
+              {harnessSkipped ? (
+                <div className="bubble__why-confidence">
+                  This looked like a simple, self-contained question, so it was answered directly
+                  without activating the harness — no evidence gathering, verification, or review
+                  pass ran for this turn.
+                </div>
+              ) : (
+                <>
+                  <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
+                  {/* Only layers that actually fired, chained in the order they fired — quiet
+                      otherwise (Phase 3.1 of the harness layer activation plan: the common,
+                      unremarkable turn stays quiet, matching the "don't badge LOW risk"
+                      convention above). The full fired/skipped picture for all 11 is one toggle
+                      down, in "Run detail". */}
+                  {(() => {
+                    const chain = buildWhyChain(trace.layerActivity)
+                    return chain.length > 0 ? (
+                      <div className="bubble__why-chain">
+                        {chain.map((item, i) => (
+                          <span key={`${item.layer}-${i}`} className="bubble__why-chain-item">
+                            {i > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
+                            <span className="bubble__why-chain-code" title={LAYER_DISPLAY_NAME[item.layer]}>
+                              {LAYER_SHORT_CODE[item.layer]}
+                            </span>
+                            <span className="bubble__why-chain-reason"> ({item.reason})</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null
+                  })()}
+                </>
+              )}
             </div>
           )}
         </div>

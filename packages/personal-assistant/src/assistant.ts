@@ -612,7 +612,11 @@ export class PersonalAssistant {
       await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
       await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
       await this.recordFacts(sessionId, userMessage)
-      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, sources, usage: usageTotal }
+      // No layer fired this turn — an empty trace rather than an absent one, so the "Why?"/
+      // "Run detail" UI can still render (all 11 layer cells shown, none highlighted) instead
+      // of hiding the panel outright, which read as broken rather than "skipped on purpose".
+      const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [] }
+      return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal }
     }
 
     // A compound-looking request spends one extra LLM call decomposing itself into

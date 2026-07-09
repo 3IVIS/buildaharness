@@ -488,8 +488,14 @@ async function main(): Promise<void> {
         return
       }
 
-      lastTrace = result.trace
-      lastNoTraceReason = undefined
+      // A trivial turn's trace is present-but-empty (see assistant.ts's triviality branch) so
+      // chat-ui can still render its "Why?"/"Run detail" panels with an explanation and an
+      // all-unfired grid — the CLI has no such grid, so it keeps printing its existing plain
+      // "took the fast path" copy instead of an empty/misleading confidence readout.
+      lastTrace = result.harnessSkipped ? undefined : result.trace
+      lastNoTraceReason = result.harnessSkipped
+        ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
+        : undefined
       lastSources = result.sources
       lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
