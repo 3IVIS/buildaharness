@@ -25,6 +25,15 @@ describe('classifyRisk', () => {
     expect(result.requiresApproval).toBe(false)
   })
 
+  it('does not flag a "remind me" recall question as MEDIUM', () => {
+    expect(classifyRisk('Can you remind me what my job is and what my hobby is?').riskLevel).toBe('LOW')
+    expect(classifyRisk('And can you remind me again what the very first item was?').riskLevel).toBe('LOW')
+  })
+
+  it('still flags an actual create-reminder request even when phrased with "remind me" and a question mark', () => {
+    expect(classifyRisk('Could you remind me to call the dentist tomorrow?').riskLevel).toBe('MEDIUM')
+  })
+
   it('classifies ordinary conversation as LOW', () => {
     expect(classifyRisk('What timezone is Tokyo in?').riskLevel).toBe('LOW')
   })

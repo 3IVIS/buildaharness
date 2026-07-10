@@ -607,6 +607,18 @@ async function main(): Promise<void> {
         console.log(`\n✗ Unknown config key "${key}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
         return
       }
+      // Takes effect immediately, same as /config set — and can silently break the active
+      // session (e.g. reverting llmBackend mid-conversation, see conv81's finding), so this asks
+      // first, same as any other consequential action (shell commands, writes, HIGH-risk
+      // requests) — /config set is left as-is (a single, explicit, intentional value the user
+      // just typed, not a broad "wipe back to defaults" that's easy to trigger without meaning to
+      // reset something specific).
+      const target = key ? `"${key}"` : 'ALL settings'
+      const confirmed = await askYesNo(`\nReset ${target} to default? This takes effect immediately. (y/N) `)
+      if (!confirmed) {
+        console.log('\nCancelled — nothing was reset.\n')
+        return
+      }
       const clearPatch = key
         ? ({ [key]: undefined } as Partial<AssistantConfig>)
         : (Object.fromEntries(CONFIG_KEYS.map((k) => [k, undefined])) as Partial<AssistantConfig>)

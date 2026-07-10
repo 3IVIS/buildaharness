@@ -7,6 +7,16 @@ export interface PlanTaskRecord {
   description: string
   depends_on: string[]
   status: TaskStatus
+  /**
+   * True once the user explicitly cancelled this specific task (see matchTaskCancelAttempt/
+   * cancelPlanTask) — distinct from `status`, which gets set to 'COMPLETE' alongside this so the
+   * harness's task-graph selection and dependent-unblocking treat it as resolved the same way a
+   * genuinely finished task would be (TaskStatus, from @buildaharness/harness, has no CANCELLED
+   * value of its own — extending that union is a cross-package change out of scope here).
+   * formatPlanProgress/planCompletionPct read this flag to show/count it accurately instead of
+   * claiming the user's own work actually got done.
+   */
+  cancelled?: boolean
 }
 
 export interface PlanRecord {
@@ -106,6 +116,62 @@ export async function abandonPlan(memory: MemoryAdapter, sessionId: string, plan
   await savePlan(memory, sessionId, { ...plan, status: 'abandoned', updatedAt: new Date().toISOString() })
 }
 
+export interface TaskCancelMatch {
+  taskId: string
+  taskDescription: string
+}
+
+const TASK_CANCEL_VERBS = /\b(cancel|skip|drop|remove)\b/i
+
+// Common words that would spuriously "overlap" with almost any task description if not excluded
+// — matchTaskCancelAttempt needs a genuinely distinctive word in common with a task, not just any
+// shared word, or "cancel that" / "skip this one" would match the first task in every plan.
+const CANCEL_MATCH_STOPWORDS = new Set([
+  'this', 'that', 'these', 'those', 'with', 'from', 'into', 'over', 'about', 'their', 'there',
+  'where', 'which', 'while', 'would', 'should', 'could', 'have', 'been', 'being', 'each', 'plan',
+  'task', 'step', 'item', 'need', 'want', 'once', 'still', 'trip', 'planning', 'along',
+])
+
+/**
+ * Detects a request to cancel/skip ONE task within an active plan — distinct from
+ * isAbandonPhrase/looksLikeAbandonAttempt, which are about ending the WHOLE plan (see conv59/
+ * conv70's h9 finding: "cancel the daily-budget task" isn't asking to abandon a trip-planning
+ * plan entirely, just to drop one of its steps, and there was no feature to route that to at
+ * all). Matches a cancel-shaped verb (cancel/skip/drop/remove) together with a distinctive word
+ * (4+ letters, not a common stopword) shared with one of the plan's own not-yet-complete task
+ * descriptions/ids — deliberately conservative: a bare "cancel" with no recognizable task
+ * reference (e.g. "cancel my gym membership", unrelated to anything in this plan) returns null
+ * and falls through to the ordinary message-level risk gate, same as today. Returns the first
+ * matching task in plan order, or null.
+ */
+export function matchTaskCancelAttempt(message: string, plan: PlanRecord): TaskCancelMatch | null {
+  if (!TASK_CANCEL_VERBS.test(message)) return null
+  const lower = message.toLowerCase()
+  for (const task of plan.tasks) {
+    if (task.status === 'COMPLETE' || task.cancelled) continue
+    const words = `${task.id} ${task.description}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 4 && !CANCEL_MATCH_STOPWORDS.has(w))
+    if (words.some((w) => lower.includes(w))) {
+      return { taskId: task.id, taskDescription: task.description }
+    }
+  }
+  return null
+}
+
+/**
+ * Cancels one task within an active plan — internal bookkeeping only (see PlanTaskRecord.cancelled
+ * for why status becomes 'COMPLETE' alongside the cancelled flag). Unlike abandonPlan, the plan
+ * itself stays 'active' so the remaining tasks continue normally.
+ */
+export async function cancelPlanTask(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, taskId: string): Promise<PlanRecord> {
+  const tasks = plan.tasks.map((t): PlanTaskRecord => (t.id === taskId ? { ...t, status: 'COMPLETE', cancelled: true } : t))
+  const updated: PlanRecord = { ...plan, tasks, updatedAt: new Date().toISOString() }
+  await savePlan(memory, sessionId, updated)
+  return updated
+}
+
 /**
  * Maps the harness's resulting task statuses back onto the plan's own task list —
  * mirrors what adapter/harness/plan_store.py's task_graph_to_plan does for the
@@ -135,9 +201,15 @@ function normalizeRestingStatus(status: TaskStatus): TaskStatus {
   return status === 'RUNNING' ? 'PENDING' : status
 }
 
+/** Cancelled tasks are excluded from both sides of the ratio — they're neither remaining work nor
+ * something the user actually did, so counting them as "complete" would overstate real progress.
+ * A plan with no tasks at all is 0% (unchanged); a plan whose remaining tasks were all cancelled
+ * is 100% (nothing left to do) — two different situations, not the same "empty" case. */
 export function planCompletionPct(plan: PlanRecord): number {
   if (plan.tasks.length === 0) return 0
-  return (plan.tasks.filter((t) => t.status === 'COMPLETE').length / plan.tasks.length) * 100
+  const relevant = plan.tasks.filter((t) => !t.cancelled)
+  if (relevant.length === 0) return 100
+  return (relevant.filter((t) => t.status === 'COMPLETE').length / relevant.length) * 100
 }
 
 /**
@@ -196,7 +268,7 @@ export function formatPlanProgress(plan: PlanRecord): string {
     `Plan: ${plan.templateName} (${planCompletionPct(plan).toFixed(1)}% complete)`,
     '',
     'Task statuses:',
-    ...plan.tasks.map((t) => `  ${STATUS_ICON[t.status]} [${t.status}] ${t.id} — ${t.description}`),
+    ...plan.tasks.map((t) => `  ${t.cancelled ? '⊘' : STATUS_ICON[t.status]} [${t.cancelled ? 'CANCELLED' : t.status}] ${t.id} — ${t.description}`),
     '',
     `Success criteria: ${plan.successCriteria}`,
   ]

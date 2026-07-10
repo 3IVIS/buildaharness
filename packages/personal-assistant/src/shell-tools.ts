@@ -1,5 +1,11 @@
 import type { FsBackend, ToolDefinition } from '@buildaharness/runtime'
-import { resolveInWorkspace, assertRealPathInWorkspace, stagePendingAction, type ShellExecutionResult } from './file-tools.js'
+import {
+  resolveInWorkspace,
+  assertRealPathInWorkspace,
+  stagePendingAction,
+  findCachedShellResult,
+  type ShellExecutionResult,
+} from './file-tools.js'
 
 /**
  * Executes a previously staged, already-sandboxed command for real — see shell-executor.ts's
@@ -19,10 +25,10 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
     'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
     'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
     'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-    '`cwd` outside the workspace is rejected immediately, before anything is staged. Every call — including a ' +
-    'repeat of a command you already ran earlier in this conversation — costs the user a fresh approval prompt. ' +
-    'Before calling this, check whether the command\'s output is already visible earlier in this conversation; ' +
-    'if it is, answer the current question from that instead of calling this tool again for the same command.',
+    '`cwd` outside the workspace is rejected immediately, before anything is staged. An identical repeat of a ' +
+    'command already resolved earlier in this conversation (same command, same cwd) returns that cached result ' +
+    'immediately instead of staging a new approval — you do not need to avoid calling this for a genuine repeat; ' +
+    "it's handled automatically.",
   input_schema: {
     type: 'object',
     properties: {
@@ -57,7 +63,9 @@ export interface ShellToolsContext extends ShellStagingContext {
   executeCommand: ShellCommandExecutor
 }
 
-export type ShellToolResult = { kind: 'staged_shell'; id: string; command: string; cwd: string }
+export type ShellToolResult =
+  | { kind: 'staged_shell'; id: string; command: string; cwd: string }
+  | { kind: 'cached_shell'; command: string; cwd: string; execution: ShellExecutionResult }
 
 function requireStringArg(input: Record<string, unknown>, key: string): string {
   const value = input[key]
@@ -65,7 +73,12 @@ function requireStringArg(input: Record<string, unknown>, key: string): string {
   return value
 }
 
-/** Executes run_shell_command by name. Never spawns anything itself — only stages, exactly like write_file does for file-tools. */
+/**
+ * Executes run_shell_command by name. Never spawns anything itself — only stages, exactly like
+ * write_file does for file-tools — UNLESS an identical (command, cwd) pair was already resolved
+ * earlier this session (see file-tools.ts's shell-result-cache doc comment for why this exists),
+ * in which case it returns that cached result directly instead of staging a new approval.
+ */
 export async function executeShellTool(
   ctx: ShellStagingContext,
   toolName: string,
@@ -79,6 +92,11 @@ export async function executeShellTool(
   // Validate now — a proposal for an out-of-scope cwd fails immediately rather than getting staged.
   const resolvedCwd = resolveInWorkspace(ctx.workspaceRoot, requestedCwd)
   await assertRealPathInWorkspace(ctx.backend, ctx.workspaceRoot, resolvedCwd)
+
+  const cached = await findCachedShellResult(ctx.backend, ctx.workspaceRoot, command, resolvedCwd)
+  if (cached) {
+    return { kind: 'cached_shell', command, cwd: resolvedCwd, execution: cached.execution }
+  }
 
   const { id } = await stagePendingAction(ctx.backend, ctx.workspaceRoot, { kind: 'shell', command, cwd: resolvedCwd })
   return { kind: 'staged_shell', id, command, cwd: resolvedCwd }

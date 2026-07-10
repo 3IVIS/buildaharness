@@ -81,6 +81,7 @@ describe('applyPendingAction integration with runApprovedShellCommand', () => {
       const backend = makeFakeBackend(dir)
       const ctx: ShellStagingContext = { backend, workspaceRoot: dir }
       const staged = await executeShellTool(ctx, 'run_shell_command', { command: 'echo integration-test-output' })
+      if (staged.kind !== 'staged_shell') throw new Error('expected a fresh command to stage, not a cache hit')
 
       const applied = await applyPendingAction(backend, dir, staged.id, {
         executeShell: (command, cwd) => runApprovedShellCommand(command, cwd),

@@ -287,6 +287,43 @@ function looksLikeDurableFact(text) {
   return FACT_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
 }
 
+// ── Shell result cache — READ-ONLY mirror of file-tools.ts's shell-result-cache (see that
+// module's doc comment for the full conv4/12/21 rationale). This subprocess only ever STAGES a
+// shell command, never executes it for real, so it never WRITES a cache entry — only
+// PersonalAssistant's own resolvePendingAction does, once the user approves and the command
+// actually runs. Kept in sync by hand (same reason as FACT_MARKERS above): path/shape must match
+// file-tools.ts's loadShellCache/findCachedShellResult exactly, or the two sides silently stop
+// seeing each other's writes.
+
+const SHELL_CACHE_DIR = '.shell-cache'
+const SHELL_CACHE_FILE = 'cache.json'
+
+function shellCachePath(workspaceRoot) {
+  return `${workspaceRoot}/${SHELL_CACHE_DIR}/${SHELL_CACHE_FILE}`
+}
+
+async function loadShellCache(workspaceRoot) {
+  const raw = await readFile(shellCachePath(workspaceRoot), 'utf-8').catch((err) => {
+    if (isEnoent(err)) return undefined
+    throw err
+  })
+  if (raw === undefined) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+async function findCachedShellResult(workspaceRoot, command, cwd) {
+  const entries = await loadShellCache(workspaceRoot)
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (entries[i].command === command && entries[i].cwd === cwd) return entries[i]
+  }
+  return undefined
+}
+
 async function readRemindersFile(remindersFile) {
   const raw = await readFile(remindersFile, 'utf-8').catch((err) => {
     if (isEnoent(err)) return undefined
@@ -402,11 +439,10 @@ async function main() {
           'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
           'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
           'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-          '`cwd` outside the workspace is rejected immediately, before anything is staged. Every call — including a ' +
-          'repeat of a command you already ran earlier in this conversation — costs the user a fresh approval ' +
-          'prompt. Before calling this, check whether the command\'s output is already visible earlier in this ' +
-          'conversation; if it is, answer the current question from that instead of calling this tool again for ' +
-          'the same command.',
+          '`cwd` outside the workspace is rejected immediately, before anything is staged. An identical repeat of a ' +
+          'command already resolved earlier in this conversation (same command, same cwd) returns that cached ' +
+          'result immediately instead of staging a new approval — you do not need to avoid calling this for a ' +
+          "genuine repeat; it's handled automatically.",
         inputSchema: {
           command: z.string().describe('The shell command to run.'),
           cwd: z
@@ -419,6 +455,21 @@ async function main() {
         try {
           // Validate now — an out-of-scope cwd fails immediately, never gets staged.
           const resolvedCwd = await resolveAndVerify(workspaceRoot, cwd ?? '.')
+          const cached = await findCachedShellResult(workspaceRoot, command, resolvedCwd)
+          if (cached) {
+            const output = cached.execution.output || '(no output)'
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text:
+                    `Already ran \`${command}\` in "${resolvedCwd}" earlier in this conversation (exit code ` +
+                    `${cached.execution.exitCode ?? 'n/a'}${cached.execution.timedOut ? ', timed out' : ''}). Output:\n${output}\n\n` +
+                    'Answer the current question from this instead of re-running it — nothing new was executed.',
+                },
+              ],
+            }
+          }
           const { id } = await stagePendingAction(workspaceRoot, { kind: 'shell', command, cwd: resolvedCwd })
           return {
             content: [
@@ -596,8 +647,25 @@ async function selfTest() {
       throw new Error('reminders file is not in the FileSystemAdapter-compatible { key, value } shape')
     }
 
+    // Shell result cache: no entry yet for an untouched workspace, then a match once one is
+    // written directly to disk in the exact shape file-tools.ts's recordShellCacheEntry uses
+    // (this subprocess never writes one itself — see findCachedShellResult's doc comment).
+    const noCacheYet = await findCachedShellResult(dir, 'echo hi', dir)
+    if (noCacheYet !== undefined) throw new Error('findCachedShellResult should find nothing before any cache file exists')
+    await mkdir(`${dir}/${SHELL_CACHE_DIR}`, { recursive: true })
+    await writeFile(
+      shellCachePath(dir),
+      JSON.stringify([{ command: 'echo hi', cwd: dir, execution: { output: 'hi\n', exitCode: 0, timedOut: false }, resolvedAt: new Date().toISOString() }]),
+      'utf-8',
+    )
+    const cacheHit = await findCachedShellResult(dir, 'echo hi', dir)
+    if (!cacheHit || cacheHit.execution.output !== 'hi\n') throw new Error('findCachedShellResult failed to find a matching cache entry')
+    if ((await findCachedShellResult(dir, 'echo bye', dir)) !== undefined) {
+      throw new Error('findCachedShellResult should not match a different command')
+    }
+
     console.log(
-      `OK — sandboxing, staging, trust-tagging, SSRF guard, and reminders all behave as expected (write id: ${id}, shell id: ${shellId}, reminder id: ${created.id})`,
+      `OK — sandboxing, staging, trust-tagging, SSRF guard, reminders, and shell cache all behave as expected (write id: ${id}, shell id: ${shellId}, reminder id: ${created.id})`,
     )
   } finally {
     await rm(dir, { recursive: true, force: true })

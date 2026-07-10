@@ -28,7 +28,16 @@ import {
 } from '@buildaharness/runtime'
 import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
-import { FILE_TOOLS, executeFileTool, applyPendingAction, discardPendingAction, type FileToolsContext } from './file-tools.js'
+import {
+  FILE_TOOLS,
+  executeFileTool,
+  applyPendingAction,
+  discardPendingAction,
+  recordShellCacheEntry,
+  clearShellCache,
+  type FileToolsContext,
+  type ShellExecutionResult,
+} from './file-tools.js'
 import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
 import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
@@ -54,6 +63,8 @@ import {
   isAbandonPhrase,
   isAbandonPhraseWithLLM,
   looksLikeAbandonAttempt,
+  matchTaskCancelAttempt,
+  cancelPlanTask,
   type PlanRecord,
   type PlanPosition,
 } from './plan-store.js'
@@ -126,6 +137,17 @@ function previewContent(content: string, maxLines = 20): string {
   const lines = content.split('\n')
   if (lines.length <= maxLines) return content
   return `${lines.slice(0, maxLines).join('\n')}\n… (truncated)`
+}
+
+/** Formats a shell-cache hit (see file-tools.ts's ShellCacheEntry) as a tool result the model can
+ * answer a follow-up question from, worded so it's unambiguous that nothing new was executed. */
+function formatCachedShellResult(command: string, cwd: string, execution: ShellExecutionResult): string {
+  const output = execution.output || '(no output)'
+  return (
+    `Already ran \`${command}\` in "${cwd}" earlier in this conversation (exit code ${execution.exitCode ?? 'n/a'}` +
+    `${execution.timedOut ? ', timed out' : ''}). Output:\n${output}\n\n` +
+    'Answer the current question from this instead of re-running it — nothing new was executed.'
+  )
 }
 
 /**
@@ -456,18 +478,25 @@ export class PersonalAssistant {
   }
 
   /**
-   * Ends the current conversation: deletes the transcript, extracted facts, and any active
-   * plan for this session, plus a leftover in-flight-turn checkpoint if one exists (from an
-   * abandoned turn that never reached its normal cleanup). Deliberately leaves
-   * `experienceStore`/`reminderStore` untouched — those are durable, cross-conversation
-   * learning, not per-conversation scratch state (see the README's "Three things live
-   * outside a single harness run" section).
+   * Ends the current conversation: deletes the transcript, extracted facts, any active plan for
+   * this session, and the shell-result cache (see file-tools.ts's shell-result-cache doc comment
+   * — a fresh conversation shouldn't silently answer from a previous, unrelated conversation's
+   * shell results), plus a leftover in-flight-turn checkpoint if one exists (from an abandoned
+   * turn that never reached its normal cleanup). Deliberately leaves
+   * `experienceStore`/`reminderStore`/DURABLE_FACTS_KEY untouched — those are durable,
+   * cross-conversation learning, not per-conversation scratch state (see the README's "Three
+   * things live outside a single harness run" section).
    */
   async clearSession(sessionId: string): Promise<void> {
     await this.memory.delete(`transcript:${sessionId}`)
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
+    const backend = this.fileTools?.backend ?? this.shellTools?.backend
+    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+    if (backend && workspaceRoot) {
+      await clearShellCache(backend, workspaceRoot)
+    }
   }
 
   /**
@@ -565,6 +594,44 @@ export class PersonalAssistant {
       classification = await classifyRiskWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
     }
     this.onTrace?.({ kind: 'risk_classified', riskLevel: classification.riskLevel, requiresApproval: classification.requiresApproval })
+
+    // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
+    // internal bookkeeping — it never touches anything outside this session's own plan state,
+    // unlike a real-world "cancel my gym membership" — so it's handled here, before the generic
+    // classifyRisk gate below ever sees it, rather than blocking an action with no real-world
+    // side effect behind an unnecessary approval prompt (see conv59/conv70's h9 finding: a bare
+    // "cancel" tripped the HIGH-risk gate before any plan-aware logic got a chance to run at all,
+    // and there was no per-task-cancel feature to route it to even if the ordering were fixed).
+    const planForCancelCheck = await loadActivePlan(this.memory, sessionId)
+    if (planForCancelCheck) {
+      const cancelMatch = matchTaskCancelAttempt(userMessage, planForCancelCheck)
+      if (cancelMatch) {
+        const updatedPlan = await cancelPlanTask(this.memory, sessionId, planForCancelCheck, cancelMatch.taskId)
+        const next = nextPendingTask(updatedPlan)
+        const reply = next
+          ? `Cancelled "${cancelMatch.taskDescription}". Continuing with the rest of the plan — next up: ${next.description}`
+          : `Cancelled "${cancelMatch.taskDescription}". That was the last remaining task, so the plan is complete.`
+        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+        const completionPct = planCompletionPct(updatedPlan)
+        this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct })
+        const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [] }
+        return {
+          status: 'ok',
+          reply,
+          riskLevel: 'LOW',
+          stepsUsed: 0,
+          harnessSkipped: true,
+          trace: skippedTrace,
+          planStatus: {
+            templateName: updatedPlan.templateName,
+            successCriteria: updatedPlan.successCriteria,
+            completionPct,
+            tasks: updatedPlan.tasks.map((t) => ({ id: t.id, description: t.description, status: t.cancelled ? 'CANCELLED' : t.status })),
+          },
+        }
+      }
+    }
 
     // A reminder-shaped MEDIUM request stores a record immediately — detection,
     // not action gating, so it happens whether or not the rest of the turn is
@@ -1169,9 +1236,23 @@ export class PersonalAssistant {
       if (shellCall) {
         if (!this.shellTools) throw new Error('run_shell_command tool call received but shellTools is not configured')
         reportStep('run_shell_command', shellCall.input)
-        // Every run_shell_command call is gated, full stop — there is no "safe subset"
-        // that skips staging (see the web+shell-tools plan's Diagnosis tab).
+        // Every genuinely new run_shell_command call is gated, full stop — there is no "safe
+        // subset" that skips staging (see the web+shell-tools plan's Diagnosis tab). An identical
+        // repeat of an already-resolved (command, cwd) pair is different: executeShellTool
+        // returns 'cached_shell' for that (see file-tools.ts's shell-result-cache doc comment —
+        // conv4/12/21's repeated shell-reuse finding), so it's answered from the cached result as
+        // an ordinary tool result below instead of re-opening an approval prompt.
         const result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
+        if (result.kind === 'cached_shell') {
+          messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
+          dispatchedAnyToolCall = true
+          messages.push({
+            role: 'tool',
+            content: formatCachedShellResult(result.command, result.cwd, result.execution),
+            toolCallId: shellCall.id,
+          })
+          continue
+        }
         return {
           kind: 'needs_approval',
           reason: `Proposes running: ${result.command}\n  (cwd: ${result.cwd})`,
@@ -1294,6 +1375,19 @@ export class PersonalAssistant {
       reply = `Wrote "${applied.path}".`
       transcriptContent = reply
     } else {
+      // Record this resolution in the shell cache BEFORE anything else — this is the only place
+      // a shell command is ever actually executed, regardless of which backend proposed it (the
+      // claude-cli backend's MCP server only ever stages, never runs for real), so it's the only
+      // place that can populate the cache executeShellTool/the MCP server both check to answer an
+      // identical repeat without a fresh approval. See file-tools.ts's shell-result-cache doc
+      // comment.
+      await recordShellCacheEntry(backend, workspaceRoot, {
+        command: applied.command,
+        cwd: applied.cwd,
+        execution: applied.execution,
+        resolvedAt: new Date().toISOString(),
+      })
+
       // Command output is untrusted external content exactly the same way a fetched web
       // page is — it can carry the same injection-shaped text (e.g. a `cat`'d file or a
       // `curl`'d page) — so it gets the same detectInjectionLikelyWithLLM treatment as

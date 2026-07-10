@@ -256,3 +256,77 @@ export async function applyPendingAction(
 export async function discardPendingAction(backend: FsBackend, workspaceRoot: string, id: string): Promise<void> {
   await backend.removeFile(pendingActionPath(workspaceRoot, id))
 }
+
+// ── Shell result cache (conv4/12/21's shell-reuse finding) ──────────────────────
+//
+// Two prior batches tried fixing "a follow-up question re-runs an already-approved shell command
+// instead of answering from context" purely with SYSTEM_PROMPT/tool-description wording — both
+// held up in that batch's own live testing but failed independent reliability re-testing (the
+// re-trigger still reproduced ~1-in-3 to ~2-in-3 runs). Root cause (see conv21): the claude-cli
+// backend flattens the whole transcript to plain text per turn (a fresh, stateless `claude -p`
+// subprocess every time), discarding any tool-call/tool-result structure that would otherwise
+// signal "this claim was already tool-grounded" — so the model periodically re-invokes the tool
+// anyway. A deterministic cache removes the model's judgment from the equation entirely: an
+// identical (command, cwd) pair already resolved this session answers from the cached result
+// instead of ever staging a new approval, no matter what the model decides to do.
+//
+// File-backed (not in-memory) for the same reason reminders.json is: the claude-cli backend's
+// run_shell_command handler lives in a separate, freshly-spawned Node subprocess
+// (file-tools-mcp-server.mjs) with no access to this process's memory — see that file's mirrored
+// read-only copy of loadShellCache/findCachedShellResult, kept in sync by hand. Only
+// applyPendingAction's shell branch (below, via assistant.ts's resolvePendingAction) ever WRITES
+// an entry, since that's the only place a shell command is actually executed for real, regardless
+// of which backend proposed it — the MCP server only ever stages, never executes.
+//
+// Cleared on /new (assistant.ts's clearSession) — a fresh conversation shouldn't silently answer
+// from a previous, unrelated conversation's shell results.
+
+const SHELL_CACHE_DIR = '.shell-cache'
+const SHELL_CACHE_FILE = 'cache.json'
+
+export interface ShellCacheEntry {
+  command: string
+  cwd: string
+  execution: ShellExecutionResult
+  resolvedAt: string
+}
+
+function shellCachePath(workspaceRoot: string): string {
+  return `${workspaceRoot}/${SHELL_CACHE_DIR}/${SHELL_CACHE_FILE}`
+}
+
+export async function loadShellCache(backend: FsBackend, workspaceRoot: string): Promise<ShellCacheEntry[]> {
+  const raw = await backend.readTextFile(shellCachePath(workspaceRoot))
+  if (raw === undefined) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? (parsed as ShellCacheEntry[]) : []
+  } catch {
+    return []
+  }
+}
+
+export async function recordShellCacheEntry(backend: FsBackend, workspaceRoot: string, entry: ShellCacheEntry): Promise<void> {
+  const existing = await loadShellCache(backend, workspaceRoot)
+  await backend.mkdir(`${workspaceRoot}/${SHELL_CACHE_DIR}`)
+  await backend.writeTextFile(shellCachePath(workspaceRoot), JSON.stringify([...existing, entry]))
+}
+
+/** Most-recent match wins — a command could plausibly be re-approved deliberately later in the
+ * same session (e.g. a live status check), so the latest resolution is the right one to serve. */
+export async function findCachedShellResult(
+  backend: FsBackend,
+  workspaceRoot: string,
+  command: string,
+  cwd: string,
+): Promise<ShellCacheEntry | undefined> {
+  const entries = await loadShellCache(backend, workspaceRoot)
+  for (let i = entries.length - 1; i >= 0; i--) {
+    if (entries[i].command === command && entries[i].cwd === cwd) return entries[i]
+  }
+  return undefined
+}
+
+export async function clearShellCache(backend: FsBackend, workspaceRoot: string): Promise<void> {
+  await backend.removeFile(shellCachePath(workspaceRoot))
+}

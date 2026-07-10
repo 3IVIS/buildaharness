@@ -13,6 +13,8 @@ import {
   formatPlanProgress,
   isAbandonPhrase,
   isAbandonPhraseWithLLM,
+  matchTaskCancelAttempt,
+  cancelPlanTask,
   type PlanRecord,
 } from './plan-store.js'
 import type { Plan } from './plan-builder.js'
@@ -204,6 +206,87 @@ describe('isAbandonPhraseWithLLM', () => {
   it('returns false when the LLM call itself throws', async () => {
     const llm = new ThrowingLLMClient()
     expect(await isAbandonPhraseWithLLM('anything', llm)).toBe(false)
+  })
+})
+
+function makeTripPlan(): PlanRecord {
+  return createPlanRecord({
+    templateName: 'trip_planning',
+    successCriteria: 'The trip is booked and planned.',
+    tasks: [
+      { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [] },
+      { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'] },
+      { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'] },
+    ],
+  })
+}
+
+describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
+  it('matches a cancel-shaped request referencing a distinctive word from one task', () => {
+    const plan = makeTripPlan()
+    const match = matchTaskCancelAttempt(
+      "I don't want to cancel the trip, but can you cancel the daily-budget task for now?",
+      plan,
+    )
+    expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: 'Draft the daily-budget itinerary' })
+  })
+
+  it('returns null for a cancel-shaped request unrelated to any task in the plan', () => {
+    const plan = makeTripPlan()
+    expect(matchTaskCancelAttempt('Please cancel my gym membership.', plan)).toBeNull()
+  })
+
+  it('returns null when there is no cancel-shaped verb at all', () => {
+    const plan = makeTripPlan()
+    expect(matchTaskCancelAttempt('What is the daily budget so far?', plan)).toBeNull()
+  })
+
+  it('does not match an already-COMPLETE or already-cancelled task', () => {
+    const plan = makeTripPlan()
+    const withOneComplete = updatePlanFromRun(plan, [{ id: 'destination_research', status: 'COMPLETE' }])
+    // "Research the Kyoto destination" is COMPLETE — a cancel request referencing "destination"
+    // should find nothing, since that task is already done, not cancellable.
+    expect(matchTaskCancelAttempt('Cancel the destination step.', withOneComplete)).toBeNull()
+  })
+})
+
+describe('cancelPlanTask', () => {
+  it('marks the task cancelled and COMPLETE, keeps the plan active, and leaves other tasks untouched', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = makeTripPlan()
+    await savePlan(memory, 'session-1', plan)
+
+    const updated = await cancelPlanTask(memory, 'session-1', plan, 'itinerary_planning')
+
+    const cancelledTask = updated.tasks.find((t) => t.id === 'itinerary_planning')!
+    expect(cancelledTask.status).toBe('COMPLETE')
+    expect(cancelledTask.cancelled).toBe(true)
+    expect(updated.status).toBe('active')
+    expect(updated.tasks.find((t) => t.id === 'destination_research')!.cancelled).toBeFalsy()
+    expect(await loadActivePlan(memory, 'session-1')).toEqual(updated)
+  })
+
+  it('excludes a cancelled task from planCompletionPct instead of counting it as done', () => {
+    const plan = makeTripPlan()
+    const withOneComplete = updatePlanFromRun(plan, [{ id: 'destination_research', status: 'COMPLETE' }])
+    const cancelled: PlanRecord = {
+      ...withOneComplete,
+      tasks: withOneComplete.tasks.map((t) => (t.id === 'book_transport' ? { ...t, status: 'COMPLETE', cancelled: true } : t)),
+    }
+    // 1 genuinely complete + 1 cancelled out of 3 — completion should be measured against the
+    // 2 non-cancelled tasks (1/2 = 50%), not 2/3.
+    expect(planCompletionPct(cancelled)).toBeCloseTo(50, 1)
+  })
+
+  it('shows a cancelled task distinctly in formatPlanProgress instead of claiming it was completed', () => {
+    const plan = makeTripPlan()
+    const cancelled: PlanRecord = {
+      ...plan,
+      tasks: plan.tasks.map((t) => (t.id === 'book_transport' ? { ...t, status: 'COMPLETE', cancelled: true } : t)),
+    }
+    const text = formatPlanProgress(cancelled)
+    expect(text).toContain('CANCELLED')
+    expect(text).toContain('Book flights to Kyoto')
   })
 })
 

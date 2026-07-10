@@ -67,6 +67,16 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
 // landlord, and picking up dry cleaning" silently bulk-created 3 reminders with zero approval.
 const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set (?:a |)reminders?|create (a |an )?events?)\b/i, reason: 'creates a calendar or reminder entry' }
 
+// "remind me what my job is?" / "remind me again what the first item was?" ask the assistant to
+// RECALL something already stated in the conversation — they contain "remind me" but aren't a
+// create-reminder request at all, and REMINDER_PATTERN's bare match doesn't distinguish the two.
+// Found via live testing: no reminder is actually (mis)created and no approval gate fires
+// incorrectly, but the reply still surfaced a misleading [risk: MEDIUM] tag. A WH-word (what/who/
+// when/where/why/how) after "remind me", plus a trailing "?" (same fails-closed shape
+// PAST_TENSE_QUESTION already uses, so an oddly-phrased genuine create-reminder request still
+// gates normally by default), is the recall-question shape.
+const REMINDER_RECALL_QUESTION = /\bremind me\b.{0,20}\b(what|who|when|where|why|how)\b.*\?\s*$/i
+
 // A reminder-shaped request that ALSO looks enumerated (see looksLikeEnumeratedItems) risks the
 // model silently bulk-creating several reminders in one turn with no chance to confirm first —
 // prompt-level nudges for this exact class of behavior have not reliably held across past testing
@@ -112,7 +122,8 @@ const REPORTED_THIRD_PARTY_SPEECH =
   /\b(said|told me|mentioned|warned|threatened)\b.{0,30}\b(he|she|they|it)\b\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\b/i
 
 export function classifyRisk(message: string): RiskClassification {
-  if (REMINDER_PATTERN.pattern.test(message)) {
+  const isReminderRecallQuestion = REMINDER_RECALL_QUESTION.test(message)
+  if (REMINDER_PATTERN.pattern.test(message) && !isReminderRecallQuestion) {
     if (looksLikeEnumeratedItems(message)) {
       return { riskLevel: 'MEDIUM', requiresApproval: true, reason: `Request ${BULK_REMINDER_REASON}.` }
     }
@@ -126,6 +137,10 @@ export function classifyRisk(message: string): RiskClassification {
     }
   }
   for (const { pattern, reason } of MEDIUM_RISK_PATTERNS) {
+    // Same recall-question exemption as above — REMINDER_PATTERN is also one of these patterns,
+    // and without this guard a recall question would fall through the block above only to
+    // immediately re-match here.
+    if (pattern === REMINDER_PATTERN.pattern && isReminderRecallQuestion) continue
     if (pattern.test(message)) {
       return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${reason}.` }
     }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage } from '@buildaharness/runtime'
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
+import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
 
@@ -1052,6 +1053,68 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.status).toBe('ok')
     expect(llm.calls).toBe(1)
   })
+
+  it('an identical (command, cwd) repeat in a later turn answers from cache instead of staging a new approval (conv4/12/21)', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: 'The files here are a.txt and b.txt.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+    const sessionId = 'shell-cache-test'
+
+    const staged = await assistant.turn('List the files here', { sessionId })
+    await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
+
+    const followUp = await assistant.turn('What did that print again?', { sessionId })
+
+    expect(followUp.status).toBe('ok')
+    expect(followUp.reply).toBe('The files here are a.txt and b.txt.')
+    // The real command only ran once — the repeat was answered from the cache, never re-executed
+    // and never re-gated behind a fresh approval.
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+  })
+
+  it('a different command, or the same command in a different cwd, is not a cache hit and still gates', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la /tmp' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+    const sessionId = 'shell-cache-miss-test'
+
+    const staged = await assistant.turn('List the files here', { sessionId })
+    await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
+
+    const differentCommand = await assistant.turn('Now list /tmp', { sessionId })
+
+    expect(differentCommand.status).toBe('needs_approval')
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+  })
+
+  it('/new (clearSession) clears the shell cache — a repeat in a fresh session gates again', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+    const sessionId = 'shell-cache-clear-test'
+
+    const staged = await assistant.turn('List the files here', { sessionId })
+    await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
+
+    await assistant.clearSession(sessionId)
+    const afterNew = await assistant.turn('List the files here', { sessionId })
+
+    expect(afterNew.status).toBe('needs_approval')
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('PersonalAssistant dynamic decomposition', () => {
@@ -1251,6 +1314,44 @@ describe('PersonalAssistant structured planning', () => {
     // task-count threshold either — no plan-builder call. Call count is unchanged
     // from the first turn.
     expect(llm.calls).toBe(2)
+  })
+
+  it('cancels a single plan task on a matching cancel request without needing approval, and leaves the other pending tasks untouched (conv59/conv70 h9)', async () => {
+    // Seeded directly (not driven through the harness) so every task starts genuinely PENDING —
+    // running the harness first (like the other tests in this block) would auto-complete most of
+    // a 6-task plan in one turn, leaving nothing meaningful to demonstrate "cancel one, the rest
+    // keep going" with.
+    const memory = new InMemoryAdapter()
+    const llm = new FakeLLMClient('should not be reached — this path is fully deterministic')
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 'plan-cancel-session'
+
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [
+        { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [] },
+        { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'] },
+        { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'] },
+      ],
+    })
+    await savePlan(memory, sessionId, plan)
+
+    const result = await assistant.turn(
+      "I don't want to cancel the trip, but can you cancel the daily-budget task for now?",
+      { sessionId },
+    )
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toContain('Draft the daily-budget itinerary')
+    // Handled entirely deterministically before any classification/tool call — zero LLM calls,
+    // and critically, no needs_approval round trip despite the bare "cancel" keyword.
+    expect(llm.calls).toBe(0)
+
+    const cancelledTask = result.planStatus!.tasks.find((t) => t.id === 'itinerary_planning')!
+    expect(cancelledTask.status).toBe('CANCELLED')
+    const others = result.planStatus!.tasks.filter((t) => t.id !== 'itinerary_planning')
+    expect(others.every((t) => t.status === 'PENDING')).toBe(true)
   })
 
   it('falls back silently to the ad hoc decomposition graph when the plan-builder call returns malformed JSON', async () => {
