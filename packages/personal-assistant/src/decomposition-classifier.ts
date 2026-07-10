@@ -30,7 +30,17 @@ const ENUMERATED_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
 // company; prepare answers; iron my suit; plan my route"), and a numbered list with no commas and
 // no SEQUENCING_MARKERS word like "step" ("1. Call the moving company 2. Buy packing boxes ...").
 // Both slipped through the same way the comma-list gap originally did.
-const SEMICOLON_LIST_MARKER = /;.*;/
+//
+// 2+ semicolons (3+ items) is a strong signal on its own. A genuine 2-subtask request needs only
+// 1 semicolon ("Look up the weather...; also find me a good vegetarian restaurant...") and was
+// still falling through every signal (no sequencing word, no comma-enumeration, short enough to
+// dodge WORD_LIMIT) — but a bare single-semicolon check is too loose: it also matches an ordinary
+// compound sentence that just happens to use a semicolon grammatically ("The meeting is at 3;
+// let me know if that works.", covered by this file's own test), which is one thought, not two
+// subtasks. Requiring an explicit second-task cue word (also/additionally/plus) right after a
+// lone semicolon distinguishes the two: it catches convJ's shape without flagging every
+// semicolon-joined compound sentence.
+const SEMICOLON_LIST_MARKER = /;.*;|;\s*(?:also|additionally|plus)\b/i
 const NUMBERED_LIST_ITEM = /\b\d{1,2}[.)]\s+\S/g
 
 function hasNumberedList(text: string): boolean {

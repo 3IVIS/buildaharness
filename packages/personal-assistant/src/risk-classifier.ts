@@ -22,19 +22,23 @@ interface RiskPattern {
 // HIGH-risk money-spending request, with the fact never making it into the transcript at all.
 // The lookbehind originally only excluded a possessive pronoun before "order" — a definite/
 // indefinite article or demonstrative ("the order arrived", "an order came in", "that order was
-// wrong") is just as clearly a noun usage and was still slipping through.
+// wrong") is just as clearly a noun usage and was still slipping through. Bare quantifiers
+// (no/any/some/every/each) are the same noun-signaling shape ("every order I've placed", "there's
+// no order confirmation yet") and were still missing from the list.
 const ORDER_VERB_PATTERN =
-  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
+  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
 // the literal word "send" and misses these entirely. Both words are also common NOUNS ("check my
 // email", "reply to that text", "an email came in", "the text message says..."), so — same
 // approach as ORDER_VERB_PATTERN above — exclude the noun-signaling contexts: preceded by a
-// possessive/article/demonstrative or a receive-shaped verb (check/read/reply to/got/get/received/
-// see/saw), or followed by "message"/"address" (a noun-compound, not a direct object).
+// possessive/article/demonstrative, a bare quantifier (no/any/some/every/each — "there's no text
+// from him yet" is exactly this shape, same gap as ORDER_VERB_PATTERN), or a receive-shaped verb
+// (check/read/reply to/got/get/received/see/saw), or followed by "message"/"address" (a
+// noun-compound, not a direct object).
 const EMAIL_TEXT_VERB_PATTERN =
-  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|check|read|reply to|got|get|received|see|saw)\b(?:\s+\w+){0,2}\s)\b(?:email|text)\b(?!\s+(?:message|messages|address|addresses|is|was)\b)/i
+  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|check|read|reply to|got|get|received|see|saw)\b(?:\s+\w+){0,2}\s)\b(?:email|text)\b(?!\s+(?:message|messages|address|addresses|is|was)\b)/i
 
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
@@ -54,7 +58,14 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
 // delete the old invoices" reads as creating a reminder, not as buying/deleting on the user's
 // behalf this instant (found via live testing: this false positive blocked an everyday reminder
 // behind an unnecessary HIGH-risk approval gate).
-const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set a reminder|create (a |an )?event)\b/i, reason: 'creates a calendar or reminder entry' }
+// Plural phrasing ("set reminders for X, Y, and Z") is just as much a reminder request as the
+// singular "set a reminder" — but the fixed-phrase list originally required the singular
+// article, so a plural-phrased bulk request never matched this pattern at all and fell through
+// classifyRisk entirely as LOW, skipping both ordinary MEDIUM classification and the
+// looksLikeEnumeratedItems bulk-confirmation gate below (which only runs once this pattern
+// already matched). Found via live testing: "Set reminders for calling the bank, emailing the
+// landlord, and picking up dry cleaning" silently bulk-created 3 reminders with zero approval.
+const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set (?:a |)reminders?|create (a |an )?events?)\b/i, reason: 'creates a calendar or reminder entry' }
 
 // A reminder-shaped request that ALSO looks enumerated (see looksLikeEnumeratedItems) risks the
 // model silently bulk-creating several reminders in one turn with no chance to confirm first —
@@ -74,23 +85,31 @@ const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
   REMINDER_PATTERN,
 ]
 
-// A question about whether/how a past action already happened ("did that send?", "was it
-// deleted?") is asking about the past, not requesting the action now — only a leading
-// past-tense/completed auxiliary paired with a trailing "?" counts, so an imperative phrased as
-// a question ("Could you delete these?") still gates normally. Found via live testing: "Did
-// that actually send a real email just now?" (a follow-up question, not a request) tripped the
-// send-a-message HIGH pattern and forced an approval prompt for a question with no side effects.
-const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have)\b.*\?\s*$/i
+// A question about whether/how an action already happened or happens automatically ("did that
+// send?", "was it deleted?", "does this cancel automatically?") is asking ABOUT the action, not
+// requesting it now — only a leading auxiliary paired with a trailing "?" counts, so an
+// imperative phrased as a question ("Could you delete these?") still gates normally. Found via
+// live testing: "Did that actually send a real email just now?" (a follow-up question, not a
+// request) tripped the send-a-message HIGH pattern and forced an approval prompt for a question
+// with no side effects. The auxiliary list originally only covered past-tense/completed
+// auxiliaries (did/was/were/has/have) — "Does this subscription cancel automatically after the
+// 30-day trial?" is the same question shape in the present tense and was still missing.
+const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have|does|do)\b.*\?\s*$/i
 
 // A message can report a THIRD PARTY's action/threat/plan rather than ask the assistant to do
 // anything — "my landlord said he will cancel my lease if I don't pay rent" contains "cancel" and
 // "pay", but the acting subject in both cases is someone else, relayed as reported speech, not a
 // live instruction from the user. Narrow and modeled on PAST_TENSE_QUESTION: a speech-report verb
 // (said/told me/mentioned/warned/threatened) followed reasonably closely by a third-person
-// subject (he/she/they/it) and a future/conditional auxiliary. An imperative ("cancel my
-// subscription") or first-person intent ("I will cancel it") has no third-person subject here and
-// still gates normally.
-const REPORTED_THIRD_PARTY_SPEECH = /\b(said|told me|mentioned|warned|threatened)\b.{0,30}\b(he|she|they|it)\b\s*(?:'ll|will|would|might|could)\b/i
+// subject (he/she/they/it) and a future/conditional auxiliary OR an equivalent "plans to"/"is
+// going to"/"intends to"/"wants to" continuation — found via live testing: "My roommate warned
+// that she plans to delete our shared documents folder..." uses "plans to" instead of a bare
+// modal, and the modal-only version of this pattern didn't cover it, leaving the bare "delete"
+// keyword to still trip HIGH_RISK_PATTERNS. An imperative ("cancel my subscription") or
+// first-person intent ("I will cancel it") has no third-person subject here and still gates
+// normally.
+const REPORTED_THIRD_PARTY_SPEECH =
+  /\b(said|told me|mentioned|warned|threatened)\b.{0,30}\b(he|she|they|it)\b\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\b/i
 
 export function classifyRisk(message: string): RiskClassification {
   if (REMINDER_PATTERN.pattern.test(message)) {

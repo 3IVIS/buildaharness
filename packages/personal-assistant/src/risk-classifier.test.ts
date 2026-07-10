@@ -77,6 +77,37 @@ describe('classifyRisk', () => {
     expect(classifyRisk('what is my email address').riskLevel).toBe('LOW')
     expect(classifyRisk('I got a text from him').riskLevel).toBe('LOW')
   })
+
+  it('does not flag "text"/"order" as nouns preceded by a bare quantifier (no/any/some/every/each)', () => {
+    // h1/h2: the determiner-exclusion lookbehind originally only covered possessives/articles/
+    // demonstratives — bare quantifiers are the same noun-signaling shape.
+    expect(classifyRisk("There's no text from him yet, so I'll just wait a bit longer.").riskLevel).toBe('LOW')
+    expect(classifyRisk("Every order I've placed with them this year has been late.").riskLevel).toBe('LOW')
+    expect(classifyRisk('There is no order confirmation yet.').riskLevel).toBe('LOW')
+  })
+
+  it('does not flag a present-tense yes/no question about a HIGH-risk-keyword topic', () => {
+    // h3: PAST_TENSE_QUESTION's auxiliary list originally only covered past-tense/completed
+    // auxiliaries (did/was/were/has/have) — "does"/"do" is the same question shape, present tense.
+    const result = classifyRisk('Does this subscription cancel automatically after the 30-day trial, or do I need to do something?')
+    expect(result.riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag reported third-party speech using a "plans to"/"is going to" continuation instead of a bare modal', () => {
+    // h8: REPORTED_THIRD_PARTY_SPEECH originally required a bare modal ('ll/will/would/might/could)
+    // immediately after the third-person subject.
+    const result = classifyRisk("My roommate warned that she plans to delete our shared documents folder if we don't split the rent by Friday.")
+    expect(result.riskLevel).not.toBe('HIGH')
+  })
+
+  it('flags a plural "set reminders for X, Y, and Z" bulk request instead of falling through as LOW', () => {
+    // h6: REMINDER_PATTERN's fixed phrase list originally only matched the singular "set a
+    // reminder" — the plural phrasing never matched at all, skipping both ordinary MEDIUM
+    // classification and the bulk-reminder confirmation gate below.
+    const result = classifyRisk('Set reminders for calling the bank, emailing the landlord, and picking up dry cleaning.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(true)
+  })
 })
 
 describe('looksActionOriented', () => {

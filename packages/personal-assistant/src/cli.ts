@@ -476,6 +476,11 @@ async function main(): Promise<void> {
           // explanation instead of this decline's reason.
           lastTrace = undefined
           lastNoTraceReason = 'No harness trace — the last turn was blocked on an approval gate and declined before the harness ran.'
+          // Recorded now (not inside turn() itself) because the outcome is only known here —
+          // see recordDeclinedRequest's doc comment for why this is safe unlike an eager append
+          // inside runTurn. Without it, a later "did that actually happen?" question found no
+          // trace of the request at all and confidently denied it was ever made.
+          await assistant.recordDeclinedRequest('cli', message, result.reason ?? 'This request needed approval.')
           console.log('Cancelled.\n')
         }
         return

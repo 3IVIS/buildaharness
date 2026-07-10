@@ -24,7 +24,14 @@ export interface UserFact {
 // so a durable fact (an allergy, a preference, ...) can't end up filed as a to-do
 // item in the reminders store — see that module's doc comment for why relying on
 // the create_reminder tool description alone wasn't reliable enough on its own.
-export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
+// "note that"/"please note that" is the same fact-introducing frame as "remember that" — added
+// after live testing showed "Please note that I'm allergic to shellfish." dropped the fact
+// entirely: with only "remember that" in this list, the message fell to the clause-scoped
+// HEALTH_OR_DIETARY_MARKERS path below, where NON_CLAIM_MARKERS' "please" match rejected the
+// clause outright (the polite request frame and the fact share one clause with no separator).
+// Matching it here — unconditional on the whole message, exactly like "remember that" — sidesteps
+// that rejection instead of trying to special-case "please" in NON_CLAIM_MARKERS.
+export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement

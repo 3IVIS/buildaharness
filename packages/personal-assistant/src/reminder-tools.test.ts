@@ -37,4 +37,20 @@ describe('executeReminderTool', () => {
     expect(result).toMatch(/Reminder created/)
     expect(await store.list()).toHaveLength(1)
   })
+
+  it('still creates the reminder when sourceUserMessage combines an unrelated fact with a genuine reminder-request clause', async () => {
+    // h7: the fact-vs-todo guard used to check sourceUserMessage as a whole with no scoping — a
+    // message combining a genuine to-do with an unrelated durable fact ("I'm vegetarian, so
+    // please remind me to check the restaurant's menu before we go Friday") got its reminder
+    // refused entirely, even though the reminder's own `text` content wasn't the fact itself.
+    const store = makeStore('fact-plus-todo-combo')
+    const result = await executeReminderTool(
+      store,
+      'create_reminder',
+      { text: "Check the restaurant's menu before we go Friday" },
+      "I'm vegetarian, so please remind me to check the restaurant's menu before we go Friday.",
+    )
+    expect(result).toMatch(/Reminder created/)
+    expect(await store.list()).toHaveLength(1)
+  })
 })

@@ -93,4 +93,15 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('I work as a nurse.', 'turn:22')[0].durable).toBe(false)
     expect(extractFactsFromTurn('Remember that my flight is on Friday.', 'turn:23')[0].durable).toBe(false)
   })
+
+  it('captures a health fact wrapped inside a single polite-request clause with no separator', () => {
+    // h4: "Please note that I'm allergic to shellfish." is ONE clause containing both "please"
+    // and the fact (no sentence punctuation or comma+conjunction to split on), so the
+    // clause-scoped NON_CLAIM_MARKERS check rejected the whole thing outright — "note that" is
+    // now in FACT_MARKERS, admitted unconditionally like "remember that" already was.
+    const facts = extractFactsFromTurn("Please note that I'm allergic to shellfish.", 'turn:24')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe("Please note that I'm allergic to shellfish.")
+    expect(facts[0].durable).toBe(true)
+  })
 })

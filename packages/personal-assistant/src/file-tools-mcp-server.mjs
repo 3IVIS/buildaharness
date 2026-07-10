@@ -274,9 +274,14 @@ export async function fetchUrlSafely(url) {
 // Mirrors fact-extraction.ts's FACT_MARKERS and HEALTH_OR_DIETARY_MARKERS byte-for-byte — kept in
 // sync by hand since this file is a standalone script copied verbatim to dist, not bundled
 // through the TS build.
-const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|for future reference|call me)\b/i
+const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me)\b/i
 const HEALTH_OR_DIETARY_MARKERS =
   /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+
+// A genuine reminder-request clause of its own (remind me/set a reminder/create an event) means
+// the raw message is a to-do PLUS an unrelated fact, not just a reworded fact — see
+// looksLikeDurableFact's call site below for why this matters.
+const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?events?)\b/i
 
 function looksLikeDurableFact(text) {
   return FACT_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
@@ -471,7 +476,18 @@ async function main() {
           // `text` alone isn't reliable enough). Kept in sync by hand with
           // fact-extraction.ts's FACT_MARKERS (this file is a standalone script copied
           // verbatim to dist, not bundled, so it can't import that module directly).
-          if (looksLikeDurableFact(text) || looksLikeDurableFact(process.env.CURRENT_USER_MESSAGE ?? '')) {
+          //
+          // CURRENT_USER_MESSAGE is only treated as fact-shaped when it has NO reminder-request
+          // clause of its own — a message combining a genuine to-do with an unrelated durable
+          // fact ("I'm vegetarian, so please remind me to check the restaurant's menu before we
+          // go Friday") is a to-do PLUS a fact, not just a fact reworded into a reminder, and
+          // should create the reminder. Found via live testing: without this, the whole-message
+          // check refused the reminder outright any time the raw message mentioned an unrelated
+          // fact anywhere, even though the reminder's own `text` content wasn't the fact itself.
+          const wholeMessageIsFactOnly =
+            !REMINDER_REQUEST_MARKER.test(process.env.CURRENT_USER_MESSAGE ?? '') &&
+            looksLikeDurableFact(process.env.CURRENT_USER_MESSAGE ?? '')
+          if (looksLikeDurableFact(text) || wholeMessageIsFactOnly) {
             return {
               content: [
                 {
@@ -543,6 +559,22 @@ async function selfTest() {
     }
     if (detectInjectionLikely('The recipe needs two eggs.').flagged) {
       throw new Error('detectInjectionLikely false-positived on benign text')
+    }
+
+    // create_reminder's fact-vs-todo guard: a message combining a genuine to-do with an
+    // unrelated durable fact must not be treated as fact-only (h7 — see create_reminder's call
+    // site for the full explanation), but a pure fact statement with no reminder-request clause
+    // of its own still must be.
+    const combinedFactAndTodo = "I'm vegetarian, so please remind me to check the restaurant's menu before we go Friday."
+    if (!REMINDER_REQUEST_MARKER.test(combinedFactAndTodo)) {
+      throw new Error('REMINDER_REQUEST_MARKER should match a message combining a fact with a genuine reminder request')
+    }
+    if (looksLikeDurableFact(combinedFactAndTodo) && !REMINDER_REQUEST_MARKER.test(combinedFactAndTodo)) {
+      throw new Error('a message with its own reminder-request clause should not be treated as fact-only')
+    }
+    const pureFactStatement = "I'm vegetarian."
+    if (!looksLikeDurableFact(pureFactStatement) || REMINDER_REQUEST_MARKER.test(pureFactStatement)) {
+      throw new Error('a pure fact statement with no reminder request should still be treated as fact-only')
     }
 
     try {

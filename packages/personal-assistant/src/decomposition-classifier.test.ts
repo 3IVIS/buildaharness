@@ -48,6 +48,16 @@ describe('classifyDecompositionCandidate', () => {
     expect(classifyDecompositionCandidate('The meeting is at 3; let me know if that works.').isCandidate).toBe(false)
     expect(classifyDecompositionCandidate('Section 1. covers the basics.').isCandidate).toBe(false)
   })
+
+  it('flags a genuine 2-subtask request joined by exactly one semicolon and a second-task cue word', () => {
+    // h5: SEMICOLON_LIST_MARKER originally required 2 semicolons (3+ items) — a genuine 2-subtask
+    // request has no sequencing word, no comma-enumeration, and is short enough to dodge
+    // WORD_LIMIT, so it fell through every signal.
+    const result = classifyDecompositionCandidate(
+      'Look up what the weather will be like in Chicago this weekend; also find me a good vegetarian restaurant nearby for Saturday night.',
+    )
+    expect(result.isCandidate).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

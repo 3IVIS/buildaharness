@@ -53,8 +53,18 @@ export async function executeReminderTool(
       // reminders store under a to-do-shaped store it doesn't belong in. Checks both markers (not
       // just FACT_MARKERS) so a health/dietary statement ("I'm allergic to shellfish") gets the
       // same backstop an identity statement ("my name is...") already had.
+      //
+      // sourceUserMessage is only treated as fact-shaped when it has NO reminder-request clause
+      // of its own — a message combining a genuine to-do with an unrelated durable fact ("I'm
+      // vegetarian, so please remind me to check the restaurant's menu before we go Friday") is a
+      // to-do PLUS a fact, not just a fact reworded into a reminder, and should create the
+      // reminder. Without this, the whole-message check refused the reminder outright any time
+      // the raw message mentioned an unrelated fact anywhere, even though `text` itself wasn't the
+      // fact (same bug shape file-tools-mcp-server.mjs's create_reminder had — kept in sync here).
       const isFactShaped = (t: string): boolean => FACT_MARKERS.test(t) || HEALTH_OR_DIETARY_MARKERS.test(t)
-      if (isFactShaped(text) || (sourceUserMessage !== undefined && isFactShaped(sourceUserMessage))) {
+      const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?events?)\b/i
+      const sourceIsFactOnly = sourceUserMessage !== undefined && !REMINDER_REQUEST_MARKER.test(sourceUserMessage) && isFactShaped(sourceUserMessage)
+      if (isFactShaped(text) || sourceIsFactOnly) {
         return `Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.`
       }
       const record = await store.create(text, null)

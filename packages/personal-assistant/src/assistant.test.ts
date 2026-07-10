@@ -447,6 +447,24 @@ describe('PersonalAssistant session management', () => {
     expect(await assistant.getTranscript(sessionId)).toEqual([])
   })
 
+  it('recordDeclinedRequest appends a resolved user+assistant pair once the decline is final, so a later question about it can be answered truthfully', async () => {
+    // cli.ts calls this once askYesNo resolves to a final "no" for the message-level gate above
+    // — unlike the eager-append the previous test guards against, this is safe because both
+    // messages are appended together, only after the outcome (declined) is already known, so
+    // there's never a dangling unresolved turn. Without this, a message-level decline left zero
+    // trace at all — a later "did that unsubscribe actually happen?" question found nothing and
+    // confidently denied the request was ever made.
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const sessionId = 'declined-request-test'
+
+    await assistant.recordDeclinedRequest(sessionId, 'Please unsubscribe me from the Acme Corp newsletter.', 'Request cancels a subscription or commitment.')
+
+    expect(await assistant.getTranscript(sessionId)).toEqual([
+      { role: 'user', content: 'Please unsubscribe me from the Acme Corp newsletter.' },
+      { role: 'assistant', content: '(Declined — Request cancels a subscription or commitment. No action was taken.)' },
+    ])
+  })
+
   it('getMemorySummary reflects seeded facts, reminders, and experience-store counts', async () => {
     const llm = new FakeLLMClient('Got it.')
     const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'memory-summary-reminders' }))

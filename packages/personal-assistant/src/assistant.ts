@@ -78,7 +78,14 @@ const SYSTEM_PROMPT =
   'means an analysis, list, or recommendation YOU wrote earlier in this exact conversation (shown above), not ' +
   'a tool result. Re-read your own prior messages above to find it before doing anything else; never call a ' +
   'tool to "search for" or "look up" something you already said in this conversation, and never claim you ' +
-  'lack context for it without first checking your own earlier replies.'
+  'lack context for it without first checking your own earlier replies. ' +
+  'A section below headed "Known facts about the user" is background about the user (name, preferences, health, ' +
+  'past to-dos) carried over from other conversations — it is not the current request, and its presence does not ' +
+  'make a vague instruction any less ambiguous. Never use it to guess what an instruction with no antecedent in ' +
+  'THIS conversation ("take care of it", "handle that", "do it") refers to — if this exact conversation hasn\'t ' +
+  'already established what "it"/"that" means, ask what the user means instead of silently acting on a background ' +
+  'fact. Likewise, never volunteer a fact from that section in a reply about something unrelated unless the ' +
+  "user's own message in this conversation actually concerns it."
 
 // Used to compose an actual answer from an approved shell command's real output, instead of
 // just handing the user the raw dump — a bare `grep`/`ls` result often can't answer what was
@@ -422,6 +429,30 @@ export class PersonalAssistant {
   /** The session's conversation transcript, oldest first — same array `turn()` reads/appends to. Used by `/export`. */
   async getTranscript(sessionId: string): Promise<ChatMessage[]> {
     return ((await this.memory.get(`transcript:${sessionId}`)) as ChatMessage[] | undefined) ?? []
+  }
+
+  /**
+   * Records a message-level risk-gate decline (the `needs_approval` branch with no
+   * `pendingActionId` — see runTurn) as a resolved, paired exchange, once the caller (cli.ts)
+   * knows the final answer was "no". Unlike the eager-append this deliberately avoids inside
+   * runTurn itself (see that comment for why an unresolved outcome can't be persisted yet), this
+   * is safe: both the user message and a "declined" reply are appended together, atomically,
+   * only after the decline is already final — there is never a dangling, un-replied-to turn a
+   * later tool-enabled call could mistake for a live request.
+   *
+   * Without this, a message-level decline (unlike a tool-call-level one, which resolvePendingAction
+   * already persists) left zero trace at all: a later "did that unsubscribe actually happen?"
+   * question found nothing in the transcript and confidently denied the request was ever made,
+   * instead of correctly recalling that it was asked and declined.
+   */
+  async recordDeclinedRequest(sessionId: string, userMessage: string, reason: string): Promise<void> {
+    const transcriptKey = `transcript:${sessionId}`
+    await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+    await this.memory.set(
+      transcriptKey,
+      { role: 'assistant', content: `(Declined — ${reason} No action was taken.)` } satisfies ChatMessage,
+      'append',
+    )
   }
 
   /**
