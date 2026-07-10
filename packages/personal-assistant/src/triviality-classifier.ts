@@ -20,7 +20,11 @@ const GENERATIVE_MARKERS = /\b(write|draft|give me a|create|generate|compose|pla
 // a genuine two-question compound slipped past this and took the trivial fast path. "how" alone
 // covers "how many"/"how much" too (the \b boundary still matches "how" as a prefix of either),
 // so the two-word phrases are now redundant and dropped.
-const COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how|is|are|does|do|who|which)\b/i
+// The auxiliary list was also missing was/were/did/can/could/will/should — the same second-question
+// shape as is/are/does/do, just a different tense/modal. Found via live testing: "What's the
+// capital of France and was Berlin ever the capital of Germany?" and "...and did Einstein
+// calculate it first?" both slipped past every branch and wrongly took the fast path.
+const COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how|is|are|was|were|does|do|did|can|could|will|should|who|which)\b/i
 
 // A trivial candidate must additionally look like a single, self-contained
 // factual question — not a fixed topic list (timezone, unit conversion, ...),

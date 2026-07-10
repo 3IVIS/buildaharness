@@ -75,4 +75,15 @@ describe('classifyTriviality', () => {
     expect(result.isTrivial).toBe(false)
     expect(result.reason).toMatch(/compound/)
   })
+
+  it('rejects a compound question joined by "and was"/"and did" (auxiliaries missing from the third branch)', () => {
+    // h9: COMPOUND_MARKERS' third branch was missing was/were/did/can/could/will/should.
+    const result1 = classifyTriviality("What's the capital of France and was Berlin ever the capital of Germany?", 'LOW')
+    expect(result1.isTrivial).toBe(false)
+    expect(result1.reason).toMatch(/compound/)
+
+    const result2 = classifyTriviality("What's the speed of light and did Einstein calculate it first?", 'LOW')
+    expect(result2.isTrivial).toBe(false)
+    expect(result2.reason).toMatch(/compound/)
+  })
 })

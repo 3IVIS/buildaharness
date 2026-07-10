@@ -193,6 +193,81 @@ describe('classifyRisk', () => {
   it('recognizes a reminder recall question with the WH-word before "remind me"', () => {
     expect(classifyRisk('What did you just remind me about?').riskLevel).toBe('LOW')
   })
+
+  it('does not flag "delete"/"remove"/"wipe" used as nouns for a UI element or appliance cycle', () => {
+    // h1: the bare delete/remove/wipe/erase HIGH pattern had no noun-context exclusion at all,
+    // unlike ORDER_VERB_PATTERN and its siblings.
+    expect(classifyRisk("The Remove button on this app is grayed out and I can't figure out why.").riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('My delete key on this keyboard has been sticking lately, sometimes it double-types.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('I ran the wipe cycle on my dishwasher last night and it still left spots on the glasses.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('still flags a genuine delete/remove request', () => {
+    expect(classifyRisk('Please delete the old backup files in my downloads folder.').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Please delete my old invoices').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag "wire"/"pay" used as plain nouns', () => {
+    // h2: the bare pay/buy/transfer money/wire HIGH pattern had no noun-context exclusion either.
+    expect(classifyRisk('The wire behind my desk keeps coming loose and I keep tripping over it, any ideas?').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('My pay was two days late this month, is that normal for a brand new job?').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag "schedule" used as a plain noun', () => {
+    // h6: MEDIUM_RISK_PATTERNS' bare schedule/reserve pattern had no noun-context exclusion,
+    // unlike BOOK_VERB_PATTERN right next to it.
+    expect(classifyRisk("My schedule is completely packed this week, I don't think I have room for anything else.").riskLevel).not.toBe('MEDIUM')
+  })
+
+  it('still flags a genuine scheduling request', () => {
+    expect(classifyRisk('Can you schedule a meeting for tomorrow at 3pm').riskLevel).toBe('MEDIUM')
+  })
+
+  it('does not flag a message merely describing/mentioning an unsubscribe link', () => {
+    // h7: the bare cancel/unsubscribe HIGH pattern had no exclusion for mentioning an unsubscribe
+    // option vs. actually requesting to unsubscribe.
+    expect(
+      classifyRisk("There's supposed to be an unsubscribe link at the bottom of this newsletter but I can't find it anywhere.").riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag an infinitive-after-modal past narrative ("needed to", "decided to", "chose to")', () => {
+    // h3 (refined): FIRST_PERSON_PAST_NARRATIVE's exemption only covered "i had to"/"i already" —
+    // other modal constructions leave the HIGH-risk verb in bare form too, describing something
+    // already completed.
+    expect(classifyRisk('I needed to cancel my dentist appointment yesterday because I was sick.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('I decided to delete those old vacation photos last weekend to free up space.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('I chose to unsubscribe from that mailing list a few days ago, way too many emails.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('flags "checking"/"reading" email as still receive-shaped despite the -ing inflection', () => {
+    // h5: EMAIL_TEXT_VERB_PATTERN's receive-verb exclusion only matched exact base word forms —
+    // an -ing inflection like "checking" doesn't satisfy \bcheck\b's trailing word boundary.
+    expect(classifyRisk('I spend way too much time checking email every single morning before I even get out of bed.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag a single reminder followed by an unrelated noun-subject aside', () => {
+    // h8: ONE_COMMA_LIST_MARKER's subject-reintroduction exclusion only covered pronouns — a new
+    // noun subject after and/or ("my accountant's office") wasn't excluded either.
+    const result = classifyRisk("Remind me to call the bank, and my accountant's office is closed on Fridays anyway.")
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
+  it('does not flag an ordinary fact+single-reminder message as a bulk-reminder candidate', () => {
+    // h8 (incidental second occurrence): "I'm X, and remind me to Y" has a comma+and followed by
+    // "remind" (not a pronoun/determiner), so the naive exclusion doesn't cover it either — but
+    // there's only one "remind" in the whole message, so it isn't a bulk request.
+    const result = classifyRisk("I'm vegan, and remind me to buy oat milk on the way home tonight.")
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
+  it('still requires confirmation for a genuine bulk request phrased with "remind" repeated after and/or', () => {
+    const result = classifyRisk('Remind me to call the bank, and remind me to email the landlord about the leak.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(true)
+  })
 })
 
 describe('looksActionOriented', () => {

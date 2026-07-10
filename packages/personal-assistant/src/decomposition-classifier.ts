@@ -10,7 +10,13 @@ export interface DecompositionCandidateClassification {
 // still probably multi-step. Fails closed toward "not a candidate" — the
 // opposite conservatism of triviality-classifier.ts, since being wrong here
 // only costs a classification, not a skipped safety layer.
-const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|finally,)\b/i
+// The "first[,:]" branch above requires trailing punctuation — found via live testing: "First book
+// the flight to Denver and reserve a rental car for the same dates" uses "First" as a plain
+// sentence-initial adverb with no comma/colon after it, no "then", and no comma-enumeration, so it
+// fell through every signal and was under-reported as a single-step request. A sentence-initial
+// "First" (no comma/colon immediately after, so it doesn't double-match the branch above) followed
+// somewhere later by "and" is the same two-step shape without the punctuation.
+const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|finally,)\b|^first\b(?!\s*[,:])(?=.*\band\b)/i
 const WORD_LIMIT = 40
 
 // A comma-separated enumeration ("I need to research the company, prepare answers, pick out
@@ -35,7 +41,15 @@ const WORD_LIMIT = 40
 // instead. A false positive here (an ordinary 2-item compound imperative like "Buy milk, and lock
 // the door.") just costs one extra confirmation, the same tradeoff this file already accepts
 // elsewhere.
-const ONE_COMMA_LIST_MARKER = /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they)\b)\S/i
+// The subject-reintroduction exclusion above only covered PRONOUNS -- found via live testing:
+// "Remind me to call the bank, and my accountant's office is closed on Fridays anyway" reintroduces
+// a new NOUN subject ("my accountant's office") rather than a pronoun, so it wasn't excluded and
+// this single reminder plus an unrelated aside wrongly tripped the bulk-reminder confirmation gate.
+// A possessive/article/demonstrative/bare-quantifier right after and/or (the same
+// NOUN_CONTEXT_DETERMINERS shape risk-classifier.ts's noun-vs-verb patterns already use) is just as
+// much a new subject being introduced as a bare pronoun is.
+const ONE_COMMA_LIST_MARKER =
+  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b)\S/i
 
 const ENUMERATED_LIST_MARKER = new RegExp(`(?:,[^,]*){2,}\\b(?:and|or)\\b|${ONE_COMMA_LIST_MARKER.source}`, 'i')
 
@@ -62,6 +76,22 @@ function hasNumberedList(text: string): boolean {
   return matches !== null && matches.length >= 2
 }
 
+// An unrelated fact/aside followed by exactly one "remind me" ("I'm vegan, and remind me to buy
+// oat milk on the way home tonight") isn't a bulk-reminder list — it's one reminder request
+// continuing after a comma+and, and ONE_COMMA_LIST_MARKER's subject-reintroduction exclusion
+// doesn't cover "remind" (it can't, safely: a genuine bulk request phrased as "Remind me to call
+// the bank, and remind me to email the landlord" also has "remind" right after "and", and that one
+// MUST still gate). The distinguishing signal is that a genuine bulk request repeats "remind" for
+// each item, while a single fact+reminder combo has exactly one "remind" in the whole message —
+// found via live testing: this ordinary everyday phrasing wrongly forced an unnecessary
+// bulk-reminder confirmation.
+const FACT_THEN_SINGLE_REMINDER = /,\s*(?:and|or)\s+remind me\b/i
+
+function isFactThenSingleReminder(trimmed: string): boolean {
+  const remindMatches = trimmed.match(/\bremind\b/gi)
+  return remindMatches !== null && remindMatches.length === 1 && FACT_THEN_SINGLE_REMINDER.test(trimmed)
+}
+
 /**
  * True if `message` looks like an enumeration of multiple distinct items — the strong signals
  * above (sequencing markers, comma/semicolon/numbered lists), deliberately WITHOUT
@@ -73,6 +103,7 @@ function hasNumberedList(text: string): boolean {
  */
 export function looksLikeEnumeratedItems(message: string): boolean {
   const trimmed = message.trim()
+  if (isFactThenSingleReminder(trimmed)) return false
   return SEQUENCING_MARKERS.test(trimmed) || ENUMERATED_LIST_MARKER.test(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
 }
 

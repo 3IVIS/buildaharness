@@ -45,8 +45,13 @@ const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\
 // from him yet" is exactly this shape, same gap as ORDER_VERB_PATTERN), or a receive-shaped verb
 // (check/read/reply to/got/get/received/see/saw), or followed by "message"/"address" (a
 // noun-compound, not a direct object).
+// The receive-verb exclusion above only matched exact base word forms — a trailing \b right after
+// e.g. "check" doesn't close between "check" and an -ing suffix (still mid-word), so "checking"/
+// "reading"/"getting"/"receiving"/"seeing" weren't excluded at all. Found via live testing: "I
+// spend way too much time checking email every morning" still tripped the bare pattern as a
+// HIGH-risk send-a-message request despite being a receive-shaped verb, just inflected.
 const EMAIL_TEXT_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind('check|read|reply to|got|get|received|see|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|is|was)\\b)`,
+  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|is|was)\\b)`,
   'i',
 )
 
@@ -70,6 +75,13 @@ const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tw
 // left bare; they weren't the word the live failure hit and are far less commonly nouns here.
 const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|is|was)\\b)`, 'i')
 
+// "schedule" is just as common a plain noun ("my schedule is completely packed") as "book" is —
+// found via live testing, same false-positive shape as BOOK_VERB_PATTERN above: a determiner
+// right before "schedule" tripped the bare pattern below and mistagged MEDIUM "books or schedules
+// something" with no scheduling request present. "reserve" is left in the same pattern; it wasn't
+// the word the live failure hit.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live
 // testing: a genuinely risky send-on-my-behalf request never gated at all. Unlike email/text,
@@ -79,19 +91,40 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // the email/text pattern's noun-context lookbehind) is the narrower, more reliable signal here.
 const FORWARD_VERB_PATTERN = /\bforward(?:ed|ing)?\b\s+(?:this|that|my|the|it|these|those|him|her|them)\b/i
 
+// "delete"/"remove"/"wipe"/"erase" have the same noun-vs-verb ambiguity ORDER_VERB_PATTERN and its
+// siblings already handle ("the Remove button", "my delete key", "the wipe cycle on my
+// dishwasher") — found via live testing: a UI-element or appliance-cycle mention with a preceding
+// determiner tripped the bare pattern below and got silently auto-declined (fails-closed) as a
+// HIGH-risk irreversible-deletion request with no delete/remove intent at all.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+
+// "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
+// just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
+// shape as DELETE_VERB_PATTERN above: a determiner-preceded noun mention tripped the bare pattern
+// and got auto-declined as a HIGH-risk money-spend request with no spend request present.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+
+// "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
+// reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already
+// handles ("the message/address I'm looking for"), and a determiner right before "unsubscribe"
+// ("an unsubscribe link") is the same noun-signaling shape as DELETE_VERB_PATTERN above — found
+// via live testing: a message merely describing an unfindable unsubscribe link tripped the bare
+// pattern and got auto-declined as a HIGH-risk cancellation request with no live request at all.
+const CANCEL_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|is|was)\\b)`, 'i')
+
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
 const HIGH_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\bsend\b.{0,30}\b(email|e-mail|message|text|dm)\b/i, reason: "sends a message on the user's behalf" },
   { pattern: EMAIL_TEXT_VERB_PATTERN, reason: "sends a message on the user's behalf" },
-  { pattern: /\b(delete|remove|wipe|erase)\b/i, reason: 'deletes or removes something, possibly irreversibly' },
-  { pattern: /\b(pay|buy|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
+  { pattern: DELETE_VERB_PATTERN, reason: 'deletes or removes something, possibly irreversibly' },
+  { pattern: PAY_WIRE_PATTERN, reason: 'spends money or moves funds' },
   { pattern: ORDER_VERB_PATTERN, reason: 'spends money or moves funds' },
   { pattern: PURCHASE_VERB_PATTERN, reason: 'spends money or moves funds' },
   { pattern: /\b(publish|share publicly)\b/i, reason: 'publishes content publicly' },
   { pattern: PUBLISH_VERB_PATTERN, reason: 'publishes content publicly' },
   { pattern: FORWARD_VERB_PATTERN, reason: "sends a message on the user's behalf" },
-  { pattern: /\b(cancel|unsubscribe)\b/i, reason: 'cancels a subscription or commitment' },
+  { pattern: CANCEL_VERB_PATTERN, reason: 'cancels a subscription or commitment' },
   { pattern: /\b(sign|submit|approve)\b.{0,30}\b(contract|form|application|agreement)\b/i, reason: 'signs or submits a binding document' },
 ]
 
@@ -144,7 +177,7 @@ const BULK_REMINDER_REASON = 'creates a calendar or reminder entry and looks lik
 // Reversible or low-stakes actions that still change state in the world —
 // surfaced in diagnostics but not blocked on approval.
 const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
-  { pattern: /\b(schedule|reserve)\b/i, reason: 'books or schedules something' },
+  { pattern: SCHEDULE_VERB_PATTERN, reason: 'books or schedules something' },
   { pattern: BOOK_VERB_PATTERN, reason: 'books or schedules something' },
   REMINDER_PATTERN,
 ]
@@ -170,7 +203,13 @@ const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have|does|do|is|are)\b.*\?\s*
 // to approve. Narrow on purpose ("I had to" / "I already" — a genuine forced-or-completed-action
 // frame): an imperative ("cancel my subscription") or first-person intent ("I will cancel it",
 // "I need to cancel it") has neither shape and still gates normally.
-const FIRST_PERSON_PAST_NARRATIVE = /\bi (?:had to|already)\b/i
+// "needed to"/"decided to"/"chose to"/"wanted to" are the same completed-action frame as "had to"
+// — an infinitive-after-modal construction that leaves the HIGH-risk verb in its exact bare form
+// (unlike simple past tense "I cancelled", which evades the bare \bcancel\b keyword on its own via
+// the missing word boundary between stem and -ed suffix) — found via live testing: "I needed to
+// cancel my dentist appointment yesterday" and "I decided to delete those old vacation photos last
+// weekend" both still tripped HIGH_RISK_PATTERNS for an action already completed.
+const FIRST_PERSON_PAST_NARRATIVE = /\bi (?:had to|already|needed to|decided to|chose to|wanted to)\b/i
 
 // A message can report a THIRD PARTY's action/threat/plan rather than ask the assistant to do
 // anything — "my landlord said he will cancel my lease if I don't pay rent" contains "cancel" and

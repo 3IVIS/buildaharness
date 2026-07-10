@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { classifyDecompositionCandidate, decomposeObjective, reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
+import { classifyDecompositionCandidate, decomposeObjective, looksLikeEnumeratedItems, reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
 
 describe('classifyDecompositionCandidate', () => {
   it('flags a request with a sequencing marker', () => {
@@ -75,6 +75,38 @@ describe('classifyDecompositionCandidate', () => {
     // reintroduces its own subject right after and/or.
     expect(classifyDecompositionCandidate('I called the bank, and it was closed for the holiday.').isCandidate).toBe(false)
     expect(classifyDecompositionCandidate("It's cold outside, and I need a coat.").isCandidate).toBe(false)
+  })
+
+  it('does not flag a compound sentence whose second clause reintroduces a new NOUN subject (not a pronoun)', () => {
+    // h8: ONE_COMMA_LIST_MARKER's subject-reintroduction exclusion only covered pronouns.
+    expect(
+      classifyDecompositionCandidate("Remind me to call the bank, and my accountant's office is closed on Fridays anyway.").isCandidate,
+    ).toBe(false)
+  })
+
+  it('flags an unpunctuated sentence-initial "First X and Y" two-step request', () => {
+    // h4: SEQUENCING_MARKERS' "first[,:]" branch requires trailing punctuation — a plain
+    // sentence-initial "first" with no comma/colon and no "then" fell through every signal.
+    const result = classifyDecompositionCandidate('First book the flight to Denver and reserve a rental car for the same dates.')
+    expect(result.isCandidate).toBe(true)
+  })
+
+  it('does not flag "first" used mid-sentence or without a following "and"', () => {
+    expect(classifyDecompositionCandidate('This is my first time trying sushi.').isCandidate).toBe(false)
+  })
+})
+
+describe('looksLikeEnumeratedItems', () => {
+  it('does not flag a single reminder followed by an unrelated noun-subject aside', () => {
+    expect(looksLikeEnumeratedItems("Remind me to call the bank, and my accountant's office is closed on Fridays anyway.")).toBe(false)
+  })
+
+  it('does not flag an ordinary fact+single-reminder message', () => {
+    expect(looksLikeEnumeratedItems("I'm vegan, and remind me to buy oat milk on the way home tonight.")).toBe(false)
+  })
+
+  it('still flags a genuine bulk request phrased with "remind" repeated after and/or', () => {
+    expect(looksLikeEnumeratedItems('Remind me to call the bank, and remind me to email the landlord about the leak.')).toBe(true)
   })
 })
 

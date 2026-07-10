@@ -1226,7 +1226,7 @@ describe('PersonalAssistant structured planning', () => {
       { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'] },
       { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'] },
       { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'] },
-      { id: 'schedule', description: 'Build the redesign schedule', depends_on: ['resource_planning', 'risk_assessment'] },
+      { id: 'schedule', description: 'Schedule the redesign kickoff meeting', depends_on: ['resource_planning', 'risk_assessment'] },
       { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'] },
     ]
     return { content: JSON.stringify({ tasks }) }
@@ -1262,8 +1262,11 @@ describe('PersonalAssistant structured planning', () => {
     const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
     const assistant = new PersonalAssistant({ llmClient: llm })
 
-    // planBuilderResponse's 'schedule' step description ("Build the redesign schedule")
-    // matches classifyRisk's MEDIUM-risk `schedule` keyword — Phase 4 of the harness layer
+    // planBuilderResponse's 'schedule' step description ("Schedule the redesign kickoff meeting")
+    // matches classifyRisk's MEDIUM-risk `schedule` keyword — SCHEDULE_VERB_PATTERN's
+    // noun-context exclusion (added to fix a false positive on "my schedule is packed") only
+    // excludes "schedule" when it's preceded by a determiner, so this leading-verb phrasing still
+    // gates correctly. Phase 4 of the harness layer
     // activation plan assesses each plan step's own risk from its own description (not the
     // turn's message) and pauses right after a MEDIUM/HIGH-risk step resolves, so this plan
     // runs 5 of its 6 steps in the first turn and stops for confirmation before 'kickoff'
