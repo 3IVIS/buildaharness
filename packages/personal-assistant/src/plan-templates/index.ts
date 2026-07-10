@@ -4,6 +4,7 @@ import researchAnalysisData from './data/research_analysis.json'
 import decisionMakingData from './data/decision_making.json'
 import processImprovementData from './data/process_improvement.json'
 import contentCreationData from './data/content_creation.json'
+import tripPlanningData from './data/trip_planning.json'
 
 export interface PlanTask {
   id: string
@@ -37,6 +38,7 @@ const TEMPLATES: Record<string, PlanTemplate> = {
   decision_making: decisionMakingData as PlanTemplate,
   process_improvement: processImprovementData as PlanTemplate,
   content_creation: contentCreationData as PlanTemplate,
+  trip_planning: tripPlanningData as PlanTemplate,
 }
 
 export function loadTemplate(name: string): PlanTemplate {
@@ -49,7 +51,7 @@ export function listTemplateNames(): string[] {
   return Object.keys(TEMPLATES)
 }
 
-// Ported verbatim from agents/planner/utils.py's _TEMPLATE_KEYWORDS — same 6 keys,
+// Ported verbatim from agents/planner/utils.py's _TEMPLATE_KEYWORDS — same 7 keys,
 // same keyword lists, same insertion order (which decides ties, see scoreTemplates).
 const TEMPLATE_KEYWORDS: Record<string, string[]> = {
   problem_solving: [
@@ -75,6 +77,10 @@ const TEMPLATE_KEYWORDS: Record<string, string[]> = {
   content_creation: [
     'write', 'draft', 'article', 'report', 'blog', 'document',
     'content', 'copy', 'proposal', 'presentation', 'essay',
+  ],
+  trip_planning: [
+    'trip', 'travel', 'vacation', 'itinerary', 'flight', 'flights',
+    'hotel', 'destination', 'pack for', 'holiday',
   ],
 }
 

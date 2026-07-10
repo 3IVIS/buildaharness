@@ -338,13 +338,17 @@ describe('PersonalAssistant session management', () => {
     ])
   })
 
-  it('clearSession deletes transcript, facts, and plan state but leaves experience/reminders untouched', async () => {
-    const llm = new FakeLLMClient('Noted, Ali.')
+  it('clearSession deletes transcript, session-scoped facts, and plan state but leaves experience/reminders untouched', async () => {
+    const llm = new FakeLLMClient('Noted.')
     const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'clear-reminders' }))
     const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
     const sessionId = 'clear-test'
 
-    await assistant.turn('My name is Ali.', { sessionId })
+    // "I live in ..." is FACT_MARKERS-shaped but not one of the durable markers (name/preference/
+    // health-dietary — see fact-extraction.ts's DURABLE_NAME_OR_PREFERENCE_MARKERS/
+    // HEALTH_OR_DIETARY_MARKERS), so it's session-scoped and should be wiped by clearSession —
+    // durable facts surviving clearSession is covered by the next test instead.
+    await assistant.turn('I live in Seattle.', { sessionId })
     await assistant.turn('Remind me to call mom tomorrow.', { sessionId })
     expect(await assistant.getTranscript(sessionId)).not.toEqual([])
     const remindersBefore = await reminderStore.list()
@@ -357,6 +361,24 @@ describe('PersonalAssistant session management', () => {
     expect(summary.facts).toEqual([])
     // Reminders are durable, cross-conversation learning — clearSession must not touch them.
     expect(await reminderStore.list()).toEqual(remindersBefore)
+  })
+
+  it('clearSession leaves durable facts (name/preference/health-dietary) intact so they survive /new', async () => {
+    const llm = new FakeLLMClient('Noted, Ali.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const sessionId = 'clear-durable-test'
+
+    await assistant.turn('My name is Ali.', { sessionId })
+    expect((await assistant.getMemorySummary(sessionId)).facts).toEqual([
+      expect.objectContaining({ text: 'My name is Ali.', durable: true }),
+    ])
+
+    await assistant.clearSession(sessionId)
+
+    expect(await assistant.getTranscript(sessionId)).toEqual([])
+    expect((await assistant.getMemorySummary(sessionId)).facts).toEqual([
+      expect.objectContaining({ text: 'My name is Ali.', durable: true }),
+    ])
   })
 
   it('clearSession deletes a leftover in-flight-turn checkpoint', async () => {

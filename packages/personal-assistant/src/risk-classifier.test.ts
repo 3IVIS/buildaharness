@@ -11,6 +11,20 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Can you book a table for two tonight').riskLevel).toBe('MEDIUM')
   })
 
+  it('requires approval for a reminder-shaped request that looks enumerated (bulk creation risk)', () => {
+    const result = classifyRisk(
+      'Remind me to: research the company, prepare answers to behavioral questions, pick out what to wear, and plan my route.',
+    )
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(true)
+  })
+
+  it('does not require approval for an ordinary single-item reminder request', () => {
+    const result = classifyRisk('Remind me to call the dentist tomorrow.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
   it('classifies ordinary conversation as LOW', () => {
     expect(classifyRisk('What timezone is Tokyo in?').riskLevel).toBe('LOW')
   })
@@ -47,6 +61,21 @@ describe('classifyRisk', () => {
 
   it('still flags a first-person or imperative request even near reported-speech-shaped words', () => {
     expect(classifyRisk('Please cancel my gym membership.').riskLevel).toBe('HIGH')
+  })
+
+  it('flags "email"/"text" used as verbs, which the literal "send" pattern misses', () => {
+    expect(classifyRisk('email the landlord about the leak').riskLevel).toBe('HIGH')
+    expect(classifyRisk('text my sister that I\'ll be late').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Can you text him now?').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag "email"/"text" used as nouns', () => {
+    expect(classifyRisk('check my email').riskLevel).toBe('LOW')
+    expect(classifyRisk('reply to that text').riskLevel).toBe('LOW')
+    expect(classifyRisk('an email came in this morning').riskLevel).toBe('LOW')
+    expect(classifyRisk('the text message says he is running late').riskLevel).toBe('LOW')
+    expect(classifyRisk('what is my email address').riskLevel).toBe('LOW')
+    expect(classifyRisk('I got a text from him').riskLevel).toBe('LOW')
   })
 })
 

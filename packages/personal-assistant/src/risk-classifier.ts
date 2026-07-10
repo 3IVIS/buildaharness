@@ -1,4 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { looksLikeEnumeratedItems } from './decomposition-classifier.js'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
 
@@ -25,10 +26,21 @@ interface RiskPattern {
 const ORDER_VERB_PATTERN =
   /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
 
+// "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
+// send-a-message action as "send an email/text", but the send-message pattern above requires
+// the literal word "send" and misses these entirely. Both words are also common NOUNS ("check my
+// email", "reply to that text", "an email came in", "the text message says..."), so — same
+// approach as ORDER_VERB_PATTERN above — exclude the noun-signaling contexts: preceded by a
+// possessive/article/demonstrative or a receive-shaped verb (check/read/reply to/got/get/received/
+// see/saw), or followed by "message"/"address" (a noun-compound, not a direct object).
+const EMAIL_TEXT_VERB_PATTERN =
+  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|check|read|reply to|got|get|received|see|saw)\b(?:\s+\w+){0,2}\s)\b(?:email|text)\b(?!\s+(?:message|messages|address|addresses|is|was)\b)/i
+
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
 const HIGH_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\bsend\b.{0,30}\b(email|e-mail|message|text|dm)\b/i, reason: "sends a message on the user's behalf" },
+  { pattern: EMAIL_TEXT_VERB_PATTERN, reason: "sends a message on the user's behalf" },
   { pattern: /\b(delete|remove|wipe|erase)\b/i, reason: 'deletes or removes something, possibly irreversibly' },
   { pattern: /\b(pay|purchase|buy|checkout|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
   { pattern: ORDER_VERB_PATTERN, reason: 'spends money or moves funds' },
@@ -43,6 +55,17 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
 // behalf this instant (found via live testing: this false positive blocked an everyday reminder
 // behind an unnecessary HIGH-risk approval gate).
 const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set a reminder|create (a |an )?event)\b/i, reason: 'creates a calendar or reminder entry' }
+
+// A reminder-shaped request that ALSO looks enumerated (see looksLikeEnumeratedItems) risks the
+// model silently bulk-creating several reminders in one turn with no chance to confirm first —
+// prompt-level nudges for this exact class of behavior have not reliably held across past testing
+// (see conv12/conv21's shell-reuse wording attempts, and conv28/conv51's bulk-reminder finding),
+// so this gates deterministically instead, via the same simple message-level approval flow
+// HIGH-risk requests already use (requiresApproval, resolved by a later approved:true re-entry —
+// see assistant.ts's runTurn). A false positive here just costs one extra confirmation for a
+// single wordy reminder that happens to look enumerated — same tradeoff decomposition-classifier.ts
+// already accepts for its own enumeration signals.
+const BULK_REMINDER_REASON = 'creates a calendar or reminder entry and looks like it may create more than one in a single turn — confirm before proceeding'
 
 // Reversible or low-stakes actions that still change state in the world —
 // surfaced in diagnostics but not blocked on approval.
@@ -71,6 +94,9 @@ const REPORTED_THIRD_PARTY_SPEECH = /\b(said|told me|mentioned|warned|threatened
 
 export function classifyRisk(message: string): RiskClassification {
   if (REMINDER_PATTERN.pattern.test(message)) {
+    if (looksLikeEnumeratedItems(message)) {
+      return { riskLevel: 'MEDIUM', requiresApproval: true, reason: `Request ${BULK_REMINDER_REASON}.` }
+    }
     return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${REMINDER_PATTERN.reason}.` }
   }
   if (!PAST_TENSE_QUESTION.test(message) && !REPORTED_THIRD_PARTY_SPEECH.test(message)) {

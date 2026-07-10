@@ -8,10 +8,11 @@ const EXPECTED_TEMPLATE_NAMES = [
   'decision_making',
   'process_improvement',
   'content_creation',
+  'trip_planning',
 ]
 
 describe('loadTemplate / listTemplateNames', () => {
-  it('lists exactly the 6 mirrored templates', () => {
+  it('lists exactly the 7 mirrored templates', () => {
     expect(listTemplateNames().sort()).toEqual([...EXPECTED_TEMPLATE_NAMES].sort())
   })
 
@@ -51,6 +52,10 @@ describe('pickTemplateForTask', () => {
 
   it('matches decision_making for choose/evaluate-shaped language', () => {
     expect(pickTemplateForTask('Help me decide between these options — evaluate the trade-offs and pick one.')).toBe('decision_making')
+  })
+
+  it('matches trip_planning for trip/travel-shaped language', () => {
+    expect(pickTemplateForTask('Help me plan a trip to Japan — flights, hotel, and an itinerary.')).toBe('trip_planning')
   })
 
   it('breaks ties by insertion order (problem_solving first)', () => {

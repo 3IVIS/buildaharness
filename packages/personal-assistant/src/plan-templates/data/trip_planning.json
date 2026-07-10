@@ -1,0 +1,63 @@
+{
+  "name": "trip_planning",
+  "version": "1.0.0",
+  "success_criteria": "The destination is researched, transport and lodging are booked, an itinerary exists, and travel-document/packing logistics are confirmed ahead of departure.",
+  "tags": ["trip", "travel", "planning"],
+  "tasks": [
+    {
+      "id": "destination_research",
+      "title": "Research the destination",
+      "description": "Research weather, entry/visa requirements, must-see highlights, and local customs for the destination and travel dates.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "book_transport",
+      "title": "Book transport",
+      "description": "Book flights or other transport to and from the destination for the planned dates.",
+      "depends_on": ["destination_research"],
+      "risk_level": "HIGH",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["bookings"]
+    },
+    {
+      "id": "book_lodging",
+      "title": "Book lodging",
+      "description": "Book accommodations for each leg of the trip, matching the transport dates.",
+      "depends_on": ["destination_research"],
+      "risk_level": "HIGH",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["bookings"]
+    },
+    {
+      "id": "itinerary_planning",
+      "title": "Plan the itinerary",
+      "description": "Draft a day-by-day itinerary balancing travel time, rest, and key activities, confirmed against the transport and lodging dates.",
+      "depends_on": ["book_transport", "book_lodging"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "logistics_prep",
+      "title": "Prepare travel logistics",
+      "description": "Confirm passport/visa validity, arrange travel insurance, and build a packing list based on the itinerary and destination.",
+      "depends_on": ["itinerary_planning"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "final_check",
+      "title": "Final pre-departure check",
+      "description": "Confirm all bookings, travel documents, and packing are ready ahead of departure.",
+      "depends_on": ["logistics_prep"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-07-10" }
+}

@@ -38,6 +38,20 @@ function hasNumberedList(text: string): boolean {
   return matches !== null && matches.length >= 2
 }
 
+/**
+ * True if `message` looks like an enumeration of multiple distinct items — the strong signals
+ * above (sequencing markers, comma/semicolon/numbered lists), deliberately WITHOUT
+ * classifyDecompositionCandidate's word-count fallback: a single long reminder isn't multiple
+ * reminders just because it's wordy, so that weaker signal would false-positive here in a way it
+ * doesn't matter for the (cheap, one-extra-LLM-call) decomposition-candidate use case. Used by
+ * risk-classifier.ts to gate bulk reminder creation on confirmation instead of letting the model
+ * silently create several reminders in one turn.
+ */
+export function looksLikeEnumeratedItems(message: string): boolean {
+  const trimmed = message.trim()
+  return SEQUENCING_MARKERS.test(trimmed) || ENUMERATED_LIST_MARKER.test(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
+}
+
 /** Zero-LLM-call gate deciding whether a request is worth spending decomposeObjective's extra call on. */
 export function classifyDecompositionCandidate(message: string): DecompositionCandidateClassification {
   const trimmed = message.trim()

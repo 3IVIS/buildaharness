@@ -94,6 +94,21 @@ const SYNTHESIS_SYSTEM_PROMPT =
 // not a summary, so this stays cheap even as the fact store grows.
 const FACT_CAP = 20
 
+// Deliberately NOT suffixed with a sessionId — clearSession() only deletes `facts:${sessionId}`,
+// so a fact stored here (see recordFacts()) survives /new the same way reminderStore/
+// experienceStore already do (see clearSession's doc comment on why those stay untouched). This
+// personal-assistant is single-user/single-install, so one global durable-fact list (not
+// per-session) is the right shape — matching reminderStore/experienceStore's own precedent.
+const DURABLE_FACTS_KEY = 'facts:durable'
+
+/** Durable facts first, then session facts whose text isn't already present among them — so a
+ * fact recorded as durable (an allergy, a name) doesn't show up twice within the same session it
+ * was stated in, but does reappear on its own once /new clears the session list. */
+function mergeFacts(durableFacts: UserFact[], sessionFacts: UserFact[]): UserFact[] {
+  const durableTexts = new Set(durableFacts.map(f => f.text))
+  return [...durableFacts, ...sessionFacts.filter(f => !durableTexts.has(f.text))]
+}
+
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
 // Matches the existing maxSteps spirit for the harness loop below — a bounded
@@ -449,7 +464,9 @@ export class PersonalAssistant {
    * `ExperienceStore`. Used by `/memory`.
    */
   async getMemorySummary(sessionId: string): Promise<MemorySummary> {
-    const facts = ((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []
+    const sessionFacts = ((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []
+    const durableFacts = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const facts = mergeFacts(durableFacts, sessionFacts)
     const reminders = await this.reminderStore.list()
     const experienceData = this.experienceStore.toJSON()
     return {
@@ -499,7 +516,9 @@ export class PersonalAssistant {
     if (compacted) await this.memory.set(transcriptKey, transcript)
 
     const factsKey = `facts:${sessionId}`
-    const facts = ((await this.memory.get(factsKey)) as UserFact[] | undefined) ?? []
+    const sessionFacts = ((await this.memory.get(factsKey)) as UserFact[] | undefined) ?? []
+    const durableFacts = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const facts = mergeFacts(durableFacts, sessionFacts)
     const factsBlock = facts.length > 0
       ? `\nKnown facts about the user:\n${facts.slice(-FACT_CAP).map(f => `- ${f.text}`).join('\n')}`
       : ''
@@ -529,7 +548,10 @@ export class PersonalAssistant {
     // fallback for backends where no tool loop ever runs at all, not a second insurance
     // policy alongside one.
     const toolLoopWillRun = Boolean(this.fileTools || this.webTools || this.shellTools)
-    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && classification.reason.includes('reminder')) {
+    // requiresApproval here means this looks like a BULK reminder request (see risk-classifier.ts's
+    // looksLikeEnumeratedItems gate) — must not auto-create anything until the approval gate below
+    // actually runs, or this would silently create a reminder before the user ever sees the prompt.
+    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && !classification.requiresApproval && classification.reason.includes('reminder')) {
       await this.reminderStore.create(userMessage, null)
     }
 
@@ -963,11 +985,19 @@ export class PersonalAssistant {
     }
   }
 
-  /** Captures a durable fact from the user's message, if any, into the session's fact store. A no-op for ordinary turns. */
+  /**
+   * Captures a durable fact from the user's message, if any, into the session's fact store. A
+   * no-op for ordinary turns. Facts flagged `durable` (name, preference, health/dietary — see
+   * fact-extraction.ts) are ALSO appended to DURABLE_FACTS_KEY, a store clearSession() never
+   * touches, so they survive /new instead of vanishing with the rest of the session's facts.
+   */
   private async recordFacts(sessionId: string, userMessage: string): Promise<void> {
     const facts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
     for (const fact of facts) {
       await this.memory.set(`facts:${sessionId}`, fact, 'append')
+      if (fact.durable) {
+        await this.memory.set(DURABLE_FACTS_KEY, fact, 'append')
+      }
     }
   }
 

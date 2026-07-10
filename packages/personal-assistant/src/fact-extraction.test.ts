@@ -80,4 +80,17 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn("I'm not vegetarian anymore, I started eating meat again last month.", 'turn:15')).toHaveLength(1)
     expect(extractFactsFromTurn("I'm no longer allergic to shellfish, I got treated for it last year.", 'turn:16')).toHaveLength(1)
   })
+
+  it('flags name, preference, and health/dietary facts as durable', () => {
+    expect(extractFactsFromTurn('My name is Ali.', 'turn:17')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('Call me Ali.', 'turn:18')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('I prefer tea over coffee.', 'turn:19')[0].durable).toBe(true)
+    expect(extractFactsFromTurn("I'm allergic to shellfish.", 'turn:20')[0].durable).toBe(true)
+  })
+
+  it('does not flag a session-scoped fact (location, job, generic "remember that") as durable', () => {
+    expect(extractFactsFromTurn('I live in Seattle.', 'turn:21')[0].durable).toBe(false)
+    expect(extractFactsFromTurn('I work as a nurse.', 'turn:22')[0].durable).toBe(false)
+    expect(extractFactsFromTurn('Remember that my flight is on Friday.', 'turn:23')[0].durable).toBe(false)
+  })
 })

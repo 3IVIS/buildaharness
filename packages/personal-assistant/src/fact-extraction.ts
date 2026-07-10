@@ -4,6 +4,15 @@ export interface UserFact {
   text: string
   extractedAt: string
   sourceTurn: string
+  /**
+   * True for a fact durable/safety-relevant enough to survive /new (name, stated preference,
+   * health/dietary — see DURABLE_MARKERS below), false for a session-scoped detail (current
+   * location, current job, "remember that"-style context) that's expected to change more often
+   * and isn't the kind of thing that should silently reappear in a conversation the user
+   * explicitly started fresh. assistant.ts's recordFacts() stores durable facts in a second,
+   * never-cleared store in addition to the per-session one.
+   */
+  durable: boolean
 }
 
 // Cheap, zero-LLM-call gate — only messages that look like the user is stating
@@ -32,6 +41,18 @@ export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i
 // shared for that purpose.
 export const HEALTH_OR_DIETARY_MARKERS =
   /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+
+// The subset of FACT_MARKERS worth surviving /new: a name or a stated preference is durable and
+// safety/identity-relevant the same way a health/dietary fact is, unlike a current location or
+// current job (expected to change more often) or the generic "remember that"/"for future
+// reference" phrasing (context-dependent — could be about anything transient). Deliberately a
+// narrow subset, not all of FACT_MARKERS, so /new keeps clearing everything that isn't clearly
+// meant to persist.
+const DURABLE_NAME_OR_PREFERENCE_MARKERS = /\b(my name is|call me|i prefer)\b/i
+
+function isDurable(text: string): boolean {
+  return DURABLE_NAME_OR_PREFERENCE_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
+}
 
 // looksLikeCodingFact is a pure keyword match, so "please delete the old backup files" and
 // "what does missing.txt say?" admit just as readily as "the tests passed" — the first is a
@@ -72,7 +93,7 @@ function splitClauses(text: string): string[] {
  */
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
   const trimmed = userMessage.trim()
-  const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn }]
+  const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed) }]
   // FACT_MARKERS' phrases are declarative by construction (unaffected by NON_CLAIM_MARKERS, as
   // before this change) and matched against the whole message, not per clause.
   if (FACT_MARKERS.test(trimmed)) return admit()
