@@ -104,4 +104,24 @@ describe('extractFactsFromTurn', () => {
     expect(facts[0].text).toBe("Please note that I'm allergic to shellfish.")
     expect(facts[0].durable).toBe(true)
   })
+
+  it('captures a name statement phrased with "I go by ..." and flags it durable', () => {
+    // h9: FACT_MARKERS/DURABLE_NAME_OR_PREFERENCE_MARKERS only recognized "my name is"/"call me"
+    // — "I go by Alex" is an equally common name-statement phrasing and wasn't captured at all.
+    const facts = extractFactsFromTurn('I go by Alex, by the way.', 'turn:25')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('I go by Alex, by the way.')
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('captures a health/dietary fact joined to a request clause by "yet"', () => {
+    // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
+    // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in
+    // the list, so the request clause's "please" suppressed the allergy fact in the same clause.
+    const facts = extractFactsFromTurn(
+      "I'm allergic to shellfish, yet please still recommend some good seafood restaurants for my friends' dinner.",
+      'turn:26',
+    )
+    expect(facts).toHaveLength(1)
+  })
 })

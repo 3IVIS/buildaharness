@@ -67,4 +67,12 @@ describe('classifyTriviality', () => {
     expect(result.isTrivial).toBe(false)
     expect(result.reason).toMatch(/not a self-contained factual question/)
   })
+
+  it('rejects a compound question joined by bare "and how" (not just "and how many/how much")', () => {
+    // h7: COMPOUND_MARKERS' third branch only recognized "how many"/"how much" after "and",
+    // not bare "how" ("and how does...").
+    const result = classifyTriviality("What's the boiling point of water and how does altitude affect it?", 'LOW')
+    expect(result.isTrivial).toBe(false)
+    expect(result.reason).toMatch(/compound/)
+  })
 })

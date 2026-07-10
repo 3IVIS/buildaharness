@@ -274,7 +274,8 @@ export async function fetchUrlSafely(url) {
 // Mirrors fact-extraction.ts's FACT_MARKERS and HEALTH_OR_DIETARY_MARKERS byte-for-byte — kept in
 // sync by hand since this file is a standalone script copied verbatim to dist, not bundled
 // through the TS build.
-const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me)\b/i
+const FACT_MARKERS =
+  /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
 const HEALTH_OR_DIETARY_MARKERS =
   /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
@@ -298,6 +299,16 @@ function looksLikeDurableFact(text) {
 const SHELL_CACHE_DIR = '.shell-cache'
 const SHELL_CACHE_FILE = 'cache.json'
 
+// Mirrors file-tools.ts's NONDETERMINISTIC_COMMAND_PATTERN/isCacheableCommand byte-for-byte —
+// see that module's doc comment for the full conv-R rationale (a repeat of a clock/randomness
+// command must never be served from the cache; it would silently hand back stale output as if it
+// were fresh). Kept in sync by hand, same reason as FACT_MARKERS above.
+const NONDETERMINISTIC_COMMAND_PATTERN = /\b(date|time|now)\b|\$RANDOM\b|\/dev\/u?random\b|\buuidgen\b|\bopenssl rand\b/i
+
+function isCacheableCommand(command) {
+  return !NONDETERMINISTIC_COMMAND_PATTERN.test(command)
+}
+
 function shellCachePath(workspaceRoot) {
   return `${workspaceRoot}/${SHELL_CACHE_DIR}/${SHELL_CACHE_FILE}`
 }
@@ -317,6 +328,7 @@ async function loadShellCache(workspaceRoot) {
 }
 
 async function findCachedShellResult(workspaceRoot, command, cwd) {
+  if (!isCacheableCommand(command)) return undefined
   const entries = await loadShellCache(workspaceRoot)
   for (let i = entries.length - 1; i >= 0; i--) {
     if (entries[i].command === command && entries[i].cwd === cwd) return entries[i]

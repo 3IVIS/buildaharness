@@ -117,6 +117,82 @@ describe('classifyRisk', () => {
     expect(result.riskLevel).toBe('MEDIUM')
     expect(result.requiresApproval).toBe(true)
   })
+
+  it('does not flag "purchase"/"checkout" used as nouns', () => {
+    // h1: unlike ORDER_VERB_PATTERN, the bare pay/purchase/buy/checkout pattern had no
+    // noun-context exclusion.
+    expect(classifyRisk("My purchase from last week still hasn't shipped -- is that normal for this store?").riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('Also, the checkout process on their site was really slow when I placed it.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('flags a genuine purchase/checkout request using the words as verbs', () => {
+    expect(classifyRisk('Can you purchase this for me').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Please checkout my cart now').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag "post"/"tweet" used as nouns', () => {
+    // h2: the publish-content pattern had no noun-context exclusion either.
+    expect(
+      classifyRisk('I saw a really interesting post about home renovation on social media earlier -- do you know good sources for tile suppliers?')
+        .riskLevel,
+    ).not.toBe('HIGH')
+    expect(classifyRisk("Also, did you see that tweet about the new phone launch everyone's talking about?").riskLevel).not.toBe('HIGH')
+  })
+
+  it('flags a genuine publish request using "post"/"tweet" as verbs', () => {
+    expect(classifyRisk('Can you post this to my timeline').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Please tweet this announcement').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a first-person past narrative reporting an already-completed action', () => {
+    // h3: PAST_TENSE_QUESTION needs a trailing "?" and REPORTED_THIRD_PARTY_SPEECH needs a
+    // third-person subject — neither covers a first-person past narrative with no question mark.
+    expect(classifyRisk('Yesterday I had to cancel my dentist appointment because of the snowstorm.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('I had to delete a bunch of duplicate photos from my phone last night to free up storage.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('still flags a live cancel/delete request despite containing "had"/"already"-adjacent words', () => {
+    expect(classifyRisk('Please cancel my gym membership.').riskLevel).toBe('HIGH')
+    expect(classifyRisk('I need to cancel my subscription right now.').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a present-tense "is"/"are" yes/no question about a HIGH-risk-keyword topic', () => {
+    // h10 (sharper root cause than the original hypothesis): PAST_TENSE_QUESTION's auxiliary list
+    // had "does"/"do" but not "is"/"are", the same present-tense "to be" question shape.
+    expect(
+      classifyRisk('Is the Remove button on the settings page supposed to be grayed out, or is that a bug?').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('flags "forward" used as a send-a-message verb', () => {
+    // h8: no keyword in HIGH_RISK_PATTERNS covered "forward" at all.
+    expect(classifyRisk('Please forward this email to my accountant so she can file it.').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag "forward"/"going forward" used as a non-messaging adverb', () => {
+    expect(classifyRisk("Going forward, let's touch base every Monday.").riskLevel).not.toBe('HIGH')
+    expect(classifyRisk("I'm looking forward to the trip.").riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag "book" used as a noun', () => {
+    // convN: MEDIUM_RISK_PATTERNS' bare schedule|book|reserve pattern had no noun-context
+    // exclusion either.
+    expect(classifyRisk('Can you recommend a good book about the history of jazz?').riskLevel).not.toBe('MEDIUM')
+  })
+
+  it('still flags a genuine booking request using "book" as a verb', () => {
+    expect(classifyRisk('Can you book a table for two tonight').riskLevel).toBe('MEDIUM')
+  })
+
+  it('recognizes a statement-phrased reminder recall with no trailing "?"', () => {
+    // h6: REMINDER_RECALL_QUESTION required a trailing "?" — a recall phrased as a flat
+    // statement ending in past-tense "was" is the same recall shape without one.
+    expect(classifyRisk('Remind me again what my pharmacy reminder was.').riskLevel).toBe('LOW')
+  })
+
+  it('recognizes a reminder recall question with the WH-word before "remind me"', () => {
+    expect(classifyRisk('What did you just remind me about?').riskLevel).toBe('LOW')
+  })
 })
 
 describe('looksActionOriented', () => {

@@ -25,8 +25,16 @@ interface RiskPattern {
 // wrong") is just as clearly a noun usage and was still slipping through. Bare quantifiers
 // (no/any/some/every/each) are the same noun-signaling shape ("every order I've placed", "there's
 // no order confirmation yet") and were still missing from the list.
-const ORDER_VERB_PATTERN =
-  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b(?:\s+\w+){0,2}\s)\border\b(?!\s+(?:is|was|to)\b)/i
+// Shared noun-signaling lookbehind: a possessive/article/demonstrative/bare-quantifier right
+// before a word almost always marks that word as a noun, not a live verb request ("my coffee
+// order", "the checkout process", "a good book", "that post"). Reused below by ORDER_VERB_PATTERN
+// and its siblings (PURCHASE_VERB_PATTERN, PUBLISH_VERB_PATTERN, BOOK_VERB_PATTERN) rather than
+// duplicating the same alternation four times.
+const NOUN_CONTEXT_DETERMINERS = 'my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each'
+const nounContextLookbehind = (extra = ''): string =>
+  `(?<!\\b(?:${NOUN_CONTEXT_DETERMINERS}${extra ? '|' + extra : ''})\\b(?:\\s+\\w+){0,2}\\s)`
+
+const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to)\\b)`, 'i')
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
@@ -37,8 +45,39 @@ const ORDER_VERB_PATTERN =
 // from him yet" is exactly this shape, same gap as ORDER_VERB_PATTERN), or a receive-shaped verb
 // (check/read/reply to/got/get/received/see/saw), or followed by "message"/"address" (a
 // noun-compound, not a direct object).
-const EMAIL_TEXT_VERB_PATTERN =
-  /(?<!\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|check|read|reply to|got|get|received|see|saw)\b(?:\s+\w+){0,2}\s)\b(?:email|text)\b(?!\s+(?:message|messages|address|addresses|is|was)\b)/i
+const EMAIL_TEXT_VERB_PATTERN = new RegExp(
+  `${nounContextLookbehind('check|read|reply to|got|get|received|see|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|is|was)\\b)`,
+  'i',
+)
+
+// "purchase"/"checkout" have the exact same noun-vs-verb ambiguity "order" does ("my purchase
+// hasn't shipped", "the checkout process was slow") but had no noun-context exclusion — found via
+// live testing: a question merely mentioning a past purchase/checkout tripped the bare
+// pay/purchase/buy/checkout/... pattern below and got silently auto-declined (fails-closed) as a
+// HIGH-risk money-spending request. "pay"/"buy"/"transfer money"/"wire" are left in the bare
+// pattern below — they're overwhelmingly verbs in ordinary usage and weren't the words the live
+// failure hit.
+const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter)\\b)`, 'i')
+
+// Same noun-vs-verb ambiguity for "post"/"tweet" ("I saw an interesting post", "did you see that
+// tweet") — found via live testing alongside PURCHASE_VERB_PATTERN above, same false-positive
+// shape on the "publishes content publicly" HIGH pattern.
+const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+
+// "book" in "schedule|book|reserve" below has the same noun-vs-verb ambiguity ("a good book
+// about jazz") — found via live testing: a book recommendation request mistagged MEDIUM risk
+// ("books or schedules something") purely because of the word "book". "schedule"/"reserve" are
+// left bare; they weren't the word the live failure hit and are far less commonly nouns here.
+const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|is|was)\\b)`, 'i')
+
+// "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
+// email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live
+// testing: a genuinely risky send-on-my-behalf request never gated at all. Unlike email/text,
+// "forward" is common as a non-messaging adverb/particle ("going forward", "move forward with the
+// plan", "look forward to it") — none of those take a determiner+noun object the way "forward
+// this/that/my email" does, so requiring an object determiner right after the verb (rather than
+// the email/text pattern's noun-context lookbehind) is the narrower, more reliable signal here.
+const FORWARD_VERB_PATTERN = /\bforward(?:ed|ing)?\b\s+(?:this|that|my|the|it|these|those|him|her|them)\b/i
 
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
@@ -46,9 +85,12 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
   { pattern: /\bsend\b.{0,30}\b(email|e-mail|message|text|dm)\b/i, reason: "sends a message on the user's behalf" },
   { pattern: EMAIL_TEXT_VERB_PATTERN, reason: "sends a message on the user's behalf" },
   { pattern: /\b(delete|remove|wipe|erase)\b/i, reason: 'deletes or removes something, possibly irreversibly' },
-  { pattern: /\b(pay|purchase|buy|checkout|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
+  { pattern: /\b(pay|buy|transfer money|wire)\b/i, reason: 'spends money or moves funds' },
   { pattern: ORDER_VERB_PATTERN, reason: 'spends money or moves funds' },
-  { pattern: /\b(post|publish|tweet|share publicly)\b/i, reason: 'publishes content publicly' },
+  { pattern: PURCHASE_VERB_PATTERN, reason: 'spends money or moves funds' },
+  { pattern: /\b(publish|share publicly)\b/i, reason: 'publishes content publicly' },
+  { pattern: PUBLISH_VERB_PATTERN, reason: 'publishes content publicly' },
+  { pattern: FORWARD_VERB_PATTERN, reason: "sends a message on the user's behalf" },
   { pattern: /\b(cancel|unsubscribe)\b/i, reason: 'cancels a subscription or commitment' },
   { pattern: /\b(sign|submit|approve)\b.{0,30}\b(contract|form|application|agreement)\b/i, reason: 'signs or submits a binding document' },
 ]
@@ -75,7 +117,18 @@ const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set (?:a |)remind
 // when/where/why/how) after "remind me", plus a trailing "?" (same fails-closed shape
 // PAST_TENSE_QUESTION already uses, so an oddly-phrased genuine create-reminder request still
 // gates normally by default), is the recall-question shape.
-const REMINDER_RECALL_QUESTION = /\bremind me\b.{0,20}\b(what|who|when|where|why|how)\b.*\?\s*$/i
+//
+// Two more recall shapes found via live testing that the above branch alone doesn't cover:
+// - The WH-word can come BEFORE "remind me" instead of after ("What did you just remind me
+//   about?") — the "after" branch's distance check never looks backwards.
+// - A recall can be phrased as a flat statement, not a question ("Remind me again what my
+//   pharmacy reminder was.") — no trailing "?" at all. Relaxing the trailing-"?" requirement for
+//   every WH-word case risked misclassifying a genuine event-triggered creation request phrased
+//   the same way ("remind me when it's time to leave."), so the statement form is only recognized
+//   when it ends in a past-tense "was"/"were" — the grammatical marker of recalling something
+//   already established, which a creation request (necessarily about the future) never has.
+const REMINDER_RECALL_QUESTION =
+  /\b(what|who|when|where|why|how)\b.{0,20}\bremind(?:ed)? me\b.*\?\s*$|\bremind me\b.{0,20}\b(what|who|when|where|why|how)\b.*(?:\?\s*$|\b(?:was|were)\b\s*\.?\s*$)/i
 
 // A reminder-shaped request that ALSO looks enumerated (see looksLikeEnumeratedItems) risks the
 // model silently bulk-creating several reminders in one turn with no chance to confirm first —
@@ -91,7 +144,8 @@ const BULK_REMINDER_REASON = 'creates a calendar or reminder entry and looks lik
 // Reversible or low-stakes actions that still change state in the world —
 // surfaced in diagnostics but not blocked on approval.
 const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
-  { pattern: /\b(schedule|book|reserve)\b/i, reason: 'books or schedules something' },
+  { pattern: /\b(schedule|reserve)\b/i, reason: 'books or schedules something' },
+  { pattern: BOOK_VERB_PATTERN, reason: 'books or schedules something' },
   REMINDER_PATTERN,
 ]
 
@@ -103,8 +157,20 @@ const MEDIUM_RISK_PATTERNS: RiskPattern[] = [
 // request) tripped the send-a-message HIGH pattern and forced an approval prompt for a question
 // with no side effects. The auxiliary list originally only covered past-tense/completed
 // auxiliaries (did/was/were/has/have) — "Does this subscription cancel automatically after the
-// 30-day trial?" is the same question shape in the present tense and was still missing.
-const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have|does|do)\b.*\?\s*$/i
+// 30-day trial?" is the same question shape in the present tense and was still missing. "is"/
+// "are" are the same present-tense "to be" auxiliary as "does"/"do" ("Is the Remove button
+// supposed to be grayed out, or is that a bug?") and were still missing too.
+const PAST_TENSE_QUESTION = /^\s*(did|was|were|has|have|does|do|is|are)\b.*\?\s*$/i
+
+// A first-person past narrative ("Yesterday I had to cancel my dentist appointment because of
+// the snowstorm.") reports an action the user themselves already completed — neither
+// PAST_TENSE_QUESTION's shape (needs a trailing "?") nor REPORTED_THIRD_PARTY_SPEECH's shape
+// (needs a third-person subject) covers it, so bare "cancel"/"delete" still tripped
+// HIGH_RISK_PATTERNS and forced an approval prompt for something already done, with nothing left
+// to approve. Narrow on purpose ("I had to" / "I already" — a genuine forced-or-completed-action
+// frame): an imperative ("cancel my subscription") or first-person intent ("I will cancel it",
+// "I need to cancel it") has neither shape and still gates normally.
+const FIRST_PERSON_PAST_NARRATIVE = /\bi (?:had to|already)\b/i
 
 // A message can report a THIRD PARTY's action/threat/plan rather than ask the assistant to do
 // anything — "my landlord said he will cancel my lease if I don't pay rent" contains "cancel" and
@@ -129,7 +195,7 @@ export function classifyRisk(message: string): RiskClassification {
     }
     return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${REMINDER_PATTERN.reason}.` }
   }
-  if (!PAST_TENSE_QUESTION.test(message) && !REPORTED_THIRD_PARTY_SPEECH.test(message)) {
+  if (!PAST_TENSE_QUESTION.test(message) && !REPORTED_THIRD_PARTY_SPEECH.test(message) && !FIRST_PERSON_PAST_NARRATIVE.test(message)) {
     for (const { pattern, reason } of HIGH_RISK_PATTERNS) {
       if (pattern.test(message)) {
         return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }

@@ -139,6 +139,23 @@ describe('executeShellTool — shell result cache (conv4/12/21 shell-reuse findi
     const result = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
     expect(result.kind).toBe('staged_shell')
   })
+
+  it('never serves a cached result for a clock/randomness command, even with an identical (command, cwd) repeat', async () => {
+    // conv-R: `date +%s%N` run twice in a row returned the FIRST run's stale timestamp both
+    // times — the cache's "identical command, cwd -> identical result" assumption is false by
+    // construction for a command whose entire purpose is to vary each invocation.
+    const backend = makeFakeBackend(ROOT)
+    const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
+    await recordShellCacheEntry(backend, ROOT, {
+      command: 'date +%s%N',
+      cwd: ROOT,
+      execution: { output: '1111111111\n', exitCode: 0, timedOut: false },
+      resolvedAt: new Date().toISOString(),
+    })
+
+    const result = await executeShellTool(ctx, 'run_shell_command', { command: 'date +%s%N' })
+    expect(result.kind).toBe('staged_shell')
+  })
 })
 
 describe('discardPendingAction (kind: shell)', () => {

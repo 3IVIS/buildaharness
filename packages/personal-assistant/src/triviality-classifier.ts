@@ -15,8 +15,12 @@ const GENERATIVE_MARKERS = /\b(write|draft|give me a|create|generate|compose|pla
 // two separate factual questions joined by a bare "and" with only one trailing "?" — neither
 // the "and also" phrase nor the two-"?" shape catches it. The third branch below catches a
 // second interrogative word reappearing after "and", the same shape FACTUAL_SHAPE itself looks
-// for at the start of the message.
-const COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how many|how much|is|are|does|do|who|which)\b/i
+// for at the start of the message. Bare "how" ("...and how does altitude affect it?") wasn't in
+// that word list — only the two-word phrases "how many"/"how much" were — found via live testing:
+// a genuine two-question compound slipped past this and took the trivial fast path. "how" alone
+// covers "how many"/"how much" too (the \b boundary still matches "how" as a prefix of either),
+// so the two-word phrases are now redundant and dropped.
+const COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how|is|are|does|do|who|which)\b/i
 
 // A trivial candidate must additionally look like a single, self-contained
 // factual question — not a fixed topic list (timezone, unit conversion, ...),

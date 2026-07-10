@@ -58,6 +58,24 @@ describe('classifyDecompositionCandidate', () => {
     )
     expect(result.isCandidate).toBe(true)
   })
+
+  it('flags a 3-item comma-separated list with no Oxford comma (only 1 comma before and/or)', () => {
+    // h4: ENUMERATED_LIST_MARKER required 2+ commas before the closing and/or — a natural list
+    // without the Oxford comma has only 1.
+    expect(classifyDecompositionCandidate('Set reminders for calling the bank, emailing the landlord and picking up dry cleaning.').isCandidate).toBe(
+      true,
+    )
+    expect(
+      classifyDecompositionCandidate('Research the company, prepare interview answers and pick out what to wear for tomorrow.').isCandidate,
+    ).toBe(true)
+  })
+
+  it('does not flag an ordinary two-clause compound sentence with a single comma+and', () => {
+    // The new 1-comma signal must not fire on a compound sentence whose second clause
+    // reintroduces its own subject right after and/or.
+    expect(classifyDecompositionCandidate('I called the bank, and it was closed for the holiday.').isCandidate).toBe(false)
+    expect(classifyDecompositionCandidate("It's cold outside, and I need a coat.").isCandidate).toBe(false)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

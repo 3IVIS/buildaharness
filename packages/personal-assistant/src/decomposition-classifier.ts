@@ -23,7 +23,21 @@ const WORD_LIMIT = 40
 // only costs one wasted decomposeObjective call (which itself falls back to a single task), the
 // same tradeoff WORD_LIMIT already makes. Also accepts "or" (not just "and") as the closing word —
 // "email the landlord, text my sister, or call the plumber" is just as enumerated a list.
-const ENUMERATED_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
+// A 3-item list WITHOUT the Oxford comma ("call the bank, email the landlord and pick up dry
+// cleaning") has only 1 comma before the closing and/or, so the 2-comma alternative above doesn't
+// catch it. Found via live testing: this exact phrasing silently bulk-created 3 reminders with
+// zero confirmation (risk-classifier.ts's bulk-reminder gate depends on this same function), and
+// separately under-reported an ordinary 3-subtask request as "one eligible task" in /layers. A
+// single comma followed by and/or is ambiguous between this shape and an ordinary compound
+// sentence ("I called the bank, and it was closed.") — the distinguishing signal used here is
+// that a compound sentence's second clause almost always reintroduces its own subject right after
+// and/or (I/we/you/he/she/it/they), while a list item continues straight into a verb/noun phrase
+// instead. A false positive here (an ordinary 2-item compound imperative like "Buy milk, and lock
+// the door.") just costs one extra confirmation, the same tradeoff this file already accepts
+// elsewhere.
+const ONE_COMMA_LIST_MARKER = /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they)\b)\S/i
+
+const ENUMERATED_LIST_MARKER = new RegExp(`(?:,[^,]*){2,}\\b(?:and|or)\\b|${ONE_COMMA_LIST_MARKER.source}`, 'i')
 
 // Two more enumeration shapes found via live testing that ENUMERATED_LIST_MARKER's comma-based
 // match doesn't cover: a semicolon-separated list with no "and"/"or" at all ("research the

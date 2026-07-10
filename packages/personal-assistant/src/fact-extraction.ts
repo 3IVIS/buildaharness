@@ -31,7 +31,12 @@ export interface UserFact {
 // clause outright (the polite request frame and the fact share one clause with no separator).
 // Matching it here — unconditional on the whole message, exactly like "remember that" — sidesteps
 // that rejection instead of trying to special-case "please" in NON_CLAIM_MARKERS.
-export const FACT_MARKERS = /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me)\b/i
+// "I go by Alex" / "everyone calls me Ali" are as common a name-statement phrasing as "my name
+// is"/"call me" but weren't recognized by either FACT_MARKERS or DURABLE_NAME_OR_PREFERENCE_MARKERS
+// below — found via live testing: the name was never captured as a fact at all, so it was gone
+// after /new (and unavailable even within the same session).
+export const FACT_MARKERS =
+  /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement
@@ -55,7 +60,7 @@ export const HEALTH_OR_DIETARY_MARKERS =
 // reference" phrasing (context-dependent — could be about anything transient). Deliberately a
 // narrow subset, not all of FACT_MARKERS, so /new keeps clearing everything that isn't clearly
 // meant to persist.
-const DURABLE_NAME_OR_PREFERENCE_MARKERS = /\b(my name is|call me|i prefer)\b/i
+const DURABLE_NAME_OR_PREFERENCE_MARKERS = /\b(my name is|call me|i prefer|i go by)\b/i
 
 function isDurable(text: string): boolean {
   return DURABLE_NAME_OR_PREFERENCE_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
@@ -76,8 +81,12 @@ const NON_CLAIM_MARKERS = /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(plea
 // content" lost the diabetic fact entirely, because "please" appears later in the sentence).
 // Splitting on clause boundaries (sentence punctuation, or a comma before a coordinating
 // conjunction) and checking NON_CLAIM_MARKERS per clause keeps the request clause's words from
-// reaching across into a separate, independent claim clause.
-const CLAUSE_BOUNDARY = /[.!?;]+|,\s*(?:so|but|and|because|although|while|whereas)\b/i
+// reaching across into a separate, independent claim clause. "yet" is the same contrastive
+// coordinating-conjunction shape as "but" ("I'm allergic to shellfish, yet please still
+// recommend...") but wasn't in the list — found via live testing: the whole message fell to the
+// unsplit path, so NON_CLAIM_MARKERS' "please" match (from the trailing clause) suppressed the
+// allergy fact too, reproducing the exact bug class this clause-split fix was meant to close.
+const CLAUSE_BOUNDARY = /[.!?;]+|,\s*(?:so|but|yet|and|because|although|while|whereas)\b/i
 
 function splitClauses(text: string): string[] {
   return text

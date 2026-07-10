@@ -295,6 +295,24 @@ function shellCachePath(workspaceRoot: string): string {
   return `${workspaceRoot}/${SHELL_CACHE_DIR}/${SHELL_CACHE_FILE}`
 }
 
+// A command whose output is expected to change on every invocation (current time, randomness)
+// must never be served from the cache — found via live testing: `date +%s%N` run twice in a row
+// (the second time via an explicit "run that exact same command again" request) returned the
+// FIRST run's stale nanosecond timestamp both times, with the assistant confidently presenting it
+// as this run's real output. The cache's whole point is that an identical (command, cwd) pair is
+// expected to produce the same result again (a status check, a file listing, ...) — that
+// assumption is false by construction for a command whose entire purpose is to vary each time, so
+// those commands should always re-stage a fresh approval instead of ever serving a cached answer.
+// Deliberately narrow (clock/randomness sources only, not e.g. "df"/"ps" whose output can also
+// drift): those are the two big deterministic-in-principle nondeterminism sources, and getting
+// this list exactly exhaustive isn't the goal — a false positive here just costs one extra
+// approval prompt on a genuine repeat, the same tradeoff this cache already accepts elsewhere.
+const NONDETERMINISTIC_COMMAND_PATTERN = /\b(date|time|now)\b|\$RANDOM\b|\/dev\/u?random\b|\buuidgen\b|\bopenssl rand\b/i
+
+function isCacheableCommand(command: string): boolean {
+  return !NONDETERMINISTIC_COMMAND_PATTERN.test(command)
+}
+
 export async function loadShellCache(backend: FsBackend, workspaceRoot: string): Promise<ShellCacheEntry[]> {
   const raw = await backend.readTextFile(shellCachePath(workspaceRoot))
   if (raw === undefined) return []
@@ -320,6 +338,7 @@ export async function findCachedShellResult(
   command: string,
   cwd: string,
 ): Promise<ShellCacheEntry | undefined> {
+  if (!isCacheableCommand(command)) return undefined
   const entries = await loadShellCache(backend, workspaceRoot)
   for (let i = entries.length - 1; i >= 0; i--) {
     if (entries[i].command === command && entries[i].cwd === cwd) return entries[i]
