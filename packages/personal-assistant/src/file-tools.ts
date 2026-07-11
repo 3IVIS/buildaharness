@@ -241,6 +241,14 @@ export async function applyPendingAction(
 
     await backend.writeTextFile(resolved, record.content)
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
+    // The shell result cache below assumes an identical (command, cwd) pair keeps producing the
+    // same result — true only as long as nothing else in the workspace changed in between. A
+    // write landing here breaks that assumption for every previously-cached command (not just
+    // ones that obviously touch this file), so any prior entries must be treated as stale — found
+    // via live testing: `ls` (empty workspace) cached, then a file written, then the identical
+    // `ls` re-run still served the stale pre-write "no output" result with no re-execution and no
+    // approval prompt at all, presented as if it were current.
+    await clearShellCache(backend, workspaceRoot)
     return record as ApplyPendingActionResult
   }
 

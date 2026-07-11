@@ -127,6 +127,22 @@ function mergeFacts(durableFacts: UserFact[], sessionFacts: UserFact[]): UserFac
   return [...durableFacts, ...sessionFacts.filter(f => !durableTexts.has(f.text))]
 }
 
+// The Contradiction layer (harness-runtime.ts's reportLayer('contradiction', true, ...)) already
+// phrases its reason as a direct, human-readable message ("Heads up — this seems to conflict with
+// something you told me earlier: ...") — found via live testing: that message only ever reached
+// the user if they happened to run /why, never the actual reply, even though the layer had already
+// done the work of detecting a genuine identity/fact conflict (e.g. the user's name stated as
+// "Priya" in one turn and "Max" in a later one) that a personal assistant tracking facts about its
+// user should clearly flag proactively. Returned as its own field (not concatenated into `reply`)
+// because `reply`'s text is often already on screen by the time this runs — cli.ts streams tokens
+// live via onToken as the LLM call itself produces them, well before HarnessRuntime.run() (and
+// this check) even starts, so a caller must print this separately alongside the risk/sources/plan
+// suffixes it already appends after a streamed reply, the same "absent when unused" convention as
+// those.
+function findContradictionNotice(layerActivity: LayerActivityEvent[]): string | undefined {
+  return layerActivity.find((e) => e.layer === 'contradiction' && e.fired)?.reason
+}
+
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
 // Matches the existing maxSteps spirit for the harness loop below — a bounded
@@ -255,6 +271,8 @@ export interface AssistantTurnResult {
    * needs_approval/escalated, matching how trace/sources already behave.
    */
   usage?: TokenUsage
+  /** Set when the Contradiction layer flagged a conflict with an existing belief this turn — see findContradictionNotice's doc comment for why this is a separate field instead of folded into `reply`. */
+  contradictionNotice?: string
 }
 
 export interface AssistantProgress {
@@ -993,6 +1011,7 @@ export class PersonalAssistant {
             ? `Ready to continue with: ${next.description}? (reply to proceed)`
             : 'All plan steps have run — let me know if you want anything else.'
         }
+        const contradictionNotice = findContradictionNotice(layerActivityThisTurn)
 
         const trace: AssistantTrace = {
           nodeExecutionOrder: outcome.checkpoint.progress.nodeExecutionOrder,
@@ -1017,6 +1036,7 @@ export class PersonalAssistant {
           trace,
           sources,
           planStatus,
+          contradictionNotice,
           usage: usageTotal,
         }
       }
@@ -1034,6 +1054,7 @@ export class PersonalAssistant {
       }
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
+      const contradictionNotice = findContradictionNotice(layerActivityThisTurn)
 
       // Write the harness's resulting task statuses back onto the plan only on this
       // success path — an aborted/errored turn leaves the stored plan as-is, so a
@@ -1057,7 +1078,7 @@ export class PersonalAssistant {
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
       await this.recordFacts(sessionId, userMessage)
 
-      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, usage: usageTotal }
+      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, usage: usageTotal }
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')

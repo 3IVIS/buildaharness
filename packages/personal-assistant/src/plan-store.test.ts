@@ -248,6 +248,27 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
     // should find nothing, since that task is already done, not cancellable.
     expect(matchTaskCancelAttempt('Cancel the destination step.', withOneComplete)).toBeNull()
   })
+
+  it('does not hijack a genuine external cancel request that merely shares a word with a task description', () => {
+    // h3/convE: a real "cancel my travel insurance policy" request coincidentally shares
+    // "insurance"/"travel" with the plan's own "arrange travel insurance" logistics task, but
+    // never references the plan/a task/step at all — must fall through to the ordinary
+    // message-level risk gate instead of being silently absorbed as internal bookkeeping.
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [
+        {
+          id: 'logistics_prep',
+          description: 'travel logistics: arrange travel insurance, verify passport/visa validity, prepare packing list',
+          depends_on: [],
+        },
+      ],
+    })
+    expect(
+      matchTaskCancelAttempt('Actually, please cancel my travel insurance policy with my current provider - I found a much cheaper one elsewhere.', plan),
+    ).toBeNull()
+  })
 })
 
 describe('cancelPlanTask', () => {

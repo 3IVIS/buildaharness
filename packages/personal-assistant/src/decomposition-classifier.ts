@@ -48,10 +48,24 @@ const WORD_LIMIT = 40
 // A possessive/article/demonstrative/bare-quantifier right after and/or (the same
 // NOUN_CONTEXT_DETERMINERS shape risk-classifier.ts's noun-vs-verb patterns already use) is just as
 // much a new subject being introduced as a bare pronoun is.
+// Still doesn't cover a PROPER noun reintroducing the subject — found via live testing: "Remind me
+// to call the bank, and Sarah will handle the rest of the emails." reintroduces the subject via a
+// name ("Sarah"), not a pronoun or determiner, so it still matched and wrongly tripped the same
+// gate. A capitalized word right after and/or, mid-message (so the capital letter is meaningful,
+// not just sentence-initial capitalization), is checked separately below in isEnumeratedListShape
+// rather than folded into this case-insensitive regex — the "i" flag needed for the pronoun/
+// determiner alternation would otherwise make an upper-vs-lowercase check meaningless.
 const ONE_COMMA_LIST_MARKER =
-  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b)\S/i
+  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b)(\S+)/i
 
-const ENUMERATED_LIST_MARKER = new RegExp(`(?:,[^,]*){2,}\\b(?:and|or)\\b|${ONE_COMMA_LIST_MARKER.source}`, 'i')
+const TWO_COMMA_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
+
+function isEnumeratedListShape(trimmed: string): boolean {
+  if (TWO_COMMA_LIST_MARKER.test(trimmed)) return true
+  const match = ONE_COMMA_LIST_MARKER.exec(trimmed)
+  if (!match) return false
+  return !/^[A-Z]/.test(match[1])
+}
 
 // Two more enumeration shapes found via live testing that ENUMERATED_LIST_MARKER's comma-based
 // match doesn't cover: a semicolon-separated list with no "and"/"or" at all ("research the
@@ -104,7 +118,7 @@ function isFactThenSingleReminder(trimmed: string): boolean {
 export function looksLikeEnumeratedItems(message: string): boolean {
   const trimmed = message.trim()
   if (isFactThenSingleReminder(trimmed)) return false
-  return SEQUENCING_MARKERS.test(trimmed) || ENUMERATED_LIST_MARKER.test(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
+  return SEQUENCING_MARKERS.test(trimmed) || isEnumeratedListShape(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
 }
 
 /** Zero-LLM-call gate deciding whether a request is worth spending decomposeObjective's extra call on. */
@@ -115,7 +129,7 @@ export function classifyDecompositionCandidate(message: string): DecompositionCa
   if (SEQUENCING_MARKERS.test(trimmed)) {
     return { isCandidate: true, reason: 'contains a sequencing marker (then/first/next/step ...)' }
   }
-  if (ENUMERATED_LIST_MARKER.test(trimmed)) {
+  if (isEnumeratedListShape(trimmed)) {
     return { isCandidate: true, reason: 'contains a comma-separated enumeration of multiple items' }
   }
   if (SEMICOLON_LIST_MARKER.test(trimmed)) {

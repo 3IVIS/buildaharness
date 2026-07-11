@@ -11,8 +11,16 @@ export interface BeliefCandidate {
 // service available/unavailable, and so on. If every newly-added belief looks like that kind
 // of structured, technical claim, there's nothing this LLM call would catch that the lexical
 // pass hasn't already had a fair shot at — so it's skipped entirely, no LLM call spent.
+// "passed"/"passing" alone also matches the entirely unrelated "passed away" (died) idiom —
+// found via live testing: "Actually, Biscuit passed away last month — I adopted a new cat named
+// Pepper instead." got admitted as a fact purely because of this coincidental collision (the
+// original "I have a cat named Biscuit" statement itself was never captured, since nothing else
+// here or in fact-extraction.ts's other markers matches an ordinary pet-ownership statement) —
+// producing a confusing, out-of-context fact entry ("Biscuit passed away...") with no record of
+// what it was correcting. "passed"/"passing" immediately followed by "away" is never the
+// build/test-status sense this list exists for, so it's excluded rather than admitted.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch|commit|pipeline|ci\/cd|ci|environment|variable|package|library|repo|repository|script|command|log|status|bug|pass(ed|ing)?|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch|commit|pipeline|ci\/cd|ci|environment|variable|package|library|repo|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared

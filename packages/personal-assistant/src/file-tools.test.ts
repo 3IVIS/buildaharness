@@ -8,6 +8,8 @@ import {
   loadPendingAction,
   applyPendingAction,
   discardPendingAction,
+  recordShellCacheEntry,
+  findCachedShellResult,
   type FileToolsContext,
 } from './file-tools.js'
 
@@ -185,6 +187,24 @@ describe('pending-action staging', () => {
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
 
     await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow(/executeShell/)
+  })
+
+  it('applyPendingAction clears the shell result cache once a write actually lands (h4/convF)', async () => {
+    // A cached `ls` result predates the write below — it must not survive to be served as if it
+    // still reflected the current (now-changed) workspace state.
+    const backend = makeFakeBackend()
+    await recordShellCacheEntry(backend, ROOT, {
+      command: 'ls',
+      cwd: ROOT,
+      execution: { output: '', exitCode: 0, timedOut: false },
+      resolvedAt: new Date().toISOString(),
+    })
+    expect(await findCachedShellResult(backend, ROOT, 'ls', ROOT)).toBeDefined()
+
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'note.txt', content: 'hello world' })
+    await applyPendingAction(backend, ROOT, id)
+
+    expect(await findCachedShellResult(backend, ROOT, 'ls', ROOT)).toBeUndefined()
   })
 
   it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {

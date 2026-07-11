@@ -84,6 +84,14 @@ describe('classifyDecompositionCandidate', () => {
     ).toBe(false)
   })
 
+  it('does not flag a compound sentence whose second clause reintroduces a new PROPER-NOUN subject', () => {
+    // h6/convH: the subject-reintroduction exclusion only covered pronouns/determiners, not a name
+    // — "Sarah" reintroduces the subject just as clearly as a pronoun would.
+    expect(classifyDecompositionCandidate('Remind me to call the bank, and Sarah will handle the rest of the emails.').isCandidate).toBe(
+      false,
+    )
+  })
+
   it('flags an unpunctuated sentence-initial "First X and Y" two-step request', () => {
     // h4: SEQUENCING_MARKERS' "first[,:]" branch requires trailing punctuation — a plain
     // sentence-initial "first" with no comma/colon and no "then" fell through every signal.

@@ -508,12 +508,18 @@ async function main(): Promise<void> {
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
       const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''
+      // Printed as its own line, not folded into riskSuffix/sourcesHint/planHint's inline
+      // "${...}" style — this is a full sentence, not a short bracketed tag. Must be handled the
+      // same way in both branches below (like the other hints), since result.contradictionNotice
+      // is only known once HarnessRuntime.run() finishes, well after writeToken already streamed
+      // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
+      const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
       if (streamedAnyTokens) {
         // The reply text is already on screen, printed token-by-token as it
         // streamed in — just append whatever suffix belongs after it.
-        process.stdout.write(`${riskSuffix}${sourcesHint}${planHint}\n\n`)
+        process.stdout.write(`${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
       } else {
-        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}\n`)
+        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't

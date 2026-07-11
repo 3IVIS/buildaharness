@@ -62,7 +62,7 @@ export async function executeReminderTool(
       // the raw message mentioned an unrelated fact anywhere, even though `text` itself wasn't the
       // fact (same bug shape file-tools-mcp-server.mjs's create_reminder had — kept in sync here).
       const isFactShaped = (t: string): boolean => FACT_MARKERS.test(t) || HEALTH_OR_DIETARY_MARKERS.test(t)
-      const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?events?)\b/i
+      const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i
       const sourceIsFactOnly = sourceUserMessage !== undefined && !REMINDER_REQUEST_MARKER.test(sourceUserMessage) && isFactShaped(sourceUserMessage)
       if (isFactShaped(text) || sourceIsFactOnly) {
         return `Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.`

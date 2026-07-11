@@ -118,6 +118,21 @@ describe('classifyRisk', () => {
     expect(result.requiresApproval).toBe(true)
   })
 
+  it('flags a "create reminders for X, Y, and Z" bulk request phrased with "create" instead of "set"', () => {
+    // h5: REMINDER_PATTERN had "set a/plural reminder(s)" and "create a/an event(s)" but no
+    // "create a/plural reminder(s)" alternative, despite it being an obvious everyday synonym —
+    // this phrasing bypassed REMINDER_PATTERN entirely and fell through as LOW with no bulk gate.
+    const result = classifyRisk('Please create reminders for calling the bank, emailing the landlord, and picking up dry cleaning.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(true)
+  })
+
+  it('still flags an ordinary single "create a reminder" request as MEDIUM without requiring approval', () => {
+    const result = classifyRisk('Can you create a reminder to call the dentist tomorrow?')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
   it('does not flag "purchase"/"checkout" used as nouns', () => {
     // h1: unlike ORDER_VERB_PATTERN, the bare pay/purchase/buy/checkout pattern had no
     // noun-context exclusion.
@@ -254,6 +269,13 @@ describe('classifyRisk', () => {
     expect(result.requiresApproval).toBe(false)
   })
 
+  it('does not flag a single reminder followed by an unrelated PROPER-NOUN-subject aside', () => {
+    // h6/convH: same gap as above, but reintroducing the subject with a name instead of a pronoun.
+    const result = classifyRisk('Remind me to call the bank, and Sarah will handle the rest of the emails.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
   it('does not flag an ordinary fact+single-reminder message as a bulk-reminder candidate', () => {
     // h8 (incidental second occurrence): "I'm X, and remind me to Y" has a comma+and followed by
     // "remind" (not a pronoun/determiner), so the naive exclusion doesn't cover it either — but
@@ -267,6 +289,54 @@ describe('classifyRisk', () => {
     const result = classifyRisk('Remind me to call the bank, and remind me to email the landlord about the leak.')
     expect(result.riskLevel).toBe('MEDIUM')
     expect(result.requiresApproval).toBe(true)
+  })
+
+  it('does not flag a noun phrase with 3+ modifier words between the determiner and the keyword', () => {
+    // h1: nounContextLookbehind()'s word-gap window originally only allowed 0-2 modifier words.
+    expect(classifyRisk('My extremely late final pay stub finally arrived in the mail.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('My completely unexpected surprise birthday order finally shipped today.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag a quantifier ("several") not previously in NOUN_CONTEXT_DETERMINERS', () => {
+    // h2: several/few/many/most/all are the same noun-signaling quantifier shape as no/any/some/
+    // every/each but were missing from the list.
+    expect(classifyRisk('Several delete requests came in from the support queue this morning, all resolved now.').riskLevel).not.toBe(
+      'HIGH',
+    )
+  })
+
+  it('does not flag a sentence-initial bare noun-compound with no preceding determiner at all', () => {
+    // h2: CANCEL_VERB_PATTERN/PUBLISH_VERB_PATTERN had nothing for the lookbehind to exclude on
+    // when the keyword itself opens the sentence with no determiner before it.
+    expect(classifyRisk('Cancel confirmations from that airline always take a few days to show up in my inbox.').riskLevel).not.toBe(
+      'HIGH',
+    )
+    expect(classifyRisk('Post engagement has been dropping across all my accounts this month.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not let a past-narrative clause suppress HIGH-risk gating for a live, different request in the same message', () => {
+    // h7: FIRST_PERSON_PAST_NARRATIVE/REPORTED_THIRD_PARTY_SPEECH originally ran against the whole
+    // message with a bare .test(), so an unrelated exemption-shaped clause suppressed gating for
+    // a live, genuinely actionable request riding along in the same message.
+    expect(
+      classifyRisk('I already deleted the old vacation photos from last year, and please delete my entire Google Photos account now.')
+        .riskLevel,
+    ).toBe('HIGH')
+    expect(
+      classifyRisk('My roommate said she will cancel our shared streaming subscription, so please cancel my gym membership for me right now.')
+        .riskLevel,
+    ).toBe('HIGH')
+    expect(
+      classifyRisk('I already forwarded the quarterly report to my boss yesterday, but please forward this new contract to the lawyer right now.')
+        .riskLevel,
+    ).toBe('HIGH')
+  })
+
+  it('still exempts a pure past-narrative/reported-speech message with no separate live request', () => {
+    // Regression guard for the h7 fix above: splitting into clauses must not reintroduce a false
+    // positive for the plain single-clause cases these exemptions exist for.
+    expect(classifyRisk('Yesterday I had to cancel my dentist appointment because of the snowstorm.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk("My landlord said he will cancel my lease if I don't pay rent by Friday.").riskLevel).not.toBe('HIGH')
   })
 })
 

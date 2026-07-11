@@ -132,20 +132,39 @@ const CANCEL_MATCH_STOPWORDS = new Set([
   'task', 'step', 'item', 'need', 'want', 'once', 'still', 'trip', 'planning', 'along',
 ])
 
+// A single shared 4+-letter word is not enough on its own — a genuine, unrelated real-world cancel
+// request can coincidentally share a word with an auto-generated task description (e.g. "insurance"
+// appears both in a real "cancel my travel insurance policy" request AND a plan's own
+// "arrange travel insurance" logistics task). Found via live testing: with an active trip-planning
+// plan running, "please cancel my travel insurance policy with my current provider" — a genuine,
+// gateable HIGH-risk request the user actually wants acted on — got silently misrouted into
+// cancelling the plan's internal logistics_prep bookkeeping task instead, with no approval gate,
+// and the real request was never surfaced, gated, or fulfilled at all.
+// Requiring the message itself to explicitly reference the PLAN/a TASK/STEP ("cancel that task",
+// "skip this step", "drop that part of the plan") — not just any cancel-shaped verb plus a
+// coincidentally shared word — keeps this deterministic shortcut scoped to what it was actually
+// built for (conv59/conv70's h9: dropping one step of an active plan the user is talking to the
+// assistant about), and lets anything else fall through to the ordinary message-level risk gate,
+// the same safe default this function already falls back to when no task match is found at all.
+const TASK_REFERENCE_MARKER = /\b(task|step|item|that part|this part|the plan)\b/i
+
 /**
  * Detects a request to cancel/skip ONE task within an active plan — distinct from
  * isAbandonPhrase/looksLikeAbandonAttempt, which are about ending the WHOLE plan (see conv59/
  * conv70's h9 finding: "cancel the daily-budget task" isn't asking to abandon a trip-planning
  * plan entirely, just to drop one of its steps, and there was no feature to route that to at
- * all). Matches a cancel-shaped verb (cancel/skip/drop/remove) together with a distinctive word
- * (4+ letters, not a common stopword) shared with one of the plan's own not-yet-complete task
+ * all). Matches a cancel-shaped verb (cancel/skip/drop/remove), an explicit reference to the plan
+ * or one of its tasks/steps (TASK_REFERENCE_MARKER), together with a distinctive word (4+ letters,
+ * not a common stopword) shared with one of the plan's own not-yet-complete task
  * descriptions/ids — deliberately conservative: a bare "cancel" with no recognizable task
- * reference (e.g. "cancel my gym membership", unrelated to anything in this plan) returns null
- * and falls through to the ordinary message-level risk gate, same as today. Returns the first
- * matching task in plan order, or null.
+ * reference (e.g. "cancel my gym membership", unrelated to anything in this plan, or "cancel my
+ * travel insurance policy with my current provider", a genuine external request that merely
+ * happens to share a word with a task description) returns null and falls through to the ordinary
+ * message-level risk gate, same as today. Returns the first matching task in plan order, or null.
  */
 export function matchTaskCancelAttempt(message: string, plan: PlanRecord): TaskCancelMatch | null {
   if (!TASK_CANCEL_VERBS.test(message)) return null
+  if (!TASK_REFERENCE_MARKER.test(message)) return null
   const lower = message.toLowerCase()
   for (const task of plan.tasks) {
     if (task.status === 'COMPLETE' || task.cancelled) continue

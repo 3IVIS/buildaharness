@@ -30,9 +30,19 @@ interface RiskPattern {
 // order", "the checkout process", "a good book", "that post"). Reused below by ORDER_VERB_PATTERN
 // and its siblings (PURCHASE_VERB_PATTERN, PUBLISH_VERB_PATTERN, BOOK_VERB_PATTERN) rather than
 // duplicating the same alternation four times.
-const NOUN_CONTEXT_DETERMINERS = 'my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each'
+// "several/few/many/most/all" are the same noun-signaling quantifier shape as "no/any/some/every/
+// each" but were missing from the list — found via live testing: "Several delete requests came in
+// from the support queue this morning, all resolved now." had a quantifier directly before
+// "delete" that the lookbehind didn't recognize, so DELETE_VERB_PATTERN still misfired HIGH.
+const NOUN_CONTEXT_DETERMINERS = 'my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all'
+// The word-gap window below only allowed 0-2 modifier words between the determiner and the
+// keyword — "My extremely late final pay stub finally arrived in the mail." has 3 (extremely,
+// late, final), exceeding the old window, so the lookbehind failed to recognize the noun usage
+// and PAY_WIRE_PATTERN/ORDER_VERB_PATTERN still misfired HIGH. Widened to 0-4 to give descriptive
+// noun phrases more headroom; still requires an actual determiner earlier in the clause, so it
+// doesn't loosen the exclusion for a bare imperative with no determiner at all.
 const nounContextLookbehind = (extra = ''): string =>
-  `(?<!\\b(?:${NOUN_CONTEXT_DETERMINERS}${extra ? '|' + extra : ''})\\b(?:\\s+\\w+){0,2}\\s)`
+  `(?<!\\b(?:${NOUN_CONTEXT_DETERMINERS}${extra ? '|' + extra : ''})\\b(?:\\s+\\w+){0,4}\\s)`
 
 const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to)\\b)`, 'i')
 
@@ -67,7 +77,13 @@ const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purcha
 // Same noun-vs-verb ambiguity for "post"/"tweet" ("I saw an interesting post", "did you see that
 // tweet") — found via live testing alongside PURCHASE_VERB_PATTERN above, same false-positive
 // shape on the "publishes content publicly" HIGH pattern.
-const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+// A sentence-initial "Post"/"Tweet" (capitalized, nothing precedes it) has no determiner for
+// nounContextLookbehind to exclude on at all — found via live testing: "Post engagement has been
+// dropping across all my accounts this month." (a social-media analytics observation, no
+// publishing request) still misfired HIGH. "engagement"/"engagements" added to the trailing
+// exclusion, the same noun-compound shape CANCEL_VERB_PATTERN's link/option/button list below
+// already uses for its own sentence-initial gap.
+const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|is|was)\\b)`, 'i')
 
 // "book" in "schedule|book|reserve" below has the same noun-vs-verb ambiguity ("a good book
 // about jazz") — found via live testing: a book recommendation request mistagged MEDIUM risk
@@ -110,7 +126,15 @@ const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|tra
 // ("an unsubscribe link") is the same noun-signaling shape as DELETE_VERB_PATTERN above — found
 // via live testing: a message merely describing an unfindable unsubscribe link tripped the bare
 // pattern and got auto-declined as a HIGH-risk cancellation request with no live request at all.
-const CANCEL_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|is|was)\\b)`, 'i')
+// A sentence-initial "Cancel" (capitalized, nothing precedes it) has no determiner for
+// nounContextLookbehind to exclude on either — found via live testing: "Cancel confirmations from
+// that airline always take a few days to show up in my inbox." (a status observation, no live
+// cancellation request) still misfired HIGH. "confirmation"/"confirmations" added to the trailing
+// exclusion alongside link/option/button.
+const CANCEL_VERB_PATTERN = new RegExp(
+  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|is|was)\\b)`,
+  'i',
+)
 
 // Consequential, hard-to-undo actions — gated behind explicit approval before the
 // harness is allowed to execute anything on the user's behalf.
@@ -140,7 +164,17 @@ const HIGH_RISK_PATTERNS: RiskPattern[] = [
 // looksLikeEnumeratedItems bulk-confirmation gate below (which only runs once this pattern
 // already matched). Found via live testing: "Set reminders for calling the bank, emailing the
 // landlord, and picking up dry cleaning" silently bulk-created 3 reminders with zero approval.
-const REMINDER_PATTERN: RiskPattern = { pattern: /\b(remind me|set (?:a |)reminders?|create (a |an )?events?)\b/i, reason: 'creates a calendar or reminder entry' }
+// "create a/plural reminder(s)" is just as obvious an everyday synonym for "set a reminder" as
+// "create an event" already was, but had no alternative of its own — found via live testing:
+// "Please create reminders for calling the bank, emailing the landlord, and picking up dry
+// cleaning." bypassed REMINDER_PATTERN entirely (falling through as LOW, skipping the same
+// bulk-confirmation gate) purely because it used "create" instead of "set". Duplicated identically
+// in reminder-tools.ts and file-tools-mcp-server.mjs's REMINDER_REQUEST_MARKER — keep all three in
+// sync by hand (see the playbook's claude-cli-backend gotcha).
+const REMINDER_PATTERN: RiskPattern = {
+  pattern: /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i,
+  reason: 'creates a calendar or reminder entry',
+}
 
 // "remind me what my job is?" / "remind me again what the first item was?" ask the assistant to
 // RECALL something already stated in the conversation — they contain "remind me" but aren't a
@@ -226,6 +260,31 @@ const FIRST_PERSON_PAST_NARRATIVE = /\bi (?:had to|already|needed to|decided to|
 const REPORTED_THIRD_PARTY_SPEECH =
   /\b(said|told me|mentioned|warned|threatened)\b.{0,30}\b(he|she|they|it)\b\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\b/i
 
+// PAST_TENSE_QUESTION/REPORTED_THIRD_PARTY_SPEECH/FIRST_PERSON_PAST_NARRATIVE originally ran a
+// single bare .test() against the WHOLE message — none of them anchored or clause-scoped the way
+// fact-extraction.ts's CLAUSE_BOUNDARY splitting is (added specifically to fix this exact
+// whole-message-vs-clause bug class for NON_CLAIM_MARKERS). That let an unrelated exemption-shaped
+// clause suppress HIGH_RISK_PATTERNS for the ENTIRE message, including a live, different HIGH-risk
+// imperative riding along in the same message — found via live testing: "I already deleted the old
+// vacation photos last year, and please delete my entire Google Photos account now." let the
+// past-narrative clause suppress gating for the live account-deletion request. Splitting on a
+// comma before a coordinating conjunction (the same shape fact-extraction.ts splits on, minus
+// sentence-ending punctuation — several of these exemptions rely on a trailing "?" surviving
+// within its own clause) and checking each clause independently keeps one clause's exemption from
+// reaching across into a separate, live request clause.
+const RISK_CLAUSE_BOUNDARY = /,\s*(?:so|but|yet|and|because|although|while|whereas)\b/i
+
+function splitRiskClauses(message: string): string[] {
+  return message
+    .split(RISK_CLAUSE_BOUNDARY)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+}
+
+function isExemptClause(clause: string): boolean {
+  return PAST_TENSE_QUESTION.test(clause) || REPORTED_THIRD_PARTY_SPEECH.test(clause) || FIRST_PERSON_PAST_NARRATIVE.test(clause)
+}
+
 export function classifyRisk(message: string): RiskClassification {
   const isReminderRecallQuestion = REMINDER_RECALL_QUESTION.test(message)
   if (REMINDER_PATTERN.pattern.test(message) && !isReminderRecallQuestion) {
@@ -234,9 +293,10 @@ export function classifyRisk(message: string): RiskClassification {
     }
     return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${REMINDER_PATTERN.reason}.` }
   }
-  if (!PAST_TENSE_QUESTION.test(message) && !REPORTED_THIRD_PARTY_SPEECH.test(message) && !FIRST_PERSON_PAST_NARRATIVE.test(message)) {
+  for (const clause of splitRiskClauses(message)) {
+    if (isExemptClause(clause)) continue
     for (const { pattern, reason } of HIGH_RISK_PATTERNS) {
-      if (pattern.test(message)) {
+      if (pattern.test(clause)) {
         return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }
       }
     }

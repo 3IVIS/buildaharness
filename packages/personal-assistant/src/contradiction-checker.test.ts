@@ -14,6 +14,18 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('my name is Alex')).toBe(false)
     expect(looksLikeCodingFact('I prefer tea over coffee')).toBe(false)
   })
+
+  it('does not flag "passed away" as a build/test-status coding fact', () => {
+    // convT: "passed" alone matches the build/test-status sense this list exists for, but also
+    // coincidentally matches the unrelated "passed away" (died) idiom — a pet-death correction
+    // ("Biscuit passed away last month") got admitted as a fact for the wrong reason.
+    expect(looksLikeCodingFact('Actually, Biscuit passed away last month, I adopted a new cat named Pepper instead.')).toBe(false)
+  })
+
+  it('still flags a genuine build/test "passed"/"passing" status claim', () => {
+    expect(looksLikeCodingFact('the build passed on the first try')).toBe(true)
+    expect(looksLikeCodingFact('all tests are passing now')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

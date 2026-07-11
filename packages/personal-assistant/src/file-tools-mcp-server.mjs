@@ -282,7 +282,7 @@ const HEALTH_OR_DIETARY_MARKERS =
 // A genuine reminder-request clause of its own (remind me/set a reminder/create an event) means
 // the raw message is a to-do PLUS an unrelated fact, not just a reworded fact — see
 // looksLikeDurableFact's call site below for why this matters.
-const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?events?)\b/i
+const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i
 
 function looksLikeDurableFact(text) {
   return FACT_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)

@@ -1454,6 +1454,15 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
 
     expect(second.status).toBe('ok')
     expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
+    // The Contradiction layer's reason is already phrased as a direct, human-readable message —
+    // it must actually reach the caller as something a UI can surface to the user, not just live
+    // in the trace behind a diagnostic command (/why) most users never think to run — found via
+    // live testing: the harness detected a conflicting user name ("Priya" vs. "Max" in a later,
+    // unrelated turn) but nothing outside /why ever mentioned it. A separate field (not folded
+    // into `reply`) because cli.ts streams `reply`'s tokens live via onToken well before this
+    // check even runs — see findContradictionNotice's doc comment.
+    const contradictionEvent = second.trace?.layerActivity.find((e) => e.layer === 'contradiction' && e.fired)
+    expect(second.contradictionNotice).toBe(contradictionEvent!.reason)
   })
 
   it('detects a contradiction from a natural-language build/test status flip with no personal-fact phrasing', async () => {
