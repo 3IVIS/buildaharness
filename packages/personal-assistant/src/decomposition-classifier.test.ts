@@ -92,6 +92,15 @@ describe('classifyDecompositionCandidate', () => {
     )
   })
 
+  it('does not flag a compound sentence whose second clause reintroduces an INDEFINITE-PRONOUN subject', () => {
+    // h9: the subject-reintroduction exclusion covered exact pronoun/determiner tokens but not
+    // indefinite pronouns like "someone"/"everybody"/"anybody".
+    expect(
+      classifyDecompositionCandidate('Remind me to call the bank, and someone will follow up separately about the wire transfer paperwork.')
+        .isCandidate,
+    ).toBe(false)
+  })
+
   it('flags an unpunctuated sentence-initial "First X and Y" two-step request', () => {
     // h4: SEQUENCING_MARKERS' "first[,:]" branch requires trailing punctuation — a plain
     // sentence-initial "first" with no comma/colon and no "then" fell through every signal.
@@ -107,6 +116,13 @@ describe('classifyDecompositionCandidate', () => {
 describe('looksLikeEnumeratedItems', () => {
   it('does not flag a single reminder followed by an unrelated noun-subject aside', () => {
     expect(looksLikeEnumeratedItems("Remind me to call the bank, and my accountant's office is closed on Fridays anyway.")).toBe(false)
+  })
+
+  it('does not flag a single reminder followed by an unrelated indefinite-pronoun-subject aside', () => {
+    // h9: same gap as the noun/proper-noun cases above, for an indefinite pronoun subject.
+    expect(
+      looksLikeEnumeratedItems('Remind me to call the bank, and someone will follow up separately about the wire transfer paperwork.'),
+    ).toBe(false)
   })
 
   it('does not flag an ordinary fact+single-reminder message', () => {

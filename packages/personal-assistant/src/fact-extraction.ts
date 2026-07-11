@@ -51,8 +51,17 @@ export const FACT_MARKERS =
 // tool implementation, kept in sync by hand) can both refuse create_reminder for the same
 // fact-shaped text this module captures as a UserFact — mirroring how FACT_MARKERS is already
 // shared for that purpose.
+// h6: the marker word originally had to be immediately adjacent to "i'm"/"i am" (only an
+// optional "not "/"no longer " in between) — an intensifier like "severely"/"extremely" between
+// them breaks that adjacency and silently drops the fact entirely (it doesn't hit FACT_MARKERS
+// or looksLikeCodingFact either) — found via live testing: "I'm severely allergic to peanuts, so
+// please keep that in mind for any food suggestions." never got captured as a known fact at all.
+// Widened to the same 0-4-word modifier-gap shape risk-classifier.ts's nounContextLookbehind
+// already uses, for the same reason: a descriptive modifier phrase needs headroom, and "not"/"no
+// longer" are just ordinary modifier words within that same gap, so the negation-correction case
+// keeps working unchanged.
 export const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // The subset of FACT_MARKERS worth surviving /new: a name or a stated preference is durable and
 // safety/identity-relevant the same way a health/dietary fact is, unlike a current location or

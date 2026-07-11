@@ -44,7 +44,12 @@ const NOUN_CONTEXT_DETERMINERS = 'my|his|her|their|our|your|the|this|that|an?|no
 const nounContextLookbehind = (extra = ''): string =>
   `(?<!\\b(?:${NOUN_CONTEXT_DETERMINERS}${extra ? '|' + extra : ''})\\b(?:\\s+\\w+){0,4}\\s)`
 
-const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to)\\b)`, 'i')
+// h2: the trailing exclusion originally only covered the "in order to" idiom ("to" right after
+// "order") — "in order for X to succeed" is the equally common variant of the same idiom, with
+// "for" instead of "to" directly after "order" ("order for us to succeed"), and "in" isn't a
+// determiner NOUN_CONTEXT_DETERMINERS' lookbehind recognizes either — found via live testing:
+// "In order for us to succeed, I need to finish this project first." misfired HIGH.
+const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for)\\b)`, 'i')
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
@@ -60,8 +65,14 @@ const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\
 // "reading"/"getting"/"receiving"/"seeing" weren't excluded at all. Found via live testing: "I
 // spend way too much time checking email every morning" still tripped the bare pattern as a
 // HIGH-risk send-a-message request despite being a receive-shaped verb, just inflected.
+// h9: unlike CANCEL_VERB_PATTERN/PUBLISH_VERB_PATTERN (already patched below for a
+// sentence-initial capitalized noun with nothing preceding it to exclude on), this pattern never
+// got the same fix — "alignment" is the same noun-compound shape as "engagement"/"confirmation"
+// below, and a sentence-initial "Text" has no determiner for nounContextLookbehind to exclude
+// on — found via live testing: "Text alignment in this document looks off, everything is
+// centered instead of left-justified." misfired HIGH.
 const EMAIL_TEXT_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|is|was)\\b)`,
+  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|is|was)\\b)`,
   'i',
 )
 
@@ -72,7 +83,12 @@ const EMAIL_TEXT_VERB_PATTERN = new RegExp(
 // HIGH-risk money-spending request. "pay"/"buy"/"transfer money"/"wire" are left in the bare
 // pattern below — they're overwhelmingly verbs in ordinary usage and weren't the words the live
 // failure hit.
-const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter)\\b)`, 'i')
+// h12: "purchase orders" is a common business noun-compound with sentence-initial "Purchase"
+// having no preceding determiner for nounContextLookbehind to exclude on — found via live
+// testing: "Purchase orders take forever to get approved at my company, it's so frustrating."
+// misfired HIGH. Same sentence-initial gap already patched for CANCEL_VERB_PATTERN/
+// PUBLISH_VERB_PATTERN below via a trailing noun-compound exclusion.
+const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter|orders?)\\b)`, 'i')
 
 // Same noun-vs-verb ambiguity for "post"/"tweet" ("I saw an interesting post", "did you see that
 // tweet") — found via live testing alongside PURCHASE_VERB_PATTERN above, same false-positive
@@ -89,14 +105,22 @@ const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tw
 // about jazz") — found via live testing: a book recommendation request mistagged MEDIUM risk
 // ("books or schedules something") purely because of the word "book". "schedule"/"reserve" are
 // left bare; they weren't the word the live failure hit and are far less commonly nouns here.
-const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|is|was)\\b)`, 'i')
+// h10: same unfixed sentence-initial gap as EMAIL_TEXT_VERB_PATTERN/PURCHASE_VERB_PATTERN above
+// — "Book recommendations" has no preceding determiner and "recommendations" wasn't in the
+// trailing noun-compound exclusion — found via live testing: "Book recommendations from my
+// sister were great this month, I finished three of them already." misfired MEDIUM.
+const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|is|was)\\b)`, 'i')
 
 // "schedule" is just as common a plain noun ("my schedule is completely packed") as "book" is —
 // found via live testing, same false-positive shape as BOOK_VERB_PATTERN above: a determiner
 // right before "schedule" tripped the bare pattern below and mistagged MEDIUM "books or schedules
 // something" with no scheduling request present. "reserve" is left in the same pattern; it wasn't
 // the word the live failure hit.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+// h11: same unfixed sentence-initial gap as BOOK_VERB_PATTERN above — "Schedule conflicts" has
+// no preceding determiner and "conflicts" wasn't in the trailing exclusion — found via live
+// testing: "Schedule conflicts are the worst part of managing a team, especially with people
+// across time zones." misfired MEDIUM.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live
@@ -105,20 +129,36 @@ const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedu
 // plan", "look forward to it") — none of those take a determiner+noun object the way "forward
 // this/that/my email" does, so requiring an object determiner right after the verb (rather than
 // the email/text pattern's noun-context lookbehind) is the narrower, more reliable signal here.
-const FORWARD_VERB_PATTERN = /\bforward(?:ed|ing)?\b\s+(?:this|that|my|the|it|these|those|him|her|them)\b/i
+// h1: "going forward"/"moving forward" is a common adverbial idiom ("I'll try to be more
+// organized going forward this year") that can be immediately followed by one of the object
+// words below as a filler continuation, not an object of "forward" — found via live testing:
+// "going forward this year" misfired HIGH despite "this" not actually being what's being
+// forwarded. A determiner-object pattern with no live "forward X" action can't distinguish the
+// two without excluding the idiom's own lead-in words directly.
+const FORWARD_VERB_PATTERN = /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|the|it|these|those|him|her|them)\b/i
 
 // "delete"/"remove"/"wipe"/"erase" have the same noun-vs-verb ambiguity ORDER_VERB_PATTERN and its
 // siblings already handle ("the Remove button", "my delete key", "the wipe cycle on my
 // dishwasher") — found via live testing: a UI-element or appliance-cycle mention with a preceding
 // determiner tripped the bare pattern below and got silently auto-declined (fails-closed) as a
 // HIGH-risk irreversible-deletion request with no delete/remove intent at all.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+// h8: a product/brand name like "Remove.bg" has a period directly after the keyword with no
+// whitespace at all — the trailing exclusion's `(?!\s+...)` requires whitespace to even attempt
+// matching, so it never engages, and a sentence-initial "Remove" has no preceding determiner for
+// the lookbehind to exclude on either — found via live testing: "Remove.bg is a great tool for
+// removing backgrounds from photos, have you heard of it?" misfired HIGH. Excluding a keyword
+// directly followed by ".word" (a domain/filename-shaped token, not a verb's own object) closes
+// this without requiring whitespace.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
 // shape as DELETE_VERB_PATTERN above: a determiner-preceded noun mention tripped the bare pattern
 // and got auto-declined as a HIGH-risk money-spend request with no spend request present.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was)\\b)`, 'i')
+// h4: "pay attention (to X)" is an extremely common idiom with no money meaning at all, and
+// "attention" wasn't in the trailing exclusion — found via live testing: "Please pay attention
+// to this email from my landlord, it looks important." misfired HIGH.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already
@@ -131,8 +171,14 @@ const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|tra
 // that airline always take a few days to show up in my inbox." (a status observation, no live
 // cancellation request) still misfired HIGH. "confirmation"/"confirmations" added to the trailing
 // exclusion alongside link/option/button.
+// h5: "cancel (each other) out" is a common math/physics idiom with no subscription/commitment
+// meaning at all — "each" directly follows "cancel" with no preceding determiner for the
+// lookbehind to exclude on, and wasn't in the trailing exclusion either — found via live
+// testing: "These two effects cancel each other out in the final calculation, so the net result
+// is zero." misfired HIGH. Scoped to "each other" specifically (not bare "each") so a genuine
+// request like "cancel each of my recurring subscriptions" still gates normally.
 const CANCEL_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|is|was)\\b)`,
+  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|is|was)\\b|\\s+each\\s+other\\b)`,
   'i',
 )
 

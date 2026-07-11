@@ -332,6 +332,73 @@ describe('classifyRisk', () => {
     ).toBe('HIGH')
   })
 
+  it('does not flag "going forward"/"moving forward" immediately followed by a filler object-determiner word', () => {
+    // h1: FORWARD_VERB_PATTERN's object-determiner check had no protection against the "going
+    // forward"/"moving forward" idiom immediately followed by one of its own trigger words used
+    // as a filler continuation, not an object of "forward".
+    expect(classifyRisk("I'll try to be more organized going forward this year.").riskLevel).not.toBe('HIGH')
+    expect(classifyRisk("Moving forward, let's touch base every Monday.").riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag the "in order for X to" idiom as a purchase request', () => {
+    // h2: the trailing exclusion only covered "order to", not the equally common "order for"
+    // variant of the same idiom.
+    expect(classifyRisk('In order for us to succeed, I need to finish this project first.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag "pay attention" as a money-spend request', () => {
+    // h4: the trailing exclusion had no case for the "pay attention" idiom.
+    expect(classifyRisk('Please pay attention to this email from my landlord, it looks important.').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not flag the "cancel each other out" idiom as a cancellation request', () => {
+    // h5: the trailing exclusion had no case for the "cancel out" idiom, and "each" (with no
+    // preceding determiner) wasn't excluded by the lookbehind either.
+    expect(
+      classifyRisk('These two effects cancel each other out in the final calculation, so the net result is zero.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('still flags a genuine "cancel each of X" request despite containing "each"', () => {
+    expect(classifyRisk('Please cancel each of my recurring subscriptions.').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a product name with no whitespace after the delete/remove keyword', () => {
+    // h8: "Remove.bg" has a period directly after "Remove" with no preceding determiner
+    // (sentence-initial) and no whitespace for the trailing exclusion to even attempt matching.
+    expect(
+      classifyRisk('Remove.bg is a great tool for removing backgrounds from photos, have you heard of it?').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag a sentence-initial "Text alignment..." as a send-a-message request', () => {
+    // h9: EMAIL_TEXT_VERB_PATTERN never got the same sentence-initial-noun-compound fix
+    // CANCEL_VERB_PATTERN/PUBLISH_VERB_PATTERN already have.
+    expect(
+      classifyRisk('Text alignment in this document looks off, everything is centered instead of left-justified.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag a sentence-initial "Book recommendations..." as a MEDIUM booking request', () => {
+    // h10: same unfixed sentence-initial gap as h9, applied to BOOK_VERB_PATTERN.
+    expect(
+      classifyRisk('Book recommendations from my sister were great this month, I finished three of them already.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
+  it('does not flag a sentence-initial "Schedule conflicts..." as a MEDIUM scheduling request', () => {
+    // h11: same unfixed sentence-initial gap as h9/h10, applied to SCHEDULE_VERB_PATTERN.
+    expect(
+      classifyRisk('Schedule conflicts are the worst part of managing a team, especially with people across time zones.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
+  it('does not flag a sentence-initial "Purchase orders..." as a money-spend request', () => {
+    // h12: "purchase orders" is a common business noun-compound never added to
+    // PURCHASE_VERB_PATTERN's trailing exclusion.
+    expect(classifyRisk('Purchase orders take forever to get approved at my company, it\'s so frustrating.').riskLevel).not.toBe('HIGH')
+  })
+
   it('still exempts a pure past-narrative/reported-speech message with no separate live request', () => {
     // Regression guard for the h7 fix above: splitting into clauses must not reintroduce a false
     // positive for the plain single-clause cases these exemptions exist for.

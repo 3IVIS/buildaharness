@@ -55,8 +55,14 @@ const WORD_LIMIT = 40
 // not just sentence-initial capitalization), is checked separately below in isEnumeratedListShape
 // rather than folded into this case-insensitive regex — the "i" flag needed for the pronoun/
 // determiner alternation would otherwise make an upper-vs-lowercase check meaningless.
+// h9: the subject-reintroduction exclusion only covered exact pronoun/determiner tokens — an
+// indefinite pronoun like "someone"/"everybody"/"anybody" isn't one of those (and "some" as a
+// substring doesn't match due to the \b boundary), so it wasn't excluded either — found via live
+// testing: "Remind me to call the bank, and someone will follow up separately about the wire
+// transfer paperwork." (a single reminder plus an unrelated aside) wrongly tripped the
+// bulk-reminder confirmation gate.
 const ONE_COMMA_LIST_MARKER =
-  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each)\b)(\S+)/i
+  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody)\b)(\S+)/i
 
 const TWO_COMMA_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
 

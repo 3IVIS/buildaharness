@@ -34,6 +34,56 @@ class FakeLLMClient implements ILLMClient {
   }
 }
 
+/**
+ * ILLMClient standing in for a real semantic contradiction check: recognizes a
+ * "works as X"/"lives in Y" belief pair with two different X/Y values as a genuine conflict,
+ * scanning whatever newBeliefs+existingBeliefs the contradiction-checker request actually
+ * contains (rather than a fixed scripted response list) so it stays correct regardless of what
+ * synthetic belief ids the harness's fresh-each-turn WorldModel happens to assign. Every other
+ * callChatStructured use (risk/decomposition/etc.) gets an inert LOW-risk fallback so this can be
+ * dropped into any turn without needing to also script those unrelated call sites.
+ */
+class ContradictionAwareLLMClient implements ILLMClient {
+  calls = 0
+  async *callChat(): AsyncIterable<string> {
+    yield 'Noted.'
+  }
+  async callChatSync(): Promise<string> {
+    return 'Noted.'
+  }
+  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+    this.calls++
+    const isContradictionCheck = messages.some((m) => m.role === 'system' && m.content.includes('genuine contradictions'))
+    if (!isContradictionCheck) return { content: JSON.stringify({ riskLevel: 'LOW', reason: 'ok' }) }
+    const userMsg = messages.find((m) => m.role === 'user')
+    const { newBeliefs, existingBeliefs } = JSON.parse(userMsg!.content) as {
+      newBeliefs: { id: string; statement: string }[]
+      existingBeliefs: { id: string; statement: string }[]
+    }
+    const all = [...newBeliefs, ...existingBeliefs]
+    const extract = (re: RegExp) => (s: string) => re.exec(s)?.[1]?.trim().toLowerCase()
+    const occupationOf = extract(/\bwork(?:s|ed)? as (?:a |an )?([a-z\s-]+?)(?:\.|,|$)/i)
+    const cityOf = extract(/\blive(?:s|d)? in ([a-z\s]+?)(?:\.|,| now|$)/i)
+    const contradictions: { beliefIds: string[]; description: string }[] = []
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const occA = occupationOf(all[i].statement)
+        const occB = occupationOf(all[j].statement)
+        if (occA && occB && occA !== occB) {
+          contradictions.push({ beliefIds: [all[i].id, all[j].id], description: 'conflicting occupations' })
+          continue
+        }
+        const cityA = cityOf(all[i].statement)
+        const cityB = cityOf(all[j].statement)
+        if (cityA && cityB && cityA !== cityB) {
+          contradictions.push({ beliefIds: [all[i].id, all[j].id], description: 'conflicting cities' })
+        }
+      }
+    }
+    return { content: JSON.stringify({ contradictions }) }
+  }
+}
+
 /** ILLMClient whose callChatStructured is driven by a scripted callback — stands in for a model that calls tools. */
 class ScriptedToolLLMClient implements ILLMClient {
   calls = 0
@@ -1477,6 +1527,40 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
 
     expect(second.status).toBe('ok')
     expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
+  })
+
+  it('does not repeat an already-notified contradiction on a later, unrelated turn', async () => {
+    // The harness's WorldModel (and its own recordExternalContradiction dedup) is rebuilt empty
+    // every turn — without session-scoped dedup in runTurn's contradictionChecker wrapper, an
+    // unresolved conflict between two still-stored facts (e.g. two different stated occupations)
+    // gets independently rediscovered and re-notified on every later turn, no matter how
+    // unrelated that turn's own message is. Found via live testing: the same nurse-vs-
+    // freelance-designer conflict notice repeated on nearly every turn for the rest of the
+    // session, including turns about an unrelated hobby.
+    const llm = new ContradictionAwareLLMClient()
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('I work as a nurse.', { sessionId: 'contradiction-dedup' })
+    const second = await assistant.turn('I work as a freelance graphic designer.', { sessionId: 'contradiction-dedup' })
+    expect(second.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
+    expect(second.contradictionNotice).toBeDefined()
+
+    const third = await assistant.turn('My hobby is rock climbing on weekends.', { sessionId: 'contradiction-dedup' })
+    expect(third.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(false)
+    expect(third.contradictionNotice).toBeUndefined()
+  })
+
+  it('still notifies a genuinely NEW contradiction even after an earlier one was already surfaced', async () => {
+    const llm = new ContradictionAwareLLMClient()
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('I work as a nurse.', { sessionId: 'contradiction-dedup-new' })
+    await assistant.turn('I work as a freelance graphic designer.', { sessionId: 'contradiction-dedup-new' })
+    await assistant.turn('I live in Seattle.', { sessionId: 'contradiction-dedup-new' })
+    const fourth = await assistant.turn('I live in Denver now.', { sessionId: 'contradiction-dedup-new' })
+
+    expect(fourth.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
+    expect(fourth.contradictionNotice).toBeDefined()
   })
 })
 

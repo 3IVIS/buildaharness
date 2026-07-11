@@ -80,11 +80,20 @@ const SYSTEM_PROMPT =
   '"remind me what that said") is asking you to recall an already-known answer from this conversation, NOT asking you to execute anything — ' +
   'the word "again" there refers to repeating information back, not repeating an action. Only call the tool again if the user\'s new message ' +
   'explicitly asks for the underlying action itself to happen a second time (e.g. "run it again", "re-check the current time"), or describes ' +
-  'something that could have changed since the last run (e.g. asking for a live status). ' +
+  'something that could have changed since the last run (e.g. asking for a live status). A question about what a file you already wrote ' +
+  'earlier in this conversation now contains (e.g. "what does the file say?") is asking you to recall or verify content, never a reason to ' +
+  'propose writing to that file again — answer directly from the content you already wrote, or call read_file to confirm it, but never ' +
+  'call write_file for a question that isn\'t itself asking you to change the file. ' +
   'A user message like "exit" or "goodbye" is never a reason to call a tool. ' +
   'Never address the user by a name, unless they have stated their own name earlier in this exact ' +
-  'conversation (shown above) — inventing a plausible-sounding name for a warmer tone is a hallucination, ' +
-  'not a personalization, since no such fact exists to invent it from. ' +
+  'conversation, in one of the actual back-and-forth turns shown above — inventing a plausible-sounding ' +
+  'name for a warmer tone is a hallucination, not a personalization, since no such fact exists to invent ' +
+  'it from. This still applies even when a name IS available from the "Known facts about the user" ' +
+  'section described below: that section is carried over from OTHER, earlier conversations, not this ' +
+  'one, and using a name from it to address the user directly is the exact same hallucination this ' +
+  'instruction already forbids — it is not "this exact conversation" just because the fact happens to be ' +
+  'true. Sign off plainly (e.g. "Take care!") instead of by name unless the name genuinely came from this ' +
+  'conversation\'s own turns. ' +
   'A user referring back to something you said — "your suggestions", "those fixes", "what you recommended" — ' +
   'means an analysis, list, or recommendation YOU wrote earlier in this exact conversation (shown above), not ' +
   'a tool result. Re-read your own prior messages above to find it before doing anything else; never call a ' +
@@ -406,6 +415,16 @@ export class PersonalAssistant {
   private readonly onTrace?: (event: TraceEvent) => void
   private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
+  // The harness's WorldModel (and its own recordExternalContradiction dedup) is rebuilt empty
+  // every turn (see runTurn's factExtractor doc comment below), so an unresolved contradiction
+  // between two still-stored facts (e.g. two different stated occupations) gets independently
+  // rediscovered and re-notified on every subsequent turn, no matter how unrelated that turn's
+  // own message is — found via live testing: the same nurse-vs-freelance-designer conflict
+  // notice repeated on nearly every turn for the rest of the session, including turns about an
+  // unrelated hobby or pet. Keyed by sessionId (cleared in clearSession, i.e. `/new`) and by the
+  // sorted statement texts involved (not belief ids, which are reassigned each turn's fresh
+  // WorldModel) — see the contradictionChecker wrapper in runTurn for where this is populated.
+  private readonly notifiedContradictions = new Map<string, Set<string>>()
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -510,6 +529,7 @@ export class PersonalAssistant {
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
+    this.notifiedContradictions.delete(sessionId)
     const backend = this.fileTools?.backend ?? this.shellTools?.backend
     const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
     if (backend && workspaceRoot) {
@@ -930,8 +950,21 @@ export class PersonalAssistant {
         // call per belief-set growth (never per-pair, never a full re-scan), and skipped
         // entirely when every newly-added belief looks like a structured/technical claim the
         // lexical check already covers (see contradiction-checker.ts's looksLikeCodingFact).
-        contradictionChecker: (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) =>
-          checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model, accumulateUsage),
+        // Filtered against notifiedContradictions (this class's field, see its doc comment) so
+        // an unresolved conflict already surfaced once this session doesn't get independently
+        // rediscovered and re-notified by every later turn's fresh, from-scratch WorldModel.
+        contradictionChecker: async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
+          const results = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model, accumulateUsage)
+          const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
+          const seen = this.notifiedContradictions.get(sessionId) ?? new Set<string>()
+          this.notifiedContradictions.set(sessionId, seen)
+          return results.filter((c) => {
+            const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
+            if (seen.has(signature)) return false
+            seen.add(signature)
+            return true
+          })
+        },
         // Layered on top of review-proposed-change.ts's lexical isNegation check — same
         // "skip when it reads like a coding fact" gate contradictionChecker uses, since that's
         // the domain the fixed-phrase check already covers reasonably well.

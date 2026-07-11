@@ -276,8 +276,11 @@ export async function fetchUrlSafely(url) {
 // through the TS build.
 const FACT_MARKERS =
   /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
+// h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
+// HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
+// copied verbatim to dist, not bundled, so it can't import that module directly).
 const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am) (not |no longer )?(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // A genuine reminder-request clause of its own (remind me/set a reminder/create an event) means
 // the raw message is a to-do PLUS an unrelated fact, not just a reworded fact — see
@@ -421,7 +424,11 @@ async function main() {
       description:
         'Propose writing text content to a file inside the sandboxed workspace. This never writes immediately — ' +
         'it stages the proposal for the user to explicitly approve or decline before anything touches disk. ' +
-        '`path` outside the workspace is rejected immediately, before anything is staged.',
+        '`path` outside the workspace is rejected immediately, before anything is staged. Do NOT call this to check ' +
+        'or verify what a file currently contains — that is a read, not a write, and re-proposing the same write ' +
+        'just to answer a question about existing content forces a pointless second approval prompt. Use read_file ' +
+        'for that instead (or answer directly if you already know the content from a write earlier in this ' +
+        'conversation).',
       inputSchema: {
         path: z.string().describe('File path to write.'),
         content: z.string().describe('Full text content to write to the file.'),

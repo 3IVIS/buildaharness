@@ -112,7 +112,11 @@ export const WRITE_FILE_TOOL: ToolDefinition = {
   description:
     'Propose writing text content to a file inside the sandboxed workspace. This never writes immediately — ' +
     'it stages the proposal for the user to explicitly approve or decline before anything touches disk. ' +
-    '`path` outside the workspace is rejected immediately, before anything is staged.',
+    '`path` outside the workspace is rejected immediately, before anything is staged. Do NOT call this to check ' +
+    'or verify what a file currently contains — that is a read, not a write, and re-proposing the same write ' +
+    'just to answer a question about existing content forces a pointless second approval prompt. Use read_file ' +
+    'for that instead (or answer directly if you already know the content from a write earlier in this ' +
+    'conversation).',
   input_schema: {
     type: 'object',
     properties: {

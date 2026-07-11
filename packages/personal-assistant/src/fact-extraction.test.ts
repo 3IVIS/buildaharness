@@ -114,6 +114,15 @@ describe('extractFactsFromTurn', () => {
     expect(facts[0].durable).toBe(true)
   })
 
+  it('captures a health/dietary self-statement with an intensifier between "I\'m" and the marker word', () => {
+    // h6: HEALTH_OR_DIETARY_MARKERS originally required the marker word immediately adjacent to
+    // "i'm"/"i am" (only an optional "not "/"no longer " in between) — "severely" broke that
+    // adjacency and silently dropped the fact entirely.
+    const facts = extractFactsFromTurn("I'm severely allergic to peanuts, so please keep that in mind for any food suggestions.", 'turn:27')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
+  })
+
   it('captures a health/dietary fact joined to a request clause by "yet"', () => {
     // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
     // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in
