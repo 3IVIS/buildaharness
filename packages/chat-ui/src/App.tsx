@@ -92,10 +92,11 @@ function newId(): string {
  * aren't CORS-enabled for arbitrary browser origins, so a plain `fetch()` from inside this
  * app fails outright with "Failed to fetch" (verified live). On desktop this is fixed by
  * routing through @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no
- * CORS involved, scoped to html.duckduckgo.com/api.search.brave.com via capabilities/
- * default.json's `http:default` entry (fetch_url's arbitrary targets aren't in that scope,
- * so still CORS-blocked on desktop today — search was the immediate ask). A plain browser
- * tab has no equivalent escape hatch and is left on native fetch.
+ * CORS involved. Scoped via capabilities/default.json's `http:default` entry to any http(s)
+ * URL (originally just html.duckduckgo.com/api.search.brave.com, which left fetch_url's
+ * arbitrary targets CORS-blocked on desktop — widened once fetch_url needed real page fetches
+ * too); the real gate against SSRF is the DNS-checked `assertPublicHttpUrl` guard below, not
+ * this scope. A plain browser tab has no equivalent escape hatch and is left on native fetch.
  *
  * dns: fetch_url's SSRF guard (web-tools.ts's assertPublicHttpUrl) defaults to
  * `node:dns/promises`, which doesn't exist in any webview or browser tab — without an
