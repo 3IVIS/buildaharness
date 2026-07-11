@@ -203,6 +203,15 @@ jobs:
       - name: Install deps (root + workspaces)
         run: npm ci
 
+      # personal-assistant depends on the real @buildaharness/harness and
+      # @buildaharness/runtime packages (no source-path aliasing) — their
+      # dist/ must exist before typecheck/test, not just before build.
+      - name: Build harness dependency
+        run: npm run build:harness
+
+      - name: Build runtime dependency
+        run: npm run build:runtime
+
       - name: Type-check
         working-directory: packages/personal-assistant
         run: npm run typecheck
@@ -228,6 +237,20 @@ jobs:
       - name: Install deps (root + workspaces)
         run: npm ci
 
+      # chat-ui depends on the real @buildaharness/{harness,runtime,personal-assistant}
+      # packages (no source-path aliasing) — their dist/ must exist before
+      # typecheck/test, and chat-ui also bundles them into its own `vite build`
+      # rather than externalizing them (it's an app, not a library), so the
+      # same dist/ output covers both needs.
+      - name: Build harness dependency
+        run: npm run build:harness
+
+      - name: Build runtime dependency
+        run: npm run build:runtime
+
+      - name: Build personal-assistant dependency
+        run: npm run build:personal-assistant
+
       - name: Type-check
         working-directory: packages/chat-ui
         run: npm run typecheck
@@ -235,19 +258,6 @@ jobs:
       - name: Test
         working-directory: packages/chat-ui
         run: npm test
-
-      # chat-ui bundles its workspace dependencies rather than externalizing
-      # them (it's an app, not a library), so its own `vite build` needs their
-      # dist/ to actually exist on disk first — unlike typecheck/test, which
-      # resolve those packages via tsconfig/vitest source-path aliases instead.
-      - name: Build runtime dependency
-        run: npm run build:runtime
-
-      - name: Build harness dependency
-        run: npm run build:harness
-
-      - name: Build personal-assistant dependency
-        run: npm run build:personal-assistant
 
       - name: Build
         working-directory: packages/chat-ui

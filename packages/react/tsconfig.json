@@ -11,7 +11,6 @@
     "types": ["vitest/globals", "node"],
     "paths": {
       "@buildaharness/runtime": ["../runtime/src/index.ts"],
-      "@buildaharness/canvas": ["../canvas/src/spec/schema.ts"],
       "@buildaharness/harness": ["../harness/src/index.ts"]
     }
   },

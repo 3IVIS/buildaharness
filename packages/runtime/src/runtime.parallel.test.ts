@@ -6,7 +6,7 @@ import { EventBus } from './events'
 import { FlowState } from './state'
 import { FlowExecutionError, AbortedError } from './errors'
 import type { ILLMClient, ChatMessage, ChatOptions } from './llm-client'
-import type { FlowSpec, Node } from '@buildaharness/canvas'
+import type { FlowSpec, Node } from './spec/schema'
 import type { ExecutorFn } from './executors/index'
 
 // ---------------------------------------------------------------------------

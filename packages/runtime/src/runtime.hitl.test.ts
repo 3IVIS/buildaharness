@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { FlowRuntime } from './runtime'
 import { createExecutionContext } from './context'
 import type { ILLMClient, ChatMessage, ChatOptions } from './llm-client'
-import type { FlowSpec } from '@buildaharness/canvas'
+import type { FlowSpec } from './spec/schema'
 
 function mockLLMClient(): ILLMClient {
   return {

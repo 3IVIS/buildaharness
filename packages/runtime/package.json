@@ -19,7 +19,6 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@buildaharness/canvas": "*",
     "@types/node": "^20.14.0",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^5.4.5",

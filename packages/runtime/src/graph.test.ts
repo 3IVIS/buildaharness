@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { FlowGraph } from './graph'
 import { GraphCycleError, FlowExecutionError } from './errors'
-import type { Node, Edge } from '@buildaharness/canvas'
+import type { Node, Edge } from './spec/schema'
 
 function makeNodes(ids: string[]): Node[] {
   return ids.map(id => ({ id, type: 'transform' as const, mode: 'mapping' as const }))

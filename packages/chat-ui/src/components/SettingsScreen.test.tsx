@@ -192,7 +192,7 @@ describe('SettingsScreen', () => {
     it('renders memory summary once loaded', () => {
       renderSettings({
         memorySummary: {
-          facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test' }],
+          facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test', durable: true }],
           reminders: [],
           experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
         },

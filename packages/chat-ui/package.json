@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@buildaharness/personal-assistant": "*",
-    "@buildaharness/runtime": "*",
+    "@buildaharness/personal-assistant": "^0.1.0",
+    "@buildaharness/runtime": "^0.1.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-http": "^2.5.9",

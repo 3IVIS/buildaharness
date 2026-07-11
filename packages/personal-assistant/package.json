@@ -18,8 +18,8 @@
     "cli": "tsx src/cli.ts"
   },
   "dependencies": {
-    "@buildaharness/harness": "*",
-    "@buildaharness/runtime": "*",
+    "@buildaharness/harness": "^0.1.0",
+    "@buildaharness/runtime": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   },

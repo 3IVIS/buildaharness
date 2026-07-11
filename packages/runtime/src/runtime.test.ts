@@ -3,10 +3,47 @@ import { FlowRuntime } from './runtime'
 import { createExecutionContext } from './context'
 import { UnknownNodeTypeError, AbortedError } from './errors'
 import type { ILLMClient, ChatMessage, ChatOptions, LLMStructuredResponse } from './llm-client'
-import type { FlowSpec, RuntimeFlowSpec } from '@buildaharness/canvas'
-import { assertRuntimeFlowSpec } from '@buildaharness/canvas'
-import { EXAMPLE_FLOWS } from '../../canvas/src/spec/examples'
+import type { FlowSpec, RuntimeFlowSpec } from './spec/schema'
+import { assertRuntimeFlowSpec } from './spec/schema'
 import { getExecutor, registerExecutor, unregisterExecutor } from './executors/index'
+
+// Mirrors the 'RAG Agent' example flow (packages/canvas/src/spec/examples.ts,
+// EXAMPLE_FLOWS[0]) — kept as an independent literal rather than imported from
+// canvas so this package's tests don't reach into canvas's source tree.
+const RAG_AGENT_FLOW: FlowSpec = {
+  spec_version: '0.2.0',
+  id: 'rag-agent-flow',
+  name: 'RAG Agent',
+  state_schema: {
+    type: 'object',
+    properties: {
+      question:          { type: 'string', description: 'User input question' },
+      retrieved_chunks:  { type: 'array',  description: 'Relevant document chunks', reducer: 'replace' },
+      formatted_context: { type: 'string', description: 'Chunks as a context string' },
+      answer:            { type: 'string', description: 'Generated grounded answer' },
+    },
+    required: ['question'],
+  },
+  memory_stores: {
+    knowledge_base: { type: 'vector', backend: 'qdrant', connection_env: 'QDRANT_URL', embedding_model: 'text-embedding-3-small', dimensions: 1536, scope: 'global' },
+    qa_cache:       { type: 'key_value', backend: 'redis', connection_env: 'REDIS_URL', scope: 'thread' },
+  },
+  nodes: [
+    { id: 'start',          type: 'input',        output_schema: { type: 'object', properties: { question: { type: 'string' } } } },
+    { id: 'retrieve',       type: 'memory_read',  store_id: 'knowledge_base', retrieval_mode: 'semantic', query_expr: '$.state.question', top_k: 5, min_score: 0.72, output_key: 'retrieved_chunks' },
+    { id: 'format_context', type: 'transform',    mode: 'fn_ref', fn_ref: '@canvas/flows-rag/formatChunks' },
+    { id: 'generate',       type: 'llm_call',     system_prompt: 'You are a helpful assistant. Answer using only the provided context.', prompt_template: 'Context:\n{{$.state.formatted_context}}\n\nQuestion: {{$.state.question}}\n\nAnswer:', model_params: { temperature: 0.1, max_tokens: 512 }, output_key: 'answer' },
+    { id: 'cache_qa',       type: 'memory_write', store_id: 'qa_cache', key_expr: '$.state.question', value_expr: '$.state.answer', write_mode: 'upsert' },
+    { id: 'done',           type: 'output' },
+  ],
+  edges: [
+    { type: 'direct', from: 'start',          to: 'retrieve' },
+    { type: 'direct', from: 'retrieve',       to: 'format_context' },
+    { type: 'direct', from: 'format_context', to: 'generate' },
+    { type: 'direct', from: 'generate',       to: 'cache_qa' },
+    { type: 'direct', from: 'cache_qa',       to: 'done' },
+  ],
+}
 
 function mockLLMClient(response = 'mocked response'): ILLMClient {
   return {
@@ -133,7 +170,7 @@ describe('FlowRuntime', () => {
   })
 
   it('runs full RAG Agent flow (mocked LLM) end-to-end and returns final FlowState with answer', async () => {
-    const ragFlow = EXAMPLE_FLOWS[0].spec
+    const ragFlow = RAG_AGENT_FLOW
     const runtime = new FlowRuntime()
     const mockMemory = {
       get: vi.fn().mockResolvedValue(undefined),

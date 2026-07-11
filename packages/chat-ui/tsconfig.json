@@ -14,13 +14,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["vite/client"],
-    "paths": {
-      "@buildaharness/personal-assistant": ["../personal-assistant/src/index.ts"],
-      "@buildaharness/runtime": ["../runtime/src/index.ts"],
-      "@buildaharness/harness": ["../harness/src/index.ts"],
-      "@buildaharness/canvas": ["../canvas/src/spec/schema.ts"]
-    }
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

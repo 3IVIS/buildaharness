@@ -1,4 +1,4 @@
-import type { Edge } from '@buildaharness/canvas'
+import type { Edge } from './spec/schema'
 import { GraphCycleError, FlowExecutionError } from './errors'
 
 type NodeLike = { id: string; type: string; [key: string]: unknown }

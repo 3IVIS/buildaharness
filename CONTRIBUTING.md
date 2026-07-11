@@ -68,11 +68,12 @@ Every schema PR must include:
 1. **`spec/schema.ts`** — the change with a `describe()` string explaining field semantics
 2. **`src/spec/schema.ts`** — kept in sync (omit `.refine()` calls on discriminated union members)
 3. **`packages/canvas/src/spec/schema.ts`** — same sync, same rule
-4. **`spec/schema.json`** — regenerated
-5. **`spec/CHANGELOG.md`** — one entry under the appropriate version header
-6. **At least one example flow** in `flows/` demonstrating the change
+4. **`packages/runtime/src/spec/schema.ts`** — same sync, same rule (runtime's own copy — see that file's header comment for why it doesn't just depend on `@buildaharness/canvas` or `@buildaharness/flow-spec`)
+5. **`spec/schema.json`** — regenerated
+6. **`spec/CHANGELOG.md`** — one entry under the appropriate version header
+7. **At least one example flow** in `flows/` demonstrating the change
 
-Run `node scripts/check-schema-sync.mjs` to verify the three copies are aligned.
+Run `node scripts/check-schema-sync.mjs` to verify all copies are aligned.
 
 Spec version follows semver. Minor versions are additive only (new optional fields). Removing or renaming fields requires a major bump and a migration note in `CHANGELOG.md`.
 
@@ -133,16 +134,17 @@ def test_all_flows_compile(flow_path):
 
 ## Adding a node type
 
-Touches eight places:
+Touches nine places:
 
 1. **`spec/schema.ts`** — Zod schema entry with `describe()` strings
 2. **`src/spec/schema.ts`** — canvas copy (omit `.refine()` calls)
 3. **`packages/canvas/src/spec/schema.ts`** — canvas package copy (same rule)
-4. **`src/store/index.ts`** — `NODE_DEFAULTS` entry
-5. **`src/canvas/nodes/NodeComponents.tsx`** — the React component, exported by name
-6. **`src/canvas/nodes/index.ts`** — add to the `nodeTypes` export map
-7. **`src/components/ConfigPanel.tsx`** — panel function + entry in `PANEL_MAP`
-8. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
+4. **`packages/runtime/src/spec/schema.ts`** — runtime's own copy (same rule); also add/skip an executor in `packages/runtime/src/executors/` depending on whether runtime should execute the new type or treat it as a passthrough stub
+5. **`src/store/index.ts`** — `NODE_DEFAULTS` entry
+6. **`src/canvas/nodes/NodeComponents.tsx`** — the React component, exported by name
+7. **`src/canvas/nodes/index.ts`** — add to the `nodeTypes` export map
+8. **`src/components/ConfigPanel.tsx`** — panel function + entry in `PANEL_MAP`
+9. **`src/canvas/nodes/BaseNode.tsx`** — icon (`NODE_ICONS`) and colour (`NODE_HEX`)
 
 ### Adding a harness node type
 
