@@ -154,10 +154,6 @@ function findContradictionNotice(layerActivity: LayerActivityEvent[]): string | 
 
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
-// Matches the existing maxSteps spirit for the harness loop below — a bounded
-// number of tool round-trips per turn, not an open-ended agent loop.
-const TOOL_LOOP_MAX_ITERATIONS = 5
-
 // Some OpenAI-compatible providers/models (observed live: OpenRouter's z-ai/glm-5.2) don't
 // reliably populate the structured tool_calls field even when they intend to call a tool —
 // they emit their own inline pseudo-XML tool-call syntax as plain content instead (e.g.
@@ -287,7 +283,7 @@ export interface AssistantTurnResult {
   }
   /**
    * Token usage accumulated across every real LLM call this turn made (can be more than one:
-   * decomposition, plan-building, up to TOOL_LOOP_MAX_ITERATIONS tool-loop round trips).
+   * decomposition, plan-building, up to maxSteps tool-loop round trips).
    * Absent when the backend/response never reported usage at all (e.g. the claude-cli backend
    * with no usage field) — same "absent when unused" convention as trace/sources. Never set on
    * needs_approval/escalated, matching how trace/sources already behave.
@@ -356,6 +352,15 @@ export interface PersonalAssistantOptions {
   experienceStore?: ExperienceStore
   /** Stores an in-flight harness run's checkpoint so a crash/reload mid-turn can resume instead of losing the turn. */
   checkpointStore?: CheckpointStore
+  /**
+   * Caps both the harness's plan-driven main loop (auto-raised there via
+   * `Math.max(maxSteps, initialTasks.length)` so a decomposed plan is never starved) and the
+   * ReAct-style tool loop's round-trips (runToolLoop, below) — one shared per-turn step
+   * budget rather than two independently-tuned constants. Defaults to 15: high enough that a
+   * legitimate multi-query research task (e.g. "find primary schools near me", which can
+   * easily take 5+ real search round-trips) doesn't get cut off mid-work, while still bounding
+   * a stuck/looping model.
+   */
   maxSteps?: number
   /**
    * When set, `turn()` gives the model real read_file/list_directory/write_file
@@ -445,7 +450,7 @@ export class PersonalAssistant {
     this.memory = options.memory ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant' })
     this.experienceStore = options.experienceStore ?? new InMemoryExperienceStore()
     this.checkpointStore = options.checkpointStore ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-checkpoints' })
-    this.maxSteps = options.maxSteps ?? 5
+    this.maxSteps = options.maxSteps ?? 15
     this.fileTools = options.fileTools
     this.webTools = options.webTools
     this.shellTools = options.shellTools
@@ -600,7 +605,7 @@ export class PersonalAssistant {
     const transcriptKey = `transcript:${sessionId}`
 
     // Accumulates usage across every real LLM call this turn makes — a turn can make several
-    // (decomposition, plan-building, up to TOOL_LOOP_MAX_ITERATIONS tool-loop round trips) —
+    // (decomposition, plan-building, up to maxSteps tool-loop round trips) —
     // into one turn-level total attached to a successful AssistantTurnResult. Absent (stays
     // undefined) on a turn that never calls onUsage at all, e.g. the claude-cli backend
     // producing no usage field, or a needs_approval/escalated turn — same "absent when
@@ -1212,7 +1217,7 @@ export class PersonalAssistant {
     // distinction matters.
     let dispatchedAnyToolCall = false
 
-    for (let iteration = 0; iteration < TOOL_LOOP_MAX_ITERATIONS; iteration++) {
+    for (let iteration = 0; iteration < this.maxSteps; iteration++) {
       // For the claude-cli backend, this one call may run several tool round trips
       // internally (Claude Code's own agentic loop) before returning — onToolStep here is
       // what makes those otherwise-invisible calls show up live; for the proxy backend,
@@ -1228,9 +1233,8 @@ export class PersonalAssistant {
         if (looksLikeUnparsedToolCall(response.content)) {
           // Never show this to the user as if it were a real answer — nudge the model to
           // either call a tool properly or answer in plain text, and retry. Bounded by the
-          // same TOOL_LOOP_MAX_ITERATIONS cap as any other iteration: a model that keeps
-          // doing this falls through to the 'escalated' return below instead of ever
-          // reaching the user.
+          // same maxSteps cap as any other iteration: a model that keeps doing this falls
+          // through to the 'escalated' return below instead of ever reaching the user.
           messages.push({ role: 'assistant', content: response.content })
           messages.push({
             role: 'user',
@@ -1382,7 +1386,7 @@ export class PersonalAssistant {
 
     return {
       kind: 'escalated',
-      reason: `Tool loop exceeded ${TOOL_LOOP_MAX_ITERATIONS} iterations without producing a final answer.`,
+      reason: `Tool loop exceeded ${this.maxSteps} iterations without producing a final answer.`,
     }
   }
 

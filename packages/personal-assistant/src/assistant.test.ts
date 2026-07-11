@@ -830,7 +830,9 @@ describe('PersonalAssistant file tools', () => {
       content: '',
       toolCalls: [{ id: 'toolu_x', name: 'list_directory', input: { path: '.' } }],
     }))
-    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+    // maxSteps set explicitly (small) rather than relying on the real 15 default, to keep
+    // this infinite-tool-call scenario fast.
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, maxSteps: 5 })
 
     const result = await assistant.turn('Keep listing files forever')
 
@@ -858,15 +860,17 @@ describe('PersonalAssistant web + reminder tools', () => {
 
   it('escalates instead of ever surfacing raw tool-call syntax when the model keeps failing to populate tool_calls past the iteration cap', async () => {
     const malformed = { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>' }
-    // One scripted response per TOOL_LOOP_MAX_ITERATIONS iteration (assistant.ts) — every one
-    // malformed, so the loop must exhaust its retry budget and escalate rather than loop forever.
-    const llm = scriptedResponses([malformed, malformed, malformed, malformed, malformed])
-    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+    // One scripted response per maxSteps iteration — every one malformed, so the loop must
+    // exhaust its retry budget and escalate rather than loop forever. maxSteps set explicitly
+    // (small) here rather than relying on the real 15 default, to keep the test fast.
+    const llm = scriptedResponses([malformed, malformed, malformed])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, maxSteps: 3 })
 
     const result = await assistant.turn('What are the closest primary schools?')
 
     expect(result.status).toBe('escalated')
     expect(result.reply).toBeNull()
+    expect(result.reason).toBe('Tool loop exceeded 3 iterations without producing a final answer.')
   })
 
   it('wraps a fetch_url result as untrusted external content before it reaches the model, and records it as a source', async () => {
