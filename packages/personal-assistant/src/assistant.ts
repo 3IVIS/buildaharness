@@ -158,6 +158,19 @@ const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 // number of tool round-trips per turn, not an open-ended agent loop.
 const TOOL_LOOP_MAX_ITERATIONS = 5
 
+// Some OpenAI-compatible providers/models (observed live: OpenRouter's z-ai/glm-5.2) don't
+// reliably populate the structured tool_calls field even when they intend to call a tool —
+// they emit their own inline pseudo-XML tool-call syntax as plain content instead (e.g.
+// `<tool_call>web_search<arg_key>query</arg_key><arg_value>...</arg_value></tool_call>`).
+// parseToolCalls (openai-compatible-client.ts) only ever reads the structured field, so that
+// content would otherwise look like an ordinary "no more tool calls" final answer and get
+// shown to the user as raw tags instead of a real reply. Detected below and never surfaced.
+const UNPARSED_TOOL_CALL_PATTERN = /<tool_call>/i
+
+function looksLikeUnparsedToolCall(content: string): boolean {
+  return UNPARSED_TOOL_CALL_PATTERN.test(content)
+}
+
 function previewContent(content: string, maxLines = 20): string {
   const lines = content.split('\n')
   if (lines.length <= maxLines) return content
@@ -1212,6 +1225,20 @@ export class PersonalAssistant {
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
+        if (looksLikeUnparsedToolCall(response.content)) {
+          // Never show this to the user as if it were a real answer — nudge the model to
+          // either call a tool properly or answer in plain text, and retry. Bounded by the
+          // same TOOL_LOOP_MAX_ITERATIONS cap as any other iteration: a model that keeps
+          // doing this falls through to the 'escalated' return below instead of ever
+          // reaching the user.
+          messages.push({ role: 'assistant', content: response.content })
+          messages.push({
+            role: 'user',
+            content: 'Your last reply contained unparsed tool-call syntax (a literal "<tool_call>" tag) instead of either a real tool call or a plain-text answer. Do not include any tool-call-like tags in your reply — either call a tool, or answer in plain text.',
+          })
+          continue
+        }
+
         if (!onToken) return { kind: 'final', content: response.content, sources }
 
         if (!dispatchedAnyToolCall) {

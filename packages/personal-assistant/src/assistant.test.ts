@@ -840,6 +840,35 @@ describe('PersonalAssistant file tools', () => {
 })
 
 describe('PersonalAssistant web + reminder tools', () => {
+  it('retries instead of showing raw tool-call syntax when the model fails to populate the structured tool_calls field (e.g. OpenRouter z-ai/glm-5.2)', async () => {
+    const llm = scriptedResponses([
+      { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>primary schools Schmargendorf Berlin</arg_value></tool_call>' },
+      { content: 'Here are the nearest primary schools.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn('What are the closest primary schools?')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Here are the nearest primary schools.')
+    expect(llm.calls).toBe(2)
+    const retryMessages = (llm as unknown as { receivedMessages: ChatMessage[][] }).receivedMessages[1]
+    expect(retryMessages.some(m => m.role === 'user' && m.content.includes('<tool_call>'))).toBe(true)
+  })
+
+  it('escalates instead of ever surfacing raw tool-call syntax when the model keeps failing to populate tool_calls past the iteration cap', async () => {
+    const malformed = { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>' }
+    // One scripted response per TOOL_LOOP_MAX_ITERATIONS iteration (assistant.ts) — every one
+    // malformed, so the loop must exhaust its retry budget and escalate rather than loop forever.
+    const llm = scriptedResponses([malformed, malformed, malformed, malformed, malformed])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn('What are the closest primary schools?')
+
+    expect(result.status).toBe('escalated')
+    expect(result.reply).toBeNull()
+  })
+
   it('wraps a fetch_url result as untrusted external content before it reaches the model, and records it as a source', async () => {
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'fetch_url', input: { url: 'https://example.com' } }] },
