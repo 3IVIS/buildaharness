@@ -405,6 +405,72 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Yesterday I had to cancel my dentist appointment because of the snowstorm.').riskLevel).not.toBe('HIGH')
     expect(classifyRisk("My landlord said he will cancel my lease if I don't pay rent by Friday.").riskLevel).not.toBe('HIGH')
   })
+
+  // batch 10 re-probe (conv166) — h1: splitRiskClauses only split on a comma before a
+  // coordinating conjunction, never a semicolon, so a semicolon-joined exempt past-narrative
+  // clause suppressed HIGH-risk gating for a live, different request in the same message too.
+  it('does not let a semicolon-joined past-narrative clause suppress HIGH-risk gating for a live, different request', () => {
+    expect(
+      classifyRisk('I already cancelled my old gym membership; please cancel my current streaming subscription now.').riskLevel,
+    ).toBe('HIGH')
+  })
+
+  it('still exempts a pure semicolon-joined past-narrative message with no separate live request', () => {
+    expect(
+      classifyRisk('I already cancelled my old gym membership; it was long overdue.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // h2 (re-probe): ORDER_VERB_PATTERN's trailing exclusion only covered is/was/to/for — a
+  // sentence-initial "Order" followed by a noun-compound outside that list still misfired HIGH.
+  it('does not flag a sentence-initial "Order confirmation..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Order confirmation emails from this store take forever to arrive, is that normal?').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // h3 (re-probe): PAY_WIRE_PATTERN's trailing exclusion only covered is/was/attention.
+  it('does not flag a sentence-initial "Pay stubs..." as a money-spend request', () => {
+    expect(classifyRisk('Pay stubs from my old job are surprisingly hard to track down online.').riskLevel).not.toBe('HIGH')
+  })
+
+  // h4 (re-probe): FORWARD_VERB_PATTERN's object-determiner list was missing "our" (also missing
+  // your/his/a/an/us) — the opposite failure mode from this file's other patterns, a false
+  // negative that let a genuine live request through with no approval gate at all.
+  it('flags a genuine forward request phrased with a previously-missing object determiner ("our")', () => {
+    expect(classifyRisk('Please forward our proposal to the client before end of day.').riskLevel).toBe('HIGH')
+  })
+
+  // h5 (re-probe): EMAIL_TEXT_VERB_PATTERN's trailing exclusion covered "alignment" but not
+  // "thread"/"threads".
+  it('does not flag a sentence-initial "Email thread..." as a send-a-message request', () => {
+    expect(classifyRisk('Email thread got really long today, over 50 replies by lunchtime.').riskLevel).not.toBe('HIGH')
+  })
+
+  // h6 (re-probe): PUBLISH_VERB_PATTERN's trailing exclusion covered "engagement" but not
+  // "office"/"mortem".
+  it('does not flag a sentence-initial "Post office hours..." as a publish request', () => {
+    expect(classifyRisk('Post office hours changed this week, they now close at 5.').riskLevel).not.toBe('HIGH')
+  })
+
+  // h7 (re-probe): DELETE_VERB_PATTERN's trailing exclusion only ever covered is/was.
+  it('does not flag a sentence-initial "Delete key..." as a delete request', () => {
+    expect(classifyRisk("Delete key on this keyboard doesn't work half the time, so annoying.").riskLevel).not.toBe('HIGH')
+  })
+
+  // h8 (re-probe): CANCEL_VERB_PATTERN's trailing exclusion covered link/option/button/
+  // confirmation(s) but not "culture".
+  it('does not flag "cancel culture" as a cancellation request', () => {
+    expect(classifyRisk("Cancel culture has gotten out of hand online lately, don't you think?").riskLevel).not.toBe('HIGH')
+  })
+
+  // h9 (re-probe): BOOK_VERB_PATTERN's trailing exclusion covered club/report/recommendations
+  // but not "signing"/"signings".
+  it('does not flag a sentence-initial "Book signing events..." as a MEDIUM booking request', () => {
+    expect(
+      classifyRisk('Book signing events are popular at that indie bookstore this weekend.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
 })
 
 describe('looksActionOriented', () => {

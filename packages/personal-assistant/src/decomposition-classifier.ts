@@ -61,8 +61,13 @@ const WORD_LIMIT = 40
 // testing: "Remind me to call the bank, and someone will follow up separately about the wire
 // transfer paperwork." (a single reminder plus an unrelated aside) wrongly tripped the
 // bulk-reminder confirmation gate.
+// batch 10 re-probe (conv166/h10): existential "there" ("there's a package coming") isn't a
+// pronoun/determiner/indefinite-pronoun either, and wasn't in the exclusion list — found via live
+// testing: "Remind me to call the bank, and there's a package coming today too." (a single
+// reminder plus an unrelated aside) wrongly tripped the bulk-reminder confirmation gate and got
+// needlessly declined fails-closed, blocking a genuine single-reminder request outright.
 const ONE_COMMA_LIST_MARKER =
-  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody)\b)(\S+)/i
+  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody)\b)(\S+)/i
 
 const TWO_COMMA_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
 

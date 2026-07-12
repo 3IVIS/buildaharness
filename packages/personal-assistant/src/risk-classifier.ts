@@ -49,7 +49,13 @@ const nounContextLookbehind = (extra = ''): string =>
 // "for" instead of "to" directly after "order" ("order for us to succeed"), and "in" isn't a
 // determiner NOUN_CONTEXT_DETERMINERS' lookbehind recognizes either — found via live testing:
 // "In order for us to succeed, I need to finish this project first." misfired HIGH.
-const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for)\\b)`, 'i')
+// batch 10 re-probe (conv166/h2): a sentence-initial "Order" (capitalized, nothing precedes it
+// for nounContextLookbehind to exclude on) followed by a noun-compound word not in the trailing
+// list still misfired HIGH — found via live testing: "Order confirmation emails from this store
+// take forever to arrive, is that normal?" misfired. Added "confirmation(s)"/"number"/"status"/
+// "history", the same order-tracking noun-compounds CANCEL_VERB_PATTERN's own trailing list
+// already covers the analogous case for.
+const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for|confirmations?|number|status|history)\\b)`, 'i')
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
@@ -71,8 +77,11 @@ const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\
 // below, and a sentence-initial "Text" has no determiner for nounContextLookbehind to exclude
 // on — found via live testing: "Text alignment in this document looks off, everything is
 // centered instead of left-justified." misfired HIGH.
+// batch 10 re-probe (conv166/h5): "thread"/"threads" is the same sentence-initial noun-compound
+// gap as "alignment" above — found via live testing: "Email thread got really long today, over
+// 50 replies by lunchtime." misfired HIGH with no live send request at all.
 const EMAIL_TEXT_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|is|was)\\b)`,
+  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|is|was)\\b)`,
   'i',
 )
 
@@ -99,7 +108,10 @@ const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purcha
 // publishing request) still misfired HIGH. "engagement"/"engagements" added to the trailing
 // exclusion, the same noun-compound shape CANCEL_VERB_PATTERN's link/option/button list below
 // already uses for its own sentence-initial gap.
-const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|is|was)\\b)`, 'i')
+// batch 10 re-probe (conv166/h6): "office"/"mortem" are the same sentence-initial noun-compound
+// gap as "engagement" above, just not exhaustively covered by that one earlier fix — found via
+// live testing: "Post office hours changed this week, they now close at 5." misfired HIGH.
+const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|office|mortem|is|was)\\b)`, 'i')
 
 // "book" in "schedule|book|reserve" below has the same noun-vs-verb ambiguity ("a good book
 // about jazz") — found via live testing: a book recommendation request mistagged MEDIUM risk
@@ -109,7 +121,11 @@ const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tw
 // — "Book recommendations" has no preceding determiner and "recommendations" wasn't in the
 // trailing noun-compound exclusion — found via live testing: "Book recommendations from my
 // sister were great this month, I finished three of them already." misfired MEDIUM.
-const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|is|was)\\b)`, 'i')
+// batch 10 re-probe (conv166/h9): "signing" is the same sentence-initial noun-compound gap as
+// club/report/recommendations above, just not exhaustively covered by those two earlier fixes —
+// found via live testing: "Book signing events are popular at that indie bookstore this
+// weekend." misfired MEDIUM with no scheduling request present.
+const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|is|was)\\b)`, 'i')
 
 // "schedule" is just as common a plain noun ("my schedule is completely packed") as "book" is —
 // found via live testing, same false-positive shape as BOOK_VERB_PATTERN above: a determiner
@@ -135,7 +151,14 @@ const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedu
 // "going forward this year" misfired HIGH despite "this" not actually being what's being
 // forwarded. A determiner-object pattern with no live "forward X" action can't distinguish the
 // two without excluding the idiom's own lead-in words directly.
-const FORWARD_VERB_PATTERN = /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|the|it|these|those|him|her|them)\b/i
+// batch 10 re-probe (conv166/h4): the object-determiner alternation was missing "our"/"your"/
+// "his"/"a"/"an"/"us" — unlike this file's other patterns (which fail toward over-triggering,
+// the safety-conservative direction), a missing determiner here is the opposite failure mode: a
+// genuine live forward-a-message request silently never gates HIGH at all — found via live
+// testing: "Please forward our proposal to the client before end of day." never triggered an
+// approval prompt.
+const FORWARD_VERB_PATTERN =
+  /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|our|your|his|the|it|these|those|him|her|them|a|an|us)\b/i
 
 // "delete"/"remove"/"wipe"/"erase" have the same noun-vs-verb ambiguity ORDER_VERB_PATTERN and its
 // siblings already handle ("the Remove button", "my delete key", "the wipe cycle on my
@@ -149,7 +172,11 @@ const FORWARD_VERB_PATTERN = /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+
 // removing backgrounds from photos, have you heard of it?" misfired HIGH. Excluding a keyword
 // directly followed by ".word" (a domain/filename-shaped token, not a verb's own object) closes
 // this without requiring whitespace.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:is|was)\\b|\\.\\w)`, 'i')
+// batch 10 re-probe (conv166/h7): the trailing exclusion only ever covered is/was (plus the
+// domain-token ".word" exclusion) — never extended with a noun-compound list the way
+// CANCEL_VERB_PATTERN's link/option/button/confirmation list was — found via live testing:
+// "Delete key on this keyboard doesn't work half the time, so annoying." misfired HIGH.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
@@ -158,7 +185,11 @@ const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|r
 // h4: "pay attention (to X)" is an extremely common idiom with no money meaning at all, and
 // "attention" wasn't in the trailing exclusion — found via live testing: "Please pay attention
 // to this email from my landlord, it looks important." misfired HIGH.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention)\\b)`, 'i')
+// batch 10 re-probe (conv166/h3): the trailing exclusion only covered is/was/attention, the same
+// class of gap conv149's narrower "pay attention" fix left open for other noun-compounds — found
+// via live testing: "Pay stubs from my old job are surprisingly hard to track down online."
+// misfired HIGH.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already
@@ -177,8 +208,12 @@ const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|tra
 // testing: "These two effects cancel each other out in the final calculation, so the net result
 // is zero." misfired HIGH. Scoped to "each other" specifically (not bare "each") so a genuine
 // request like "cancel each of my recurring subscriptions" still gates normally.
+// batch 10 re-probe (conv166/h8): "culture" (as in "cancel culture") is an extremely common
+// phrase this pattern's own trailing noun-compound treatment never got extended to cover — found
+// via live testing: "Cancel culture has gotten out of hand online lately, don't you think?"
+// misfired HIGH.
 const CANCEL_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|is|was)\\b|\\s+each\\s+other\\b)`,
+  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|is|was)\\b|\\s+each\\s+other\\b)`,
   'i',
 )
 
@@ -318,7 +353,16 @@ const REPORTED_THIRD_PARTY_SPEECH =
 // sentence-ending punctuation — several of these exemptions rely on a trailing "?" surviving
 // within its own clause) and checking each clause independently keeps one clause's exemption from
 // reaching across into a separate, live request clause.
-const RISK_CLAUSE_BOUNDARY = /,\s*(?:so|but|yet|and|because|although|while|whereas)\b/i
+//
+// batch 10 re-probe (conv166/h1): the comma-before-conjunction boundary never covered a
+// semicolon, unlike decomposition-classifier.ts's own SEMICOLON_LIST_MARKER, which already
+// treats a semicolon as a genuine clause/item boundary — found via live testing: "I already
+// cancelled my old gym membership; please cancel my current streaming subscription now." let
+// FIRST_PERSON_PAST_NARRATIVE match across the whole unsplit string and silently suppress
+// HIGH-risk gating for the live, different second request too. A semicolon is unambiguously a
+// clause boundary in ordinary prose (unlike a bare comma, which needs the conjunction check to
+// avoid over-splitting), so it's split on unconditionally.
+const RISK_CLAUSE_BOUNDARY = /,\s*(?:so|but|yet|and|because|although|while|whereas)\b|;\s*/i
 
 function splitRiskClauses(message: string): string[] {
   return message

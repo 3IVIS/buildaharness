@@ -152,6 +152,17 @@ function findContradictionNotice(layerActivity: LayerActivityEvent[]): string | 
   return layerActivity.find((e) => e.layer === 'contradiction' && e.fired)?.reason
 }
 
+// batch 10 coverage (conv166): notifiedContradictions (see its own doc comment above) was wired
+// into the LLM-based semantic contradictionChecker callback below, but never into this
+// lexical-layer notice — the layer that actually fires here (harness-runtime.ts's always-on
+// detectContradictions) has no dedup of its own either, so the exact same "Heads up ..." notice
+// this function surfaces kept reappearing on every subsequent non-trivial turn in the session
+// (found via live testing: a job-correction contradiction notice, correctly shown once, reappeared
+// verbatim on the next non-trivial turn — a simple factual recall question happened to take the
+// triviality fast path in between and masked the repeat, but any non-trivial turn, not just the
+// literal word "exit", re-triggers it). Deduped the same way the LLM-based checker already is:
+// once per unique notice text per session, cleared on /new.
+
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
 // Some OpenAI-compatible providers/models (observed live: OpenRouter's z-ai/glm-5.2) don't
@@ -553,6 +564,21 @@ export class PersonalAssistant {
     if (backend && workspaceRoot) {
       await clearShellCache(backend, workspaceRoot)
     }
+  }
+
+  /** findContradictionNotice's own text, deduped once per session — see notifiedContradictions'
+   * doc comment and findContradictionNotice's for why this exists: without it, the always-on
+   * lexical Contradiction layer re-fires the identical notice on every subsequent non-trivial
+   * turn, since the WorldModel it runs against is rebuilt fresh (re-seeded from all known facts)
+   * each turn with no memory of its own that this exact conflict was already surfaced. */
+  private dedupedContradictionNotice(sessionId: string, layerActivity: LayerActivityEvent[]): string | undefined {
+    const notice = findContradictionNotice(layerActivity)
+    if (!notice) return undefined
+    const seen = this.notifiedContradictions.get(sessionId) ?? new Set<string>()
+    this.notifiedContradictions.set(sessionId, seen)
+    if (seen.has(notice)) return undefined
+    seen.add(notice)
+    return notice
   }
 
   /**
@@ -1062,7 +1088,7 @@ export class PersonalAssistant {
             ? `Ready to continue with: ${next.description}? (reply to proceed)`
             : 'All plan steps have run — let me know if you want anything else.'
         }
-        const contradictionNotice = findContradictionNotice(layerActivityThisTurn)
+        const contradictionNotice = this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
         const trace: AssistantTrace = {
           nodeExecutionOrder: outcome.checkpoint.progress.nodeExecutionOrder,
@@ -1105,7 +1131,7 @@ export class PersonalAssistant {
       }
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
-      const contradictionNotice = findContradictionNotice(layerActivityThisTurn)
+      const contradictionNotice = this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
       // Write the harness's resulting task statuses back onto the plan only on this
       // success path — an aborted/errored turn leaves the stored plan as-is, so a

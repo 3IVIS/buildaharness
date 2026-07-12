@@ -46,6 +46,16 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('What does missing.txt say?', 'turn:8')).toEqual([])
   })
 
+  it('captures a personal-fact statement using the plural form of a CODING_FACT_MARKERS word', () => {
+    // batch 10 re-probe (conv166/h12): "package" only matched the singular form — the plural
+    // "packages" was silently dropped entirely (not admitted as a fact at all), which is how a
+    // genuine contradiction with an earlier "I always insure and track any package I mail."
+    // statement went undetected: there was no second belief for the contradiction check to
+    // compare against.
+    const facts = extractFactsFromTurn("I never bother insuring or tracking packages, it's not worth the hassle.", 'turn:8b')
+    expect(facts).toHaveLength(1)
+  })
+
   it('captures a health/dietary self-statement with no FACT_MARKERS phrasing', () => {
     // "I'm allergic to shellfish." matches none of FACT_MARKERS' identity-statement phrases
     // ("my name is", "i'm a", ...) — this was filed only as a reminder, never as a known fact,
@@ -59,6 +69,14 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('I am vegetarian.', 'turn:10')).toHaveLength(1)
     expect(extractFactsFromTurn("I don't eat pork.", 'turn:11')).toHaveLength(1)
     expect(extractFactsFromTurn('I have a peanut allergy.', 'turn:12')).toHaveLength(1)
+  })
+
+  it('captures an i\'ve/i have allergy statement with an intervening verb before the marker', () => {
+    // batch 10 re-probe (conv166/h11): the i'm/i am branch got a 0-4-word modifier-gap widening,
+    // but the i've/i have branch never got the same treatment — a verb between "i've" and the
+    // allergy statement silently dropped the fact entirely.
+    const facts = extractFactsFromTurn("I've recently developed a peanut allergy, so please double check ingredient labels for me.", 'turn:12b')
+    expect(facts).toHaveLength(1)
   })
 
   it('captures a health/dietary fact even when a later clause in the same message is a polite request', () => {

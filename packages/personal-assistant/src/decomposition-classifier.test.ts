@@ -125,6 +125,12 @@ describe('looksLikeEnumeratedItems', () => {
     ).toBe(false)
   })
 
+  it('does not flag a single reminder followed by an unrelated existential-"there" aside', () => {
+    // batch 10 re-probe (conv166/h10): same gap as the noun/proper-noun/indefinite-pronoun cases
+    // above, for an existential "there" subject.
+    expect(looksLikeEnumeratedItems("Remind me to call the bank, and there's a package coming today too.")).toBe(false)
+  })
+
   it('does not flag an ordinary fact+single-reminder message', () => {
     expect(looksLikeEnumeratedItems("I'm vegan, and remind me to buy oat milk on the way home tonight.")).toBe(false)
   })

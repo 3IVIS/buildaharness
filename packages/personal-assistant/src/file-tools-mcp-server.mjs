@@ -279,8 +279,10 @@ const FACT_MARKERS =
 // h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
 // HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
 // copied verbatim to dist, not bundled, so it can't import that module directly).
+// batch 10 re-probe (conv166/h11): the i've/i have branch got the same 0-4-word gap widening the
+// i'm/i am branch already has — kept in sync with fact-extraction.ts's own fix.
 const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // A genuine reminder-request clause of its own (remind me/set a reminder/create an event) means
 // the raw message is a to-do PLUS an unrelated fact, not just a reworded fact — see

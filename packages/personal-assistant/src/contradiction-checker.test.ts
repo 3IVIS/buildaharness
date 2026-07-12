@@ -26,6 +26,14 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('the build passed on the first try')).toBe(true)
     expect(looksLikeCodingFact('all tests are passing now')).toBe(true)
   })
+
+  it('flags the plural "packages" the same way it already flags singular "package"', () => {
+    // batch 10 re-probe (conv166/h12): \bpackage\b's word boundary can't match a directly-
+    // appended plural "s" — "...tracking packages..." never looksLikeCodingFact, so the whole
+    // statement was dropped before it ever became a belief (nothing for the contradiction check
+    // to even run against, lexical or LLM).
+    expect(looksLikeCodingFact('I never bother insuring or tracking packages, it\'s not worth the hassle.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

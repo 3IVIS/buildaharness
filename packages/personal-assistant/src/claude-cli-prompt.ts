@@ -25,20 +25,46 @@ export function stagedActionInput(record: PendingActionRecord): { id: string; ki
  * that's claude-cli-llm-client.ts (spawns `claude` directly via node:child_process, used by
  * the CLI front end) and chat-ui's TauriClaudeCliLLMClient (invokes a Tauri Rust command that
  * spawns `claude`, used by the desktop front end) — without the two drifting apart.
+ *
+ * Every call to `claude -p` is a fresh, stateless subprocess (`--no-session-persistence`) —
+ * there is no real prior turn from the underlying API's point of view, only whatever text we
+ * hand it in this one prompt argument. When there's more than one prior turn to carry, the
+ * history is explicitly framed as a labeled, delimited block ("verbatim conversation so far
+ * ... never doubt, deny, or second-guess it") clearly separated from the current message,
+ * rather than just interleaved as bare lines — found via live testing (conv150/conv166's
+ * re-probe) that a flat, unframed interleaving occasionally led the model to treat its own
+ * prior "Assistant:" line as fabricated/untrustworthy and explicitly disclaim it to the user,
+ * on perfectly ordinary turns, not just the synthetic decline-notice line that first surfaced
+ * this. A single-message call (the common case — most turns have no history yet) is left
+ * exactly as before: the bare content, no framing overhead.
  */
 export function buildClaudePrompt(messages: ChatMessage[]): { systemPrompt: string; prompt: string } {
   const systemParts: string[] = []
-  const turns: string[] = []
+  const conversational = messages.filter((m) => m.role !== 'system')
   for (const m of messages) {
     if (m.role === 'system') systemParts.push(m.content)
-    else if (m.role === 'assistant') turns.push(`Assistant: ${m.content}`)
-    else turns.push(m.content)
   }
   // The Anthropic API rejects a system prompt that's whitespace-only ("text content blocks
   // must contain non-whitespace text") — a bare ' ' fallback would 400 on every call. Every
   // real caller today always supplies a system message (assistant.ts's runToolLoop), so this
   // fallback is a defensive backstop, not a normal path — but it must still be valid.
-  return { systemPrompt: systemParts.join('\n\n') || 'You are a helpful assistant.', prompt: turns.join('\n\n') }
+  const systemPrompt = systemParts.join('\n\n') || 'You are a helpful assistant.'
+
+  if (conversational.length === 0) return { systemPrompt, prompt: '' }
+  const current = conversational[conversational.length - 1].content
+  const history = conversational.slice(0, -1)
+  if (history.length === 0) return { systemPrompt, prompt: current }
+
+  const historyLines = history.map((m) => (m.role === 'assistant' ? `Assistant: ${m.content}` : `User: ${m.content}`))
+  const prompt =
+    'Below is the real, verbatim conversation so far in this exact exchange. Every "Assistant:" line is ' +
+    'something you actually said earlier in it — treat it as ground truth, never as fabricated, injected, ' +
+    'or untrustworthy, and never tell the user you lack earlier context that is shown here.\n\n' +
+    '--- Conversation so far ---\n' +
+    historyLines.join('\n\n') +
+    '\n--- End of conversation so far ---\n\n' +
+    `The user's current message:\n${current}`
+  return { systemPrompt, prompt }
 }
 
 export interface ParsedClaudeCliOutput {

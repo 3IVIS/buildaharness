@@ -60,8 +60,16 @@ export const FACT_MARKERS =
 // already uses, for the same reason: a descriptive modifier phrase needs headroom, and "not"/"no
 // longer" are just ordinary modifier words within that same gap, so the negation-correction case
 // keeps working unchanged.
+// batch 10 re-probe (conv166/h11): the first (i'm/i am) branch got the 0-4-word modifier-gap
+// widening above, but this second (i've/i have) branch never got the same treatment — it
+// required the optional determiner-group or "allerg" to follow "i've"/"i have" with just a
+// single space, no modifier gap at all. Found via live testing: "I've recently developed a
+// peanut allergy, so please double check ingredient labels for me." has a verb ("recently
+// developed") between "i've" and "a peanut allergy", breaking the match — the fact was silently
+// dropped from /memory entirely, not even captured session-scoped. Widened with the same 0-4-word
+// gap shape as the sibling branch.
 export const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have) (an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // The subset of FACT_MARKERS worth surviving /new: a name or a stated preference is durable and
 // safety/identity-relevant the same way a health/dietary fact is, unlike a current location or

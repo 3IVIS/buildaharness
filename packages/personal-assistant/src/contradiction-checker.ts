@@ -19,8 +19,21 @@ export interface BeliefCandidate {
 // producing a confusing, out-of-context fact entry ("Biscuit passed away...") with no record of
 // what it was correcting. "passed"/"passing" immediately followed by "away" is never the
 // build/test-status sense this list exists for, so it's excluded rather than admitted.
+// batch 10 re-probe (conv166/h12, investigated as staged): "package" only matched the singular
+// form — \bpackage\b's trailing word boundary can't match a directly-appended plural "s", so
+// "...tracking packages..." never looksLikeCodingFact, extractFactsFromTurn's isClaimClause gate
+// fails, and the whole statement is dropped before it ever becomes a belief at all — no
+// contradiction check (lexical or LLM) ever gets a chance to run, since there's no second belief
+// to compare against. Found via live testing: "I never bother insuring or tracking packages,
+// it's not worth the hassle." (a genuine contradiction with an earlier "I always insure and track
+// any package I mail." statement) was silently dropped entirely, while the singular-form version
+// of the same statement was correctly captured and flagged as contradictory. Several other nouns
+// in this list have the same singular-only gap (library, repo, script, command, log, bug, branch,
+// commit, error, exception, server, service, function, database, config, module, variable,
+// schema, endpoint) — left as a known adjacent gap for a future pass rather than widening all of
+// them speculatively without live-testing each one.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch|commit|pipeline|ci\/cd|ci|environment|variable|package|library|repo|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch|commit|pipeline|ci\/cd|ci|environment|variable|packages?|library|repo|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared

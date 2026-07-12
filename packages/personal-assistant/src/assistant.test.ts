@@ -1583,6 +1583,27 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
     expect(third.contradictionNotice).toBeUndefined()
   })
 
+  it('does not repeat an already-notified LEXICAL contradiction on a later, unrelated non-trivial turn', async () => {
+    // batch 10 coverage (conv166): distinct from the LLM-checker dedup test above, which uses
+    // ContradictionAwareLLMClient — this exercises the separate, always-on LEXICAL/negation-pair
+    // layer (detectContradictions in harness-runtime.ts) with a plain FakeLLMClient, the same
+    // available/unavailable pair the cross-turn belief-seeding test above uses. That layer has no
+    // dedup of its own, and (before this fix) neither did the notice this class surfaces from it —
+    // found via live testing: a job-correction contradiction notice, correctly shown once,
+    // reappeared verbatim on every later non-trivial turn in the same session (not specific to any
+    // particular later message — any non-trivial turn re-triggers the underlying fresh-WorldModel
+    // re-detection, since it's rebuilt from all known facts every non-trivial turn).
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('Remember that the server is available.', { sessionId: 'lexical-contradiction-dedup' })
+    const second = await assistant.turn('Remember that the server is unavailable now.', { sessionId: 'lexical-contradiction-dedup' })
+    expect(second.contradictionNotice).toBeDefined()
+
+    const third = await assistant.turn('Can you help me with something else now?', { sessionId: 'lexical-contradiction-dedup' })
+    expect(third.contradictionNotice).toBeUndefined()
+  })
+
   it('still notifies a genuinely NEW contradiction even after an earlier one was already surfaced', async () => {
     const llm = new ContradictionAwareLLMClient()
     const assistant = new PersonalAssistant({ llmClient: llm })

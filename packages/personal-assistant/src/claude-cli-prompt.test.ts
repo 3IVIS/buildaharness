@@ -3,7 +3,22 @@ import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence } from './c
 import type { ChatMessage } from '@buildaharness/runtime'
 
 describe('buildClaudePrompt', () => {
-  it('collects system messages into systemPrompt and joins the rest as turns', () => {
+  it('a single message (no history yet) is passed through as bare content, no framing', () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'Hi' },
+    ]
+    const { systemPrompt, prompt } = buildClaudePrompt(messages)
+    expect(systemPrompt).toBe('You are helpful.')
+    expect(prompt).toBe('Hi')
+  })
+
+  // Was previously a bare 'Hi\n\nAssistant: Hello!\n\nWhat time is it?' interleaving with no
+  // framing at all — live testing (conv150/conv166's re-probe) showed the model would
+  // sometimes treat its own unframed prior "Assistant:" line as fabricated and explicitly
+  // disclaim it to the user instead of trusting it as real history. This test now asserts the
+  // fix's explicit history/current-message framing, not the old bug-shaped format.
+  it('collects system messages into systemPrompt and frames prior turns as an explicit, labeled history block separate from the current message', () => {
     const messages: ChatMessage[] = [
       { role: 'system', content: 'You are helpful.' },
       { role: 'user', content: 'Hi' },
@@ -12,7 +27,13 @@ describe('buildClaudePrompt', () => {
     ]
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
     expect(systemPrompt).toBe('You are helpful.')
-    expect(prompt).toBe('Hi\n\nAssistant: Hello!\n\nWhat time is it?')
+    expect(prompt).toContain('--- Conversation so far ---')
+    expect(prompt).toContain('User: Hi')
+    expect(prompt).toContain('Assistant: Hello!')
+    expect(prompt).toContain('--- End of conversation so far ---')
+    expect(prompt.trim().endsWith("The user's current message:\nWhat time is it?")).toBe(true)
+    // The current message must not itself be duplicated inside the history block.
+    expect(prompt.indexOf('What time is it?')).toBe(prompt.lastIndexOf('What time is it?'))
   })
 
   it('falls back to a non-whitespace systemPrompt when there are no system messages, since the Anthropic API rejects a whitespace-only one', () => {
