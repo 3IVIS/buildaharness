@@ -236,7 +236,7 @@ function planTaskRiskLevel(description: string): Task['risk_level'] {
 }
 
 type ToolLoopResult =
-  | { kind: 'final'; content: string; sources: AssistantSource[] }
+  | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: AssistantTrace['batchBudget'] }
   | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'batch' }
   | { kind: 'escalated'; reason: string }
 
@@ -310,6 +310,10 @@ interface BatchPendingState {
   sessionId: string
   probedResults: BatchItemResolution[]
   remainingItems: string[]
+  /** The projection computed at the confirmation gate (runBatchToolLoop) — carried across the
+   * round trip so the resume/decline paths can report the same number in AssistantTrace.batchBudget
+   * instead of re-deriving it (or leaving it absent) after the fact. */
+  projectedTotal: number
 }
 
 export interface AssistantTrace {
@@ -317,6 +321,37 @@ export interface AssistantTrace {
   verificationHealth: { strength: number; feasibility: number }
   /** Every one of the 11 harness layers' fired/skipped report for this turn — see LayerActivityEvent. Powers the "Why?" panel's "What I checked" list and the 11-layer status grid (Phase 3.1/3.3). */
   layerActivity: LayerActivityEvent[]
+  /**
+   * Present only when the batch-research path (batch-list-detector.ts / runBatchToolLoop) drove
+   * this turn — absent otherwise, same "absent when unused" convention as sources/usage. Turns
+   * `should we raise the ceiling/floor/slack factor` from a guess into a measurement: if
+   * truncated_while_productive shows up often across real sessions, the per-item budget is too
+   * tight; if it never shows up, the ceiling isn't the bottleneck. See
+   * plans/personal_assistant_dynamic_tool_budget_plan.html Phase 4.
+   */
+  batchBudget?: {
+    itemCount: number
+    callsPerItemHistory: number[]
+    projectedTotal: number
+    totalCallsUsed: number
+    perItemOutcomes: { item: string; status: 'found' | 'not_found' | 'truncated_while_productive'; callsUsed: number }[]
+  }
+}
+
+/** Builds AssistantTrace.batchBudget from a batch turn's resolved items — shared by
+ * runBatchToolLoop's direct path and both resolvePendingBatchConfirmation outcomes. */
+function buildBatchBudgetTrace(
+  itemCount: number,
+  projectedTotal: number,
+  resolutions: BatchItemResolution[],
+): NonNullable<AssistantTrace['batchBudget']> {
+  return {
+    itemCount,
+    callsPerItemHistory: resolutions.map((r) => r.callsUsed),
+    projectedTotal,
+    totalCallsUsed: resolutions.reduce((sum, r) => sum + r.callsUsed, 0),
+    perItemOutcomes: resolutions.map((r) => ({ item: r.item, status: r.status, callsUsed: r.callsUsed })),
+  }
 }
 
 /** Read-only snapshot returned by `getMemorySummary()` — see that method's doc comment. */
@@ -833,6 +868,10 @@ export class PersonalAssistant {
 
     let draftReply: string
     let sources: AssistantSource[] | undefined
+    // Set only when the batch-research path (runBatchToolLoop) drove this turn — carried into
+    // every trace built below so AssistantTrace.batchBudget stays populated even though the
+    // batch loop itself finishes long before the harness run that ultimately builds `trace` (T6).
+    let batchBudgetTrace: AssistantTrace['batchBudget']
     if (toolLoopWillRun) {
       // Gated entry point for the batch-research path: only when webTools is configured, the
       // message is an explicit ≥3-item list (batch-list-detector.ts's narrow, syntactic-only
@@ -873,6 +912,7 @@ export class PersonalAssistant {
       }
       draftReply = loopResult.content
       sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
+      batchBudgetTrace = loopResult.batchBudget
     } else {
       // The only real network call this turn makes — everything the harness does
       // around it (risk, gating, verification, recovery, review) is local bookkeeping.
@@ -901,7 +941,7 @@ export class PersonalAssistant {
       // No layer fired this turn — an empty trace rather than an absent one, so the "Why?"/
       // "Run detail" UI can still render (all 11 layer cells shown, none highlighted) instead
       // of hiding the panel outright, which read as broken rather than "skipped on purpose".
-      const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [] }
+      const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [], batchBudget: batchBudgetTrace }
       return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal }
     }
 
@@ -1178,6 +1218,7 @@ export class PersonalAssistant {
           nodeExecutionOrder: outcome.checkpoint.progress.nodeExecutionOrder,
           verificationHealth: { ...outcome.checkpoint.runState.diagnostics.verification_health },
           layerActivity: layerActivityThisTurn,
+          batchBudget: batchBudgetTrace,
         }
 
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -1212,6 +1253,7 @@ export class PersonalAssistant {
         nodeExecutionOrder: result.nodeExecutionOrder,
         verificationHealth: { ...result.initResult.diagnostics.verification_health },
         layerActivity: layerActivityThisTurn,
+        batchBudget: batchBudgetTrace,
       }
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
@@ -1755,6 +1797,7 @@ export class PersonalAssistant {
         sessionId,
         probedResults: probeResolutions,
         remainingItems,
+        projectedTotal,
       }
       await this.memory.set(`batch-pending:${pendingActionId}`, pendingState)
       return {
@@ -1778,7 +1821,7 @@ export class PersonalAssistant {
     )
     const content = await this.synthesizeBatchReply(userMessage, systemPrompt, resolutions, notAttempted, onToken, onUsage)
     const sources = resolutions.flatMap((r) => r.sources)
-    return { kind: 'final', content, sources }
+    return { kind: 'final', content, sources, batchBudget: buildBatchBudgetTrace(items.length, projectedTotal, resolutions) }
   }
 
   /**
@@ -1796,12 +1839,26 @@ export class PersonalAssistant {
   ): Promise<AssistantTurnResult> {
     await this.memory.delete(`batch-pending:${pendingActionId}`)
 
+    // Both outcomes below skip the per-turn HarnessRuntime run entirely (same as the triviality
+    // fast path) — an empty nodeExecutionOrder/verificationHealth/layerActivity plus a populated
+    // batchBudget, rather than an absent trace, so a "Why?"/run-detail panel still has something
+    // to render (T6).
     if (!approved) {
       const findingsBlock = batchState.probedResults.map((r) => `### ${r.item}\n${r.content}`).join('\n\n')
       const notAttemptedBlock = batchState.remainingItems.map((i) => `- ${i}`).join('\n')
       const reply = `Here's what I found before stopping, as requested:\n\n${findingsBlock}\n\nNot attempted:\n${notAttemptedBlock}`
       await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
-      return { status: 'ok', reply }
+      const trace: AssistantTrace = {
+        nodeExecutionOrder: [],
+        verificationHealth: { strength: 0, feasibility: 0 },
+        layerActivity: [],
+        batchBudget: buildBatchBudgetTrace(
+          batchState.probedResults.length + batchState.remainingItems.length,
+          batchState.projectedTotal,
+          batchState.probedResults,
+        ),
+      }
+      return { status: 'ok', reply, harnessSkipped: true, trace }
     }
 
     // Absent (stays undefined) if none of the resumed calls report usage — same "absent when
@@ -1832,7 +1889,17 @@ export class PersonalAssistant {
       accumulateLocalUsage,
     )
     await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
-    return { status: 'ok', reply, usage }
+    const trace: AssistantTrace = {
+      nodeExecutionOrder: [],
+      verificationHealth: { strength: 0, feasibility: 0 },
+      layerActivity: [],
+      batchBudget: buildBatchBudgetTrace(
+        batchState.probedResults.length + batchState.remainingItems.length,
+        batchState.projectedTotal,
+        resolutions,
+      ),
+    }
+    return { status: 'ok', reply, usage, harnessSkipped: true, trace }
   }
 
   /**
