@@ -1664,9 +1664,18 @@ export class PersonalAssistant {
   /**
    * Synthesizes one final reply from every item's per-item findings — same shape as the flat
    * loop's own final-answer call, just seeded with structured per-item results instead of raw
-   * tool-call history for every item at once. Any item listed in `notAttempted` (the absolute
-   * ceiling was hit before it was ever reached) is explicitly named as not yet checked, never
-   * silently dropped from the reply.
+   * tool-call history for every item at once.
+   *
+   * Any item in `notAttempted` (the absolute ceiling was hit before it was ever reached) is
+   * appended as a deterministic, guaranteed-present list rather than left to the synthesis call's
+   * prose (T5 step 2) — an LLM asked to "write one well-organized reply" over many items can drop
+   * one from its summary the same way it can drop one from a longer todo list; the per-item
+   * `resolutions` themselves stay inside the model's synthesis (their found/not_found/
+   * truncated_while_productive wording is already baked into `content` by resolveBatchItem, so the
+   * model has no need to invent that part), but which items were never even attempted this turn is
+   * a plain fact, not something worth trusting to how well the model followed instructions —
+   * exactly the same reasoning behind resolvePendingBatchConfirmation's decline path building its
+   * own "Not attempted" list directly instead of asking an LLM to restate it.
    */
   private async synthesizeBatchReply(
     userMessage: string,
@@ -1677,14 +1686,16 @@ export class PersonalAssistant {
     onUsage?: (usage: TokenUsage) => void,
   ): Promise<string> {
     const findingsBlock = resolutions.map((r) => `### ${r.item}\n${r.content}`).join('\n\n')
-    const notAttemptedBlock =
-      notAttempted.length > 0 ? `\n\nNot yet checked this turn (ran out of room): ${notAttempted.join(', ')}` : ''
+    const notAttemptedNote =
+      notAttempted.length > 0
+        ? `\n\nThe following items were not attempted this turn (ran out of room) and are appended to the reply ` +
+          `separately — do not mention them yourself: ${notAttempted.join(', ')}`
+        : ''
     const synthesisPrompt =
       `The user's original batch research request: "${userMessage}"\n\n` +
-      `Per-item findings gathered so far:\n${findingsBlock}${notAttemptedBlock}\n\n` +
+      `Per-item findings gathered so far:\n${findingsBlock}${notAttemptedNote}\n\n` +
       "Write one well-organized reply covering every item above. For any item whose findings couldn't be " +
-      'resolved, say so plainly — never invent or guess a value. If any items are listed as "not yet checked", ' +
-      'say so explicitly rather than omitting them.'
+      'resolved, say so plainly — never invent or guess a value.'
 
     let finalContent = ''
     for await (const token of this.llmClient.callChat(
@@ -1694,7 +1705,11 @@ export class PersonalAssistant {
       finalContent += token
       onToken?.(token)
     }
-    return finalContent
+
+    if (notAttempted.length === 0) return finalContent
+    const guaranteedNotAttempted = `\n\nNot yet checked this turn (ran out of room): ${notAttempted.join(', ')}`
+    onToken?.(guaranteedNotAttempted)
+    return finalContent + guaranteedNotAttempted
   }
 
   /**
