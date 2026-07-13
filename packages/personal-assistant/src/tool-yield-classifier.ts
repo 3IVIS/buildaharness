@@ -25,7 +25,11 @@ const DEAD_END_MARKERS = [
  * DEAD_END_MARKERS' comment for why that asymmetry is deliberate.
  */
 export function classifyToolYield(toolName: 'web_search' | 'fetch_url', resultText: string): ToolYield {
-  if (toolName === 'web_search' && resultText === NO_RESULTS_LITERAL) return 'dead_end'
+  // .includes(), not exact equality: callers in the real pipeline (see assistant.ts's
+  // resolveBatchItem) classify the result *after* executeToolCall has run it through
+  // wrapUntrusted (and, rarely, an injection-warning prefix) — the literal marker is a substring
+  // of that wrapped text, never the whole of it.
+  if (toolName === 'web_search' && resultText.includes(NO_RESULTS_LITERAL)) return 'dead_end'
   if (DEAD_END_MARKERS.some((marker) => marker.test(resultText))) return 'dead_end'
   return 'productive'
 }

@@ -29,6 +29,7 @@ import {
 } from '@buildaharness/runtime'
 import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
+import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import { classifyTriviality } from './triviality-classifier.js'
 import {
   FILE_TOOLS,
@@ -248,6 +249,7 @@ const BATCH_PER_ITEM_FLOOR = 2 // never project a per-item budget below this —
 const BATCH_SLACK_FACTOR = 1.4 // headroom multiplier over the calibrated average
 const BATCH_LARGE_PROJECTION_THRESHOLD = 25 // a projection above this needs confirmation before spending it
 const BATCH_ABSOLUTE_TURN_CEILING = 40 // hard stop regardless of how favorable calibration looks
+const BATCH_DEAD_END_WINDOW = 3 // consecutive dead_end web_search/fetch_url results (see classifyToolYield) before an item's sub-loop gives up early instead of spending its whole per-item budget on a dead page
 
 /** Per-item calibration inputs — see nextItemBudget. */
 export interface BatchBudgetState {
@@ -280,14 +282,19 @@ export function nextItemBudget(state: BatchBudgetState): number {
 /**
  * One batch item's outcome from its own per-item sub-loop (see resolveBatchItem). `exhausted`
  * means the sub-loop ran out of its budget without the model producing a final answer for this
- * item — T4 adds the item-scoped dead-end window that can stop a sub-loop early (before its
- * budget is exhausted) instead of always running one item all the way to budget.
+ * item. `status` distinguishes *why* a non-'found' outcome happened: 'not_found' covers both the
+ * item-scoped dead-end window tripping early (BATCH_DEAD_END_WINDOW consecutive dead_end tool
+ * results — stopped before spending the rest of the item's budget on a dead page) and a
+ * needs_approval bail-out; 'truncated_while_productive' means the budget ran out while the
+ * trailing window was still turning up plausibly-relevant content — the live signal that this
+ * item specifically could have used more room (surfaced via AssistantTrace.batchBudget in T6).
  */
 interface BatchItemResolution {
   item: string
   content: string
   callsUsed: number
   exhausted: boolean
+  status: 'found' | 'not_found' | 'truncated_while_productive'
   sources: AssistantSource[]
 }
 
@@ -1313,6 +1320,12 @@ export class PersonalAssistant {
    * history and its own (usually much smaller) iteration budget, instead of duplicating it.
    * `maxIterations` replaces runToolLoop's former direct use of `this.maxSteps`; passing
    * `this.maxSteps` here reproduces that method's exact prior behavior unchanged.
+   *
+   * `onToolResult`, when provided, is called after every tool result is folded into `messages`
+   * and may return `'stop'` to end the loop immediately (see resolveBatchItem's item-scoped
+   * dead-end window, T4) — a caller that never passes it (runToolLoop, the flat non-batch path)
+   * gets today's unmodified behavior: the loop only ever ends via a final answer, an
+   * needs_approval bail-out, or maxIterations.
    */
   private async runToolIterations(
     messages: ChatMessage[],
@@ -1323,7 +1336,8 @@ export class PersonalAssistant {
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
-  ): Promise<{ result: ToolLoopResult; iterationsUsed: number }> {
+    onToolResult?: (toolName: string, resultText: string) => 'continue' | 'stop',
+  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
     const sources: AssistantSource[] = []
 
     // Reports a step immediately, before the call executes — a caller wants to see "reading
@@ -1517,6 +1531,10 @@ export class PersonalAssistant {
           this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${call.name}(${JSON.stringify(call.input)}) → ${resultText}` })
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
+
+        if (onToolResult && onToolResult(call.name, resultText) === 'stop') {
+          return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1, deadEndStopped: true }
+        }
       }
     }
 
@@ -1527,11 +1545,17 @@ export class PersonalAssistant {
   }
 
   /**
-   * Resolves one batch item in its own bounded sub-loop (T3 steps 2 and 5) — structurally the
-   * same runToolIterations call the flat loop uses, just seeded with a single-item-focused user
-   * message and a per-item budget instead of the whole conversation and `this.maxSteps`. Does not
-   * yet track a dead-end window (T4 adds item-scoped early-stop on top of this); every item here
-   * runs until either the model produces a final answer or its budget is exhausted.
+   * Resolves one batch item in its own bounded sub-loop (T3 steps 2 and 5; T4 adds the
+   * item-scoped dead-end window below) — structurally the same runToolIterations call the flat
+   * loop uses, just seeded with a single-item-focused user message and a per-item budget instead
+   * of the whole conversation and `this.maxSteps`.
+   *
+   * The dead-end window (`toolYields`) is a local array, created fresh on every call to this
+   * method — never shared across items. This is the direct fix for the flat-window failure mode
+   * in the plan's Diagnosis tab ("A flat trailing-window gate breaks across item boundaries"): a
+   * hard item that trips BATCH_DEAD_END_WINDOW consecutive dead_end results only stops *this*
+   * item's sub-loop early (rather than spending the rest of its budget on a dead page) and can
+   * never poison an easier item queued behind it.
    */
   private async resolveBatchItem(
     item: string,
@@ -1557,18 +1581,45 @@ export class PersonalAssistant {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: itemPrompt },
     ]
-    const { result, iterationsUsed } = await this.runToolIterations(messages, budget, tools, sessionId, itemPrompt, undefined, onToolStep, onUsage)
 
+    const toolYields: ToolYield[] = []
+    const trackYield = (toolName: string, resultText: string): 'continue' | 'stop' => {
+      if (toolName !== 'web_search' && toolName !== 'fetch_url') return 'continue'
+      toolYields.push(classifyToolYield(toolName, resultText))
+      const trailing = toolYields.slice(-BATCH_DEAD_END_WINDOW)
+      return trailing.length === BATCH_DEAD_END_WINDOW && trailing.every((y) => y === 'dead_end') ? 'stop' : 'continue'
+    }
+
+    const { result, iterationsUsed, deadEndStopped } = await this.runToolIterations(
+      messages, budget, tools, sessionId, itemPrompt, undefined, onToolStep, onUsage, trackYield,
+    )
+
+    if (deadEndStopped) {
+      const sources = result.kind === 'final' ? result.sources : []
+      return {
+        item,
+        content:
+          `No results found for "${item}" after ${BATCH_DEAD_END_WINDOW} consecutive unproductive searches — ` +
+          'treating as not found rather than continuing to spend this item\'s budget.',
+        callsUsed: iterationsUsed,
+        exhausted: false,
+        status: 'not_found',
+        sources,
+      }
+    }
     if (result.kind === 'final') {
-      return { item, content: result.content, callsUsed: iterationsUsed, exhausted: false, sources: result.sources }
+      return { item, content: result.content, callsUsed: iterationsUsed, exhausted: false, status: 'found', sources: result.sources }
     }
     if (result.kind === 'escalated') {
-      return { item, content: `(Could not resolve within budget: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, sources: [] }
+      // maxIterations was reached without a final answer, but the dead-end window above never
+      // tripped — this item was still turning up plausibly-relevant content when its budget ran
+      // out (T4 step 3), not stuck on a dead page.
+      return { item, content: `(Could not resolve within budget: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, status: 'truncated_while_productive', sources: [] }
     }
     // 'needs_approval': a write_file/run_shell_command call inside a batch item is out of scope
     // for a batch-research turn (there is no per-item place to route an approval prompt) — surfaced
     // as an unresolved item rather than silently dropping the request or applying it unreviewed.
-    return { item, content: `(Could not resolve — this item's tool call needs approval: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, sources: [] }
+    return { item, content: `(Could not resolve — this item's tool call needs approval: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, status: 'not_found', sources: [] }
   }
 
   /**
