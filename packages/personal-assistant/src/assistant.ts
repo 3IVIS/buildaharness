@@ -25,8 +25,10 @@ import {
   type ReminderStore,
   type ReminderRecord,
   type TokenUsage,
+  type ToolDefinition,
 } from '@buildaharness/runtime'
 import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
+import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyTriviality } from './triviality-classifier.js'
 import {
   FILE_TOOLS,
@@ -234,8 +236,74 @@ function planTaskRiskLevel(description: string): Task['risk_level'] {
 
 type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[] }
-  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' }
+  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'batch' }
   | { kind: 'escalated'; reason: string }
+
+// Batch-research tuning constants (dynamic tool-call budget for batch research tasks): a
+// self-calibrating alternative to the flat maxSteps cap for the one task shape that needs it —
+// an explicit list of N similar lookup targets in one turn. See
+// plans/personal_assistant_dynamic_tool_budget_plan.html for the reasoning behind each value.
+const BATCH_PROBE_ITEM_CAP = 10 // generous fixed cap for the probe items, before calibration exists yet
+const BATCH_PER_ITEM_FLOOR = 2 // never project a per-item budget below this — a cheap probe item can't starve the rest
+const BATCH_SLACK_FACTOR = 1.4 // headroom multiplier over the calibrated average
+const BATCH_LARGE_PROJECTION_THRESHOLD = 25 // a projection above this needs confirmation before spending it
+const BATCH_ABSOLUTE_TURN_CEILING = 40 // hard stop regardless of how favorable calibration looks
+
+/** Per-item calibration inputs — see nextItemBudget. */
+export interface BatchBudgetState {
+  callsPerItemHistory: number[]
+  perItemFloor: number
+  slackFactor: number
+  absoluteTurnCeiling: number
+}
+
+/**
+ * Drops one min and one max before averaging once there are enough samples for that to be
+ * meaningful (fewer than 3 just averages plain) — so a single unusually cheap or expensive item
+ * can't swing the projection to either extreme on its own (see the plan's Overview decision 2).
+ */
+export function trimmedAverage(counts: number[]): number {
+  if (counts.length === 0) return 0
+  if (counts.length < 3) return counts.reduce((sum, c) => sum + c, 0) / counts.length
+  const sorted = [...counts].sort((a, b) => a - b)
+  const trimmed = sorted.slice(1, -1)
+  return trimmed.reduce((sum, c) => sum + c, 0) / trimmed.length
+}
+
+/** Budget for the next item to resolve — floored so a suspiciously cheap item can't starve the
+ * rest, with slack headroom on top of the calibrated average. */
+export function nextItemBudget(state: BatchBudgetState): number {
+  const average = Math.max(state.perItemFloor, trimmedAverage(state.callsPerItemHistory))
+  return Math.ceil(average * state.slackFactor)
+}
+
+/**
+ * One batch item's outcome from its own per-item sub-loop (see resolveBatchItem). `exhausted`
+ * means the sub-loop ran out of its budget without the model producing a final answer for this
+ * item — T4 adds the item-scoped dead-end window that can stop a sub-loop early (before its
+ * budget is exhausted) instead of always running one item all the way to budget.
+ */
+interface BatchItemResolution {
+  item: string
+  content: string
+  callsUsed: number
+  exhausted: boolean
+  sources: AssistantSource[]
+}
+
+/**
+ * Persisted across the confirmation round trip (see runBatchToolLoop's confirmation gate and
+ * resolvePendingBatchConfirmation) so approving resumes with the probe items' real results
+ * intact instead of re-probing them, and declining can still return those real results instead
+ * of discarding them.
+ */
+interface BatchPendingState {
+  userMessage: string
+  systemPrompt: string
+  sessionId: string
+  probedResults: BatchItemResolution[]
+  remainingItems: string[]
+}
 
 export interface AssistantTrace {
   nodeExecutionOrder: string[]
@@ -275,8 +343,8 @@ export interface AssistantTurnResult {
   trace?: AssistantTrace
   /** Set only when `needs_approval` was triggered by a `write_file`/`run_shell_command` tool call — pass back into `turn(message, { approved, pendingActionId })` to apply or discard it. */
   pendingActionId?: string
-  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd. */
-  pendingActionKind?: 'write' | 'shell'
+  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd, a batch confirmation shows the projected remaining search count. */
+  pendingActionKind?: 'write' | 'shell' | 'batch'
   /** Real read_file/list_directory calls made while producing this reply, in call order. Only set when fileTools is configured and at least one such call happened this turn. */
   sources?: AssistantSource[]
   /**
@@ -759,7 +827,16 @@ export class PersonalAssistant {
     let draftReply: string
     let sources: AssistantSource[] | undefined
     if (toolLoopWillRun) {
-      const loopResult = await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
+      // Gated entry point for the batch-research path: only when webTools is configured, the
+      // message is an explicit ≥3-item list (batch-list-detector.ts's narrow, syntactic-only
+      // shape), and this turn isn't already inside a plan-driven run (planForCancelCheck, loaded
+      // above, is the same "is there an active plan" check the harness run below re-derives as
+      // `activePlan`). Every other case falls straight into today's flat runToolLoop, byte-for-byte
+      // unchanged — see plans/personal_assistant_dynamic_tool_budget_plan.html.
+      const batch = this.webTools && !planForCancelCheck ? detectHomogeneousBatchList(userMessage) : null
+      const loopResult = batch
+        ? await this.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
+        : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
 
       if (loopResult.kind === 'needs_approval') {
         await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
@@ -1220,12 +1297,33 @@ export class PersonalAssistant {
       ...(this.shellTools ? SHELL_TOOLS : []),
       ...REMINDER_TOOLS,
     ]
-
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...transcript,
       { role: 'user', content: userMessage },
     ]
+    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage)
+    return result
+  }
+
+  /**
+   * The actual ReAct-style tool-calling loop, factored out of runToolLoop so a batch sub-loop
+   * (resolveBatchItem, below) can run the exact same iteration logic — including the
+   * looksLikeUnparsedToolCall retry guard and write/shell staging — scoped to its own message
+   * history and its own (usually much smaller) iteration budget, instead of duplicating it.
+   * `maxIterations` replaces runToolLoop's former direct use of `this.maxSteps`; passing
+   * `this.maxSteps` here reproduces that method's exact prior behavior unchanged.
+   */
+  private async runToolIterations(
+    messages: ChatMessage[],
+    maxIterations: number,
+    tools: ToolDefinition[],
+    sessionId: string,
+    userMessage: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<{ result: ToolLoopResult; iterationsUsed: number }> {
     const sources: AssistantSource[] = []
 
     // Reports a step immediately, before the call executes — a caller wants to see "reading
@@ -1243,7 +1341,7 @@ export class PersonalAssistant {
     // distinction matters.
     let dispatchedAnyToolCall = false
 
-    for (let iteration = 0; iteration < this.maxSteps; iteration++) {
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
       // For the claude-cli backend, this one call may run several tool round trips
       // internally (Claude Code's own agentic loop) before returning — onToolStep here is
       // what makes those otherwise-invisible calls show up live; for the proxy backend,
@@ -1259,7 +1357,7 @@ export class PersonalAssistant {
         if (looksLikeUnparsedToolCall(response.content)) {
           // Never show this to the user as if it were a real answer — nudge the model to
           // either call a tool properly or answer in plain text, and retry. Bounded by the
-          // same maxSteps cap as any other iteration: a model that keeps doing this falls
+          // same maxIterations cap as any other iteration: a model that keeps doing this falls
           // through to the 'escalated' return below instead of ever reaching the user.
           messages.push({ role: 'assistant', content: response.content })
           messages.push({
@@ -1269,7 +1367,7 @@ export class PersonalAssistant {
           continue
         }
 
-        if (!onToken) return { kind: 'final', content: response.content, sources }
+        if (!onToken) return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1 }
 
         if (!dispatchedAnyToolCall) {
           // No tool result was ever manually folded into `messages` this turn — true for
@@ -1282,7 +1380,7 @@ export class PersonalAssistant {
           // correct, tool-grounded reply with a wrong one. Just deliver the already-correct
           // content through onToken directly; no second call, no risk of losing grounding.
           onToken(response.content)
-          return { kind: 'final', content: response.content, sources }
+          return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1 }
         }
 
         // Re-request the same final answer as a real streamed completion — only
@@ -1295,7 +1393,7 @@ export class PersonalAssistant {
           streamed += token
           onToken(token)
         }
-        return { kind: 'final', content: streamed, sources }
+        return { result: { kind: 'final', content: streamed, sources }, iterationsUsed: iteration + 1 }
       }
 
       // The Claude CLI backend's own agentic loop resolves read/list/web calls internally
@@ -1310,18 +1408,24 @@ export class PersonalAssistant {
         if (kind === 'write') {
           const { path, content } = payload as { path: string; content: string }
           return {
-            kind: 'needs_approval',
-            reason: `Proposes writing to "${path}":\n${previewContent(content)}`,
-            pendingActionId: id,
-            pendingActionKind: 'write',
+            result: {
+              kind: 'needs_approval',
+              reason: `Proposes writing to "${path}":\n${previewContent(content)}`,
+              pendingActionId: id,
+              pendingActionKind: 'write',
+            },
+            iterationsUsed: iteration + 1,
           }
         }
         const { command, cwd } = payload as { command: string; cwd: string }
         return {
-          kind: 'needs_approval',
-          reason: `Proposes running: ${command}\n  (cwd: ${cwd})`,
-          pendingActionId: id,
-          pendingActionKind: 'shell',
+          result: {
+            kind: 'needs_approval',
+            reason: `Proposes running: ${command}\n  (cwd: ${cwd})`,
+            pendingActionId: id,
+            pendingActionKind: 'shell',
+          },
+          iterationsUsed: iteration + 1,
         }
       }
 
@@ -1336,10 +1440,13 @@ export class PersonalAssistant {
           throw new Error('write_file executor returned an unexpected result kind')
         }
         return {
-          kind: 'needs_approval',
-          reason: `Proposes writing to "${result.path}":\n${previewContent(result.content)}`,
-          pendingActionId: result.id,
-          pendingActionKind: 'write',
+          result: {
+            kind: 'needs_approval',
+            reason: `Proposes writing to "${result.path}":\n${previewContent(result.content)}`,
+            pendingActionId: result.id,
+            pendingActionKind: 'write',
+          },
+          iterationsUsed: iteration + 1,
         }
       }
 
@@ -1365,10 +1472,13 @@ export class PersonalAssistant {
           continue
         }
         return {
-          kind: 'needs_approval',
-          reason: `Proposes running: ${result.command}\n  (cwd: ${result.cwd})`,
-          pendingActionId: result.id,
-          pendingActionKind: 'shell',
+          result: {
+            kind: 'needs_approval',
+            reason: `Proposes running: ${result.command}\n  (cwd: ${result.cwd})`,
+            pendingActionId: result.id,
+            pendingActionKind: 'shell',
+          },
+          iterationsUsed: iteration + 1,
         }
       }
 
@@ -1411,9 +1521,252 @@ export class PersonalAssistant {
     }
 
     return {
-      kind: 'escalated',
-      reason: `Tool loop exceeded ${this.maxSteps} iterations without producing a final answer.`,
+      result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
+      iterationsUsed: maxIterations,
     }
+  }
+
+  /**
+   * Resolves one batch item in its own bounded sub-loop (T3 steps 2 and 5) — structurally the
+   * same runToolIterations call the flat loop uses, just seeded with a single-item-focused user
+   * message and a per-item budget instead of the whole conversation and `this.maxSteps`. Does not
+   * yet track a dead-end window (T4 adds item-scoped early-stop on top of this); every item here
+   * runs until either the model produces a final answer or its budget is exhausted.
+   */
+  private async resolveBatchItem(
+    item: string,
+    budget: number,
+    batchItems: string[],
+    systemPrompt: string,
+    sessionId: string,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<BatchItemResolution> {
+    const tools = [
+      ...(this.fileTools ? FILE_TOOLS : []),
+      ...(this.webTools ? WEB_TOOLS : []),
+      ...(this.shellTools ? SHELL_TOOLS : []),
+      ...REMINDER_TOOLS,
+    ]
+    const itemPrompt =
+      `You are working through one item from a batch research request covering ${batchItems.length} similar ` +
+      `items in total. Find the requested information for just this one item, using the available tools as ` +
+      `needed:\n\n"${item}"\n\nAnswer only for this item — a separate pass handles the others. Be concise and ` +
+      'ground your answer in what the tools actually returned; say plainly if nothing could be found.'
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: itemPrompt },
+    ]
+    const { result, iterationsUsed } = await this.runToolIterations(messages, budget, tools, sessionId, itemPrompt, undefined, onToolStep, onUsage)
+
+    if (result.kind === 'final') {
+      return { item, content: result.content, callsUsed: iterationsUsed, exhausted: false, sources: result.sources }
+    }
+    if (result.kind === 'escalated') {
+      return { item, content: `(Could not resolve within budget: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, sources: [] }
+    }
+    // 'needs_approval': a write_file/run_shell_command call inside a batch item is out of scope
+    // for a batch-research turn (there is no per-item place to route an approval prompt) — surfaced
+    // as an unresolved item rather than silently dropping the request or applying it unreviewed.
+    return { item, content: `(Could not resolve — this item's tool call needs approval: ${result.reason})`, callsUsed: iterationsUsed, exhausted: true, sources: [] }
+  }
+
+  /**
+   * Resolves every item in `remainingItems` in its own sub-loop (T3 step 5), recalibrating the
+   * per-item budget after each one via nextItemBudget instead of freezing it at the initial probe
+   * average, and stopping once the running total hits BATCH_ABSOLUTE_TURN_CEILING regardless of
+   * how favorable calibration still looks. Returns every resolution so far (probed + newly
+   * resolved) plus the names of any items never attempted because the ceiling was hit first.
+   */
+  private async resolveRemainingBatchItems(
+    probedResults: BatchItemResolution[],
+    remainingItems: string[],
+    systemPrompt: string,
+    sessionId: string,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<{ resolutions: BatchItemResolution[]; notAttempted: string[] }> {
+    const resolutions: BatchItemResolution[] = [...probedResults]
+    const budgetState: BatchBudgetState = {
+      callsPerItemHistory: probedResults.map((r) => r.callsUsed),
+      perItemFloor: BATCH_PER_ITEM_FLOOR,
+      slackFactor: BATCH_SLACK_FACTOR,
+      absoluteTurnCeiling: BATCH_ABSOLUTE_TURN_CEILING,
+    }
+    let totalCallsUsed = budgetState.callsPerItemHistory.reduce((sum, c) => sum + c, 0)
+    const allItems = [...probedResults.map((r) => r.item), ...remainingItems]
+
+    for (const item of remainingItems) {
+      if (totalCallsUsed >= BATCH_ABSOLUTE_TURN_CEILING) break
+      const remainingRoom = BATCH_ABSOLUTE_TURN_CEILING - totalCallsUsed
+      const budget = Math.max(1, Math.min(nextItemBudget(budgetState), remainingRoom))
+      const resolution = await this.resolveBatchItem(item, budget, allItems, systemPrompt, sessionId, onToolStep, onUsage)
+      resolutions.push(resolution)
+      budgetState.callsPerItemHistory.push(resolution.callsUsed)
+      totalCallsUsed += resolution.callsUsed
+    }
+
+    const notAttempted = remainingItems.slice(resolutions.length - probedResults.length)
+    return { resolutions, notAttempted }
+  }
+
+  /**
+   * Synthesizes one final reply from every item's per-item findings — same shape as the flat
+   * loop's own final-answer call, just seeded with structured per-item results instead of raw
+   * tool-call history for every item at once. Any item listed in `notAttempted` (the absolute
+   * ceiling was hit before it was ever reached) is explicitly named as not yet checked, never
+   * silently dropped from the reply.
+   */
+  private async synthesizeBatchReply(
+    userMessage: string,
+    systemPrompt: string,
+    resolutions: BatchItemResolution[],
+    notAttempted: string[],
+    onToken?: (token: string) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<string> {
+    const findingsBlock = resolutions.map((r) => `### ${r.item}\n${r.content}`).join('\n\n')
+    const notAttemptedBlock =
+      notAttempted.length > 0 ? `\n\nNot yet checked this turn (ran out of room): ${notAttempted.join(', ')}` : ''
+    const synthesisPrompt =
+      `The user's original batch research request: "${userMessage}"\n\n` +
+      `Per-item findings gathered so far:\n${findingsBlock}${notAttemptedBlock}\n\n` +
+      "Write one well-organized reply covering every item above. For any item whose findings couldn't be " +
+      'resolved, say so plainly — never invent or guess a value. If any items are listed as "not yet checked", ' +
+      'say so explicitly rather than omitting them.'
+
+    let finalContent = ''
+    for await (const token of this.llmClient.callChat(
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: synthesisPrompt }],
+      { model: this.model, onUsage },
+    )) {
+      finalContent += token
+      onToken?.(token)
+    }
+    return finalContent
+  }
+
+  /**
+   * Gated entry point for the batch-research path (T3 steps 1-5): probes the first 1-2 items
+   * (keeping at least one item unprobed so a single sample can't swing the whole projection),
+   * calibrates a per-item budget off their real cost, and either pauses for confirmation (a large
+   * projection) or resolves every remaining item and synthesizes the final reply.
+   */
+  private async runBatchToolLoop(
+    items: string[],
+    sessionId: string,
+    userMessage: string,
+    systemPrompt: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<ToolLoopResult> {
+    // Probe phase (T3 step 2): N==3 probes just item[0] so at least one item stays unprobed even
+    // for the smallest qualifying batch; larger batches probe the first two.
+    const probeCount = items.length === 3 ? 1 : 2
+    const probeItems = items.slice(0, probeCount)
+    const remainingItems = items.slice(probeCount)
+
+    const probeResolutions: BatchItemResolution[] = []
+    for (const item of probeItems) {
+      probeResolutions.push(await this.resolveBatchItem(item, BATCH_PROBE_ITEM_CAP, items, systemPrompt, sessionId, onToolStep, onUsage))
+    }
+
+    // Calibrate (T3 step 3).
+    const callsPerItemHistory = probeResolutions.map((r) => r.callsUsed)
+    const callsPerItem = Math.max(BATCH_PER_ITEM_FLOOR, trimmedAverage(callsPerItemHistory))
+    const projectedTotal = callsPerItem * remainingItems.length * BATCH_SLACK_FACTOR
+
+    // Confirmation gate (T3 step 4): a large projection pauses instead of silently spending it,
+    // reusing the same needs_approval shape risk-classifier.ts's bulk-reminder gate already
+    // established. Probed results are persisted (not discarded) so approving resumes without
+    // re-probing, and declining still returns them as real findings.
+    if (remainingItems.length > 0 && projectedTotal > BATCH_LARGE_PROJECTION_THRESHOLD) {
+      const pendingActionId = crypto.randomUUID()
+      const pendingState: BatchPendingState = {
+        userMessage,
+        systemPrompt,
+        sessionId,
+        probedResults: probeResolutions,
+        remainingItems,
+      }
+      await this.memory.set(`batch-pending:${pendingActionId}`, pendingState)
+      return {
+        kind: 'needs_approval',
+        reason:
+          `This looks like it'll take ~${Math.ceil(projectedTotal)} more searches to cover the remaining ` +
+          `${remainingItems.length} item(s) — continue, or should I do a quick pass first?`,
+        pendingActionId,
+        pendingActionKind: 'batch',
+      }
+    }
+
+    // Remaining items (T3 step 5).
+    const { resolutions, notAttempted } = await this.resolveRemainingBatchItems(
+      probeResolutions,
+      remainingItems,
+      systemPrompt,
+      sessionId,
+      onToolStep,
+      onUsage,
+    )
+    const content = await this.synthesizeBatchReply(userMessage, systemPrompt, resolutions, notAttempted, onToken, onUsage)
+    const sources = resolutions.flatMap((r) => r.sources)
+    return { kind: 'final', content, sources }
+  }
+
+  /**
+   * Resolves a batch confirmation pause (see runBatchToolLoop's confirmation gate) once the
+   * caller resumes via `turn(message, { approved, pendingActionId })`. Declining resolves the
+   * turn immediately with only the probed items' real results, explicitly listing every unprobed
+   * item as not attempted. Approving continues resolving the remaining items with zero
+   * re-probing — the probe results loaded from `batchState` are reused as-is.
+   */
+  private async resolvePendingBatchConfirmation(
+    transcriptKey: string,
+    pendingActionId: string,
+    approved: boolean,
+    batchState: BatchPendingState,
+  ): Promise<AssistantTurnResult> {
+    await this.memory.delete(`batch-pending:${pendingActionId}`)
+
+    if (!approved) {
+      const findingsBlock = batchState.probedResults.map((r) => `### ${r.item}\n${r.content}`).join('\n\n')
+      const notAttemptedBlock = batchState.remainingItems.map((i) => `- ${i}`).join('\n')
+      const reply = `Here's what I found before stopping, as requested:\n\n${findingsBlock}\n\nNot attempted:\n${notAttemptedBlock}`
+      await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+      return { status: 'ok', reply }
+    }
+
+    // Absent (stays undefined) if none of the resumed calls report usage — same "absent when
+    // unused" convention as runTurn's own accumulateUsage/usageTotal.
+    let usage: TokenUsage | undefined
+    const accumulateLocalUsage = (u: TokenUsage): void => {
+      usage = {
+        inputTokens: (usage?.inputTokens ?? 0) + u.inputTokens,
+        outputTokens: (usage?.outputTokens ?? 0) + u.outputTokens,
+        costUsd: u.costUsd !== undefined ? (usage?.costUsd ?? 0) + u.costUsd : usage?.costUsd,
+      }
+    }
+
+    const { resolutions, notAttempted } = await this.resolveRemainingBatchItems(
+      batchState.probedResults,
+      batchState.remainingItems,
+      batchState.systemPrompt,
+      batchState.sessionId,
+      undefined,
+      accumulateLocalUsage,
+    )
+    const reply = await this.synthesizeBatchReply(
+      batchState.userMessage,
+      batchState.systemPrompt,
+      resolutions,
+      notAttempted,
+      undefined,
+      accumulateLocalUsage,
+    )
+    await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+    return { status: 'ok', reply, usage }
   }
 
   /**
@@ -1446,6 +1799,15 @@ export class PersonalAssistant {
 
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
   private async resolvePendingAction(transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string): Promise<AssistantTurnResult> {
+    // A batch-confirmation pause (see runBatchToolLoop) is staged in `this.memory`, not under a
+    // file/shell workspace backend — check for it first so a webTools-only assistant (no
+    // fileTools/shellTools configured at all) can still resume/decline one without hitting the
+    // "neither configured" guard below, which is specific to write/shell staged actions.
+    const batchState = (await this.memory.get(`batch-pending:${pendingActionId}`)) as BatchPendingState | undefined
+    if (batchState) {
+      return this.resolvePendingBatchConfirmation(transcriptKey, pendingActionId, approved, batchState)
+    }
+
     const fileTools = this.fileTools
     const shellTools = this.shellTools
     // A pending action is staged under whichever workspace it belongs to — fileTools and
