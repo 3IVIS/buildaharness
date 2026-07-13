@@ -1,0 +1,63 @@
+{
+  "name": "research_analysis",
+  "version": "1.0.0",
+  "success_criteria": "Research questions are answered with synthesised evidence from multiple sources, and a clear report is produced.",
+  "tags": ["research", "analysis", "evidence"],
+  "tasks": [
+    {
+      "id": "define_questions",
+      "title": "Define research questions",
+      "description": "State the primary and secondary research questions. Define scope and success criteria for the inquiry.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "gather_sources",
+      "title": "Gather sources",
+      "description": "Identify and collect relevant data sources, documents, and stakeholder inputs. Assess source quality.",
+      "depends_on": ["define_questions"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "extract_insights",
+      "title": "Extract insights",
+      "description": "Read and analyse each source. Extract key findings, data points, and quotes that bear on the research questions.",
+      "depends_on": ["gather_sources"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "cross_reference",
+      "title": "Cross-reference findings",
+      "description": "Identify agreements, contradictions, and gaps across sources. Flag conflicting evidence for resolution.",
+      "depends_on": ["extract_insights"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "synthesise",
+      "title": "Synthesise",
+      "description": "Combine verified findings into a coherent narrative that directly answers the research questions.",
+      "depends_on": ["cross_reference"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "report",
+      "title": "Write report",
+      "description": "Produce a structured report: executive summary, findings, evidence, recommendations, and limitations.",
+      "depends_on": ["synthesise"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

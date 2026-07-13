@@ -1,0 +1,63 @@
+{
+  "name": "project_planning",
+  "version": "1.0.0",
+  "success_criteria": "The project scope is defined, resources are allocated, risks are assessed, and a schedule with a kickoff milestone is ready.",
+  "tags": ["project", "planning", "management"],
+  "tasks": [
+    {
+      "id": "scope_definition",
+      "title": "Define project scope",
+      "description": "Document project goals, deliverables, boundaries, and acceptance criteria. Align with stakeholders.",
+      "depends_on": [],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "work_breakdown",
+      "title": "Work breakdown structure",
+      "description": "Decompose deliverables into discrete tasks. Estimate effort and identify dependencies.",
+      "depends_on": ["scope_definition"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "resource_planning",
+      "title": "Resource planning",
+      "description": "Identify required team members, tools, and budget. Confirm availability and assign owners.",
+      "depends_on": ["work_breakdown"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["resources"]
+    },
+    {
+      "id": "risk_assessment",
+      "title": "Risk assessment",
+      "description": "Identify project risks, assess likelihood and impact, and define mitigation actions.",
+      "depends_on": ["work_breakdown"],
+      "risk_level": "HIGH",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["risks"]
+    },
+    {
+      "id": "schedule",
+      "title": "Build schedule",
+      "description": "Produce a timeline with milestones. Incorporate resource constraints and risk buffers.",
+      "depends_on": ["resource_planning", "risk_assessment"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "kickoff",
+      "title": "Kickoff",
+      "description": "Run the project kickoff. Distribute the plan, confirm roles, and establish communication cadence.",
+      "depends_on": ["schedule"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

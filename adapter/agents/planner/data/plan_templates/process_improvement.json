@@ -1,0 +1,54 @@
+{
+  "name": "process_improvement",
+  "version": "1.0.0",
+  "success_criteria": "Identified gaps are addressed via a piloted improvement that shows measurable positive outcomes.",
+  "tags": ["process", "improvement", "operations"],
+  "tasks": [
+    {
+      "id": "map_current_state",
+      "title": "Map current state",
+      "description": "Document the existing process end-to-end: steps, owners, inputs, outputs, cycle time, and pain points.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "identify_gaps",
+      "title": "Identify gaps",
+      "description": "Analyse the current state map for inefficiencies, bottlenecks, errors, and unmet needs.",
+      "depends_on": ["map_current_state"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "design_improvements",
+      "title": "Design improvements",
+      "description": "Propose process changes that address the identified gaps. Design the future-state process map.",
+      "depends_on": ["identify_gaps"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "pilot",
+      "title": "Pilot",
+      "description": "Run the improved process in a controlled environment. Monitor for unintended side-effects.",
+      "depends_on": ["design_improvements"],
+      "risk_level": "HIGH",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "measure_outcomes",
+      "title": "Measure outcomes",
+      "description": "Collect metrics from the pilot. Compare against the baseline. Decide: adopt, adjust, or abandon.",
+      "depends_on": ["pilot"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

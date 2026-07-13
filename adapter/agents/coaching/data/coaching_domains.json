@@ -1,0 +1,126 @@
+{
+  "version": "1",
+  "description": "Coaching domain taxonomy — seed data for the coaching_knowledge_base Qdrant store. Each entry is embedded using the embed_text field. Keywords grow over time as sessions confirm additional terms.",
+  "domains": [
+    {
+      "id": "life_coaching",
+      "name": "Life coaching",
+      "typical_levels": ["L1", "L2"],
+      "description": "Supporting the coachee to gain clarity on identity, purpose, and direction in their personal life.",
+      "keywords": [
+        "identity", "clarity", "purpose", "habits", "growth", "who I am", "what I want",
+        "direction in life", "self-discovery", "personal growth", "life goals", "values",
+        "authentic self", "life balance", "who do I want to be"
+      ],
+      "primary_schools": ["co_actives", "erickson", "point_of_view"],
+      "embed_text": "Life coaching: identity, clarity, purpose, habits, growth, who I am, what I want, direction in life, self-discovery, personal growth, life goals, values, authentic self. Typical coaching levels L1-L2. Non-directive, client-led exploration of identity and life direction."
+    },
+    {
+      "id": "strength_finder",
+      "name": "Strength finder",
+      "typical_levels": ["L1", "L2"],
+      "description": "Helping the coachee discover and leverage their natural talents and strengths.",
+      "keywords": [
+        "strengths", "self-awareness", "talents", "natural abilities", "what I'm good at",
+        "gifts", "capabilities", "unique value", "natural strengths", "strengths inventory",
+        "CliftonStrengths", "what energises me", "where I shine"
+      ],
+      "primary_schools": ["erickson", "co_actives", "point_of_view"],
+      "embed_text": "Strength finder coaching: strengths, self-awareness, talents, natural abilities, what I'm good at, gifts, unique value, what energises me. Typical levels L1-L2. Solution-focused, strengths-based approach to help the coachee see and use their natural capabilities."
+    },
+    {
+      "id": "wellness",
+      "name": "Wellness coaching",
+      "typical_levels": ["L2", "L3"],
+      "description": "Supporting the coachee to build sustainable health and wellbeing habits.",
+      "keywords": [
+        "wellness habits", "health", "energy", "sleep", "exercise", "stress", "burnout",
+        "balance", "wellbeing", "self-care", "mental health", "physical health", "exhausted",
+        "overwhelmed", "tired all the time", "healthy lifestyle", "work-life balance"
+      ],
+      "primary_schools": ["ipec", "co_actives", "hudson"],
+      "embed_text": "Wellness coaching: health, energy, sleep, exercise, stress, burnout, balance, wellbeing, self-care, exhausted, overwhelmed, healthy lifestyle, work-life balance. Typical levels L2-L3. Developmental coaching with feedback on patterns plus mentoring insight on sustainable habits."
+    },
+    {
+      "id": "confidence",
+      "name": "Confidence coaching",
+      "typical_levels": ["L1", "L2"],
+      "description": "Helping the coachee build self-belief and overcome fear, self-doubt, and imposter syndrome.",
+      "keywords": [
+        "self-image", "self-worth", "fear", "imposter syndrome", "doubt", "not good enough",
+        "believing in myself", "confidence", "anxiety", "self-belief", "inner critic",
+        "fear of failure", "who am I to", "feel like a fraud", "second-guess myself"
+      ],
+      "primary_schools": ["co_actives", "ipec", "erickson"],
+      "embed_text": "Confidence coaching: self-image, self-worth, fear, imposter syndrome, doubt, not good enough, believing in myself, self-belief, inner critic, fear of failure, feel like a fraud. Typical levels L1-L2. Pure coaching and developmental coaching to shift self-perception and build genuine confidence."
+    },
+    {
+      "id": "purpose",
+      "name": "Purpose coaching",
+      "typical_levels": ["L1", "L2"],
+      "description": "Supporting the coachee to clarify their values, meaning, and sense of direction.",
+      "keywords": [
+        "goal", "meaning", "values", "mission", "what matters", "why I'm doing this",
+        "legacy", "purpose", "calling", "north star", "why", "direction", "what's the point",
+        "feels meaningless", "lost my sense of purpose", "what do I stand for"
+      ],
+      "primary_schools": ["co_actives", "erickson", "integral"],
+      "embed_text": "Purpose coaching: meaning, values, mission, what matters, why I'm doing this, legacy, calling, north star, what do I stand for, lost my sense of purpose. Typical levels L1-L2. Deep exploration of values and meaning, fully client-led."
+    },
+    {
+      "id": "career",
+      "name": "Career coaching",
+      "typical_levels": ["L2", "L3", "L4"],
+      "description": "Supporting the coachee through career transitions, direction decisions, and professional positioning.",
+      "keywords": [
+        "job change", "career direction", "positioning", "promotion", "transition",
+        "next role", "career path", "career change", "professional development",
+        "what's next", "stuck in my career", "not progressing", "looking for a new job",
+        "career pivot", "industry change", "salary negotiation"
+      ],
+      "primary_schools": ["aoc_executive", "marshall_goldsmith", "korn_ferry"],
+      "embed_text": "Career coaching: job change, career direction, positioning, promotion, transition, next role, career change, professional development, stuck in my career, career pivot, industry change. Typical levels L2-L4. Combines coaching with mentoring and consulting depending on how much direction the coachee needs."
+    },
+    {
+      "id": "performance",
+      "name": "Performance coaching",
+      "typical_levels": ["L3", "L4"],
+      "description": "Improving the coachee's performance against targets, KPIs, and professional standards.",
+      "keywords": [
+        "sales", "KPI", "performance improvement", "targets", "results", "hitting numbers",
+        "under-performing", "performance review", "PIP", "not hitting targets",
+        "improve performance", "output", "productivity", "deliverables", "accountability"
+      ],
+      "primary_schools": ["korn_ferry", "marshall_goldsmith", "aoc_executive"],
+      "embed_text": "Performance coaching: sales, KPIs, targets, results, hitting numbers, under-performing, performance review, productivity, accountability. Typical levels L3-L4. Combines structured feedback, competency frameworks, and direct advice with coaching questions."
+    },
+    {
+      "id": "leadership_mid",
+      "name": "Leadership coaching (mid-level)",
+      "typical_levels": ["L3", "L4"],
+      "description": "Developing the coachee's management capability, communication, and people leadership skills.",
+      "keywords": [
+        "management", "communication", "influence", "team", "feedback", "people skills",
+        "leading others", "difficult conversations", "delegation", "managing up",
+        "leadership style", "team dynamics", "motivating people", "conflict in team",
+        "performance managing", "new manager", "becoming a manager"
+      ],
+      "primary_schools": ["aoc_executive", "marshall_goldsmith", "orsc"],
+      "embed_text": "Mid-level leadership coaching: management capability, communication, influence, team, feedback, people skills, difficult conversations, delegation, leadership style, team dynamics. Typical levels L3-L4. Developmental coaching plus mentoring on leadership models and frameworks."
+    },
+    {
+      "id": "executive",
+      "name": "Executive coaching (senior leadership)",
+      "typical_levels": ["L3", "L4", "L5"],
+      "description": "Supporting senior leaders on strategic leadership, behaviour change, presence, and organisational impact.",
+      "keywords": [
+        "strategic leadership", "behaviour change", "presence", "board", "C-suite",
+        "organisational impact", "executive presence", "stakeholders", "influencing at exec level",
+        "leading through change", "organisation culture", "senior leadership team",
+        "CEO", "director", "VP", "managing director", "cultural change"
+      ],
+      "primary_schools": ["aoc_executive", "marshall_goldsmith", "orsc", "korn_ferry"],
+      "embed_text": "Executive coaching: strategic leadership, behaviour change, executive presence, board, C-suite, organisational impact, stakeholders, leading through change, culture. Typical levels L3-L5. High-level coaching, mentoring, consulting, and system coaching for senior leaders."
+    }
+  ]
+}

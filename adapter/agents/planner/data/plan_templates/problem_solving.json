@@ -1,0 +1,72 @@
+{
+  "name": "problem_solving",
+  "version": "1.0.0",
+  "success_criteria": "The problem is resolved, the chosen approach has been validated, and the rationale is documented.",
+  "tags": ["generic", "analysis", "decision"],
+  "tasks": [
+    {
+      "id": "clarify_problem",
+      "title": "Clarify the problem",
+      "description": "Restate the problem in concrete terms, identify stakeholders, and confirm scope.",
+      "depends_on": [],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "root_cause_analysis",
+      "title": "Root cause analysis",
+      "description": "Identify underlying causes rather than surface symptoms. Use evidence from available sources.",
+      "depends_on": ["clarify_problem"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "generate_options",
+      "title": "Generate solution options",
+      "description": "Brainstorm at least three distinct approaches. Document trade-offs for each.",
+      "depends_on": ["root_cause_analysis"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["options"]
+    },
+    {
+      "id": "assess_constraints",
+      "title": "Assess constraints",
+      "description": "Identify time, resource, and stakeholder constraints that narrow the solution space.",
+      "depends_on": ["root_cause_analysis"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["constraints"]
+    },
+    {
+      "id": "select_approach",
+      "title": "Select approach",
+      "description": "Choose the best option given the constraints. Document the decision rationale.",
+      "depends_on": ["generate_options", "assess_constraints"],
+      "risk_level": "HIGH",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "implement",
+      "title": "Implement",
+      "description": "Execute the chosen approach. Track progress against the plan.",
+      "depends_on": ["select_approach"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "validate",
+      "title": "Validate outcome",
+      "description": "Confirm the problem is resolved. Measure against the original success criteria.",
+      "depends_on": ["implement"],
+      "risk_level": "HIGH",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

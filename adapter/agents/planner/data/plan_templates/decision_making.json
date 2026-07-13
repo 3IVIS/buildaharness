@@ -1,0 +1,63 @@
+{
+  "name": "decision_making",
+  "version": "1.0.0",
+  "success_criteria": "A decision is made, documented with full rationale, and communicated to stakeholders.",
+  "tags": ["decision", "evaluation", "criteria"],
+  "tasks": [
+    {
+      "id": "define_criteria",
+      "title": "Define decision criteria",
+      "description": "List the criteria that will govern the decision. Assign relative weights. Confirm with decision owners.",
+      "depends_on": [],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "identify_options",
+      "title": "Identify options",
+      "description": "Generate a complete list of candidate options. Include at least one 'do nothing' option for baseline.",
+      "depends_on": ["define_criteria"],
+      "risk_level": "LOW",
+      "abstraction_level": 1,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "evaluate_options",
+      "title": "Evaluate options",
+      "description": "Score each option against the weighted criteria. Document evidence for each score.",
+      "depends_on": ["identify_options"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["evaluation"]
+    },
+    {
+      "id": "stakeholder_check",
+      "title": "Stakeholder check",
+      "description": "Validate options against stakeholder constraints and political considerations not captured in criteria.",
+      "depends_on": ["identify_options"],
+      "risk_level": "MEDIUM",
+      "abstraction_level": 1,
+      "parallel_write_domains": ["stakeholders"]
+    },
+    {
+      "id": "select",
+      "title": "Select",
+      "description": "Choose the winning option based on evaluation scores and stakeholder input. Record the final decision.",
+      "depends_on": ["evaluate_options", "stakeholder_check"],
+      "risk_level": "HIGH",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    },
+    {
+      "id": "document_rationale",
+      "title": "Document rationale",
+      "description": "Write a decision record: what was decided, why, what was rejected and why, and who approved.",
+      "depends_on": ["select"],
+      "risk_level": "LOW",
+      "abstraction_level": 0,
+      "parallel_write_domains": []
+    }
+  ],
+  "metadata": { "author": "buildaharness", "created": "2026-06-22" }
+}

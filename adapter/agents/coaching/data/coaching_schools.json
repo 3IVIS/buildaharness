@@ -1,0 +1,180 @@
+{
+  "version": "1",
+  "description": "Coaching school knowledge base — seed data for the coaching_knowledge_base Qdrant store. Each entry describes one school: its levels, best-suited situations, key methods, and compatible schools. The coach agent retrieves relevant entries at warm start based on the coachee's domain and opening message.",
+  "schools": [
+    {
+      "id": "co_actives",
+      "name": "Co-Actives",
+      "levels": ["L1", "L2"],
+      "best_suited": "Life coaching, purpose, identity, inner-work focus. Coachees exploring who they are and what they want.",
+      "compatible_with": ["erickson", "point_of_view", "ipec"],
+      "key_methods": [
+        "Fulfillment / Balance / Process coaching model — three distinct contexts the coach moves between",
+        "Designed alliance — explicit agreement between coach and coachee about how to work together",
+        "Level 2 and Level 3 listening — moving from content to context to global field",
+        "Championing — naming what the coach sees in the coachee when they can't see it themselves",
+        "Forwarding the action and deepening the learning — moving between action and reflection",
+        "Powerful questions — open, evocative, one at a time",
+        "Acknowledgement — naming who the coachee is being, not just what they did"
+      ],
+      "embed_text": "Co-Actives coaching school: fulfillment balance process model, designed alliance, Level 2 Level 3 listening, championing, powerful questions, acknowledgement. Best for life coaching, purpose, identity, inner-work. Levels L1-L2. Non-directive, client-led."
+    },
+    {
+      "id": "erickson",
+      "name": "Erickson",
+      "levels": ["L1", "L2"],
+      "best_suited": "Solution-focused coaching. Coachees who benefit from strengths-based positive framing and concrete goal-setting.",
+      "compatible_with": ["co_actives", "point_of_view", "ipec"],
+      "key_methods": [
+        "Solution-focused questions — focus on desired future state, not problem analysis",
+        "SMART goals — Specific, Meaningful, Action-oriented, Realistic, Time-framed",
+        "Scaling questions — quantify progress and confidence on a 1–10 scale",
+        "Exception questions — 'When has this already worked for you, even a little?'",
+        "Strengths spotting — explicitly naming the coachee's capabilities as evidence",
+        "Positive presupposition — language that assumes the coachee can and will succeed"
+      ],
+      "embed_text": "Erickson coaching school: solution-focused, SMART goals, scaling questions, exception questions, strengths spotting, positive presupposition. Best for strengths-based coaching, positive framing, goal-setting. Levels L1-L2."
+    },
+    {
+      "id": "ipec",
+      "name": "IPEC (Institute for Professional Excellence in Coaching)",
+      "levels": ["L2", "L3"],
+      "best_suited": "Energy leadership and awareness. Coachees doing developmental work — understanding their patterns of thinking and increasing self-awareness.",
+      "compatible_with": ["co_actives", "erickson", "integral"],
+      "key_methods": [
+        "Energy Leadership Index (ELI) — 7 levels of energy (catabolic to anabolic)",
+        "Core Energy Coaching — addressing the underlying beliefs and perspectives, not just behaviour",
+        "Reframing — helping the coachee shift from catabolic energy (victim, conflict) to anabolic (opportunity, creation)",
+        "Be-Do-Have model — who the coachee is being drives what they do and what they have",
+        "Curiosity over judgement — modelling and evoking curiosity as a default stance"
+      ],
+      "embed_text": "IPEC coaching school: energy leadership, core energy coaching, ELI assessment, catabolic anabolic energy, reframing, Be-Do-Have, curiosity over judgement. Best for awareness and developmental coaching. Levels L2-L3."
+    },
+    {
+      "id": "integral",
+      "name": "Integral coaching",
+      "levels": ["L2"],
+      "best_suited": "Whole-person development. Coachees working across multiple life dimensions simultaneously.",
+      "compatible_with": ["ipec", "hudson", "co_actives"],
+      "key_methods": [
+        "AQAL framework — All Quadrants All Levels (interior/exterior × individual/collective)",
+        "Integral Life Practice — addressing body, mind, spirit, and shadow",
+        "Lines of development — recognising that coachees may be advanced in some areas and less developed in others",
+        "States and stages — distinguishing temporary states (moods, flow) from stable stages of development",
+        "Shadow work — gently surfacing disowned aspects that limit the coachee"
+      ],
+      "embed_text": "Integral coaching school: AQAL framework, whole-person development, all quadrants all levels, integral life practice, lines of development, states and stages, shadow work. Best for developmental coaching across all life dimensions. Level L2."
+    },
+    {
+      "id": "hudson",
+      "name": "Hudson Institute",
+      "levels": ["L2"],
+      "best_suited": "Life transitions and renewal cycles. Coachees navigating endings, transitions, or major life changes.",
+      "compatible_with": ["integral", "co_actives", "ipec"],
+      "key_methods": [
+        "Cycle of Renewal — Go for It → Doldrums → Cocooning → Getting Ready → Go for It",
+        "Chapter endings and beginnings — framing transitions as natural and purposeful",
+        "Self-renewal — supporting the coachee to stay vital across their lifespan",
+        "Adult development — understanding that growth continues throughout adulthood in predictable patterns",
+        "Values clarification — anchoring transition decisions to what truly matters"
+      ],
+      "embed_text": "Hudson Institute coaching school: Cycle of Renewal, life transitions, endings and beginnings, self-renewal, adult development, values clarification. Best for coachees navigating major changes, chapter endings. Level L2."
+    },
+    {
+      "id": "orsc",
+      "name": "ORSC (Organisation and Relationship Systems Coaching)",
+      "levels": ["L4", "L5"],
+      "best_suited": "Team dynamics, group interventions, systems work. Coachees who need to work with relationships and teams, not just individual development.",
+      "compatible_with": ["aoc_executive", "marshall_goldsmith"],
+      "key_methods": [
+        "Relationship Systems Intelligence (RSI) — the system (team/pair/org) as the client, not the individual",
+        "Roles in systems — distinguishing person from role, rank from person",
+        "Ghosting — naming the implicit third entity in a system (the relationship itself)",
+        "Deep democracy — ensuring all voices in a system are heard, including dissenting ones",
+        "Systems constellations — spatial/positional exercises to reveal hidden system dynamics",
+        "Team emotional intelligence — recognising and working with collective emotions"
+      ],
+      "embed_text": "ORSC coaching school: organisation and relationship systems, RSI, team coaching, roles in systems, deep democracy, systems constellations, team emotional intelligence. Best for team dynamics, group interventions, organisational systems. Levels L4-L5."
+    },
+    {
+      "id": "aoc_executive",
+      "name": "AoEC (Academy of Executive Coaching)",
+      "levels": ["L3", "L4"],
+      "best_suited": "Executive presence and leadership development. Senior leaders working on impact, influence, and presence.",
+      "compatible_with": ["marshall_goldsmith", "korn_ferry", "orsc"],
+      "key_methods": [
+        "Psychodynamic approach — understanding how unconscious patterns influence leadership behaviour",
+        "Executive presence framework — gravitas, communication, appearance as three dimensions",
+        "360-degree feedback integration — using multi-rater data as a coaching entry point",
+        "Stakeholder mapping — identifying and working with the leader's full stakeholder landscape",
+        "Systemic coaching — working at the intersection of individual and organisational dynamics",
+        "Challenging with care — high-support high-challenge stance"
+      ],
+      "embed_text": "AoEC executive coaching school: executive presence, psychodynamic approach, 360 feedback, stakeholder mapping, systemic coaching, high-support high-challenge. Best for senior leaders, executive development, leadership presence. Levels L3-L4."
+    },
+    {
+      "id": "korn_ferry",
+      "name": "Korn Ferry",
+      "levels": ["L4"],
+      "best_suited": "Performance improvement and competency development. Coachees with specific capability gaps or performance targets.",
+      "compatible_with": ["aoc_executive", "marshall_goldsmith"],
+      "key_methods": [
+        "Korn Ferry Leadership Architect — structured competency framework across 4 factors and 38 competencies",
+        "FYI (For Your Improvement) — evidence-based developmental actions per competency",
+        "VOICES 360 — multi-rater feedback tool tied to the competency framework",
+        "Development planning — building a structured capability development plan with milestones",
+        "Derailer identification — surfacing the behaviours most likely to limit the coachee's progression",
+        "Stretch assignments — recommending specific experiences that build the target competencies"
+      ],
+      "embed_text": "Korn Ferry coaching: competency framework, leadership architect, FYI development guide, VOICES 360, development planning, derailer identification, stretch assignments. Best for performance coaching, competency gaps, structured development. Level L4."
+    },
+    {
+      "id": "marshall_goldsmith",
+      "name": "Marshall Goldsmith",
+      "levels": ["L3", "L4"],
+      "best_suited": "Behavioural change for successful leaders. Coachees who need to stop a behaviour that is limiting their effectiveness, not just add a new one.",
+      "compatible_with": ["korn_ferry", "aoc_executive", "orsc"],
+      "key_methods": [
+        "Stakeholder-centred coaching — involving the coachee's key stakeholders throughout the change process",
+        "Feedforward — asking for suggestions about the future rather than feedback about the past",
+        "Daily questions — brief daily self-reporting on key behaviours the coachee has committed to",
+        "'What got you here won't get you there' — the behaviours that drove past success can limit future success",
+        "Behavioural commitments — specific, observable behaviour changes the leader publicly commits to",
+        "Follow-through tracking — regular check-ins with stakeholders to measure perceived change"
+      ],
+      "embed_text": "Marshall Goldsmith coaching: stakeholder-centred coaching, feedforward, daily questions, behavioural change, what got you here won't get you there, follow-through. Best for senior leaders changing specific limiting behaviours. Levels L3-L4."
+    },
+    {
+      "id": "newfield",
+      "name": "Newfield Network",
+      "levels": ["L3"],
+      "best_suited": "Ontological coaching. Coachees where the work is fundamentally about how they are being (language, body, emotions) rather than what they are doing.",
+      "compatible_with": ["co_actives", "integral", "ipec"],
+      "key_methods": [
+        "Observer-action-results loop — the observer (who the coachee is being) determines actions and results",
+        "Three domains of being — language, body (somatic), and emotions as a unified triad",
+        "Moods and emotions as dispositions for action — not feelings to manage but stances that open or close possibilities",
+        "Generative listening — listening for what the speaker is committed to, not just what they say",
+        "Declarations — the power of explicit commitments to shift who you are being",
+        "Somatic coaching — working with posture, breath, and body as entry points to shifting patterns"
+      ],
+      "embed_text": "Newfield ontological coaching: observer action results, language body emotions, moods as dispositions, generative listening, declarations, somatic coaching. Best for coachees where the work is about way of being. Level L3."
+    },
+    {
+      "id": "point_of_view",
+      "name": "Point of View Coaching",
+      "levels": ["L1", "L2"],
+      "best_suited": "Clean questioning and non-directive work. Coachees who need space to think without the coach's frame, metaphor, or agenda.",
+      "compatible_with": ["co_actives", "erickson"],
+      "key_methods": [
+        "Clean Language — questions that use only the coachee's own words, removing coach interpretation",
+        "Symbolic modelling — working with metaphors the coachee generates spontaneously",
+        "Emergence — allowing insights to arise from the coachee's own exploration rather than direction",
+        "Non-directive stance — the coach refrains from any framing, interpretation, or agenda",
+        "Developing questions — 'And when [X], what happens just before [X]?' — deepening awareness",
+        "Presupposition-free questions — no embedded assumptions about what the answer should be"
+      ],
+      "embed_text": "Point of View coaching: clean language, symbolic modelling, emergence, non-directive, coachee's own metaphors, presupposition-free questions. Best for deep non-directive work, metaphor, coachees who need the coach to stay completely out of the way. Levels L1-L2."
+    }
+  ]
+}
