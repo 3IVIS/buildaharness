@@ -4,7 +4,8 @@ import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
-import { PersonalAssistant } from './assistant.js'
+import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState } from './assistant.js'
+import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 
 class FakeLLMClient implements ILLMClient {
   calls = 0
@@ -1642,5 +1643,282 @@ describe('PersonalAssistant world_model layer_activity reporting', () => {
     const worldModelEvent = second.trace?.layerActivity.find((e) => e.layer === 'world_model')
     expect(worldModelEvent?.fired).toBe(false)
     expect(worldModelEvent?.reason).toContain('carried forward')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// Dynamic tool-call budget for batch research tasks (T7 — see
+// plans/personal_assistant_dynamic_tool_budget_plan.html). The point of this suite is proving
+// the feature *can't* misfire on anything it wasn't built for, not just demonstrating the happy
+// path — see the plan's Test Plan tab for the itemized list this implements.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+describe('trimmedAverage / nextItemBudget — batch calibration math (pure functions, no LLM)', () => {
+  it('plain-averages when fewer than 3 samples exist', () => {
+    expect(trimmedAverage([4])).toBe(4)
+    expect(trimmedAverage([2, 8])).toBe(5)
+  })
+
+  it('drops one min and one max once there are 3+ samples, so a single unusually cheap or expensive item cannot swing the average', () => {
+    expect(trimmedAverage([1, 5, 9])).toBe(5) // drops the 1 and the 9, leaving just the 5
+    expect(trimmedAverage([2, 2, 2, 10])).toBe(2) // drops one 2 (min) and the 10 (max), leaving [2, 2]
+  })
+
+  it('floors the projected budget at perItemFloor when the probe item resolved in 0-1 calls, so a suspiciously cheap probe cannot starve the rest', () => {
+    const cheapState: BatchBudgetState = { callsPerItemHistory: [1], perItemFloor: 2, slackFactor: 1.4, absoluteTurnCeiling: 40 }
+    expect(nextItemBudget(cheapState)).toBe(Math.ceil(2 * 1.4)) // floored at 2, not the raw 1
+
+    const freeState: BatchBudgetState = { callsPerItemHistory: [0], perItemFloor: 2, slackFactor: 1.4, absoluteTurnCeiling: 40 }
+    expect(nextItemBudget(freeState)).toBe(Math.ceil(2 * 1.4))
+  })
+
+  it('scales the projected budget with slackFactor for an expensive probe item', () => {
+    const state: BatchBudgetState = { callsPerItemHistory: [20], perItemFloor: 2, slackFactor: 1.4, absoluteTurnCeiling: 40 }
+    expect(nextItemBudget(state)).toBe(Math.ceil(20 * 1.4))
+  })
+
+  it('recalibrates once item 3 resolves — the per-item budget for item 4+ is not frozen at the initial probe average', () => {
+    const state: BatchBudgetState = { callsPerItemHistory: [2, 10], perItemFloor: 2, slackFactor: 1.4, absoluteTurnCeiling: 40 }
+    const budgetAfterProbe = nextItemBudget(state) // plain average of [2, 10] = 6, under 3 samples
+    expect(budgetAfterProbe).toBe(Math.ceil(6 * 1.4))
+
+    state.callsPerItemHistory.push(3) // item 3 resolves in 3 calls — now 3 samples, trimming kicks in
+    const budgetAfterItem3 = nextItemBudget(state) // trimmed average of [2, 3, 10] drops the 2 and the 10, leaving just 3
+    expect(budgetAfterItem3).toBe(Math.ceil(3 * 1.4))
+    expect(budgetAfterItem3).not.toBe(budgetAfterProbe)
+  })
+})
+
+describe('PersonalAssistant batch research — detection gating', () => {
+  it('a 2-item list stays below the batch detector\'s 3-item floor — the flat runToolLoop path is used unchanged', async () => {
+    const message = 'What are the open house dates for:\nSchool A\nSchool B'
+    const llm = scriptedResponses([{ content: 'Here are both dates.' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn(message)
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Here are both dates.')
+    expect(llm.calls).toBe(1)
+    // The flat loop's first message carries the whole original message verbatim — a batch
+    // sub-loop would instead seed a synthetic single-item prompt ("You are working through one
+    // item from a batch research request...").
+    expect(llm.receivedMessages[0].some((m) => m.role === 'user' && m.content === message)).toBe(true)
+    expect(result.trace?.batchBudget).toBeUndefined()
+  })
+
+  it('without webTools configured, the batch path is never evaluated even for a qualifying 3+ item list', async () => {
+    const message = 'What are the open house dates for:\nSchool A\nSchool B\nSchool C'
+    const llm = new FakeLLMClient('Sure, here is some general advice.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    const result = await assistant.turn(message)
+
+    expect(result.status).toBe('ok')
+    // No tool loop runs at all when nothing is configured — the plain callChat path is used once.
+    expect(llm.calls).toBe(1)
+    expect(result.trace?.batchBudget).toBeUndefined()
+  })
+
+  it('a request already inside a plan-driven run skips the batch path even for a qualifying list', async () => {
+    const memory = new InMemoryAdapter()
+    const sessionId = 'batch-inside-plan'
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [{ id: 'destination_research', description: 'Research the destination', depends_on: [] }],
+    })
+    await savePlan(memory, sessionId, plan)
+
+    const message = 'What are the open house dates for:\nSchool A\nSchool B\nSchool C'
+    const llm = scriptedResponses([{ content: 'Handled via the flat loop.' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn(message, { sessionId })
+
+    expect(result.status).toBe('ok')
+    // A batch sub-loop would make one callChatStructured call per item; the flat loop makes
+    // exactly one for the whole message.
+    expect(llm.calls).toBe(1)
+    expect(llm.receivedMessages[0].some((m) => m.role === 'user' && m.content === message)).toBe(true)
+    expect(result.trace?.batchBudget).toBeUndefined()
+  })
+})
+
+describe('PersonalAssistant batch research — real transcript replay and per-item isolation', () => {
+  it('replays the real school-dates transcript: the item with 3 consecutive dead-end searches resolves not_found without dragging down the others', async () => {
+    const llm = scriptedResponses(
+      fixtureStructuredResponses(SCHOOL_DATES_BATCH_FIXTURE),
+      ['Erich-Kästner-Grundschule: confirmed for June 17, 2025. See the other schools\' findings above.'],
+    )
+    const webTools = { search: fixtureWebSearch(SCHOOL_DATES_BATCH_FIXTURE) }
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools })
+
+    const result = await assistant.turn(fixtureUserMessage(SCHOOL_DATES_BATCH_FIXTURE))
+
+    expect(result.status).toBe('ok')
+    const batchBudget = result.trace?.batchBudget
+    expect(batchBudget).toBeDefined()
+    expect(batchBudget!.itemCount).toBe(7)
+    expect(batchBudget!.perItemOutcomes).toHaveLength(7)
+
+    const halensee = batchBudget!.perItemOutcomes.find((o) => o.item === 'Halensee-Grundschule')
+    expect(halensee?.status).toBe('not_found')
+    expect(halensee?.callsUsed).toBe(3) // stopped at the dead-end window, not its full per-item budget
+
+    // Every other school — including ones queued behind Halensee in resolution order — still
+    // resolved normally. This is the direct proof the item-scoped window (T4) doesn't poison an
+    // easier item queued behind a hard one, the exact failure mode of a flat, turn-wide window.
+    const others = batchBudget!.perItemOutcomes.filter((o) => o.item !== 'Halensee-Grundschule')
+    expect(others.every((o) => o.status === 'found')).toBe(true)
+
+    expect(result.reply).toContain('Erich-Kästner-Grundschule')
+    expect(result.reply).toContain('June 17, 2025')
+  })
+
+  it('a model emitting raw <tool_call> pseudo-XML inside a per-item sub-loop still triggers the retry-nudge and never surfaces the raw tag', async () => {
+    const message = 'What are the open house dates for:\nSchool A\nSchool B\nSchool C'
+    const llm = scriptedResponses([
+      // Probe item (School A): malformed tool-call syntax, then a real tool call, then the final answer.
+      { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>School A</arg_value></tool_call>' },
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'School A' } }] },
+      { content: 'School A: found the date.' },
+      // Remaining items resolve immediately, no tool calls needed.
+      { content: 'School B: found the date.' },
+      { content: 'School C: found the date.' },
+    ], ['Here are the dates you asked for.'])
+    const webTools = { search: async () => [{ title: 'Result', url: 'https://example.com', snippet: 'Confirmed date: October 2025.' }] }
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools })
+
+    const result = await assistant.turn(message)
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).not.toContain('<tool_call>')
+    const retryMessages = llm.receivedMessages[1]
+    expect(retryMessages.some((m) => m.role === 'user' && m.content.includes('<tool_call>'))).toBe(true)
+    expect(result.trace?.batchBudget?.perItemOutcomes).toHaveLength(3)
+    expect(result.trace?.batchBudget?.perItemOutcomes.every((o) => o.status === 'found')).toBe(true)
+  })
+})
+
+describe('PersonalAssistant batch research — confirmation gate', () => {
+  /** Two probe items each costing 3 calls (2 productive tool calls + a final answer) — enough to
+   * push the projection for 8 remaining items over BATCH_LARGE_PROJECTION_THRESHOLD (25):
+   * callsPerItem(3) * 8 * slackFactor(1.4) = 33.6. */
+  function probeResponses(): LLMStructuredResponse[] {
+    const toolCall = (id: string): LLMStructuredResponse => ({ content: '', toolCalls: [{ id, name: 'web_search', input: { query: 'q' } }] })
+    return [
+      toolCall('p1'), toolCall('p2'), { content: 'Probe item 0 found.' },
+      toolCall('p3'), toolCall('p4'), { content: 'Probe item 1 found.' },
+    ]
+  }
+  function tenItemMessage(): string {
+    return Array.from({ length: 10 }, (_, i) => `School ${String.fromCharCode(65 + i)}`).join('\n')
+  }
+  const productiveSearch = async () => [{ title: 'Result', url: 'https://example.com', snippet: 'Confirmed date found.' }]
+
+  it('a projected total above the threshold returns a confirmation step before spending it', async () => {
+    const llm = scriptedResponses(probeResponses())
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: productiveSearch } })
+
+    const result = await assistant.turn(tenItemMessage())
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.pendingActionKind).toBe('batch')
+    expect(result.pendingActionId).toBeTruthy()
+    expect(result.reason).toMatch(/8 item/)
+    expect(llm.calls).toBe(6) // only the two probe items ran — nothing else was spent yet
+  })
+
+  it('confirming the projection resumes and completes the remaining items with zero re-probing', async () => {
+    const remainingResponses = Array.from({ length: 8 }, (_, i) => ({ content: `Remaining item ${i} found.` }))
+    const llm = scriptedResponses([...probeResponses(), ...remainingResponses])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: productiveSearch } })
+
+    const staged = await assistant.turn(tenItemMessage())
+    expect(staged.status).toBe('needs_approval')
+    const callsAfterStaging = llm.calls
+    expect(callsAfterStaging).toBe(6)
+
+    const resumed = await assistant.turn('', { approved: true, pendingActionId: staged.pendingActionId })
+
+    expect(resumed.status).toBe('ok')
+    // 6 probe calls + 8 one-call remaining items = 14 total — not 6 (re-probe) + 6 + 8 = 20.
+    expect(llm.calls).toBe(14)
+    const batchBudget = resumed.trace?.batchBudget
+    expect(batchBudget?.itemCount).toBe(10)
+    expect(batchBudget?.perItemOutcomes).toHaveLength(10)
+    expect(batchBudget?.totalCallsUsed).toBe(3 + 3 + 8)
+    expect(batchBudget?.perItemOutcomes.every((o) => o.status === 'found')).toBe(true)
+  })
+
+  it('declining the projection resolves the turn immediately with only the probed items\' real results, and explicitly lists every unprobed item as not attempted', async () => {
+    const llm = scriptedResponses(probeResponses())
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: productiveSearch } })
+
+    const staged = await assistant.turn(tenItemMessage())
+    const callsAfterStaging = llm.calls
+
+    const declined = await assistant.turn('', { approved: false, pendingActionId: staged.pendingActionId })
+
+    expect(declined.status).toBe('ok')
+    expect(declined.reply).toContain('Probe item 0 found.')
+    expect(declined.reply).toContain('Probe item 1 found.')
+    expect(declined.reply).toContain('Not attempted')
+    for (const letter of ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) {
+      expect(declined.reply).toContain(`School ${letter}`)
+    }
+    // Nothing further was spent on decline — no new LLM calls at all.
+    expect(llm.calls).toBe(callsAfterStaging)
+    const batchBudget = declined.trace?.batchBudget
+    expect(batchBudget?.perItemOutcomes).toHaveLength(2) // only the 2 probed items, not the 8 unprobed ones
+  })
+
+  it('approving a large projected batch that still hits the absolute ceiling mid-resolution (real per-item costs exceeding the projection) resolves what it can and explicitly lists the rest as not attempted, without erroring', async () => {
+    // 2 probe items each costing 2 calls (1 productive search + a final answer) followed by 13
+    // remaining items that are each a 3-call dead end (BATCH_DEAD_END_WINDOW). Every dead-end
+    // item's per-item budget (BATCH_PER_ITEM_FLOOR=2, slackFactor=1.4 -> at least ceil(2*1.4)=3
+    // calls, until room runs low) comfortably covers its 3-call window trip — this ceiling-hit
+    // point (12 of 13 remaining items resolve, the 13th is skipped, total lands at exactly the
+    // BATCH_ABSOLUTE_TURN_CEILING=40) was derived by simulating resolveRemainingBatchItems' own
+    // loop (trimmedAverage/nextItemBudget, imported above) with these exact costs.
+    const items = Array.from({ length: 15 }, (_, i) => `School ${String.fromCharCode(65 + i)}`)
+    const message = items.join('\n')
+
+    const toolCall = (id: string): LLMStructuredResponse => ({ content: '', toolCalls: [{ id, name: 'web_search', input: { query: 'q' } }] })
+    const responses: LLMStructuredResponse[] = [
+      toolCall('probe-0'), { content: 'Probe item 0 found.' }, // School A — 1 productive search + final = 2 calls
+      toolCall('probe-1'), { content: 'Probe item 1 found.' }, // School B — 1 productive search + final = 2 calls
+    ]
+    const deadEndToolCall = (id: string): LLMStructuredResponse => ({ content: '', toolCalls: [{ id, name: 'web_search', input: { query: 'q' } }] })
+    for (let item = 0; item < 12; item++) {
+      for (let call = 0; call < 3; call++) responses.push(deadEndToolCall(`de-${item}-${call}`))
+    }
+    // School O (the 13th remaining item) is never attempted — the ceiling is hit first — so no
+    // scripted response is needed for it.
+
+    // The first 2 search calls (the probe items) return a real result; every one after that is a
+    // dead end — matching the responses script above exactly.
+    let searchCalls = 0
+    const search = async () => {
+      searchCalls++
+      return searchCalls <= 2 ? [{ title: 'Result', url: 'https://example.com', snippet: 'Confirmed date found.' }] : []
+    }
+    const llm = scriptedResponses(responses)
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search } })
+
+    const staged = await assistant.turn(message)
+    expect(staged.status).toBe('needs_approval') // projection: 2 * 13 * 1.4 = 36.4 > 25
+
+    const resumed = await assistant.turn('', { approved: true, pendingActionId: staged.pendingActionId })
+
+    expect(resumed.status).toBe('ok')
+    expect(resumed.reply).toContain('Not yet checked this turn')
+    expect(resumed.reply).toContain('School O')
+    const batchBudget = resumed.trace?.batchBudget
+    expect(batchBudget?.itemCount).toBe(15)
+    expect(batchBudget?.totalCallsUsed).toBe(40) // hit BATCH_ABSOLUTE_TURN_CEILING exactly
+    expect(batchBudget?.perItemOutcomes).toHaveLength(14) // 2 probed + 12 resolved; School O excluded
+    expect(searchCalls).toBe(38) // 2 probe searches + 12 dead-end items * 3 calls each
   })
 })
