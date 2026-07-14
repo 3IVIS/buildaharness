@@ -13,32 +13,91 @@ if TYPE_CHECKING:
 # Keywords that map to each template name for heuristic selection
 _TEMPLATE_KEYWORDS: dict[str, list[str]] = {
     "problem_solving": [
-        "problem", "issue", "solve", "fix", "troubleshoot", "root cause",
-        "diagnose", "debug", "investigate", "resolve",
+        "problem",
+        "issue",
+        "solve",
+        "fix",
+        "troubleshoot",
+        "root cause",
+        "diagnose",
+        "debug",
+        "investigate",
+        "resolve",
     ],
     "project_planning": [
-        "project", "plan", "launch", "build", "develop", "deliver",
-        "milestone", "roadmap", "schedule", "resource",
+        "project",
+        "plan",
+        "launch",
+        "build",
+        "develop",
+        "deliver",
+        "milestone",
+        "roadmap",
+        "schedule",
+        "resource",
     ],
     "research_analysis": [
-        "research", "analyse", "analyze", "study", "review", "investigate",
-        "explore", "survey", "literature", "data", "insights",
+        "research",
+        "analyse",
+        "analyze",
+        "study",
+        "review",
+        "investigate",
+        "explore",
+        "survey",
+        "literature",
+        "data",
+        "insights",
     ],
     "decision_making": [
-        "decide", "decision", "choose", "select", "evaluate", "compare",
-        "option", "trade-off", "tradeoff", "criteria", "pick",
+        "decide",
+        "decision",
+        "choose",
+        "select",
+        "evaluate",
+        "compare",
+        "option",
+        "trade-off",
+        "tradeoff",
+        "criteria",
+        "pick",
     ],
     "process_improvement": [
-        "process", "improve", "optimise", "optimize", "efficiency",
-        "workflow", "bottleneck", "streamline", "kaizen", "lean",
+        "process",
+        "improve",
+        "optimise",
+        "optimize",
+        "efficiency",
+        "workflow",
+        "bottleneck",
+        "streamline",
+        "kaizen",
+        "lean",
     ],
     "content_creation": [
-        "write", "draft", "article", "report", "blog", "document",
-        "content", "copy", "proposal", "presentation", "essay",
+        "write",
+        "draft",
+        "article",
+        "report",
+        "blog",
+        "document",
+        "content",
+        "copy",
+        "proposal",
+        "presentation",
+        "essay",
     ],
     "trip_planning": [
-        "trip", "travel", "vacation", "itinerary", "flight", "flights",
-        "hotel", "destination", "pack for", "holiday",
+        "trip",
+        "travel",
+        "vacation",
+        "itinerary",
+        "flight",
+        "flights",
+        "hotel",
+        "destination",
+        "pack for",
+        "holiday",
     ],
 }
 
@@ -62,7 +121,7 @@ def pick_template_for_task(description: str) -> str:
     return best if scores[best] > 0 else _DEFAULT_TEMPLATE
 
 
-def format_plan_progress(snapshot: "PlanSnapshot") -> str:
+def format_plan_progress(snapshot: PlanSnapshot) -> str:
     """Return a human-readable plan status string for agent context injection."""
     lines: list[str] = [
         f"Plan: {snapshot.name} (turn {snapshot.turn})",
@@ -89,7 +148,7 @@ def format_plan_progress(snapshot: "PlanSnapshot") -> str:
     return "\n".join(lines)
 
 
-def snapshot_to_html(snapshot: "PlanSnapshot") -> str:
+def snapshot_to_html(snapshot: PlanSnapshot) -> str:
     """Render a PlanSnapshot as a minimal HTML progress report."""
     rows = []
     for status in snapshot.task_statuses:
@@ -125,10 +184,11 @@ th{{text-align:left;padding:6px 12px;font-size:12px;color:#64748b;border-bottom:
 </head>
 <body>
 <h1>Plan: {snapshot.name}</h1>
-<h2>Run {snapshot.run_id} &middot; Turn {snapshot.turn} &middot; {snapshot.completion_pct:.1f}% complete &middot; {snapshot.exported_at}</h2>
+<h2>Run {snapshot.run_id} &middot; Turn {snapshot.turn} &middot; \
+{snapshot.completion_pct:.1f}% complete &middot; {snapshot.exported_at}</h2>
 <table>
 <thead><tr><th>Task ID</th><th>Status</th></tr></thead>
-<tbody>{''.join(rows)}</tbody>
+<tbody>{"".join(rows)}</tbody>
 </table>
 <p style="margin-top:1.5rem;font-size:12px;color:#64748b">
   Success criteria: {snapshot.success_criteria}

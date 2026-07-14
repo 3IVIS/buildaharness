@@ -487,13 +487,10 @@ def init_turn_state(state: dict) -> dict:
         or []
     )
     _recent_coach_turns = [
-        (t.get("turn", i + 1), t.get("coach", ""))
-        for i, t in enumerate(_conv_history)
-        if t.get("coach")
+        (t.get("turn", i + 1), t.get("coach", "")) for i, t in enumerate(_conv_history) if t.get("coach")
     ][-5:]
     updates["recent_coach_responses_text"] = (
-        "\n---\n".join(f'Turn {n}: "{text}"' for n, text in _recent_coach_turns)
-        if _recent_coach_turns else ""
+        "\n---\n".join(f'Turn {n}: "{text}"' for n, text in _recent_coach_turns) if _recent_coach_turns else ""
     )
 
     # When the experience store returns nothing (expected on a first session),
@@ -1001,7 +998,7 @@ def update_level_blend(state: dict) -> dict:
             _prev_qtype = _qt_wms.get("_last_question_type", "")
             _prev_recent = list(_qt_wms.get("_recent_question_types") or [])
             _qt_wms["_last_question_type"] = _new_qtype
-            _updated_recent = (_prev_recent + [_new_qtype])[-3:]
+            _updated_recent = [*_prev_recent, _new_qtype][-3:]
             _qt_wms["_recent_question_types"] = _updated_recent
             _hint_recent_qtypes = _updated_recent
             updates["world_model_state"] = _qt_wms
@@ -1019,8 +1016,7 @@ def update_level_blend(state: dict) -> dict:
                 _new_qtype, _hint_recent_qtypes or None, stage=state.get("session_stage", "")
             )
         elif state.get("recovery_cap_reached") and any(
-            i.get("type") == "REPETITION"
-            for i in ((state.get("semantic_verify_result") or {}).get("issues") or [])
+            i.get("type") == "REPETITION" for i in ((state.get("semantic_verify_result") or {}).get("issues") or [])
         ):
             _sem_hint = next(
                 (

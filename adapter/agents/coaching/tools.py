@@ -323,15 +323,12 @@ def verify_coaching_response(state: dict) -> dict:
                     layer_notes.append(f"coaching_continuity: {reason}")
                 if not continuity_hint:
                     _hint_lower = (hint or "").lower()
-                    _is_opening_echo_only = (
-                        any(
-                            w in _hint_lower
-                            for w in ("opening sentence", "opener", "acknowledgment", "opening acknowledgment")
-                        )
-                        and not any(
-                            w in _hint_lower
-                            for w in ("re-ask", "reasked", "same intent", "already answered", "underlying intent")
-                        )
+                    _is_opening_echo_only = any(
+                        w in _hint_lower
+                        for w in ("opening sentence", "opener", "acknowledgment", "opening acknowledgment")
+                    ) and not any(
+                        w in _hint_lower
+                        for w in ("re-ask", "reasked", "same intent", "already answered", "underlying intent")
                     )
                     if _is_opening_echo_only:
                         technique_clause = (
@@ -353,32 +350,32 @@ def verify_coaching_response(state: dict) -> dict:
                         technique_clause = (
                             "You are in ESTABLISH stage. ALL questions of any type are FORBIDDEN for this retry — "
                             "including open-ended exploratory questions, contracting questions "
-                            "(‘What feels most important to focus on right now?’, ‘What do you want to leave this "
-                            "session with?’, ‘What specifically would be different by the end of today?’), and "
-                            "resource-oriented questions (‘What past experiences have equipped you...?’, ‘When have "
-                            "you navigated...?’). You MUST use one of the following ESTABLISH-appropriate responses "
+                            "('What feels most important to focus on right now?', 'What do you want to leave this "
+                            "session with?', 'What specifically would be different by the end of today?'), and "
+                            "resource-oriented questions ('What past experiences have equipped you...?', 'When have "
+                            "you navigated...?'). You MUST use one of the following ESTABLISH-appropriate responses "
                             "and NOTHING ELSE:\n"
                             "(a) Brief acknowledgment only — address the coachee directly in second person and "
                             "reflect ALL key disclosures from their current message (every named person, fear, "
                             "behavioral avoidance, and metaphor they used) without asking anything. Speak TO the "
-                            "coachee using ‘you’ and ‘your’ — ‘The coachee named…’ or any other third-person "
-                            "narration is FORBIDDEN. Mirror their own words back directly: ‘You named Marcus…’, "
-                            "’I hear that your fear of…’. Do not single out one thread and ignore others.\n"
-                            "(b) Tentative goal confirmation — if the coachee’s message contains anything that sounds "
+                            "coachee using 'you' and 'your' — 'The coachee named…' or any other third-person "
+                            "narration is FORBIDDEN. Mirror their own words back directly: 'You named Marcus…', "
+                            "'I hear that your fear of…'. Do not single out one thread and ignore others.\n"
+                            "(b) Tentative goal confirmation — if the coachee's message contains anything that sounds "
                             "like their desired focus or shift, offer it back as a yes/no confirmation: "
-                            "’It sounds like [their exact words naming what they want] might be the thing you want "
-                            "to sit with today — does that feel right?’\n"
+                            "'It sounds like [their exact words naming what they want] might be the thing you want "
+                            "to sit with today — does that feel right?'\n"
                             "(c) Narrowing clarification — invite the coachee to state their specific desired outcome "
-                            "in one sentence, using only their own words: ‘What would feel different for you by the "
-                            "end of today, given what you’ve just named?’"
+                            "in one sentence, using only their own words: 'What would feel different for you by the "
+                            "end of today, given what you've just named?'"
                         )
                     else:
                         technique_clause = (
                             "You MUST use a completely different technique this turn. "
-                            "First scan the conversation history and identify which technique types you have used recently, then choose one NOT used in the last 4 turns: "
+                            "First scan the conversation history and identify which technique types you have used recently, then choose one NOT used in the last 4 turns: "  # noqa: E501
                             "(a) Brief acknowledgment only — hold space without asking a question this turn "
-                            "(b) Perspective-shift technique — invite the coachee to view their situation from a different vantage point "
-                            "(c) Pattern-naming technique — observe a theme recurring in the coachee’s own language "
+                            "(b) Perspective-shift technique — invite the coachee to view their situation from a different vantage point "  # noqa: E501
+                            "(c) Pattern-naming technique — observe a theme recurring in the coachee's own language "
                             "(d) Reframe technique — offer a different way of seeing the same situation"
                         )
                     # For ESTABLISH stage, the semantic_verify hint typically suggests asking a
@@ -391,11 +388,11 @@ def verify_coaching_response(state: dict) -> dict:
                     )
                     continuity_hint = (
                         f"REPETITION DETECTED — {_rep_opening}. "
-                        "OPENER CONSTRAINT: do NOT begin your response with ‘I hear’ in any form (‘I hear that’, ‘I hear you’re’, ‘I hear it’, ‘I hear how’) — the prior coach turn already used this opener and it is the source of the structural repetition. If the hint above contains an example that starts with ‘I hear’, treat it as an example of the FORBIDDEN pattern, not a suggested rephrasing. "  # noqa: E501
-                        "ACKNOWLEDGMENT SOURCE — MANDATORY: your opening acknowledgment for this retry MUST be derived entirely from the coachee’s CURRENT message (the ‘Coachee message:’ block at the bottom of your prompt). "
-                        "Before writing your acknowledgment: scan the last 3 coach turns in conversation_history and extract every phrase, image, and metaphor they contain — your opening sentence MUST NOT echo any of those. "
-                        "Also scan prior coachee turns in conversation_history — even evocative language the coachee used earlier (e.g. a vivid metaphor or a fear they named in a previous turn) is off limits unless it also appears verbatim in the current ‘Coachee message:’ block. "
-                        "If a word, phrase, or image does not appear in the current ‘Coachee message:’ block, do not use it in your acknowledgment. "
+                        "OPENER CONSTRAINT: do NOT begin your response with 'I hear' in any form ('I hear that', 'I hear you're', 'I hear it', 'I hear how') — the prior coach turn already used this opener and it is the source of the structural repetition. If the hint above contains an example that starts with 'I hear', treat it as an example of the FORBIDDEN pattern, not a suggested rephrasing. "  # noqa: E501
+                        "ACKNOWLEDGMENT SOURCE — MANDATORY: your opening acknowledgment for this retry MUST be derived entirely from the coachee's CURRENT message (the 'Coachee message:' block at the bottom of your prompt). "  # noqa: E501
+                        "Before writing your acknowledgment: scan the last 3 coach turns in conversation_history and extract every phrase, image, and metaphor they contain — your opening sentence MUST NOT echo any of those. "  # noqa: E501
+                        "Also scan prior coachee turns in conversation_history — even evocative language the coachee used earlier (e.g. a vivid metaphor or a fear they named in a previous turn) is off limits unless it also appears verbatim in the current 'Coachee message:' block. "  # noqa: E501
+                        "If a word, phrase, or image does not appear in the current 'Coachee message:' block, do not use it in your acknowledgment. "  # noqa: E501
                         + technique_clause
                     )
             elif issue_type == "MISSED_DISCLOSURE":
