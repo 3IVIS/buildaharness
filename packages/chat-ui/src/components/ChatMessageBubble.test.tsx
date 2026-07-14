@@ -106,4 +106,41 @@ describe('ChatMessageBubble', () => {
     render(<ChatMessageBubble role="assistant" content="Hi." />)
     expect(screen.queryByRole('button', { name: /Run detail/ })).not.toBeInTheDocument()
   })
+
+  it('shows a batch-research tally inside Why? and the per-item breakdown inside Run detail', async () => {
+    const trace = makeTrace({
+      batchBudget: {
+        itemCount: 3,
+        callsPerItemHistory: [1, 3, 10],
+        projectedTotal: 14,
+        totalCallsUsed: 14,
+        perItemOutcomes: [
+          { item: 'Grunewald-Grundschule', status: 'found', callsUsed: 1 },
+          { item: 'Carl-Orff-Grundschule', status: 'not_found', callsUsed: 3 },
+          { item: 'Erich-Kästner-Grundschule', status: 'truncated_while_productive', callsUsed: 10 },
+        ],
+      },
+    })
+    render(<ChatMessageBubble role="assistant" content="Done." trace={trace} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Why?' }))
+    expect(screen.getByText(/Batch: 3 items — 1 found, 1 not found, 1 truncated/)).toBeInTheDocument()
+    expect(screen.getByText(/14 calls used, projected ~14/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run detail ▾' }))
+    expect(screen.getByText(/Grunewald-Grundschule — found \(1 calls\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Carl-Orff-Grundschule — not found \(3 calls\)/).closest('li')).toHaveClass('bubble__batch-item--not_found')
+    expect(screen.getByText(/Erich-Kästner-Grundschule — truncated while productive \(10 calls\)/).closest('li')).toHaveClass('bubble__batch-item--truncated_while_productive')
+  })
+
+  it('shows no batch tally or breakdown on a non-batch turn', async () => {
+    const trace = makeTrace({ layerActivity: [{ layer: 'world_model', fired: true, reason: 'Remembered a fact' }] })
+    render(<ChatMessageBubble role="assistant" content="Done." trace={trace} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Why?' }))
+    expect(screen.queryByText(/^Batch:/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run detail ▾' }))
+    expect(screen.queryByText(/found \(/)).not.toBeInTheDocument()
+  })
 })

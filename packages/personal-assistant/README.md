@@ -227,6 +227,62 @@ substitute for a network-isolated environment if that's a hard requirement.
 Independent of `fileTools`/`shellTools` — a caller can enable web access
 without ever exposing the filesystem or shell.
 
+## Batch research budget
+
+The flat `maxSteps` cap that governs an ordinary chat turn (see below) doesn't
+know the difference between a one-question turn and a turn asking for the same
+lookup across many items — a 7-item batch and a 1-item question get the same
+budget. When `webTools` is configured, a message is *also* checked against
+`detectHomogeneousBatchList` (`batch-list-detector.ts`) before the flat loop
+starts: a syntactically explicit list — newline/bullet/numbered lines, ≥3
+qualifying entries, name-shaped content (a capitalization-ratio heuristic, not
+an LLM call) — routes the turn through a separate, self-calibrating budget
+instead. Anything else (open-ended discovery, free-text comma-enumeration, a
+list already mid-`HarnessRuntime` plan run) falls straight through to the flat
+loop, unchanged.
+
+Once triggered, `runBatchToolLoop` resolves each item in **its own bounded
+sub-loop**, never a shared pool:
+
+- **Probe phase** — the first 1–2 items (whichever leaves at least one item
+  unprobed) resolve against a generous fixed cap, and their real cost
+  calibrates a per-item budget (`trimmedAverage` of calls-per-item, floored so
+  one suspiciously cheap item can't starve the rest, with slack headroom on
+  top) for every item after them — recalibrated again after each one resolves,
+  not frozen at the initial estimate.
+- **Per-item dead-end window** — each item tracks its own trailing window of
+  `classifyToolYield` results (`tool-yield-classifier.ts`); 3 consecutive
+  `dead_end` tool results stop *that item's* sub-loop early (`not_found`)
+  without touching its remaining budget, and without dragging down any other
+  item queued behind it. An item whose budget runs out while still turning up
+  plausibly-relevant content is recorded as `truncated_while_productive`
+  instead — a different, more informative outcome than a dead page.
+- **Confirmation gate** — if the calibrated projection for the remaining items
+  is large, the turn pauses with `pendingActionKind: 'batch'` (same
+  `needs_approval` shape as a staged write/shell command) before spending it,
+  rather than silently running up the tool-call count.
+- **Absolute ceiling** — a hard per-turn cap on total tool calls applies
+  regardless of how favorable calibration looks, as a last-resort backstop.
+
+Every item ends in `found`, `not_found`, or `truncated_while_productive` — a
+batch turn's final reply is synthesized from these per-item outcomes and is
+never allowed to silently omit one (an explicit "not yet checked this turn"
+line is appended deterministically for any item the absolute ceiling cut off
+before it was reached, rather than trusted to the synthesis call's prose).
+`AssistantTrace.batchBudget` (present only when this path activates) reports
+`itemCount`, `callsPerItemHistory`, `projectedTotal`, `totalCallsUsed`, and each
+item's outcome — the measurement that would tell you whether the ceiling,
+floor, or slack factor need adjusting, versus a guess.
+
+**Known limitations:** only fires on explicit list syntax — "find the closest
+5 schools and their dates" in one open-ended sentence (N unknown until search
+results come back) still uses the flat loop; the yield classifier is a keyword
+heuristic, not semantic understanding (favors calling an unusual dead end
+"productive" over the reverse, since the per-item budget/ceiling still bounds
+the damage either way); calibration is per-turn only, never learned across
+turns or sessions; and this bounds cost/prevents thrashing but doesn't make a
+weaker model better at multi-page research on its own.
+
 ## Shell access via tools
 
 `run_shell_command` is the highest-risk tool this assistant has, and is gated

@@ -425,6 +425,25 @@ body {
   font-size: 12px;
 }
 
+/* Batch research (dynamic tool-call budget plan): the one-line found/not-found/truncated tally
+   inside "Why?", quiet (--muted) since the common case (everything found) needs no attention. */
+.bubble__batch-summary {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* The fuller per-item breakdown behind that tally, inside "Run detail" — reuses .bubble__why-steps'
+   list layout. Only truncated/not-found items are colored, same "don't badge the common case"
+   convention as .risk-badge not rendering for LOW. */
+.bubble__batch-item--not_found {
+  color: var(--red);
+}
+
+.bubble__batch-item--truncated_while_productive {
+  color: var(--amber);
+}
+
 /* Phase 3.3 of the harness layer activation plan: an 11-cell glanceable grid, one per harness
    layer, inside the "Run detail" toggle — dim for a layer whose trigger condition didn't hold
    this turn, highlighted for one that fired (hover/title shows the reason either way). */

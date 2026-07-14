@@ -48,6 +48,23 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
   return 'Worth double-checking'
 }
 
+// Present only on a batch-research turn (see AssistantTrace.batchBudget's doc comment in
+// assistant.ts) — every other turn's trace has no batchBudget to summarize.
+type BatchBudget = NonNullable<AssistantTrace['batchBudget']>
+
+function batchOutcomeCounts(batchBudget: BatchBudget): { found: number; notFound: number; truncated: number } {
+  return {
+    found: batchBudget.perItemOutcomes.filter((o) => o.status === 'found').length,
+    notFound: batchBudget.perItemOutcomes.filter((o) => o.status === 'not_found').length,
+    truncated: batchBudget.perItemOutcomes.filter((o) => o.status === 'truncated_while_productive').length,
+  }
+}
+
+// Same icon convention as PLAN_TASK_STATUS_ICON above / cli.ts's mirrored STATUS_MARK.
+const BATCH_STATUS_ICON: Record<BatchBudget['perItemOutcomes'][number]['status'], string> = {
+  found: '✓', not_found: '✗', truncated_while_productive: '~',
+}
+
 
 const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
   read_file: 'Read',
@@ -171,6 +188,15 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                       </div>
                     ) : null
                   })()}
+                  {trace.batchBudget && (() => {
+                    const { found, notFound, truncated } = batchOutcomeCounts(trace.batchBudget)
+                    return (
+                      <div className="bubble__batch-summary">
+                        Batch: {trace.batchBudget.itemCount} items — {found} found, {notFound} not found, {truncated} truncated
+                        {' '}({trace.batchBudget.totalCallsUsed} calls used, projected ~{Math.ceil(trace.batchBudget.projectedTotal)})
+                      </div>
+                    )
+                  })()}
                 </>
               )}
             </div>
@@ -209,6 +235,15 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                     )
                   })}
                 </div>
+              )}
+              {trace?.batchBudget && (
+                <ul className="bubble__why-steps bubble__batch-item-list">
+                  {trace.batchBudget.perItemOutcomes.map((o) => (
+                    <li key={o.item} className={`bubble__batch-item--${o.status}`}>
+                      {BATCH_STATUS_ICON[o.status]} {o.item} — {o.status.replace(/_/g, ' ')} ({o.callsUsed} calls)
+                    </li>
+                  ))}
+                </ul>
               )}
               {planStatus && (
                 <ul className="bubble__why-steps bubble__plan-checklist">

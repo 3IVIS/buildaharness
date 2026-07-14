@@ -217,6 +217,19 @@ async function main(): Promise<void> {
     return 'Worth double-checking'
   }
 
+  /** One-line summary of AssistantTrace.batchBudget — the same found/not_found/truncated_while_productive
+   * counts a batch turn's synthesized reply is already built from, just as a glance-able tally
+   * rather than prose. Shared by /why's compact view and /layers' fuller per-item breakdown. */
+  function batchBudgetSummaryLine(batchBudget: NonNullable<AssistantTrace['batchBudget']>): string {
+    const found = batchBudget.perItemOutcomes.filter((o) => o.status === 'found').length
+    const notFound = batchBudget.perItemOutcomes.filter((o) => o.status === 'not_found').length
+    const truncated = batchBudget.perItemOutcomes.filter((o) => o.status === 'truncated_while_productive').length
+    return (
+      `Batch: ${batchBudget.itemCount} items — ${found} found, ${notFound} not found, ${truncated} truncated ` +
+      `(${batchBudget.totalCallsUsed} calls used, projected ~${Math.ceil(batchBudget.projectedTotal)})`
+    )
+  }
+
   function printWhy(): void {
     if (!lastTrace) {
       console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
@@ -230,6 +243,11 @@ async function main(): Promise<void> {
     const chain = buildWhyChain(lastTrace.layerActivity)
     if (chain.length > 0) {
       console.log('  ' + chain.map((item) => `${LAYER_SHORT_CODE[item.layer]} (${item.reason})`).join(' > '))
+    }
+    // Absent on every non-batch turn (see AssistantTrace.batchBudget's doc comment) — only a
+    // batch-research turn ever has this to show.
+    if (lastTrace.batchBudget) {
+      console.log('  ' + batchBudgetSummaryLine(lastTrace.batchBudget))
     }
     console.log('')
   }
@@ -247,6 +265,18 @@ async function main(): Promise<void> {
       const mark = e?.fired ? '✓' : '·'
       const reason = e?.reason ?? 'not evaluated this turn'
       console.log(`  [${mark}] ${LAYER_DISPLAY_NAME[layer].padEnd(22)} ${reason}`)
+    }
+    // The full per-item breakdown behind /why's one-line batchBudgetSummaryLine tally — same
+    // "absent on every non-batch turn" gating as that summary.
+    if (lastTrace.batchBudget) {
+      console.log('')
+      console.log(`  ${batchBudgetSummaryLine(lastTrace.batchBudget)}`)
+      const STATUS_MARK: Record<'found' | 'not_found' | 'truncated_while_productive', string> = {
+        found: '✓', not_found: '✗', truncated_while_productive: '~',
+      }
+      for (const outcome of lastTrace.batchBudget.perItemOutcomes) {
+        console.log(`    [${STATUS_MARK[outcome.status]}] ${outcome.item.padEnd(30)} ${outcome.status} (${outcome.callsUsed} calls)`)
+      }
     }
     console.log('')
   }
@@ -453,11 +483,21 @@ async function main(): Promise<void> {
       // Diagnosis tabs. Unlike the message-level gate below, both a yes and a no need to
       // re-call turn() (to apply or discard the staged action), not just a yes.
       if (result.status === 'needs_approval' && result.pendingActionId) {
-        const isShell = result.pendingActionKind === 'shell'
-        console.log(`\n[needs approval — ${isShell ? 'shell command' : 'write'}] ${result.reason}`)
-        const confirmed = await askYesNo(isShell ? 'Run this command? (y/N) ' : 'Apply this write? (y/N) ')
+        // 'batch' (a projected-search-count confirmation, not a staged write/shell action) has
+        // its own label and prompt — falling through to the 'write' case here would print
+        // "[needs approval — write]" and "Apply this write?" over a message that's actually
+        // about how many more searches a batch research turn is projected to need.
+        const kindLabel = result.pendingActionKind === 'shell' ? 'shell command' : result.pendingActionKind === 'batch' ? 'batch research' : 'write'
+        const promptText =
+          result.pendingActionKind === 'shell'
+            ? 'Run this command? (y/N) '
+            : result.pendingActionKind === 'batch'
+              ? 'Continue? (y/N) '
+              : 'Apply this write? (y/N) '
+        console.log(`\n[needs approval — ${kindLabel}] ${result.reason}`)
+        const confirmed = await askYesNo(promptText)
         lastTrace = undefined
-        lastNoTraceReason = `No harness trace — the last turn was a staged ${isShell ? 'shell command' : 'write'} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+        lastNoTraceReason = `No harness trace — the last turn was a staged ${kindLabel} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
         await handleTurn(message, confirmed, result.pendingActionId)
         return
       }

@@ -1799,6 +1799,43 @@ describe('PersonalAssistant batch research — real transcript replay and per-it
     expect(result.trace?.batchBudget?.perItemOutcomes).toHaveLength(3)
     expect(result.trace?.batchBudget?.perItemOutcomes.every((o) => o.status === 'found')).toBe(true)
   })
+
+  it('a probe item that keeps turning up plausibly-relevant content past its per-item budget resolves truncated_while_productive, not not_found', async () => {
+    // 4 items so probeCount=2 (School A, School B are probed; School C, School D are "remaining").
+    // School B never gives a final answer within its BATCH_PROBE_ITEM_CAP (10) budget, but every
+    // one of its tool results is productive (no dead-end marker ever matches) — so the item-scoped
+    // dead-end window (T4) never trips, and resolveBatchItem's 'escalated' branch (T4 step 3) is
+    // the only path that can produce this status: the sub-loop ran out of room while still finding
+    // plausibly-relevant content, which is a materially different outcome than "genuinely dead page".
+    const message = 'What are the open house dates for:\nSchool A\nSchool B\nSchool C\nSchool D'
+    const stillSearching = { content: '', toolCalls: [{ id: 'toolu_b', name: 'web_search', input: { query: 'School B' } }] }
+    const llm = scriptedResponses([
+      { content: 'School A: found the date.' }, // probe item 1 — resolves in 1 call
+      ...Array(10).fill(stillSearching), // probe item 2 — exhausts its full 10-call budget, never finalizes
+      { content: 'School C: found the date.' }, // remaining item 1 — resolves in 1 call
+      { content: 'School D: found the date.' }, // remaining item 2 — resolves in 1 call
+    ], ['Here are the dates you asked for.'])
+    const webTools = { search: async () => [{ title: 'Result', url: 'https://example.com', snippet: 'Confirmed date: October 2025.' }] }
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools })
+
+    const result = await assistant.turn(message)
+
+    expect(result.status).toBe('ok')
+    const batchBudget = result.trace?.batchBudget
+    expect(batchBudget?.itemCount).toBe(4)
+    expect(batchBudget?.perItemOutcomes).toHaveLength(4)
+
+    const schoolB = batchBudget!.perItemOutcomes.find((o) => o.item === 'School B')
+    expect(schoolB?.status).toBe('truncated_while_productive')
+    expect(schoolB?.callsUsed).toBe(10) // spent its whole per-item budget, not stopped early by the dead-end window
+
+    const others = batchBudget!.perItemOutcomes.filter((o) => o.item !== 'School B')
+    expect(others.every((o) => o.status === 'found')).toBe(true)
+    // A large per-item cost for one probe item still projected under BATCH_LARGE_PROJECTION_THRESHOLD
+    // for the remaining 2 items (trimmedAverage([1,10])=5.5, *1.4 slack*2 items=15.4), so this
+    // never should have hit the confirmation gate — confirms the two paths stay independent.
+    expect(result.reply).not.toContain('needs approval')
+  })
 })
 
 describe('PersonalAssistant batch research — confirmation gate', () => {
