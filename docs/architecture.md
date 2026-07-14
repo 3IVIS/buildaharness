@@ -302,7 +302,7 @@ Thin Hono server that issues short-lived JWTs and forwards LLM requests to Anthr
 
 ## Further reading
 
-- [flowspec.md](./flowspec.md) — complete FlowSpec v1.0.0 field-by-field reference for all 26 node types
+- [flowspec.md](./flowspec.md) — complete FlowSpec v1.0.0 field-by-field reference for all 27 node types
 - [env-vars.md](./env-vars.md) — all environment variables across all services
 - [qdrant.md](./qdrant.md) — Qdrant vector store setup, seeding, and production deployment
 

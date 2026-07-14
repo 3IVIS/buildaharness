@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/状态-公开测试版-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/测试-379%20通过-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/测试-2%2C293%20通过-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/欢迎-PR贡献-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -43,7 +43,7 @@
 | 输出 | **恢复** + **内存** — 6 种策略 · 压缩 |
 | | **学习** — 经验存储 · 热启动 *（可选）* |
 | | **输出 & 审查员通过** — 合约 · 三镜头审查 |
-| *提示输入 → 答案输出* | *22 个节点 · 11 层 · 379 个测试通过* |
+| *提示输入 → 答案输出* | *27 个节点 · 11 层 · 759 个线束层测试* |
 
 ---
 
@@ -58,7 +58,7 @@
 - ✅ 4 个框架适配器 — LangGraph、CrewAI、Mastra、MAF
 - ✅ Langfuse 可观测性 — 线束追踪覆盖所有运行时
 - ✅ HITL 暂停/恢复 · REST / MCP / A2A 部署
-- ✅ FlowSpec v0.2.0 — 开放、可移植的 JSON 格式
+- ✅ FlowSpec v1.0.0 — 开放、可移植的 JSON 格式
 - ✅ 流程概念 — 预置任务图脚手架
 
 </td>
@@ -174,7 +174,7 @@
 
 ```bash
 ./scripts/setup-env.sh   # 生成密钥，写入 .env
-docker compose up        # 启动全部 9 个服务
+docker compose up        # 启动全部 12 个服务
 ```
 
 | 服务 | URL |
@@ -200,7 +200,7 @@ cd adapter && python main.py      # 适配器 → localhost:8000
 ```bash
 npm test                                         # Vitest — 验证 5 个参考流程
 pytest adapter/tests/ -v                         # 适配器单元 + 集成测试
-pytest adapter/tests/test_maf_adapter.py -v     # MAF 套件（742 个测试）
+pytest adapter/tests/test_maf_adapter.py -v     # MAF 套件（42 个测试）
 ```
 
 </details>

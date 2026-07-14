@@ -97,6 +97,12 @@ if ! command -v openssl &>/dev/null; then
   error "openssl not found. Install it and re-run."; exit 1
 fi
 
+# Use the tracked hooks in .githooks/ (e.g. the pre-commit guard that blocks
+# .private.git/ and test_convs/ from ever being staged — see .githooks/pre-commit).
+# Local .git/hooks/ isn't version-controlled, so every fresh clone needs this.
+git config core.hooksPath .githooks
+success "Configured git to use .githooks/ (blocks committing .private.git/, test_convs/)"
+
 # ── Step 1: Secrets ────────────────────────────────────────────────────────────
 header "Step 1 — Secrets"
 

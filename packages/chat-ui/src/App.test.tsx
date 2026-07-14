@@ -79,6 +79,36 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
   })
 
+  it('pressing Enter submits the message', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const input = screen.getByPlaceholderText('Message the assistant…')
+    await user.type(input, 'hello there{Enter}')
+
+    expect(screen.getByText('hello there')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+    expect(input).toHaveValue('')
+  })
+
+  it('pressing Shift+Enter inserts a newline instead of submitting', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const input = screen.getByPlaceholderText('Message the assistant…')
+    await user.type(input, 'line one{Shift>}{Enter}{/Shift}line two')
+
+    // Not sent yet — Shift+Enter must not trigger a submit.
+    expect(screen.queryByText('echo: line one')).not.toBeInTheDocument()
+    expect(input).toHaveValue('line one\nline two')
+
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    // The bubble renders content as markdown (ChatMessageBubble), which collapses a single
+    // soft line break to a space — assert on the rendered text, not the raw '\n'-joined value
+    // already verified above.
+    await waitFor(() => expect(screen.getByText('echo: line one line two')).toBeInTheDocument())
+  })
+
   it('renders an approval card for needs_approval and resolves it on approve', async () => {
     const user = userEvent.setup()
     render(<App />)

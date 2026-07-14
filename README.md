@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/tests-379%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-2%2C293%20passing-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -43,7 +43,7 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 | Output | **Recovery** + **Memory** — 6 strategies · compression |
 | | **Learning** — experience store · warm start *(optional)* |
 | | **Output & Reviewer Pass** — contract · 3-lens review |
-| *prompt in → answer out* | *22 nodes · 11 layers · 379 tests passing* |
+| *prompt in → answer out* | *27 nodes · 11 layers · 759 harness-layer tests* |
 
 ---
 
@@ -58,7 +58,7 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 - ✅ 4 framework adapters — LangGraph, CrewAI, Mastra, MAF
 - ✅ Langfuse observability — harness traces across all runtimes
 - ✅ HITL pause/resume · REST / MCP / A2A deploy
-- ✅ FlowSpec v0.2.0 — open, portable JSON format
+- ✅ FlowSpec v1.0.0 — open, portable JSON format
 - ✅ Process concepts — pre-seeded task graph scaffolds
 
 </td>
@@ -174,7 +174,7 @@ Self-hosted **Langfuse** starts with `docker compose up` — no extra configurat
 
 ```bash
 ./scripts/setup-env.sh   # generate secrets, write .env
-docker compose up        # start all 9 services
+docker compose up        # start all 12 services
 ```
 
 | Service | URL |
@@ -200,7 +200,7 @@ cd adapter && python main.py      # adapter → localhost:8000
 ```bash
 npm test                                         # Vitest — validates 5 reference flows
 pytest adapter/tests/ -v                         # adapter unit + integration
-pytest adapter/tests/test_maf_adapter.py -v     # MAF suite (742 tests)
+pytest adapter/tests/test_maf_adapter.py -v     # MAF suite (42 tests)
 ```
 
 </details>
@@ -252,7 +252,7 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 | | |
 |:--|:--|
 | [docs/getting-started.md](docs/getting-started.md) | Step-by-step: clone → secrets → LLM → first run |
-| [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — all 26 node types, edges, fields |
+| [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — all 27 node types, edges, fields |
 | [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows |
 | [docs/api.md](docs/api.md) | REST API reference — compile, execute, deploy, HITL resume |
 | [docs/llm-setup.md](docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom |

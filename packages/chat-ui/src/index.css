@@ -105,12 +105,13 @@ body {
 
 .app__composer {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid var(--border);
 }
 
-.app__composer input {
+.app__composer textarea {
   flex: 1;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -118,6 +119,11 @@ body {
   color: var(--text);
   padding: 10px 12px;
   font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .app__composer button {

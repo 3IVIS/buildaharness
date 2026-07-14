@@ -265,6 +265,7 @@ export function App(): React.JSX.Element {
   const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
 
   /**
    * claude-cli (via TauriClaudeCliLLMClient, desktop-only) is the only backend that returns a
@@ -483,13 +484,35 @@ export function App(): React.JSX.Element {
     }
   }
 
-  function handleSubmit(e: React.FormEvent): void {
-    e.preventDefault()
+  function submitMessage(): void {
     const message = input.trim()
     if (!message || busy) return
     setInput('')
+    // The composer's height was grown by handleComposerInput as the user typed multiple
+    // lines — reset it here rather than waiting for the now-empty value to reflow next paint.
+    if (composerRef.current) composerRef.current.style.height = 'auto'
     setEntries((prev) => [...prev, { id: newId(), kind: 'user', content: message }])
     void runTurn(message, false)
+  }
+
+  function handleSubmit(e: React.FormEvent): void {
+    e.preventDefault()
+    submitMessage()
+  }
+
+  /** Enter submits (matching the old single-line <input>'s behavior); Shift+Enter inserts a real newline, which a plain <input> can never hold — see the <textarea> below. */
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      submitMessage()
+    }
+  }
+
+  /** Auto-grows the composer with content (capped by CSS max-height, which then scrolls) instead of hiding wrapped/newline text in a fixed-height box. */
+  function handleComposerInput(e: React.ChangeEvent<HTMLTextAreaElement>): void {
+    setInput(e.target.value)
+    e.target.style.height = 'auto'
+    e.target.style.height = `${e.target.scrollHeight}px`
   }
 
   function handleApprove(entryId: string, pendingMessage: string): void {
@@ -611,10 +634,13 @@ export function App(): React.JSX.Element {
         </div>
       )}
       <form className="app__composer" onSubmit={handleSubmit}>
-        <input
+        <textarea
+          ref={composerRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleComposerInput}
+          onKeyDown={handleComposerKeyDown}
           placeholder="Message the assistant…"
+          rows={1}
           disabled={busy}
         />
         <button type="submit" disabled={busy || !input.trim()}>Send</button>
