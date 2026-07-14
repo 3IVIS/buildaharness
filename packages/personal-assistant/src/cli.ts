@@ -32,6 +32,7 @@ import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueP
 import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatCostSummary, formatDoctorReport } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
+import { resolveNonInteractiveApprovalMode } from './non-interactive-mode.js'
 
 const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const configStore = new NodeConfigStore(join(dataDir, 'config.json'))
@@ -48,6 +49,8 @@ const remindersFile = join(dataDir, 'reminders', 'reminders.json')
 // and config.ts's resolveConfig — so this stays a behavior-preserving migration for anyone
 // who already sets ASSISTANT_ENABLE_WEB etc. and never touches /config.
 const envOverrides = envOverridesFromProcessEnv(process.env)
+
+const nonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
@@ -129,6 +132,20 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
+  // Checked before anything else starts, not lazily at the first approval prompt — a session
+  // that ran tool calls for several turns before hitting a HIGH-risk gate would otherwise fail
+  // deep in, with no chance to recover the work already done, instead of failing immediately
+  // with a clear explanation of what to do about it.
+  if (nonInteractiveApprovalMode === 'require-tty' && !process.stdin.isTTY) {
+    console.error(
+      'ASSISTANT_NON_INTERACTIVE_APPROVAL=require-tty is set, but stdin is not a real TTY ' +
+        '(piped/scripted input). Refusing to start rather than fail confusingly at the first ' +
+        'approval prompt — see README.md\'s "Non-interactive / scripted use" section for the ' +
+        'alternative (ASSISTANT_NON_INTERACTIVE_APPROVAL=decline).',
+    )
+    process.exit(1)
+  }
+
   let assistant = await buildAssistant(config)
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
@@ -157,8 +174,14 @@ async function main(): Promise<void> {
   const dangerBanner = config.dangerouslySkipPermissions
     ? '\n⚠ dangerouslySkipPermissions is ON — every approval prompt (risky messages, file writes, shell commands) is skipped automatically.\n'
     : ''
+  // Same "never silently in effect" reasoning as dangerBanner above — the opposite trust
+  // direction (declines instead of skips), but just as important to surface up front.
+  const nonInteractiveBanner =
+    nonInteractiveApprovalMode === 'decline'
+      ? '\nASSISTANT_NON_INTERACTIVE_APPROVAL=decline is set — every approval prompt auto-declines.\n'
+      : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}`)
+  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 
@@ -314,6 +337,40 @@ async function main(): Promise<void> {
     sessionUsage = undefined
     lastNoTraceReason = undefined
     console.log('\n✓ Started a fresh conversation.\n')
+  }
+
+  /**
+   * Explicit inspect/clear for a stuck harness checkpoint — a scoped alternative to `/clear`
+   * (which also wipes transcript/facts/plan) or moving the whole
+   * `~/.buildaharness/personal-assistant/` directory aside by hand, previously the only way to
+   * recover from a checkpoint that keeps failing to resume (e.g. left behind by a process killed
+   * mid-turn — see assistant.ts's runId doc comment). Bare `/checkpoint` inspects without
+   * clearing; `/checkpoint clear` clears it, matching `/config`/`/config set`'s own
+   * bare-vs-subcommand shape.
+   */
+  async function handleCheckpoint(args: string[]): Promise<void> {
+    if (args[0] === 'clear') {
+      const result = await assistant.clearCheckpoint('cli')
+      console.log(
+        result.cleared
+          ? `\n✓ Cleared the stuck checkpoint (was at step ${result.stepsUsed}, node "${result.currentNode}"). Conversation history is untouched — your next message starts a fresh harness run.\n`
+          : '\nNo checkpoint to clear — the last turn either completed normally or there was nothing in progress.\n',
+      )
+      return
+    }
+    const status = await assistant.getCheckpointStatus('cli')
+    if (!status.present) {
+      console.log('\nNo checkpoint present — the last turn completed normally or there was nothing in progress.\n')
+      return
+    }
+    const attemptsNote =
+      status.failedResumeAttempts > 0
+        ? ` — failed to resume ${status.failedResumeAttempts} time${status.failedResumeAttempts === 1 ? '' : 's'} in a row so far`
+        : ''
+    console.log(
+      `\nA checkpoint is present: step ${status.stepsUsed}, last node "${status.currentNode}"${attemptsNote}.\n` +
+        `Your next message will try to resume it automatically. Run /checkpoint clear to discard it and start fresh instead.\n`,
+    )
   }
 
   async function printStatus(): Promise<void> {
@@ -581,6 +638,13 @@ async function main(): Promise<void> {
   // read a real answer must resolve to "no" (never "yes"), so a broken/absent confirmation
   // channel can't be mistaken for approval.
   function askYesNo(question: string): Promise<boolean> {
+    // A designed decision, not a fallback: never touches stdin, so there's no readline race to
+    // land in — unlike the catch below, this path is reached deterministically on every
+    // approval gate, not only when reading the answer happens to fail.
+    if (nonInteractiveApprovalMode === 'decline') {
+      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      return Promise.resolve(false)
+    }
     return new Promise((resolve) => {
       try {
         rl.question(question, (answer) => resolve(answer.trim().toLowerCase().startsWith('y')))
@@ -707,6 +771,7 @@ async function main(): Promise<void> {
     '/cost': () => printCost(),
     '/doctor': () => handleDoctor(),
     '/config': (args) => handleConfigCommand(args),
+    '/checkpoint': (args) => handleCheckpoint(args),
   }
 
   // readline's 'line' event fires for every buffered line as soon as it's parsed — it does

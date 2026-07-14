@@ -24,3 +24,11 @@ export type TraceEvent =
    * not a free-text name, so a "Why?"/`/layers` renderer can key off it directly.
    */
   | { kind: 'layer_activity'; layer: string; fired: boolean; reason: string }
+  /**
+   * A prior-turn harness checkpoint (see runTurn's runId doc comment — left behind when a
+   * process died mid-run before reaching normal cleanup) failed to resume `failedAttempts` times
+   * in a row and was discarded automatically instead of being retried again; this turn started
+   * fresh instead of resuming it. See PersonalAssistant.clearCheckpoint for the manual
+   * equivalent, and RESUME_ATTEMPT_CAP in assistant.ts for the threshold.
+   */
+  | { kind: 'checkpoint_discarded'; sessionId: string; failedAttempts: number }

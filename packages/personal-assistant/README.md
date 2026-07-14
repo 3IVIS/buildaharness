@@ -50,6 +50,32 @@ every layer of the harness touched on the ones that do run — matching what
 [buildaharness.com/harness-comparison](https://buildaharness.com/harness-comparison)
 calls out as missing from Hermes Agent, Kilo Code, and OpenClaw: none of them
 ships a formal Control State resolver *and* a Reviewer/output gate together.
+<!--
+  Last verified against the live page 2026-07-14: it still shows all three as
+  "○ Not described" for a tiered Control State resolver, and states "0/3 ship
+  a formal output/reviewer-pass quality gate before a reply goes out." That
+  page is external to this repo (not vendored here), edited independently of
+  this package, and its specific figures (CVE/CVSS numbers, malicious-skill
+  counts, etc. elsewhere on the page) have already changed at least once —
+  re-check this exact claim by hand whenever the comparison page is next
+  revised, since nothing in this repo will catch it drifting silently.
+-->
+
+#### Recovering a stuck checkpoint
+
+Resuming a leftover checkpoint can itself fail — most often because whatever
+crashed the process partway through a turn crashes again identically on
+replay. `PersonalAssistant` tracks failed resume attempts per session
+(persisted, so it survives the crash too) and, after 2 in a row for the same
+checkpoint, discards it automatically and starts that turn fresh instead of
+retrying forever — a `checkpoint_discarded` trace event marks when this
+happens. `clearCheckpoint(sessionId)` / `getCheckpointStatus(sessionId)` give
+a caller (the CLI's `/checkpoint` / `/checkpoint clear`, see "REPL commands"
+below) an explicit, scoped way to inspect or discard a checkpoint by hand
+without waiting for that automatic cap, and without the collateral damage of
+`clearSession()` (`/clear`/`/new`), which also wipes the session's transcript,
+facts, and plan — previously the only in-product recovery option, short of
+moving `checkpointStore`'s whole backing directory aside by hand.
 
 ## Usage
 
@@ -399,6 +425,37 @@ limits underneath it. The startup banner switches shell's capability label
 from "approval-gated" to "NOT approval-gated" and prints an extra `⚠` line
 whenever this is on, so it's never silently in effect.
 
+#### Non-interactive / scripted use
+
+Piping input into the CLI (`echo "..." | npm run cli ...`, or any non-TTY stdin)
+used to hit an approval gate as an *incidental* consequence of `readline`
+eagerly draining and closing piped stdin before a slow turn reaches the
+prompt: `rl.question()` throws, the fail-closed catch logs a generic
+`[could not read a response — treating as declined]`, and the turn is
+declined. That fail-closed outcome was always correct, but it read as
+something to be rediscovered by piping input at it rather than a documented
+decision. `ASSISTANT_NON_INTERACTIVE_APPROVAL` makes it explicit:
+
+- `ASSISTANT_NON_INTERACTIVE_APPROVAL=decline` — every approval gate
+  auto-declines immediately, without ever touching stdin. The right choice
+  for scripted/CI use where every HIGH-risk or staged write/shell action
+  should always be rejected outright:
+
+  ```bash
+  ASSISTANT_NON_INTERACTIVE_APPROVAL=decline npm run cli --workspace=packages/personal-assistant < script.txt
+  ```
+
+- `ASSISTANT_NON_INTERACTIVE_APPROVAL=require-tty` — fails fast at startup
+  with a clear error if stdin isn't a real TTY, instead of running an entire
+  session that can only discover the problem deep in, at the first approval
+  prompt.
+
+Leaving it unset keeps today's behavior (interactive prompt on a real TTY,
+fail-closed decline on piped stdin) exactly as before — this only makes the
+piped-stdin case an intentional choice instead of an implicit one. An
+unrecognized value is ignored, with a startup warning, rather than silently
+picking one of the two behaviors for you.
+
 #### Using Brave Search instead of DuckDuckGo
 
 By default, `ASSISTANT_ENABLE_WEB=1` uses the free, keyless `duckDuckGoSearch`
@@ -538,6 +595,7 @@ change local session/config state — none of them make an LLM call themselves.
 | `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
 | `/sources` | List files/URLs the last turn actually consulted |
 | `/plan` | Show the active structured plan's task status |
+| `/checkpoint [clear]` | Inspect a stuck in-progress harness checkpoint (step, node, failed-resume count so far), or `/checkpoint clear` to discard it — see "Recovering a stuck checkpoint" above. Scoped to just the checkpoint: unlike `/clear`, transcript/facts/plan are untouched |
 
 ### `/cost` and real vs. estimated dollar figures
 

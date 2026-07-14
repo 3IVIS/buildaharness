@@ -131,6 +131,20 @@ const FACT_CAP = 20
 // per-session) is the right shape — matching reminderStore/experienceStore's own precedent.
 const DURABLE_FACTS_KEY = 'facts:durable'
 
+// A harness checkpoint left behind by a process that died mid-run (see runTurn's runId doc
+// comment) is normally resumed transparently on the session's next turn. If resume() itself
+// reliably fails for that particular checkpoint — e.g. the same crash it left behind repeats on
+// replay — retrying it forever would wedge the session permanently instead of making progress.
+// Persisted (see resumeAttemptsKey below) and incremented BEFORE each resume() attempt, not
+// after, so a resume() call that crashes the whole process (never reaching runTurn's normal
+// cleanup) still counts toward the cap on the next launch — the scenario this exists for in the
+// first place. Reset to 0 whenever resume() returns normally (paused or completed — either way,
+// not a failure) or the checkpoint is cleared, manually (clearCheckpoint) or automatically (this
+// cap). 2 rather than 1: a single failure is treated as possibly transient (e.g. a one-off tool
+// error) before concluding the checkpoint itself is the problem.
+const RESUME_ATTEMPT_CAP = 2
+const resumeAttemptsKey = (sessionId: string): string => `resume-attempts:${sessionId}`
+
 /** Durable facts first, then session facts whose text isn't already present among them — so a
  * fact recorded as durable (an allergy, a name) doesn't show up twice within the same session it
  * was stated in, but does reappear on its own once /new clears the session list. */
@@ -668,11 +682,50 @@ export class PersonalAssistant {
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
+    await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)
     const backend = this.fileTools?.backend ?? this.shellTools?.backend
     const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
     if (backend && workspaceRoot) {
       await clearShellCache(backend, workspaceRoot)
+    }
+  }
+
+  /**
+   * Scoped recovery for a stuck harness checkpoint: clears just `turn:${sessionId}`'s checkpoint
+   * (and its resume-attempt count) without touching transcript/facts/plan — unlike clearSession
+   * (`/clear`/`/new`), which wipes the whole conversation. For a checkpoint left behind by a
+   * process that died mid-run (see runTurn's runId doc comment) and now fails to resume, but
+   * whose conversation history is still worth keeping — previously the only in-product recovery
+   * was `/clear`, and the only way to target just the checkpoint was moving the whole
+   * `~/.buildaharness/personal-assistant/` directory aside by hand. See RESUME_ATTEMPT_CAP for
+   * the automatic version of this same recovery. Returns `{ cleared: false }` when there was
+   * nothing to clear, so a caller can report "nothing stuck" instead of a false "cleared".
+   */
+  async clearCheckpoint(sessionId: string): Promise<{ cleared: boolean; stepsUsed?: number; currentNode?: string }> {
+    const runId = `turn:${sessionId}`
+    const checkpoint = await loadHarnessCheckpoint(this.checkpointStore, runId)
+    await this.memory.delete(resumeAttemptsKey(sessionId))
+    if (!checkpoint) return { cleared: false }
+    await deleteHarnessCheckpoint(this.checkpointStore, runId)
+    return { cleared: true, stepsUsed: checkpoint.progress.stepsUsed, currentNode: checkpoint.progress.nodeExecutionOrder.at(-1) }
+  }
+
+  /**
+   * Read-only counterpart to clearCheckpoint — reports whether `sessionId` has a checkpoint left
+   * behind by a prior turn and how many times in a row it has already failed to resume, without
+   * clearing anything. Lets a caller (cli.ts's `/checkpoint`) inspect before deciding whether to
+   * clear.
+   */
+  async getCheckpointStatus(sessionId: string): Promise<{ present: boolean; stepsUsed?: number; currentNode?: string; failedResumeAttempts: number }> {
+    const runId = `turn:${sessionId}`
+    const checkpoint = await loadHarnessCheckpoint(this.checkpointStore, runId)
+    const failedResumeAttempts = ((await this.memory.get(resumeAttemptsKey(sessionId))) as number | undefined) ?? 0
+    return {
+      present: checkpoint !== undefined,
+      stepsUsed: checkpoint?.progress.stepsUsed,
+      currentNode: checkpoint?.progress.nodeExecutionOrder.at(-1),
+      failedResumeAttempts,
     }
   }
 
@@ -1178,7 +1231,26 @@ export class PersonalAssistant {
         },
       }
 
-      const priorCheckpoint = await loadHarnessCheckpoint(this.checkpointStore, runId)
+      let priorCheckpoint = await loadHarnessCheckpoint(this.checkpointStore, runId)
+      if (priorCheckpoint) {
+        const priorAttempts = ((await this.memory.get(resumeAttemptsKey(sessionId))) as number | undefined) ?? 0
+        if (priorAttempts >= RESUME_ATTEMPT_CAP) {
+          // See RESUME_ATTEMPT_CAP's doc comment: this checkpoint has already failed to resume
+          // (via a process crash that never reached this function's own finally cleanup below —
+          // an ordinary in-process failure is cleaned up there on its first attempt already, see
+          // that comment) enough times in a row that retrying again would just wedge the session
+          // permanently. Discard it and start this turn fresh instead, the same recovery
+          // clearCheckpoint() offers manually.
+          await deleteHarnessCheckpoint(this.checkpointStore, runId)
+          await this.memory.delete(resumeAttemptsKey(sessionId))
+          this.onTrace?.({ kind: 'checkpoint_discarded', sessionId, failedAttempts: priorAttempts })
+          priorCheckpoint = undefined
+        } else {
+          // Persisted BEFORE the resume() call, not after — see RESUME_ATTEMPT_CAP's doc comment
+          // for why this specific ordering is what makes the cap reachable at all.
+          await this.memory.set(resumeAttemptsKey(sessionId), priorAttempts + 1)
+        }
+      }
       const outcome = priorCheckpoint
         ? await runtime.resume(priorCheckpoint, runOptions)
         : await runtime.run(
@@ -1186,6 +1258,10 @@ export class PersonalAssistant {
             ['Respond helpfully, accurately, and safely to the user request.'],
             runOptions,
           )
+      // resume() (if that's the path taken above) returned normally — paused or completed,
+      // either way not a failure — so this checkpoint isn't the problem; don't let a stale count
+      // from a since-resolved issue prematurely trip the cap on some future unrelated failure.
+      if (priorCheckpoint) await this.memory.delete(resumeAttemptsKey(sessionId))
 
       if (outcome.status === 'paused') {
         // An intentional plan-pacing stop (Phase 4.1) — not a bug. Persist the plan's current
@@ -1303,6 +1379,11 @@ export class PersonalAssistant {
       // starting a fresh one.
       if (!pausedThisTurn) {
         await deleteHarnessCheckpoint(this.checkpointStore, runId).catch(() => {})
+        // Keeps the two in sync — an in-process failure (unlike the process-crash case
+        // RESUME_ATTEMPT_CAP exists for) is cleaned up right here on its first attempt, so a
+        // stale count must not linger to prematurely trip the cap on some later, unrelated
+        // checkpoint for this same session.
+        await this.memory.delete(resumeAttemptsKey(sessionId)).catch(() => {})
       }
     }
   }

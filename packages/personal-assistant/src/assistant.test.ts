@@ -285,6 +285,23 @@ describe('PersonalAssistant', () => {
     expect(secondCallSystemMessage?.content).toContain('My name is Ali.')
   })
 
+  it('instructs the model to resolve backreferences to its own earlier replies from context, not a tool call', async () => {
+    // 459fe20: the claude-cli backend was invoking file tools to "look up" things it had already
+    // said earlier in the conversation (e.g. a prior suggestions list), landing on unrelated
+    // cached content and wrongly claiming it had no context. The fix is a system-prompt
+    // instruction, not a code branch — there's no deterministic function to unit-test against a
+    // scripted fake LLM, so this guards the instruction itself against being silently dropped in
+    // a future prompt edit, the same way the "Known facts" test above guards fact injection.
+    const llm = new FakeLLMClient('Sure.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('What did you suggest earlier?', { sessionId: 'backreference-test' })
+
+    const systemMessage = llm.receivedMessages[0].find((m) => m.role === 'system')
+    expect(systemMessage?.content).toContain('Re-read your own prior messages above to find it')
+    expect(systemMessage?.content).toContain('never call a tool to "search for" or "look up" something you already said')
+  })
+
   it('stores a reminder-shaped MEDIUM-risk request without blocking on approval', async () => {
     const llm = new FakeLLMClient('Sure, noted.')
     const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'reminder-test' }))
@@ -454,7 +471,116 @@ describe('PersonalAssistant session management', () => {
 
     expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeUndefined()
   })
+})
 
+/** Builds a leftover, paused harness checkpoint the same way a process crashing mid-turn would leave one behind — shared by clearCheckpoint/getCheckpointStatus/RESUME_ATTEMPT_CAP tests below. */
+async function saveLeftoverCheckpoint(checkpointStore: InMemoryAdapter, sessionId: string): Promise<{ stepsUsedAtPause: number }> {
+  const staleTask: Task = {
+    id: 'respond', description: 'leftover objective', status: 'PENDING', risk_level: 'LOW',
+    depends_on: [], parallel_write_domains: [], abstraction_level: 0, assigned_strategy: null,
+  }
+  const rt = new HarnessRuntime()
+  const paused = await rt.run('leftover objective', ['done'], {
+    initialTasks: [staleTask], max_steps: 5,
+    toolExecutors: { default: () => 'stale draft' },
+    runId: `turn:${sessionId}`, shouldPause: () => true,
+  })
+  if (paused.status !== 'paused') throw new Error('unreachable')
+  await saveHarnessCheckpoint(checkpointStore, paused.checkpoint)
+  return { stepsUsedAtPause: paused.checkpoint.progress.stepsUsed }
+}
+
+describe('PersonalAssistant checkpoint recovery', () => {
+  it('clearCheckpoint reports nothing to clear when no checkpoint is present', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    expect(await assistant.clearCheckpoint('nobody')).toEqual({ cleared: false })
+  })
+
+  it('clearCheckpoint clears a stuck checkpoint without touching transcript/facts — unlike clearSession', async () => {
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'clear-cp-scoped' })
+    const sessionId = 'clear-cp-scoped-test'
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm, checkpointStore })
+
+    // A real prior turn, so there's transcript/fact history that must survive.
+    await assistant.turn('My name is Ali.', { sessionId })
+    const { stepsUsedAtPause } = await saveLeftoverCheckpoint(checkpointStore, sessionId)
+
+    const result = await assistant.clearCheckpoint(sessionId)
+
+    expect(result).toEqual({ cleared: true, stepsUsed: stepsUsedAtPause, currentNode: expect.any(String) })
+    expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeUndefined()
+    // Scoped: transcript and facts from the earlier real turn are untouched.
+    expect(await assistant.getTranscript(sessionId)).not.toEqual([])
+    expect((await assistant.getMemorySummary(sessionId)).facts).not.toEqual([])
+  })
+
+  it('getCheckpointStatus reports absent when there is nothing in progress', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    expect(await assistant.getCheckpointStatus('nobody')).toEqual({ present: false, stepsUsed: undefined, currentNode: undefined, failedResumeAttempts: 0 })
+  })
+
+  it('getCheckpointStatus reports a present checkpoint and its failed-resume count without clearing it', async () => {
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'status-cp' })
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'status-cp-memory' })
+    const sessionId = 'status-cp-test'
+    await saveLeftoverCheckpoint(checkpointStore, sessionId)
+    await memory.set(`resume-attempts:${sessionId}`, 1)
+
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient(), checkpointStore, memory })
+    const status = await assistant.getCheckpointStatus(sessionId)
+
+    expect(status.present).toBe(true)
+    expect(status.failedResumeAttempts).toBe(1)
+    expect(status.stepsUsed).toBeGreaterThan(0)
+    // Read-only: the checkpoint is still there afterward.
+    expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeDefined()
+  })
+
+  it('discards a checkpoint that has already failed to resume RESUME_ATTEMPT_CAP times, instead of retrying it again', async () => {
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'auto-discard-cp' })
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'auto-discard-cp-memory' })
+    const sessionId = 'auto-discard-test'
+    // Pre-seeded at the cap, the same way two real prior turns each incrementing it (and both
+    // crashing before ever reaching runTurn's own cleanup — see RESUME_ATTEMPT_CAP's doc
+    // comment) would leave it.
+    await memory.set(`resume-attempts:${sessionId}`, 2)
+    await saveLeftoverCheckpoint(checkpointStore, sessionId)
+
+    const llm = new FakeLLMClient('Starting fresh.')
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({ llmClient: llm, checkpointStore, memory, onTrace: (e) => events.push(e) })
+
+    const result = await assistant.turn('Please continue.', { sessionId })
+
+    expect(result.status).toBe('ok')
+    expect(events).toContainEqual({ kind: 'checkpoint_discarded', sessionId, failedAttempts: 2 })
+    expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeUndefined()
+    expect(await memory.get(`resume-attempts:${sessionId}`)).toBeUndefined()
+  })
+
+  it('resets the failed-resume count once a checkpoint resumes successfully', async () => {
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'reset-cp' })
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'reset-cp-memory' })
+    const sessionId = 'reset-attempts-test'
+    // Below the cap — this attempt should succeed (a normal, resumable checkpoint) and clear it.
+    await memory.set(`resume-attempts:${sessionId}`, 1)
+    const { stepsUsedAtPause } = await saveLeftoverCheckpoint(checkpointStore, sessionId)
+
+    const llm = new FakeLLMClient('Continuing.')
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({ llmClient: llm, checkpointStore, memory, onTrace: (e) => events.push(e) })
+
+    const result = await assistant.turn('Please continue.', { sessionId })
+
+    expect(result.status).toBe('ok')
+    expect(events).not.toContainEqual(expect.objectContaining({ kind: 'checkpoint_discarded' }))
+    expect(result.stepsUsed).toBeGreaterThan(stepsUsedAtPause)
+    expect(await memory.get(`resume-attempts:${sessionId}`)).toBeUndefined()
+  })
+})
+
+describe('PersonalAssistant session management extras', () => {
   it('undoLastTurn on an empty transcript returns { undone: false } without throwing', async () => {
     const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
     expect(await assistant.undoLastTurn('nobody')).toEqual({ undone: false })

@@ -25,6 +25,16 @@ describe('classifyRisk', () => {
     expect(result.requiresApproval).toBe(false)
   })
 
+  it('classifies a reminder naming a HIGH-risk-keyword action as MEDIUM (creating the reminder), not HIGH (doing the action now)', () => {
+    // d100db3: REMINDER_PATTERN wasn't checked before HIGH_RISK_PATTERNS, so "remind me to
+    // delete the old invoices" tripped the delete/remove HIGH pattern and forced an approval
+    // prompt for an everyday reminder — found via live testing. This was documented in a code
+    // comment (REMINDER_PATTERN's doc comment above) but never pinned down as its own test.
+    const result = classifyRisk('remind me to delete the old invoices')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
   it('does not flag a "remind me" recall question as MEDIUM', () => {
     expect(classifyRisk('Can you remind me what my job is and what my hobby is?').riskLevel).toBe('LOW')
     expect(classifyRisk('And can you remind me again what the very first item was?').riskLevel).toBe('LOW')
@@ -32,6 +42,15 @@ describe('classifyRisk', () => {
 
   it('still flags an actual create-reminder request even when phrased with "remind me" and a question mark', () => {
     expect(classifyRisk('Could you remind me to call the dentist tomorrow?').riskLevel).toBe('MEDIUM')
+  })
+
+  it('does not flag a past-tense yes/no question asking whether a HIGH-risk action already happened', () => {
+    // d100db3: the original found case — "Did that actually send a real email just now?" is a
+    // follow-up question about a completed action, not a live request, but tripped the
+    // send-a-message HIGH pattern and forced an approval prompt for a question with no side
+    // effects. Later commits (h3/h10 above) generalized PAST_TENSE_QUESTION well beyond this
+    // exact wording, but the original bug sentence itself was never pinned down as a test.
+    expect(classifyRisk('Did that actually send a real email just now?').riskLevel).not.toBe('HIGH')
   })
 
   it('classifies ordinary conversation as LOW', () => {

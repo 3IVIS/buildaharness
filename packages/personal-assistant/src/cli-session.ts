@@ -31,6 +31,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/sources', description: 'List files/URLs the last turn actually consulted' },
   { command: '/plan', description: "Show the active structured plan's task status" },
   { command: '/config ...', description: 'View or change persisted settings' },
+  { command: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint' },
 ]
 
 export function formatHelp(): string {
