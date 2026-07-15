@@ -55,7 +55,10 @@ const nounContextLookbehind = (extra = ''): string =>
 // take forever to arrive, is that normal?" misfired. Added "confirmation(s)"/"number"/"status"/
 // "history", the same order-tracking noun-compounds CANCEL_VERB_PATTERN's own trailing list
 // already covers the analogous case for.
-const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for|confirmations?|number|status|history)\\b)`, 'i')
+// h1: same sentence-initial gap, one more noun-compound the trailing list didn't cover — "of" (as
+// in "order of operations"/"order of magnitude") — found via live testing: "Order of operations
+// always trips up my students when we get to nested parentheses." misfired HIGH.
+const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for|of|confirmations?|number|status|history)\\b)`, 'i')
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
@@ -125,7 +128,10 @@ const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tw
 // club/report/recommendations above, just not exhaustively covered by those two earlier fixes —
 // found via live testing: "Book signing events are popular at that indie bookstore this
 // weekend." misfired MEDIUM with no scheduling request present.
-const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|is|was)\\b)`, 'i')
+// h4: same sentence-initial noun-compound gap, one more not yet covered — "store" (book store) —
+// found via live testing: "Book store closures have been in the news a lot lately, it's sad to
+// see." misfired MEDIUM.
+const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|stores?|is|was)\\b)`, 'i')
 
 // "schedule" is just as common a plain noun ("my schedule is completely packed") as "book" is —
 // found via live testing, same false-positive shape as BOOK_VERB_PATTERN above: a determiner
@@ -176,7 +182,10 @@ const FORWARD_VERB_PATTERN =
 // domain-token ".word" exclusion) — never extended with a noun-compound list the way
 // CANCEL_VERB_PATTERN's link/option/button/confirmation list was — found via live testing:
 // "Delete key on this keyboard doesn't work half the time, so annoying." misfired HIGH.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|is|was)\\b|\\.\\w)`, 'i')
+// h3: same UI-element noun-compound shape, missing the exact one CANCEL_VERB_PATTERN's sibling
+// list already covers — "button" — found via live testing: "Delete button on this remote doesn't
+// work half the time, so annoying." misfired HIGH.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
@@ -189,7 +198,10 @@ const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|r
 // class of gap conv149's narrower "pay attention" fix left open for other noun-compounds — found
 // via live testing: "Pay stubs from my old job are surprisingly hard to track down online."
 // misfired HIGH.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise)\\b)`, 'i')
+// h2: same class of gap, one more noun-compound not in the trailing list — "day" (payday as two
+// words) — found via live testing: "Pay day at my company always falls on the last Friday of the
+// month." misfired HIGH.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already

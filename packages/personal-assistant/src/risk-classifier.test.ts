@@ -490,6 +490,39 @@ describe('classifyRisk', () => {
       classifyRisk('Book signing events are popular at that indie bookstore this weekend.').riskLevel,
     ).not.toBe('MEDIUM')
   })
+
+  // batch 12, h1: ORDER_VERB_PATTERN's trailing exclusion covered is/was/to/for/confirmations?/
+  // number/status/history but not "of" (order of operations/magnitude).
+  it('does not flag a sentence-initial "Order of operations..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Order of operations always trips up my students when we get to nested parentheses.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 12, h2: PAY_WIRE_PATTERN's trailing exclusion covered is/was/attention/stubs?/period/
+  // raise but not "day" (payday as two words).
+  it('does not flag a sentence-initial "Pay day..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Pay day at my company always falls on the last Friday of the month.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 12, h3: DELETE_VERB_PATTERN's trailing exclusion only had key/keys/is/was — unlike its
+  // sibling CANCEL_VERB_PATTERN, which already excludes "button" for the identical UI-element
+  // noun-compound shape.
+  it('does not flag a sentence-initial "Delete button..." as a delete request', () => {
+    expect(
+      classifyRisk("Delete button on this remote doesn't work half the time, so annoying.").riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 12, h4: BOOK_VERB_PATTERN's trailing exclusion covered club/report/recommendations?/
+  // signings?/is/was but not "store" (book store).
+  it('does not flag a sentence-initial "Book store closures..." as a MEDIUM booking request', () => {
+    expect(
+      classifyRisk("Book store closures have been in the news a lot lately, it's sad to see.").riskLevel,
+    ).not.toBe('MEDIUM')
+  })
 })
 
 describe('looksActionOriented', () => {

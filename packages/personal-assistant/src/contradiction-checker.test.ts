@@ -34,6 +34,20 @@ describe('looksLikeCodingFact', () => {
     // to even run against, lexical or LLM).
     expect(looksLikeCodingFact('I never bother insuring or tracking packages, it\'s not worth the hassle.')).toBe(true)
   })
+
+  it('flags the plural "repos" the same way it already flags singular "repo"', () => {
+    // batch 12 re-probe (conv178/h12): same singular-only \b...\b gap as "package"/"packages",
+    // confirmed live for "repo" — "...backing up my repos..." never looksLikeCodingFact, so the
+    // contradicting statement was dropped before the belief graph ever saw it.
+    expect(looksLikeCodingFact('I never bother backing up my repos anymore, it\'s not worth the hassle.')).toBe(true)
+  })
+
+  it('flags the plural "branches" the same way it already flags singular "branch"', () => {
+    // batch 12 re-probe (conv198/h12): same gap as "repo"/"repos", confirmed live for "branch" —
+    // "...rebasing branches..." never looksLikeCodingFact, so the contradicting statement was
+    // dropped before the belief graph ever saw it.
+    expect(looksLikeCodingFact('I never bother squashing or rebasing branches anymore, it\'s not worth the hassle.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {
