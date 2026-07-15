@@ -78,6 +78,19 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 
 ---
 
+## Personal Assistant
+
+The harness, talking back — Build A Harness's own reference chat agent. Every ordinary message walks the full 11-layer harness; a one-shot fact lookup skips it entirely; a real email send or shell command stops for approval first. One core, three front ends: terminal CLI, browser, native desktop.
+
+```bash
+npm install && npm run build:harness && npm run build:runtime
+ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
+```
+
+[buildaharness.com/personal-assistant](https://buildaharness.com/personal-assistant) · [`packages/personal-assistant/README.md`](packages/personal-assistant/README.md)
+
+---
+
 ## Node palette
 
 Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — every node compiles to all four runtimes. Hover a node name for its description.
