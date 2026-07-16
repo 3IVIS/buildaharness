@@ -5,6 +5,8 @@ import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
 import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState } from './assistant.js'
+import { stagePendingAction, loadPendingAction } from './file-tools.js'
+import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 
 class FakeLLMClient implements ILLMClient {
@@ -557,6 +559,40 @@ describe('PersonalAssistant checkpoint recovery', () => {
     expect(events).toContainEqual({ kind: 'checkpoint_discarded', sessionId, failedAttempts: 2 })
     expect(await loadHarnessCheckpoint(checkpointStore, `turn:${sessionId}`)).toBeUndefined()
     expect(await memory.get(`resume-attempts:${sessionId}`)).toBeUndefined()
+  })
+
+  it('auto-discarding a stuck checkpoint (RESUME_ATTEMPT_CAP) never touches an unrelated staged write/shell action or its undo-log (T4)', async () => {
+    // The harness's own checkpoint (this test's leftover run state) and file-tools.ts's
+    // .pending-actions staging are two independent mechanisms — auto-discard clears only the
+    // former. A staged-but-not-yet-approved write must survive untouched, and since it was never
+    // applied, no undo-log entry should exist either way (see T1's "discard never produces an
+    // undo-log entry" invariant, exercised here for the auto-discard path specifically).
+    const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'auto-discard-cp-undo' })
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'auto-discard-cp-undo-memory' })
+    const sessionId = 'auto-discard-undo-test'
+    const backend = makeFakeBackend()
+    const ROOT = '/workspace'
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'original content')
+    const { id: stagedId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes.txt', content: 'proposed content' })
+
+    await memory.set(`resume-attempts:${sessionId}`, 2)
+    await saveLeftoverCheckpoint(checkpointStore, sessionId)
+
+    const llm = new FakeLLMClient('Starting fresh.')
+    const events: TraceEvent[] = []
+    const assistant = new PersonalAssistant({
+      llmClient: llm, checkpointStore, memory, fileTools: { backend, workspaceRoot: ROOT }, onTrace: (e) => events.push(e),
+    })
+
+    const result = await assistant.turn('Please continue.', { sessionId })
+
+    expect(result.status).toBe('ok')
+    expect(events).toContainEqual({ kind: 'checkpoint_discarded', sessionId, failedAttempts: 2 })
+    // The staged write is untouched — neither applied nor discarded — and the file it targets
+    // still has its original content.
+    expect(await loadPendingAction(backend, ROOT, stagedId)).toBeDefined()
+    expect(await backend.readTextFile(`${ROOT}/notes.txt`)).toBe('original content')
+    expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
   })
 
   it('resets the failed-resume count once a checkpoint resumes successfully', async () => {
