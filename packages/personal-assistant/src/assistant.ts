@@ -26,6 +26,7 @@ import {
   type ReminderRecord,
   type TokenUsage,
   type ToolDefinition,
+  type FsBackend,
 } from '@buildaharness/runtime'
 import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
@@ -36,11 +37,18 @@ import {
   executeFileTool,
   applyPendingAction,
   discardPendingAction,
+  stagePendingAction,
   recordShellCacheEntry,
   clearShellCache,
   type FileToolsContext,
   type ShellExecutionResult,
 } from './file-tools.js'
+import {
+  listUndoLogEntries as listUndoLogEntriesFromStore,
+  loadUndoLogEntry,
+  buildRevertPlan,
+  type UndoLogEntry,
+} from './action-snapshot.js'
 import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
 import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
@@ -144,6 +152,21 @@ const DURABLE_FACTS_KEY = 'facts:durable'
 // error) before concluding the checkpoint itself is the problem.
 const RESUME_ATTEMPT_CAP = 2
 const resumeAttemptsKey = (sessionId: string): string => `resume-attempts:${sessionId}`
+
+// Per-message search index, written alongside every transcript append (see
+// appendTranscriptMessage) so a /search hit can resolve to the one exchange that matched instead
+// of scoreEntries() having to score `transcript:<sessionId>`'s whole growing array as a single
+// blob. Indexed by a persisted per-session counter, deliberately NOT by transcript.length at
+// append time: transcript-compaction.ts can shrink the live transcript array (collapsing older
+// messages into one synthetic summary), and deriving the index from the post-compaction array's
+// length would silently collide a new message's index with an older, still-live index entry.
+const messageIndexKey = (sessionId: string, messageIndex: number): string => `transcript-msg:${sessionId}:${messageIndex}`
+const messageIndexCounterKey = (sessionId: string): string => `transcript-msg-count:${sessionId}`
+
+// Bumped only if backfillMessageIndex's logic or IndexedMessage's shape changes in a way that
+// requires re-running the backfill against installs that already completed an earlier version.
+const MESSAGE_INDEX_BACKFILL_VERSION = 1
+const MESSAGE_INDEX_BACKFILL_VERSION_KEY = 'message-index-backfill-version'
 
 /** Durable facts first, then session facts whose text isn't already present among them — so a
  * fact recorded as durable (an allergy, a name) doesn't show up twice within the same session it
@@ -376,6 +399,31 @@ export interface MemorySummary {
 }
 
 /**
+ * One searchable, individually-addressable transcript entry — key `transcript-msg:<sessionId>:<n>`
+ * (see messageIndexKey). Written alongside every `transcript:<sessionId>` append by
+ * appendTranscriptMessage so scoreEntries() (via MemoryAdapter.search()) can resolve a hit to this
+ * one exchange instead of the whole session array. Derived, not authoritative: the per-session
+ * `transcript:<sessionId>` array remains the one source of truth for conversation replay,
+ * compaction, and /export — losing an index entry (a failed write, or a pre-backfill install) only
+ * ever degrades search recall, never conversation behavior.
+ */
+export interface IndexedMessage {
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  at: string
+}
+
+/** One ranked `/search` result — an `IndexedMessage` plus the graduated relevance score `scoreEntries()` gave it. */
+export interface TranscriptSearchHit {
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  at: string
+  score: number
+}
+
+/**
  * A real, non-mutating tool call the model made while producing a reply — grounds a reply in something other
  * than the model's own words. write_file is deliberately excluded: until approved, nothing was actually read or
  * changed. `path` holds the file path for read_file/list_directory, the URL for fetch_url, or the query for
@@ -399,8 +447,8 @@ export interface AssistantTurnResult {
   trace?: AssistantTrace
   /** Set only when `needs_approval` was triggered by a `write_file`/`run_shell_command` tool call — pass back into `turn(message, { approved, pendingActionId })` to apply or discard it. */
   pendingActionId?: string
-  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd, a batch confirmation shows the projected remaining search count. */
-  pendingActionKind?: 'write' | 'shell' | 'batch'
+  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd, a batch confirmation shows the projected remaining search count, a revert (staged only via /undo-action, never by the model) shows which paths will be restored/removed. */
+  pendingActionKind?: 'write' | 'shell' | 'batch' | 'revert'
   /** Real read_file/list_directory calls made while producing this reply, in call order. Only set when fileTools is configured and at least one such call happened this turn. */
   sources?: AssistantSource[]
   /**
@@ -593,6 +641,12 @@ export class PersonalAssistant {
     this.onTrace = options.onTrace
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
+    // Fire-and-forget, not awaited: a large pre-existing history must not delay this
+    // constructor or the first turn/render. Covers every front end (CLI, chat-ui, desktop)
+    // and both construction paths (this constructor directly, and static create() below,
+    // which calls back into it) since it's rooted here rather than in cli.ts. See
+    // backfillMessageIndex's own doc comment for the idempotency/version-guard details.
+    void this.backfillMessageIndex()
   }
 
   /**
@@ -644,6 +698,71 @@ export class PersonalAssistant {
   }
 
   /**
+   * Appends `message` to `transcriptKey`'s array — every site that used to call
+   * `this.memory.set(transcriptKey, message, 'append')` directly now goes through here instead, so
+   * a per-message search index entry (transcript-msg:<sessionId>:<n> — see messageIndexKey) is
+   * always written alongside it, with no call site able to forget. The index write is best-effort:
+   * caught and logged, never thrown — a search-indexing problem must never be able to break an
+   * ordinary turn or lose the transcript message itself.
+   */
+  private async appendTranscriptMessage(
+    sessionId: string,
+    transcriptKey: string,
+    message: { role: 'user' | 'assistant'; content: string },
+  ): Promise<void> {
+    await this.memory.set(transcriptKey, message satisfies ChatMessage, 'append')
+    try {
+      const counterKey = messageIndexCounterKey(sessionId)
+      const nextIndex = ((await this.memory.get(counterKey)) as number | undefined) ?? 0
+      const indexed: IndexedMessage = { sessionId, role: message.role, content: message.content, at: new Date().toISOString() }
+      await this.memory.set(messageIndexKey(sessionId, nextIndex), indexed)
+      await this.memory.set(counterKey, nextIndex + 1)
+    } catch (err) {
+      console.error(`[message-index] failed to index a transcript message for session "${sessionId}":`, err)
+    }
+  }
+
+  /**
+   * One-off, idempotent backfill for installs that already had transcript history before the
+   * message index existed: scans every `transcript:*` session currently in `this.memory` and
+   * indexes whichever messages don't already have a `transcript-msg:` entry, so pre-existing
+   * conversations become searchable too, not just messages sent after this shipped. Guarded by
+   * MESSAGE_INDEX_BACKFILL_VERSION_KEY so it only does real work once per install (and once more
+   * per future version bump); a second call is a cheap no-op. Only covers what's still present in
+   * the live (possibly already-compacted) transcript array — a session already compacted before
+   * backfill ran has already lost its older messages the same way /search would, a known,
+   * documented limitation rather than a bug (see README).
+   *
+   * Run fire-and-forget from the constructor (see below), never awaited by a turn — a large
+   * pre-existing history must not delay the first prompt/render.
+   */
+  private async backfillMessageIndex(): Promise<void> {
+    try {
+      if (await this.memory.get(MESSAGE_INDEX_BACKFILL_VERSION_KEY)) return
+      const hits = await this.memory.search('', Number.MAX_SAFE_INTEGER, 0)
+      for (const hit of hits) {
+        if (typeof hit.key !== 'string' || !hit.key.startsWith('transcript:')) continue
+        const sessionId = hit.key.slice('transcript:'.length)
+        const transcript = hit.value as ChatMessage[] | undefined
+        if (!Array.isArray(transcript) || transcript.length === 0) continue
+
+        const counterKey = messageIndexCounterKey(sessionId)
+        const alreadyIndexed = ((await this.memory.get(counterKey)) as number | undefined) ?? 0
+        for (let i = alreadyIndexed; i < transcript.length; i++) {
+          const message = transcript[i]
+          if (message.role !== 'user' && message.role !== 'assistant') continue
+          const indexed: IndexedMessage = { sessionId, role: message.role, content: message.content, at: new Date().toISOString() }
+          await this.memory.set(messageIndexKey(sessionId, i), indexed)
+        }
+        await this.memory.set(counterKey, transcript.length)
+      }
+      await this.memory.set(MESSAGE_INDEX_BACKFILL_VERSION_KEY, MESSAGE_INDEX_BACKFILL_VERSION)
+    } catch (err) {
+      console.error('[message-index] backfill failed:', err)
+    }
+  }
+
+  /**
    * Records a message-level risk-gate decline (the `needs_approval` branch with no
    * `pendingActionId` — see runTurn) as a resolved, paired exchange, once the caller (cli.ts)
    * knows the final answer was "no". Unlike the eager-append this deliberately avoids inside
@@ -659,12 +778,11 @@ export class PersonalAssistant {
    */
   async recordDeclinedRequest(sessionId: string, userMessage: string, reason: string): Promise<void> {
     const transcriptKey = `transcript:${sessionId}`
-    await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
-    await this.memory.set(
-      transcriptKey,
-      { role: 'assistant', content: `(Declined — ${reason} No action was taken.)` } satisfies ChatMessage,
-      'append',
-    )
+    await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    await this.appendTranscriptMessage(sessionId, transcriptKey, {
+      role: 'assistant',
+      content: `(Declined — ${reason} No action was taken.)`,
+    })
   }
 
   /**
@@ -762,6 +880,57 @@ export class PersonalAssistant {
     return { undone: true }
   }
 
+  /** The workspace backend/root a staged write/shell/revert action lives under — see resolvePendingAction's own doc comment for why fileTools and shellTools are assumed to share one. `undefined` when neither is configured (e.g. a webTools-only assistant). */
+  private undoWorkspace(): { backend: FsBackend; workspaceRoot: string } | undefined {
+    const backend = this.fileTools?.backend ?? this.shellTools?.backend
+    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+    return backend && workspaceRoot ? { backend, workspaceRoot } : undefined
+  }
+
+  /** Real filesystem effects still on record as revertible, newest first — bounded by action-snapshot.ts's UNDO_LOG_MAX_ENTRIES retention cap. Backs `/undo-action` with no argument. Distinct from `/undo` (undoLastTurn above), which only forgets conversation history — see README's /undo-action section for the naming distinction. */
+  async listUndoLogEntries(): Promise<UndoLogEntry[]> {
+    const workspace = this.undoWorkspace()
+    if (!workspace) return []
+    return listUndoLogEntriesFromStore(workspace.backend, workspace.workspaceRoot)
+  }
+
+  /**
+   * Stages a revert of undo-log entry `id` as its own approval-gated `PendingActionPayload` (T3
+   * step 2) — reusing the exact same staging/approval machinery write_file/run_shell_command
+   * already use, per the plan's Overview decision 3, rather than a new confirmation concept.
+   * Approve/decline it the same way any other staged action resolves: `turn('', { sessionId,
+   * approved, pendingActionId })`.
+   */
+  async stageUndoAction(id: string): Promise<{ status: 'staged'; pendingActionId: string; reason: string } | { status: 'error'; message: string }> {
+    const workspace = this.undoWorkspace()
+    if (!workspace) return { status: 'error', message: 'No workspace configured — file/shell tools are not enabled.' }
+    const { backend, workspaceRoot } = workspace
+
+    const entry = await loadUndoLogEntry(backend, workspaceRoot, id)
+    if (!entry) return { status: 'error', message: `No undo-log entry with id "${id}".` }
+    if (!entry.undoable) return { status: 'error', message: `Entry "${id}" cannot be reverted: ${entry.reason}` }
+
+    const plan = buildRevertPlan(entry)
+    if (!plan) return { status: 'error', message: `Entry "${id}" cannot be reverted.` }
+    if (plan.restore.length === 0 && plan.remove.length === 0) {
+      return { status: 'error', message: `Entry "${id}" made no filesystem changes to revert.` }
+    }
+
+    const { id: pendingActionId } = await stagePendingAction(backend, workspaceRoot, {
+      kind: 'revert',
+      revertedEntryId: id,
+      restore: plan.restore,
+      remove: plan.remove,
+    })
+
+    const parts: string[] = []
+    if (plan.restore.length > 0) parts.push(`restore ${plan.restore.map((r) => `"${r.path}"`).join(', ')}`)
+    if (plan.remove.length > 0) parts.push(`remove ${plan.remove.map((p) => `"${p}"`).join(', ')}`)
+    const reason = `Reverting ${entry.kind === 'write' ? `write to "${entry.path}"` : `\`${entry.command}\``} — will ${parts.join(' and ')}.`
+
+    return { status: 'staged', pendingActionId, reason }
+  }
+
   /**
    * Read-only snapshot of what this session/assistant has learned: durable facts extracted
    * from the user's own messages, reminders created so far, and summary counts (not the raw
@@ -783,6 +952,34 @@ export class PersonalAssistant {
         recoverySequenceCount: experienceData.recovery_sequences.length,
       },
     }
+  }
+
+  /**
+   * Ranked search over the per-message index (see appendTranscriptMessage/IndexedMessage), not
+   * the whole session transcript — a hit resolves to the one exchange that matched. Deliberately
+   * not scoped to a single sessionId: this is a single local install's memory namespace, and
+   * "what did I tell you about my dentist appointment" should find it regardless of which
+   * session it was said in.
+   *
+   * `MemoryAdapter.search()` scores every stored key in one pass (facts, reminders, experience
+   * data, the message index itself, its counters, ...), so this asks for every entry scoring
+   * above 0 rather than a small topK directly, then filters to `transcript-msg:` keys and
+   * truncates afterward — otherwise a real match could be pushed out of a small topK by
+   * unrelated non-transcript entries that happen to score higher. Read-only and synchronous over
+   * already-persisted data: never an LLM call, never a network request, never a mutation. Used
+   * by `/search`.
+   */
+  async searchTranscript(query: string, topK = 10): Promise<TranscriptSearchHit[]> {
+    if (!query.trim()) return []
+    const candidates = await this.memory.search(query, Number.MAX_SAFE_INTEGER, 0)
+    const hits: TranscriptSearchHit[] = []
+    for (const c of candidates) {
+      if (typeof c.key !== 'string' || !c.key.startsWith('transcript-msg:')) continue
+      if (c.score <= 0) continue
+      const value = c.value as IndexedMessage
+      hits.push({ sessionId: value.sessionId, role: value.role, content: value.content, at: value.at, score: c.score })
+    }
+    return hits.slice(0, topK)
   }
 
   /** Changes the model used by every subsequent `turn()` call, mid-session — no reconstruction needed. Used by `/model`. */
@@ -813,7 +1010,7 @@ export class PersonalAssistant {
     // call has no guarantee of proposing identical content (and, for a shell
     // command, no guarantee of proposing the same command at all).
     if (options.pendingActionId) {
-      return this.resolvePendingAction(transcriptKey, options.pendingActionId, options.approved ?? false, userMessage)
+      return this.resolvePendingAction(sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage)
     }
 
     const rawTranscript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
@@ -856,8 +1053,8 @@ export class PersonalAssistant {
         const reply = next
           ? `Cancelled "${cancelMatch.taskDescription}". Continuing with the rest of the plan — next up: ${next.description}`
           : `Cancelled "${cancelMatch.taskDescription}". That was the last remaining task, so the plan is complete.`
-        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
-        await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
         const completionPct = planCompletionPct(updatedPlan)
         this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct })
         const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [] }
@@ -938,12 +1135,12 @@ export class PersonalAssistant {
         : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
 
       if (loopResult.kind === 'needs_approval') {
-        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
         // dangerouslySkipPermissions auto-applies the staged action the same way a second
         // turn() call with `approved: true` would — resolvePendingAction is exactly that
         // path, just invoked immediately instead of waiting for the caller to resume it.
         if (this.dangerouslySkipPermissions) {
-          return this.resolvePendingAction(transcriptKey, loopResult.pendingActionId, true, userMessage)
+          return this.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
         }
         return {
           status: 'needs_approval',
@@ -959,7 +1156,7 @@ export class PersonalAssistant {
         }
       }
       if (loopResult.kind === 'escalated') {
-        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
         this.onTrace?.({ kind: 'escalation', reason: loopResult.reason })
         return { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: classification.riskLevel }
       }
@@ -988,8 +1185,8 @@ export class PersonalAssistant {
     const triviality = classifyTriviality(userMessage, classification.riskLevel)
     this.onTrace?.({ kind: 'triviality_classified', isTrivial: triviality.isTrivial })
     if (triviality.isTrivial) {
-      await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
-      await this.memory.set(transcriptKey, { role: 'assistant', content: draftReply } satisfies ChatMessage, 'append')
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
       await this.recordFacts(sessionId, userMessage)
       // No layer fired this turn — an empty trace rather than an absent one, so the "Why?"/
       // "Run detail" UI can still render (all 11 layer cells shown, none highlighted) instead
@@ -1297,8 +1494,8 @@ export class PersonalAssistant {
           batchBudget: batchBudgetTrace,
         }
 
-        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
-        await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
         await this.recordFacts(sessionId, userMessage)
 
         return {
@@ -1353,14 +1550,14 @@ export class PersonalAssistant {
         }
       }
 
-      await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
-      await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
       await this.recordFacts(sessionId, userMessage)
 
       return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, usage: usageTotal }
     } catch (err) {
       if (err instanceof EscalationHalt) {
-        await this.memory.set(transcriptKey, { role: 'user', content: userMessage } satisfies ChatMessage, 'append')
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
         const reason = err.blocker.missing_info.join('; ') || err.blocker.reason
         this.onTrace?.({ kind: 'escalation', reason })
         return {
@@ -1928,7 +2125,7 @@ export class PersonalAssistant {
       const findingsBlock = batchState.probedResults.map((r) => `### ${r.item}\n${r.content}`).join('\n\n')
       const notAttemptedBlock = batchState.remainingItems.map((i) => `- ${i}`).join('\n')
       const reply = `Here's what I found before stopping, as requested:\n\n${findingsBlock}\n\nNot attempted:\n${notAttemptedBlock}`
-      await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+      await this.appendTranscriptMessage(batchState.sessionId, transcriptKey, { role: 'assistant', content: reply })
       const trace: AssistantTrace = {
         nodeExecutionOrder: [],
         verificationHealth: { strength: 0, feasibility: 0 },
@@ -1969,7 +2166,7 @@ export class PersonalAssistant {
       undefined,
       accumulateLocalUsage,
     )
-    await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+    await this.appendTranscriptMessage(batchState.sessionId, transcriptKey, { role: 'assistant', content: reply })
     const trace: AssistantTrace = {
       nodeExecutionOrder: [],
       verificationHealth: { strength: 0, feasibility: 0 },
@@ -2012,7 +2209,7 @@ export class PersonalAssistant {
   }
 
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
-  private async resolvePendingAction(transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string): Promise<AssistantTurnResult> {
+  private async resolvePendingAction(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string): Promise<AssistantTurnResult> {
     // A batch-confirmation pause (see runBatchToolLoop) is staged in `this.memory`, not under a
     // file/shell workspace backend — check for it first so a webTools-only assistant (no
     // fileTools/shellTools configured at all) can still resume/decline one without hitting the
@@ -2036,7 +2233,7 @@ export class PersonalAssistant {
     if (!approved) {
       await discardPendingAction(backend, workspaceRoot, pendingActionId)
       const reply = 'Cancelled — nothing was written or run.'
-      await this.memory.set(transcriptKey, { role: 'assistant', content: reply } satisfies ChatMessage, 'append')
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
       return { status: 'ok', reply }
     }
 
@@ -2060,6 +2257,12 @@ export class PersonalAssistant {
     }
     if (applied.kind === 'write') {
       reply = `Wrote "${applied.path}".`
+      transcriptContent = reply
+    } else if (applied.kind === 'revert') {
+      const parts: string[] = []
+      if (applied.restore.length > 0) parts.push(`restored ${applied.restore.map((r) => `"${r.path}"`).join(', ')}`)
+      if (applied.remove.length > 0) parts.push(`removed ${applied.remove.map((p) => `"${p}"`).join(', ')}`)
+      reply = `Reverted "${applied.revertedEntryId}" — ${parts.join(' and ')}.`
       transcriptContent = reply
     } else {
       // Record this resolution in the shell cache BEFORE anything else — this is the only place
@@ -2120,7 +2323,7 @@ export class PersonalAssistant {
       }
     }
 
-    await this.memory.set(transcriptKey, { role: 'assistant', content: transcriptContent } satisfies ChatMessage, 'append')
+    await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent })
     return { status: 'ok', reply, usage }
   }
 }

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage } from '@buildaharness/runtime'
 import { DEFAULT_CONFIG } from './config.js'
-import { formatHelp, formatStatus, formatMemorySummary, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
-import type { MemorySummary } from './assistant.js'
+import { formatHelp, formatStatus, formatMemorySummary, formatSearchResults, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
+import type { MemorySummary, TranscriptSearchHit } from './assistant.js'
+import type { UndoLogEntry } from './action-snapshot.js'
 
 describe('formatHelp', () => {
   it('lists every command', () => {
@@ -12,10 +13,10 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 14 commands documented for this plan', () => {
+  it('includes all 16 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
-      '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/memory',
-      '/model [name]', '/cost', '/doctor', '/why', '/layers', '/sources', '/plan', '/config ...',
+      '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
+      '/search <query>', '/model [name]', '/cost', '/doctor', '/why', '/layers', '/sources', '/plan', '/config ...',
       '/checkpoint [clear]',
     ])
   })
@@ -64,6 +65,45 @@ describe('formatStatus', () => {
     })
     expect(output).toContain('env-pinned: ASSISTANT_ENABLE_SHELL')
   })
+
+  it('omits the undo-log line entirely when undoLogEntries is not supplied (T6)', () => {
+    const output = formatStatus({
+      config: DEFAULT_CONFIG,
+      overriddenKeys: new Set(),
+      transcriptLength: 0,
+      planActive: false,
+    })
+    expect(output).not.toContain('undo-log')
+  })
+
+  it('reports undo-log entry and revertible counts when supplied (T6)', () => {
+    const entries: UndoLogEntry[] = [
+      { id: '1', appliedActionId: 'a1', kind: 'write', path: '/f.txt', previousContent: 'old', appliedAt: '2026-01-01T00:00:00.000Z', undoable: true },
+      { id: '2', appliedActionId: 'a2', kind: 'write', path: '/g.bin', appliedAt: '2026-01-01T00:00:00.000Z', undoable: false, reason: 'existing file is binary, cannot capture its prior content' },
+    ]
+    const output = formatStatus({
+      config: DEFAULT_CONFIG,
+      overriddenKeys: new Set(),
+      transcriptLength: 0,
+      planActive: false,
+      undoLogEntries: entries,
+    })
+    expect(output).toContain('2 entries (1 revertible) — see /undo-action')
+  })
+
+  it('singularizes "entry" for exactly one undo-log entry (T6)', () => {
+    const entries: UndoLogEntry[] = [
+      { id: '1', appliedActionId: 'a1', kind: 'write', path: '/f.txt', previousContent: null, appliedAt: '2026-01-01T00:00:00.000Z', undoable: true },
+    ]
+    const output = formatStatus({
+      config: DEFAULT_CONFIG,
+      overriddenKeys: new Set(),
+      transcriptLength: 0,
+      planActive: false,
+      undoLogEntries: entries,
+    })
+    expect(output).toContain('1 entry (1 revertible) — see /undo-action')
+  })
 })
 
 describe('formatMemorySummary', () => {
@@ -94,6 +134,44 @@ describe('formatMemorySummary', () => {
     expect(output).toContain('3 strategy weight(s)')
     expect(output).toContain('1 learned decomposition(s)')
     expect(output).toContain('2 recovery sequence(s)')
+  })
+})
+
+// T3: /search <query> result formatting — see
+// plans/personal_assistant_memory_transparency_search_plan.html.
+describe('formatSearchResults', () => {
+  it('returns an explicit "no results" message for an empty hit list, never a blank output', () => {
+    const output = formatSearchResults([], 'dentist appointment')
+    expect(output).toContain('No results')
+    expect(output).toContain('dentist appointment')
+  })
+
+  it('renders each hit with session id, timestamp, role, and a content snippet', () => {
+    const hits: TranscriptSearchHit[] = [
+      { sessionId: 'session-abc123', role: 'user', content: 'I have a dentist appointment next week', at: '2026-01-01T00:00:00.000Z', score: 1.0 },
+    ]
+    const output = formatSearchResults(hits, 'dentist')
+    expect(output).toContain('session-')
+    expect(output).toContain('2026-01-01T00:00:00.000Z')
+    expect(output).toContain('user')
+    expect(output).toContain('dentist appointment')
+  })
+
+  it('preserves the given hit order (caller is responsible for ranking)', () => {
+    const hits: TranscriptSearchHit[] = [
+      { sessionId: 's1', role: 'user', content: 'first hit', at: '2026-01-01T00:00:00.000Z', score: 1.0 },
+      { sessionId: 's1', role: 'assistant', content: 'second hit', at: '2026-01-01T00:00:01.000Z', score: 0.5 },
+    ]
+    const output = formatSearchResults(hits, 'hit')
+    expect(output.indexOf('first hit')).toBeLessThan(output.indexOf('second hit'))
+  })
+
+  it('truncates a long message to a snippet around the matching term rather than dumping the whole content', () => {
+    const longContent = `${'padding '.repeat(40)}dentist appointment${' more padding'.repeat(40)}`
+    const hits: TranscriptSearchHit[] = [{ sessionId: 's1', role: 'user', content: longContent, at: '2026-01-01T00:00:00.000Z', score: 1.0 }]
+    const output = formatSearchResults(hits, 'dentist appointment')
+    expect(output.length).toBeLessThan(longContent.length)
+    expect(output).toContain('dentist appointment')
   })
 })
 

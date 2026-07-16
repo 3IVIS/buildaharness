@@ -12,7 +12,7 @@ import {
   findCachedShellResult,
   type FileToolsContext,
 } from './file-tools.js'
-import { listUndoLogEntries } from './action-snapshot.js'
+import { listUndoLogEntries, UNDO_SNAPSHOT_MAX_FILES } from './action-snapshot.js'
 
 const ROOT = '/workspace'
 
@@ -22,11 +22,20 @@ function makeFakeBackend(opts: { symlinks?: Record<string, string> } = {}): FsBa
   const dirs = new Set<string>([ROOT])
   const symlinks = new Map(Object.entries(opts.symlinks ?? {}))
 
+  function ensureParentDirs(path: string): void {
+    let parent = path.slice(0, path.lastIndexOf('/'))
+    while (parent && parent.length >= ROOT.length) {
+      dirs.add(parent)
+      parent = parent.slice(0, parent.lastIndexOf('/'))
+    }
+  }
+
   return {
     async readTextFile(path) {
       return files.get(path)
     },
     async writeTextFile(path, contents) {
+      ensureParentDirs(path)
       files.set(path, contents)
     },
     async removeFile(path) {
@@ -37,11 +46,14 @@ function makeFakeBackend(opts: { symlinks?: Record<string, string> } = {}): FsBa
     },
     async readDir(dir) {
       const prefix = `${dir}/`
-      const names: string[] = []
+      const names = new Set<string>()
       for (const key of files.keys()) {
-        if (key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) names.push(key.slice(prefix.length))
+        if (key.startsWith(prefix)) names.add(key.slice(prefix.length).split('/')[0])
       }
-      return names
+      for (const key of dirs) {
+        if (key !== dir && key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) names.add(key.slice(prefix.length))
+      }
+      return [...names]
     },
     async realpath(path) {
       for (const [link, target] of symlinks) {
@@ -50,6 +62,11 @@ function makeFakeBackend(opts: { symlinks?: Record<string, string> } = {}): FsBa
       }
       if (files.has(path) || dirs.has(path)) return path
       throw new Error(`ENOENT: ${path}`)
+    },
+    async stat(path) {
+      if (files.has(path)) return { isDirectory: false, size: files.get(path)!.length }
+      if (dirs.has(path)) return { isDirectory: true, size: 0 }
+      return undefined
     },
     // test helpers, not part of FsBackend
     _files: files,
@@ -220,6 +237,80 @@ describe('pending-action staging', () => {
     expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
   })
 
+  it('applyPendingAction records a shell undo-log entry capturing a file the command created', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'touch new.txt', cwd: ROOT })
+    const executeShell = vi.fn().mockImplementation(async () => {
+      await backend.writeTextFile(`${ROOT}/new.txt`, 'created by the command')
+      return { output: '', exitCode: 0, timedOut: false }
+    })
+
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      appliedActionId: id,
+      kind: 'shell',
+      command: 'touch new.txt',
+      undoable: true,
+      added: [`${ROOT}/new.txt`],
+    })
+  })
+
+  it('applyPendingAction records a shell undo-log entry capturing a file the command modified', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/existing.txt`, 'before')
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'edit existing.txt', cwd: ROOT })
+    const executeShell = vi.fn().mockImplementation(async () => {
+      await backend.writeTextFile(`${ROOT}/existing.txt`, 'after')
+      return { output: '', exitCode: 0, timedOut: false }
+    })
+
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries[0]).toMatchObject({
+      kind: 'shell',
+      undoable: true,
+      modified: [{ path: `${ROOT}/existing.txt`, previousContent: 'before' }],
+    })
+  })
+
+  it('applyPendingAction records a shell undo-log entry capturing a file the command deleted', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/gone.txt`, 'will be removed')
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'rm gone.txt', cwd: ROOT })
+    const executeShell = vi.fn().mockImplementation(async () => {
+      await backend.removeFile(`${ROOT}/gone.txt`)
+      return { output: '', exitCode: 0, timedOut: false }
+    })
+
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries[0]).toMatchObject({
+      kind: 'shell',
+      undoable: true,
+      deleted: [{ path: `${ROOT}/gone.txt`, previousContent: 'will be removed' }],
+    })
+  })
+
+  it('a shell command touching only files inside node_modules/ still runs normally, reporting the change in unsnapshottableChanges rather than nothing changed', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'npm install left-pad', cwd: ROOT })
+    const executeShell = vi.fn().mockImplementation(async () => {
+      await backend.writeTextFile(`${ROOT}/node_modules/left-pad/index.js`, 'module.exports = () => {}')
+      return { output: '', exitCode: 0, timedOut: false }
+    })
+
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries[0].undoable).toBe(true)
+    expect((entries[0] as { unsnapshottableChanges: string[] }).unsnapshottableChanges).toContain(`${ROOT}/node_modules`)
+  })
+
   it('discardPendingAction deletes the staging record and performs no write', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'never applied' })
@@ -265,6 +356,89 @@ describe('pending-action staging', () => {
 
     await discardPendingAction(backend, ROOT, id)
 
+    expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
+  })
+
+  it('discardPendingAction never produces an undo-log entry for a declined shell action either — only an actually-applied one does (T4)', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'rm -rf .', cwd: ROOT })
+
+    await discardPendingAction(backend, ROOT, id)
+
+    expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
+  })
+
+  it('applying a revert clears the shell result cache, mirroring the original write/shell apply (T4)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'draft one')
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'draft two' })
+    await applyPendingAction(backend, ROOT, writeId)
+    const [entry] = await listUndoLogEntries(backend, ROOT)
+
+    // A command cached AFTER the write we're about to revert — reverting should invalidate it,
+    // since the revert changes the workspace exactly as the original write did.
+    await recordShellCacheEntry(backend, ROOT, {
+      command: 'cat notes/summary.md',
+      cwd: ROOT,
+      execution: { output: 'draft two', exitCode: 0, timedOut: false },
+      resolvedAt: new Date().toISOString(),
+    })
+    expect(await findCachedShellResult(backend, ROOT, 'cat notes/summary.md', ROOT)).toBeDefined()
+
+    const { id: revertId } = await stagePendingAction(backend, ROOT, {
+      kind: 'revert',
+      revertedEntryId: entry.id,
+      restore: [{ path: 'notes/summary.md', content: 'draft one' }],
+      remove: [],
+    })
+    await applyPendingAction(backend, ROOT, revertId)
+
+    expect(await findCachedShellResult(backend, ROOT, 'cat notes/summary.md', ROOT)).toBeUndefined()
+    expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBe('draft one')
+  })
+
+  // T7 step 2: the file-count ceiling (T2 step 7) must only ever affect revertibility, never the
+  // approved action itself — exercised here end-to-end through applyPendingAction, the same real
+  // apply path every backend goes through, rather than just at snapshotWorkspaceTree's own unit
+  // level (already covered separately in action-snapshot.test.ts).
+  it('a shell command still runs to completion with an unchanged output/exit code when the workspace is over the snapshot file-count ceiling (T7)', async () => {
+    const backend = makeFakeBackend()
+    for (let i = 0; i < UNDO_SNAPSHOT_MAX_FILES + 5; i++) {
+      await backend.writeTextFile(`${ROOT}/file-${i}.txt`, `content ${i}`)
+    }
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo done', cwd: ROOT })
+    const executeShell = vi.fn().mockResolvedValue({ output: 'done\n', exitCode: 0, timedOut: false })
+
+    const applied = await applyPendingAction(backend, ROOT, id, { executeShell })
+
+    expect(applied).toMatchObject({ kind: 'shell', execution: { output: 'done\n', exitCode: 0, timedOut: false } })
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries[0]).toMatchObject({ kind: 'shell', undoable: false })
+    expect((entries[0] as { reason: string }).reason).toMatch(/too large|more than/i)
+  })
+
+  // Risk-item from the Test Plan's "Regression guards" card, flagged by T3's own write-up as not
+  // yet covered by a dedicated test ("verified by inspection... test this directly rather than
+  // assuming the exclusion holds") — closed here as part of T7's regression sweep.
+  it('applying a revert does not itself produce a new undo-log entry (T3 step 3, tested directly)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'draft one')
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'draft two' })
+    await applyPendingAction(backend, ROOT, writeId)
+    const [entry] = await listUndoLogEntries(backend, ROOT)
+    expect(entry).toBeDefined()
+
+    const { id: revertId } = await stagePendingAction(backend, ROOT, {
+      kind: 'revert',
+      revertedEntryId: entry.id,
+      restore: [{ path: 'notes/summary.md', content: 'draft one' }],
+      remove: [],
+    })
+    await applyPendingAction(backend, ROOT, revertId)
+
+    // The original entry is consumed by the revert, and nothing new takes its place.
     expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
   })
 })

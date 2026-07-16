@@ -58,7 +58,10 @@ const nounContextLookbehind = (extra = ''): string =>
 // h1: same sentence-initial gap, one more noun-compound the trailing list didn't cover — "of" (as
 // in "order of operations"/"order of magnitude") — found via live testing: "Order of operations
 // always trips up my students when we get to nested parentheses." misfired HIGH.
-const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for|of|confirmations?|number|status|history)\\b)`, 'i')
+// batch 19 (h1): "form" is the same sentence-initial noun-compound gap ("order form", a document,
+// not a purchase verb) — found via live testing: "Order form for the new office chairs needs to
+// be filled out before Friday, does anyone know where to find it?" misfired HIGH.
+const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\\s+(?:is|was|to|for|of|confirmations?|number|status|history|forms?)\\b)`, 'i')
 
 // "email"/"text" used as VERBS ("email the landlord", "text my sister") are the same
 // send-a-message action as "send an email/text", but the send-message pattern above requires
@@ -83,8 +86,11 @@ const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\
 // batch 10 re-probe (conv166/h5): "thread"/"threads" is the same sentence-initial noun-compound
 // gap as "alignment" above — found via live testing: "Email thread got really long today, over
 // 50 replies by lunchtime." misfired HIGH with no live send request at all.
+// batch 19 (h5): "editor" (text editor) is the same sentence-initial noun-compound gap as
+// "alignment"/"thread" above — found via live testing: "Text editor I use at work keeps crashing
+// every time I paste in a large file." misfired HIGH.
 const EMAIL_TEXT_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|is|was)\\b)`,
+  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|editor|editors|is|was)\\b)`,
   'i',
 )
 
@@ -100,7 +106,10 @@ const EMAIL_TEXT_VERB_PATTERN = new RegExp(
 // testing: "Purchase orders take forever to get approved at my company, it's so frustrating."
 // misfired HIGH. Same sentence-initial gap already patched for CANCEL_VERB_PATTERN/
 // PUBLISH_VERB_PATTERN below via a trailing noun-compound exclusion.
-const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter|orders?)\\b)`, 'i')
+// batch 19 (h11): "history" (purchase history) is the same sentence-initial noun-compound gap as
+// "orders" above — found via live testing: "Purchase history on this site is really hard to find,
+// the search is broken." misfired HIGH.
+const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter|orders?|history)\\b)`, 'i')
 
 // Same noun-vs-verb ambiguity for "post"/"tweet" ("I saw an interesting post", "did you see that
 // tweet") — found via live testing alongside PURCHASE_VERB_PATTERN above, same false-positive
@@ -114,7 +123,10 @@ const PURCHASE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:purcha
 // batch 10 re-probe (conv166/h6): "office"/"mortem" are the same sentence-initial noun-compound
 // gap as "engagement" above, just not exhaustively covered by that one earlier fix — found via
 // live testing: "Post office hours changed this week, they now close at 5." misfired HIGH.
-const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|office|mortem|is|was)\\b)`, 'i')
+// batch 19 (h12): "count" (post count) is the same sentence-initial noun-compound gap as
+// "office"/"mortem" above — found via live testing: "Post count on my account keeps resetting for
+// no reason, it's really annoying." misfired HIGH.
+const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|office|mortem|count|is|was)\\b)`, 'i')
 
 // "book" in "schedule|book|reserve" below has the same noun-vs-verb ambiguity ("a good book
 // about jazz") — found via live testing: a book recommendation request mistagged MEDIUM risk
@@ -163,8 +175,12 @@ const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedu
 // genuine live forward-a-message request silently never gates HIGH at all — found via live
 // testing: "Please forward our proposal to the client before end of day." never triggered an
 // approval prompt.
+// batch 19 (h6): the object-determiner alternation was still missing possessive "their" — found
+// via live testing: "Please forward their proposal to the client before end of day." never
+// triggered an approval prompt at all — the opposite failure direction from the other patterns in
+// this file (a false negative, letting a genuine send-on-behalf request through with no gate).
 const FORWARD_VERB_PATTERN =
-  /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|our|your|his|the|it|these|those|him|her|them|a|an|us)\b/i
+  /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|our|your|his|their|the|it|these|those|him|her|them|a|an|us)\b/i
 
 // "delete"/"remove"/"wipe"/"erase" have the same noun-vs-verb ambiguity ORDER_VERB_PATTERN and its
 // siblings already handle ("the Remove button", "my delete key", "the wipe cycle on my
@@ -185,7 +201,10 @@ const FORWARD_VERB_PATTERN =
 // h3: same UI-element noun-compound shape, missing the exact one CANCEL_VERB_PATTERN's sibling
 // list already covers — "button" — found via live testing: "Delete button on this remote doesn't
 // work half the time, so annoying." misfired HIGH.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|is|was)\\b|\\.\\w)`, 'i')
+// batch 19 (h3): "queue" (delete/print queue) is the same UI/system-element noun-compound gap as
+// key/button above — found via live testing: "Delete queue on this printer keeps growing no
+// matter how many times IT clears it." misfired HIGH.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
@@ -201,7 +220,10 @@ const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|r
 // h2: same class of gap, one more noun-compound not in the trailing list — "day" (payday as two
 // words) — found via live testing: "Pay day at my company always falls on the last Friday of the
 // month." misfired HIGH.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day)\\b)`, 'i')
+// batch 19 (h2): "grade" (pay grade) is the same noun-compound gap as "day"/"period" above — found
+// via live testing: "Pay grade differences between departments never made sense to me, honestly."
+// misfired HIGH.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already
@@ -224,8 +246,11 @@ const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|tra
 // phrase this pattern's own trailing noun-compound treatment never got extended to cover — found
 // via live testing: "Cancel culture has gotten out of hand online lately, don't you think?"
 // misfired HIGH.
+// batch 19 (h4): "policy" (cancellation/return policy) is the same sentence-initial noun-compound
+// gap as "culture" above — found via live testing: "Cancel policy on this website is really
+// unclear, I can't tell if I'd get a refund." misfired HIGH.
 const CANCEL_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|is|was)\\b|\\s+each\\s+other\\b)`,
+  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|is|was)\\b|\\s+each\\s+other\\b)`,
   'i',
 )
 

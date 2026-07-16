@@ -2,27 +2,45 @@ import { describe, it, expect } from 'vitest'
 import type { FsBackend } from '@buildaharness/runtime'
 import {
   snapshotBeforeWrite,
+  snapshotWorkspaceTree,
+  diffSnapshots,
+  buildShellUndoLogEntry,
   recordUndoLogEntry,
   loadUndoLogEntry,
   listUndoLogEntries,
   UNDO_LOG_MAX_ENTRIES,
+  UNDO_SNAPSHOT_MAX_FILE_BYTES,
+  UNDO_SNAPSHOT_MAX_FILES,
   type UndoLogEntry,
 } from './action-snapshot.js'
 
 const ROOT = '/workspace'
 
-/** In-memory FsBackend, standing in for a real disk — mirrors file-tools.test.ts's fake backend. */
-function makeFakeBackend(opts: { failReadPaths?: Set<string> } = {}): FsBackend {
+/**
+ * In-memory FsBackend, standing in for a real disk — mirrors file-tools.test.ts's fake backend,
+ * extended with `stat`/directory tracking so a recursive workspace walk (T2) can tell a file
+ * from a directory the way a real filesystem would.
+ */
+function makeFakeBackend(opts: { failReadPaths?: Set<string>; noStat?: boolean } = {}): FsBackend {
   const files = new Map<string, string>()
   const dirs = new Set<string>([ROOT])
   const failReadPaths = opts.failReadPaths ?? new Set<string>()
 
-  return {
+  function ensureParentDirs(path: string): void {
+    let parent = path.slice(0, path.lastIndexOf('/'))
+    while (parent && parent.length >= ROOT.length) {
+      dirs.add(parent)
+      parent = parent.slice(0, parent.lastIndexOf('/'))
+    }
+  }
+
+  const backend: FsBackend = {
     async readTextFile(path) {
       if (failReadPaths.has(path)) throw new Error(`EIO: simulated read failure at ${path}`)
       return files.get(path)
     },
     async writeTextFile(path, contents) {
+      ensureParentDirs(path)
       files.set(path, contents)
     },
     async removeFile(path) {
@@ -32,14 +50,27 @@ function makeFakeBackend(opts: { failReadPaths?: Set<string> } = {}): FsBackend 
       dirs.add(path)
     },
     async readDir(dir) {
-      const prefix = `${dir}/`
-      const names: string[] = []
+      const prefix = dir.endsWith('/') ? dir : `${dir}/`
+      const names = new Set<string>()
       for (const key of files.keys()) {
-        if (key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) names.push(key.slice(prefix.length))
+        if (key.startsWith(prefix)) names.add(key.slice(prefix.length).split('/')[0])
       }
-      return names
+      for (const key of dirs) {
+        if (key !== dir && key.startsWith(prefix) && !key.slice(prefix.length).includes('/')) names.add(key.slice(prefix.length))
+      }
+      return [...names]
     },
   }
+
+  if (!opts.noStat) {
+    backend.stat = async (path: string) => {
+      if (files.has(path)) return { isDirectory: false, size: files.get(path)!.length }
+      if (dirs.has(path)) return { isDirectory: true, size: 0 }
+      return undefined
+    }
+  }
+
+  return backend
 }
 
 function makeWriteEntry(overrides: Partial<UndoLogEntry> = {}): UndoLogEntry {
@@ -89,6 +120,116 @@ describe('snapshotBeforeWrite', () => {
     const backend = makeFakeBackend({ failReadPaths: new Set([`${ROOT}/locked.txt`]) })
 
     await expect(snapshotBeforeWrite(backend, ROOT, `${ROOT}/locked.txt`)).rejects.toThrow(/simulated read failure/)
+  })
+})
+
+describe('snapshotWorkspaceTree / diffSnapshots / buildShellUndoLogEntry', () => {
+  it('captures files and skips default-excluded directories, recording an excluded-dir signature', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'hello')
+    await backend.writeTextFile(`${ROOT}/node_modules/pkg/index.js`, 'module.exports = {}')
+
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+
+    expect(snap.files.get(`${ROOT}/notes.txt`)).toBe('hello')
+    expect(snap.files.has(`${ROOT}/node_modules/pkg/index.js`)).toBe(false)
+    expect(snap.skipped.some((s) => s.path === `${ROOT}/node_modules`)).toBe(true)
+    expect(snap.excludedDirSignatures.has(`${ROOT}/node_modules`)).toBe(true)
+  })
+
+  it('skips a binary file rather than capturing it lossily', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/image.png`, 'PNG��binary')
+
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+
+    expect(snap.files.has(`${ROOT}/image.png`)).toBe(false)
+    expect(snap.skipped.find((s) => s.path === `${ROOT}/image.png`)?.reason).toMatch(/binary/i)
+  })
+
+  it('marks truncated once the file-count ceiling is hit', async () => {
+    const backend = makeFakeBackend()
+    for (let i = 0; i < UNDO_SNAPSHOT_MAX_FILES + 5; i++) {
+      await backend.writeTextFile(`${ROOT}/file${i}.txt`, 'x')
+    }
+
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+
+    expect(snap.truncated).toBe(true)
+    expect(snap.truncationReason).toMatch(/too large/i)
+  })
+
+  it('marks truncated when the backend has no stat()', async () => {
+    const backend = makeFakeBackend({ noStat: true })
+
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+
+    expect(snap.truncated).toBe(true)
+    expect(snap.truncationReason).toMatch(/does not support recursive/i)
+  })
+
+  it('diffSnapshots classifies added/modified/deleted correctly', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/a.txt`, 'one')
+    await backend.writeTextFile(`${ROOT}/b.txt`, 'two')
+    const before = await snapshotWorkspaceTree(backend, ROOT)
+
+    await backend.writeTextFile(`${ROOT}/a.txt`, 'one-modified')
+    await backend.removeFile(`${ROOT}/b.txt`)
+    await backend.writeTextFile(`${ROOT}/c.txt`, 'three')
+    const after = await snapshotWorkspaceTree(backend, ROOT)
+
+    const diff = diffSnapshots(before, after)
+    expect(diff.added).toEqual([`${ROOT}/c.txt`])
+    expect(diff.modified).toEqual([{ path: `${ROOT}/a.txt`, previousContent: 'one' }])
+    expect(diff.deleted).toEqual([{ path: `${ROOT}/b.txt`, previousContent: 'two' }])
+    expect(diff.unsnapshottableChanges).toEqual([])
+  })
+
+  it('flags a change inside an excluded directory in unsnapshottableChanges instead of reporting nothing changed', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/node_modules/pkg/index.js`, 'v1')
+    const before = await snapshotWorkspaceTree(backend, ROOT)
+
+    await backend.writeTextFile(`${ROOT}/node_modules/pkg2/index.js`, 'v2')
+    const after = await snapshotWorkspaceTree(backend, ROOT)
+
+    const diff = diffSnapshots(before, after)
+    expect(diff.unsnapshottableChanges).toContain(`${ROOT}/node_modules`)
+  })
+
+  it('buildShellUndoLogEntry stays undoable: true with a non-empty unsnapshottableChanges (excluded-dir case)', async () => {
+    const backend = makeFakeBackend()
+    const before = await snapshotWorkspaceTree(backend, ROOT)
+    await backend.writeTextFile(`${ROOT}/node_modules/pkg/index.js`, 'v1')
+    const after = await snapshotWorkspaceTree(backend, ROOT)
+
+    const entry = buildShellUndoLogEntry('action-1', 'npm install pkg', before, after)
+    expect(entry.undoable).toBe(true)
+    if (entry.kind === 'shell' && entry.undoable) expect(entry.unsnapshottableChanges).toContain(`${ROOT}/node_modules`)
+  })
+
+  it('buildShellUndoLogEntry marks undoable: false with a clear reason when the walk was truncated', async () => {
+    const backend = makeFakeBackend()
+    for (let i = 0; i < UNDO_SNAPSHOT_MAX_FILES + 5; i++) {
+      await backend.writeTextFile(`${ROOT}/file${i}.txt`, 'x')
+    }
+    const before = await snapshotWorkspaceTree(backend, ROOT)
+    const after = await snapshotWorkspaceTree(backend, ROOT)
+
+    const entry = buildShellUndoLogEntry('action-1', 'touch newfile', before, after)
+    expect(entry.undoable).toBe(false)
+    if (!entry.undoable) expect(entry.reason).toMatch(/too large/i)
+  })
+
+  it('a file over the size cap is skipped, not partially captured', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/big.txt`, 'x'.repeat(UNDO_SNAPSHOT_MAX_FILE_BYTES + 1))
+
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+
+    expect(snap.files.has(`${ROOT}/big.txt`)).toBe(false)
+    expect(snap.skipped.find((s) => s.path === `${ROOT}/big.txt`)?.reason).toMatch(/size cap/i)
   })
 })
 

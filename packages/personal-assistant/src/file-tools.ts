@@ -1,5 +1,12 @@
 import type { FsBackend, ToolDefinition } from '@buildaharness/runtime'
-import { snapshotBeforeWrite, recordUndoLogEntry, type UndoLogEntry } from './action-snapshot.js'
+import {
+  snapshotBeforeWrite,
+  snapshotWorkspaceTree,
+  buildShellUndoLogEntry,
+  recordUndoLogEntry,
+  deleteUndoLogEntry,
+  type UndoLogEntry,
+} from './action-snapshot.js'
 
 /**
  * Thrown by resolveInWorkspace/assertRealPathInWorkspace instead of returning
@@ -178,6 +185,15 @@ export async function executeFileTool(ctx: FileToolsContext, toolName: string, i
 export type PendingActionPayload =
   | { kind: 'write'; path: string; content: string }
   | { kind: 'shell'; command: string; cwd: string }
+  /**
+   * Staged by /undo-action (T3), never by the model — reverts a previously-applied write/shell
+   * action back to its pre-action state. `revertedEntryId` names the undo-log entry this reverts
+   * (deleted once applied — see applyPendingAction's revert branch). `restore`/`remove` are the
+   * concrete filesystem operations (see action-snapshot.ts's buildRevertPlan), computed once at
+   * staging time so apply doesn't need to re-derive them from a (possibly since-pruned) undo-log
+   * entry.
+   */
+  | { kind: 'revert'; revertedEntryId: string; restore: { path: string; content: string }[]; remove: string[] }
 
 export type PendingActionRecord = { id: string; stagedAt: string } & PendingActionPayload
 
@@ -192,6 +208,7 @@ export interface ShellExecutionResult {
 export type ApplyPendingActionResult =
   | ({ kind: 'write' } & PendingActionRecord)
   | ({ kind: 'shell' } & PendingActionRecord & { execution: ShellExecutionResult })
+  | ({ kind: 'revert' } & PendingActionRecord)
 
 const PENDING_ACTIONS_DIR = '.pending-actions'
 
@@ -238,6 +255,31 @@ export async function applyPendingAction(
   const record = await loadPendingAction(backend, workspaceRoot, id)
   if (!record) throw new Error(`No pending action staged with id "${id}"`)
 
+  if (record.kind === 'revert') {
+    // Deliberately does NOT call snapshotBeforeWrite/snapshotWorkspaceTree the way the write/shell
+    // branches below do — a revert is one-shot and must never itself produce a new undo-log entry
+    // (T3 step 3). Applying it directly, bypassing both snapshot hooks entirely, is what keeps that
+    // guarantee true structurally rather than by convention.
+    for (const { path, content } of record.restore) {
+      const resolved = resolveInWorkspace(workspaceRoot, path)
+      await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+      await backend.writeTextFile(resolved, content)
+    }
+    for (const path of record.remove) {
+      const resolved = resolveInWorkspace(workspaceRoot, path)
+      await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+      await backend.removeFile(resolved)
+    }
+    await deleteUndoLogEntry(backend, workspaceRoot, record.revertedEntryId)
+    await backend.removeFile(pendingActionPath(workspaceRoot, id))
+    // Mirror-direction of the write/shell branches' own clearShellCache() call below — a revert
+    // is a workspace mutation exactly like the write/shell action it undoes, so a cached command
+    // result from AFTER the original action could otherwise be served as current after reverting
+    // it. Same reasoning as that comment, applied in the opposite direction (see T4).
+    await clearShellCache(backend, workspaceRoot)
+    return record as ApplyPendingActionResult
+  }
+
   if (record.kind === 'write') {
     // Defense in depth — the workspace root shouldn't have changed between
     // staging and approval, but don't trust that; re-validate before writing.
@@ -274,7 +316,14 @@ export async function applyPendingAction(
   if (!options.executeShell) {
     throw new Error(`Cannot apply a staged shell action ("${id}") — no executeShell callback was provided`)
   }
+  // A shell command's effects aren't scoped to one known path the way a write's are — snapshot
+  // the whole tree before and after, so the diff (whatever it turns out to be) can still be
+  // reverted later. See action-snapshot.ts's snapshotWorkspaceTree/buildShellUndoLogEntry.
+  const before = await snapshotWorkspaceTree(backend, workspaceRoot)
   const execution = await options.executeShell(record.command, record.cwd)
+  const after = await snapshotWorkspaceTree(backend, workspaceRoot)
+  const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
+  await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
   await backend.removeFile(pendingActionPath(workspaceRoot, id))
   return { ...record, execution }
 }

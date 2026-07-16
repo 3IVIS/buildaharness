@@ -12,10 +12,16 @@ import type { PendingActionRecord } from './file-tools.js'
  */
 export const ALREADY_STAGED_ACTION_TOOL = '__staged_action'
 
-/** Reduces a staged record down to the synthetic __staged_action tool call's input shape. Shared for the same reason ALREADY_STAGED_ACTION_TOOL above is. */
+/**
+ * Reduces a staged record down to the synthetic __staged_action tool call's input shape. Shared
+ * for the same reason ALREADY_STAGED_ACTION_TOOL above is. `kind: 'revert'` is never passed here
+ * — a revert is only ever staged directly (assistant.ts's stageUndoAction, driven by
+ * /undo-action), never proposed by the model through the claude-cli MCP server's staging path.
+ */
 export function stagedActionInput(record: PendingActionRecord): { id: string; kind: 'write' | 'shell' } & Record<string, unknown> {
   if (record.kind === 'write') return { id: record.id, kind: 'write', path: record.path, content: record.content }
-  return { id: record.id, kind: 'shell', command: record.command, cwd: record.cwd }
+  if (record.kind === 'shell') return { id: record.id, kind: 'shell', command: record.command, cwd: record.cwd }
+  throw new Error(`stagedActionInput does not support kind "${record.kind}" — reverts are never staged through the claude-cli MCP server`)
 }
 
 /**

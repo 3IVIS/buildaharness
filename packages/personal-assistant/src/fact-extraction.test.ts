@@ -56,6 +56,28 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
   })
 
+  it('captures a personal-fact statement using a plural CODING_FACT_MARKERS word not previously widened (server/commit)', () => {
+    // batch 19 (h7/h8, re-probing conv178/conv198): "server" and "commit" were still singular-only.
+    expect(extractFactsFromTurn('Honestly I stopped bothering with backups on our servers, we have snapshots now.', 'turn:8c')).toHaveLength(1)
+    expect(extractFactsFromTurn('Actually I stopped squashing commits a while back, our team keeps full history now.', 'turn:8d')).toHaveLength(1)
+  })
+
+  it('does not reject a first-person declarative statement that happens to use a NON_CLAIM_MARKERS action verb', () => {
+    // batch 19: found while investigating conv178's re-probe — "I always run a backup script
+    // before touching the server." was silently dropped entirely, because bare "run" tripped
+    // NON_CLAIM_MARKERS even though this is a plain statement of routine behavior, not a request
+    // directed at the assistant.
+    const facts = extractFactsFromTurn('I always run a backup script before touching the server.', 'turn:8e')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('I always run a backup script before touching the server.')
+  })
+
+  it('still rejects a genuine imperative using the same action verb with no subject pronoun', () => {
+    // Guards the NON_CLAIM_MARKERS fix above from over-widening: a bare imperative ("Run the
+    // tests") has no "I"/"we" before the verb and must still be rejected as a request, not a fact.
+    expect(extractFactsFromTurn('Run the tests before you merge this branch.', 'turn:8f')).toEqual([])
+  })
+
   it('captures a health/dietary self-statement with no FACT_MARKERS phrasing', () => {
     // "I'm allergic to shellfish." matches none of FACT_MARKERS' identity-statement phrases
     // ("my name is", "i'm a", ...) — this was filed only as a reminder, never as a known fact,
@@ -69,6 +91,11 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('I am vegetarian.', 'turn:10')).toHaveLength(1)
     expect(extractFactsFromTurn("I don't eat pork.", 'turn:11')).toHaveLength(1)
     expect(extractFactsFromTurn('I have a peanut allergy.', 'turn:12')).toHaveLength(1)
+  })
+
+  it('captures a celiac statement (batch 19, h9)', () => {
+    const facts = extractFactsFromTurn('I am celiac, so please avoid recommending anything with wheat or gluten.', 'turn:12c')
+    expect(facts).toHaveLength(1)
   })
 
   it('captures an i\'ve/i have allergy statement with an intervening verb before the marker', () => {

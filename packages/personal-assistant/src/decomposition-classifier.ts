@@ -66,8 +66,14 @@ const WORD_LIMIT = 40
 // testing: "Remind me to call the bank, and there's a package coming today too." (a single
 // reminder plus an unrelated aside) wrongly tripped the bulk-reminder confirmation gate and got
 // needlessly declined fails-closed, blocking a genuine single-reminder request outright.
+// batch 19 (h10): the indefinite-pronoun exclusion only covered person-indefinite-pronouns
+// (someone/somebody/anybody/...) — thing-indefinite-pronouns (something/anything/everything/
+// nothing) are the same "an unrelated aside reintroduces its own subject" shape and were missing
+// — found via live testing: "Remind me to call the bank, and something came up with my car
+// insurance too." (one reminder + an unrelated aside) wrongly tripped the bulk-reminder
+// confirmation gate.
 const ONE_COMMA_LIST_MARKER =
-  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody)\b)(\S+)/i
+  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody|something|anything|everything|nothing)\b)(\S+)/i
 
 const TWO_COMMA_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
 

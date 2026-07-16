@@ -523,6 +523,64 @@ describe('classifyRisk', () => {
       classifyRisk("Book store closures have been in the news a lot lately, it's sad to see.").riskLevel,
     ).not.toBe('MEDIUM')
   })
+
+  // batch 19, h1: ORDER_VERB_PATTERN's trailing exclusion was missing "form" (order form).
+  it('does not flag a sentence-initial "Order form..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Order form for the new office chairs needs to be filled out before Friday, does anyone know where to find it?').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h2: PAY_WIRE_PATTERN's trailing exclusion was missing "grade" (pay grade).
+  it('does not flag a sentence-initial "Pay grade..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Pay grade differences between departments never made sense to me, honestly.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h3: DELETE_VERB_PATTERN's trailing exclusion was missing "queue" (delete/print queue).
+  it('does not flag a sentence-initial "Delete queue..." as a delete request', () => {
+    expect(
+      classifyRisk('Delete queue on this printer keeps growing no matter how many times IT clears it.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h4: CANCEL_VERB_PATTERN's trailing exclusion was missing "policy" (cancellation policy).
+  it('does not flag a sentence-initial "Cancel policy..." as a cancellation request', () => {
+    expect(
+      classifyRisk("Cancel policy on this website is really unclear, I can't tell if I'd get a refund.").riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h5: EMAIL_TEXT_VERB_PATTERN's trailing exclusion was missing "editor" (text editor).
+  it('does not flag a sentence-initial "Text editor..." as a send-message request', () => {
+    expect(
+      classifyRisk('Text editor I use at work keeps crashing every time I paste in a large file.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h11: PURCHASE_VERB_PATTERN's trailing exclusion was missing "history" (purchase history).
+  it('does not flag a sentence-initial "Purchase history..." as a money-spend request', () => {
+    expect(
+      classifyRisk('Purchase history on this site is really hard to find, the search is broken.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h12: PUBLISH_VERB_PATTERN's trailing exclusion was missing "count" (post count).
+  it('does not flag a sentence-initial "Post count..." as a publish request', () => {
+    expect(
+      classifyRisk("Post count on my account keeps resetting for no reason, it's really annoying.").riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  // batch 19, h6: FORWARD_VERB_PATTERN's object-determiner alternation was missing "their" — the
+  // opposite failure direction from the other cases above (a false negative: a genuine
+  // send-on-behalf request silently never gated at all).
+  it('flags "forward their X" as a HIGH-risk send-on-behalf request', () => {
+    const result = classifyRisk('Please forward their proposal to the client before end of day.')
+    expect(result.riskLevel).toBe('HIGH')
+    expect(result.requiresApproval).toBe(true)
+  })
 })
 
 describe('looksActionOriented', () => {

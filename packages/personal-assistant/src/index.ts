@@ -1,5 +1,5 @@
 export { PersonalAssistant } from './assistant.js'
-export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, DebugLogEntry } from './assistant.js'
+export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
 export { classifyRisk } from './risk-classifier.js'
 export type { RiskLevel, RiskClassification } from './risk-classifier.js'
 export { classifyTriviality } from './triviality-classifier.js'
@@ -71,6 +71,6 @@ export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
 // formatters with no Node-only imports, reused as-is by chat-ui's header Export button and
 // Settings > Diagnostics section so the CLI and GUI never drift into two descriptions of the
 // same facts.
-export { formatMemorySummary, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
+export { formatMemorySummary, formatSearchResults, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
 export type { CostSummaryInfo, DoctorCheck } from './cli-session.js'
 export { estimateCostUsd } from './model-pricing.js'

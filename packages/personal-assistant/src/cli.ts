@@ -29,7 +29,7 @@ import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatCostSummary, formatDoctorReport } from './cli-session.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode } from './non-interactive-mode.js'
@@ -181,7 +181,17 @@ async function main(): Promise<void> {
       ? '\nASSISTANT_NON_INTERACTIVE_APPROVAL=decline is set — every approval prompt auto-declines.\n'
       : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}`)
+  // The undo-log persists across sessions (it's on disk under the workspace, not in-memory) —
+  // surfaced here so a user doesn't discover leftover revertible actions from a prior session
+  // only by happening to run /undo-action or /status (T6).
+  const startupUndoLogEntries = await assistant.listUndoLogEntries()
+  const undoableFromBefore = startupUndoLogEntries.filter((e) => e.undoable).length
+  const undoBanner =
+    undoableFromBefore > 0
+      ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
+      : ''
+
+  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 
@@ -375,7 +385,10 @@ async function main(): Promise<void> {
 
   async function printStatus(): Promise<void> {
     const transcript = await assistant.getTranscript('cli')
-    console.log(`\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined })}\n`)
+    const undoLogEntries = await assistant.listUndoLogEntries()
+    console.log(
+      `\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined, undoLogEntries })}\n`,
+    )
   }
 
   /** Writes the session transcript to a markdown file — an explicit argument overrides the default filename, resolved relative to process.cwd() if not absolute. */
@@ -439,9 +452,48 @@ async function main(): Promise<void> {
     )
   }
 
+  /**
+   * `/undo-action` with no argument lists real filesystem effects still on record as revertible
+   * (T3 step 1). `/undo-action <id>` stages a revert of that entry as its own approval-gated
+   * action (T3 step 2) — same "yes/no, then re-call turn() to apply or discard" shape as any
+   * other staged write/shell action, except staging itself happens synchronously here (via
+   * assistant.stageUndoAction) rather than by the model calling a tool, so the confirmation
+   * prompt is driven directly rather than via handleTurn's needs_approval branch.
+   */
+  async function handleUndoAction(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      const entries = await assistant.listUndoLogEntries()
+      console.log(`\n${formatUndoLogListing(entries)}\n`)
+      return
+    }
+
+    const staged = await assistant.stageUndoAction(args[0])
+    if (staged.status === 'error') {
+      console.log(`\n✗ ${staged.message}\n`)
+      return
+    }
+
+    console.log(`\n[needs approval — revert] ${staged.reason}`)
+    const confirmed = await askYesNo('Apply this revert? (y/N) ')
+    lastTrace = undefined
+    lastNoTraceReason = `No harness trace — the last turn was a staged revert that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+    await handleTurn('', confirmed, staged.pendingActionId)
+  }
+
   async function printMemory(): Promise<void> {
     const summary = await assistant.getMemorySummary('cli')
     console.log(`\n${formatMemorySummary(summary)}\n`)
+  }
+
+  /** `/search <query>` — ranked search over past messages (see PersonalAssistant.searchTranscript), never an LLM call or network request. A query with no terms is treated the same as no results, not an error. */
+  async function handleSearch(args: string[]): Promise<void> {
+    const query = args.join(' ')
+    if (!query.trim()) {
+      console.log('\nUsage: /search <query>\n')
+      return
+    }
+    const hits = await assistant.searchTranscript(query)
+    console.log(`\n${formatSearchResults(hits, query)}\n`)
   }
 
   function printCost(): void {
@@ -766,7 +818,9 @@ async function main(): Promise<void> {
     '/status': () => printStatus(),
     '/export': (args) => handleExport(args),
     '/undo': () => handleUndo(),
+    '/undo-action': (args) => handleUndoAction(args),
     '/memory': () => printMemory(),
+    '/search': (args) => handleSearch(args),
     '/model': (args) => handleModel(args),
     '/cost': () => printCost(),
     '/doctor': () => handleDoctor(),

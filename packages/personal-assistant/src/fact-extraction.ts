@@ -68,8 +68,12 @@ export const FACT_MARKERS =
 // developed") between "i've" and "a peanut allergy", breaking the match — the fact was silently
 // dropped from /memory entirely, not even captured session-scoped. Widened with the same 0-4-word
 // gap shape as the sibling branch.
+// batch 19 (h9): "celiac" was missing from the i'm/i am marker-word alternation — found via live
+// testing: "I am celiac, so please avoid recommending anything with wheat or gluten." was never
+// captured as a durable fact at all (/memory showed "Facts I know: None yet" despite the
+// assistant acknowledging it conversationally).
 export const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free|celiac)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
 
 // The subset of FACT_MARKERS worth surviving /new: a name or a stated preference is durable and
 // safety/identity-relevant the same way a health/dietary fact is, unlike a current location or
@@ -89,7 +93,19 @@ function isDurable(text: string): boolean {
 // claim about the world. Excluding request and question phrasing keeps admission scoped to
 // actual state claims; FACT_MARKERS' phrases ("my name is", "remember that", ...) are already
 // declarative by construction and don't need this filter.
-const NON_CLAIM_MARKERS = /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me|delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
+// batch 19 (found while investigating conv178's re-probe, h7): the action-verb group (delete,
+// remove, run, ...) is meant to catch an imperative directed at the assistant ("run the tests"),
+// but as a bare keyword match it just as readily matched a first-person declarative statement
+// using the same verb to describe the user's own routine behavior — found via live testing: "I
+// always run a backup script before touching the server." was silently dropped from the Facts
+// store entirely (not even session-scoped), because "run" tripped NON_CLAIM_MARKERS despite the
+// clause being a plain statement of fact, not a request. A subject pronoun ("I"/"we") within a
+// short word-gap directly before the verb is the same declarative-not-imperative signal
+// risk-classifier.ts's nounContextLookbehind already uses for noun-vs-verb ambiguity — scoped to
+// just the action-verb group (not the please/can-you/modal-request phrases, which are unambiguous
+// requests regardless of any preceding subject).
+const NON_CLAIM_MARKERS =
+  /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me)\b|(?<!\b(?:i|we)\b(?:\s+\w+){0,4}\s)\b(delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
 
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole

@@ -131,6 +131,14 @@ describe('looksLikeEnumeratedItems', () => {
     expect(looksLikeEnumeratedItems("Remind me to call the bank, and there's a package coming today too.")).toBe(false)
   })
 
+  it('does not flag a single reminder followed by an unrelated thing-indefinite-pronoun-subject aside', () => {
+    // batch 19, h10: same gap as the person-indefinite-pronoun case above, for a
+    // thing-indefinite-pronoun ("something"/"anything"/"everything"/"nothing") subject.
+    expect(
+      looksLikeEnumeratedItems('Remind me to call the bank, and something came up with my car insurance too.'),
+    ).toBe(false)
+  })
+
   it('does not flag an ordinary fact+single-reminder message', () => {
     expect(looksLikeEnumeratedItems("I'm vegan, and remind me to buy oat milk on the way home tonight.")).toBe(false)
   })

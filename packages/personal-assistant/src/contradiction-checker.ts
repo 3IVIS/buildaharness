@@ -38,8 +38,12 @@ export interface BeliefCandidate {
 // singular-form statement ("...my repo...", "...any branch...") that had been captured fine.
 // Widened just these two (not the rest of the still-untested list above) for the same reason the
 // package fix stayed narrow: confirm each one live rather than widening speculatively.
+// batch 19 (h7/h8, re-probing conv178/conv198): "server" and "commit" are two more of the named
+// sibling gaps, now live-tested — "servers" and "commits" reproduced the same silent-drop shape.
+// Widened just these two for the same reason as before: confirm each live rather than widening
+// the rest of the still-untested list speculatively.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|server|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch(?:es)?|commit|pipeline|ci\/cd|ci|environment|variable|packages?|library|repos?|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|library|repos?|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared

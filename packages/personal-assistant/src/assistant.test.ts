@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage } from '@buildaharness/runtime'
+import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage, MemoryAdapter } from '@buildaharness/runtime'
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
-import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState } from './assistant.js'
+import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState, type IndexedMessage } from './assistant.js'
 import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
@@ -2197,3 +2197,189 @@ describe('PersonalAssistant batch research — confirmation gate', () => {
     expect(searchCalls).toBe(38) // 2 probe searches + 12 dead-end items * 3 calls each
   })
 })
+
+// T2: per-message search index, written alongside the transcript — see
+// plans/personal_assistant_memory_transparency_search_plan.html.
+describe('PersonalAssistant message index (T2)', () => {
+  it('every appended transcript message also produces a searchable transcript-msg: entry', async () => {
+    const llm = new FakeLLMClient('Sure thing.')
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'msg-index-basic' })
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn('Remind me to call the dentist', { sessionId: 's1' })
+
+    const first = (await memory.get('transcript-msg:s1:0')) as IndexedMessage
+    const second = (await memory.get('transcript-msg:s1:1')) as IndexedMessage
+    expect(first).toMatchObject({ sessionId: 's1', role: 'user', content: 'Remind me to call the dentist' })
+    expect(second).toMatchObject({ sessionId: 's1', role: 'assistant', content: 'Sure thing.' })
+    expect(typeof first.at).toBe('string')
+    expect(new Date(first.at).toString()).not.toBe('Invalid Date')
+  })
+
+  it('a failed index write is caught and logged, and does not throw or alter the turn result', async () => {
+    const llm = new FakeLLMClient('Okay.')
+    const base = new InMemoryAdapter({ scope: 'thread', namespace: 'msg-index-fail' })
+    // Wraps the real adapter but fails only writes to the message index, standing in for e.g. a
+    // full disk or a browser storage quota error hit only on the extra index write.
+    const memory: MemoryAdapter = {
+      get: (key) => base.get(key),
+      set: (key, value, mode) => {
+        if (key.startsWith('transcript-msg:')) throw new Error('simulated index-write failure')
+        return base.set(key, value, mode)
+      },
+      search: (query, topK, minScore) => base.search(query, topK, minScore),
+      delete: (key) => base.delete(key),
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    const result = await assistant.turn('Hello there', { sessionId: 's2' })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Okay.')
+    const transcript = await assistant.getTranscript('s2')
+    expect(transcript).toHaveLength(2)
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('transcript-compaction.ts dropping older messages from the live transcript leaves their index entries intact', async () => {
+    const llm = new FakeLLMClient('Ack.')
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'msg-index-compaction' })
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 's3'
+
+    // 25 turns * 2 messages/turn = 50 messages, well past compactTranscript's 40-message
+    // threshold, so compaction fires partway through.
+    for (let i = 0; i < 25; i++) {
+      await assistant.turn(`message number ${i}`, { sessionId })
+    }
+
+    const transcriptAfter = await assistant.getTranscript(sessionId)
+    expect(transcriptAfter.length).toBeLessThan(50) // confirms compaction actually ran
+
+    // The very first message's index entry (written long before compaction ran) survives,
+    // even though message 0 itself is gone from the live (now-compacted) transcript array.
+    const firstEntry = (await memory.get('transcript-msg:s3:0')) as IndexedMessage
+    expect(firstEntry).toMatchObject({ sessionId, role: 'user', content: 'message number 0' })
+
+    // The very last message's index entry lands at index 49, not at whatever smaller index the
+    // post-compaction array's own length would suggest — proves indices come from a persisted
+    // per-session counter, not transcript.length, so compaction can never collide a new message's
+    // index with an older, still-live one.
+    const lastEntry = (await memory.get('transcript-msg:s3:49')) as IndexedMessage
+    expect(lastEntry).toMatchObject({ sessionId, role: 'assistant', content: 'Ack.' })
+  })
+})
+
+describe('PersonalAssistant message index backfill (T2)', () => {
+  it('backfillMessageIndex populates entries for a pre-existing transcript and is a no-op on a second run', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'msg-index-backfill' })
+    // Pre-existing history written before the message index existed — bypasses
+    // appendTranscriptMessage/PersonalAssistant entirely, the same shape an install upgrading
+    // from before this feature shipped would already have on disk.
+    await memory.set('transcript:s4', { role: 'user', content: 'first message' } satisfies ChatMessage, 'append')
+    await memory.set('transcript:s4', { role: 'assistant', content: 'first reply' } satisfies ChatMessage, 'append')
+
+    // Constructing a PersonalAssistant fires backfillMessageIndex() in the background (see the
+    // constructor) — it is deliberately not awaited, so poll for it to land instead of assuming
+    // it's done synchronously.
+    new PersonalAssistant({ llmClient: new FakeLLMClient(), memory })
+    await vi.waitFor(async () => {
+      expect(await memory.get('transcript-msg:s4:1')).toBeDefined()
+    })
+
+    const first = (await memory.get('transcript-msg:s4:0')) as IndexedMessage
+    const second = (await memory.get('transcript-msg:s4:1')) as IndexedMessage
+    expect(first).toMatchObject({ sessionId: 's4', role: 'user', content: 'first message' })
+    expect(second).toMatchObject({ sessionId: 's4', role: 'assistant', content: 'first reply' })
+
+    // A second run (e.g. relaunching the app against the same store) is a no-op: the version
+    // marker set by the first run short-circuits the scan, so nothing gets re-indexed or
+    // overwritten.
+    await memory.set('transcript-msg:s4:0', { sessionId: 's4', role: 'user', content: 'TAMPERED', at: 'x' })
+    new PersonalAssistant({ llmClient: new FakeLLMClient(), memory })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(await memory.get('transcript-msg:s4:0')).toMatchObject({ content: 'TAMPERED' })
+  })
+
+  it('backfill runs without blocking the first turn', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'msg-index-backfill-nonblocking' })
+    for (let i = 0; i < 300; i++) {
+      await memory.set(`transcript:session-${i}`, { role: 'user', content: `hi ${i}` } satisfies ChatMessage, 'append')
+    }
+    const llm = new FakeLLMClient('Quick reply.')
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    // turn() never awaits backfillMessageIndex() (constructor fires it with `void`, uninspected by
+    // turn()), so a large pre-existing history must not stop this from resolving.
+    const result = await assistant.turn('Are you there?', { sessionId: 'live' })
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Quick reply.')
+  })
+})
+
+// T3: /search <query> over the message index — see
+// plans/personal_assistant_memory_transparency_search_plan.html.
+describe('PersonalAssistant.searchTranscript (T3)', () => {
+  it('a query matching one specific past message returns that message, not the whole session', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-basic' })
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('noted'), memory })
+
+    await assistant.turn('Remind me about my dentist appointment next week', { sessionId: 's1' })
+    await assistant.turn('What is the weather like today', { sessionId: 's1' })
+
+    const hits = await assistant.searchTranscript('dentist appointment')
+    expect(hits.length).toBeGreaterThan(0)
+    expect(hits[0].content).toContain('dentist appointment')
+    expect(hits[0].sessionId).toBe('s1')
+    // Not the whole session array — one message per hit.
+    expect(typeof hits[0].content).toBe('string')
+    expect(hits.every((h) => !hits.some((other) => other !== h && other.content === h.content && other.at === h.at))).toBe(true)
+  })
+
+  it('a query matching nothing returns an empty array, not an error', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-empty' })
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('noted'), memory })
+
+    await assistant.turn('Let us talk about gardening', { sessionId: 's1' })
+
+    const hits = await assistant.searchTranscript('quantum thermodynamics')
+    expect(hits).toEqual([])
+  })
+
+  it('ranks a message containing more matching terms above one containing fewer', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-ranking' })
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+
+    await assistant.turn('I have a dentist appointment', { sessionId: 's1' })
+    await assistant.turn('I have an appointment', { sessionId: 's1' })
+
+    const hits = await assistant.searchTranscript('dentist appointment')
+    const dentistHit = hits.find((h) => h.content === 'I have a dentist appointment')
+    const plainHit = hits.find((h) => h.content === 'I have an appointment')
+    expect(dentistHit).toBeDefined()
+    expect(plainHit).toBeDefined()
+    expect(dentistHit!.score).toBeGreaterThan(plainHit!.score)
+    expect(hits.indexOf(dentistHit!)).toBeLessThan(hits.indexOf(plainHit!))
+  })
+
+  it('finds a message across sessions, not just the current one', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-cross-session' })
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+
+    await assistant.turn('Feed the cat at 6pm', { sessionId: 'old-session' })
+
+    const hits = await assistant.searchTranscript('feed the cat')
+    expect(hits.some((h) => h.sessionId === 'old-session' && h.content === 'Feed the cat at 6pm')).toBe(true)
+  })
+
+  it('a blank query returns an empty array without touching memory.search', async () => {
+    const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-blank' })
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+    await assistant.turn('hello', { sessionId: 's1' })
+
+    expect(await assistant.searchTranscript('   ')).toEqual([])
+  })
+})
+

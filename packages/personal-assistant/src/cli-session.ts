@@ -1,7 +1,8 @@
 import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
-import type { MemorySummary } from './assistant.js'
+import type { MemorySummary, TranscriptSearchHit } from './assistant.js'
+import type { UndoLogEntry } from './action-snapshot.js'
 
 /**
  * Pure formatting/logic backing cli.ts's session-level commands (/help, /status, /export,
@@ -21,8 +22,10 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/clear (/new)', description: 'Start a fresh conversation' },
   { command: '/status', description: 'Show current model, backend, workspace, and enabled capabilities' },
   { command: '/export [file]', description: "Save this session's transcript to a markdown file" },
-  { command: '/undo', description: 'Remove the last exchange from conversation history' },
+  { command: '/undo', description: 'Remove the last exchange from conversation history — never reverses a real write_file/run_shell_command effect (see /undo-action)' },
+  { command: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval' },
   { command: '/memory', description: 'Show learned facts, reminders, and experience-store counts' },
+  { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
   { command: '/model [name]', description: 'Show or switch the active model' },
   { command: '/cost', description: 'Show token usage for the last turn and this session' },
   { command: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health' },
@@ -44,6 +47,8 @@ export interface StatusInfo {
   overriddenKeys: ReadonlySet<keyof AssistantConfig>
   transcriptLength: number
   planActive: boolean
+  /** Real filesystem effects still on record as revertible (see action-snapshot.ts) — omitted entirely when no workspace is configured (fileTools/shellTools both absent), same "don't imply a capability that isn't there" rule the banner's capability list already follows. */
+  undoLogEntries?: UndoLogEntry[]
 }
 
 /** Reuses formatConfigListing for the config half rather than re-formatting the same fields a second way. */
@@ -54,6 +59,13 @@ export function formatStatus(info: StatusInfo): string {
     `  ${'transcript'.padEnd(14)} ${info.transcriptLength} message${info.transcriptLength === 1 ? '' : 's'} this session`,
     `  ${'active plan'.padEnd(14)} ${info.planActive ? 'yes (see /plan)' : 'none'}`,
   ]
+  if (info.undoLogEntries !== undefined) {
+    const total = info.undoLogEntries.length
+    const undoable = info.undoLogEntries.filter((e) => e.undoable).length
+    lines.push(
+      `  ${'undo-log'.padEnd(14)} ${total} entr${total === 1 ? 'y' : 'ies'} (${undoable} revertible) — see /undo-action`,
+    )
+  }
   return lines.join('\n')
 }
 
@@ -76,6 +88,44 @@ export function formatMemorySummary(summary: MemorySummary): string {
   sections.push(`  ${summary.experience.recoverySequenceCount} recovery sequence(s)`)
 
   return sections.join('\n')
+}
+
+/** Truncates `content` to a snippet around the first matching term when possible, else the leading `maxLen` chars — full messages can be long, and a search result list is meant to be scannable, not a second transcript view. */
+function snippet(content: string, query: string, maxLen = 160): string {
+  const normalized = content.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLen) return normalized
+  const firstTerm = query.split(/\s+/).find((t) => t.length > 0)
+  const matchAt = firstTerm ? normalized.toLowerCase().indexOf(firstTerm.toLowerCase()) : -1
+  if (matchAt === -1) return `${normalized.slice(0, maxLen)}…`
+  const start = Math.max(0, matchAt - maxLen / 2)
+  const end = Math.min(normalized.length, start + maxLen)
+  return `${start > 0 ? '…' : ''}${normalized.slice(start, end)}${end < normalized.length ? '…' : ''}`
+}
+
+/** Renders `/search <query>`'s results — each hit is one message (session id short form, timestamp, role, snippet), ranked by relevance, never the whole session it came from. An empty list is an explicit "no results" line, never a silent blank output. */
+export function formatSearchResults(hits: TranscriptSearchHit[], query: string): string {
+  if (hits.length === 0) return `No results for "${query}".`
+  return hits
+    .map((h) => {
+      const shortSession = h.sessionId.length > 8 ? `${h.sessionId.slice(0, 8)}…` : h.sessionId
+      return `  [${shortSession}] ${h.at}  ${h.role.padEnd(9)} ${snippet(h.content, query)}`
+    })
+    .join('\n')
+}
+
+function undoLogEntryLabel(entry: UndoLogEntry): string {
+  return entry.kind === 'write' ? `write "${entry.path}"` : `shell \`${entry.command}\``
+}
+
+/** Renders /undo-action's no-argument listing — newest first (see action-snapshot.ts's listUndoLogEntries), with each entry's undoable status so the user doesn't have to stage a revert just to find out it's unavailable. */
+export function formatUndoLogListing(entries: UndoLogEntry[]): string {
+  if (entries.length === 0) return 'No undo-log entries yet — nothing to revert.'
+  return entries
+    .map((e) => {
+      const status = e.undoable ? 'undoable' : `NOT undoable — ${e.reason}`
+      return `  ${e.id}  ${undoLogEntryLabel(e)}  (${e.appliedAt})  [${status}]`
+    })
+    .join('\n')
 }
 
 /** Renders a transcript as markdown for /export — "You:"/"Assistant:" turns, oldest first. */
