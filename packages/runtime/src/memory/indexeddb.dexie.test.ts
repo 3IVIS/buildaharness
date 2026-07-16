@@ -35,6 +35,25 @@ describe('IndexedDBAdapter (real IndexedDB via fake-indexeddb)', () => {
     expect(docA?.score).toBe(1.0)
   })
 
+  it('search returns a graduated, correctly-ranked result for a multi-term non-exact-substring query', async () => {
+    const adapter = new IndexedDBAdapter({ namespace: 'dexie-search-graduated' })
+    await adapter.set('reordered', 'appointment for the dentist')
+    await adapter.set('partial', 'dentist visit only')
+    await adapter.set('unrelated', 'completely different topic')
+
+    const results = await adapter.search('dentist appointment', 5, 0.0)
+
+    const reordered = results.find(r => r.key === 'reordered')
+    const partial = results.find(r => r.key === 'partial')
+    expect(reordered).toBeDefined()
+    expect(partial).toBeDefined()
+    // words present but not as the literal query substring → graduated score below 1.0
+    expect(reordered?.score).toBeGreaterThan(0)
+    expect(reordered?.score).toBeLessThan(1.0)
+    // more matching terms ranks above fewer
+    expect(reordered!.score).toBeGreaterThan(partial!.score)
+  })
+
   it('delete removes a key', async () => {
     const adapter = new IndexedDBAdapter({ namespace: 'dexie-delete' })
     await adapter.set('toDelete', 'value')
