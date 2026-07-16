@@ -920,6 +920,51 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 
+  // T5: the claude-cli backend's MCP server never applies an action itself — it only stages one
+  // (see file-tools-mcp-server.mjs's own doc comment) and signals it back via the synthetic
+  // '__staged_action' tool call (assistant.ts:1601), which this test drives directly instead of
+  // spawning a real `claude` subprocess. Approval from there on runs through the exact same
+  // resolvePendingAction -> applyPendingAction path a proxy-backend write_file call uses, so T1's
+  // snapshot-on-apply logic already covers this backend with no additional "mirrored" code —
+  // verified here rather than assumed, per T5's own step 2 test.
+  it('an action pre-staged the way the claude-cli MCP server stages one, then adopted via __staged_action, produces the same undo-log entry a proxy-backend write would (T5)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/summary.md`, 'original content')
+    const { id: preStagedId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'summary.md', content: 'from claude-cli backend' })
+
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: '__staged_action', input: { id: preStagedId, kind: 'write', path: 'summary.md', content: 'from claude-cli backend' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    expect(staged.status).toBe('needs_approval')
+    expect(staged.pendingActionKind).toBe('write')
+    // The id assistant.ts surfaces for approval must be the one the "MCP server" already staged,
+    // not a freshly minted one — otherwise a second, redundant PendingActionRecord would exist.
+    expect(staged.pendingActionId).toBe(preStagedId)
+
+    const applied = await assistant.turn('Write a summary to summary.md', { approved: true, pendingActionId: preStagedId })
+    expect(applied.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('from claude-cli backend')
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries).toHaveLength(1)
+    const entry = entries[0]
+    expect(entry.kind).toBe('write')
+    if (entry.kind !== 'write' || !entry.undoable) throw new Error('expected an undoable write entry')
+    expect(entry.path).toBe('summary.md')
+    expect(entry.previousContent).toBe('original content')
+
+    // /undo-action works the same regardless of which backend originally applied the action.
+    const revertStage = await assistant.stageUndoAction(entry.id)
+    expect(revertStage.status).toBe('staged')
+    if (revertStage.status !== 'staged') throw new Error('expected stageUndoAction to succeed')
+    const reverted = await assistant.turn('irrelevant', { approved: true, pendingActionId: revertStage.pendingActionId })
+    expect(reverted.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('original content')
+  })
+
   it('without fileTools configured, behavior is unchanged — no tool loop is entered', async () => {
     const llm = new FakeLLMClient('Plain reply, no tools involved.')
     const assistant = new PersonalAssistant({ llmClient: llm })

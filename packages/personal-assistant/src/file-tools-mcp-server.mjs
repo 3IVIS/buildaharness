@@ -48,6 +48,18 @@
  * stop — there is no "safe subset" that skips staging (see the web+shell-tools plan's
  * Diagnosis tab).
  *
+ * Undo/snapshot coverage (the real-undo plan's T1/T2) needs NO mirrored logic in this file,
+ * unlike the sandboxing/trust-tagging/shell-cache-read logic above: this server only ever
+ * stages an action (writes the record above and returns), it never applies one. The actual
+ * apply — and therefore T1/T2's snapshotBeforeWrite/snapshotWorkspaceTree calls — happens
+ * exactly once, in file-tools.ts's applyPendingAction, called from assistant.ts's
+ * resolvePendingAction regardless of which backend staged the record (see that function's own
+ * comment on the shell-cache write). So an action a claude-cli/MCP-server call stages already
+ * gets identical undo-log coverage to one the proxy backend staged directly, with no
+ * backend-specific code needed here — verified in assistant.test.ts ("an action pre-staged
+ * the way the claude-cli MCP server stages one... produces the same undo-log entry a
+ * proxy-backend write would (T5)").
+ *
  * REMINDERS_FILE, when set, must point at the exact file a `FileSystemAdapter`
  * (namespace "reminders") would use for the key "reminders" — i.e.
  * `<baseDir>/reminders/reminders.json` — so this subprocess and the parent
