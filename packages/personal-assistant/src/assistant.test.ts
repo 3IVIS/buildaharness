@@ -965,6 +965,37 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('original content')
   })
 
+  // T7: a revert is exactly as consequential as the action it undoes, so it must go through the
+  // same explicit approval step — declining one must leave the workspace untouched and the
+  // undo-log entry available for a later attempt, same as declining any other staged action.
+  it('declining a staged revert leaves the workspace unchanged and the undo-log entry intact for a later attempt (T7)', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'final content' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    await assistant.turn('Write a summary to summary.md', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('final content')
+
+    const [entry] = await listUndoLogEntries(backend, ROOT)
+    const revertStage = await assistant.stageUndoAction(entry.id)
+    expect(revertStage.status).toBe('staged')
+    if (revertStage.status !== 'staged') throw new Error('expected stageUndoAction to succeed')
+
+    // Staging never applies by itself — the workspace must be untouched before approval.
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('final content')
+
+    const declined = await assistant.turn('irrelevant', { approved: false, pendingActionId: revertStage.pendingActionId })
+    expect(declined.status).toBe('ok')
+
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('final content')
+    const entriesAfterDecline = await listUndoLogEntries(backend, ROOT)
+    expect(entriesAfterDecline).toHaveLength(1)
+    expect(entriesAfterDecline[0].id).toBe(entry.id)
+  })
+
   it('without fileTools configured, behavior is unchanged — no tool loop is entered', async () => {
     const llm = new FakeLLMClient('Plain reply, no tools involved.')
     const assistant = new PersonalAssistant({ llmClient: llm })
