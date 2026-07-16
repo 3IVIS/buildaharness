@@ -12,6 +12,7 @@ import {
   findCachedShellResult,
   type FileToolsContext,
 } from './file-tools.js'
+import { listUndoLogEntries } from './action-snapshot.js'
 
 const ROOT = '/workspace'
 
@@ -227,5 +228,43 @@ describe('pending-action staging', () => {
 
     expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
     expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBeUndefined()
+  })
+
+  it('applyPendingAction records an undo-log entry capturing the exact prior content of an overwritten file', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'draft one')
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'draft two' })
+
+    await applyPendingAction(backend, ROOT, id)
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      appliedActionId: id,
+      kind: 'write',
+      path: 'notes/summary.md',
+      previousContent: 'draft one',
+      undoable: true,
+    })
+  })
+
+  it('applyPendingAction records previousContent: null in the undo-log entry for a write to a previously-nonexistent path', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'brand-new.md', content: 'hello' })
+
+    await applyPendingAction(backend, ROOT, id)
+
+    const entries = await listUndoLogEntries(backend, ROOT)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ kind: 'write', path: 'brand-new.md', previousContent: null, undoable: true })
+  })
+
+  it('discardPendingAction never produces an undo-log entry — only an actually-applied action does', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'never applied' })
+
+    await discardPendingAction(backend, ROOT, id)
+
+    expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 import type { FsBackend, ToolDefinition } from '@buildaharness/runtime'
+import { snapshotBeforeWrite, recordUndoLogEntry, type UndoLogEntry } from './action-snapshot.js'
 
 /**
  * Thrown by resolveInWorkspace/assertRealPathInWorkspace instead of returning
@@ -242,6 +243,20 @@ export async function applyPendingAction(
     // staging and approval, but don't trust that; re-validate before writing.
     const resolved = resolveInWorkspace(workspaceRoot, record.path)
     await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+
+    // Capture what's there now, before it's gone — the only chance to ever undo this write.
+    const snapshot = await snapshotBeforeWrite(backend, workspaceRoot, resolved)
+    const undoEntryBase = {
+      id: crypto.randomUUID(),
+      appliedActionId: id,
+      kind: 'write' as const,
+      path: record.path,
+      appliedAt: new Date().toISOString(),
+    }
+    const undoEntry: UndoLogEntry = snapshot.undoable
+      ? { ...undoEntryBase, undoable: true, previousContent: snapshot.previousContent }
+      : { ...undoEntryBase, undoable: false, reason: snapshot.reason }
+    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
 
     await backend.writeTextFile(resolved, record.content)
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
