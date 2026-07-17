@@ -168,6 +168,19 @@ describe('extractFactsFromTurn', () => {
     expect(facts[0].durable).toBe(true)
   })
 
+  it('captures a job-correction statement with a modifier word between "i\'m" and "a"', () => {
+    // batch 20 (h2, re-probing conv354): FACT_MARKERS' "i'm a"/"i am a" branches required strict
+    // literal adjacency — "I'm actually a product manager now" has "actually" between "i'm" and
+    // "a", so the substring "i'm a" never appears and the correction was silently dropped from
+    // the facts store entirely (the harness still answered correctly in-conversation from raw
+    // transcript context, but /memory kept showing the stale original job).
+    const facts = extractFactsFromTurn(
+      "Oh wait, I'm actually a product manager at a totally different company now, I switched roles last month.",
+      'turn:28',
+    )
+    expect(facts).toHaveLength(1)
+  })
+
   it('captures a health/dietary fact joined to a request clause by "yet"', () => {
     // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
     // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in

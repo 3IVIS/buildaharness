@@ -48,6 +48,16 @@ describe('looksLikeCodingFact', () => {
     // dropped before the belief graph ever saw it.
     expect(looksLikeCodingFact('I never bother squashing or rebasing branches anymore, it\'s not worth the hassle.')).toBe(true)
   })
+
+  it('flags the plural "libraries" the same way it already flags singular "library"', () => {
+    // batch 20 (h1, re-probing conv178/conv198): same singular-only \b...\b gap as
+    // "package"/"packages", confirmed live for "library" — "...pinning versions for
+    // libraries..." never looksLikeCodingFact, so the contradicting statement ("I never bother
+    // pinning versions for libraries, floating latest is fine these days.") was dropped before
+    // the belief graph ever saw it, leaving an earlier "I always pin exact versions for any
+    // library I use in production." unchallenged.
+    expect(looksLikeCodingFact('I never bother pinning versions for libraries, floating latest is fine these days.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

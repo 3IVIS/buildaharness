@@ -35,8 +35,17 @@ export interface UserFact {
 // is"/"call me" but weren't recognized by either FACT_MARKERS or DURABLE_NAME_OR_PREFERENCE_MARKERS
 // below — found via live testing: the name was never captured as a fact at all, so it was gone
 // after /new (and unavailable even within the same session).
+// batch 20 (h2, re-probing conv354): "i work (at|as|for)"/"i am a"/"i'm a" required strict literal
+// adjacency to the pronoun-copula, with no modifier word allowed in between — a job-correction
+// like "I'm actually a product manager now" never matches "i'm a" as a substring, so the
+// correction is silently dropped from the facts store entirely (the harness still answers
+// correctly in-conversation from raw transcript context, but /memory keeps showing the stale
+// original job). Widened to the same 0-4-word modifier gap HEALTH_OR_DIETARY_MARKERS already
+// uses below, for the same reason: a descriptive/temporal modifier needs headroom between the
+// pronoun-copula and the marker word. Confirmed live for "actually" (conv354 originally found
+// "now"); both are ordinary modifier words within the same gap, not special-cased individually.
 export const FACT_MARKERS =
-  /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
+  /\b(my name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement

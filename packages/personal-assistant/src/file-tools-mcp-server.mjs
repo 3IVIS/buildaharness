@@ -286,8 +286,11 @@ export async function fetchUrlSafely(url) {
 // Mirrors fact-extraction.ts's FACT_MARKERS and HEALTH_OR_DIETARY_MARKERS byte-for-byte — kept in
 // sync by hand since this file is a standalone script copied verbatim to dist, not bundled
 // through the TS build.
+// batch 20 (h2, re-probing conv354): "i work (at|as|for)"/"i am a"/"i'm a" widened to the same
+// 0-4-word modifier gap HEALTH_OR_DIETARY_MARKERS already used, kept in sync with
+// fact-extraction.ts's own fix.
 const FACT_MARKERS =
-  /\b(my name is|i live in|i work (at|as|for)|i am a|i'm a|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
+  /\b(my name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
 // h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
 // HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
 // copied verbatim to dist, not bundled, so it can't import that module directly).
