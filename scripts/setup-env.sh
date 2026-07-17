@@ -103,6 +103,22 @@ fi
 git config core.hooksPath .githooks
 success "Configured git to use .githooks/ (blocks committing .private.git/, test_convs/)"
 
+# If a private overlay (.private.git) is present locally, it tracks a source
+# file naming every individually-private path (.git-private-excludes-source —
+# never committed to THIS repo, see .gitignore's own comment on
+# .git-private-excludes for why). Provision a local-only copy outside the
+# working tree and point this repo's core.excludesFile at it, so those paths
+# are excluded from `git status`/`git add` here too, without their names ever
+# living inside a file this repo could commit. Deliberately generic: this
+# script doesn't know or care what's in that file, only whether it exists.
+if [[ -f .git-private-excludes-source ]]; then
+  private_excludes_dir="${XDG_CONFIG_HOME:-$HOME/.config}/buildaharness"
+  mkdir -p "$private_excludes_dir"
+  cp .git-private-excludes-source "$private_excludes_dir/git-private-excludes"
+  git config core.excludesFile "$private_excludes_dir/git-private-excludes"
+  success "Configured core.excludesFile from the private overlay's path list ($private_excludes_dir/git-private-excludes)"
+fi
+
 # ── Step 1: Secrets ────────────────────────────────────────────────────────────
 header "Step 1 — Secrets"
 
