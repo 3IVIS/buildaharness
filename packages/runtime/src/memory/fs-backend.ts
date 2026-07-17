@@ -23,4 +23,12 @@ export interface FsBackend {
    * node:fs/promises.realpath's behavior.
    */
   realpath?(path: string): Promise<string>
+  /**
+   * Optional — only backends that need a recursive directory walk (e.g.
+   * personal-assistant's workspace-wide undo snapshot) have to implement it,
+   * the same way `realpath` already is. Resolves `undefined` if `path`
+   * doesn't exist, matching `readTextFile`'s "missing means undefined, not a
+   * throw" convention rather than `realpath`'s "throw" one.
+   */
+  stat?(path: string): Promise<{ isDirectory: boolean; size: number } | undefined>
 }

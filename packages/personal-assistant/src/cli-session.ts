@@ -1,7 +1,7 @@
 import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
-import type { MemorySummary, TranscriptSearchHit } from './assistant.js'
+import type { MemorySummary, MemoryExport, TranscriptSearchHit } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 
 /**
@@ -24,7 +24,8 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/export [file]', description: "Save this session's transcript to a markdown file" },
   { command: '/undo', description: 'Remove the last exchange from conversation history — never reverses a real write_file/run_shell_command effect (see /undo-action)' },
   { command: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval' },
-  { command: '/memory', description: 'Show learned facts, reminders, and experience-store counts' },
+  { command: '/memory', description: 'Show learned facts, reminders, and experience-store content' },
+  { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders) to a JSON file' },
   { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
   { command: '/model [name]', description: 'Show or switch the active model' },
   { command: '/cost', description: 'Show token usage for the last turn and this session' },
@@ -82,12 +83,38 @@ export function formatMemorySummary(summary: MemorySummary): string {
       : '  None yet',
   )
 
-  sections.push('\nLearned from experience:')
-  sections.push(`  ${summary.experience.strategyWeightCount} strategy weight(s)`)
-  sections.push(`  ${summary.experience.decompositionCount} learned decomposition(s)`)
-  sections.push(`  ${summary.experience.recoverySequenceCount} recovery sequence(s)`)
+  const strategyWeightEntries = Object.entries(summary.experience.strategyWeights)
+  sections.push('\nStrategy weights:')
+  sections.push(
+    strategyWeightEntries.length > 0
+      ? strategyWeightEntries.map(([key, weight]) => `  - ${key}: ${weight.toFixed(3)}`).join('\n')
+      : '  None yet',
+  )
+
+  sections.push('\nLearned decompositions (most recent, up to 20):')
+  sections.push(
+    summary.experience.decompositions.length > 0
+      ? summary.experience.decompositions
+          .map((d) => `  - ${d.task_type}: ${d.decomposition.join(' → ')} (${(d.success_rate * 100).toFixed(0)}% success)`)
+          .join('\n')
+      : '  None yet',
+  )
+
+  sections.push('\nRecovery sequences (most recent, up to 20):')
+  sections.push(
+    summary.experience.recoverySequences.length > 0
+      ? summary.experience.recoverySequences
+          .map((r) => `  - ${r.failure_class}: ${r.strategy_sequence.join(' → ')} (${(r.success_rate * 100).toFixed(0)}% success)`)
+          .join('\n')
+      : '  None yet',
+  )
 
   return sections.join('\n')
+}
+
+/** Renders `/memory export`'s full, unbounded contents as pretty-printed JSON — a plain formatting function so it's unit-testable the same way as every other cli-session.ts formatter; cli.ts does the actual file write. */
+export function formatMemoryExport(data: MemoryExport): string {
+  return JSON.stringify(data, null, 2)
 }
 
 /** Truncates `content` to a snippet around the first matching term when possible, else the leading `maxLen` chars — full messages can be long, and a search result list is meant to be scannable, not a second transcript view. */
@@ -139,6 +166,11 @@ export function formatTranscriptMarkdown(transcript: ChatMessage[]): string {
 /** Default /export filename when none is given — mirrors Claude Code's own /export default-name convention. Colons/dots are filesystem-unsafe on some platforms, so the ISO timestamp is sanitized. */
 export function defaultExportFilename(now: Date = new Date()): string {
   return `assistant-transcript-${now.toISOString().replace(/[:.]/g, '-')}.md`
+}
+
+/** Default /memory export filename when none is given — same sanitized-ISO-timestamp convention as defaultExportFilename, JSON instead of markdown. */
+export function defaultMemoryExportFilename(now: Date = new Date()): string {
+  return `assistant-memory-${now.toISOString().replace(/[:.]/g, '-')}.json`
 }
 
 export interface CostSummaryInfo {

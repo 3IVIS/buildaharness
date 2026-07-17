@@ -21,7 +21,28 @@ Three things live *outside* a single harness run, deliberately:
   scratch state for that turn only, the same way they are for any harness run.
   The transcript is kept in a `MemoryAdapter` (in-memory by default; swap in
   `IndexedDBAdapter` from `@buildaharness/runtime` for browser persistence) and
-  fed to the LLM call directly.
+  fed to the LLM call directly. Alongside every message appended to
+  `transcript:<sessionId>`, `PersonalAssistant` also writes a parallel,
+  individually-addressable `transcript-msg:<sessionId>:<n>` entry (an
+  `IndexedMessage` — see `assistant.ts`) so a search can resolve a hit to the
+  one exchange that matched instead of the whole session array. This index is
+  derived, not authoritative: `transcript:<sessionId>` remains the one source
+  of truth for replay/compaction/export, and index entries are never deleted
+  by `transcript-compaction.ts`, so a search can still find something that's
+  since aged out of the live (compacted) transcript window. On first
+  construction, `PersonalAssistant` also runs a one-off, idempotent
+  `backfillMessageIndex()` in the background (not awaited, so it never delays
+  the first turn) to index any transcript history that predates this feature.
+  `FileSystemAdapter.search()`, `IndexedDBAdapter.search()`, and
+  `InMemoryAdapter.search()` all funnel through the same tokenized, graduated
+  relevance scorer (`scoring.ts`'s `scoreEntries()`) and are a linear scan over
+  every stored entry, not an inverted index — fine at the message volumes a
+  single personal-use install accumulates over weeks/months, but expect it to
+  get noticeably slower after tens of thousands of messages. The `/search`
+  command (see the command table below) is the user-facing entry point:
+  `PersonalAssistant.searchTranscript()` scores every stored entry, keeps only
+  `transcript-msg:` hits, and returns them ranked, so a real match is never
+  pushed out by an unrelated non-transcript entry scoring higher.
 - **Risk classification** — `risk-classifier.ts` is a cheap keyword heuristic
   that flags consequential requests (send/delete/pay/post/...) *before* the
   harness — and before the one real network call — ever runs. A `HIGH` risk
@@ -588,7 +609,9 @@ change local session/config state — none of them make an LLM call themselves.
 | `/status` | Show the resolved config (model, backend, workspace, enabled capabilities — same as the startup banner) plus this session's transcript length and whether a plan is active |
 | `/export [file]` | Save this session's transcript to a markdown file (default: `assistant-transcript-<timestamp>.md` in the current directory) |
 | `/undo` | Remove the last exchange from conversation history — a completed turn drops both the user message and the reply; a turn still awaiting approval drops just the pending message. Only affects what the model remembers: a real `write_file`/`run_shell_command` effect from that turn is **not** reversed |
-| `/memory` | Show facts learned about you, reminders created so far, and summary counts from the learning-layer `ExperienceStore` |
+| `/memory` | Show facts learned about you, reminders created so far, and the learning-layer `ExperienceStore`'s real content — every strategy weight, plus the 20 most recently learned decompositions/recovery sequences (newest first), not just counts |
+| `/memory export [file]` | Write the full, unbounded `ExperienceStore` contents (every strategy weight/decomposition/recovery sequence, not the 20-entry preview `/memory` prints) plus facts/reminders to a JSON file (default: `assistant-memory-<timestamp>.json`). Read-only: there's no matching import path, so exported data can't be hand-edited and loaded back in |
+| `/search <query>` | Ranked search over past messages, across every session in this install — a hit is the one message that matched, not the whole session transcript around it. Read-only: never an LLM call or network request. Scoring is tokenized/graduated, not exact-substring-only (see "Conversation history" above), and a query matching nothing returns an explicit "no results" line |
 | `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
 | `/cost` | Show token usage for the last turn and the running session total |
 | `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |

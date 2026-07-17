@@ -3,7 +3,7 @@ import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructure
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
-import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, type Task } from '@buildaharness/harness'
+import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, InMemoryExperienceStore, type Task } from '@buildaharness/harness'
 import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState, type IndexedMessage } from './assistant.js'
 import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import { listUndoLogEntries } from './action-snapshot.js'
@@ -679,10 +679,14 @@ describe('PersonalAssistant session management extras', () => {
     ])
   })
 
-  it('getMemorySummary reflects seeded facts, reminders, and experience-store counts', async () => {
+  it('getMemorySummary reflects seeded facts, reminders, and real experience-store content (T4)', async () => {
     const llm = new FakeLLMClient('Got it.')
     const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'memory-summary-reminders' }))
-    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+    const experienceStore = new InMemoryExperienceStore()
+    experienceStore.setStrategyWeight('decompose:timeout', 0.5)
+    experienceStore.addDecomposition({ task_type: 'research', decomposition: ['search', 'summarize'], success_rate: 0.9 })
+    experienceStore.addRecoverySequence({ failure_class: 'timeout', strategy_sequence: ['retry', 'escalate'], success_rate: 0.75 })
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore, experienceStore })
     const sessionId = 'memory-summary-test'
 
     await assistant.turn('My name is Ali.', { sessionId })
@@ -694,17 +698,63 @@ describe('PersonalAssistant session management extras', () => {
     expect(summary.facts[0].text).toBe('My name is Ali.')
     expect(summary.reminders).toHaveLength(1)
     expect(summary.reminders[0].rawText).toBe('Water the plants')
-    expect(summary.experience).toEqual({ strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 })
+    expect(summary.experience.strategyWeights).toEqual({ 'decompose:timeout': 0.5 })
+    expect(summary.experience.decompositions).toEqual([{ task_type: 'research', decomposition: ['search', 'summarize'], success_rate: 0.9 }])
+    expect(summary.experience.recoverySequences).toEqual([{ failure_class: 'timeout', strategy_sequence: ['retry', 'escalate'], success_rate: 0.75 }])
   })
 
-  it('getMemorySummary returns empty collections and zero counts when nothing has happened yet', async () => {
+  it('getMemorySummary returns empty collections when nothing has happened yet', async () => {
     const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
     const summary = await assistant.getMemorySummary('fresh-session')
     expect(summary).toEqual({
       facts: [],
       reminders: [],
-      experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
+      experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
     })
+  })
+
+  it('getMemorySummary caps decompositions/recovery sequences at the 20 most recent, newest first (T4)', async () => {
+    const experienceStore = new InMemoryExperienceStore()
+    for (let i = 0; i < 25; i++) {
+      experienceStore.addDecomposition({ task_type: `task-${i}`, decomposition: [`step-${i}`], success_rate: 0.5 })
+    }
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient(), experienceStore })
+
+    const summary = await assistant.getMemorySummary('cap-test')
+
+    expect(summary.experience.decompositions).toHaveLength(20)
+    expect(summary.experience.decompositions[0].task_type).toBe('task-24')
+    expect(summary.experience.decompositions[19].task_type).toBe('task-5')
+  })
+
+  it('exportMemory returns the full, unbounded ExperienceStore contents plus facts/reminders (T4)', async () => {
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'memory-export-reminders' }))
+    const experienceStore = new InMemoryExperienceStore()
+    for (let i = 0; i < 25; i++) {
+      experienceStore.addDecomposition({ task_type: `task-${i}`, decomposition: [`step-${i}`], success_rate: 0.5 })
+    }
+    experienceStore.setStrategyWeight('decompose:timeout', 0.5)
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('Got it.'), reminderStore, experienceStore })
+    const sessionId = 'export-test'
+
+    await assistant.turn('My name is Ali.', { sessionId })
+    await reminderStore.create('Water the plants', null)
+
+    const exported = await assistant.exportMemory(sessionId)
+
+    expect(exported.facts).toHaveLength(1)
+    expect(exported.reminders).toHaveLength(1)
+    expect(exported.experience.decompositions).toHaveLength(25)
+    expect(exported.experience.strategy_weights).toEqual({ 'decompose:timeout': 0.5 })
+    expect(() => new Date(exported.exportedAt).toISOString()).not.toThrow()
+  })
+
+  it('exportMemory does not require the T2/T3 message-search index to be populated (T4)', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const exported = await assistant.exportMemory('no-history-session')
+    expect(exported.facts).toEqual([])
+    expect(exported.reminders).toEqual([])
+    expect(exported.experience.decompositions).toEqual([])
   })
 
   it('setModel changes the model passed to the llmClient on the next turn, mid-session', async () => {

@@ -13,6 +13,10 @@ import {
   type LayerActivityEvent,
   type HarnessCheckpoint,
   type FailureModeEntry,
+  type StrategyWeightKey,
+  type DecompositionEntry,
+  type RecoverySequenceEntry,
+  type ExperienceStoreData,
 } from '@buildaharness/harness'
 import {
   InMemoryAdapter,
@@ -391,11 +395,32 @@ function buildBatchBudgetTrace(
   }
 }
 
-/** Read-only snapshot returned by `getMemorySummary()` — see that method's doc comment. */
+/**
+ * Read-only snapshot returned by `getMemorySummary()` — see that method's doc comment.
+ * `decompositions`/`recoverySequences` are capped at the 20 most recently learned entries
+ * (newest first) so `/memory` stays scannable after months of accumulated learning; `/memory
+ * export` (see `exportMemory()`) returns every category unbounded, since a file on disk doesn't
+ * have the same terminal-scrollback concern a REPL print does.
+ */
 export interface MemorySummary {
   facts: UserFact[]
   reminders: ReminderRecord[]
-  experience: { strategyWeightCount: number; decompositionCount: number; recoverySequenceCount: number }
+  experience: {
+    strategyWeights: Record<StrategyWeightKey, number>
+    decompositions: DecompositionEntry[]
+    recoverySequences: RecoverySequenceEntry[]
+  }
+}
+
+/** Bound on how many learned decompositions/recovery sequences `getMemorySummary()` includes — see MemorySummary's doc comment. */
+const MEMORY_SUMMARY_PREVIEW_LIMIT = 20
+
+/** Full, unbounded snapshot written by `/memory export` — every ExperienceStore category plus facts/reminders, as plain JSON. */
+export interface MemoryExport {
+  exportedAt: string
+  facts: UserFact[]
+  reminders: ReminderRecord[]
+  experience: ExperienceStoreData
 }
 
 /**
@@ -933,9 +958,10 @@ export class PersonalAssistant {
 
   /**
    * Read-only snapshot of what this session/assistant has learned: durable facts extracted
-   * from the user's own messages, reminders created so far, and summary counts (not the raw
-   * weights, which aren't meaningfully human-readable on their own) from the learning-layer
-   * `ExperienceStore`. Used by `/memory`.
+   * from the user's own messages, reminders created so far, and the real content (not just
+   * counts) of the learning-layer `ExperienceStore` — strategy weights in full, and the 20
+   * most recently learned decompositions/recovery sequences (see MEMORY_SUMMARY_PREVIEW_LIMIT).
+   * Use `exportMemory()` for the full, unbounded contents. Used by `/memory`.
    */
   async getMemorySummary(sessionId: string): Promise<MemorySummary> {
     const sessionFacts = ((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []
@@ -947,10 +973,27 @@ export class PersonalAssistant {
       facts,
       reminders,
       experience: {
-        strategyWeightCount: Object.keys(experienceData.strategy_weights).length,
-        decompositionCount: experienceData.decompositions.length,
-        recoverySequenceCount: experienceData.recovery_sequences.length,
+        strategyWeights: experienceData.strategy_weights,
+        decompositions: experienceData.decompositions.slice(-MEMORY_SUMMARY_PREVIEW_LIMIT).reverse(),
+        recoverySequences: experienceData.recovery_sequences.slice(-MEMORY_SUMMARY_PREVIEW_LIMIT).reverse(),
       },
+    }
+  }
+
+  /**
+   * Full, unbounded snapshot of everything learned so far — every ExperienceStore category
+   * (not just the 20-entry preview `getMemorySummary()` bounds for terminal display) plus
+   * facts/reminders, as plain JSON. Read-only: this adds no corresponding import path, so a
+   * user cannot hand-edit the result and load it back in (see the plan's Known limitations —
+   * that's a separate feature with its own trust questions). Used by `/memory export`.
+   */
+  async exportMemory(sessionId: string): Promise<MemoryExport> {
+    const summary = await this.getMemorySummary(sessionId)
+    return {
+      exportedAt: new Date().toISOString(),
+      facts: summary.facts,
+      reminders: summary.reminders,
+      experience: this.experienceStore.toJSON(),
     }
   }
 

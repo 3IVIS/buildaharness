@@ -29,7 +29,7 @@ import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing } from './cli-session.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode } from './non-interactive-mode.js'
@@ -485,6 +485,35 @@ async function main(): Promise<void> {
     console.log(`\n${formatMemorySummary(summary)}\n`)
   }
 
+  /**
+   * `/memory export [file]` — writes the full, unbounded learned-experience contents (every
+   * strategy weight/decomposition/recovery sequence, not just the 20-entry preview `/memory`
+   * prints) plus facts/reminders to a JSON file. Mirrors handleExport's shape: explicit
+   * argument overrides the default filename, resolved relative to process.cwd() if not
+   * absolute, a failed write is reported rather than thrown. Read-only over already-persisted
+   * data — never an LLM call or network request.
+   */
+  async function handleMemoryExport(args: string[]): Promise<void> {
+    const data = await assistant.exportMemory('cli')
+    const filename = resolvePath(process.cwd(), args[0] ?? defaultMemoryExportFilename())
+    try {
+      await writeFile(filename, formatMemoryExport(data), 'utf-8')
+      console.log(`\n✓ Exported learned memory to ${filename}\n`)
+    } catch (err) {
+      const { message } = classifyError(err)
+      console.log(`\n[error] ${message}\n`)
+    }
+  }
+
+  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport). */
+  async function handleMemory(args: string[]): Promise<void> {
+    if (args[0] === 'export') {
+      await handleMemoryExport(args.slice(1))
+      return
+    }
+    await printMemory()
+  }
+
   /** `/search <query>` — ranked search over past messages (see PersonalAssistant.searchTranscript), never an LLM call or network request. A query with no terms is treated the same as no results, not an error. */
   async function handleSearch(args: string[]): Promise<void> {
     const query = args.join(' ')
@@ -819,7 +848,7 @@ async function main(): Promise<void> {
     '/export': (args) => handleExport(args),
     '/undo': () => handleUndo(),
     '/undo-action': (args) => handleUndoAction(args),
-    '/memory': () => printMemory(),
+    '/memory': (args) => handleMemory(args),
     '/search': (args) => handleSearch(args),
     '/model': (args) => handleModel(args),
     '/cost': () => printCost(),

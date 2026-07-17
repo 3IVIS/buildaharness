@@ -1,4 +1,5 @@
 import type { MemoryAdapter, MemoryResult } from './adapter'
+import { scoreEntries } from './scoring'
 
 export interface InMemoryAdapterOptions {
   scope?: 'global' | 'thread' | 'resource'
@@ -46,26 +47,12 @@ export class InMemoryAdapter implements MemoryAdapter {
   }
 
   async search(query: string, topK = 5, minScore = 0.0): Promise<MemoryResult[]> {
-    const results: MemoryResult[] = []
-
+    const entries: [string, unknown][] = []
     for (const [prefixedKey, value] of this.store.entries()) {
       if (!prefixedKey.startsWith(this.prefix)) continue
-      const key = prefixedKey.slice(this.prefix.length)
-      let score = 0.0
-      try {
-        if (JSON.stringify(value).includes(query)) {
-          score = 1.0
-        }
-      } catch {
-        // non-serializable value — score stays 0
-      }
-      if (score >= minScore) {
-        results.push({ key, value, score })
-      }
+      entries.push([prefixedKey.slice(this.prefix.length), value])
     }
-
-    results.sort((a, b) => b.score - a.score)
-    return results.slice(0, topK)
+    return scoreEntries(entries, query, topK, minScore)
   }
 
   async delete(key: string): Promise<void> {

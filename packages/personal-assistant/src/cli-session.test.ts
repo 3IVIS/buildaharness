@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage } from '@buildaharness/runtime'
 import { DEFAULT_CONFIG } from './config.js'
-import { formatHelp, formatStatus, formatMemorySummary, formatSearchResults, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
-import type { MemorySummary, TranscriptSearchHit } from './assistant.js'
+import { formatHelp, formatStatus, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
+import type { MemorySummary, MemoryExport, TranscriptSearchHit } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 
 describe('formatHelp', () => {
@@ -13,11 +13,11 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 16 commands documented for this plan', () => {
+  it('includes all 18 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
-      '/search <query>', '/model [name]', '/cost', '/doctor', '/why', '/layers', '/sources', '/plan', '/config ...',
-      '/checkpoint [clear]',
+      '/memory export [file]', '/search <query>', '/model [name]', '/cost', '/doctor', '/why', '/layers',
+      '/sources', '/plan', '/config ...', '/checkpoint [clear]',
     ])
   })
 })
@@ -107,33 +107,80 @@ describe('formatStatus', () => {
 })
 
 describe('formatMemorySummary', () => {
-  it('renders "None yet" for empty facts and reminders', () => {
+  it('renders "None yet" for empty facts, reminders, and experience content', () => {
     const summary: MemorySummary = {
       facts: [],
       reminders: [],
-      experience: { strategyWeightCount: 0, decompositionCount: 0, recoverySequenceCount: 0 },
+      experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
     }
     const output = formatMemorySummary(summary)
     expect(output).toContain('None yet')
-    expect(output).toContain('0 strategy weight(s)')
   })
 
-  it('renders populated facts, reminders, and experience counts', () => {
+  it('renders real strategy-weight keys/values, not just a count', () => {
+    const summary: MemorySummary = {
+      facts: [],
+      reminders: [],
+      experience: { strategyWeights: { 'decompose:timeout': 0.825, 'retry:network_error': 0.4 }, decompositions: [], recoverySequences: [] },
+    }
+    const output = formatMemorySummary(summary)
+    expect(output).toContain('decompose:timeout: 0.825')
+    expect(output).toContain('retry:network_error: 0.400')
+  })
+
+  it('renders populated facts, reminders, decomposition, and recovery-sequence content', () => {
     const summary: MemorySummary = {
       facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test', durable: true }],
       reminders: [
         { id: '1', rawText: 'Call mom', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: false },
         { id: '2', rawText: 'Buy milk', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: true },
       ],
-      experience: { strategyWeightCount: 3, decompositionCount: 1, recoverySequenceCount: 2 },
+      experience: {
+        strategyWeights: { 'decompose:timeout': 0.5 },
+        decompositions: [{ task_type: 'research', decomposition: ['search', 'summarize'], success_rate: 0.9 }],
+        recoverySequences: [{ failure_class: 'timeout', strategy_sequence: ['retry', 'escalate'], success_rate: 0.75 }],
+      },
     }
     const output = formatMemorySummary(summary)
     expect(output).toContain('My name is Ali.')
     expect(output).toContain('Call mom')
     expect(output).toContain('Buy milk (done)')
-    expect(output).toContain('3 strategy weight(s)')
-    expect(output).toContain('1 learned decomposition(s)')
-    expect(output).toContain('2 recovery sequence(s)')
+    expect(output).toContain('research: search → summarize (90% success)')
+    expect(output).toContain('timeout: retry → escalate (75% success)')
+  })
+})
+
+describe('formatMemoryExport', () => {
+  it('produces valid JSON containing every learned-experience category plus facts/reminders', () => {
+    const data: MemoryExport = {
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test', durable: true }],
+      reminders: [{ id: '1', rawText: 'Call mom', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: false }],
+      experience: {
+        strategy_weights: { 'decompose:timeout': 0.5 },
+        class_priors: { timeout: 0.2 },
+        decompositions: [{ task_type: 'research', decomposition: ['search'], success_rate: 0.9 }],
+        tool_workflows: [{ tool_id: 'web_search', workflow_steps: ['query', 'fetch'], success_rate: 0.8 }],
+        verification_plans: [{ task_type: 'research', layers: ['consistency'], success_rate: 0.7 }],
+        recovery_sequences: [{ failure_class: 'timeout', strategy_sequence: ['retry'], success_rate: 0.6 }],
+      },
+    }
+    const output = formatMemoryExport(data)
+    const parsed = JSON.parse(output)
+    expect(parsed.facts).toHaveLength(1)
+    expect(parsed.reminders).toHaveLength(1)
+    expect(parsed.experience.strategy_weights).toEqual({ 'decompose:timeout': 0.5 })
+    expect(parsed.experience.decompositions).toHaveLength(1)
+    expect(parsed.experience.tool_workflows).toHaveLength(1)
+    expect(parsed.experience.verification_plans).toHaveLength(1)
+    expect(parsed.experience.recovery_sequences).toHaveLength(1)
+  })
+})
+
+describe('defaultMemoryExportFilename', () => {
+  it('produces a filesystem-safe .json filename from the given date', () => {
+    const name = defaultMemoryExportFilename(new Date('2026-01-01T12:34:56.000Z'))
+    expect(name).toBe('assistant-memory-2026-01-01T12-34-56-000Z.json')
   })
 })
 
