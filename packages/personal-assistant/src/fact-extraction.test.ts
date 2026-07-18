@@ -181,6 +181,23 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
   })
 
+  it('captures an ordinary pet-ownership/naming statement', () => {
+    // batch 21 (h2/convA, re-probing conv354): matched none of FACT_MARKERS, CODING_FACT_MARKERS,
+    // or HEALTH_OR_DIETARY_MARKERS — "Also, I have a golden retriever named Max." never appeared
+    // in /memory's Facts list at all.
+    const facts = extractFactsFromTurn('Also, I have a golden retriever named Max.', 'turn:29')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('Also, I have a golden retriever named Max.')
+    // Left non-durable (unlike "my name is"/"call me") — see fact-extraction.ts's doc comment.
+    expect(facts[0].durable).toBe(false)
+  })
+
+  it('captures a possessive naming statement ("my dog\'s name is ...")', () => {
+    const facts = extractFactsFromTurn("My dog's name is Biscuit, he's a 3 year old beagle.", 'turn:30')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(false)
+  })
+
   it('captures a health/dietary fact joined to a request clause by "yet"', () => {
     // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
     // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in

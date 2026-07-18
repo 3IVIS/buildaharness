@@ -44,8 +44,21 @@ export interface UserFact {
 // uses below, for the same reason: a descriptive/temporal modifier needs headroom between the
 // pronoun-copula and the marker word. Confirmed live for "actually" (conv354 originally found
 // "now"); both are ordinary modifier words within the same gap, not special-cased individually.
+// batch 21 (h2/convA, re-probing conv354): an ordinary pet-ownership/naming statement ("I have a
+// golden retriever named Max", "My dog's name is Biscuit") matched none of this list's
+// identity-statement phrasing, CODING_FACT_MARKERS, or HEALTH_OR_DIETARY_MARKERS — the same gap
+// contradiction-checker.ts's own doc comment already named ("nothing else here or in
+// fact-extraction.ts's other markers matches an ordinary pet-ownership statement") when explaining
+// why "Biscuit passed away" produced a confusing out-of-context fact entry with no record of what
+// it corrected. Found via live testing: "Also, I have a golden retriever named Max." never
+// appeared in /memory's Facts list at all. Two additions below: widening "my name is" to allow an
+// optional possessive noun in between ("my dog's name is") the same way other markers here already
+// allow a modifier gap, and a general "i have a/an ... named X" naming construction that doesn't
+// require the "name is" phrasing at all. Left non-durable (unlike "my name is"/"call me") since a
+// pet's name is closer in kind to the other non-durable session facts (job, location) than to the
+// user's own identity — narrower than the durable set until there's a stronger signal otherwise.
 export const FACT_MARKERS =
-  /\b(my name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by)\b/i
+  /\b(my (?:\w+'s\s+)?name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement

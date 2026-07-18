@@ -41,6 +41,14 @@ export interface AssistantConfig {
    * exactly as dangerous as it is.
    */
   dangerouslySkipPermissions: boolean
+  /**
+   * Session-scoped spend ceilings, enforced (not just reported) before each new turn starts —
+   * see spend-cap.ts. Undefined (the default) preserves today's unbounded behavior; this is an
+   * opt-in safety rail on top of what /cost already computes, not a new default constraint.
+   */
+  sessionCostLimitUsd?: number
+  /** Secondary ceiling on completed turns this session — see SpendCapConfig's doc comment in spend-cap.ts for why this counts turns, not raw internal LLM calls. */
+  sessionCallLimit?: number
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -57,6 +65,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'shellTimeoutMs',
   'workspaceRoot',
   'dangerouslySkipPermissions',
+  'sessionCostLimitUsd',
+  'sessionCallLimit',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, ddg search, web/shell off) — this plan changes nothing for a caller that never touches config. */

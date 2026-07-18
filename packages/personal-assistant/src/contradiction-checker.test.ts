@@ -58,6 +58,22 @@ describe('looksLikeCodingFact', () => {
     // library I use in production." unchallenged.
     expect(looksLikeCodingFact('I never bother pinning versions for libraries, floating latest is fine these days.')).toBe(true)
   })
+
+  it('flags the plural "databases" the same way it already flags singular "database"', () => {
+    // batch 21 (h2/convA, re-probing conv178/conv198): same singular-only \b...\b gap, confirmed
+    // live for "database" — "I never bother backing up my databases anymore, it's not worth the
+    // hassle." never looksLikeCodingFact, so the contradicting statement was dropped before the
+    // belief graph ever saw it, leaving an earlier "I always back up every database before
+    // deploying." unchallenged.
+    expect(looksLikeCodingFact("I never bother backing up my databases anymore, it's not worth the hassle.")).toBe(true)
+  })
+
+  it('flags the plural "scripts" the same way it already flags singular "script"', () => {
+    // batch 21 (h2/convA): confirmed live for "script" — both "I always keep my scripts under
+    // version control." and "I never bother versioning my scripts these days, it's not worth it."
+    // used only the plural form, so neither ever became a belief at all.
+    expect(looksLikeCodingFact('I never bother versioning my scripts these days, it\'s not worth it.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

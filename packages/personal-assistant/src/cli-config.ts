@@ -27,6 +27,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
   workspaceRoot: 'ASSISTANT_WORKSPACE_DIR',
   dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
+  sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
+  sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -67,6 +69,8 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
   if (env.ASSISTANT_WORKSPACE_DIR !== undefined) overrides.workspaceRoot = env.ASSISTANT_WORKSPACE_DIR
   if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
+  if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
+  if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
   return overrides
 }
 
@@ -84,6 +88,16 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
     case 'shellTimeoutMs': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('shellTimeoutMs must be a positive number')
+      return n
+    }
+    case 'sessionCostLimitUsd': {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('sessionCostLimitUsd must be a positive number')
+      return n
+    }
+    case 'sessionCallLimit': {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('sessionCallLimit must be a positive integer')
       return n
     }
     case 'llmBackend':

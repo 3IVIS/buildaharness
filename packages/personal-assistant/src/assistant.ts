@@ -64,6 +64,8 @@ import { checkForContradictions, looksLikeCodingFact, type BeliefCandidate } fro
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { classifyPlanningCandidate } from './planning-classifier.js'
+import { estimateCostUsd } from './model-pricing.js'
+import { checkSpendCap, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
 import { loadTemplate } from './plan-templates/index.js'
 import {
@@ -134,6 +136,9 @@ const SYNTHESIS_SYSTEM_PROMPT =
 
 // Most-recent facts injected into the system prompt each turn — a hard cap,
 // not a summary, so this stays cheap even as the fact store grows.
+/** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — kept in sync by hand, same convention as cli.ts's own backendDisplayModel table. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
+const DEFAULT_MODEL_FOR_COST_ESTIMATE = 'claude-3-5-sonnet-20241022'
+
 const FACT_CAP = 20
 
 // Deliberately NOT suffixed with a sessionId — clearSession() only deletes `facts:${sessionId}`,
@@ -617,6 +622,13 @@ export interface PersonalAssistantOptions {
    * Off by default.
    */
   dangerouslySkipPermissions?: boolean
+  /**
+   * Opt-in session spend/turn-count ceilings — see spend-cap.ts. Undefined by default, same as
+   * every other field here that changes behavior only when a caller sets it: no ceiling means
+   * exactly today's unbounded behavior. Checked once per turn, before any LLM call that turn
+   * would make (see turn()) — never mid-turn.
+   */
+  spendCap?: SpendCapConfig
 }
 
 /**
@@ -641,6 +653,7 @@ export class PersonalAssistant {
   private readonly onTrace?: (event: TraceEvent) => void
   private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
+  private readonly spendCap?: SpendCapConfig
   // The harness's WorldModel (and its own recordExternalContradiction dedup) is rebuilt empty
   // every turn (see runTurn's factExtractor doc comment below), so an unresolved contradiction
   // between two still-stored facts (e.g. two different stated occupations) gets independently
@@ -666,6 +679,7 @@ export class PersonalAssistant {
     this.onTrace = options.onTrace
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
+    this.spendCap = options.spendCap
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
     // constructor or the first turn/render. Covers every front end (CLI, chat-ui, desktop)
     // and both construction paths (this constructor directly, and static create() below,
@@ -700,8 +714,26 @@ export class PersonalAssistant {
     const sessionId = options.sessionId ?? 'default'
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+
+    // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
+    // spend-cap.ts's checkSpendCap doc comment). A pendingActionId call is a continuation of a
+    // turn that already passed this check when it first started (the message-level risk gate or
+    // a staged write/shell/batch action awaiting the user's yes/no), not a new turn on its own,
+    // so it's exempt — otherwise a turn that was allowed to start, then paused for approval,
+    // could get silently stuck refusing to ever resolve once the ceiling was crossed by
+    // something else in between.
+    if (!options.pendingActionId && this.spendCap) {
+      const spendState = await this.getSpendState(sessionId)
+      const check = checkSpendCap(spendState, this.spendCap)
+      if (!check.allowed) {
+        this.onTrace?.({ kind: 'turn_end', sessionId, status: 'escalated' })
+        return { status: 'escalated', reply: null, reason: check.reason }
+      }
+    }
+
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
+      if (result.status === 'ok') await this.recordSpend(sessionId, result.usage)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
       this.onDebugLog?.({
         kind: 'assistant_reply',
@@ -715,6 +747,27 @@ export class PersonalAssistant {
       this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[threw] ${message}` })
       throw err
     }
+  }
+
+  /** Persisted alongside transcript/facts/plan (this.memory) — survives a process restart, same as everything else keyed by sessionId, so the ceiling is genuinely cross-session, not just cross-turn within one process lifetime. */
+  async getSpendState(sessionId: string): Promise<SpendState> {
+    return ((await this.memory.get(`spend:${sessionId}`)) as SpendState | undefined) ?? { cumulativeCostUsd: 0, cumulativeCalls: 0 }
+  }
+
+  /**
+   * Called once per successfully completed ('ok') turn, after runTurn returns — counts turns,
+   * not raw internal LLM calls (see SpendCapConfig's doc comment for why). Estimates cost the
+   * same way cli.ts's withCostEstimate does for a backend that doesn't report a real costUsd,
+   * so the cap enforces against the same number /cost displays, not a second cost model.
+   */
+  private async recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
+    if (!this.spendCap) return
+    const state = await this.getSpendState(sessionId)
+    const costUsd = usage?.costUsd ?? (usage ? estimateCostUsd(this.model ?? DEFAULT_MODEL_FOR_COST_ESTIMATE, usage) : undefined) ?? 0
+    await this.memory.set(`spend:${sessionId}`, {
+      cumulativeCostUsd: state.cumulativeCostUsd + costUsd,
+      cumulativeCalls: state.cumulativeCalls + 1,
+    } satisfies SpendState)
   }
 
   /** The session's conversation transcript, oldest first — same array `turn()` reads/appends to. Used by `/export`. */

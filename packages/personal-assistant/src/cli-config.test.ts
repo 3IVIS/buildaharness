@@ -59,6 +59,11 @@ describe('envOverridesFromProcessEnv', () => {
   it('picks up ASSISTANT_API_KEY', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_API_KEY: 'sk-test' })).toEqual({ apiKey: 'sk-test' })
   })
+
+  it('parses ASSISTANT_SESSION_COST_LIMIT_USD/ASSISTANT_SESSION_CALL_LIMIT as numbers', () => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_SESSION_COST_LIMIT_USD: '5.5' })).toEqual({ sessionCostLimitUsd: 5.5 })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_SESSION_CALL_LIMIT: '50' })).toEqual({ sessionCallLimit: 50 })
+  })
 })
 
 describe('parseConfigValue', () => {
@@ -97,6 +102,26 @@ describe('parseConfigValue', () => {
 
   it('passes free-form string fields through unchanged', () => {
     expect(parseConfigValue('proxyUrl', 'http://example.com')).toBe('http://example.com')
+  })
+
+  it('parses a valid positive number for sessionCostLimitUsd', () => {
+    expect(parseConfigValue('sessionCostLimitUsd', '5.5')).toBe(5.5)
+  })
+
+  it('rejects a non-numeric or non-positive sessionCostLimitUsd', () => {
+    expect(() => parseConfigValue('sessionCostLimitUsd', 'abc')).toThrow(ConfigValueParseError)
+    expect(() => parseConfigValue('sessionCostLimitUsd', '0')).toThrow(ConfigValueParseError)
+    expect(() => parseConfigValue('sessionCostLimitUsd', '-1')).toThrow(ConfigValueParseError)
+  })
+
+  it('parses a valid positive integer for sessionCallLimit', () => {
+    expect(parseConfigValue('sessionCallLimit', '50')).toBe(50)
+  })
+
+  it('rejects a non-integer, non-numeric, or non-positive sessionCallLimit', () => {
+    expect(() => parseConfigValue('sessionCallLimit', 'abc')).toThrow(ConfigValueParseError)
+    expect(() => parseConfigValue('sessionCallLimit', '0')).toThrow(ConfigValueParseError)
+    expect(() => parseConfigValue('sessionCallLimit', '2.5')).toThrow(ConfigValueParseError)
   })
 })
 

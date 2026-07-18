@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   LLMClient,
   AnthropicLLMClient,
@@ -17,6 +18,7 @@ import {
   InMemoryReminderStore,
   type ILLMClient,
   type TokenUsage,
+  type FsBackend,
 } from '@buildaharness/runtime'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
@@ -26,16 +28,17 @@ import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
 import { runApprovedShellCommand } from './shell-executor.js'
 import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
-import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig } from './config.js'
+import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
+import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
-import { resolveNonInteractiveApprovalMode } from './non-interactive-mode.js'
+import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 
-const dataDir = join(homedir(), '.buildaharness', 'personal-assistant')
-const configStore = new NodeConfigStore(join(dataDir, 'config.json'))
+const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
+const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
 
 // Must match the exact path a FileSystemAdapter({ baseDir: dataDir, namespace:
 // 'reminders' }) uses for the key "reminders" — see file-tools-mcp-server.mjs's
@@ -43,19 +46,19 @@ const configStore = new NodeConfigStore(join(dataDir, 'config.json'))
 // own reminderStore (below) read/write the same file instead of two disconnected
 // reminder lists. FileSystemAdapter's path formula is `${baseDir}/${namespace}/${sanitize(key)}.json`,
 // and "reminders" sanitizes to itself (no special characters).
-const remindersFile = join(dataDir, 'reminders', 'reminders.json')
+const defaultRemindersFile = join(defaultDataDir, 'reminders', 'reminders.json')
 
 // Env vars still win over persisted config — see cli-config.ts's envOverridesFromProcessEnv
 // and config.ts's resolveConfig — so this stays a behavior-preserving migration for anyone
 // who already sets ASSISTANT_ENABLE_WEB etc. and never touches /config.
-const envOverrides = envOverridesFromProcessEnv(process.env)
+const defaultEnvOverrides = envOverridesFromProcessEnv(process.env)
 
-const nonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
+const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
 // what gives the CLI real persistence across runs. See plans/tauri_desktop_plan.html Phase 3.
-const backend = createNodeFsBackend()
+const defaultBackend = createNodeFsBackend()
 
 /**
  * Picks the ILLMClient for config.llmBackend — one branch per backend, shared in shape with
@@ -65,7 +68,7 @@ const backend = createNodeFsBackend()
  * available on this surface (no "unsupported on this platform" branch needed, unlike a plain
  * browser tab which can't spawn `claude` at all).
  */
-function buildLlmClient(config: AssistantConfig, workspaceRoot: string): ILLMClient {
+function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
   switch (config.llmBackend) {
     case 'claude-cli':
       return new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
@@ -91,7 +94,13 @@ function buildLlmClient(config: AssistantConfig, workspaceRoot: string): ILLMCli
  * takes effect, so nothing requires a process restart. Reuses the same dataDir-backed stores
  * each time, so transcripts/experience/checkpoints/reminders carry over across a rebuild.
  */
-async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
+interface BuildAssistantDeps {
+  backend: FsBackend
+  dataDir: string
+  remindersFile: string
+}
+
+async function buildAssistant(config: AssistantConfig, { backend, dataDir, remindersFile }: BuildAssistantDeps): Promise<PersonalAssistant> {
   const workspaceRoot = config.workspaceRoot ?? process.cwd()
   const search =
     config.searchBackend === 'brave'
@@ -102,7 +111,7 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   // enableWeb yet — web_search has no default backend on this path either (see
   // claude-cli-llm-client.ts's doc comment), so enableWeb only takes effect on the proxy
   // (LLMClient) backend below.
-  const llmClient = buildLlmClient(config, workspaceRoot)
+  const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
   return PersonalAssistant.create({
     llmClient,
@@ -117,10 +126,53 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
     shellTools: config.enableShell ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    spendCap:
+      config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
+        ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
+        : undefined,
   })
 }
 
-async function main(): Promise<void> {
+export interface RunCliOptions {
+  dataDir?: string
+  configStore?: ConfigStore
+  backend?: FsBackend
+  remindersFile?: string
+  envOverrides?: Partial<AssistantConfig>
+  nonInteractiveApprovalMode?: NonInteractiveApprovalMode
+  input?: NodeJS.ReadableStream
+  output?: NodeJS.WritableStream
+  /**
+   * Bypasses buildAssistant()'s config-driven backend selection entirely — the seam tests use
+   * to hand runCli a PersonalAssistant wired to a scripted ILLMClient (same pattern as
+   * assistant.test.ts) for deterministic command-dispatch/approval-flow coverage. When set, a
+   * /config change that would otherwise rebuild the assistant leaves this instance in place.
+   */
+  assistant?: PersonalAssistant
+  /** Overrides the rl.question-based approval prompt — lets tests script approve/decline answers without faking stdin/a real TTY. */
+  askYesNo?: (question: string) => Promise<boolean>
+}
+
+export interface CliInstance {
+  /** Parses and dispatches one line of input exactly as the REPL's 'line' handler does (same dispatchQueue serialization) — the seam cli.test.ts drives command dispatch through without a live TTY. */
+  dispatchLine(line: string): Promise<void>
+  close(): void
+}
+
+/**
+ * The CLI's REPL, parameterized so cli.test.ts can import and drive it directly instead of only
+ * through a live process (see non-interactive-mode.ts's doc comment for why that mattered before
+ * this export existed — this is T1's answer to it). `main()` below calls this with no options,
+ * getting exactly today's behavior; every option here has a real-filesystem/real-stdio default.
+ */
+export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> {
+  const dataDir = options.dataDir ?? defaultDataDir
+  const configStore = options.configStore ?? defaultConfigStore
+  const backend = options.backend ?? defaultBackend
+  const remindersFile = options.remindersFile ?? defaultRemindersFile
+  const envOverrides = options.envOverrides ?? defaultEnvOverrides
+  const nonInteractiveApprovalMode = options.nonInteractiveApprovalMode ?? defaultNonInteractiveApprovalMode
+
   const persisted = await configStore.load()
   let { config, overriddenKeys } = resolveConfig(persisted, envOverrides)
 
@@ -146,9 +198,9 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  let assistant = await buildAssistant(config)
+  let assistant = options.assistant ?? (await buildAssistant(config, { dataDir, backend, remindersFile }))
 
-  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
+  const rl = createInterface({ input: options.input ?? process.stdin, output: options.output ?? process.stdout, prompt: 'you> ' })
 
   // Display-only defaults, mirroring each backend's own fallback so the banner shows the
   // model that will actually be used even when config.model is unset — not authoritative
@@ -386,9 +438,17 @@ async function main(): Promise<void> {
   async function printStatus(): Promise<void> {
     const transcript = await assistant.getTranscript('cli')
     const undoLogEntries = await assistant.listUndoLogEntries()
+    const spendCapLine = await spendCapStatusLine()
     console.log(
-      `\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined, undoLogEntries })}\n`,
+      `\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined, undoLogEntries, spendCapLine })}\n`,
     )
+  }
+
+  /** Shared by /status and /cost (plan T2 step 5: "not a separate display") — undefined when no ceiling is configured. */
+  async function spendCapStatusLine(): Promise<string | undefined> {
+    if (config.sessionCostLimitUsd === undefined && config.sessionCallLimit === undefined) return undefined
+    const state = await assistant.getSpendState('cli')
+    return formatSpendCapStatus(state, { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit })
   }
 
   /** Writes the session transcript to a markdown file — an explicit argument overrides the default filename, resolved relative to process.cwd() if not absolute. */
@@ -525,8 +585,9 @@ async function main(): Promise<void> {
     console.log(`\n${formatSearchResults(hits, query)}\n`)
   }
 
-  function printCost(): void {
-    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 }, backend: config.llmBackend })}\n`)
+  async function printCost(): Promise<void> {
+    const spendCapLine = await spendCapStatusLine()
+    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 }, backend: config.llmBackend, spendCapLine })}\n`)
   }
 
   async function handleDoctor(): Promise<void> {
@@ -719,6 +780,10 @@ async function main(): Promise<void> {
   // read a real answer must resolve to "no" (never "yes"), so a broken/absent confirmation
   // channel can't be mistaken for approval.
   function askYesNo(question: string): Promise<boolean> {
+    // Test-only seam: bypasses stdin/readline entirely, same "never touches stdin" shape as the
+    // nonInteractiveApprovalMode === 'decline' branch below, just with a caller-scripted answer
+    // instead of a hardcoded decline.
+    if (options.askYesNo) return options.askYesNo(question)
     // A designed decision, not a fallback: never touches stdin, so there's no readline race to
     // land in — unlike the catch below, this path is reached deterministically on every
     // approval gate, not only when reading the answer happens to fail.
@@ -743,7 +808,7 @@ async function main(): Promise<void> {
   async function reloadAssistant(): Promise<void> {
     const nextPersisted = await configStore.load()
     ;({ config, overriddenKeys } = resolveConfig(nextPersisted, envOverrides))
-    assistant = await buildAssistant(config)
+    assistant = options.assistant ?? (await buildAssistant(config, { dataDir, backend, remindersFile }))
   }
 
   async function handleConfigCommand(args: string[]): Promise<void> {
@@ -866,28 +931,58 @@ async function main(): Promise<void> {
   // every dispatch onto `dispatchQueue` makes the loop a real REPL — one command fully
   // resolves before the next begins — matching what a human typing into the prompt would
   // experience anyway.
+  async function dispatchOne(message: string): Promise<void> {
+    const [token, ...args] = message.split(/\s+/)
+    const handler = commands[token]
+    if (handler) {
+      await handler(args)
+      return
+    }
+    await handleTurn(message)
+  }
+
   let dispatchQueue: Promise<void> = Promise.resolve()
+  // One command fully resolves before the next begins — see the comment this used to carry
+  // inline here (still true): readline's 'line' event doesn't wait for a previous line's async
+  // handler, so piped/pasted multi-line input (or a test calling dispatchLine back to back)
+  // could otherwise dispatch several commands concurrently, corrupting /config's read-modify-write.
+  function enqueue(message: string): Promise<void> {
+    const result = dispatchQueue
+      .then(() => dispatchOne(message))
+      // An unexpected throw here must not poison the queue for lines dispatched after it.
+      .catch((err) => {
+        console.error('[unexpected error]', err)
+      })
+    dispatchQueue = result
+    return result
+  }
+
   rl.on('line', (line) => {
     const message = line.trim()
     if (!message) { rl.prompt(); return }
-    dispatchQueue = dispatchQueue
-      .then(async () => {
-        const [token, ...args] = message.split(/\s+/)
-        const handler = commands[token]
-        if (handler) {
-          await handler(args)
-          rl.prompt()
-          return
-        }
-        await handleTurn(message)
-        rl.prompt()
-      })
-      // An unexpected throw here must not poison the queue for lines typed after it.
-      .catch((err) => {
-        console.error('[unexpected error]', err)
-        rl.prompt()
-      })
+    void enqueue(message).finally(() => rl.prompt())
   })
+
+  return {
+    dispatchLine: async (line: string) => {
+      const message = line.trim()
+      if (!message) return
+      await enqueue(message)
+    },
+    close: () => rl.close(),
+  }
 }
 
-void main()
+async function main(): Promise<void> {
+  await runCli()
+}
+
+function isEntryModule(): boolean {
+  const entry = process.argv[1]
+  return entry !== undefined && import.meta.url === pathToFileURL(entry).href
+}
+
+// Guarded so importing this module (e.g. from cli.test.ts, which drives runCli() directly
+// instead) never starts a second live REPL against the real process.stdin/stdout and the real
+// ~/.buildaharness/personal-assistant data directory.
+if (isEntryModule()) void main()

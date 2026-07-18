@@ -47,8 +47,18 @@ export interface BeliefCandidate {
 // pinning versions for libraries, floating latest is fine these days." contradicting an earlier
 // "...for any library I use in production." never became a belief at all). Widened just this one
 // for the same reason as before: confirm each live rather than widening the rest speculatively.
+// batch 21 (h2, re-probing conv178/conv198): "database" and "script" are two more of the named
+// sibling gaps, now live-tested — "I always back up every database before deploying." became a
+// belief, but "I never bother backing up my databases anymore, it's not worth the hassle." was
+// silently dropped (never even became a UserFact, let alone a contradiction), and both "scripts"
+// statements in the same session ("I always keep my scripts under version control." / "I never
+// bother versioning my scripts these days, it's not worth it.") were dropped identically since
+// neither ever matched the singular-only "script". Widened just these two for the same reason as
+// before: confirm each live rather than widening the rest of the still-untested list
+// (command, log, bug, error, exception, service, function, config, module, variable, schema,
+// endpoint) speculatively.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|module|dependency|dependencies|error|exception|endpoint|api|database|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|script|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|module|dependency|dependencies|error|exception|endpoint|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared
@@ -89,11 +99,19 @@ const CONTRADICTION_SCHEMA = {
   required: ['contradictions'],
 }
 
+// batch 21 (convA): a job-promotion self-correction ("I work as a data analyst..." then "Actually,
+// I'm now a senior data analyst...") got flagged as a conflict needing the user's attention, even
+// though the second statement is an explicit, unambiguous update of the first, not an unresolved
+// simultaneous claim — found via live testing. The two examples below ("actually...now"/"I no
+// longer...") name the update-language shape this instruction is meant to exclude.
 const SYSTEM_PROMPT =
   'You check a personal assistant\'s beliefs for genuine contradictions — statements that cannot ' +
   "both be true at the same time (e.g. two different home cities, conflicting preferences, " +
   'opposite factual claims). Do not flag beliefs that are merely about different topics, or that ' +
-  'could both be true (e.g. "likes coffee" and "likes tea" are not a contradiction). You are given ' +
+  'could both be true (e.g. "likes coffee" and "likes tea" are not a contradiction). Do not flag a ' +
+  'newBelief that explicitly updates or corrects an existingBelief (e.g. "Actually, I\'m now a ' +
+  'senior analyst" superseding "I\'m an analyst", or "I no longer live in Boston") — that is a ' +
+  'stated change over time, not two simultaneously-held conflicting claims. You are given ' +
   '"newBeliefs" (just learned) and "existingBeliefs" (already known and already mutually ' +
   'consistent with each other) as JSON. Check newBeliefs against existingBeliefs, and against each ' +
   'other. Respond with JSON only: {"contradictions": [{"beliefIds": [id, id, ...], "description": ' +

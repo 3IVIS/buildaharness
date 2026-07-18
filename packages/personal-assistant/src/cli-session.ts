@@ -50,6 +50,8 @@ export interface StatusInfo {
   planActive: boolean
   /** Real filesystem effects still on record as revertible (see action-snapshot.ts) — omitted entirely when no workspace is configured (fileTools/shellTools both absent), same "don't imply a capability that isn't there" rule the banner's capability list already follows. */
   undoLogEntries?: UndoLogEntry[]
+  /** Pre-formatted by spend-cap.ts's formatSpendCapStatus — undefined when no ceiling is configured, in which case the line is omitted entirely. */
+  spendCapLine?: string
 }
 
 /** Reuses formatConfigListing for the config half rather than re-formatting the same fields a second way. */
@@ -66,6 +68,9 @@ export function formatStatus(info: StatusInfo): string {
     lines.push(
       `  ${'undo-log'.padEnd(14)} ${total} entr${total === 1 ? 'y' : 'ies'} (${undoable} revertible) — see /undo-action`,
     )
+  }
+  if (info.spendCapLine) {
+    lines.push(`  ${'spend cap'.padEnd(14)} ${info.spendCapLine}`)
   }
   return lines.join('\n')
 }
@@ -179,6 +184,8 @@ export interface CostSummaryInfo {
   /** Running total across the session — {inputTokens: 0, outputTokens: 0} before any usage has ever been reported. */
   session: TokenUsage
   backend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
+  /** Pre-formatted by spend-cap.ts's formatSpendCapStatus — undefined when no ceiling is configured, in which case the line is omitted entirely (same convention as StatusInfo.spendCapLine). */
+  spendCapLine?: string
 }
 
 function formatUsageLine(usage: TokenUsage): string {
@@ -199,6 +206,7 @@ export function formatCostSummary(info: CostSummaryInfo): string {
   } else if (info.session.costUsd !== undefined) {
     lines.push('(cost is an approximate estimate from a static pricing table, not real billing data)')
   }
+  if (info.spendCapLine) lines.push(`Session ceiling: ${info.spendCapLine}`)
   return lines.join('\n')
 }
 

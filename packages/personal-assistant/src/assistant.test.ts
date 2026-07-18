@@ -2433,3 +2433,106 @@ describe('PersonalAssistant.searchTranscript (T3)', () => {
   })
 })
 
+describe('PersonalAssistant spend cap (T2)', () => {
+  it('no ceiling configured behaves identically to unbounded behavior — many turns all proceed', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 100, outputTokens: 100, costUsd: 3 })
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    for (let i = 0; i < 5; i++) {
+      const result = await assistant.turn('hi', { sessionId: 's1' })
+      expect(result.status).toBe('ok')
+    }
+    expect(llm.calls).toBe(5)
+  })
+
+  it('a turn under the ceiling proceeds normally', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 1 })
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 5 } })
+    const result = await assistant.turn('hi', { sessionId: 's1' })
+    expect(result.status).toBe('ok')
+  })
+
+  it('refuses a turn before any LLM call once cumulative session spend would be at/over the ceiling', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 3 })
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 5 } })
+
+    const first = await assistant.turn('hi', { sessionId: 's1' })
+    expect(first.status).toBe('ok')
+    const second = await assistant.turn('hi again', { sessionId: 's1' })
+    expect(second.status).toBe('ok') // cumulative $3, still under $5
+
+    const callsBeforeThird = llm.calls
+    const third = await assistant.turn('hi a third time', { sessionId: 's1' })
+    expect(third.status).toBe('escalated')
+    expect(third.reason).toMatch(/cost ceiling reached/)
+    expect(llm.calls).toBe(callsBeforeThird) // refused before making the LLM call for this turn
+  })
+
+  it('a turn already in flight when spend crosses the ceiling mid-turn still completes — enforcement is pre-turn only', async () => {
+    // A single turn whose own usage (costUsd: 6) alone exceeds a $5 ceiling must still complete
+    // and return 'ok' — the check only ever runs before a turn starts, never partway through one.
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 6 })
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 5 } })
+    const result = await assistant.turn('a big turn', { sessionId: 's1' })
+    expect(result.status).toBe('ok')
+
+    // The *next* turn, now that cumulative spend is over the ceiling, is refused.
+    const next = await assistant.turn('another turn', { sessionId: 's1' })
+    expect(next.status).toBe('escalated')
+  })
+
+  it('a pendingActionId resume is exempt from the pre-turn check — a continuation of an already-started turn, not a new one', async () => {
+    const backend = makeFakeBackend()
+    const ROOT = '/workspace'
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'original content')
+    const { id: stagedId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes.txt', content: 'new content' })
+
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 3 })
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, spendCap: { sessionCostLimitUsd: 5 } })
+    await assistant.turn('hi', { sessionId: 's1' })
+    await assistant.turn('hi again', { sessionId: 's1' }) // cumulative now $6, over the $5 ceiling
+
+    // Resuming the already-staged write still applies it (reaches resolvePendingAction's normal
+    // path) rather than being refused by the spend cap first, proving the exemption holds even
+    // once the ceiling has actually been crossed.
+    const result = await assistant.turn('', { sessionId: 's1', approved: true, pendingActionId: stagedId })
+    expect(result.status).not.toBe('escalated')
+    expect(await backend.readTextFile(`${ROOT}/notes.txt`)).toBe('new content')
+  })
+
+  it('respects a call-count ceiling, counting completed turns', async () => {
+    const llm = new FakeLLMClient('ok')
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCallLimit: 2 } })
+    expect((await assistant.turn('one', { sessionId: 's1' })).status).toBe('ok')
+    expect((await assistant.turn('two', { sessionId: 's1' })).status).toBe('ok')
+    const third = await assistant.turn('three', { sessionId: 's1' })
+    expect(third.status).toBe('escalated')
+    expect(third.reason).toMatch(/turn-count ceiling reached/)
+  })
+
+  it('tracks spend independently per session — one session hitting its ceiling does not affect another', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 6 })
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 5 } })
+    await assistant.turn('hi', { sessionId: 'session-a' })
+    expect((await assistant.turn('hi', { sessionId: 'session-a' })).status).toBe('escalated')
+    expect((await assistant.turn('hi', { sessionId: 'session-b' })).status).toBe('ok')
+  })
+
+  it('getSpendState reflects accumulated cost and call count after turns complete', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 1.5 })
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 100 } })
+    await assistant.turn('hi', { sessionId: 's1' })
+    await assistant.turn('hi again', { sessionId: 's1' })
+    const state = await assistant.getSpendState('s1')
+    expect(state.cumulativeCostUsd).toBeCloseTo(3)
+    expect(state.cumulativeCalls).toBe(2)
+  })
+
+  it('needs_approval and escalated turns (that never got a chance to run) do not themselves count toward spend', async () => {
+    const llm = new FakeLLMClient('ok')
+    const assistant = new PersonalAssistant({ llmClient: llm, spendCap: { sessionCostLimitUsd: 100 } })
+    await assistant.turn('Please send an email to my boss telling him I quit.', { sessionId: 's1' }) // needs_approval, no LLM call
+    const state = await assistant.getSpendState('s1')
+    expect(state.cumulativeCalls).toBe(0)
+  })
+})
+
