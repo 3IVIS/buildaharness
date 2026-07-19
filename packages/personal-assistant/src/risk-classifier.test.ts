@@ -412,6 +412,14 @@ describe('classifyRisk', () => {
     ).not.toBe('MEDIUM')
   })
 
+  it('does not flag a sentence-initial "Reserve funds..." as a MEDIUM scheduling request (batch 23, h4/conv381)', () => {
+    // "reserve" has its own financial-noun-compound sense ("reserve funds") distinct from
+    // "schedule"'s conflicts/is/was exclusions above — "funds" wasn't in the trailing exclusion.
+    expect(
+      classifyRisk('Reserve funds at my company only cover about three months of expenses, which worries me a bit.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
   it('does not flag a sentence-initial "Purchase orders..." as a money-spend request', () => {
     // h12: "purchase orders" is a common business noun-compound never added to
     // PURCHASE_VERB_PATTERN's trailing exclusion.

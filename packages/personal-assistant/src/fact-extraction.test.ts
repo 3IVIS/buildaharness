@@ -198,6 +198,22 @@ describe('extractFactsFromTurn', () => {
     expect(facts[0].durable).toBe(false)
   })
 
+  it('captures "i work" with a modifier word between the pronoun and the verb (batch 23, conv354/373)', () => {
+    const facts = extractFactsFromTurn('I currently work as a project manager at a design agency.', 'turn:33')
+    expect(facts).toHaveLength(1)
+  })
+
+  it('captures "i live in" with a modifier word between the pronoun and the verb (batch 23, conv380)', () => {
+    const facts = extractFactsFromTurn('I currently live in a small apartment in Denver.', 'turn:31')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(false)
+  })
+
+  it('captures "my ... name is" with an adjective before a possessive noun (batch 23, conv380)', () => {
+    const facts = extractFactsFromTurn("My good friend's name is Marcus.", 'turn:32')
+    expect(facts).toHaveLength(1)
+  })
+
   it('captures a health/dietary fact joined to a request clause by "yet"', () => {
     // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
     // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in

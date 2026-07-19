@@ -292,8 +292,15 @@ export async function fetchUrlSafely(url) {
 // batch 21 (h2/convA, re-probing conv354): "my name is" widened to allow an optional possessive
 // noun ("my dog's name is"), and an "i have a/an ... named X" naming construction added, kept in
 // sync with fact-extraction.ts's own fix (see that module's doc comment for the full rationale).
+// batch 23 (re-probing conv380): "i live in" widened to the same 0-4-word gap as "i work"/"i am
+// a", and "my ... name is" widened to a 0-3-word gap (covers an adjective plus a possessive noun,
+// e.g. "good friend's"; each gap word is `\w+(?:'s)?` since bare `\w` excludes apostrophes),
+// kept in sync with fact-extraction.ts's own fix.
+// batch 23 (re-probing conv354/373): "i work" widened to a 0-4-word gap before "work" too (not
+// just after it) — "I currently work as..." never matched otherwise. Kept in sync with
+// fact-extraction.ts's own fix.
 const FACT_MARKERS =
-  /\b(my (?:\w+'s\s+)?name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
+  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
 // h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
 // HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
 // copied verbatim to dist, not bundled, so it can't import that module directly).

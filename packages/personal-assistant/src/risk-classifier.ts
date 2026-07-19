@@ -154,7 +154,14 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // no preceding determiner and "conflicts" wasn't in the trailing exclusion — found via live
 // testing: "Schedule conflicts are the worst part of managing a team, especially with people
 // across time zones." misfired MEDIUM.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|is|was)\\b)`, 'i')
+// batch 23 (h4, re-probing conv381): "reserve" has its own financial-noun-compound sense
+// ("reserve funds", "cash reserve requirements") distinct from "schedule"'s idioms above, and a
+// sentence-initial "Reserve" has no preceding determiner for nounContextLookbehind to exclude on
+// either — found via live testing: "Reserve funds at my company only cover about three months of
+// expenses, which worries me a bit." (a plain financial observation, no scheduling/reservation
+// request) misfired MEDIUM. Added "funds?"/"requirements?" to the trailing exclusion, the same
+// noun-compound shape already used for BOOK_VERB_PATTERN/ORDER_VERB_PATTERN above.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live

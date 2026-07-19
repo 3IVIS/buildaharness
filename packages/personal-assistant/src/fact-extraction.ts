@@ -44,6 +44,14 @@ export interface UserFact {
 // uses below, for the same reason: a descriptive/temporal modifier needs headroom between the
 // pronoun-copula and the marker word. Confirmed live for "actually" (conv354 originally found
 // "now"); both are ordinary modifier words within the same gap, not special-cased individually.
+// batch 23 (re-probing conv354/373): that fix only widened the gap AFTER "work" (between it and
+// at/as/for) — "i work" itself was left as a literal, zero-gap substring, so "I currently work as
+// a project manager..." (an adverb directly between "i" and "work") still never matched at all
+// and the fact was silently never captured (not corrected-then-dropped — never a UserFact in the
+// first place). Found via live testing: in a two-turn session ("I currently work as a project
+// manager..." then "Actually, I'm now a senior project manager..."), /memory showed only the
+// second (corrected) statement — the first was never admitted, so there was nothing to merge or
+// supersede. Widened "i work" to the same 0-4-word gap already used everywhere else in this file.
 // batch 21 (h2/convA, re-probing conv354): an ordinary pet-ownership/naming statement ("I have a
 // golden retriever named Max", "My dog's name is Biscuit") matched none of this list's
 // identity-statement phrasing, CODING_FACT_MARKERS, or HEALTH_OR_DIETARY_MARKERS — the same gap
@@ -57,8 +65,21 @@ export interface UserFact {
 // require the "name is" phrasing at all. Left non-durable (unlike "my name is"/"call me") since a
 // pet's name is closer in kind to the other non-durable session facts (job, location) than to the
 // user's own identity — narrower than the durable set until there's a stronger signal otherwise.
+// batch 23 (re-probing conv380): "i live in" and "my ... name is" were the only two marker phrases
+// in this list still requiring strict/near-strict adjacency — "i work"/"i am a"/"i'm a" already
+// tolerate a 0-4-word modifier gap, but "i live in" required the exact three words in a row and
+// "my (?:\w+'s\s+)?name is" only allowed a single possessive-noun token, not an adjective before
+// it — found via live testing: "I currently live in a small apartment in Denver." and "My good
+// friend's name is Marcus." both dropped the fact entirely (zero session or durable capture).
+// Widened "i live in" to the same 0-4-word gap shape as the other i-prefixed branches, and "my
+// ... name is" to a 0-3-word gap (covers an adjective plus a possessive noun, e.g. "good friend's",
+// while staying narrower than the 0-4 gap used elsewhere, since this phrase has no pronoun/copula
+// of its own to anchor on before "my"). Each gap word is `\w+(?:'s)?`, not a bare `\w+` — plain
+// `\w` doesn't include an apostrophe, so a bare `\w+` gap would split "dog's" into "dog" + a
+// dangling "'s" that couldn't match at all, silently breaking the existing possessive case
+// ("my dog's name is Biscuit") this same branch already had to support before this widening.
 export const FACT_MARKERS =
-  /\b(my (?:\w+'s\s+)?name is|i live in|i work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
+  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement
