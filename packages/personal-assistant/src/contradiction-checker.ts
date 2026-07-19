@@ -57,8 +57,15 @@ export interface BeliefCandidate {
 // before: confirm each live rather than widening the rest of the still-untested list
 // (command, log, bug, error, exception, service, function, config, module, variable, schema,
 // endpoint) speculatively.
+// batch 24 (h2, re-probing conv178/conv198): "module" is another of the still-named sibling gaps,
+// now live-tested — looksLikeCodingFact('I never bother documenting my modules anymore, it is not
+// worth the hassle.') returned false (dropped) while the singular 'I always document every module
+// I write.' returned true, reproducing the exact same silent-drop shape as the other nouns already
+// widened above. Widened just this one for the same reason as before: confirm each live rather
+// than widening the rest of the still-untested list (command, log, bug, error, exception, service,
+// function, config, variable, schema, endpoint) speculatively.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|module|dependency|dependencies|error|exception|endpoint|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|modules?|dependency|dependencies|error|exception|endpoint|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared
@@ -104,6 +111,15 @@ const CONTRADICTION_SCHEMA = {
 // though the second statement is an explicit, unambiguous update of the first, not an unresolved
 // simultaneous claim — found via live testing. The two examples below ("actually...now"/"I no
 // longer...") name the update-language shape this instruction is meant to exclude.
+// batch 24 (h3, re-probing conv354/373): the description field is surfaced verbatim to the user
+// as the contradictionNotice (assistant.ts's findContradictionNotice reads Contradiction.description
+// straight through) — but the ids in "newBeliefs"/"existingBeliefs" are internal bookkeeping
+// tokens (e.g. "fact-respond-1-0"), never meant for prose. Nothing here told the model not to name
+// them, so a description like "fact-respond-1-0 states the person works as a nurse, while
+// fact-respond-1-1 states..." reached the user's screen verbatim — found via live testing. Told
+// the model explicitly to describe beliefs by their content, never by id; kept as a hint only
+// (see the deterministic strip in checkForContradictions below for the actual guarantee, since a
+// prompt instruction alone isn't reliable — playbook §6).
 const SYSTEM_PROMPT =
   'You check a personal assistant\'s beliefs for genuine contradictions — statements that cannot ' +
   "both be true at the same time (e.g. two different home cities, conflicting preferences, " +
@@ -115,7 +131,9 @@ const SYSTEM_PROMPT =
   '"newBeliefs" (just learned) and "existingBeliefs" (already known and already mutually ' +
   'consistent with each other) as JSON. Check newBeliefs against existingBeliefs, and against each ' +
   'other. Respond with JSON only: {"contradictions": [{"beliefIds": [id, id, ...], "description": ' +
-  'string}]}. Empty array if none.'
+  'string}]}. "description" is shown directly to the user in prose — describe what the beliefs ' +
+  'say, never their ids (e.g. write "you said you work as a nurse, but also as a physical ' +
+  'therapist", not "fact-respond-1-0 states..."). Empty array if none.'
 
 /**
  * One LLM call reviewing whatever belief(s) were just added against everything already known —
@@ -126,6 +144,20 @@ const SYSTEM_PROMPT =
  * LLM-backed classifiers (isAbandonPhraseWithLLM, classifyRiskWithLLM) — a missed contradiction
  * costs nothing worse than the lexical-only behavior this is layered on top of.
  */
+// batch 24 (h3, re-probing conv354/373): the prompt-level instruction above (not to name ids in
+// "description") is only a hint the model may or may not follow — found via live testing that it
+// didn't hold on its own before this guard existed. This is the actual guarantee: strip every
+// known belief id (the exact ids handed to the model in "newBeliefs"/"existingBeliefs", not a
+// generic pattern) out of whatever the model returns, so a leaked id can never reach the user's
+// screen regardless of model compliance.
+function stripBeliefIds(description: string, knownIds: string[]): string {
+  let sanitized = description
+  for (const id of knownIds) {
+    sanitized = sanitized.split(id).join('')
+  }
+  return sanitized.replace(/\s{2,}/g, ' ').trim()
+}
+
 export async function checkForContradictions(
   newBeliefs: BeliefCandidate[],
   existingBeliefs: BeliefCandidate[],
@@ -146,7 +178,9 @@ export async function checkForContradictions(
       { model, onUsage, structuredOutput: { schema: CONTRADICTION_SCHEMA } },
     )
     const parsed = JSON.parse(response.content) as { contradictions?: ExternalContradictionInput[] }
-    return Array.isArray(parsed.contradictions) ? parsed.contradictions : []
+    const contradictions = Array.isArray(parsed.contradictions) ? parsed.contradictions : []
+    const knownIds = [...newBeliefs, ...existingBeliefs].map((b) => b.id)
+    return contradictions.map((c) => ({ ...c, description: stripBeliefIds(c.description, knownIds) }))
   } catch {
     return []
   }

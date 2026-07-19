@@ -161,7 +161,12 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // expenses, which worries me a bit." (a plain financial observation, no scheduling/reservation
 // request) misfired MEDIUM. Added "funds?"/"requirements?" to the trailing exclusion, the same
 // noun-compound shape already used for BOOK_VERB_PATTERN/ORDER_VERB_PATTERN above.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|is|was)\\b)`, 'i')
+// batch 24 (h8, re-probing conv381): same sentence-initial noun-compound gap as "conflicts"/
+// "funds"/"requirements" above — "change(s)" wasn't in the trailing exclusion list, and a
+// sentence-initial "Schedule" has no preceding determiner either — found via live testing:
+// "Schedule change requests have to go through HR now." misfired MEDIUM with no live
+// scheduling request present. Added "changes?" to the trailing exclusion.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live

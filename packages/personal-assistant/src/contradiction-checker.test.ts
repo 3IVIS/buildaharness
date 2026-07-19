@@ -156,6 +156,28 @@ describe('checkForContradictions', () => {
     expect(userMessage).toContain('Boston')
   })
 
+  it('strips leaked belief ids out of the description even if the model names them', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({
+        contradictions: [
+          {
+            beliefIds: ['fact-respond-1-0', 'fact-respond-1-1'],
+            description: 'fact-respond-1-0 states the person works as a nurse, while fact-respond-1-1 states they now work as a physical therapist.',
+          },
+        ],
+      }),
+    )
+    const result = await checkForContradictions(
+      [{ id: 'fact-respond-1-1', statement: 'the user works as a physical therapist' }],
+      [{ id: 'fact-respond-1-0', statement: 'the user works as a nurse' }],
+      llm,
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0].description).not.toContain('fact-respond-1-0')
+    expect(result[0].description).not.toContain('fact-respond-1-1')
+    expect(result[0].description).toContain('states the person works as a nurse')
+  })
+
   it('returns [] on malformed JSON instead of throwing', async () => {
     const llm = new StructuredOnlyLLMClient('not json at all')
     const result = await checkForContradictions(
