@@ -214,6 +214,13 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
   })
 
+  it('captures "i live in" with a modifier word between "live" and "in" (batch 25, re-probing conv380)', () => {
+    // batch 23 only opened a gap before "live"; a modifier after "live" but before "in" still
+    // broke the match until this widening.
+    const facts = extractFactsFromTurn('I live currently in Austin, Texas.', 'turn:34')
+    expect(facts).toHaveLength(1)
+  })
+
   it('captures a health/dietary fact joined to a request clause by "yet"', () => {
     // h5: CLAUSE_BOUNDARY's conjunction list originally only covered so/but/and/because/
     // although/while/whereas — "yet" is the same contrastive-conjunction shape and wasn't in

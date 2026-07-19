@@ -299,8 +299,12 @@ export async function fetchUrlSafely(url) {
 // batch 23 (re-probing conv354/373): "i work" widened to a 0-4-word gap before "work" too (not
 // just after it) — "I currently work as..." never matched otherwise. Kept in sync with
 // fact-extraction.ts's own fix.
+// batch 25 (re-probing conv380): "i live in" widened again with a second, narrower 0-2-word gap
+// between "live" and "in" (in addition to the batch 23 gap before "live") — a modifier after
+// "live" ("I live currently in Austin") still broke the match otherwise. Kept in sync with
+// fact-extraction.ts's own fix.
 const FACT_MARKERS =
-  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
+  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live(?:\s+\w+){0,2}\s+in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
 // h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
 // HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
 // copied verbatim to dist, not bundled, so it can't import that module directly).

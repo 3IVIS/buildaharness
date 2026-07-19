@@ -74,6 +74,17 @@ describe('looksLikeCodingFact', () => {
     // used only the plural form, so neither ever became a belief at all.
     expect(looksLikeCodingFact('I never bother versioning my scripts these days, it\'s not worth it.')).toBe(true)
   })
+
+  it('flags the plural forms of "bug", "error", "config", and "endpoint" the same way it already flags their singulars', () => {
+    // batch 25 (re-probing conv178/conv198): confirmed live — a four-pair always/never session
+    // showed all four plural-form contradicting statements silently dropped from /memory's Facts
+    // list, while the singular originals ("every bug", "every error", "every config file", "every
+    // endpoint") were captured fine.
+    expect(looksLikeCodingFact("I never bother triaging bugs anymore, it's not worth the hassle.")).toBe(true)
+    expect(looksLikeCodingFact('I never bother checking errors anymore, it\'s not worth it.')).toBe(true)
+    expect(looksLikeCodingFact('I never bother version-controlling configs anymore, it\'s not worth it.')).toBe(true)
+    expect(looksLikeCodingFact('I never bother documenting endpoints anymore, it\'s not worth it.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

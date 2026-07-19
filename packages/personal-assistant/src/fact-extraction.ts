@@ -78,8 +78,15 @@ export interface UserFact {
 // `\w` doesn't include an apostrophe, so a bare `\w+` gap would split "dog's" into "dog" + a
 // dangling "'s" that couldn't match at all, silently breaking the existing possessive case
 // ("my dog's name is Biscuit") this same branch already had to support before this widening.
+// batch 25 (re-probing conv380): the batch 23 "i live in" widening only opened a gap BEFORE "live"
+// (between the pronoun and the verb) — a modifier AFTER "live" but before "in" (a different
+// position in the same phrase) still broke the match, since "live in" itself still had to appear
+// as an exact, contiguous two-word literal. Found via live testing: "I live currently in Austin,
+// Texas." was never captured as a fact at all (/memory showed no location fact), even though the
+// pronoun-verb gap fix from batch 23 already handles "I currently live in Austin". Added a second,
+// narrower 0-2-word gap between "live" and "in" for the same reason as the other gaps in this file.
 export const FACT_MARKERS =
-  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
+  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live(?:\s+\w+){0,2}\s+in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement

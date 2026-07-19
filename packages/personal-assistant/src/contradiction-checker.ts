@@ -64,8 +64,16 @@ export interface BeliefCandidate {
 // widened above. Widened just this one for the same reason as before: confirm each live rather
 // than widening the rest of the still-untested list (command, log, bug, error, exception, service,
 // function, config, variable, schema, endpoint) speculatively.
+// batch 25 (re-probing conv178/conv198): "bug", "error", "config", and "endpoint" are four more of
+// the still-named sibling gaps, now live-tested — a four-pair session ("I always triage every bug
+// immediately..." / "I never bother triaging bugs anymore...", and the same always/never shape for
+// error/errors, config/configs, endpoint/endpoints) showed all four plural-form contradicting
+// statements silently dropped from /memory's Facts list entirely, while all four singular-form
+// originals were captured fine. Widened just these four for the same reason as before: confirm each
+// live rather than widening the rest of the still-untested list (command, log, service, function,
+// variable, schema) speculatively.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|config|servers?|service|function|modules?|dependency|dependencies|error|exception|endpoint|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bug|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|service|function|modules?|dependency|dependencies|errors?|exception|endpoints?|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared
