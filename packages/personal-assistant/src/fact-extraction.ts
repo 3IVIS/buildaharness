@@ -154,8 +154,16 @@ function isDurable(text: string): boolean {
 // risk-classifier.ts's nounContextLookbehind already uses for noun-vs-verb ambiguity — scoped to
 // just the action-verb group (not the please/can-you/modal-request phrases, which are unambiguous
 // requests regardless of any preceding subject).
+// batch 29 (convR2, re-probing conv178/conv198/conv394): even with "commands?" added to
+// CODING_FACT_MARKERS, "All the deploy commands are passing in CI right now." still never became
+// a fact live — the action-verb group's subject-pronoun exemption above only recognized "i"/"we"
+// directly before the verb, so "the deploy commands" (a noun-compound — commands *for*
+// deployment, not a live "deploy X" imperative) still tripped NON_CLAIM_MARKERS' bare "deploy"
+// match, same noun-vs-verb ambiguity risk-classifier.ts's NOUN_CONTEXT_DETERMINERS lookbehind
+// exists to solve for order/pay/delete/cancel/etc. Widened the exemption to the same
+// determiner/article/quantifier list, not just "i"/"we".
 const NON_CLAIM_MARKERS =
-  /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me)\b|(?<!\b(?:i|we)\b(?:\s+\w+){0,4}\s)\b(delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
+  /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me)\b|(?<!\b(?:i|we|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\b(?:\s+\w+){0,4}\s)\b(delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
 
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole

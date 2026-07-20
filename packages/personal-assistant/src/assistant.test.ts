@@ -1833,8 +1833,17 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
     // unrelated turn) but nothing outside /why ever mentioned it. A separate field (not folded
     // into `reply`) because cli.ts streams `reply`'s tokens live via onToken well before this
     // check even runs — see findContradictionNotice's doc comment.
+    // batch 29 (conv3/convR2, re-probing conv178/conv198/conv394): this assertion used to require
+    // contradictionNotice to equal the raw layerActivity reason verbatim — but for a lexical/
+    // negation-pair match (as here), that raw reason embeds internal belief ids straight from
+    // detect-contradictions.ts's template (e.g. `Pairwise contradiction between "fact-respond-1-0"
+    // and "fact-respond-1-1"`), which is exactly the leak found live in conv3 ("Pairwise
+    // contradiction between \"fact-respond-1-3\" and \"fact-respond-1-4\"" reaching the user's
+    // screen verbatim). findContradictionNotice now recognizes that raw-id shape and falls back to
+    // a generic notice instead of asserting equality with the leaky internal string.
     const contradictionEvent = second.trace?.layerActivity.find((e) => e.layer === 'contradiction' && e.fired)
-    expect(second.contradictionNotice).toBe(contradictionEvent!.reason)
+    expect(contradictionEvent!.reason).toContain('fact-respond-1-0')
+    expect(second.contradictionNotice).toBe('Heads up — this seems to conflict with something you told me earlier.')
   })
 
   it('detects a contradiction from a natural-language build/test status flip with no personal-fact phrasing', async () => {

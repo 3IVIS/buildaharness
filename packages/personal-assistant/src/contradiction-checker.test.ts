@@ -85,6 +85,16 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('I never bother version-controlling configs anymore, it\'s not worth it.')).toBe(true)
     expect(looksLikeCodingFact('I never bother documenting endpoints anymore, it\'s not worth it.')).toBe(true)
   })
+
+  it('flags the plural forms of "log" and "command" the same way it already flags their singulars (batch 29, conv3/convR2)', () => {
+    // conv3: "The build logs show success right now." / "Actually, the build logs show failure
+    // now after the last commit." reproduced the silent-drop shape live — neither statement
+    // appeared in /memory's Facts list. convR2: same shape for "commands" ("All the deploy
+    // commands are passing in CI right now." / "Actually, the deploy commands are now failing in
+    // the staging environment.").
+    expect(looksLikeCodingFact('The build logs show success right now.')).toBe(true)
+    expect(looksLikeCodingFact('All the deploy commands are passing in CI right now.')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {

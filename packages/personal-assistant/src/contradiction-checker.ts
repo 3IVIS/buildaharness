@@ -72,8 +72,16 @@ export interface BeliefCandidate {
 // originals were captured fine. Widened just these four for the same reason as before: confirm each
 // live rather than widening the rest of the still-untested list (command, log, service, function,
 // variable, schema) speculatively.
+// batch 29 (conv3/convR2, re-probing conv178/conv198/conv394): "log" and "command" are two more of
+// the still-named sibling gaps, now live-tested — "The build logs show success right now." /
+// "Actually, the build logs show failure now after the last commit." (conv3) and "All the deploy
+// commands are passing in CI right now." / "Actually, the deploy commands are now failing in the
+// staging environment." (convR2) both reproduced the exact same silent-drop shape: /memory's Facts
+// list showed neither statement at all. Widened just these two for the same reason as before:
+// confirm each live rather than widening the rest of the still-untested list (service, function,
+// variable, schema) speculatively.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|service|function|modules?|dependency|dependencies|errors?|exception|endpoints?|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|command|log|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|service|function|modules?|dependency|dependencies|errors?|exception|endpoints?|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|commands?|logs?|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared

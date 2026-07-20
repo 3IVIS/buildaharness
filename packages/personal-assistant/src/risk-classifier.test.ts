@@ -426,6 +426,48 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Purchase orders take forever to get approved at my company, it\'s so frustrating.').riskLevel).not.toBe('HIGH')
   })
 
+  it('does not flag a sentence-initial "Schedule details..." as a MEDIUM scheduling request (batch 29, h6/conv381/conv397)', () => {
+    // Same sentence-initial noun-compound gap as "conflicts"/"funds"/"requirements"/"changes"
+    // above — "detail(s)" wasn't in the trailing exclusion.
+    expect(
+      classifyRisk('Schedule details are attached for the conference, let me know if you have questions.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
+  it('does not flag a sentence-initial "Delete confirmation..." as a HIGH delete request (batch 29, h1)', () => {
+    // Same noun-compound gap ORDER_VERB_PATTERN/CANCEL_VERB_PATTERN's own trailing lists already
+    // cover — "confirmation(s)" wasn't in DELETE_VERB_PATTERN's trailing exclusion.
+    expect(
+      classifyRisk('Delete confirmation for my old account finally came through this morning.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag a sentence-initial "Wire fraud..." as a HIGH money-spend request (batch 29, h2)', () => {
+    // PAY_WIRE_PATTERN's trailing exclusion only ever covered "pay"-noun-compounds, never
+    // "wire"-noun-compounds ("wire fraud", "wire mesh", "high wire act").
+    expect(
+      classifyRisk('Wire fraud cases have increased significantly this year according to the report.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag "...last week\'s email campaign..." as a HIGH send-message request (batch 29, surfaced re-probing h3)', () => {
+    // EMAIL_TEXT_VERB_PATTERN's trailing exclusion never covered "campaign(s)" — an email
+    // marketing campaign is a noun-compound, not a live send-a-message request. This pattern is
+    // checked before CANCEL_VERB_PATTERN in HIGH_RISK_PATTERNS, so it used to mask the
+    // "unsubscribe rates" gap below from ever being reached on this exact sentence.
+    expect(
+      classifyRisk("Unsubscribe rates jumped after last week's email campaign, according to marketing.").riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag "Unsubscribe rates..." as a HIGH cancellation request (batch 29, h3)', () => {
+    // CANCEL_VERB_PATTERN's trailing exclusion never covered "rate(s)" (unsubscribe rate, a
+    // marketing-metric noun-compound, not a live cancellation request).
+    expect(
+      classifyRisk('Unsubscribe rates on our newsletter are much higher than industry average this quarter.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
   it('still exempts a pure past-narrative/reported-speech message with no separate live request', () => {
     // Regression guard for the h7 fix above: splitting into clauses must not reintroduce a false
     // positive for the plain single-clause cases these exemptions exist for.

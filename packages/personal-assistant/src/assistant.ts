@@ -202,8 +202,26 @@ function mergeFacts(durableFacts: UserFact[], sessionFacts: UserFact[]): UserFac
 // this check) even starts, so a caller must print this separately alongside the risk/sources/plan
 // suffixes it already appends after a streamed reply, the same "absent when unused" convention as
 // those.
+// batch 29 (conv3/convR2, re-probing conv178/conv198/conv394): the always-on lexical Contradiction
+// layer (harness-runtime.ts's detectContradictions, packages/harness) has no id-stripping guard of
+// its own the way the LLM-based path in this file does (see contradiction-checker.ts's
+// stripBeliefIds) — its raw description templates (detect-contradictions.ts's `Pairwise
+// contradiction between "X" and "Y"`, `Temporal contradiction: belief "X" invalidated by change
+// "Y"`, `Abstraction contradiction: belief "X" stated at line-level granularity`) embed internal
+// belief ids like "fact-respond-1-3" directly, and nothing between there and the user ever
+// sanitizes them — found via live testing (conv3: "Pairwise contradiction between
+// \"fact-respond-1-3\" and \"fact-respond-1-4\"" reached the screen verbatim). The template itself
+// lives in packages/harness, out of this package's scope, so this is a defense-in-depth backstop:
+// recognize the specific raw-id-shaped token these templates produce and fall back to a generic
+// but still-useful notice instead of ever showing leaked internals.
+const RAW_BELIEF_ID_PATTERN = /\b(?:fact|belief)-[\w-]+-\d+(?:-\d+)?\b/
+
 function findContradictionNotice(layerActivity: LayerActivityEvent[]): string | undefined {
-  return layerActivity.find((e) => e.layer === 'contradiction' && e.fired)?.reason
+  const reason = layerActivity.find((e) => e.layer === 'contradiction' && e.fired)?.reason
+  if (reason === undefined) return undefined
+  return RAW_BELIEF_ID_PATTERN.test(reason)
+    ? 'Heads up — this seems to conflict with something you told me earlier.'
+    : reason
 }
 
 // batch 10 coverage (conv166): notifiedContradictions (see its own doc comment above) was wired

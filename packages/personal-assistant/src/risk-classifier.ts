@@ -89,8 +89,15 @@ const ORDER_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\border\\b(?!\
 // batch 19 (h5): "editor" (text editor) is the same sentence-initial noun-compound gap as
 // "alignment"/"thread" above — found via live testing: "Text editor I use at work keeps crashing
 // every time I paste in a large file." misfired HIGH.
+// batch 29 (convSweep1, surfaced while re-probing h3): "campaign(s)" (an email marketing
+// campaign, a noun-compound, not a live send-a-message request) wasn't in the trailing exclusion
+// list either — found via live testing: "Unsubscribe rates jumped after last week's email
+// campaign, according to marketing." (a plain statistics statement, no live send request)
+// misfired HIGH via the bare "email" alternative before CANCEL_VERB_PATTERN's own gap on the same
+// sentence's "unsubscribe" ever got a chance to run (this pattern is checked first in
+// HIGH_RISK_PATTERNS). Added "campaigns?" to the trailing exclusion.
 const EMAIL_TEXT_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|editor|editors|is|was)\\b)`,
+  `${nounContextLookbehind('check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw')}\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|editor|editors|campaigns?|is|was)\\b)`,
   'i',
 )
 
@@ -166,7 +173,12 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // sentence-initial "Schedule" has no preceding determiner either — found via live testing:
 // "Schedule change requests have to go through HR now." misfired MEDIUM with no live
 // scheduling request present. Added "changes?" to the trailing exclusion.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|is|was)\\b)`, 'i')
+// batch 29 (h6, re-probing conv381/conv397): same sentence-initial noun-compound gap as
+// "conflicts"/"funds"/"requirements"/"changes" above — "detail(s)" wasn't in the trailing
+// exclusion list either — found via live testing: "Schedule details are attached for the
+// conference, let me know if you have questions." misfired MEDIUM with no live scheduling
+// request present. Added "details?" to the trailing exclusion.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live
@@ -216,7 +228,12 @@ const FORWARD_VERB_PATTERN =
 // batch 19 (h3): "queue" (delete/print queue) is the same UI/system-element noun-compound gap as
 // key/button above — found via live testing: "Delete queue on this printer keeps growing no
 // matter how many times IT clears it." misfired HIGH.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|is|was)\\b|\\.\\w)`, 'i')
+// batch 29 (h1, re-probing conv381/conv397 cluster): "confirmation(s)" is the same noun-compound
+// gap ORDER_VERB_PATTERN/CANCEL_VERB_PATTERN's own trailing lists already cover for the
+// analogous case, but DELETE_VERB_PATTERN never got it — found via live testing: "Delete
+// confirmation for my old account finally came through this morning." (a status observation, no
+// live delete request) misfired HIGH.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|confirmations?|is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
@@ -235,7 +252,12 @@ const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|r
 // batch 19 (h2): "grade" (pay grade) is the same noun-compound gap as "day"/"period" above — found
 // via live testing: "Pay grade differences between departments never made sense to me, honestly."
 // misfired HIGH.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade)\\b)`, 'i')
+// batch 29 (h2, re-probing conv381/conv397 cluster): the trailing exclusion list above only ever
+// covered "pay"-noun-compounds, never "wire"-noun-compounds ("wire fraud", "wire mesh", "high
+// wire act") — found via live testing: "Wire fraud cases have increased significantly this year
+// according to the report." (a plain statement, no live wire-transfer request) misfired HIGH via
+// the bare "wire" alternative. Added "fraud" to the trailing exclusion.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade|fraud)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already
@@ -261,8 +283,17 @@ const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|tra
 // batch 19 (h4): "policy" (cancellation/return policy) is the same sentence-initial noun-compound
 // gap as "culture" above — found via live testing: "Cancel policy on this website is really
 // unclear, I can't tell if I'd get a refund." misfired HIGH.
+// h3 (re-probing conv381/conv397 cluster, batch 29): "rate(s)" (unsubscribe rate, a marketing
+// metric noun-compound, not a live cancellation request) wasn't in the trailing exclusion list
+// either — found via code reading (convSweep1's live test hit EMAIL_TEXT_VERB_PATTERN's own
+// "campaign" gap on the same sentence first, since that pattern is checked earlier in
+// HIGH_RISK_PATTERNS and masked this one from ever being reached): "Unsubscribe rates jumped
+// after last week's email campaign, according to marketing." would still misfire HIGH here once
+// the email/campaign gap above is fixed, since "unsubscribe" followed by "rates" isn't excluded.
+// Added "rates?" to the trailing exclusion pre-emptively rather than waiting for a future batch
+// to rediscover it once the masking pattern above no longer fires first.
 const CANCEL_VERB_PATTERN = new RegExp(
-  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|is|was)\\b|\\s+each\\s+other\\b)`,
+  `${nounContextLookbehind()}\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|rates?|is|was)\\b|\\s+each\\s+other\\b)`,
   'i',
 )
 
