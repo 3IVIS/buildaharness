@@ -1,0 +1,4 @@
+{
+  "dep-class-gap-notes-format": "TS prefixes the dep_class_gap_annotation note with 'dep_class_gap: '; Python appends the raw annotation with no prefix. Advisory-only (INV-07), doesn't affect risk_state/block_mask. Filed by T10, not fixed — human to decide which formatting is canonical.",
+  "dep-class-gap-empty-string": "TS treats an explicit empty-string dep_class_gap_annotation as absent (truthy check); Python treats it as present (`is not None` check) and appends an empty-string note. Filed by T10, not fixed — human to decide correct semantics for an explicit empty string vs. an absent/null annotation."
+}

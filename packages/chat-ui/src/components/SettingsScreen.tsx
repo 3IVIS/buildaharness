@@ -38,6 +38,8 @@ interface Props {
   overriddenKeys: ReadonlySet<keyof AssistantConfig>
   /** Hides the Connection section (proxy/token/model don't apply — desktop always talks to the user's own claude-cli session) and shows the Workspace section instead. */
   isDesktop: boolean
+  /** T7: true for one render right after this app just migrated a pre-existing plaintext apiKey into the OS keychain — shows a one-time notice, then the caller (App.tsx) clears it. Always false on the browser build. */
+  apiKeyMigrationNotice: boolean
   /** True while a turn is in flight — Save/Cancel disable rather than racing a live turn. */
   busy: boolean
   onSave: (patch: Partial<AssistantConfig>) => Promise<void>
@@ -72,6 +74,7 @@ export function SettingsScreen({
   config,
   overriddenKeys,
   isDesktop,
+  apiKeyMigrationNotice,
   busy,
   onSave,
   onCancel,
@@ -173,12 +176,25 @@ export function SettingsScreen({
                   onChange={(e) => set('apiKey', e.target.value || undefined)}
                 />
               </FieldRow>
-              <p className="settings__warning">
-                Stored in plain text on this device, not an OS keychain — same trust boundary as the other secret
-                fields on this screen, but this is a real {BACKEND_LABEL[form.llmBackend]} key, not a self-hosted
-                proxy token, so a leaked config file is a bigger deal. Only enter a key you're comfortable having
-                sit in a local settings file.
-              </p>
+              {isDesktop ? (
+                <p className="settings__warning">
+                  Stored in your OS keychain (Keychain on macOS, Secret Service on Linux, DPAPI-protected on
+                  Windows) — not in the plaintext settings file the other fields on this screen use.
+                </p>
+              ) : (
+                <p className="settings__warning">
+                  Stored in plain text on this device, not an OS keychain — same trust boundary as the other secret
+                  fields on this screen, but this is a real {BACKEND_LABEL[form.llmBackend]} key, not a self-hosted
+                  proxy token, so a leaked config file is a bigger deal. Only enter a key you're comfortable having
+                  sit in a local settings file.
+                </p>
+              )}
+              {isDesktop && apiKeyMigrationNotice && (
+                <p className="settings__warning">
+                  Your previously saved API key has been moved into your OS keychain — it no longer lives in the
+                  plaintext settings file.
+                </p>
+              )}
             </>
           )}
 

@@ -90,13 +90,16 @@ command (`src-tauri/src/lib.rs`) — a Rust port of personal-assistant's
 proposed command is always staged first via the same pending-action flow
 `write_file` already uses — nothing runs until the user approves it in the
 UI. The Rust executor caps output at 20 000 bytes, reduces the child's env to
-`PATH`/`HOME`/`USERPROFILE`/`LANG`, and kills the process on timeout
-(`config.shellTimeoutMs`, default 30 s) — it does not kill the whole process
-group on timeout the way `shell-executor.ts`'s Node implementation does
-(`detached` + a negative-pid signal), so a killed shell's own unwaited
-grandchildren can outlive the timeout; accepted simplification for a first
-cut, same tradeoff `check_claude_available`'s doc comment already accepts
-elsewhere in this crate.
+`PATH`/`HOME`/`USERPROFILE`/`LANG`, and on timeout (`config.shellTimeoutMs`,
+default 30 s) kills the whole process group, not just the top-level shell —
+parity with `shell-executor.ts`'s Node implementation (`detached` + a
+negative-pid signal). On Unix, the child is spawned via `process_group(0)`
+(making it the leader of its own new process group) and killed via
+`kill -KILL -<pgid>`, reaching a backgrounded/unwaited grandchild the same
+way the CLI's negative-pid kill does. On Windows, which has no
+process-group-signal equivalent, `taskkill /F /T /PID <pid>` walks and
+force-kills the whole descendant tree instead — the closest available
+guarantee.
 
 ## Diagnostics health check
 

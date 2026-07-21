@@ -389,16 +389,39 @@ fn truncate_output(text: String, max_bytes: usize) -> String {
   format!("{}\n… (truncated)", &text[..end])
 }
 
+/// Kills every process in `child`'s process group, not just `child` itself — the Unix
+/// equivalent of shell-executor.ts's `detached: true` + `process.kill(-pid, 'SIGKILL')`. Only
+/// correct because the child was spawned with `process_group(0)` (see run_shell_command below),
+/// which makes it the leader of its own new process group, i.e. its pgid equals its pid; a
+/// negative pid to `kill` targets the whole group instead of one process, reaching a
+/// backgrounded/unwaited grandchild that plain `child.kill()` would leave running past the
+/// timeout. Shells out to the `kill` binary rather than a raw `libc::kill` syscall to avoid
+/// adding a new crate dependency for one call.
+#[cfg(unix)]
+fn kill_process_tree(child: &std::process::Child) {
+  let pgid = child.id();
+  let _ = Command::new("kill").arg("-KILL").arg(format!("-{pgid}")).status();
+}
+
+/// Windows has no process-group-signal equivalent to Unix's negative-pid `kill` — `taskkill`'s
+/// `/T` walks and kills the whole descendant tree rooted at the given pid, and `/F` forces
+/// termination, which is the closest available guarantee that a timed-out command's own child
+/// processes don't survive it.
+#[cfg(windows)]
+fn kill_process_tree(child: &std::process::Child) {
+  let _ = Command::new("taskkill").args(["/F", "/T", "/PID", &child.id().to_string()]).status();
+}
+
 /// Actually runs a previously staged, already-sandboxed command — the Rust equivalent of
 /// personal-assistant's shell-executor.ts (which can't run inside a webview because it needs
 /// node:child_process). Invoked only at approval time, via the frontend's ShellCommandExecutor
 /// (tauri-shell-executor.ts) passed into PersonalAssistant's `shellTools.executeCommand` — the
 /// same generic resolvePendingAction path the CLI uses, just backed by a Tauri command instead
 /// of a direct node:child_process.spawn call. `cwd` is the staged (already-validated-in-workspace)
-/// path from the pending-action record, not user input taken fresh here. No process-group kill
-/// on timeout (unlike shell-executor.ts's `detached` + negative-pid kill) — accepted simplification
-/// for a first cut, same tradeoff already noted on check_claude_available's doc comment; a killed
-/// shell's own unwaited grandchildren can outlive the timeout.
+/// path from the pending-action record, not user input taken fresh here. On timeout, kills the
+/// whole process tree (see kill_process_tree above) rather than just the top-level shell —
+/// parity with shell-executor.ts's `detached` + negative-pid kill, closing the gap this crate's
+/// doc comments and the desktop README previously disclosed.
 #[tauri::command]
 async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>) -> Result<ShellCommandOutcome, String> {
   tauri::async_runtime::spawn_blocking(move || {
@@ -406,8 +429,12 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
 
     #[cfg(unix)]
     let mut cmd = {
+      use std::os::unix::process::CommandExt;
       let mut c = Command::new("/bin/sh");
       c.arg("-c").arg(&command);
+      // New process group with pgid == this child's own pid, so kill_process_tree's negative-pid
+      // signal reaches this shell and everything it spawns, not just the shell itself.
+      c.process_group(0);
       c
     };
     #[cfg(windows)]
@@ -453,7 +480,7 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
         Ok(None) => {
           if start.elapsed() >= timeout {
             timed_out = true;
-            let _ = child.kill();
+            kill_process_tree(&child);
             let _ = child.wait();
             break None;
           }
@@ -656,6 +683,264 @@ async fn dns_lookup(hostname: String) -> Result<Vec<String>, String> {
   .map_err(|e| format!("Internal error during DNS resolution: {e}"))?
 }
 
+// ── OS-keychain-backed apiKey storage (T7) ──
+//
+// Scoped to `apiKey` only, per the review's own framing (§5.3) that it's materially
+// higher-value than authToken/braveApiKey — a real Anthropic/OpenAI/OpenRouter provider key,
+// not a self-hosted proxy token. No new Cargo dependency was added for this (no `keyring`
+// crate) — this sandbox has neither `cargo`/`rustc` on PATH nor working access to crates.io
+// (confirmed: a direct crates.io request returns HTTP 403 here), so a new dependency could
+// not be fetched or have its Cargo.lock entry regenerated and verified to even compile. This
+// mirrors T5's own precedent of shelling out to existing OS binaries (`kill`/`taskkill`)
+// rather than adding a crate — the same tradeoff, just for keychain access instead of
+// process-group signaling.
+const KEYCHAIN_SERVICE: &str = "com.buildaharness.assistant";
+const KEYCHAIN_ACCOUNT: &str = "apiKey";
+
+/// macOS: shells out to `/usr/bin/security`'s generic-password keychain item commands.
+/// Known limitation: `-w <secret>` passes the secret as a CLI argument, briefly visible to
+/// other processes on the same machine via `ps`/`/proc` — an inherent gap versus calling the
+/// Keychain Services C API directly (which the `security-framework`/`keyring` crates do), and
+/// the direct tradeoff of shelling out instead of adding that crate dependency (see module
+/// doc comment above). Still a strict improvement over a permanently-resident plaintext file.
+#[cfg(target_os = "macos")]
+fn keychain_set_impl(secret: &str) -> Result<(), String> {
+  let status = Command::new("security")
+    .args(["add-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w", secret, "-U"])
+    .status()
+    .map_err(|e| format!("Couldn't run \"security\": {e}"))?;
+  if status.success() { Ok(()) } else { Err(format!("\"security add-generic-password\" exited with {status}")) }
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_get_impl() -> Result<Option<String>, String> {
+  let output = Command::new("security")
+    .args(["find-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"])
+    .output()
+    .map_err(|e| format!("Couldn't run \"security\": {e}"))?;
+  // A nonzero exit here means "no matching item" (errSecItemNotFound), the overwhelmingly
+  // common non-error outcome (nothing saved yet) — matches FsBackend.readTextFile's contract
+  // of `None` for "missing", not an `Err`.
+  if !output.status.success() {
+    return Ok(None);
+  }
+  Ok(Some(String::from_utf8_lossy(&output.stdout).trim_end_matches('\n').to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn keychain_delete_impl() -> Result<(), String> {
+  // Not-found is treated as success too (no-op) — matches workspace_remove_file's contract.
+  let _ = Command::new("security").args(["delete-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE]).status();
+  Ok(())
+}
+
+/// Linux: shells out to `secret-tool` (libsecret-tools), which talks to whatever Secret
+/// Service provider is running (gnome-keyring, KWallet's compat shim, etc.) over D-Bus. The
+/// secret is piped over stdin rather than passed as a `-w`-style argument (unlike the macOS
+/// path above) — `secret-tool store` is specifically designed to read the secret from stdin,
+/// so this path doesn't share macOS's ps-visibility caveat.
+#[cfg(target_os = "linux")]
+fn keychain_set_impl(secret: &str) -> Result<(), String> {
+  use std::io::Write;
+  let mut child = Command::new("secret-tool")
+    .args(["store", "--label", "buildaharness Assistant API key", "service", KEYCHAIN_SERVICE, "account", KEYCHAIN_ACCOUNT])
+    .stdin(Stdio::piped())
+    .spawn()
+    .map_err(|e| format!("Couldn't run \"secret-tool\" (is libsecret-tools installed, and a Secret Service provider running?): {e}"))?;
+  child
+    .stdin
+    .take()
+    .expect("piped stdin")
+    .write_all(secret.as_bytes())
+    .map_err(|e| format!("Couldn't write the secret to \"secret-tool\": {e}"))?;
+  let status = child.wait().map_err(|e| format!("Couldn't wait on \"secret-tool\": {e}"))?;
+  if status.success() { Ok(()) } else { Err(format!("\"secret-tool store\" exited with {status}")) }
+}
+
+#[cfg(target_os = "linux")]
+fn keychain_get_impl() -> Result<Option<String>, String> {
+  let output = Command::new("secret-tool")
+    .args(["lookup", "service", KEYCHAIN_SERVICE, "account", KEYCHAIN_ACCOUNT])
+    .output()
+    .map_err(|e| format!("Couldn't run \"secret-tool\" (is libsecret-tools installed, and a Secret Service provider running?): {e}"))?;
+  if !output.status.success() || output.stdout.is_empty() {
+    return Ok(None);
+  }
+  Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn keychain_delete_impl() -> Result<(), String> {
+  let _ = Command::new("secret-tool").args(["clear", "service", KEYCHAIN_SERVICE, "account", KEYCHAIN_ACCOUNT]).status();
+  Ok(())
+}
+
+/// Windows has no equivalent CLI to macOS's `security`/Linux's `secret-tool` that can both
+/// write *and read back* a Credential Manager secret — `cmdkey` can create a generic
+/// credential but has no read-back command at all (by design; it's meant for Windows' own
+/// SSO use, not scriptable secret storage). Absent a new crate dependency (see module doc
+/// comment), the closest available OS-native equivalent is DPAPI
+/// (`ProtectedData.Protect`/`Unprotect`, `CurrentUser` scope) via a `powershell` shell-out —
+/// the same primitive Credential Manager itself is built on, tying the ciphertext to this OS
+/// user account, just stored in our own file under `%LOCALAPPDATA%` rather than inside the
+/// Credential Manager vault proper. Documented here as a deliberate, disclosed platform
+/// difference, not a silent one — see this task's implementation note in the plan doc.
+/// The secret is passed via an environment variable, not interpolated into the PowerShell
+/// script text, specifically so a secret containing a quote/backtick/`$(...)` can't break out
+/// of script-string quoting into command injection.
+#[cfg(target_os = "windows")]
+fn keychain_file_path() -> Result<PathBuf, String> {
+  let local_app_data = std::env::var("LOCALAPPDATA").map_err(|_| "LOCALAPPDATA is not set".to_string())?;
+  let dir = PathBuf::from(local_app_data).join("buildaharness-assistant");
+  std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't create the keychain directory: {e}"))?;
+  Ok(dir.join("apikey.dpapi"))
+}
+
+#[cfg(target_os = "windows")]
+fn keychain_set_impl(secret: &str) -> Result<(), String> {
+  let path = keychain_file_path()?;
+  let script = "$bytes = [System.Text.Encoding]::UTF8.GetBytes($env:BAH_KEYCHAIN_SECRET); \
+    $enc = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); \
+    [System.IO.File]::WriteAllBytes($env:BAH_KEYCHAIN_PATH, $enc)";
+  let status = Command::new("powershell")
+    .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    .env("BAH_KEYCHAIN_SECRET", secret)
+    .env("BAH_KEYCHAIN_PATH", path.to_string_lossy().to_string())
+    .status()
+    .map_err(|e| format!("Couldn't run \"powershell\": {e}"))?;
+  if status.success() { Ok(()) } else { Err(format!("DPAPI protect via powershell exited with {status}")) }
+}
+
+#[cfg(target_os = "windows")]
+fn keychain_get_impl() -> Result<Option<String>, String> {
+  let path = keychain_file_path()?;
+  if !path.exists() {
+    return Ok(None);
+  }
+  let script = "$enc = [System.IO.File]::ReadAllBytes($env:BAH_KEYCHAIN_PATH); \
+    $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($enc, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser); \
+    [System.Console]::Out.Write([System.Text.Encoding]::UTF8.GetString($bytes))";
+  let output = Command::new("powershell")
+    .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    .env("BAH_KEYCHAIN_PATH", path.to_string_lossy().to_string())
+    .output()
+    .map_err(|e| format!("Couldn't run \"powershell\": {e}"))?;
+  if !output.status.success() {
+    return Err(format!("DPAPI unprotect via powershell failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+  }
+  Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()))
+}
+
+#[cfg(target_os = "windows")]
+fn keychain_delete_impl() -> Result<(), String> {
+  let path = keychain_file_path()?;
+  match std::fs::remove_file(&path) {
+    Ok(()) => Ok(()),
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+    Err(e) => Err(format!("Couldn't remove the keychain file: {e}")),
+  }
+}
+
+/// Stores (creating or overwriting) the apiKey secret in the OS keychain. Called by
+/// tauri-config-store.ts's `save()` whenever a patch touches `apiKey`, and by its `load()`
+/// when migrating a pre-existing plaintext value — never a silent fallback to plaintext on
+/// failure, per this task's own requirement: a keychain-access error propagates to the
+/// frontend as a rejected promise instead.
+#[tauri::command]
+async fn keychain_set_api_key(secret: String) -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(move || keychain_set_impl(&secret))
+    .await
+    .map_err(|e| format!("Internal error setting the keychain secret: {e}"))?
+}
+
+#[tauri::command]
+async fn keychain_get_api_key() -> Result<Option<String>, String> {
+  tauri::async_runtime::spawn_blocking(keychain_get_impl)
+    .await
+    .map_err(|e| format!("Internal error getting the keychain secret: {e}"))?
+}
+
+#[tauri::command]
+async fn keychain_delete_api_key() -> Result<(), String> {
+  tauri::async_runtime::spawn_blocking(keychain_delete_impl)
+    .await
+    .map_err(|e| format!("Internal error deleting the keychain secret: {e}"))?
+}
+
+/// Regression coverage for the T7 gap, Linux path only (this dev sandbox's own platform) —
+/// mirrors shell_process_group_tests' precedent of testing the one platform path this
+/// environment can actually exercise. Skips itself (rather than failing) when `secret-tool`
+/// isn't on PATH or no Secret Service provider answers, since neither is guaranteed present
+/// in every CI/dev environment this crate might be built in — the same "don't fail on an
+/// absent optional runtime dependency" spirit as check_claude_available's `Ok(false)` for a
+/// missing `claude` binary, just surfaced as a skip message instead of a boolean here since
+/// this is a test, not a user-facing health check.
+#[cfg(all(test, target_os = "linux"))]
+mod keychain_tests {
+  use super::{keychain_delete_impl, keychain_get_impl, keychain_set_impl, Command};
+
+  fn secret_service_available() -> bool {
+    Command::new("secret-tool").arg("--version").status().map(|s| s.success()).unwrap_or(false)
+  }
+
+  #[test]
+  fn set_then_get_then_delete_round_trips_through_secret_tool() {
+    if !secret_service_available() {
+      eprintln!("skipping: secret-tool not available / no Secret Service provider running");
+      return;
+    }
+    let probe = format!("bah-test-secret-{}", std::process::id());
+    keychain_set_impl(&probe).expect("keychain_set_impl should succeed");
+    assert_eq!(keychain_get_impl().expect("keychain_get_impl should succeed"), Some(probe));
+    keychain_delete_impl().expect("keychain_delete_impl should succeed");
+    assert_eq!(keychain_get_impl().expect("keychain_get_impl should succeed after delete"), None);
+  }
+}
+
+#[cfg(all(test, unix))]
+mod shell_process_group_tests {
+  use super::{kill_process_tree, Command};
+  use std::io::{BufRead, BufReader};
+  use std::os::unix::process::CommandExt;
+  use std::process::Stdio;
+
+  fn process_alive(pid: u32) -> bool {
+    Command::new("kill").arg("-0").arg(pid.to_string()).status().map(|s| s.success()).unwrap_or(false)
+  }
+
+  /// Regression test for the T5 gap: mirrors shell-executor.test.ts's own coverage for the CLI's
+  /// process-group kill. Spawns a shell that backgrounds a long-running grandchild (`sleep 30 &`)
+  /// and exits immediately on its own — before this fix, killing only the top-level shell process
+  /// left that grandchild running past the shell's own exit, let alone past a timeout.
+  #[test]
+  fn kill_process_tree_terminates_a_backgrounded_grandchild() {
+    let mut cmd = Command::new("/bin/sh");
+    cmd.arg("-c").arg("sleep 30 & echo $!");
+    // Mirrors run_shell_command's own process_group(0) call — the grandchild inherits the same
+    // new process group, which is what makes the group-wide kill below reach it.
+    cmd.process_group(0);
+    cmd.stdout(Stdio::piped());
+    let mut child = cmd.spawn().expect("failed to spawn test shell");
+
+    // Read only the one pid line, not to EOF — the backgrounded grandchild inherits the same
+    // stdout pipe, so it stays open (and read_to_string would block for the grandchild's whole
+    // 30s lifetime) even after the shell itself has exited.
+    let stdout = child.stdout.take().expect("piped stdout");
+    let mut grandchild_pid_line = String::new();
+    BufReader::new(stdout).read_line(&mut grandchild_pid_line).expect("failed to read grandchild pid");
+    let grandchild_pid: u32 = grandchild_pid_line.trim().parse().expect("grandchild pid should be numeric");
+
+    // The shell itself backgrounds `sleep 30` and returns right away, so it exits well before
+    // the grandchild does — same shape as a timed-out command whose own child outlives it.
+    let _ = child.wait();
+    assert!(process_alive(grandchild_pid), "grandchild should still be running before the group kill");
+
+    kill_process_tree(&child);
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    assert!(!process_alive(grandchild_pid), "grandchild should be terminated by the process-group kill");
+  }
+}
+
 #[cfg(test)]
 mod workspace_fs_tests {
   use super::assert_within_workspace;
@@ -716,7 +1001,10 @@ pub fn run() {
       workspace_mkdir,
       workspace_read_dir,
       workspace_realpath,
-      dns_lookup
+      dns_lookup,
+      keychain_set_api_key,
+      keychain_get_api_key,
+      keychain_delete_api_key
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

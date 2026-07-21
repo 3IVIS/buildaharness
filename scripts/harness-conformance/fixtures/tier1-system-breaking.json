@@ -1,0 +1,26 @@
+{
+  "id": "tier1-system-breaking",
+  "description": "A SYSTEM_BREAKING contradiction short-circuits every other tier — both implementations should return BLOCKED/SYSTEM_BREAKING_CONTRADICTION with the fixed world_model_integrity block entry, ignoring otherwise-healthy diagnostics.",
+  "diagnostics": {
+    "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
+    "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },
+    "verification_health": { "strength": 1.0, "feasibility": 1.0 },
+    "execution_health": { "progress_rate": 1.0, "failure_recurrence": 0.0, "oscillation_score": 0.0 },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 7,
+    "contradictions": [
+      {
+        "id": "c1",
+        "type": "pairwise",
+        "severity": "SYSTEM_BREAKING",
+        "scope": "global",
+        "description": "two beliefs directly negate each other",
+        "involved_belief_ids": ["b1", "b2"]
+      }
+    ]
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

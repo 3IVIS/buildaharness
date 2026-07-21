@@ -42,6 +42,7 @@ import {
   applyPendingAction,
   discardPendingAction,
   stagePendingAction,
+  sweepAbandonedPendingActions,
   recordShellCacheEntry,
   clearShellCache,
   type FileToolsContext,
@@ -709,6 +710,9 @@ export class PersonalAssistant {
     // which calls back into it) since it's rooted here rather than in cli.ts. See
     // backfillMessageIndex's own doc comment for the idempotency/version-guard details.
     void this.backfillMessageIndex()
+    // Fire-and-forget, same reasoning as backfillMessageIndex above — see
+    // sweepAbandonedPendingActionsOnStartup's own doc comment (T12 of the gap-coverage plan).
+    void this.sweepAbandonedPendingActionsOnStartup()
   }
 
   /**
@@ -860,6 +864,41 @@ export class PersonalAssistant {
       await this.memory.set(MESSAGE_INDEX_BACKFILL_VERSION_KEY, MESSAGE_INDEX_BACKFILL_VERSION)
     } catch (err) {
       console.error('[message-index] backfill failed:', err)
+    }
+  }
+
+  /**
+   * Prunes stale `.pending-actions/` records on startup (T12 of the gap-coverage plan — review
+   * §3.2). A leftover record is harmless (never applied without a matching id) but unbounded, so
+   * this keeps the directory from growing forever across crashed/abandoned turns.
+   *
+   * Safety-first, not per-record: `stagePendingAction`'s records carry no `sessionId` (the id is a
+   * random UUID, unrelated to any session — see file-tools.ts), so there is no direct way to tie
+   * one staged record to one session's checkpoint. Rather than sweep blind, this skips the sweep
+   * entirely for this startup if ANY known session still has a checkpoint eligible for resume —
+   * the coarser, but always-safe, version of the plan's "never sweep a record that could still be
+   * legitimately resumed" requirement. Known sessions are discovered the same way
+   * backfillMessageIndex already does (transcript: key prefixes), so no new bookkeeping is added.
+   */
+  private async sweepAbandonedPendingActionsOnStartup(): Promise<void> {
+    try {
+      const backend = this.fileTools?.backend ?? this.shellTools?.backend
+      const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+      if (!backend || !workspaceRoot) return
+
+      const hits = await this.memory.search('', Number.MAX_SAFE_INTEGER, 0)
+      for (const hit of hits) {
+        if (typeof hit.key !== 'string' || !hit.key.startsWith('transcript:')) continue
+        const sessionId = hit.key.slice('transcript:'.length)
+        const checkpoint = await loadHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
+        if (!checkpoint) continue
+        const attempts = ((await this.memory.get(resumeAttemptsKey(sessionId))) as number | undefined) ?? 0
+        if (attempts < RESUME_ATTEMPT_CAP) return // still resumable — skip the sweep entirely this startup
+      }
+
+      await sweepAbandonedPendingActions(backend, workspaceRoot)
+    } catch (err) {
+      console.error('[pending-actions] sweep failed:', err)
     }
   }
 

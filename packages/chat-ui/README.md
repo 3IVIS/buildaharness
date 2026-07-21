@@ -26,8 +26,20 @@ at `appLocalDataDir()` — real files instead of a browser database. See
 Renders each `AssistantTurnResult` status distinctly:
 
 - `ok` — a normal assistant reply bubble.
-- `needs_approval` — an approve/deny card; approving replays the same
-  message with `{ approved: true }`, denying leaves it cancelled.
+- `needs_approval` — an approve/deny card. Two distinct gates share this one
+  status, and the card resumes them differently (T8): the message-level risk
+  gate (no `pendingActionId`) just replays the message with
+  `{ approved: true }` on approve, and never re-calls `turn()` at all on
+  deny (matching `assistant.ts`'s own doc comment for that branch — nothing
+  was ever staged, so there's nothing to discard). A staged
+  `write_file`/`run_shell_command`/batch-research pause (`pendingActionId`
+  set) is different — approve *and* deny both resume with
+  `turn(pendingMessage, { approved, pendingActionId })`, since only that
+  round trip actually applies or discards the staged action;
+  `ChatEntry`'s `approval` kind carries `pendingActionId`/`pendingActionKind`
+  through for exactly this. Earlier versions of this card only ever replayed
+  the bare message — real for the message-level gate, but silently never
+  applied *or* discarded a staged write/shell/batch action.
 - `escalated` — a halt banner; the harness needs more information than the
   turn provided and there's nothing to approve.
 
@@ -72,11 +84,16 @@ the default that applies when none of those are set. Saving tears down and
 recreates the `PersonalAssistant` instance so a change applies to the very
 next turn, no reload needed.
 
-**Known limitation**: `enableWeb`/`searchBackend`/`braveApiKey` are shown and
-persisted for schema consistency with the CLI, but chat-ui has no
-`web_search`/`fetch_url` wiring of its own yet (see `App.tsx`'s doc comment) —
-that toggle doesn't change behavior here until the capability is added
-separately. `enableShell` *is* wired on the desktop build (Tauri's
+**Known limitation**: `enableWeb`/`searchBackend`/`braveApiKey` *are* wired
+(`App.tsx`'s `createWebTools()` — see its doc comment) — turning `enableWeb`
+on really does register working `web_search`/`fetch_url` tools, not a no-op.
+On desktop it works end-to-end (Tauri's `@tauri-apps/plugin-http` fetch
+bypasses the browser CORS restriction and a real DNS resolver backs the
+SSRF guard). In a plain browser tab, DuckDuckGo's/Brave's endpoints aren't
+CORS-enabled for arbitrary origins, so the call fails with a `fetch` error —
+that failure is caught by `assistant.ts`'s tool dispatch and reported to the
+model as an ordinary tool error, not a crash, so the turn still completes.
+`enableShell` *is* wired on the desktop build (Tauri's
 `run_shell_command` command, gated the same way the CLI gates it) — see
 `packages/desktop/README.md`'s Shell section; it remains a no-op in a plain
 browser tab, which has no way to execute anything at all. Secrets
@@ -89,8 +106,8 @@ says so next to the field.
 
 ## Session actions & Diagnostics
 
-The header (next to the gear icon) has three buttons — the GUI equivalents
-of the CLI's `/clear`, `/export`, and `/undo`:
+The header (next to the gear icon) has four buttons — the GUI equivalents
+of the CLI's `/clear`, `/export`, `/undo`, and `/search`:
 
 - **New chat** — ends the current conversation (`PersonalAssistant.clearSession()`)
   and resets every piece of derived UI state (usage, memory, health) so
@@ -102,6 +119,18 @@ of the CLI's `/clear`, `/export`, and `/undo`:
   (`PersonalAssistant.undoLastTurn()`), adjusting the visible message list to
   match: a completed turn drops both bubbles, a still-pending approval card
   drops just that one. Disabled with no conversation yet.
+- **Search** — opens a full-screen search panel (`components/SearchPanel.tsx`)
+  over `PersonalAssistant.searchTranscript()`, the same cross-session,
+  relevance-ranked search the CLI's `/search <query>` uses (not limited to the
+  current session — see that method's own doc comment in `assistant.ts`).
+  Clicking a result expands it in place to the full, untruncated message —
+  this app has no multi-session picker anywhere yet, so "jump to the match"
+  means "reveal its full content", not "switch to that session's live chat
+  view". Matched query terms are highlighted (`<mark>`) for sighted users; the
+  result row's accessible name is a separate plain-text `aria-label` rather
+  than computed from that highlighted markup, since the accname
+  name-from-content algorithm silently drops whitespace at each text/element
+  boundary otherwise (verified while writing this feature's tests).
 
 `SettingsScreen.tsx` has a **Diagnostics** section (below Shell, above the
 Save/Cancel footer) — the GUI equivalents of `/status` (transcript length),

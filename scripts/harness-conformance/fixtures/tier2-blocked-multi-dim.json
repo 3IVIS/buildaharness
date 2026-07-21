@@ -1,0 +1,17 @@
+{
+  "id": "tier2-blocked-multi-dim",
+  "description": "Two independent sub-dimensions below CRITICAL_THRESHOLD (0.2), neither in a recovery-dependency cycle with the other — both implementations should return BLOCKED with a two-entry block_mask (belief_freshness, verification_strength) in extraction order, and no escalation_reason (no deadlock).",
+  "diagnostics": {
+    "belief_health": { "freshness": 0.1, "consistency": 1.0, "support": 1.0 },
+    "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },
+    "verification_health": { "strength": 0.15, "feasibility": 1.0 },
+    "execution_health": { "progress_rate": 1.0, "failure_recurrence": 0.0, "oscillation_score": 0.0 },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 2,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

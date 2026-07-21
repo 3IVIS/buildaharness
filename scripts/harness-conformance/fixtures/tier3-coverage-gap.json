@@ -1,0 +1,17 @@
+{
+  "id": "tier3-coverage-gap",
+  "description": "symptom_coverage in [CRITICAL_THRESHOLD, CAUTION_THRESHOLD) with everything else healthy — both implementations should return CAUTIOUS with a single coverage-gap note, formatted identically (same f-string/template-literal shape) on both sides.",
+  "diagnostics": {
+    "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
+    "coverage_health": { "symptom_coverage": 0.3, "explanation_coverage": 1.0 },
+    "verification_health": { "strength": 1.0, "feasibility": 1.0 },
+    "execution_health": { "progress_rate": 1.0, "failure_recurrence": 0.0, "oscillation_score": 0.0 },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 4,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

@@ -20,6 +20,7 @@ import {
   type DnsResolver,
   type AssistantTurnResult,
   type DebugLogEntry,
+  type TranscriptSearchHit,
 } from '@buildaharness/personal-assistant'
 import {
   LLMClient,
@@ -41,6 +42,7 @@ import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
 import { SettingsScreen } from './components/SettingsScreen'
+import { SearchPanel } from './components/SearchPanel'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
@@ -180,10 +182,11 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: 
  * computed on the Rust side from this crate's compile-time location — see that command's own
  * doc comment) otherwise. shellTools follows the same enableShell gate the CLI uses
  * (cli.ts) — `run_shell_command` is only registered on the MCP server, and only wired into
- * PersonalAssistant, when the user has turned Shell on in Settings. Note:
- * `config.enableWeb`/`searchBackend` are still persisted and shown in Settings for schema
- * consistency with the CLI but chat-ui has no web_search/fetch_url wiring of its own yet —
- * that toggle alone doesn't change behavior here.
+ * PersonalAssistant, when the user has turned Shell on in Settings. Note: `config.enableWeb`/
+ * `searchBackend` *are* wired here via `createWebTools()` above (see its doc comment for the
+ * fetchImpl/dns caveats) — a plain browser tab genuinely reaches DuckDuckGo/Brave over the
+ * network, it just fails there with a CORS error today (caught by assistant.ts's tool dispatch
+ * and reported to the model as a tool error, not a crash); desktop works end-to-end.
  *
  * fileTools/shellTools deliberately use a *different* FsBackend (createTauriWorkspaceFsBackend)
  * than memory/experienceStore/checkpointStore do (createTauriFsBackend) — the former is
@@ -241,12 +244,17 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search'>('chat')
   // Optimistic default so Settings is usable immediately — refreshed to the real persisted
   // value once createConfigStore().load() resolves, a moment later (see the mount effect).
   const initialResolved = resolveConfig({}, envOverrides)
   const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
   const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
+  // T7: true for one Settings-screen render right after TauriConfigStore.load() has just
+  // migrated a pre-existing plaintext apiKey into the OS keychain — see that class's
+  // consumeMigrationNotice() doc comment. Always false on a plain-browser build (BrowserConfigStore
+  // has no such migration, apiKey stays in localStorage there).
+  const [apiKeyMigrationNotice, setApiKeyMigrationNotice] = useState(false)
   // GUI equivalents of the CLI's /cost, /memory, /doctor, and /status (transcript length) —
   // populated on demand (usage as each turn completes; memory/health/transcript length when
   // Settings opens) rather than kept live at all times, the same "compute when asked for"
@@ -314,6 +322,13 @@ export function App(): React.JSX.Element {
   async function handleOpenSettings(): Promise<void> {
     setView('settings')
     void loadDiagnostics()
+  }
+
+  /** Cross-session transcript search (GUI equivalent of the CLI's /search) — see SearchPanel.tsx's doc comment. Returns no results rather than throwing while the assistant is still starting up, same "still starting up" grace every other assistant-backed handler here gives. */
+  async function handleSearchTranscript(query: string): Promise<TranscriptSearchHit[]> {
+    const assistant = assistantRef.current
+    if (!assistant) return []
+    return assistant.searchTranscript(query)
   }
 
   /** GUI equivalent of /clear — ends the conversation and resets every piece of derived UI state alongside it, so nothing shows stale data for the fresh session. */
@@ -385,6 +400,7 @@ export function App(): React.JSX.Element {
       configStoreRef.current = store
       setConfig(resolved.config)
       setOverriddenKeys(resolved.overriddenKeys)
+      if (store instanceof TauriConfigStore) setApiKeyMigrationNotice(store.consumeMigrationNotice())
       const assistant = await buildAssistant(resolved.config)
       if (!cancelled) assistantRef.current = assistant
     })()
@@ -411,12 +427,20 @@ export function App(): React.JSX.Element {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [entries])
 
-  async function runTurn(message: string, approved: boolean): Promise<void> {
+  async function runTurn(message: string, approved: boolean, pendingActionId?: string): Promise<void> {
     const assistant = assistantRef.current
     if (!assistant) {
       setEntries((prev) => [
         ...prev,
-        { id: newId(), kind: 'error', content: 'Assistant is still starting up — try again in a moment.', retryable: true, retryMessage: message, retryApproved: approved },
+        {
+          id: newId(),
+          kind: 'error',
+          content: 'Assistant is still starting up — try again in a moment.',
+          retryable: true,
+          retryMessage: message,
+          retryApproved: approved,
+          retryPendingActionId: pendingActionId,
+        },
       ])
       return
     }
@@ -430,6 +454,7 @@ export function App(): React.JSX.Element {
       const result = await assistant.turn(message, {
         sessionId: sessionIdRef.current,
         approved,
+        pendingActionId,
         onProgress: setProgress,
         onToken: (token) => setStreamingText((prev) => (prev ?? '') + token),
         onToolStep: (step) => {
@@ -464,7 +489,15 @@ export function App(): React.JSX.Element {
       } else if (result.status === 'needs_approval') {
         setEntries((prev) => [
           ...prev,
-          { id: newId(), kind: 'approval', pendingMessage: message, reason: result.reason ?? 'This action needs approval.', riskLevel: result.riskLevel },
+          {
+            id: newId(),
+            kind: 'approval',
+            pendingMessage: message,
+            reason: result.reason ?? 'This action needs approval.',
+            riskLevel: result.riskLevel,
+            pendingActionId: result.pendingActionId,
+            pendingActionKind: result.pendingActionKind,
+          },
         ])
       } else {
         setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.' }])
@@ -475,7 +508,10 @@ export function App(): React.JSX.Element {
       // no code/name) is otherwise never surfaced anywhere, not even devtools. Log it.
       console.error('[assistant turn failed]', err)
       const { message: errorMessage, retryable } = classifyError(err)
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved }])
+      setEntries((prev) => [
+        ...prev,
+        { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved, retryPendingActionId: pendingActionId },
+      ])
     } finally {
       setBusy(false)
       setProgress(null)
@@ -515,17 +551,31 @@ export function App(): React.JSX.Element {
     e.target.style.height = `${e.target.scrollHeight}px`
   }
 
-  function handleApprove(entryId: string, pendingMessage: string): void {
+  function handleApprove(entryId: string, pendingMessage: string, pendingActionId?: string): void {
     setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'approval' ? { ...e, resolution: 'approved' } : e)))
-    void runTurn(pendingMessage, true)
+    void runTurn(pendingMessage, true, pendingActionId)
   }
 
-  function handleDeny(entryId: string): void {
+  function handleDeny(entryId: string, pendingMessage: string, pendingActionId?: string): void {
     setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'approval' ? { ...e, resolution: 'denied' } : e)))
+    // The message-level risk gate (no pendingActionId) never re-enters turn() on decline — see
+    // assistant.ts's own doc comment on that branch, and the local resolution flip above is the
+    // whole story for that case. A staged write/shell/batch-research action is different: it must
+    // resume via turn({approved: false, pendingActionId}) to actually discard it (batch also needs
+    // this to get back the real "here's what I found before stopping" reply) — without this call,
+    // Deny only changed local UI state and left the staged action to rot, never applied or
+    // discarded (T8).
+    if (pendingActionId) {
+      void runTurn(pendingMessage, false, pendingActionId)
+    }
   }
 
-  function handleRetry(message: string, approved: boolean): void {
-    void runTurn(message, approved)
+  function handleRetry(message: string, approved: boolean, pendingActionId?: string): void {
+    void runTurn(message, approved, pendingActionId)
+  }
+
+  if (view === 'search') {
+    return <SearchPanel search={handleSearchTranscript} onCancel={() => setView('chat')} />
   }
 
   if (view === 'settings') {
@@ -534,6 +584,7 @@ export function App(): React.JSX.Element {
         config={config}
         overriddenKeys={overriddenKeys}
         isDesktop={isTauri()}
+        apiKeyMigrationNotice={apiKeyMigrationNotice}
         busy={busy}
         onSave={handleSaveSettings}
         onCancel={() => setView('chat')}
@@ -555,6 +606,7 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
           <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
+          <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
       </header>
@@ -583,7 +635,7 @@ export function App(): React.JSX.Element {
                   key={entry.id}
                   role="error"
                   content={entry.content}
-                  onRetry={entry.retryable ? () => handleRetry(entry.retryMessage, entry.retryApproved) : undefined}
+                  onRetry={entry.retryable ? () => handleRetry(entry.retryMessage, entry.retryApproved, entry.retryPendingActionId) : undefined}
                 />
               )
             case 'approval':
@@ -593,9 +645,10 @@ export function App(): React.JSX.Element {
                   pendingMessage={entry.pendingMessage}
                   reason={entry.reason}
                   riskLevel={entry.riskLevel}
+                  pendingActionKind={entry.pendingActionKind}
                   resolution={entry.resolution}
-                  onApprove={() => handleApprove(entry.id, entry.pendingMessage)}
-                  onDeny={() => handleDeny(entry.id)}
+                  onApprove={() => handleApprove(entry.id, entry.pendingMessage, entry.pendingActionId)}
+                  onDeny={() => handleDeny(entry.id, entry.pendingMessage, entry.pendingActionId)}
                 />
               )
             case 'escalation':

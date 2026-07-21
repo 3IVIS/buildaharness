@@ -8,6 +8,8 @@ import {
   loadPendingAction,
   applyPendingAction,
   discardPendingAction,
+  sweepAbandonedPendingActions,
+  PENDING_ACTION_MAX_AGE_MS,
   recordShellCacheEntry,
   findCachedShellResult,
   type FileToolsContext,
@@ -440,5 +442,62 @@ describe('pending-action staging', () => {
 
     // The original entry is consumed by the revert, and nothing new takes its place.
     expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
+  })
+})
+
+describe('pending-action sweep (T12)', () => {
+  it('sweeps a record older than PENDING_ACTION_MAX_AGE_MS', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'stale' })
+    const stagedAt = (await loadPendingAction(backend, ROOT, id))!.stagedAt
+    const now = new Date(stagedAt).getTime() + PENDING_ACTION_MAX_AGE_MS + 1
+
+    const { swept } = await sweepAbandonedPendingActions(backend, ROOT, now)
+
+    expect(swept).toEqual([id])
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+  })
+
+  it('leaves a record younger than PENDING_ACTION_MAX_AGE_MS untouched', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'fresh' })
+    const stagedAt = (await loadPendingAction(backend, ROOT, id))!.stagedAt
+    const now = new Date(stagedAt).getTime() + PENDING_ACTION_MAX_AGE_MS - 1
+
+    const { swept } = await sweepAbandonedPendingActions(backend, ROOT, now)
+
+    expect(swept).toEqual([])
+    expect(await loadPendingAction(backend, ROOT, id)).toBeDefined()
+  })
+
+  it('never touches .undo-log/ entries', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'before')
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'after' })
+    await applyPendingAction(backend, ROOT, writeId) // produces one undo-log entry
+    const { id: staleId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'other.md', content: 'stale' })
+    const stagedAt = (await loadPendingAction(backend, ROOT, staleId))!.stagedAt
+    const now = new Date(stagedAt).getTime() + PENDING_ACTION_MAX_AGE_MS + 1
+
+    await sweepAbandonedPendingActions(backend, ROOT, now)
+
+    expect(await listUndoLogEntries(backend, ROOT)).toHaveLength(1)
+  })
+
+  it('leaves a corrupt record in place rather than sweeping it', async () => {
+    const backend = makeFakeBackend()
+    await backend.mkdir(`${ROOT}/.pending-actions`)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/broken.json`, 'not json')
+
+    const { swept } = await sweepAbandonedPendingActions(backend, ROOT, Date.now() + PENDING_ACTION_MAX_AGE_MS * 2)
+
+    expect(swept).toEqual([])
+    expect(await backend.readTextFile(`${ROOT}/.pending-actions/broken.json`)).toBe('not json')
+  })
+
+  it('returns an empty sweep when no .pending-actions/ directory exists yet', async () => {
+    const backend = makeFakeBackend()
+    const { swept } = await sweepAbandonedPendingActions(backend, ROOT, Date.now())
+    expect(swept).toEqual([])
   })
 })

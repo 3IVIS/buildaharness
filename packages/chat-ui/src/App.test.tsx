@@ -24,7 +24,31 @@ vi.mock('@buildaharness/personal-assistant', async () => {
       create: vi.fn(async () => {
         let transcript: FakeTranscriptEntry[] = []
         return {
-          turn: vi.fn(async (message: string, options?: { approved?: boolean }) => {
+          turn: vi.fn(async (message: string, options?: { approved?: boolean; pendingActionId?: string }) => {
+            // Mirrors a real staged write_file/run_shell_command/batch-research pause
+            // (assistant.ts's pendingActionId gate, not the message-level risk gate below):
+            // only resolves — either applying or discarding — once the caller resumes with the
+            // exact pendingActionId this stage handed back, exactly like resolvePendingAction
+            // requires. A caller that resends the bare message (as chat-ui's approval UI used to,
+            // pre-T8) gets staged again instead of ever resolving — this is what makes the T8
+            // regression tests below fail against the pre-fix code and pass against the fix.
+            if (message.includes('staged action')) {
+              if (options?.pendingActionId === 'pending-staged-1') {
+                transcript.push({ role: 'user', content: message })
+                const reply = options.approved ? 'Wrote "file.txt".' : 'Cancelled — nothing was written or run.'
+                transcript.push({ role: 'assistant', content: reply })
+                return { status: 'ok', reply }
+              }
+              transcript.push({ role: 'user', content: message })
+              return {
+                status: 'needs_approval',
+                reply: null,
+                reason: 'Proposes writing to "file.txt"',
+                riskLevel: 'HIGH',
+                pendingActionId: 'pending-staged-1',
+                pendingActionKind: 'batch',
+              }
+            }
             if (message.includes('approval') && !options?.approved) {
               transcript.push({ role: 'user', content: message })
               return { status: 'needs_approval', reply: null, reason: 'looks risky', riskLevel: 'HIGH' }
@@ -47,6 +71,11 @@ vi.mock('@buildaharness/personal-assistant', async () => {
             reminders: [],
             experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
           })),
+          searchTranscript: vi.fn(async (query: string) =>
+            query === 'nomatch'
+              ? []
+              : [{ sessionId: 'session-aaaaaaaa-1111', role: 'user' as const, content: `a past message about ${query}`, at: '2026-07-01T10:00:00.000Z', score: 1 }],
+          ),
         }
       }),
     },
@@ -122,6 +151,44 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Approved.')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText('echo: needs approval please')).toBeInTheDocument())
+  })
+
+  describe('approval flow — pendingActionId threading for staged actions (T8)', () => {
+    it('Approve on a staged write/shell/batch action resumes with pendingActionId and actually applies it', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'run this staged action')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+
+      // pendingActionKind: 'batch' on this pause — the card must label it accordingly, not
+      // fall back to the generic riskLevel label (see ApprovalCard's kindLabel precedence).
+      await waitFor(() => expect(screen.getByText('Needs approval — batch research')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+      // Without threading pendingActionId back into turn(), the mock (mirroring the real
+      // resolvePendingAction gate) re-stages instead of resolving — this would still show
+      // "Needs approval — batch research", never "Wrote...". This assertion is what the pre-fix
+      // code fails.
+      await waitFor(() => expect(screen.getByText('Wrote "file.txt".')).toBeInTheDocument())
+    })
+
+    it('Deny on a staged action resumes with pendingActionId to actually discard it, not just flip local UI state', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'run this staged action')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(screen.getByText('Needs approval — batch research')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: 'Deny' }))
+
+      await waitFor(() => expect(screen.getByText('Denied.')).toBeInTheDocument())
+      // The pre-fix handleDeny never called turn() at all for this gate, so the staged action was
+      // simply abandoned — no "Cancelled..." reply was ever produced. Getting this message back
+      // proves a real turn({approved: false, pendingActionId}) round trip happened.
+      await waitFor(() => expect(screen.getByText('Cancelled — nothing was written or run.')).toBeInTheDocument())
+    })
   })
 
   it('opens Settings via the gear icon, saves a change, and returns to the chat view', async () => {
@@ -268,6 +335,85 @@ describe('App', () => {
       await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
       expect(lastLlmClient()).toBeInstanceOf(LLMClient)
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('claude-cli'))
+    })
+  })
+
+  describe('webTools wiring (T3 — createWebTools is real, not a stub)', () => {
+    function seedConfig(patch: Record<string, unknown>): void {
+      localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify(patch))
+    }
+
+    function lastWebTools(): { search: (query: string) => Promise<unknown> } | undefined {
+      const calls = (PersonalAssistant.create as unknown as { mock: { calls: Array<[{ webTools?: { search: (query: string) => Promise<unknown> } }]> } }).mock.calls
+      return calls.at(-1)?.[0]?.webTools
+    }
+
+    it('enableWeb unset (default) passes no webTools at all', async () => {
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastWebTools()).toBeUndefined()
+    })
+
+    it('enableWeb true passes a webTools.search that really calls DuckDuckGo\'s endpoint via fetch (not a no-op stub)', async () => {
+      seedConfig({ enableWeb: true })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      const webTools = lastWebTools()
+      expect(webTools?.search).toBeInstanceOf(Function)
+
+      // fetch is stubbed (beforeEach) to reject — this proves search() genuinely reaches the
+      // network layer instead of being a silently-inert stub, and that a failure (e.g. the real
+      // CORS block a plain browser tab hits against html.duckduckgo.com, per App.tsx's doc
+      // comment) propagates as a rejection for assistant.ts's tool dispatch to catch, not swallow.
+      await expect(webTools!.search('test query')).rejects.toThrow()
+      expect(fetch).toHaveBeenCalledWith('https://html.duckduckgo.com/html/', expect.anything())
+    })
+
+    it('enableWeb true + searchBackend "brave" passes a webTools.search that calls Brave\'s API instead', async () => {
+      seedConfig({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'test-key' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      const webTools = lastWebTools()
+      await expect(webTools!.search('test query')).rejects.toThrow()
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining('api.search.brave.com'), expect.anything())
+    })
+  })
+
+  describe('/search UI (T6)', () => {
+    it('opens the Search panel via the header button and renders results for a query with matches', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click(screen.getByRole('button', { name: 'Search' }))
+      expect(screen.getByText('Search', { selector: '.search-panel__title' })).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText('Search past messages'), 'garden')
+      await user.click(screen.getByRole('button', { name: 'Search' }))
+
+      // Highlighting splits the snippet across <mark>/<span> nodes — match on the result row's
+      // accessible name (aggregated text), not a single text node.
+      await waitFor(() => expect(screen.getByRole('button', { name: /a past message about garden/ })).toBeInTheDocument())
+    })
+
+    it('shows a clear empty state for a query with no matches', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click(screen.getByRole('button', { name: 'Search' }))
+      await user.type(screen.getByLabelText('Search past messages'), 'nomatch')
+      await user.click(screen.getByRole('button', { name: 'Search' }))
+
+      await waitFor(() => expect(screen.getByText('No results for "nomatch".')).toBeInTheDocument())
+    })
+
+    it('"← Back" returns to the chat view', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click(screen.getByRole('button', { name: 'Search' }))
+      await user.click(screen.getByRole('button', { name: '← Back' }))
+
+      expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
     })
   })
 })

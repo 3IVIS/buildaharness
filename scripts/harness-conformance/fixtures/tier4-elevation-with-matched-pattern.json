@@ -1,0 +1,27 @@
+{
+  "id": "tier4-elevation-with-matched-pattern",
+  "description": "All sub-dimensions healthy (no tier 2/3 trigger), but a high-confidence matched failure pattern alone should push the proportional elevation factor over 0.05 and flip NORMAL to CAUTIOUS on both sides. This specifically exercises each language's own MatchResult.confidence read: TS's MatchResult has a plain `confidence` field; Python's MatchResult only has raw_confidence/normalised_confidence plus a `confidence` @property alias — confirms the alias is actually wired into resolve_control_state()'s getattr(matched_pattern, 'confidence', 0.0) read, not silently falling back to the 0.0 default.",
+  "diagnostics": {
+    "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
+    "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },
+    "verification_health": { "strength": 1.0, "feasibility": 1.0 },
+    "execution_health": { "progress_rate": 1.0, "failure_recurrence": 0.0, "oscillation_score": 0.0 },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  },
+  "ts_matched_pattern": {
+    "failure_class": "flaky_tool",
+    "confidence": 1.0,
+    "matched_pattern": "pattern-flaky-1"
+  },
+  "py_matched_pattern": {
+    "matched": true,
+    "pattern_name": "pattern-flaky-1",
+    "raw_confidence": 1.0,
+    "normalised_confidence": 1.0,
+    "strategy_affinity": null
+  }
+}

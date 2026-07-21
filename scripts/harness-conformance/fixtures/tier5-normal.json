@@ -1,0 +1,17 @@
+{
+  "id": "tier5-normal",
+  "description": "Baseline all-healthy input with no contradictions and no matched pattern — both implementations should fall through every tier to NORMAL with an empty block_mask and empty notes.",
+  "diagnostics": {
+    "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
+    "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },
+    "verification_health": { "strength": 1.0, "feasibility": 1.0 },
+    "execution_health": { "progress_rate": 1.0, "failure_recurrence": 0.0, "oscillation_score": 0.0 },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 0,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

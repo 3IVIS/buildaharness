@@ -12,6 +12,7 @@ function renderSettings(overrides: Partial<React.ComponentProps<typeof SettingsS
       config={DEFAULT_CONFIG}
       overriddenKeys={new Set()}
       isDesktop={false}
+      apiKeyMigrationNotice={false}
       busy={false}
       onSave={onSave}
       onCancel={onCancel}
@@ -55,6 +56,7 @@ describe('SettingsScreen', () => {
         config={DEFAULT_CONFIG}
         overriddenKeys={new Set()}
         isDesktop={false}
+        apiKeyMigrationNotice={false}
         busy={false}
         onSave={vi.fn()}
         onCancel={vi.fn()}
@@ -69,6 +71,7 @@ describe('SettingsScreen', () => {
         config={DEFAULT_CONFIG}
         overriddenKeys={new Set()}
         isDesktop
+        apiKeyMigrationNotice={false}
         busy={false}
         onSave={vi.fn()}
         onCancel={vi.fn()}
@@ -78,6 +81,27 @@ describe('SettingsScreen', () => {
       />,
     )
     expect(screen.getByText('Workspace')).toBeInTheDocument()
+  })
+
+  it('shows the plaintext warning (not the keychain one) for apiKey on the browser path', () => {
+    renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
+    expect(screen.getByText(/Stored in plain text on this device, not an OS keychain/)).toBeInTheDocument()
+    expect(screen.queryByText(/Stored in your OS keychain/)).not.toBeInTheDocument()
+  })
+
+  it('shows the keychain warning (not the plaintext one) for apiKey on the desktop path', () => {
+    renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
+    expect(screen.getByText(/Stored in your OS keychain/)).toBeInTheDocument()
+    expect(screen.queryByText(/Stored in plain text on this device, not an OS keychain/)).not.toBeInTheDocument()
+  })
+
+  it('shows the one-time migration notice only on desktop when apiKeyMigrationNotice is true', () => {
+    const { unmount } = renderSettings({ isDesktop: true, apiKeyMigrationNotice: true, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
+    expect(screen.getByText(/previously saved API key has been moved into your OS keychain/)).toBeInTheDocument()
+    unmount()
+
+    renderSettings({ isDesktop: true, apiKeyMigrationNotice: false, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
+    expect(screen.queryByText(/previously saved API key has been moved into your OS keychain/)).not.toBeInTheDocument()
   })
 
   it('Brave API key field is hidden unless searchBackend is set to brave in the form', async () => {

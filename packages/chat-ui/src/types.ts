@@ -22,6 +22,24 @@ export type ChatEntry =
       reason: string
       riskLevel?: RiskLevel
       resolution?: 'approved' | 'denied'
+      /** Set when this pause came from a staged write_file/run_shell_command/batch-research
+       * action (AssistantTurnResult.pendingActionId) rather than the message-level risk gate.
+       * Both Approve and Deny must resume via `turn(pendingMessage, { approved, pendingActionId })`
+       * to actually apply or discard the staged action — the message-level gate has no staged
+       * action to resolve, and per assistant.ts's own doc comment a decline there never re-enters
+       * turn() at all. */
+      pendingActionId?: string
+      pendingActionKind?: AssistantTurnResult['pendingActionKind']
     }
   | { id: string; kind: 'escalation'; reason: string }
-  | { id: string; kind: 'error'; content: string; retryable: boolean; retryMessage: string; retryApproved: boolean }
+  | {
+      id: string
+      kind: 'error'
+      content: string
+      retryable: boolean
+      retryMessage: string
+      retryApproved: boolean
+      /** Carries the same pendingActionId through a retry, so retrying a failed resume of a
+       * staged action doesn't silently drop back to a plain (message, approved) turn. */
+      retryPendingActionId?: string
+    }

@@ -333,6 +333,49 @@ export async function discardPendingAction(backend: FsBackend, workspaceRoot: st
   await backend.removeFile(pendingActionPath(workspaceRoot, id))
 }
 
+/**
+ * A staged action left behind by a crashed or abandoned turn is harmless (never applied without
+ * its matching id — see applyPendingAction) but, left unswept, accumulates forever. Records older
+ * than this are considered abandoned rather than legitimately pending — mirrors the naming
+ * convention of action-snapshot.ts's UNDO_LOG_MAX_ENTRIES (T12 of the gap-coverage plan).
+ */
+export const PENDING_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Deletes `.pending-actions/` records older than `PENDING_ACTION_MAX_AGE_MS`. Called from
+ * PersonalAssistant's startup sweep (see assistant.ts), which is itself responsible for first
+ * confirming no session has a checkpoint still eligible for resume — this function only applies
+ * the age cutoff and has no knowledge of checkpoints itself. `now` is a parameter (not read
+ * directly from Date.now()) so tests can pin a fixed reference time. Corrupt records are left in
+ * place rather than swept — not this function's job to repair malformed JSON.
+ */
+export async function sweepAbandonedPendingActions(
+  backend: FsBackend,
+  workspaceRoot: string,
+  now: number = Date.now(),
+): Promise<{ swept: string[] }> {
+  const dir = pendingActionsDir(workspaceRoot)
+  const names = await backend.readDir(dir)
+  const swept: string[] = []
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const path = `${dir}/${name}`
+    const raw = await backend.readTextFile(path)
+    if (raw === undefined) continue
+    let record: PendingActionRecord
+    try {
+      record = JSON.parse(raw) as PendingActionRecord
+    } catch {
+      continue
+    }
+    if (now - new Date(record.stagedAt).getTime() > PENDING_ACTION_MAX_AGE_MS) {
+      await backend.removeFile(path)
+      swept.push(record.id)
+    }
+  }
+  return { swept }
+}
+
 // ── Shell result cache (conv4/12/21's shell-reuse finding) ──────────────────────
 //
 // Two prior batches tried fixing "a follow-up question re-runs an already-approved shell command
