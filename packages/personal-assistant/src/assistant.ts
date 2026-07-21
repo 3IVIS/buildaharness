@@ -138,7 +138,10 @@ const SYNTHESIS_SYSTEM_PROMPT =
   "request. Its real output is given below, wrapped as untrusted external content per the " +
   "instructions above. Give the user an actual, direct answer grounded in that output — don't " +
   "just repeat it verbatim, and don't claim it answers the question if it doesn't. If the " +
-  'output is empty, an error, or otherwise unhelpful, say so plainly rather than pretending it worked.'
+  'output is empty, an error, or otherwise unhelpful, say so plainly rather than pretending it worked. ' +
+  "If the status line above says the command timed out, state plainly that it timed out (and after " +
+  "how long, if given) — don't hedge with phrasing like \"didn't finish\" or \"wasn't captured\" that " +
+  'implies uncertainty about something the status line already states as fact.'
 
 // Most-recent facts injected into the system prompt each turn — a hard cap,
 // not a summary, so this stays cheap even as the fact store grows.
