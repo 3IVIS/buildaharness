@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/tests-2%2C293%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-2%2C474%20passing-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
@@ -152,7 +152,7 @@ Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — ev
 </tbody>
 </table>
 
-Full architecture, pseudo-code, and state model: [plan/harness_architecture.html](plan/harness_architecture.html)
+A deeper pseudo-code / state-model architecture walkthrough is maintained privately and isn't part of this public repo — for the architecture that ships here, see [docs/architecture.md](docs/architecture.md).
 
 ---
 

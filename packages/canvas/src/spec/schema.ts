@@ -1,5 +1,5 @@
 /**
- * Build A Harness flow spec v0.2.0 — canvas implementation
+ * Build A Harness flow spec v1.0.0 — canvas implementation
  *
  * This file is the canvas app's working copy of the spec schema.
  * Canonical source of truth for publishing: spec/schema.ts (root).
@@ -15,7 +15,7 @@
  *   npm test
  * to verify all 5 example flows still validate.
  *
- * @version 0.2.0
+ * @version 1.0.0
  * @see spec/schema.ts — canonical Zod schema (source of truth for npm package)
  * @see spec/schema.json — derived JSON Schema (use for non-TS validation)
  * @see spec/CHANGELOG.md — version history
@@ -34,10 +34,10 @@ import { z } from 'zod'
 //   4. Update STORAGE_VERSION constant in store/index.ts.
 //   5. Regenerate spec/schema.json via: cd spec && npm run gen:json-schema
 //   6. Update spec/CHANGELOG.md.
-export const SpecVersion = z.literal('0.2.0')
+export const SpecVersion = z.union([z.literal('0.2.0'), z.literal('1.0.0')])
 
-/** The spec version string as a plain constant (avoids repeated z.literal('0.2.0') references). */
-export const CURRENT_SPEC_VERSION = '0.2.0' as const
+/** The spec version string as a plain constant (avoids repeated z.literal('1.0.0') references). */
+export const CURRENT_SPEC_VERSION = '1.0.0' as const
 
 export const FlowId = z
   .string()
@@ -374,8 +374,12 @@ export type NodeType = Node['type']
 export type AnyNode = Node
 
 // Phase 10: harness node type identifiers for BaseNode palette/icon registration.
-// These are type-only definitions — the canvas package schema stays at v0.2.0;
-// harness node Zod schemas live in src/spec/schema.ts (the main-app copy).
+// These are type-only definitions — the strict `Node` discriminated union above
+// stays scoped to execution node types only; harness nodes validate via
+// RuntimeFlowSpec's passthrough stubs below instead. (SpecVersion itself does
+// accept '1.0.0' — see Fix #37 above — since harness-enabled specs use that
+// version even though their harness nodes aren't individually typed here.)
+// Full harness node Zod schemas live in src/spec/schema.ts (the main-app copy).
 export type HarnessNodeType =
   | 'world_model' | 'hypothesis_set'
   | 'gather_evidence' | 'apply_tool_reliability' | 'update_world_model'

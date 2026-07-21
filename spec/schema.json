@@ -2830,6 +2830,10 @@
                           "show_pattern_confidence": {
                             "type": "boolean",
                             "default": true
+                          },
+                          "read_only": {
+                            "type": "boolean",
+                            "description": "When true, the adapter skips writing this node's output back into state (monitor-only node)."
                           }
                         },
                         "additionalProperties": false
@@ -3126,6 +3130,107 @@
                     "required": [
                       "id",
                       "type"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-_]*$"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Canvas layout coordinates. Non-semantic — adapters MUST ignore this field."
+                      },
+                      "runtime_support": {
+                        "type": "object",
+                        "properties": {
+                          "langgraph": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "partial",
+                              "missing"
+                            ]
+                          },
+                          "crewai": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "partial",
+                              "missing"
+                            ]
+                          },
+                          "mastra": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "partial",
+                              "missing"
+                            ]
+                          },
+                          "microsoft_agent_framework": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "partial",
+                              "missing"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "process_concept"
+                      },
+                      "harness_config": {
+                        "type": "object",
+                        "properties": {
+                          "concept_id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "show_steps": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "show_success_criteria": {
+                            "type": "boolean",
+                            "default": false
+                          }
+                        },
+                        "required": [
+                          "concept_id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type",
+                      "harness_config"
                     ],
                     "additionalProperties": false
                   }
@@ -3571,6 +3676,10 @@
             "enabled": {
               "type": "boolean",
               "default": false
+            },
+            "input_key": {
+              "type": "string",
+              "description": "State key the harness reads as the turn input when no tool_output is present yet. Defaults to \"input\" in the adapter when absent."
             },
             "process_concept_id": {
               "type": "string",

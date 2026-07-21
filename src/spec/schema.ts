@@ -464,6 +464,8 @@ const RECOVERY_STRATEGY_NAMES = [
 const RecoveryNodeConfig = z.object({
   strategy_order_override: z.array(z.enum(RECOVERY_STRATEGY_NAMES)).optional(),
   show_pattern_confidence: z.boolean().default(true).optional(),
+  read_only:                z.boolean().optional()
+    .describe('When true, the adapter skips writing this node\'s output back into state (monitor-only node).'),
 })
 export const RecoveryNode = NodeBase.extend({
   type: z.literal('recovery_node'),
@@ -699,6 +701,8 @@ export const HarnessMeta = z.object({
   harness_version: z.string().optional(),
   phase:           z.string().optional(),
   enabled:         z.boolean().default(false),
+  input_key:       z.string().optional()
+    .describe('State key the harness reads as the turn input when no tool_output is present yet. Defaults to "input" in the adapter when absent.'),
 })
 export type HarnessMeta = z.infer<typeof HarnessMeta>
 

@@ -553,6 +553,8 @@ const RECOVERY_STRATEGY_NAMES = [
 const RecoveryNodeConfig = z.object({
   strategy_order_override: z.array(z.enum(RECOVERY_STRATEGY_NAMES)).optional(),
   show_pattern_confidence: z.boolean().default(true).optional(),
+  read_only:                z.boolean().optional()
+    .describe('When true, the adapter skips writing this node\'s output back into state (monitor-only node).'),
 })
 export const RecoveryNode = NodeBase.extend({
   type: z.literal('recovery_node'),
@@ -588,6 +590,16 @@ export const ReviewerPassNode = NodeBase.extend({
   harness_config: ReviewerPassNodeConfig.optional(),
 })
 
+const ProcessConceptNodeConfig = z.object({
+  concept_id: z.string().min(1),
+  show_steps: z.boolean().default(true).optional(),
+  show_success_criteria: z.boolean().default(false).optional(),
+})
+export const ProcessConceptNode = NodeBase.extend({
+  type: z.literal('process_concept'),
+  harness_config: ProcessConceptNodeConfig,
+})
+
 export type WorldModelNode = z.infer<typeof WorldModelNode>
 export type HypothesisSetNode = z.infer<typeof HypothesisSetNode>
 export type GatherEvidenceNode = z.infer<typeof GatherEvidenceNode>
@@ -600,6 +612,7 @@ export type RecoveryNode = z.infer<typeof RecoveryNode>
 export type EvidenceStoreNode = z.infer<typeof EvidenceStoreNode>
 export type ExperienceStoreNode = z.infer<typeof ExperienceStoreNode>
 export type ReviewerPassNode = z.infer<typeof ReviewerPassNode>
+export type ProcessConceptNode = z.infer<typeof ProcessConceptNode>
 
 export type WorldModelNodeConfig = z.infer<typeof WorldModelNodeConfig>
 export type HypothesisSetNodeConfig = z.infer<typeof HypothesisSetNodeConfig>
@@ -610,6 +623,7 @@ export type RecoveryNodeConfig = z.infer<typeof RecoveryNodeConfig>
 export type EvidenceStoreNodeConfig = z.infer<typeof EvidenceStoreNodeConfig>
 export type ExperienceStoreNodeConfig = z.infer<typeof ExperienceStoreNodeConfig>
 export type ReviewerPassNodeConfig = z.infer<typeof ReviewerPassNodeConfig>
+export type ProcessConceptNodeConfig = z.infer<typeof ProcessConceptNodeConfig>
 
 // ---------------------------------------------------------------------------
 // v0.2 Node discriminated union (14 types — unchanged)
@@ -639,7 +653,7 @@ export const Node = z.union([
 export type Node = z.infer<typeof Node>
 
 // ---------------------------------------------------------------------------
-// Harness node discriminated union (12 stubs — require harness_meta.enabled: true)
+// Harness node discriminated union (13 stubs — require harness_meta.enabled: true)
 // ---------------------------------------------------------------------------
 
 export const HarnessNode = z.discriminatedUnion('type', [
@@ -655,6 +669,7 @@ export const HarnessNode = z.discriminatedUnion('type', [
   EvidenceStoreNode,
   ExperienceStoreNode,
   ReviewerPassNode,
+  ProcessConceptNode,
 ])
 
 export type HarnessNode = z.infer<typeof HarnessNode>
@@ -847,6 +862,8 @@ export const HarnessMeta = z.object({
   harness_version:    z.string().optional(),
   phase:              z.string().optional(),
   enabled:            z.boolean().default(false),
+  input_key:          z.string().optional()
+    .describe('State key the harness reads as the turn input when no tool_output is present yet. Defaults to "input" in the adapter when absent.'),
   process_concept_id: z.string().optional()
     .describe('ID of the process concept that seeds the task graph for this run. Must reference a registered concept. When absent the model performs its own decomposition.'),
 }).describe(

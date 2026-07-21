@@ -1,5 +1,5 @@
 /**
- * Build A Harness flow spec v0.2.0 — runtime package's working copy
+ * Build A Harness flow spec v1.0.0 — runtime package's working copy
  *
  * This is the FOURTH copy of the FlowSpec schema in this repo (after
  * spec/schema.ts, src/spec/schema.ts, packages/canvas/src/spec/schema.ts —
@@ -46,7 +46,7 @@ import { z } from 'zod'
 // Primitives
 // ---------------------------------------------------------------------------
 
-export const SpecVersion = z.literal('0.2.0')
+export const SpecVersion = z.union([z.literal('0.2.0'), z.literal('1.0.0')])
 
 export const FlowId = z
   .string()

@@ -14,6 +14,14 @@ v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-
 - Full harness architecture: 11-layer reasoning and control system, 470 harness tests (P0–P11, P-PC, integration, E2E, invariants)
 - npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/proxy`
 
+**Not in this repo:** a few pieces referenced in internal docs are maintained in a private overlay
+and aren't part of this public clone — most visibly the coaching-agent example flow and its
+persona/prompt fixtures, and a deeper pseudo-code/state-model architecture write-up (the public
+[docs/architecture.md](docs/architecture.md) covers the same system at a level intended for external
+contributors). The `adapter/agents/coaching/` tool implementations that ship here are public and
+usable by any flow via `fn_ref`; the example flow and session-runner tooling built on top of them
+are not.
+
 ---
 
 ## Architecture Decision Records

@@ -327,3 +327,35 @@ jobs:
       - name: Build (tsc)
         working-directory: mastra-runner
         run: npm run build
+
+  docs-stats:
+    name: 'Docs stats — README/CLAUDE.md counts match source (Phase 4)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-dev.txt
+
+      - name: Install node deps
+        run: npm ci
+
+      - name: Install adapter + dev deps
+        run: pip install -r adapter/requirements.txt -r adapter/requirements-dev.txt
+
+      # scripts/gen-stats.mjs derives test/node-type/service counts from
+      # vitest's own JSON reporter, `pytest --collect-only`, spec/schema.ts's
+      # Node/HarnessNode unions, and docker-compose.yml, then checks that
+      # README.md, README_CN.md, CLAUDE.md (if present — gitignored in a
+      # public-only checkout), docs/getting-started.md, docs/architecture.md
+      # and docs/stats.md all quote those exact numbers.
+      - name: Check doc stats are up to date
+        run: node scripts/gen-stats.mjs --check

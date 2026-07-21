@@ -22,7 +22,15 @@ Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to c
 
 ## [Unreleased]
 
-No unreleased spec changes at this time.
+### Added — fields the adapter already reads but the schema didn't type
+
+**`harness_meta.input_key: string`** (optional) — State key the LangGraph adapter reads as the turn input when no `tool_output` is present yet (`adapter/langgraph_adapter.py`); defaults to `"input"` when absent. Was already consumed by codegen and used by `coaching-agent-flow`, but missing from the schema, so any flow setting it failed `tsc` excess-property checks.
+
+**`recovery_node`'s `harness_config.read_only: boolean`** (optional) — When `true`, the adapter skips writing the node's output back into state (monitor-only node). Same story as `input_key`: already read by `adapter/langgraph_adapter.py`, already set by `coaching-agent-flow`, not previously in the schema.
+
+### Added — 13th harness node type stub the canonical schema was missing
+
+**`process_concept` node type** — `ProcessConceptNode` / `ProcessConceptNodeConfig` (`harness_config: { concept_id: string, show_steps?: boolean, show_success_criteria?: boolean }`). This node type already had a working config schema in `src/spec/schema.ts`, partial adapter support (langgraph/crewai/mastra partial, MAF missing in `NODE_SUPPORT_MATRIX`), and was already counted in the "14 execution + 13 harness = 27 node types" figure published elsewhere — but was absent from `spec/schema.ts`, the documented canonical source of truth, so the canonical schema only actually specified 12 harness node types. `scripts/check-schema-sync.mjs` previously allowlisted this gap explicitly as tracked, known drift (`CANONICAL_ONLY_NODE_TYPES`); that allowlist entry has been removed now that canonical has it, so this exact class of drift fails the sync check instead of passing silently in the future.
 
 ## [0.2.0] — 2025-05-14 (updated 2026-05-16)
 
