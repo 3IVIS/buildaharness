@@ -30,8 +30,10 @@
  * specific replacements are skipped, with a loud warning, rather than
  * guessing or clobbering a correct on-disk value with nothing.
  */
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, symlinkSync, readdirSync } from 'fs'
 import { spawnSync } from 'child_process'
+import { tmpdir } from 'os'
+import { join, dirname } from 'path'
 
 const ROOT = new URL('..', import.meta.url).pathname
 const CHECK = process.argv.includes('--check')
@@ -108,15 +110,87 @@ function computeDockerServiceCount() {
 }
 
 // ---------------------------------------------------------------------------
+// Public-only snapshot — this repo uses a dual public/private git overlay
+// (two GIT_DIRs sharing one working tree; see .gitignore's comment on
+// .git-private-excludes). Counting tests directly against the live working
+// tree silently includes private-only content: private-only test files
+// (adapter/tests/test_coaching_llm_screens.py, test_planner_agent.py) inflate
+// the pytest count, and private-only source (src/spec/flows/coaching.ts,
+// picked up by src/spec/flows/index.ts's import.meta.glob) adds extra
+// EXAMPLE_FLOWS entries and therefore extra parameterized vitest cases. That
+// produced wrong numbers twice before this existed (commits c5b0277,
+// 33bab9c) — CI's own checkout is always public-only, so a local run against
+// the merged tree drifts from what CI computes.
+//
+// Fix: reuse git's own idea of "what's in the public repo" — `git ls-files`
+// (tracked) plus `git ls-files --others --exclude-standard` (untracked but
+// not excluded by core.excludesFile, the same mechanism .githooks/pre-commit
+// uses to keep private-only paths out of commits) is exactly the file set a
+// clean `git clone` of the public repo would contain. Copy just that set into
+// a scratch directory and compute every count against the copy instead of
+// the live tree. node_modules is symlinked in rather than reinstalled —
+// dependencies don't differ between the two overlays, only source does.
+// ---------------------------------------------------------------------------
+
+function hasPrivateOverlay() {
+  // CLAUDE.md is private-only (see .git-private-excludes-source) — absent in
+  // a clean public-only checkout, present whenever the private overlay is
+  // layered on this working tree.
+  return existsSync(new URL('CLAUDE.md', `file://${ROOT}`))
+}
+
+function listPublicFiles() {
+  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  if (tracked.status !== 0) {
+    throw new Error(`gen-stats: git ls-files failed:\n${tracked.stderr}`)
+  }
+  const untracked = spawnSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+  if (untracked.status !== 0) {
+    throw new Error(`gen-stats: git ls-files --others failed:\n${untracked.stderr}`)
+  }
+  const files = new Set()
+  for (const out of [tracked.stdout, untracked.stdout]) {
+    for (const f of out.split('\0')) if (f) files.add(f)
+  }
+  return [...files]
+}
+
+function buildPublicOnlySnapshot() {
+  const dir = mkdtempSync(join(tmpdir(), 'gen-stats-public-'))
+  for (const rel of listPublicFiles()) {
+    const dest = join(dir, rel)
+    mkdirSync(dirname(dest), { recursive: true })
+    cpSync(join(ROOT, rel), dest)
+  }
+  // Symlink node_modules trees (root + each npm workspace package) so
+  // npm/vitest resolve deps without reinstalling.
+  const nodeModuleDirs = ['node_modules']
+  for (const entry of readdirSync(join(ROOT, 'packages'), { withFileTypes: true })) {
+    if (entry.isDirectory()) nodeModuleDirs.push(`packages/${entry.name}/node_modules`)
+  }
+  for (const rel of nodeModuleDirs) {
+    const src = join(ROOT, rel)
+    if (!existsSync(src)) continue
+    const dest = join(dir, rel)
+    mkdirSync(dirname(dest), { recursive: true })
+    symlinkSync(src, dest)
+  }
+  return dir
+}
+
+// ---------------------------------------------------------------------------
 // Vitest counts — root `vitest run` already aggregates every workspace
 // package (verified: one run covers src/ and all packages/*), so this is a
 // single command, not one per package.
 // ---------------------------------------------------------------------------
 
-function computeVitestStats() {
-  const outFile = new URL('.gen-stats-vitest.json', `file://${ROOT}`)
-  const result = spawnSync('npx', ['vitest', 'run', '--reporter=json', `--outputFile=${outFile.pathname}`], {
-    cwd: ROOT,
+function computeVitestStats(cwd) {
+  const outFile = join(cwd, '.gen-stats-vitest.json')
+  const result = spawnSync('npx', ['vitest', 'run', '--reporter=json', `--outputFile=${outFile}`], {
+    cwd,
     encoding: 'utf8',
   })
   if (result.status !== 0) {
@@ -134,9 +208,9 @@ function computeVitestStats() {
 // isn't, we can't get a real number and must not guess one.
 // ---------------------------------------------------------------------------
 
-function collectPytestCount(args) {
+function collectPytestCount(cwd, args) {
   const result = spawnSync('python3', ['-m', 'pytest', ...args, '--collect-only', '-q'], {
-    cwd: ROOT,
+    cwd,
     encoding: 'utf8',
   })
   const out = result.stdout || ''
@@ -147,10 +221,10 @@ function collectPytestCount(args) {
   return parseInt(m[1], 10)
 }
 
-function computePytestStats() {
+function computePytestStats(cwd) {
   return {
-    full: collectPytestCount(['adapter/tests/']),
-    maf: collectPytestCount(['adapter/tests/test_maf_adapter.py']),
+    full: collectPytestCount(cwd, ['adapter/tests/']),
+    maf: collectPytestCount(cwd, ['adapter/tests/test_maf_adapter.py']),
   }
 }
 
@@ -175,7 +249,7 @@ function single(pattern, replacer) {
 }
 
 function buildReplacements(stats) {
-  const { nodeTypes, dockerServices, vitest, pytest } = stats
+  const { nodeTypes, dockerServices, vitest, pytest, pytestLocal } = stats
   const totalTests = pytest ? vitest.tests + pytest.full : null
 
   return [
@@ -287,11 +361,15 @@ function buildReplacements(stats) {
       ),
     },
     {
+      // CLAUDE.md is private-only and documents *this actual working tree's*
+      // full suite (including private-only tests), not the public-repo
+      // count every other file's replacement uses — so this reads
+      // pytestLocal (unsanitized), not pytest (public-only snapshot).
       file: 'CLAUDE.md',
-      pytest: true,
+      requires: 'pytestLocal',
       apply: single(
         /(pytest adapter\/tests\/ -v(?: {2,})?# full suite \()(\d+)( tests\))/,
-        (_m, pre, _num, post) => `${pre}${pytest.full}${post}`,
+        (_m, pre, _num, post) => `${pre}${pytestLocal.full}${post}`,
       ),
     },
 
@@ -343,44 +421,41 @@ ${pytestRow}
 // Main
 // ---------------------------------------------------------------------------
 
-// CLAUDE.md is private-only (see .git-private-excludes-source) — absent in a
-// clean public-only checkout, present whenever a private overlay is layered
-// on this working tree per the dual public/private repo setup. Every count
-// this script computes (vitest run, pytest collect-only) walks the working
-// tree as-is, so a merged tree silently inflates them with private-only
-// tests — e.g. adapter/tests/test_coaching_llm_screens.py and
-// test_planner_agent.py, plus extra EXAMPLE_FLOWS-driven vitest cases from
-// the private coaching flow. That produced wrong numbers twice (commits
-// c5b0277, 33bab9c) before this guard existed. Refuse outright rather than
-// let it happen a third time — CI's own checkout is always public-only, so
-// this never fires there.
-function hasPrivateOverlay() {
-  return existsSync(new URL('CLAUDE.md', `file://${ROOT}`))
-}
-
 function main() {
-  if (hasPrivateOverlay()) {
-    console.error(
-      '❌  Refusing to run: this working tree has the private overlay merged in\n' +
-      '    (CLAUDE.md is present, which is private-only — see .git-private-excludes-source).\n' +
-      '    Counts computed here would include private-only tests/files and be wrong for the\n' +
-      '    public repo. Run this from a clean `git clone` of the public repo instead.',
-    )
-    process.exit(1)
+  const overlay = hasPrivateOverlay()
+  const statsCwd = overlay ? buildPublicOnlySnapshot() : ROOT
+  if (overlay) {
+    console.log(`ℹ️   Private overlay detected (CLAUDE.md present) — computing vitest/pytest counts from a public-only snapshot at ${statsCwd}.`)
   }
 
   const nodeTypes = computeNodeTypeCounts()
   const dockerServices = computeDockerServiceCount()
-  const vitest = computeVitestStats()
+  const vitest = computeVitestStats(statsCwd)
 
   let pytest = null
   try {
-    pytest = computePytestStats()
+    pytest = computePytestStats(statsCwd)
   } catch (err) {
     console.warn(`⚠️   Skipping pytest-derived stats: ${err.message}`)
   }
 
-  const stats = { nodeTypes, dockerServices, vitest, pytest }
+  // CLAUDE.md is private-only and documents this actual working tree's own
+  // (unsanitized) full suite, not the public-repo count — only worth a
+  // second pytest run when the overlay is actually present and the numbers
+  // could differ; otherwise statsCwd === ROOT already and pytest === pytestLocal.
+  let pytestLocal = pytest
+  if (overlay) {
+    try {
+      pytestLocal = computePytestStats(ROOT)
+    } catch (err) {
+      console.warn(`⚠️   Skipping CLAUDE.md's local pytest count: ${err.message}`)
+      pytestLocal = null
+    }
+  }
+
+  if (overlay) rmSync(statsCwd, { recursive: true, force: true })
+
+  const stats = { nodeTypes, dockerServices, vitest, pytest, pytestLocal }
   const replacements = buildReplacements(stats)
   const statsDoc = renderStatsDoc(stats)
 
@@ -406,6 +481,7 @@ function main() {
   const byFile = new Map()
   for (const r of replacements) {
     if (r.pytest && !pytest) continue
+    if (r.requires === 'pytestLocal' && !pytestLocal) continue
     if (!byFile.has(r.file)) byFile.set(r.file, [])
     byFile.get(r.file).push(r)
   }
