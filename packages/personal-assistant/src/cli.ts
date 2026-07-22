@@ -201,6 +201,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   let assistant = options.assistant ?? (await buildAssistant(config, { dataDir, backend, remindersFile }))
 
   const rl = createInterface({ input: options.input ?? process.stdin, output: options.output ?? process.stdout, prompt: 'you> ' })
+  // Paused immediately, synchronously, before any awaits below get a chance to yield the event
+  // loop: createInterface() switches its input stream to flowing mode as soon as it attaches its
+  // own internal 'data' listener, so once we hit e.g. the listUndoLogEntries() await further
+  // down, a piped/heredoc input whose lines are already fully buffered by the OS gets parsed into
+  // 'line' events right then — and since EventEmitter#emit never queues an event for a listener
+  // that isn't there yet, every line parsed before rl.on('line', ...) near the bottom of this
+  // function runs is silently dropped, not just delayed. rl.prompt() below auto-resumes if
+  // paused, but that resume is itself deferred (stream.resume() only schedules a nextTick flow
+  // start) and everything from here to the rl.on('line', ...)/rl.resume() pair at the bottom
+  // runs synchronously with no further awaits, so the listener is always in place first.
+  rl.pause()
 
   // Display-only defaults, mirroring each backend's own fallback so the banner shows the
   // model that will actually be used even when config.model is unset — not authoritative
@@ -969,6 +980,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (!message) { rl.prompt(); return }
     void enqueue(message).finally(() => rl.prompt())
   })
+  // Safe to resume now — the 'line' listener right above is in place, so anything already
+  // buffered on stdin (see the rl.pause() call up top) gets parsed and delivered, not dropped.
+  rl.resume()
 
   return {
     dispatchLine: async (line: string) => {
