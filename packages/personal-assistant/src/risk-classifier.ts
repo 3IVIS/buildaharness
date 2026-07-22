@@ -150,7 +150,11 @@ const PUBLISH_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:post|tw
 // h4: same sentence-initial noun-compound gap, one more not yet covered — "store" (book store) —
 // found via live testing: "Book store closures have been in the news a lot lately, it's sad to
 // see." misfired MEDIUM.
-const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|stores?|is|was)\\b)`, 'i')
+// batch 34 (h6, re-probing conv381): same sentence-initial noun-compound gap — "fair" (book
+// fair) wasn't in the trailing exclusion list either — found via live testing: "Book fair at
+// school this weekend was really fun for the kids." misfired MEDIUM with no live
+// booking/scheduling request present. Added "fairs?" to the trailing exclusion.
+const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|stores?|fairs?|is|was)\\b)`, 'i')
 
 // "schedule" is just as common a plain noun ("my schedule is completely packed") as "book" is —
 // found via live testing, same false-positive shape as BOOK_VERB_PATTERN above: a determiner
@@ -178,7 +182,12 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // exclusion list either — found via live testing: "Schedule details are attached for the
 // conference, let me know if you have questions." misfired MEDIUM with no live scheduling
 // request present. Added "details?" to the trailing exclusion.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|is|was)\\b)`, 'i')
+// batch 34 (h6, re-probing conv381): same sentence-initial noun-compound gap as
+// "conflicts"/"funds"/"requirements"/"changes"/"details" above — "adjustment(s)" wasn't in the
+// trailing exclusion list either — found via live testing: "Schedule adjustments are common
+// this time of year at my company." misfired MEDIUM with no live scheduling request present.
+// Added "adjustments?" to the trailing exclusion.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|adjustments?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live
@@ -233,7 +242,12 @@ const FORWARD_VERB_PATTERN =
 // analogous case, but DELETE_VERB_PATTERN never got it — found via live testing: "Delete
 // confirmation for my old account finally came through this morning." (a status observation, no
 // live delete request) misfired HIGH.
-const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|confirmations?|is|was)\\b|\\.\\w)`, 'i')
+// batch 34 (h5, re-probing conv381/conv397 cluster): "option(s)" is the same UI-element
+// noun-compound gap CANCEL_VERB_PATTERN's own trailing list already covers ("link/option/button"),
+// but DELETE_VERB_PATTERN never got it — found via live testing: "Delete option is missing from
+// the settings menu on this app, does anyone know why?" (a UI question, no live delete request)
+// misfired HIGH.
+const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|confirmations?|options?|is|was)\\b|\\.\\w)`, 'i')
 
 // "pay"/"wire" are common plain nouns ("my pay was late this month", "the wire behind my desk")
 // just as much as "buy"/"transfer money" are verbs — found via live testing, same false-positive
@@ -257,7 +271,13 @@ const DELETE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:delete|r
 // wire act") — found via live testing: "Wire fraud cases have increased significantly this year
 // according to the report." (a plain statement, no live wire-transfer request) misfired HIGH via
 // the bare "wire" alternative. Added "fraud" to the trailing exclusion.
-const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade|fraud)\\b)`, 'i')
+// batch 34 (h4, re-probing conv381/conv397 cluster): "transfer" itself is the same
+// "wire"-noun-compound gap as "fraud" above — "wire transfer" is far more often the plain noun
+// phrase for a bank fee/charge than a live "wire transfer money" request — found via live
+// testing: "Wire transfer fees at my bank are outrageous, I switch banks every few years because
+// of it." (a plain observation, no live transfer request) misfired HIGH via the bare "wire"
+// alternative. Added "transfers?" to the trailing exclusion.
+const PAY_WIRE_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade|fraud|transfers?)\\b)`, 'i')
 
 // "cancel"/"unsubscribe" have the same mention-vs-request ambiguity — "an unsubscribe link"
 // reintroduces the noun-compound shape EMAIL_TEXT_VERB_PATTERN's trailing exclusion already

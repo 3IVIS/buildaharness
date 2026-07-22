@@ -450,6 +450,30 @@ describe('classifyRisk', () => {
     ).not.toBe('HIGH')
   })
 
+  it('does not flag a sentence-initial "Wire transfer fees..." as a HIGH money-spend request (batch 34, h4)', () => {
+    // "transfer" is the same "wire"-noun-compound gap as "fraud" above — "wire transfer fees" is
+    // a plain observation, not a live transfer-money request.
+    expect(
+      classifyRisk('Wire transfer fees at my bank are outrageous, I switch banks every few years because of it.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag a sentence-initial "Delete option..." as a HIGH delete request (batch 34, h5)', () => {
+    // "option(s)" is the same UI-element noun-compound gap CANCEL_VERB_PATTERN's own trailing
+    // list already covers, but DELETE_VERB_PATTERN never got it.
+    expect(
+      classifyRisk('Delete option is missing from the settings menu on this app, does anyone know why?').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag a sentence-initial "Schedule adjustments..." as a MEDIUM scheduling request (batch 34, h6)', () => {
+    // Same sentence-initial noun-compound gap as "conflicts"/"funds"/"requirements"/"changes"/
+    // "details" above — "adjustment(s)" wasn't in the trailing exclusion.
+    expect(
+      classifyRisk('Schedule adjustments are common this time of year at my company.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
   it('does not flag "...last week\'s email campaign..." as a HIGH send-message request (batch 29, surfaced re-probing h3)', () => {
     // EMAIL_TEXT_VERB_PATTERN's trailing exclusion never covered "campaign(s)" — an email
     // marketing campaign is a noun-compound, not a live send-a-message request. This pattern is
@@ -571,6 +595,13 @@ describe('classifyRisk', () => {
   it('does not flag a sentence-initial "Book store closures..." as a MEDIUM booking request', () => {
     expect(
       classifyRisk("Book store closures have been in the news a lot lately, it's sad to see.").riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
+  // batch 34, h6: BOOK_VERB_PATTERN's trailing exclusion still didn't cover "fair" (book fair).
+  it('does not flag a sentence-initial "Book fair..." as a MEDIUM booking request', () => {
+    expect(
+      classifyRisk('Book fair at school this weekend was really fun for the kids.').riskLevel,
     ).not.toBe('MEDIUM')
   })
 
