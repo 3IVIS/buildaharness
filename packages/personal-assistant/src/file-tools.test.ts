@@ -352,6 +352,20 @@ describe('pending-action staging', () => {
     expect(entries[0]).toMatchObject({ kind: 'write', path: 'brand-new.md', previousContent: null, undoable: true })
   })
 
+  it('a write that throws partway through never leaves behind an undo-log entry claiming it applied (convE)', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'archive/.keep', content: '' })
+    const realWrite = backend.writeTextFile.bind(backend)
+    backend.writeTextFile = async (path, contents) => {
+      if (path === `${ROOT}/archive/.keep`) throw new Error('disk full')
+      return realWrite(path, contents)
+    }
+
+    await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow('disk full')
+
+    expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
+  })
+
   it('discardPendingAction never produces an undo-log entry — only an actually-applied action does', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'never applied' })

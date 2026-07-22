@@ -298,9 +298,14 @@ export async function applyPendingAction(
     const undoEntry: UndoLogEntry = snapshot.undoable
       ? { ...undoEntryBase, undoable: true, previousContent: snapshot.previousContent }
       : { ...undoEntryBase, undoable: false, reason: snapshot.reason }
-    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
 
+    // The write itself must succeed before the undo-log entry is persisted — recording it first
+    // (the previous order) meant a write that threw partway (or an external failure between
+    // approval and completion) still left behind an undo-log entry claiming the write applied and
+    // could be reverted, even though nothing landed on disk (found live: convE, an
+    // archive/.keep write that never completed was still listed [undoable] by /undo-action).
     await backend.writeTextFile(resolved, record.content)
+    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
     // The shell result cache below assumes an identical (command, cwd) pair keeps producing the
     // same result — true only as long as nothing else in the workspace changed in between. A
