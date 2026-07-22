@@ -343,7 +343,32 @@ ${pytestRow}
 // Main
 // ---------------------------------------------------------------------------
 
+// CLAUDE.md is private-only (see .git-private-excludes-source) — absent in a
+// clean public-only checkout, present whenever a private overlay is layered
+// on this working tree per the dual public/private repo setup. Every count
+// this script computes (vitest run, pytest collect-only) walks the working
+// tree as-is, so a merged tree silently inflates them with private-only
+// tests — e.g. adapter/tests/test_coaching_llm_screens.py and
+// test_planner_agent.py, plus extra EXAMPLE_FLOWS-driven vitest cases from
+// the private coaching flow. That produced wrong numbers twice (commits
+// c5b0277, 33bab9c) before this guard existed. Refuse outright rather than
+// let it happen a third time — CI's own checkout is always public-only, so
+// this never fires there.
+function hasPrivateOverlay() {
+  return existsSync(new URL('CLAUDE.md', `file://${ROOT}`))
+}
+
 function main() {
+  if (hasPrivateOverlay()) {
+    console.error(
+      '❌  Refusing to run: this working tree has the private overlay merged in\n' +
+      '    (CLAUDE.md is present, which is private-only — see .git-private-excludes-source).\n' +
+      '    Counts computed here would include private-only tests/files and be wrong for the\n' +
+      '    public repo. Run this from a clean `git clone` of the public repo instead.',
+    )
+    process.exit(1)
+  }
+
   const nodeTypes = computeNodeTypeCounts()
   const dockerServices = computeDockerServiceCount()
   const vitest = computeVitestStats()
