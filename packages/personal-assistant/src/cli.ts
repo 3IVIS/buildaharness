@@ -599,6 +599,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ...(config.llmBackend === 'claude-cli' ? [checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')] : []),
       checkWorkspaceRoot(workspaceRoot),
       checkDataDirWritable(backend, dataDir),
+      // Informational only (always ok:true) — surfaces the active backend/flags so a user has
+      // one command to confirm config, rather than none (see file's own config summary gap).
+      { label: `llmBackend: ${config.llmBackend}`, ok: true },
+      { label: `enableShell: ${config.enableShell ?? false}, enableWeb: ${config.enableWeb ?? false}`, ok: true },
+      // Provider API keys are stored plaintext in config.json, not an OS keychain — confirming
+      // that explicitly here rather than leaving it unstated (no keychain integration exists).
+      { label: 'provider keys stored: plaintext in config.json (no OS keychain integration)', ok: true },
     ])
     console.log(`\n${formatDoctorReport(checks)}\n`)
   }
