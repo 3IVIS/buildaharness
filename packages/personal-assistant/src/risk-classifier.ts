@@ -212,8 +212,18 @@ const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedu
 // via live testing: "Please forward their proposal to the client before end of day." never
 // triggered an approval prompt at all — the opposite failure direction from the other patterns in
 // this file (a false negative, letting a genuine send-on-behalf request through with no gate).
+// h1 (this batch): the object-determiner list still required SOME determiner right after the
+// verb — a bare plural-noun object with no determiner at all ("forward invoices to accounting",
+// "forward emails to the client") has nothing for that alternation to match, so a genuine
+// send-on-behalf request slipped through ungated (the same false-negative direction as the
+// batch-19 "their" fix above). Added a second alternative that accepts any bare object as long as
+// it's followed by "to" (the recipient marker) — "to" is what actually signals a live forward-to-
+// someone action, the same signal every real example in this file's own test suite already
+// contains. The trailing exclusion right after the verb keeps this from misfiring on "forwarding
+// address/rules/service"-shaped noun compounds, which have the same bare-object-then-preposition
+// shape but aren't a live send request.
 const FORWARD_VERB_PATTERN =
-  /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b\s+(?:this|that|my|our|your|his|their|the|it|these|those|him|her|them|a|an|us)\b/i
+  /(?<!\b(?:going|moving)\s)\bforward(?:ed|ing)?\b(?!\s+(?:address(?:es)?|rules?|service)\b)\s+(?:(?:this|that|my|our|your|his|their|the|it|these|those|him|her|them|a|an|us)\b|\S+\s+to\b)/i
 
 // "delete"/"remove"/"wipe"/"erase" have the same noun-vs-verb ambiguity ORDER_VERB_PATTERN and its
 // siblings already handle ("the Remove button", "my delete key", "the wipe cycle on my

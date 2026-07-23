@@ -662,6 +662,19 @@ describe('classifyRisk', () => {
     expect(result.riskLevel).toBe('HIGH')
     expect(result.requiresApproval).toBe(true)
   })
+
+  // h1 (this batch): FORWARD_VERB_PATTERN required a determiner right after the verb, so a bare
+  // plural-noun object with no determiner at all slipped through with no HIGH-risk gate at all.
+  it('flags "forward" with a bare plural-noun object and no determiner', () => {
+    expect(classifyRisk('Please forward invoices to accounting.').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Please forward emails to the client.').riskLevel).toBe('HIGH')
+  })
+
+  // The widened bare-object alternative shouldn't misfire on "forwarding address/rules/service"
+  // noun compounds, which have the same bare-object-then-preposition shape but aren't a live send.
+  it('does not flag "forwarding address"/"forwarding rules" noun compounds', () => {
+    expect(classifyRisk('The forwarding address to update is listed below.').riskLevel).not.toBe('HIGH')
+  })
 })
 
 describe('looksActionOriented', () => {
