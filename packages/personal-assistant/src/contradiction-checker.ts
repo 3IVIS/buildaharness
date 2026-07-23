@@ -80,8 +80,19 @@ export interface BeliefCandidate {
 // list showed neither statement at all. Widened just these two for the same reason as before:
 // confirm each live rather than widening the rest of the still-untested list (service, function,
 // variable, schema) speculatively.
+// batch 42 (h1, re-probing conv178/conv198/conv387): "exception", "service", "function",
+// "schema", "variable", and "environment" are six more of the still-named sibling gaps, now
+// live-tested — "My exceptions are all getting caught silently now..." (convLF1) and "My services
+// and functions are all throwing exceptions now, and my schemas and variables seem fine."
+// (convR1) both used only plural forms and neither statement matched CODING_FACT_MARKERS at all,
+// so looksLikeCodingFact returned false and isCheckWorthy treated them as natural-language
+// personal facts instead of skipping the LLM contradiction check — same silent-drop-shaped gap
+// as every other noun already widened above. ("exception" was named in the original batch10 list
+// but dropped from the "still-untested" tracking list without ever actually being fixed — this
+// closes that stray gap too.) Widened all six for the same reason as before: confirm each live
+// rather than widening speculatively. This closes out the last of the batch10-named sibling gaps.
 const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|service|function|modules?|dependency|dependencies|errors?|exception|endpoints?|api|databases?|schema|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environment|variable|packages?|libraries|library|repos?|repository|scripts?|commands?|logs?|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|services?|functions?|modules?|dependency|dependencies|errors?|exceptions?|endpoints?|api|databases?|schemas?|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environments?|variables?|packages?|libraries|library|repos?|repository|scripts?|commands?|logs?|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared

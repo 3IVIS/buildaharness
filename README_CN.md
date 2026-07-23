@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/状态-公开测试版-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/测试-2%2C447%20通过-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/测试-2%2C449%20通过-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/欢迎-PR贡献-brightgreen.svg)](CONTRIBUTING.md)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)

@@ -187,7 +187,11 @@ const BOOK_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\bbook\\b(?!\\s
 // trailing exclusion list either — found via live testing: "Schedule adjustments are common
 // this time of year at my company." misfired MEDIUM with no live scheduling request present.
 // Added "adjustments?" to the trailing exclusion.
-const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|adjustments?|is|was)\\b)`, 'i')
+// batch 42 (h3, re-probing conv381/conv397): same gap again — "template(s)" wasn't in the
+// trailing exclusion list either — found via live testing: "Schedule template for the new hires
+// still needs work, nobody's touched it in weeks." misfired MEDIUM with no live scheduling
+// request present. Added "templates?" to the trailing exclusion.
+const SCHEDULE_VERB_PATTERN = new RegExp(`${nounContextLookbehind()}\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|adjustments?|templates?|is|was)\\b)`, 'i')
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in HIGH_RISK_PATTERNS — found via live

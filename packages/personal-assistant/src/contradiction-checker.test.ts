@@ -95,6 +95,23 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('The build logs show success right now.')).toBe(true)
     expect(looksLikeCodingFact('All the deploy commands are passing in CI right now.')).toBe(true)
   })
+
+  it('flags the plural forms of "exception", "service", "function", "schema", "variable", and "environment" the same way it already flags their singulars (batch 42, h1/conv178/conv387)', () => {
+    // convLF1: "My exceptions are all getting caught silently now and I can't figure out why."
+    // convR1: "My services and functions are all throwing exceptions now, and my schemas and
+    // variables seem fine." Both used only plural forms, so neither statement matched
+    // CODING_FACT_MARKERS at all before this fix — same silent-drop shape as every other noun
+    // already widened above. This closes out the last of the batch10-named sibling gaps
+    // ("exception" was named in the original list but dropped from later tracking without ever
+    // actually being fixed).
+    expect(looksLikeCodingFact("My exceptions are all getting caught silently now and I can't figure out why.")).toBe(true)
+    expect(
+      looksLikeCodingFact('My services and functions are all throwing exceptions now, and my schemas and variables seem fine.'),
+    ).toBe(true)
+    expect(looksLikeCodingFact("I never bother deploying to the staging environments before production, it's not worth the hassle.")).toBe(
+      true,
+    )
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {
