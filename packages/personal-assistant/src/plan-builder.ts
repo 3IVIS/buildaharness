@@ -57,10 +57,10 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
 
 /**
  * Spends one real LLM call personalizing `template`'s task skeleton to `message` —
- * only called once classifyPlanningCandidate has already flagged the request, so an
+ * only called once classifyTurnIntent has already named a matchedPlanTemplate, so an
  * ordinary turn never pays for this. Same "malformed/incomplete JSON is the expected
- * failure mode, not the edge case" fallback as decomposeObjective: any parse failure
- * or a response with fewer than 2 usable tasks returns null, meaning "fall back to
+ * failure mode, not the edge case" fallback classifyTurnIntent itself uses: any parse
+ * failure or a response with fewer than 2 usable tasks returns null, meaning "fall back to
  * the caller's own ad hoc decomposition for this turn" rather than throwing.
  */
 export async function buildPlanFromTemplate(

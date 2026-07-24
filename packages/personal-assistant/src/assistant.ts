@@ -32,10 +32,10 @@ import {
   type ToolDefinition,
   type FsBackend,
 } from '@buildaharness/runtime'
-import { classifyRisk, classifyRiskWithLLM, looksActionOriented, type RiskClassification } from './risk-classifier.js'
+import { classifyRisk, type RiskClassification } from './risk-classifier.js'
+import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import { classifyTriviality } from './triviality-classifier.js'
 import {
   FILE_TOOLS,
   executeFileTool,
@@ -60,11 +60,10 @@ import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, type ShellToolsContext } from './shell-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
-import { classifyDecompositionCandidate, decomposeObjective, reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomposition-classifier.js'
+import { reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomposition-classifier.js'
 import { checkForContradictions, looksLikeCodingFact, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
-import { classifyPlanningCandidate } from './planning-classifier.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
@@ -78,9 +77,6 @@ import {
   planCompletionPct,
   computePlanPosition,
   nextPendingTask,
-  isAbandonPhrase,
-  isAbandonPhraseWithLLM,
-  looksLikeAbandonAttempt,
   matchTaskCancelAttempt,
   cancelPlanTask,
   type PlanRecord,
@@ -1197,24 +1193,14 @@ export class PersonalAssistant {
       : ''
     const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
 
-    // classifyRisk's exact keyword lists catch the obvious cases for free; a message that
-    // slips through as LOW but still *looks* like it's asking the assistant to act in the
-    // world (looksActionOriented) gets one extra LLM call as a second opinion — see
-    // risk-classifier.ts's doc comments for why this stays gated instead of running on
-    // every LOW-classified message (most of which are just ordinary conversation).
-    let classification = classifyRisk(userMessage)
-    if (classification.riskLevel === 'LOW' && looksActionOriented(userMessage)) {
-      classification = await classifyRiskWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
-    }
-    this.onTrace?.({ kind: 'risk_classified', riskLevel: classification.riskLevel, requiresApproval: classification.requiresApproval })
-
     // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
     // internal bookkeeping — it never touches anything outside this session's own plan state,
-    // unlike a real-world "cancel my gym membership" — so it's handled here, before the generic
-    // classifyRisk gate below ever sees it, rather than blocking an action with no real-world
-    // side effect behind an unnecessary approval prompt (see conv59/conv70's h9 finding: a bare
-    // "cancel" tripped the HIGH-risk gate before any plan-aware logic got a chance to run at all,
-    // and there was no per-task-cancel feature to route it to even if the ordering were fixed).
+    // unlike a real-world "cancel my gym membership" — so it's handled here, before
+    // classifyTurnIntent's single consolidated LLM call below ever runs, both because it's a
+    // tighter, plan-aware match than a general risk gate should have to express (see conv59/
+    // conv70's h9 finding: a bare "cancel" used to trip the HIGH-risk gate before any plan-aware
+    // logic got a chance to run at all) and because short-circuiting here means a turn that's
+    // just cancelling one task doesn't spend the consolidated call at all.
     const planForCancelCheck = await loadActivePlan(this.memory, sessionId)
     if (planForCancelCheck) {
       const cancelMatch = matchTaskCancelAttempt(userMessage, planForCancelCheck)
@@ -1246,6 +1232,12 @@ export class PersonalAssistant {
       }
     }
 
+    // Single consolidated LLM call replacing the former classifyRisk/classifyTriviality/
+    // classifyDecompositionCandidate/isAbandonPhrase/classifyPlanningCandidate chain — see
+    // turn-intent-classifier.ts and plans/personal_assistant_consolidated_classifier_plan.html.
+    const classification = await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null }, this.model, accumulateUsage)
+    this.onTrace?.({ kind: 'risk_classified', riskLevel: classification.riskLevel, requiresApproval: classification.requiresApproval })
+
     // A reminder-shaped MEDIUM request stores a record immediately — detection,
     // not action gating, so it happens whether or not the rest of the turn is
     // ultimately approved/completed. v1 stores raw text with no time parsing
@@ -1259,10 +1251,10 @@ export class PersonalAssistant {
     // fallback for backends where no tool loop ever runs at all, not a second insurance
     // policy alongside one.
     const toolLoopWillRun = Boolean(this.fileTools || this.webTools || this.shellTools)
-    // requiresApproval here means this looks like a BULK reminder request (see risk-classifier.ts's
-    // looksLikeEnumeratedItems gate) — must not auto-create anything until the approval gate below
-    // actually runs, or this would silently create a reminder before the user ever sees the prompt.
-    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && !classification.requiresApproval && classification.reason.includes('reminder')) {
+    // requiresApproval here means this looks like a BULK reminder request — must not auto-create
+    // anything until the approval gate below actually runs, or this would silently create a
+    // reminder before the user ever sees the prompt.
+    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && classification.isReminderRequest && !classification.requiresApproval) {
       await this.reminderStore.create(userMessage, null)
     }
 
@@ -1282,7 +1274,7 @@ export class PersonalAssistant {
       return {
         status: 'needs_approval',
         reply: null,
-        reason: classification.reason,
+        reason: classification.riskReason,
         riskLevel: classification.riskLevel,
       }
     }
@@ -1352,10 +1344,10 @@ export class PersonalAssistant {
 
     // Self-contained factual questions ("what timezone is Tokyo in") skip the harness
     // run entirely — no verification/reviewer pass/checkpoint for this turn. Deliberately
-    // conservative: see triviality-classifier.ts for what disqualifies a turn from this path.
-    const triviality = classifyTriviality(userMessage, classification.riskLevel)
-    this.onTrace?.({ kind: 'triviality_classified', isTrivial: triviality.isTrivial })
-    if (triviality.isTrivial) {
+    // conservative: see turn-intent-classifier.ts's isTrivial contract for what disqualifies
+    // a turn from this path.
+    this.onTrace?.({ kind: 'triviality_classified', isTrivial: classification.isTrivial })
+    if (classification.isTrivial) {
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
       await this.recordFacts(sessionId, userMessage)
@@ -1366,42 +1358,31 @@ export class PersonalAssistant {
       return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal }
     }
 
-    // A compound-looking request spends one extra LLM call decomposing itself into
-    // multiple tasks — gated by a zero-cost pre-classifier, so an ordinary single-step
-    // turn never pays for this. Falls back to the single-task graph below on a parse
-    // failure or a single-task result (decomposeObjective's own load-bearing fallback).
+    // A compound-looking request decomposes into multiple tasks — classifyTurnIntent's single
+    // call above already produced this, so no separate LLM call is spent here.
     let initialTasks: Task[] = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], classification.riskLevel)
-    let decomposed: DecomposedTaskSpec[] | null = null
-    const decompositionCandidate = classifyDecompositionCandidate(userMessage)
-    if (decompositionCandidate.isCandidate) {
-      decomposed = await decomposeObjective(this.llmClient, userMessage, this.model, accumulateUsage)
-      if (decomposed) {
-        initialTasks = toHarnessTasks(decomposed, classification.riskLevel)
-      }
+    const decomposed: DecomposedTaskSpec[] | null = classification.decomposedTasks
+    if (decomposed) {
+      initialTasks = toHarnessTasks(decomposed, classification.riskLevel)
     }
 
     // Structured planning: an active plan for this session takes precedence over
     // re-classifying every turn, so an unrelated aside mid-plan doesn't get silently
-    // reinterpreted as "start a new plan" — see plan-store.ts / planning-classifier.ts.
-    let activePlan: PlanRecord | null = await loadActivePlan(this.memory, sessionId)
-    if (activePlan) {
-      let abandon = isAbandonPhrase(userMessage)
-      if (!abandon && looksLikeAbandonAttempt(userMessage)) {
-        abandon = await isAbandonPhraseWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
-      }
-      if (abandon) {
-        await abandonPlan(this.memory, sessionId, activePlan)
-        activePlan = null
-      }
+    // reinterpreted as "start a new plan" — see plan-store.ts. classification.isAbandonRequest
+    // is only ever true when planForCancelCheck (passed as context.hasActivePlan above) was
+    // non-null, so it's safe to act on unconditionally here.
+    let activePlan: PlanRecord | null = planForCancelCheck
+    if (activePlan && classification.isAbandonRequest) {
+      await abandonPlan(this.memory, sessionId, activePlan)
+      activePlan = null
     }
 
     if (activePlan) {
       initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
     } else {
-      const planningCandidate = classifyPlanningCandidate(userMessage, decomposed)
-      this.onTrace?.({ kind: 'plan_classified', isCandidate: planningCandidate.isCandidate, matchedTemplate: planningCandidate.matchedTemplate })
-      if (planningCandidate.isCandidate && planningCandidate.matchedTemplate) {
-        const template = loadTemplate(planningCandidate.matchedTemplate)
+      this.onTrace?.({ kind: 'plan_classified', isCandidate: classification.matchedPlanTemplate !== null, matchedTemplate: classification.matchedPlanTemplate })
+      if (classification.matchedPlanTemplate) {
+        const template = loadTemplate(classification.matchedPlanTemplate)
         const plan = await buildPlanFromTemplate(this.llmClient, userMessage, template, this.model, accumulateUsage)
         if (plan) {
           activePlan = createPlanRecord(plan)
@@ -1415,8 +1396,8 @@ export class PersonalAssistant {
 
     // The single-task fallback seeded at the top of this function (initialTasks still exactly
     // that one 'respond' task — nothing above overrode it with a decomposed or planned task set)
-    // uses the raw userMessage verbatim as its description, unlike decomposeObjective/
-    // buildPlanFromTemplate, which already ask their own LLM call for a subject-first
+    // uses the raw userMessage verbatim as its description, unlike classifyTurnIntent's own
+    // decomposedTasks/buildPlanFromTemplate, which already ask for a subject-first
     // description. Reusing that same phrasing here keeps the "Completed: <description>" belief
     // statementsOpposed/isNegation compare against structured consistently across every
     // task-creation path, not just the decomposed/planned ones. This only touches the task's own

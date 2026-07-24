@@ -6,6 +6,7 @@ import { HarnessRuntime, saveHarnessCheckpoint, type Task } from '@buildaharness
 import { PersonalAssistant } from './assistant.js'
 import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
+import { classifyRisk } from './risk-classifier.js'
 
 /**
  * cli.ts's `main()` runs at import time (see non-interactive-mode.ts's doc comment) — runCli()
@@ -14,6 +15,47 @@ import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config
  * store/backend/assistant so nothing here touches the real filesystem, a real LLM backend, or a
  * real TTY.
  */
+
+// Every turn now spends exactly one classifyTurnIntent call up front (see
+// turn-intent-classifier.ts) — trimmed version of assistant.test.ts's own
+// isTurnIntentRequest/deriveTurnIntentJSON, so the fakes below can answer that call with a
+// realistic risk/triviality classification instead of it falling back to LOW by default.
+function isTurnIntentRequest(messages: ChatMessage[]): boolean {
+  return messages.some((m) => m.role === 'system' && m.content.includes('six independent judgments'))
+}
+
+// Trimmed test-only stand-in for the deleted triviality-classifier.ts's classifyTriviality — see
+// assistant.test.ts's looksTrivial for the full doc comment.
+const TRIVIAL_HISTORY_MARKERS = /\b(earlier|before|you said|remember|again|previously|as I mentioned|still)\b/i
+const TRIVIAL_GENERATIVE_MARKERS = /\b(write|draft|give me a|create|generate|compose|plan|design|pitch|summarize|explain|compare|pros and cons|recommend|best way|should I|how do I decide)\b/i
+const TRIVIAL_COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how|is|are|was|were|does|do|did|can|could|will|should|who|which)\b/i
+const TRIVIAL_FACTUAL_SHAPE = /^(what|when|where|how many|how much|is|are|does|do)\b/i
+
+function looksTrivial(message: string): boolean {
+  const trimmed = message.trim()
+  if (trimmed.split(/\s+/).filter(Boolean).length > 15) return false
+  return (
+    TRIVIAL_FACTUAL_SHAPE.test(trimmed) &&
+    !TRIVIAL_HISTORY_MARKERS.test(trimmed) &&
+    !TRIVIAL_GENERATIVE_MARKERS.test(trimmed) &&
+    !TRIVIAL_COMPOUND_MARKERS.test(trimmed)
+  )
+}
+
+function deriveTurnIntentJSON(messages: ChatMessage[]): string {
+  const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
+  const risk = classifyRisk(userContent)
+  return JSON.stringify({
+    riskLevel: risk.riskLevel,
+    riskReason: risk.reason,
+    isTrivial: risk.riskLevel === 'LOW' && looksTrivial(userContent),
+    decomposedTasks: [],
+    isReminderRequest: risk.reason.includes('reminder'),
+    isBulkReminderRequest: risk.reason.includes('reminder') && risk.requiresApproval,
+    isAbandonRequest: false,
+    matchedPlanTemplate: null,
+  })
+}
 
 class FakeLLMClient implements ILLMClient {
   calls = 0
@@ -26,8 +68,9 @@ class FakeLLMClient implements ILLMClient {
     this.calls++
     return this.reply
   }
-  async callChatStructured(): Promise<LLMStructuredResponse> {
+  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
     this.calls++
+    if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
     return { content: this.reply }
   }
 }
@@ -42,7 +85,8 @@ class ScriptedToolLLMClient implements ILLMClient {
   async callChatSync(): Promise<string> {
     return 'Done.'
   }
-  async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
+  async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
+    if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
     if (!this.served) {
       this.served = true
       return { content: '', toolCalls: [this.toolCall] }
@@ -334,7 +378,7 @@ describe('approval-prompt handling', () => {
     await cli.dispatchLine('Please send an email to my boss telling him I quit.')
 
     expect(lines.join('\n')).toContain('Cancelled.')
-    expect(llm.calls).toBe(0)
+    expect(llm.calls).toBe(1) // the one mandatory classification call — declining spends no more
     const transcript = await assistant.getTranscript('cli')
     expect(transcript.some((m) => m.content.includes('email'))).toBe(true)
   })

@@ -10,6 +10,6 @@
     "resolveJsonModule": true,
     "types": ["vitest/globals", "node"]
   },
-  "include": ["src", "*.ts"],
+  "include": ["src", "scripts", "*.ts"],
   "exclude": ["node_modules", "dist"]
 }

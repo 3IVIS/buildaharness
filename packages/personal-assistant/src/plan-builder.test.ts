@@ -61,7 +61,7 @@ describe('buildPlanFromTemplate', () => {
     expect(await buildPlanFromTemplate(llm, 'Plan a launch.', template)).toBeNull()
   })
 
-  it('returns null when fewer than 2 valid tasks remain (mirrors decomposeObjective\'s own fallback)', async () => {
+  it('returns null when fewer than 2 valid tasks remain (mirrors classifyTurnIntent\'s own decomposedTasks fallback)', async () => {
     const llm = new StructuredOnlyLLMClient(JSON.stringify({ tasks: [{ id: 'only', description: 'one task', depends_on: [] }] }))
 
     expect(await buildPlanFromTemplate(llm, 'Plan a launch.', template)).toBeNull()

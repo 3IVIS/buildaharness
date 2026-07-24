@@ -113,7 +113,7 @@ describe('ClaudeCliLLMClient', () => {
   it('callChatStructured strips a markdown code fence the model wrapped its JSON reply in, when a schema was requested', async () => {
     // This backend has no real schema-constrained output mode — the model routinely wraps its
     // JSON reply in ```json ... ``` despite the system prompt saying "no prose", which silently
-    // broke every caller's bare JSON.parse(response.content) (decomposeObjective returning null
+    // broke every caller's bare JSON.parse(response.content) (classifyTurnIntent falling back to its safe default
     // for a genuinely multi-step request, indistinguishable from the model choosing a single
     // task) until this was traced back to the fence rather than the classifier or the model.
     spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: '```json\n{"tasks":[{"id":"1"}]}\n```' })))

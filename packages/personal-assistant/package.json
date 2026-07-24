@@ -15,7 +15,8 @@
     "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "eval:turn-intent": "tsx scripts/eval-turn-intent.ts"
   },
   "dependencies": {
     "@buildaharness/harness": "^0.1.0",

@@ -1,15 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 
-export interface DecompositionCandidateClassification {
-  isCandidate: boolean
-  reason: string
-}
-
-// Sequencing markers are a strong signal on their own; word count is a weaker,
-// backstop signal for long requests that don't use any of these words but are
-// still probably multi-step. Fails closed toward "not a candidate" — the
-// opposite conservatism of triviality-classifier.ts, since being wrong here
-// only costs a classification, not a skipped safety layer.
+// Sequencing markers are a strong signal on their own for looksLikeEnumeratedItems below.
 // The "first[,:]" branch above requires trailing punctuation — found via live testing: "First book
 // the flight to Denver and reserve a rental car for the same dates" uses "First" as a plain
 // sentence-initial adverb with no comma/colon after it, no "then", and no comma-enumeration, so it
@@ -17,17 +8,14 @@ export interface DecompositionCandidateClassification {
 // "First" (no comma/colon immediately after, so it doesn't double-match the branch above) followed
 // somewhere later by "and" is the same two-step shape without the punctuation.
 const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|finally,)\b|^first\b(?!\s*[,:])(?=.*\band\b)/i
-const WORD_LIMIT = 40
 
 // A comma-separated enumeration ("I need to research the company, prepare answers, pick out
 // what to wear, and plan my route") is just as much a multi-step request as one using
 // then/first/next — it just never uses any of those words. Found via live testing: a 4-subtask
-// interview-prep request phrased this way (and landing at exactly 40 words, under WORD_LIMIT)
-// fell through both signals, so decomposeObjective never ran and /layers reported "one eligible
-// task" even though the model itself went on to create 4 separate reminders for it. At least 2
+// interview-prep request phrased this way fell through both signals, so the model went on to
+// create 4 separate reminders for it with no bulk-confirmation gate ever firing. At least 2
 // commas before a closing "and"/"or" is a cheap, deliberately loose signal — a false positive here
-// only costs one wasted decomposeObjective call (which itself falls back to a single task), the
-// same tradeoff WORD_LIMIT already makes. Also accepts "or" (not just "and") as the closing word —
+// only costs one unnecessary confirmation. Also accepts "or" (not just "and") as the closing word —
 // "email the landlord, text my sister, or call the plumber" is just as enumerated a list.
 // A 3-item list WITHOUT the Oxford comma ("call the bank, email the landlord and pick up dry
 // cleaning") has only 1 comma before the closing and/or, so the 2-comma alternative above doesn't
@@ -92,8 +80,7 @@ function isEnumeratedListShape(trimmed: string): boolean {
 //
 // 2+ semicolons (3+ items) is a strong signal on its own. A genuine 2-subtask request needs only
 // 1 semicolon ("Look up the weather...; also find me a good vegetarian restaurant...") and was
-// still falling through every signal (no sequencing word, no comma-enumeration, short enough to
-// dodge WORD_LIMIT) — but a bare single-semicolon check is too loose: it also matches an ordinary
+// still falling through every other signal — but a bare single-semicolon check is too loose: it also matches an ordinary
 // compound sentence that just happens to use a semicolon grammatically ("The meeting is at 3;
 // let me know if that works.", covered by this file's own test), which is one thought, not two
 // subtasks. Requiring an explicit second-task cue word (also/additionally/plus) right after a
@@ -125,10 +112,8 @@ function isFactThenSingleReminder(trimmed: string): boolean {
 
 /**
  * True if `message` looks like an enumeration of multiple distinct items — the strong signals
- * above (sequencing markers, comma/semicolon/numbered lists), deliberately WITHOUT
- * classifyDecompositionCandidate's word-count fallback: a single long reminder isn't multiple
- * reminders just because it's wordy, so that weaker signal would false-positive here in a way it
- * doesn't matter for the (cheap, one-extra-LLM-call) decomposition-candidate use case. Used by
+ * above (sequencing markers, comma/semicolon/numbered lists), deliberately WITHOUT a word-count
+ * fallback: a single long reminder isn't multiple reminders just because it's wordy. Used by
  * risk-classifier.ts to gate bulk reminder creation on confirmation instead of letting the model
  * silently create several reminders in one turn.
  */
@@ -138,105 +123,10 @@ export function looksLikeEnumeratedItems(message: string): boolean {
   return SEQUENCING_MARKERS.test(trimmed) || isEnumeratedListShape(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
 }
 
-/** Zero-LLM-call gate deciding whether a request is worth spending decomposeObjective's extra call on. */
-export function classifyDecompositionCandidate(message: string): DecompositionCandidateClassification {
-  const trimmed = message.trim()
-  const wordCount = trimmed.split(/\s+/).filter(Boolean).length
-
-  if (SEQUENCING_MARKERS.test(trimmed)) {
-    return { isCandidate: true, reason: 'contains a sequencing marker (then/first/next/step ...)' }
-  }
-  if (isEnumeratedListShape(trimmed)) {
-    return { isCandidate: true, reason: 'contains a comma-separated enumeration of multiple items' }
-  }
-  if (SEMICOLON_LIST_MARKER.test(trimmed)) {
-    return { isCandidate: true, reason: 'contains a semicolon-separated enumeration of multiple items' }
-  }
-  if (hasNumberedList(trimmed)) {
-    return { isCandidate: true, reason: 'contains a numbered list of multiple items' }
-  }
-  if (wordCount > WORD_LIMIT) {
-    return { isCandidate: true, reason: `long request (${wordCount} words) — worth checking for multiple steps` }
-  }
-  return { isCandidate: false, reason: 'no sequencing markers and short enough to be one step' }
-}
-
 export interface DecomposedTaskSpec {
   id: string
   description: string
   depends_on: string[]
-}
-
-const DECOMPOSITION_SCHEMA = {
-  type: 'object',
-  properties: {
-    tasks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          description: { type: 'string' },
-          depends_on: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['id', 'description', 'depends_on'],
-      },
-    },
-  },
-  required: ['tasks'],
-}
-
-const DECOMPOSITION_SYSTEM_PROMPT =
-  "Decompose the user's request into a short, ordered list of concrete sub-tasks. If the request is really just " +
-  'one step, return a single task. Phrase each `description` starting with the concrete subject or object it ' +
-  'acts on (e.g. "the login tests: rerun after the config fix" rather than "rerun the login tests after the ' +
-  "config fix\"), so later comparisons against this task's completion/failure beliefs share matching vocabulary. " +
-  'Respond with JSON only, no prose: {"tasks":[{"id": string, "description": ' +
-  'string, "depends_on": string[]}]}. `id` values must be unique; `depends_on` lists the ids of tasks that must ' +
-  'complete first (usually just the previous task, or empty for the first one).'
-
-function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
-  if (typeof value !== 'object' || value === null) return false
-  const v = value as Record<string, unknown>
-  return (
-    typeof v.id === 'string' &&
-    typeof v.description === 'string' &&
-    Array.isArray(v.depends_on) &&
-    v.depends_on.every((d) => typeof d === 'string')
-  )
-}
-
-/**
- * Spends one real LLM call decomposing `message` into multiple sub-tasks — only
- * call this for a request classifyDecompositionCandidate already flagged, so
- * ordinary single-step turns never pay for it. Malformed/incomplete JSON is the
- * expected failure mode here, not the edge case: any parse failure or a
- * single-task result returns null, meaning "fall back to the caller's own
- * single-task graph" rather than throwing.
- */
-export async function decomposeObjective(
-  llmClient: ILLMClient,
-  message: string,
-  model?: string,
-  onUsage?: (usage: TokenUsage) => void,
-): Promise<DecomposedTaskSpec[] | null> {
-  try {
-    const response = await llmClient.callChatStructured(
-      [
-        { role: 'system', content: DECOMPOSITION_SYSTEM_PROMPT },
-        { role: 'user', content: message },
-      ],
-      undefined,
-      { model, onUsage, structuredOutput: { schema: DECOMPOSITION_SCHEMA } },
-    )
-    const parsed = JSON.parse(response.content) as { tasks?: unknown }
-    if (!Array.isArray(parsed.tasks)) return null
-    const tasks = parsed.tasks.filter(isDecomposedTaskSpec)
-    if (tasks.length <= 1) return null
-    return tasks
-  } catch {
-    return null
-  }
 }
 
 const REFRAME_SCHEMA = {
@@ -256,9 +146,9 @@ const REFRAME_SYSTEM_PROMPT =
 
 /**
  * Reframes a single-task turn's description to lead with its subject — the same phrasing
- * decomposeObjective and buildPlanFromTemplate (plan-builder.ts) already ask their own LLM calls
- * for, applied here for the much more common case where a turn goes through neither: an ad hoc
- * single-task turn whose description otherwise stays the raw verbatim userMessage (see
+ * classifyTurnIntent's own decomposedTasks and buildPlanFromTemplate (plan-builder.ts) already
+ * produce for their own tasks, applied here for the much more common case where a turn goes
+ * through neither: an ad hoc single-task turn whose description otherwise stays the raw verbatim userMessage (see
  * assistant.ts's initialTasks fallback). Without this, only decomposed/planned tasks got
  * subject-first descriptions, so the "Completed: <description>" belief statementsOpposed/
  * isNegation compare against was structured for some tasks and not others. Deliberately not

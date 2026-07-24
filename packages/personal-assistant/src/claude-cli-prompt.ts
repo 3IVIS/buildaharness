@@ -89,9 +89,9 @@ export interface ParsedClaudeCliOutput {
  * The claude-cli backend has no schema-constrained "structured output" mode of its own —
  * callChatStructured's schema is only ever a system-prompt instruction ("Respond with JSON
  * only, no prose") the model can, and routinely does, still wrap in a markdown code fence
- * (```json ... ```). Every caller (decomposeObjective, classifyRiskWithLLM,
- * checkForContradictions, reframeTaskDescriptionWithLLM, isAbandonPhraseWithLLM,
- * buildPlanFromTemplate, review-checker.ts, trust-tagging.ts, failure-mode-matcher.ts) does a
+ * (```json ... ```). Every caller (classifyTurnIntent, checkForContradictions,
+ * reframeTaskDescriptionWithLLM, buildPlanFromTemplate, review-checker.ts, trust-tagging.ts,
+ * failure-mode-matcher.ts) does a
  * bare `JSON.parse(response.content)` and falls back to its own "nothing structured" default on
  * any parse failure — a fenced reply silently looked exactly like the model declining to
  * decompose/flag/reframe anything, rather than a parsing bug. Only strips a fence that wraps the

@@ -2,8 +2,8 @@ export { PersonalAssistant } from './assistant.js'
 export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
 export { classifyRisk } from './risk-classifier.js'
 export type { RiskLevel, RiskClassification } from './risk-classifier.js'
-export { classifyTriviality } from './triviality-classifier.js'
-export type { TrivialityClassification } from './triviality-classifier.js'
+export { classifyTurnIntent } from './turn-intent-classifier.js'
+export type { TurnIntentClassification, TurnIntentContext } from './turn-intent-classifier.js'
 export { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
 export type { LayerSlug, WhyChainItem } from './node-display-names.js'
 export { classifyError } from './error-classifier.js'
@@ -44,8 +44,6 @@ export { detectHomogeneousBatchList } from './batch-list-detector.js'
 export type { BatchListDetection } from './batch-list-detector.js'
 export { classifyToolYield } from './tool-yield-classifier.js'
 export type { ToolYield } from './tool-yield-classifier.js'
-export { classifyPlanningCandidate } from './planning-classifier.js'
-export type { PlanningCandidateClassification } from './planning-classifier.js'
 export { buildPlanFromTemplate } from './plan-builder.js'
 export type { Plan } from './plan-builder.js'
 export { loadTemplate, listTemplateNames, pickTemplateForTask, matchTemplateIfConfident } from './plan-templates/index.js'
@@ -60,7 +58,6 @@ export {
   computePlanPosition,
   nextPendingTask,
   formatPlanProgress,
-  isAbandonPhrase,
 } from './plan-store.js'
 export type { PlanRecord, PlanTaskRecord, PlanPosition } from './plan-store.js'
 export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'

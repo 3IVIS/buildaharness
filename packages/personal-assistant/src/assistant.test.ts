@@ -8,6 +8,64 @@ import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetStat
 import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
+import { classifyRisk } from './risk-classifier.js'
+
+// Every turn now spends exactly one classifyTurnIntent call up front (see
+// turn-intent-classifier.ts) — a distinctive phrase from its system prompt lets every fake
+// ILLMClient below recognize that call and answer it separately from whatever else the fake is
+// scripted to simulate (a tool loop, a decomposition call, ...), instead of it silently consuming
+// a slot meant for something else.
+const TURN_INTENT_MARKER = 'six independent judgments'
+
+function isTurnIntentRequest(messages: ChatMessage[]): boolean {
+  return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))
+}
+
+// A trimmed, test-only stand-in for what used to be triviality-classifier.ts's classifyTriviality
+// (deleted once classifyTurnIntent subsumed it — see turn-intent-classifier.ts) — used only to
+// give the default oracle below a realistic isTrivial verdict for the exact kind of short factual
+// question this repo's test corpus already relies on (e.g. "What timezone is Tokyo in?").
+const TRIVIAL_HISTORY_MARKERS = /\b(earlier|before|you said|remember|again|previously|as I mentioned|still)\b/i
+const TRIVIAL_GENERATIVE_MARKERS = /\b(write|draft|give me a|create|generate|compose|plan|design|pitch|summarize|explain|compare|pros and cons|recommend|best way|should I|how do I decide)\b/i
+const TRIVIAL_COMPOUND_MARKERS = /\band also\b|\?.*\?|\band\s+(what|when|where|how|is|are|was|were|does|do|did|can|could|will|should|who|which)\b/i
+const TRIVIAL_FACTUAL_SHAPE = /^(what|when|where|how many|how much|is|are|does|do)\b/i
+
+function looksTrivial(message: string): boolean {
+  const trimmed = message.trim()
+  if (trimmed.split(/\s+/).filter(Boolean).length > 15) return false
+  return (
+    TRIVIAL_FACTUAL_SHAPE.test(trimmed) &&
+    !TRIVIAL_HISTORY_MARKERS.test(trimmed) &&
+    !TRIVIAL_GENERATIVE_MARKERS.test(trimmed) &&
+    !TRIVIAL_COMPOUND_MARKERS.test(trimmed)
+  )
+}
+
+/**
+ * Default stand-in for what the real LLM would answer for classifyTurnIntent's call — derived
+ * from the same deterministic risk/triviality logic the old regex-gate classifiers used, so
+ * ordinary tests (that don't care about decomposition/abandon/plan-template specifics) get
+ * realistic risk/triviality classification for free, matching this repo's test corpus exactly.
+ * `override` lets a test dictate specific fields (decomposedTasks, matchedPlanTemplate,
+ * isAbandonRequest, ...) the deterministic stand-in can't produce on its own.
+ */
+function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string, unknown>): string {
+  const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
+  const risk = classifyRisk(userContent)
+  const isReminderRequest = risk.reason.includes('reminder')
+  const isBulkReminderRequest = isReminderRequest && risk.requiresApproval
+  const base = {
+    riskLevel: risk.riskLevel,
+    riskReason: risk.reason,
+    isTrivial: risk.riskLevel === 'LOW' && looksTrivial(userContent),
+    decomposedTasks: [],
+    isReminderRequest,
+    isBulkReminderRequest,
+    isAbandonRequest: false,
+    matchedPlanTemplate: null,
+  }
+  return JSON.stringify({ ...base, ...override })
+}
 
 class FakeLLMClient implements ILLMClient {
   calls = 0
@@ -31,8 +89,9 @@ class FakeLLMClient implements ILLMClient {
     return chunks.join('')
   }
 
-  async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
+  async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
+    if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
     return { content: this.reply }
   }
 }
@@ -57,7 +116,7 @@ class ContradictionAwareLLMClient implements ILLMClient {
   async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
     this.calls++
     const isContradictionCheck = messages.some((m) => m.role === 'system' && m.content.includes('genuine contradictions'))
-    if (!isContradictionCheck) return { content: JSON.stringify({ riskLevel: 'LOW', reason: 'ok' }) }
+    if (!isContradictionCheck) return { content: deriveTurnIntentJSON(messages) }
     const userMsg = messages.find((m) => m.role === 'user')
     const { newBeliefs, existingBeliefs } = JSON.parse(userMsg!.content) as {
       newBeliefs: { id: string; statement: string }[]
@@ -101,6 +160,10 @@ class ScriptedToolLLMClient implements ILLMClient {
     // (see assistant.ts) — absent, this throws, so every other test path (which should only
     // ever reach callChatStructured/callChat) still fails loudly if it hits this by mistake.
     private readonly syncReply?: string,
+    // Lets a test dictate specific classifyTurnIntent fields (decomposedTasks,
+    // matchedPlanTemplate, isAbandonRequest, ...) per user message, instead of only the
+    // risk/triviality-only default deriveTurnIntentJSON's shared oracle produces.
+    private readonly classificationOverride?: (userMessage: string) => Record<string, unknown> | undefined,
   ) {}
 
   async *callChat(): AsyncIterable<string> {
@@ -120,32 +183,45 @@ class ScriptedToolLLMClient implements ILLMClient {
 
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
-    this.receivedMessages.push(messages)
     // Fixed per-call usage — lets a usage-accumulation test assert on `calls * usagePerCall`
     // without needing a dedicated LLM client stub just for that.
     options?.onUsage?.({ inputTokens: 10, outputTokens: 5 })
+    // The mandatory classifyTurnIntent call every turn now makes is answered separately here —
+    // it does not consume a slot from `next()`'s scripted queue (that queue represents the tool
+    // loop's own scripted responses, a distinct concern) and is not recorded in receivedMessages
+    // (whose index tests rely on to inspect the tool loop's own call sequence).
+    if (isTurnIntentRequest(messages)) {
+      const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
+      return { content: deriveTurnIntentJSON(messages, this.classificationOverride?.(userContent)) }
+    }
+    this.receivedMessages.push(messages)
     return this.next()
   }
 }
 
-function scriptedResponses(responses: LLMStructuredResponse[], streamChunks?: string[], syncReply?: string): ScriptedToolLLMClient {
+function scriptedResponses(
+  responses: LLMStructuredResponse[],
+  streamChunks?: string[],
+  syncReply?: string,
+  classificationOverride?: (userMessage: string) => Record<string, unknown> | undefined,
+): ScriptedToolLLMClient {
   let i = 0
   return new ScriptedToolLLMClient(() => {
     if (i >= responses.length) throw new Error('ScriptedToolLLMClient: no more scripted responses')
     return responses[i++]
-  }, streamChunks, syncReply)
+  }, streamChunks, syncReply, classificationOverride)
 }
 
 /**
- * ILLMClient whose callChat (plain-chat reply) and callChatStructured (used only
- * by decomposeObjective, since no fileTools/webTools are configured in the tests
- * that use this) return independently scripted content — lets a decomposition
- * test assert on both the final reply and the decomposition call in one turn.
+ * ILLMClient whose callChatStructured always answers the mandatory classifyTurnIntent call with
+ * a fixed `decomposedTasks` list (decomposition is now bundled into that one call, not a separate
+ * decomposeObjective call) — lets a decomposition test assert on both the final reply and the
+ * resulting task graph without also being polluted by risk/triviality specifics it doesn't care
+ * about.
  */
 class DecompositionAwareLLMClient implements ILLMClient {
   calls = 0
-  structuredCalls = 0
-  constructor(private readonly reply: string, private readonly decompositionResponseContent: string) {}
+  constructor(private readonly reply: string, private readonly decomposedTasks: { id: string; description: string; depends_on: string[] }[] = []) {}
 
   async *callChat(): AsyncIterable<string> {
     this.calls++
@@ -157,9 +233,38 @@ class DecompositionAwareLLMClient implements ILLMClient {
     return this.reply
   }
 
-  async callChatStructured(): Promise<LLMStructuredResponse> {
+  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+    return { content: deriveTurnIntentJSON(messages, { decomposedTasks: this.decomposedTasks }) }
+  }
+}
+
+/**
+ * ILLMClient whose callChat (plain-chat reply) returns scripted content, and whose
+ * callChatStructured answers the mandatory classifyTurnIntent call via the shared default
+ * oracle for every call EXCEPT a genuine reframeTaskDescriptionWithLLM call (still a real,
+ * separate LLM call — see assistant.ts), which gets `reframeResponseContent` instead. Lets a
+ * reframe test assert on both the final reply and the reframe call itself, in one turn, without
+ * the mandatory classification call polluting `structuredCalls`.
+ */
+class ReframeAwareLLMClient implements ILLMClient {
+  calls = 0
+  structuredCalls = 0
+  constructor(private readonly reply: string, private readonly reframeResponseContent: string) {}
+
+  async *callChat(): AsyncIterable<string> {
+    this.calls++
+    yield this.reply
+  }
+
+  async callChatSync(): Promise<string> {
+    this.calls++
+    return this.reply
+  }
+
+  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+    if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
     this.structuredCalls++
-    return { content: this.decompositionResponseContent }
+    return { content: this.reframeResponseContent }
   }
 }
 
@@ -191,7 +296,7 @@ function makeFakeBackend(): FsBackend {
 }
 
 describe('PersonalAssistant', () => {
-  it('answers a plain chat turn with a single LLM call', async () => {
+  it('answers a plain chat turn with one classification call plus one reply call', async () => {
     const llm = new FakeLLMClient('The forecast looks mild.')
     const assistant = new PersonalAssistant({ llmClient: llm })
 
@@ -200,7 +305,7 @@ describe('PersonalAssistant', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('The forecast looks mild.')
     expect(result.riskLevel).toBe('LOW')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2) // classifyTurnIntent + the reply itself
   })
 
   it('streams the reply token-by-token via onToken, and the final reply matches the concatenated chunks', async () => {
@@ -227,7 +332,7 @@ describe('PersonalAssistant', () => {
     expect(result.reply).toBe('Partial, then whole.')
   })
 
-  it('gates a consequential action behind approval without calling the LLM', async () => {
+  it('gates a consequential action behind approval, spending only the one mandatory classification call', async () => {
     const llm = new FakeLLMClient()
     const assistant = new PersonalAssistant({ llmClient: llm })
 
@@ -236,7 +341,7 @@ describe('PersonalAssistant', () => {
     expect(result.status).toBe('needs_approval')
     expect(result.riskLevel).toBe('HIGH')
     expect(result.reason).toMatch(/sends a message/)
-    expect(llm.calls).toBe(0)
+    expect(llm.calls).toBe(1)
   })
 
   it('dangerouslySkipPermissions bypasses the message-level risk gate entirely — proceeds without needs_approval', async () => {
@@ -260,7 +365,9 @@ describe('PersonalAssistant', () => {
 
     expect(approved.status).toBe('ok')
     expect(approved.reply).toBe('Draft sent.')
-    expect(llm.calls).toBe(1)
+    // 1 classification call on the first (declined) turn + 1 classification call and 1 reply
+    // call on the approved retry, which re-enters runTurn from scratch.
+    expect(llm.calls).toBe(3)
   })
 
   it('persists conversation history across turns in the same session', async () => {
@@ -330,7 +437,7 @@ describe('PersonalAssistant', () => {
     expect(result.reply).toBe('Tokyo is in Japan Standard Time (UTC+9).')
     expect(result.harnessSkipped).toBe(true)
     expect(result.stepsUsed).toBe(0)
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2) // classifyTurnIntent + the reply itself
     // No harness run means no checkpoint was ever written for this turn.
     expect(await loadHarnessCheckpoint(checkpointStore, 'turn:trivial-test')).toBeUndefined()
   })
@@ -807,9 +914,9 @@ describe('PersonalAssistant usage tracking', () => {
     const result = await assistant.turn('What is the launch code, from notes.txt?')
 
     expect(result.status).toBe('ok')
-    expect(llm.calls).toBe(3)
+    expect(llm.calls).toBe(4) // classifyTurnIntent + the 3 tool-loop iterations
     // ScriptedToolLLMClient reports a fixed { inputTokens: 10, outputTokens: 5 } per call.
-    expect(result.usage).toEqual({ inputTokens: 30, outputTokens: 15 })
+    expect(result.usage).toEqual({ inputTokens: 40, outputTokens: 20 })
   })
 
   it('does not set usage on a needs_approval result', async () => {
@@ -850,7 +957,7 @@ describe('PersonalAssistant file tools', () => {
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('The secret ingredient is basil.')
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(3)
     expect(result.sources).toEqual([{ tool: 'read_file', path: 'notes.txt' }])
   })
 
@@ -1055,7 +1162,7 @@ describe('PersonalAssistant file tools', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Plain reply, no tools involved.')
     expect(result.pendingActionId).toBeUndefined()
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
   })
 
   it('streams the final answer via onToken once the tool loop stops calling tools, at the cost of one extra LLM call', async () => {
@@ -1078,7 +1185,7 @@ describe('PersonalAssistant file tools', () => {
     expect(received).toEqual(['The ', 'ingredient ', 'is basil.'])
     // 1 tool-call round trip + 1 final non-streaming round trip (whose content is
     // discarded in favor of the streamed re-request) + 1 streamed re-request.
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(3)
     expect(llm.streamCalls).toBe(1)
   })
 
@@ -1096,7 +1203,7 @@ describe('PersonalAssistant file tools', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('The file says: the launch code is 4471')
     expect(received).toEqual(['The file says: the launch code is 4471'])
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
     expect(llm.streamCalls).toBe(0)
   })
 
@@ -1109,7 +1216,7 @@ describe('PersonalAssistant file tools', () => {
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('No lookup needed.')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
     expect(llm.streamCalls).toBe(0)
   })
 
@@ -1126,7 +1233,7 @@ describe('PersonalAssistant file tools', () => {
     const result = await assistant.turn('Keep listing files forever')
 
     expect(result.status).toBe('escalated')
-    expect(llm.calls).toBe(5)
+    expect(llm.calls).toBe(6)
   })
 })
 
@@ -1142,7 +1249,7 @@ describe('PersonalAssistant web + reminder tools', () => {
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Here are the nearest primary schools.')
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(3)
     const retryMessages = (llm as unknown as { receivedMessages: ChatMessage[][] }).receivedMessages[1]
     expect(retryMessages.some(m => m.role === 'user' && m.content.includes('<tool_call>'))).toBe(true)
   })
@@ -1211,7 +1318,7 @@ describe('PersonalAssistant web + reminder tools', () => {
     const result = await assistant.turn('Look this up online for me.')
 
     expect(result.status).toBe('ok')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
   })
 
   it('the model can create a reminder via the create_reminder tool once any tool loop is active', async () => {
@@ -1423,7 +1530,7 @@ describe('PersonalAssistant shell tools', () => {
     const result = await assistant.turn('Run ls for me.')
 
     expect(result.status).toBe('ok')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
   })
 
   it('an identical (command, cwd) repeat in a later turn answers from cache instead of staging a new approval (conv4/12/21)', async () => {
@@ -1490,49 +1597,41 @@ describe('PersonalAssistant shell tools', () => {
 })
 
 describe('PersonalAssistant dynamic decomposition', () => {
-  it('spends one extra LLM call decomposing a compound request, and still completes the turn', async () => {
-    const decompositionJson = JSON.stringify({
-      tasks: [
-        { id: 'step-1', description: 'Book the flight', depends_on: [] },
-        { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
-      ],
-    })
-    const llm = new DecompositionAwareLLMClient('All booked.', decompositionJson)
+  // Decomposition is no longer a separate, conditionally-spent LLM call (see
+  // turn-intent-classifier.ts) — the mandatory classifyTurnIntent call every turn already makes
+  // produces decomposedTasks directly, so these tests assert on the resulting task-graph shape
+  // (stepsUsed) rather than on a second call ever having fired.
+  it('runs a multi-task graph when classification returns decomposedTasks, and still completes the turn', async () => {
+    const llm = new DecompositionAwareLLMClient('All booked.', [
+      { id: 'step-1', description: 'Book the flight', depends_on: [] },
+      { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
+    ])
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('First book my flight to Paris, then book a hotel near the Louvre.')
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('All booked.')
-    expect(llm.structuredCalls).toBe(1)
+    // One more step than the single-task baseline below — HarnessRuntime.run() counts one step
+    // per task plus its own fixed overhead, not just the raw task count.
+    expect(result.stepsUsed).toBe(3)
   })
 
-  it('does not spend a decomposition call on an ordinary short request', async () => {
-    const llm = new DecompositionAwareLLMClient('Sure.', '{}')
+  it('runs a single task when classification returns no decomposedTasks', async () => {
+    const llm = new DecompositionAwareLLMClient('Sure.')
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('Can you help me plan something?')
 
     expect(result.status).toBe('ok')
-    expect(llm.structuredCalls).toBe(0)
-  })
-
-  it('falls back to the single-task graph when decomposition returns malformed JSON', async () => {
-    const llm = new DecompositionAwareLLMClient('Handled anyway.', 'not valid json')
-    const assistant = new PersonalAssistant({ llmClient: llm })
-
-    const result = await assistant.turn('First do this, then do that, then wrap it all up nicely for me please.')
-
-    expect(result.status).toBe('ok')
-    expect(result.reply).toBe('Handled anyway.')
-    expect(llm.structuredCalls).toBe(1)
+    expect(result.stepsUsed).toBe(2)
   })
 })
 
 describe('PersonalAssistant single-task description reframing', () => {
   it('spends one extra LLM call reframing a coding-fact-shaped, non-LOW-risk single task, and still completes the turn', async () => {
     const reframeJson = JSON.stringify({ description: 'the deploy tests: schedule a rerun tonight' })
-    const llm = new DecompositionAwareLLMClient('Scheduled.', reframeJson)
+    const llm = new ReframeAwareLLMClient('Scheduled.', reframeJson)
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('Please schedule a rerun of the deploy tests tonight.')
@@ -1548,7 +1647,7 @@ describe('PersonalAssistant single-task description reframing', () => {
   // LLM call on it alone spent an unnecessary call on plain conversation; riskLevel !== 'LOW' is
   // the actual precondition (see assistant.ts's call site comment) and rules this out.
   it('does not spend a reframe call on a LOW-risk request that merely contains coding-flavored words', async () => {
-    const llm = new DecompositionAwareLLMClient('Still playing in some theaters.', '{}')
+    const llm = new ReframeAwareLLMClient('Still playing in some theaters.', '{}')
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('Please look up whether the movie is still available online.')
@@ -1558,7 +1657,7 @@ describe('PersonalAssistant single-task description reframing', () => {
   })
 
   it('does not spend a reframe call on an ordinary non-technical request', async () => {
-    const llm = new DecompositionAwareLLMClient('How about Whiskers?', '{}')
+    const llm = new ReframeAwareLLMClient('How about Whiskers?', '{}')
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('Please help me pick a good name for my new cat.')
@@ -1568,7 +1667,7 @@ describe('PersonalAssistant single-task description reframing', () => {
   })
 
   it('falls back to the original description when the reframe call returns malformed content', async () => {
-    const llm = new DecompositionAwareLLMClient('Handled anyway.', 'not valid json')
+    const llm = new ReframeAwareLLMClient('Handled anyway.', 'not valid json')
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn('Please schedule a rerun of the deploy tests tonight.')
@@ -1583,14 +1682,24 @@ describe('PersonalAssistant structured planning', () => {
   const planningMessage =
     'Plan and launch the Q3 onboarding redesign project, then build the rollout schedule and deliver the milestone roadmap.'
 
-  function decompositionResponse(count = 4): LLMStructuredResponse {
-    const tasks = Array.from({ length: count }, (_, i) => ({
+  // Decomposition candidacy and the >=4-task/template-match threshold used to be classifyPlanningCandidate's
+  // own code-side logic; both are now folded into classifyTurnIntent's single judgment (see
+  // turn-intent-classifier.ts), so these tests dictate the classification result directly via an
+  // override matched against the (sub)string of the actual user message being classified, rather
+  // than a separate scripted decomposition call.
+  function decomposedTasksFixture(count = 4) {
+    return Array.from({ length: count }, (_, i) => ({
       id: `step-${i + 1}`,
       description: `Step ${i + 1}`,
       depends_on: i > 0 ? [`step-${i}`] : [],
     }))
-    return { content: JSON.stringify({ tasks }) }
   }
+
+  function overrideFor(map: [string, Record<string, unknown>][]): (userMessage: string) => Record<string, unknown> | undefined {
+    return (userMessage) => map.find(([needle]) => userMessage.includes(needle))?.[1]
+  }
+
+  const planTemplateMatch = { decomposedTasks: decomposedTasksFixture(), matchedPlanTemplate: 'project_planning' }
 
   function planBuilderResponse(): LLMStructuredResponse {
     const tasks = [
@@ -1605,7 +1714,7 @@ describe('PersonalAssistant structured planning', () => {
   }
 
   it('creates a PlanRecord and reports planStatus for a planning-shaped request that decomposes into 4+ tasks', async () => {
-    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
@@ -1616,22 +1725,27 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.planStatus!.tasks.map((t) => t.id)).toEqual([
       'scope_definition', 'work_breakdown', 'resource_planning', 'risk_assessment', 'schedule', 'kickoff',
     ])
-    expect(llm.calls).toBe(2) // decomposition + plan-builder structured calls
+    expect(llm.calls).toBe(2) // classification + plan-builder structured calls
   })
 
-  it('does not build a plan when decomposition produces fewer than 4 tasks, even with template keywords present', async () => {
-    const llm = scriptedResponses([decompositionResponse(2)], ['Sure.'])
+  it('does not build a plan when classification reports fewer than 4 decomposed tasks and no template match', async () => {
+    const llm = scriptedResponses(
+      [],
+      ['Sure.'],
+      undefined,
+      overrideFor([[planningMessage, { decomposedTasks: decomposedTasksFixture(2), matchedPlanTemplate: null }]]),
+    )
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
 
     expect(result.status).toBe('ok')
     expect(result.planStatus).toBeUndefined()
-    expect(llm.calls).toBe(1) // decomposition only — plan-builder never called
+    expect(llm.calls).toBe(1) // classification only — plan-builder never called
   })
 
   it('paces a plan across turns when a step looks MEDIUM/HIGH-risk, then resumes to completion', async () => {
-    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     // planBuilderResponse's 'schedule' step description ("Schedule the redesign kickoff meeting")
@@ -1652,16 +1766,16 @@ describe('PersonalAssistant structured planning', () => {
 
     // Any next message resumes the paused harness run (Phase 4.1 keeps the checkpoint
     // instead of deleting it) and completes the plan's one remaining LOW-risk step — no
-    // fresh decomposition/plan-builder calls, and no re-pausing since 'kickoff' isn't
-    // MEDIUM/HIGH risk.
+    // fresh plan-builder call, and no re-pausing since 'kickoff' isn't MEDIUM/HIGH risk. It
+    // does still spend the one mandatory classifyTurnIntent call every turn now makes.
     const second = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
     expect(second.status).toBe('ok')
     expect(second.planStatus?.completionPct).toBe(100)
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(3)
   })
 
   it('does not resume a plan from a different session', async () => {
-    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     await assistant.turn(planningMessage, { sessionId: 'plan-session-a' })
@@ -1672,8 +1786,10 @@ describe('PersonalAssistant structured planning', () => {
 
   it('abandons the active plan on an explicit abandon phrase, then falls back to ordinary decomposition on the next turn', async () => {
     const llm = scriptedResponses(
-      [decompositionResponse(), planBuilderResponse(), decompositionResponse(4)],
+      [planBuilderResponse()],
       ['All set.'],
+      undefined,
+      overrideFor([[planningMessage, planTemplateMatch], ['Forget this plan', { isAbandonRequest: true }]]),
     )
     const assistant = new PersonalAssistant({ llmClient: llm })
 
@@ -1683,12 +1799,10 @@ describe('PersonalAssistant structured planning', () => {
     const result = await assistant.turn('Forget this plan, let\'s do something else.', { sessionId: 'plan-session' })
 
     expect(result.planStatus).toBeUndefined()
-    // The abandon-phrase message is short with no sequencing marker, so
-    // classifyDecompositionCandidate never triggers (no extra structured call), and
-    // with decomposed staying null, classifyPlanningCandidate can't reach its
-    // task-count threshold either — no plan-builder call. Call count is unchanged
-    // from the first turn.
-    expect(llm.calls).toBe(2)
+    // No plan-builder call this turn (matchedPlanTemplate isn't part of the override for this
+    // message, and no plan gets built while abandoning one) — just the one mandatory
+    // classifyTurnIntent call, on top of the first turn's 2.
+    expect(llm.calls).toBe(3)
   })
 
   it('cancels a single plan task on a matching cancel request without needing approval, and leaves the other pending tasks untouched (conv59/conv70 h9)', async () => {
@@ -1730,7 +1844,7 @@ describe('PersonalAssistant structured planning', () => {
   })
 
   it('falls back silently to the ad hoc decomposition graph when the plan-builder call returns malformed JSON', async () => {
-    const llm = scriptedResponses([decompositionResponse(), { content: 'not valid json' }], ['Handled anyway.'])
+    const llm = scriptedResponses([{ content: 'not valid json' }], ['Handled anyway.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
@@ -1743,7 +1857,7 @@ describe('PersonalAssistant structured planning', () => {
 
   it('emits plan_classified and plan_updated trace events when a plan is created', async () => {
     const events: TraceEvent[] = []
-    const llm = scriptedResponses([decompositionResponse(), planBuilderResponse()], ['All set.'])
+    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) })
 
     await assistant.turn(planningMessage, { sessionId: 'plan-session' })
@@ -1996,7 +2110,7 @@ describe('PersonalAssistant batch research — detection gating', () => {
 
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Here are both dates.')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
     // The flat loop's first message carries the whole original message verbatim — a batch
     // sub-loop would instead seed a synthetic single-item prompt ("You are working through one
     // item from a batch research request...").
@@ -2013,7 +2127,7 @@ describe('PersonalAssistant batch research — detection gating', () => {
 
     expect(result.status).toBe('ok')
     // No tool loop runs at all when nothing is configured — the plain callChat path is used once.
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
     expect(result.trace?.batchBudget).toBeUndefined()
   })
 
@@ -2036,7 +2150,7 @@ describe('PersonalAssistant batch research — detection gating', () => {
     expect(result.status).toBe('ok')
     // A batch sub-loop would make one callChatStructured call per item; the flat loop makes
     // exactly one for the whole message.
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
     expect(llm.receivedMessages[0].some((m) => m.role === 'user' && m.content === message)).toBe(true)
     expect(result.trace?.batchBudget).toBeUndefined()
   })
@@ -2161,7 +2275,7 @@ describe('PersonalAssistant batch research — confirmation gate', () => {
     expect(result.pendingActionKind).toBe('batch')
     expect(result.pendingActionId).toBeTruthy()
     expect(result.reason).toMatch(/8 item/)
-    expect(llm.calls).toBe(6) // only the two probe items ran — nothing else was spent yet
+    expect(llm.calls).toBe(7) // only the two probe items ran — nothing else was spent yet
   })
 
   it('confirming the projection resumes and completes the remaining items with zero re-probing', async () => {
@@ -2172,13 +2286,15 @@ describe('PersonalAssistant batch research — confirmation gate', () => {
     const staged = await assistant.turn(tenItemMessage())
     expect(staged.status).toBe('needs_approval')
     const callsAfterStaging = llm.calls
-    expect(callsAfterStaging).toBe(6)
+    expect(callsAfterStaging).toBe(7) // classifyTurnIntent + 6 probe calls
 
     const resumed = await assistant.turn('', { approved: true, pendingActionId: staged.pendingActionId })
 
     expect(resumed.status).toBe('ok')
-    // 6 probe calls + 8 one-call remaining items = 14 total — not 6 (re-probe) + 6 + 8 = 20.
-    expect(llm.calls).toBe(14)
+    // A pendingActionId resume bypasses runTurn's classification entirely (see assistant.ts's
+    // "options.pendingActionId" short-circuit at the top of runTurn) — 7 calls after staging +
+    // 8 one-call remaining items = 15 total, no extra classification call for the resume itself.
+    expect(llm.calls).toBe(15)
     const batchBudget = resumed.trace?.batchBudget
     expect(batchBudget?.itemCount).toBe(10)
     expect(batchBudget?.perItemOutcomes).toHaveLength(10)
@@ -2450,7 +2566,7 @@ describe('PersonalAssistant spend cap (T2)', () => {
       const result = await assistant.turn('hi', { sessionId: 's1' })
       expect(result.status).toBe('ok')
     }
-    expect(llm.calls).toBe(5)
+    expect(llm.calls).toBe(10)
   })
 
   it('a turn under the ceiling proceeds normally', async () => {

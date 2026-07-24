@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { InMemoryAdapter } from '@buildaharness/runtime'
-import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import {
   loadActivePlan,
   createPlanRecord,
@@ -11,8 +10,6 @@ import {
   computePlanPosition,
   nextPendingTask,
   formatPlanProgress,
-  isAbandonPhrase,
-  isAbandonPhraseWithLLM,
   matchTaskCancelAttempt,
   cancelPlanTask,
   type PlanRecord,
@@ -146,66 +143,6 @@ describe('formatPlanProgress', () => {
     expect(text).toContain('t1')
     expect(text).toContain('Gather requirements')
     expect(text).toContain('The launch ships on time.')
-  })
-})
-
-describe('isAbandonPhrase', () => {
-  it('matches common abandon phrases', () => {
-    expect(isAbandonPhrase('Forget this plan, let\'s do something else.')).toBe(true)
-    expect(isAbandonPhrase('Actually, start over.')).toBe(true)
-    expect(isAbandonPhrase('Never mind the plan.')).toBe(true)
-  })
-
-  it('does not match ordinary messages', () => {
-    expect(isAbandonPhrase('What is the next step?')).toBe(false)
-  })
-})
-
-class StructuredOnlyLLMClient implements ILLMClient {
-  constructor(private readonly content: string) {}
-
-  async *callChat(): AsyncIterable<string> {
-    yield ''
-  }
-  async callChatSync(): Promise<string> {
-    return ''
-  }
-  async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
-    return { content: this.content }
-  }
-}
-
-class ThrowingLLMClient implements ILLMClient {
-  async *callChat(): AsyncIterable<string> {
-    yield ''
-  }
-  async callChatSync(): Promise<string> {
-    return ''
-  }
-  async callChatStructured(): Promise<LLMStructuredResponse> {
-    throw new Error('proxy unreachable')
-  }
-}
-
-describe('isAbandonPhraseWithLLM', () => {
-  it('returns true when the LLM says the message abandons the plan', async () => {
-    const llm = new StructuredOnlyLLMClient(JSON.stringify({ abandon: true }))
-    expect(await isAbandonPhraseWithLLM("let's not bother with this plan anymore", llm)).toBe(true)
-  })
-
-  it('returns false when the LLM says the message does not abandon the plan', async () => {
-    const llm = new StructuredOnlyLLMClient(JSON.stringify({ abandon: false }))
-    expect(await isAbandonPhraseWithLLM('what is the next step?', llm)).toBe(false)
-  })
-
-  it('returns false on malformed JSON instead of throwing', async () => {
-    const llm = new StructuredOnlyLLMClient('not json at all')
-    expect(await isAbandonPhraseWithLLM('anything', llm)).toBe(false)
-  })
-
-  it('returns false when the LLM call itself throws', async () => {
-    const llm = new ThrowingLLMClient()
-    expect(await isAbandonPhraseWithLLM('anything', llm)).toBe(false)
   })
 })
 

@@ -168,8 +168,8 @@ const SYSTEM_PROMPT =
  * Skips the LLM call entirely when every new belief looks like a structured/technical claim the
  * always-on lexical check already handles (see looksLikeCodingFact). Falls back to "no
  * contradictions found" on any parse failure or LLM error, matching this codebase's other
- * LLM-backed classifiers (isAbandonPhraseWithLLM, classifyRiskWithLLM) — a missed contradiction
- * costs nothing worse than the lexical-only behavior this is layered on top of.
+ * LLM-backed classifiers (classifyTurnIntent, reframeTaskDescriptionWithLLM) — a missed
+ * contradiction costs nothing worse than the lexical-only behavior this is layered on top of.
  */
 // batch 24 (h3, re-probing conv354/373): the prompt-level instruction above (not to name ids in
 // "description") is only a hint the model may or may not follow — found via live testing that it
