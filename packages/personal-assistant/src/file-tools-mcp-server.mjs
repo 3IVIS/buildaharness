@@ -74,9 +74,18 @@
  */
 
 import { readFile, writeFile, mkdir, readdir, realpath as fsRealpath, mkdtemp, rm } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
+
+// Resolves lexical pattern JSON files relative to this script's own location — see the
+// fact-markers/injection-patterns reads below (this file is a standalone script copied verbatim
+// to dist, not bundled, so it can't import those modules directly, but a plain JSON read has no
+// such barrier).
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PENDING_ACTIONS_DIR = '.pending-actions'
 const REMINDERS_KEY = 'reminders'
@@ -157,13 +166,12 @@ export function wrapUntrusted(text) {
   return `<untrusted_external_content>\n${text}\n</untrusted_external_content>`
 }
 
-const INJECTION_PATTERNS = [
-  { pattern: /\bignore (all )?(the )?(previous|prior|above) instructions\b/i, reason: 'asks to ignore prior instructions' },
-  { pattern: /\byou are now\b/i, reason: "attempts to redefine the assistant's role" },
-  { pattern: /\bnew instructions?:/i, reason: 'presents itself as new instructions' },
-  { pattern: /\bsystem prompt\b/i, reason: 'references the system prompt directly' },
-  { pattern: /\bdisregard (the |your )?(above|previous)\b/i, reason: 'asks to disregard prior context' },
-]
+// Reads the same canonical JSON trust-tagging.ts's own INJECTION_PATTERNS compiles from
+// (packages/personal-assistant/src/lexical/patterns/injection-patterns.json).
+const injectionPatternsData = JSON.parse(readFileSync(join(__dirname, 'lexical/patterns/injection-patterns.json'), 'utf8'))
+const INJECTION_PATTERNS = Object.values(injectionPatternsData).flatMap((lang) =>
+  lang.injectionPatterns.map(({ source, reason }) => ({ pattern: new RegExp(source, 'i'), reason })),
+)
 
 export function detectInjectionLikely(text) {
   for (const { pattern, reason } of INJECTION_PATTERNS) {
@@ -283,36 +291,23 @@ export async function fetchUrlSafely(url) {
 // they already share workspaceRoot for file tools. Mirrors FileSystemAdapter's
 // on-disk `{ key, value }` entry shape exactly (packages/runtime/src/memory/filesystem.ts).
 
-// Mirrors fact-extraction.ts's FACT_MARKERS and HEALTH_OR_DIETARY_MARKERS byte-for-byte — kept in
-// sync by hand since this file is a standalone script copied verbatim to dist, not bundled
-// through the TS build.
-// batch 20 (h2, re-probing conv354): "i work (at|as|for)"/"i am a"/"i'm a" widened to the same
-// 0-4-word modifier gap HEALTH_OR_DIETARY_MARKERS already used, kept in sync with
-// fact-extraction.ts's own fix.
-// batch 21 (h2/convA, re-probing conv354): "my name is" widened to allow an optional possessive
-// noun ("my dog's name is"), and an "i have a/an ... named X" naming construction added, kept in
-// sync with fact-extraction.ts's own fix (see that module's doc comment for the full rationale).
-// batch 23 (re-probing conv380): "i live in" widened to the same 0-4-word gap as "i work"/"i am
-// a", and "my ... name is" widened to a 0-3-word gap (covers an adjective plus a possessive noun,
-// e.g. "good friend's"; each gap word is `\w+(?:'s)?` since bare `\w` excludes apostrophes),
-// kept in sync with fact-extraction.ts's own fix.
-// batch 23 (re-probing conv354/373): "i work" widened to a 0-4-word gap before "work" too (not
-// just after it) — "I currently work as..." never matched otherwise. Kept in sync with
-// fact-extraction.ts's own fix.
-// batch 25 (re-probing conv380): "i live in" widened again with a second, narrower 0-2-word gap
-// between "live" and "in" (in addition to the batch 23 gap before "live") — a modifier after
-// "live" ("I live currently in Austin") still broke the match otherwise. Kept in sync with
-// fact-extraction.ts's own fix.
-const FACT_MARKERS =
-  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live(?:\s+\w+){0,2}\s+in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
-// h6: widened to the same 0-4-word modifier-gap shape fact-extraction.ts's own
-// HEALTH_OR_DIETARY_MARKERS uses — keep both in sync by hand (this file is a standalone script
-// copied verbatim to dist, not bundled, so it can't import that module directly).
-// batch 10 re-probe (conv166/h11): the i've/i have branch got the same 0-4-word gap widening the
-// i'm/i am branch already has — kept in sync with fact-extraction.ts's own fix.
-// batch 19 (h9): "celiac" added, kept in sync with fact-extraction.ts's own fix.
-const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free|celiac)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+// Reads the same canonical JSON fact-extraction.ts's own FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS
+// compile from (packages/personal-assistant/src/lexical/patterns/fact-markers.json) — this file
+// is a standalone script copied verbatim to dist (not bundled through the TS build), but a plain
+// JSON read has no such barrier, so it no longer needs a hand-duplicated regex copy. The build
+// script also copies dist/lexical/patterns/ alongside this file — see package.json.
+const factMarkersData = JSON.parse(readFileSync(join(__dirname, 'lexical/patterns/fact-markers.json'), 'utf8'))
+
+function compilePerLanguage(field) {
+  return Object.values(factMarkersData).map((lang) => new RegExp(lang[field], 'i'))
+}
+
+function testAny(patterns, text) {
+  return patterns.some((p) => p.test(text))
+}
+
+const FACT_MARKERS = compilePerLanguage('factMarkers')
+const HEALTH_OR_DIETARY_MARKERS = compilePerLanguage('healthOrDietaryMarkers')
 
 // A genuine reminder-request clause of its own (remind me/set a reminder/create an event) means
 // the raw message is a to-do PLUS an unrelated fact, not just a reworded fact — see
@@ -320,7 +315,7 @@ const HEALTH_OR_DIETARY_MARKERS =
 const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i
 
 function looksLikeDurableFact(text) {
-  return FACT_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
+  return testAny(FACT_MARKERS, text) || testAny(HEALTH_OR_DIETARY_MARKERS, text)
 }
 
 // ── Shell result cache — READ-ONLY mirror of file-tools.ts's shell-result-cache (see that

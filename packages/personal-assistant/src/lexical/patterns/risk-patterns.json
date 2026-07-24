@@ -1,0 +1,70 @@
+{
+  "en": {
+    "highRiskPatterns": [
+      {
+        "source": "\\bsend\\b.{0,30}\\b(email|e-mail|message|text|dm)\\b",
+        "reason": "sends a message on the user's behalf"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all|check(?:ing)?|read(?:ing)?|repl(?:y|ying) to|got|get(?:ting)?|received|receiving|see(?:ing)?|saw)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:email|text)\\b(?!\\s+(?:message|messages|address|addresses|alignment|thread|threads|editor|editors|campaigns?|is|was)\\b)",
+        "reason": "sends a message on the user's behalf"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:delete|remove|wipe|erase)\\b(?!\\s+(?:key|keys|button|queue|confirmations?|options?|is|was)\\b|\\.\\w)",
+        "reason": "deletes or removes something, possibly irreversibly"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:pay|buy|transfer money|wire)\\b(?!\\s+(?:is|was|attention|stubs?|period|raise|day|grade|fraud|transfers?)\\b)",
+        "reason": "spends money or moves funds"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\border\\b(?!\\s+(?:is|was|to|for|of|confirmations?|number|status|history|forms?)\\b)",
+        "reason": "spends money or moves funds"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:purchase|checkout)\\b(?!\\s+(?:is|was|process|line|page|counter|orders?|history)\\b)",
+        "reason": "spends money or moves funds"
+      },
+      {
+        "source": "\\b(publish|share publicly)\\b",
+        "reason": "publishes content publicly"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:post|tweet)\\b(?!\\s+(?:engagement|engagements|office|mortem|count|is|was)\\b)",
+        "reason": "publishes content publicly"
+      },
+      {
+        "source": "(?<!\\b(?:going|moving)\\s)\\bforward(?:ed|ing)?\\b(?!\\s+(?:address(?:es)?|rules?|service)\\b)\\s+(?:(?:this|that|my|our|your|his|their|the|it|these|those|him|her|them|a|an|us)\\b|\\S+\\s+to\\b)",
+        "reason": "sends a message on the user's behalf"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|rates?|is|was)\\b|\\s+each\\s+other\\b)",
+        "reason": "cancels a subscription or commitment"
+      },
+      {
+        "source": "\\b(sign|submit|approve)\\b.{0,30}\\b(contract|form|application|agreement)\\b",
+        "reason": "signs or submits a binding document"
+      }
+    ],
+    "mediumRiskPatterns": [
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:schedule|reserve)\\b(?!\\s+(?:conflicts?|funds?|requirements?|changes?|details?|adjustments?|templates?|is|was)\\b)",
+        "reason": "books or schedules something"
+      },
+      {
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\bbook\\b(?!\\s+(?:club|report|recommendations?|signings?|stores?|fairs?|is|was)\\b)",
+        "reason": "books or schedules something"
+      }
+    ],
+    "reminderPattern": {
+      "source": "\\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\\b",
+      "reason": "creates a calendar or reminder entry"
+    },
+    "reminderRecallQuestion": "\\b(what|who|when|where|why|how)\\b.{0,20}\\bremind(?:ed)? me\\b.*\\?\\s*$|\\bremind me\\b.{0,20}\\b(what|who|when|where|why|how)\\b.*(?:\\?\\s*$|\\b(?:was|were)\\b\\s*\\.?\\s*$)",
+    "bulkReminderReason": "creates a calendar or reminder entry and looks like it may create more than one in a single turn — confirm before proceeding",
+    "pastTenseQuestion": "^\\s*(did|was|were|has|have|does|do|is|are)\\b.*\\?\\s*$",
+    "firstPersonPastNarrative": "\\bi (?:had to|already|needed to|decided to|chose to|wanted to)\\b",
+    "reportedThirdPartySpeech": "\\b(said|told me|mentioned|warned|threatened)\\b.{0,30}\\b(he|she|they|it)\\b\\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\\b",
+    "riskClauseBoundary": ",\\s*(?:so|but|yet|and|because|although|while|whereas)\\b|;\\s*"
+  }
+}

@@ -35,6 +35,11 @@ jobs:
       - name: Check schema sync
         run: node scripts/check-schema-sync.mjs
 
+      # Guards against the two independent copies (TS <-> Python) of harness-core negation
+      # patterns and plan-template keywords drifting apart — see scripts/check-lexical-patterns-sync.mjs.
+      - name: Check lexical patterns sync
+        run: node scripts/check-lexical-patterns-sync.mjs
+
   canvas-package:
     name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest

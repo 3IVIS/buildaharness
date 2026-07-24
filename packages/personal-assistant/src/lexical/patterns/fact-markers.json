@@ -1,0 +1,9 @@
+{
+  "en": {
+    "factMarkers": "\\b(my(?:\\s+\\w+(?:'s)?){0,3}\\s+name is|i(?:\\s+\\w+){0,4}\\s+live(?:\\s+\\w+){0,2}\\s+in|i(?:\\s+\\w+){0,4}\\s+work(?:\\s+\\w+){0,4}\\s+(at|as|for)|i am(?:\\s+\\w+){0,4}\\s+a\\b|i'm(?:\\s+\\w+){0,4}\\s+a\\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\\d+)(?:\\s+\\w+){0,4}\\s+named)\\b",
+    "healthOrDietaryMarkers": "\\b(i'?m|i am)\\b(?:\\s+\\w+){0,4}\\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\\s-]free|celiac)\\b|\\bi('?ve| have)\\b(?:\\s+\\w+){0,4}\\s+(an? .{0,20})?allerg\\w*\\b|\\b(i don'?t eat|i can'?t eat|i cannot eat)\\b",
+    "durableNameOrPreferenceMarkers": "\\b(my name is|call me|i prefer|i go by)\\b",
+    "nonClaimMarkers": "\\?\\s*$|^(what|when|where|why|who|which|how)\\b|\\b(please|can you|could you|would you|will you|help me)\\b|(?<!\\b(?:i|we|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\\b",
+    "clauseBoundary": "[.!?;]+|,\\s*(?:so|but|yet|and|because|although|while|whereas)\\b"
+  }
+}

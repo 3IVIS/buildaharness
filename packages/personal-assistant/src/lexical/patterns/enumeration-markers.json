@@ -1,0 +1,11 @@
+{
+  "en": {
+    "sequencingMarkers": "\\b(then|after that|and then|next,|step \\d|first[,:]|finally,)\\b|^first\\b(?!\\s*[,:])(?=.*\\band\\b)",
+    "oneCommaListMarker": ",[^,]*\\b(?:and|or)\\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody|something|anything|everything|nothing)\\b)(\\S+)",
+    "twoCommaListMarker": "(?:,[^,]*){2,}\\b(?:and|or)\\b",
+    "semicolonListMarker": ";.*;|;\\s*(?:also|additionally|plus)\\b",
+    "numberedListItem": "\\b\\d{1,2}[.)]\\s+\\S",
+    "factThenSingleReminder": ",\\s*(?:and|or)\\s+remind me\\b",
+    "remindWord": "\\bremind\\b"
+  }
+}

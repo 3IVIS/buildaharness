@@ -1,4 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { getEnumerationPatterns, testAny } from './lexical/patterns.js'
+
+const enumeration = getEnumerationPatterns()
 
 // Sequencing markers are a strong signal on their own for looksLikeEnumeratedItems below.
 // The "first[,:]" branch above requires trailing punctuation — found via live testing: "First book
@@ -7,7 +10,10 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 // fell through every signal and was under-reported as a single-step request. A sentence-initial
 // "First" (no comma/colon immediately after, so it doesn't double-match the branch above) followed
 // somewhere later by "and" is the same two-step shape without the punctuation.
-const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|finally,)\b|^first\b(?!\s*[,:])(?=.*\band\b)/i
+// Compiled from packages/personal-assistant/src/lexical/patterns/enumeration-markers.json (see
+// lexical/patterns.ts) — the historical rationale in this file documents each pattern's current
+// shape; edit the JSON to change it, not this file.
+const SEQUENCING_MARKERS = enumeration.sequencingMarkers
 
 // A comma-separated enumeration ("I need to research the company, prepare answers, pick out
 // what to wear, and plan my route") is just as much a multi-step request as one using
@@ -60,16 +66,16 @@ const SEQUENCING_MARKERS = /\b(then|after that|and then|next,|step \d|first[,:]|
 // — found via live testing: "Remind me to call the bank, and something came up with my car
 // insurance too." (one reminder + an unrelated aside) wrongly tripped the bulk-reminder
 // confirmation gate.
-const ONE_COMMA_LIST_MARKER =
-  /,[^,]*\b(?:and|or)\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody|something|anything|everything|nothing)\b)(\S+)/i
-
-const TWO_COMMA_LIST_MARKER = /(?:,[^,]*){2,}\b(?:and|or)\b/i
+const ONE_COMMA_LIST_MARKER = enumeration.oneCommaListMarker
+const TWO_COMMA_LIST_MARKER = enumeration.twoCommaListMarker
 
 function isEnumeratedListShape(trimmed: string): boolean {
-  if (TWO_COMMA_LIST_MARKER.test(trimmed)) return true
-  const match = ONE_COMMA_LIST_MARKER.exec(trimmed)
-  if (!match) return false
-  return !/^[A-Z]/.test(match[1])
+  if (testAny(TWO_COMMA_LIST_MARKER, trimmed)) return true
+  for (const pattern of ONE_COMMA_LIST_MARKER) {
+    const match = pattern.exec(trimmed)
+    if (match) return !/^[A-Z]/.test(match[1])
+  }
+  return false
 }
 
 // Two more enumeration shapes found via live testing that ENUMERATED_LIST_MARKER's comma-based
@@ -86,12 +92,14 @@ function isEnumeratedListShape(trimmed: string): boolean {
 // subtasks. Requiring an explicit second-task cue word (also/additionally/plus) right after a
 // lone semicolon distinguishes the two: it catches convJ's shape without flagging every
 // semicolon-joined compound sentence.
-const SEMICOLON_LIST_MARKER = /;.*;|;\s*(?:also|additionally|plus)\b/i
-const NUMBERED_LIST_ITEM = /\b\d{1,2}[.)]\s+\S/g
+const SEMICOLON_LIST_MARKER = enumeration.semicolonListMarker
+const NUMBERED_LIST_ITEM = enumeration.numberedListItem
 
 function hasNumberedList(text: string): boolean {
-  const matches = text.match(NUMBERED_LIST_ITEM)
-  return matches !== null && matches.length >= 2
+  return NUMBERED_LIST_ITEM.some((pattern) => {
+    const matches = text.match(pattern)
+    return matches !== null && matches.length >= 2
+  })
 }
 
 // An unrelated fact/aside followed by exactly one "remind me" ("I'm vegan, and remind me to buy
@@ -103,11 +111,11 @@ function hasNumberedList(text: string): boolean {
 // each item, while a single fact+reminder combo has exactly one "remind" in the whole message —
 // found via live testing: this ordinary everyday phrasing wrongly forced an unnecessary
 // bulk-reminder confirmation.
-const FACT_THEN_SINGLE_REMINDER = /,\s*(?:and|or)\s+remind me\b/i
+const FACT_THEN_SINGLE_REMINDER = enumeration.factThenSingleReminder
 
 function isFactThenSingleReminder(trimmed: string): boolean {
-  const remindMatches = trimmed.match(/\bremind\b/gi)
-  return remindMatches !== null && remindMatches.length === 1 && FACT_THEN_SINGLE_REMINDER.test(trimmed)
+  const remindMatchCount = enumeration.remindWord.reduce((count, pattern) => count + (trimmed.match(pattern)?.length ?? 0), 0)
+  return remindMatchCount === 1 && testAny(FACT_THEN_SINGLE_REMINDER, trimmed)
 }
 
 /**
@@ -120,7 +128,7 @@ function isFactThenSingleReminder(trimmed: string): boolean {
 export function looksLikeEnumeratedItems(message: string): boolean {
   const trimmed = message.trim()
   if (isFactThenSingleReminder(trimmed)) return false
-  return SEQUENCING_MARKERS.test(trimmed) || isEnumeratedListShape(trimmed) || SEMICOLON_LIST_MARKER.test(trimmed) || hasNumberedList(trimmed)
+  return testAny(SEQUENCING_MARKERS, trimmed) || isEnumeratedListShape(trimmed) || testAny(SEMICOLON_LIST_MARKER, trimmed) || hasNumberedList(trimmed)
 }
 
 export interface DecomposedTaskSpec {

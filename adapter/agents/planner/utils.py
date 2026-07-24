@@ -5,101 +5,35 @@ Helper functions used internally by tools.py and the runner scripts.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from harness.plan_schema import PlanSnapshot  # type: ignore[import]
 
-# Keywords that map to each template name for heuristic selection
-_TEMPLATE_KEYWORDS: dict[str, list[str]] = {
-    "problem_solving": [
-        "problem",
-        "issue",
-        "solve",
-        "fix",
-        "troubleshoot",
-        "root cause",
-        "diagnose",
-        "debug",
-        "investigate",
-        "resolve",
-    ],
-    "project_planning": [
-        "project",
-        "plan",
-        "launch",
-        "build",
-        "develop",
-        "deliver",
-        "milestone",
-        "roadmap",
-        "schedule",
-        "resource",
-    ],
-    "research_analysis": [
-        "research",
-        "analyse",
-        "analyze",
-        "study",
-        "review",
-        "investigate",
-        "explore",
-        "survey",
-        "literature",
-        "data",
-        "insights",
-    ],
-    "decision_making": [
-        "decide",
-        "decision",
-        "choose",
-        "select",
-        "evaluate",
-        "compare",
-        "option",
-        "trade-off",
-        "tradeoff",
-        "criteria",
-        "pick",
-    ],
-    "process_improvement": [
-        "process",
-        "improve",
-        "optimise",
-        "optimize",
-        "efficiency",
-        "workflow",
-        "bottleneck",
-        "streamline",
-        "kaizen",
-        "lean",
-    ],
-    "content_creation": [
-        "write",
-        "draft",
-        "article",
-        "report",
-        "blog",
-        "document",
-        "content",
-        "copy",
-        "proposal",
-        "presentation",
-        "essay",
-    ],
-    "trip_planning": [
-        "trip",
-        "travel",
-        "vacation",
-        "itinerary",
-        "flight",
-        "flights",
-        "hotel",
-        "destination",
-        "pack for",
-        "holiday",
-    ],
-}
+# Keywords that map to each template name for heuristic selection — kept in sync with
+# packages/personal-assistant/src/lexical/patterns/template-keywords.json (that package's own
+# canonical copy) via this file's own byte-for-byte mirror at
+# adapter/agents/planner/lexical_patterns/template-keywords.json, checked by
+# scripts/check-lexical-patterns-sync.mjs. Same pattern this repo already uses for
+# adapter/agents/planner/data/plan_templates/ vs. packages/personal-assistant/src/plan-templates/data/
+# (scripts/check-plan-templates-sync.mjs) — Python and the TS package keep their own local copies
+# rather than reaching into each other's source trees at runtime.
+_TEMPLATE_KEYWORDS_PATH = Path(__file__).parent / "lexical_patterns" / "template-keywords.json"
+
+
+def _load_template_keywords() -> dict[str, list[str]]:
+    data = json.loads(_TEMPLATE_KEYWORDS_PATH.read_text(encoding="utf-8"))
+    merged: dict[str, list[str]] = {}
+    for lang in data.values():
+        for name, keywords in lang.items():
+            merged.setdefault(name, [])
+            merged[name].extend(keywords)
+    return merged
+
+
+_TEMPLATE_KEYWORDS: dict[str, list[str]] = _load_template_keywords()
 
 _DEFAULT_TEMPLATE = "problem_solving"
 

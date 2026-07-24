@@ -1,36 +1,25 @@
 import type { WorldModel, Contradiction, Belief, BeliefDepGraph, EnvironmentChange } from '../state/world-model.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
+import { getNegationPairs } from '../lexical/patterns.js'
+import { sharedTokens, tokenize } from '../lexical/script-utils.js'
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
 type ConfidenceClass = 'HIGH' | 'MEDIUM' | 'LOW'
 
-// Matches adapter/harness/contradiction.py's _NEGATION_PAIRS.
+// NEGATION_PAIRS/STOPWORDS/polarityWords now live in packages/harness/src/lexical/patterns/negation.json
+// (see lexical/patterns.ts) — mirrored in adapter/harness/lexical_patterns.py, read by
+// adapter/harness/contradiction.py's own _statements_opposed.
 //
 // passed/failed, passing/failing, running/stopped, and online/offline exist as
 // literal words in contradiction-checker.ts's CODING_FACT_MARKERS (personal-assistant
 // package) — that regex skips the LLM-backed semantic contradiction check whenever a
 // belief statement matches it, on the assumption this lexical pass already covers
 // build/test/service-state claims. That assumption only holds for the antonym pairs
-// actually listed here, so any status word added to CODING_FACT_MARKERS needs its
-// opposite pair added here too, or a statement using it (e.g. "the tests passed" vs.
-// "the tests failed") silently gets neither check.
-const NEGATION_PAIRS: Array<[string, string]> = [
-  ['present', 'absent'],
-  ['true', 'false'],
-  ['exists', 'missing'],
-  ['success', 'failure'],
-  ['available', 'unavailable'],
-  ['enabled', 'disabled'],
-  ['found', 'not found'],
-  ['is', 'is not'],
-  ['passed', 'failed'],
-  ['passing', 'failing'],
-  ['running', 'stopped'],
-  ['online', 'offline'],
-]
-
-const STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'at'])
+// actually listed in negation.json, so any status word added to CODING_FACT_MARKERS
+// needs its opposite pair added there too, or a statement using it (e.g. "the tests
+// passed" vs. "the tests failed") silently gets neither check.
+const { pairs: NEGATION_PAIRS, stopwords: STOPWORDS, polarityWords: POLARITY_WORDS } = getNegationPairs()
 
 /**
  * Matches _statements_opposed(): a keyword-negation check for semantic opposition.
@@ -46,9 +35,7 @@ function statementsOpposed(stmtA: string, stmtB: string): boolean {
   const a = stmtA.toLowerCase()
   const b = stmtB.toLowerCase()
 
-  const wordsA = new Set(a.split(/\s+/))
-  const wordsB = new Set(b.split(/\s+/))
-  const common = [...wordsA].filter(w => wordsB.has(w) && !STOPWORDS.has(w))
+  const common = sharedTokens(a, b, STOPWORDS)
   if (common.length === 0) return false
 
   for (const [pos, neg] of NEGATION_PAIRS) {
@@ -56,9 +43,11 @@ function statementsOpposed(stmtA: string, stmtB: string): boolean {
     if (a.includes(neg) && b.includes(pos)) return true
   }
 
-  if (wordsA.has('not') !== wordsB.has('not')) return true
-  if (wordsA.has('absent') !== wordsB.has('absent')) return true
-  if (wordsA.has('no') !== wordsB.has('no')) return true
+  const wordsA = new Set(tokenize(a))
+  const wordsB = new Set(tokenize(b))
+  for (const word of POLARITY_WORDS) {
+    if (wordsA.has(word) !== wordsB.has(word)) return true
+  }
 
   return false
 }

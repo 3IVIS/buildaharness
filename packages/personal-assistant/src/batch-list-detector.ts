@@ -1,3 +1,5 @@
+import { getConnectorWords } from './lexical/patterns.js'
+
 export interface BatchListDetection {
   /** Exact strings as they appeared in the list (marker/bullet stripped), in message order. */
   items: string[]
@@ -17,10 +19,9 @@ const BULLET_MARKER = /^[-*]\s+(.+)$/
 // Rüdesheimer Platz") actually uses. Excluded from the capitalization ratio so a real name isn't
 // penalized for the connective tissue it needs, while an instruction sentence ("Add a submit
 // button") still reads as mostly lowercase once its own articles are excluded the same way.
-const CONNECTOR_WORDS = new Set([
-  'a', 'an', 'the', 'of', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'with',
-  'am', 'im', 'an', 'der', 'die', 'das', 'von', 'zu', 'de', 'la', 'le', 'van', 'al',
-])
+// Compiled from packages/personal-assistant/src/lexical/patterns/batch-list-markers.json (see
+// lexical/patterns.ts).
+const CONNECTOR_WORDS = getConnectorWords()
 
 function isCapitalizedWord(word: string): boolean {
   const first = word.charAt(0)

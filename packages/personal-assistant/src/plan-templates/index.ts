@@ -5,6 +5,7 @@ import decisionMakingData from './data/decision_making.json'
 import processImprovementData from './data/process_improvement.json'
 import contentCreationData from './data/content_creation.json'
 import tripPlanningData from './data/trip_planning.json'
+import { getTemplateKeywords } from '../lexical/patterns.js'
 
 export interface PlanTask {
   id: string
@@ -51,38 +52,12 @@ export function listTemplateNames(): string[] {
   return Object.keys(TEMPLATES)
 }
 
-// Ported verbatim from agents/planner/utils.py's _TEMPLATE_KEYWORDS — same 7 keys,
-// same keyword lists, same insertion order (which decides ties, see scoreTemplates).
-const TEMPLATE_KEYWORDS: Record<string, string[]> = {
-  problem_solving: [
-    'problem', 'issue', 'solve', 'fix', 'troubleshoot', 'root cause',
-    'diagnose', 'debug', 'investigate', 'resolve',
-  ],
-  project_planning: [
-    'project', 'plan', 'launch', 'build', 'develop', 'deliver',
-    'milestone', 'roadmap', 'schedule', 'resource',
-  ],
-  research_analysis: [
-    'research', 'analyse', 'analyze', 'study', 'review', 'investigate',
-    'explore', 'survey', 'literature', 'data', 'insights',
-  ],
-  decision_making: [
-    'decide', 'decision', 'choose', 'select', 'evaluate', 'compare',
-    'option', 'trade-off', 'tradeoff', 'criteria', 'pick',
-  ],
-  process_improvement: [
-    'process', 'improve', 'optimise', 'optimize', 'efficiency',
-    'workflow', 'bottleneck', 'streamline', 'kaizen', 'lean',
-  ],
-  content_creation: [
-    'write', 'draft', 'article', 'report', 'blog', 'document',
-    'content', 'copy', 'proposal', 'presentation', 'essay',
-  ],
-  trip_planning: [
-    'trip', 'travel', 'vacation', 'itinerary', 'flight', 'flights',
-    'hotel', 'destination', 'pack for', 'holiday',
-  ],
-}
+// Kept in sync with adapter/agents/planner/lexical_patterns/template-keywords.json (the Python
+// planner agent's own copy of the same data) — same 7 keys, same keyword lists, same insertion
+// order (which decides ties, see scoreTemplates). See
+// packages/personal-assistant/src/lexical/patterns/template-keywords.json (this package's own
+// canonical copy) and lexical/patterns.ts's getTemplateKeywords().
+const TEMPLATE_KEYWORDS: Record<string, string[]> = getTemplateKeywords()
 
 const DEFAULT_TEMPLATE = 'problem_solving'
 

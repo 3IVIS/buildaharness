@@ -1,0 +1,11 @@
+{
+  "en": {
+    "problem_solving": ["problem", "issue", "solve", "fix", "troubleshoot", "root cause", "diagnose", "debug", "investigate", "resolve"],
+    "project_planning": ["project", "plan", "launch", "build", "develop", "deliver", "milestone", "roadmap", "schedule", "resource"],
+    "research_analysis": ["research", "analyse", "analyze", "study", "review", "investigate", "explore", "survey", "literature", "data", "insights"],
+    "decision_making": ["decide", "decision", "choose", "select", "evaluate", "compare", "option", "trade-off", "tradeoff", "criteria", "pick"],
+    "process_improvement": ["process", "improve", "optimise", "optimize", "efficiency", "workflow", "bottleneck", "streamline", "kaizen", "lean"],
+    "content_creation": ["write", "draft", "article", "report", "blog", "document", "content", "copy", "proposal", "presentation", "essay"],
+    "trip_planning": ["trip", "travel", "vacation", "itinerary", "flight", "flights", "hotel", "destination", "pack for", "holiday"]
+  }
+}

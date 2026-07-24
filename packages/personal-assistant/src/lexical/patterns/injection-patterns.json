@@ -1,0 +1,11 @@
+{
+  "en": {
+    "injectionPatterns": [
+      { "source": "\\bignore (all )?(the )?(previous|prior|above) instructions\\b", "reason": "asks to ignore prior instructions" },
+      { "source": "\\byou are now\\b", "reason": "attempts to redefine the assistant's role" },
+      { "source": "\\bnew instructions?:", "reason": "presents itself as new instructions" },
+      { "source": "\\bsystem prompt\\b", "reason": "references the system prompt directly" },
+      { "source": "\\bdisregard (the |your )?(above|previous)\\b", "reason": "asks to disregard prior context" }
+    ]
+  }
+}

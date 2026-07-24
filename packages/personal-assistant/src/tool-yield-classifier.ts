@@ -1,3 +1,5 @@
+import { getDeadEndMarkers, testAny } from './lexical/patterns.js'
+
 export type ToolYield = 'productive' | 'dead_end'
 
 // The literal string web-tools.ts's own executor returns for a zero-result search
@@ -11,13 +13,9 @@ const NO_RESULTS_LITERAL = 'No results found.'
 // "productive") only costs one extra call, while a false positive (calling real content a dead
 // end) would prematurely abandon a findable item — the same asymmetry decomposition-classifier.ts
 // accepts elsewhere.
-const DEAD_END_MARKERS = [
-  /\bno (specific )?date\b/i,
-  /\bcannot find\b/i,
-  /\bnot (found|mentioned|listed)\b/i,
-  /\bno mention of\b/i,
-  /\bno event called\b/i,
-]
+// Compiled from packages/personal-assistant/src/lexical/patterns/tool-yield-markers.json (see
+// lexical/patterns.ts).
+const DEAD_END_MARKERS = getDeadEndMarkers()
 
 /**
  * Zero-LLM-call heuristic run on every web tool result inside a batch sub-loop, so it has to stay
@@ -30,6 +28,6 @@ export function classifyToolYield(toolName: 'web_search' | 'fetch_url', resultTe
   // wrapUntrusted (and, rarely, an injection-warning prefix) — the literal marker is a substring
   // of that wrapped text, never the whole of it.
   if (toolName === 'web_search' && resultText.includes(NO_RESULTS_LITERAL)) return 'dead_end'
-  if (DEAD_END_MARKERS.some((marker) => marker.test(resultText))) return 'dead_end'
+  if (testAny(DEAD_END_MARKERS, resultText)) return 'dead_end'
   return 'productive'
 }

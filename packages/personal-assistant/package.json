@@ -12,7 +12,7 @@
     "personal-assistant": "./dist/cli.js"
   },
   "scripts": {
-    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs",
+    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs && mkdir -p dist/lexical/patterns && cp src/lexical/patterns/*.json dist/lexical/patterns/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",

@@ -1,0 +1,11 @@
+{
+  "en": {
+    "deadEndMarkers": [
+      "\\bno (specific )?date\\b",
+      "\\bcannot find\\b",
+      "\\bnot (found|mentioned|listed)\\b",
+      "\\bno mention of\\b",
+      "\\bno event called\\b"
+    ]
+  }
+}

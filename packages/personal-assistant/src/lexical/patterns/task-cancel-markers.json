@@ -1,0 +1,11 @@
+{
+  "en": {
+    "taskCancelVerbs": "\\b(cancel|skip|drop|remove)\\b",
+    "taskReferenceMarker": "\\b(task|step|item|that part|this part|the plan)\\b",
+    "cancelMatchStopwords": [
+      "this", "that", "these", "those", "with", "from", "into", "over", "about", "their", "there",
+      "where", "which", "while", "would", "should", "could", "have", "been", "being", "each", "plan",
+      "task", "step", "item", "need", "want", "once", "still", "trip", "planning", "along"
+    ]
+  }
+}

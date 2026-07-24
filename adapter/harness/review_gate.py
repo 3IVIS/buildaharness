@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_patterns import get_review_negation_triggers
+from .script_utils import tokenize
+
 ReviewDimension = Literal[
     "task_alignment",
     "world_model_consistency",
@@ -272,18 +275,10 @@ def _get_change_description(proposed_change: Any) -> str:
     return str(getattr(proposed_change, "description", "") or "")
 
 
-_NEGATION_STOPWORDS = {"the", "a", "an", "is", "are", "was", "were", "in", "at", "to", "of", "and"}
-_NEGATION_TRIGGERS = [
-    "not ",
-    "removes ",
-    "remove ",
-    "delete ",
-    "revert ",
-    "contradicts ",
-    "negate ",
-    "negates ",
-    "no longer ",
-]
+# _NEGATION_TRIGGERS/_NEGATION_STOPWORDS now live in adapter/harness/lexical_patterns/negation.json
+# (see lexical_patterns.py) — mirrored in packages/harness/src/lexical/patterns/negation.json,
+# read by packages/harness/src/nodes/review-proposed-change.ts's own isNegation.
+_NEGATION_TRIGGERS, _NEGATION_STOPWORDS = get_review_negation_triggers()
 
 
 def _is_negation(change_desc: str, belief_stmt: str) -> bool:
@@ -301,25 +296,15 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
     """
     if not belief_stmt or not change_desc:
         return False
-    negation_patterns = [
-        f"not {belief_stmt}",
-        f"removes {belief_stmt}",
-        f"remove {belief_stmt}",
-        f"delete {belief_stmt}",
-        f"revert {belief_stmt}",
-        f"contradicts {belief_stmt}",
-        f"negate {belief_stmt}",
-        f"negates {belief_stmt}",
-        f"no longer {belief_stmt}",
-    ]
+    negation_patterns = [f"{trigger}{belief_stmt}" for trigger in _NEGATION_TRIGGERS]
     if any(pat in change_desc for pat in negation_patterns):
         return True
 
     if not any(trigger in change_desc for trigger in _NEGATION_TRIGGERS):
         return False
-    stmt_words = [w for w in belief_stmt.split() if len(w) > 3 and w not in _NEGATION_STOPWORDS]
+    stmt_words = [w for w in tokenize(belief_stmt) if len(w) > 3 and w not in _NEGATION_STOPWORDS]
     if not stmt_words:
         return False
-    change_words = set(change_desc.split())
+    change_words = set(tokenize(change_desc))
     overlap = [w for w in stmt_words if w in change_words]
     return len(overlap) >= min(2, len(stmt_words))

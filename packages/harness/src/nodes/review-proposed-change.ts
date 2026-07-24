@@ -3,6 +3,8 @@ import type { OutputContract } from '../state/output-contract.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { Task } from '../state/task-graph.js'
+import { getReviewNegationTriggers } from '../lexical/patterns.js'
+import { tokenize } from '../lexical/script-utils.js'
 
 export type ReviewDimension =
   | 'task_alignment'
@@ -37,8 +39,10 @@ function getChangeDescription(proposedChange: ProposedChange): string {
   return (proposedChange.description ?? '').toLowerCase()
 }
 
-const NEGATION_STOPWORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'at', 'to', 'of', 'and'])
-const NEGATION_TRIGGERS = ['not ', 'removes ', 'remove ', 'delete ', 'revert ', 'contradicts ', 'negate ', 'negates ', 'no longer ']
+// NEGATION_STOPWORDS/NEGATION_TRIGGERS now live in packages/harness/src/lexical/patterns/negation.json
+// (see lexical/patterns.ts) — mirrored in adapter/harness/lexical_patterns.py, read by
+// adapter/harness/review_gate.py's own isNegation-equivalent.
+const { triggers: NEGATION_TRIGGERS, stopwords: NEGATION_STOPWORDS } = getReviewNegationTriggers()
 
 /**
  * True when changeDesc negates stmt. Primary check: changeDesc literally contains "not <stmt>"
@@ -52,23 +56,13 @@ const NEGATION_TRIGGERS = ['not ', 'removes ', 'remove ', 'delete ', 'revert ', 
  */
 function isNegation(changeDesc: string, stmt: string): boolean {
   if (!changeDesc || !stmt) return false
-  const patterns = [
-    `not ${stmt}`,
-    `removes ${stmt}`,
-    `remove ${stmt}`,
-    `delete ${stmt}`,
-    `revert ${stmt}`,
-    `contradicts ${stmt}`,
-    `negate ${stmt}`,
-    `negates ${stmt}`,
-    `no longer ${stmt}`,
-  ]
+  const patterns = NEGATION_TRIGGERS.map((trigger) => `${trigger}${stmt}`)
   if (patterns.some(p => changeDesc.includes(p))) return true
 
   if (!NEGATION_TRIGGERS.some(t => changeDesc.includes(t))) return false
-  const stmtWords = stmt.split(/\s+/).filter(w => w.length > 3 && !NEGATION_STOPWORDS.has(w))
+  const stmtWords = tokenize(stmt).filter(w => w.length > 3 && !NEGATION_STOPWORDS.has(w))
   if (stmtWords.length === 0) return false
-  const changeWords = new Set(changeDesc.split(/\s+/))
+  const changeWords = new Set(tokenize(changeDesc))
   const overlap = stmtWords.filter(w => changeWords.has(w))
   return overlap.length >= Math.min(2, stmtWords.length)
 }

@@ -206,6 +206,16 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
       matchTaskCancelAttempt('Actually, please cancel my travel insurance policy with my current provider - I found a much cheaper one elsewhere.', plan),
     ).toBeNull()
   })
+
+  it('matches a task with a non-Latin-script description — regression for the ASCII-only `.split(/[^a-z0-9]+/)` tokenizer, which produced an empty word list for CJK text and silently disabled this feature entirely for it', () => {
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [{ id: 'itinerary_planning', description: '起草每日预算行程', depends_on: [] }],
+    })
+    const match = matchTaskCancelAttempt('cancel the 每日预算 task for now', plan)
+    expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: '起草每日预算行程' })
+  })
 })
 
 describe('cancelPlanTask', () => {

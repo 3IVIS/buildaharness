@@ -24,6 +24,7 @@ ignore = [
   "S603",   # subprocess — intentional in build scripts
   "B008",   # function calls in default args — FastAPI Depends() pattern
   "S110",   # try-except-pass — intentional in cleanup/teardown paths
+  "RUF001", # ambiguous fullwidth CJK punctuation in strings — intentional, see adapter/harness/script_utils.py
   "RUF002", # ambiguous EN-dash in docstrings — intentional range notation (e.g. T01–T21)
   "RUF003", # ambiguous EN-dash in comments — intentional range notation
 ]

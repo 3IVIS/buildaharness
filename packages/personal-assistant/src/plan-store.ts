@@ -1,6 +1,7 @@
 import type { MemoryAdapter } from '@buildaharness/runtime'
-import type { TaskStatus } from '@buildaharness/harness'
+import { containsCJK, tokenize, type TaskStatus } from '@buildaharness/harness'
 import type { Plan } from './plan-builder.js'
+import { getTaskCancelPatterns, testAny } from './lexical/patterns.js'
 
 export interface PlanTaskRecord {
   id: string
@@ -64,16 +65,14 @@ export interface TaskCancelMatch {
   taskDescription: string
 }
 
-const TASK_CANCEL_VERBS = /\b(cancel|skip|drop|remove)\b/i
+// Compiled from packages/personal-assistant/src/lexical/patterns/task-cancel-markers.json (see
+// lexical/patterns.ts) — the historical rationale below documents this pattern's current shape;
+// edit the JSON to change it, not this file.
+const { taskCancelVerbs: TASK_CANCEL_VERBS, taskReferenceMarker: TASK_REFERENCE_MARKER, cancelMatchStopwords: CANCEL_MATCH_STOPWORDS } = getTaskCancelPatterns()
 
 // Common words that would spuriously "overlap" with almost any task description if not excluded
 // — matchTaskCancelAttempt needs a genuinely distinctive word in common with a task, not just any
 // shared word, or "cancel that" / "skip this one" would match the first task in every plan.
-const CANCEL_MATCH_STOPWORDS = new Set([
-  'this', 'that', 'these', 'those', 'with', 'from', 'into', 'over', 'about', 'their', 'there',
-  'where', 'which', 'while', 'would', 'should', 'could', 'have', 'been', 'being', 'each', 'plan',
-  'task', 'step', 'item', 'need', 'want', 'once', 'still', 'trip', 'planning', 'along',
-])
 
 // A single shared 4+-letter word is not enough on its own — a genuine, unrelated real-world cancel
 // request can coincidentally share a word with an auto-generated task description (e.g. "insurance"
@@ -89,7 +88,6 @@ const CANCEL_MATCH_STOPWORDS = new Set([
 // built for (conv59/conv70's h9: dropping one step of an active plan the user is talking to the
 // assistant about), and lets anything else fall through to the ordinary message-level risk gate,
 // the same safe default this function already falls back to when no task match is found at all.
-const TASK_REFERENCE_MARKER = /\b(task|step|item|that part|this part|the plan)\b/i
 
 /**
  * Detects a request to cancel/skip ONE task within an active plan — distinct from
@@ -106,15 +104,21 @@ const TASK_REFERENCE_MARKER = /\b(task|step|item|that part|this part|the plan)\b
  * message-level risk gate, same as today. Returns the first matching task in plan order, or null.
  */
 export function matchTaskCancelAttempt(message: string, plan: PlanRecord): TaskCancelMatch | null {
-  if (!TASK_CANCEL_VERBS.test(message)) return null
-  if (!TASK_REFERENCE_MARKER.test(message)) return null
+  if (!testAny(TASK_CANCEL_VERBS, message)) return null
+  if (!testAny(TASK_REFERENCE_MARKER, message)) return null
   const lower = message.toLowerCase()
   for (const task of plan.tasks) {
     if (task.status === 'COMPLETE' || task.cancelled) continue
-    const words = `${task.id} ${task.description}`
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length >= 4 && !CANCEL_MATCH_STOPWORDS.has(w))
+    // tokenize (not a bare `.split(/[^a-z0-9]+/)`) so this works on non-Latin scripts too — that
+    // ASCII-only split produced an empty word list for any CJK task description, silently
+    // disabling this feature entirely rather than just matching less precisely. The "4+ letters"
+    // distinctiveness filter is an English-specific heuristic (a short word is usually a stopword,
+    // a longer one usually isn't) that doesn't transfer to CJK, where tokenize splits per
+    // character and even a single character is often already distinctive — so that length
+    // threshold only applies to non-CJK tokens; a CJK token just needs to not be a stopword.
+    const words = tokenize(`${task.id} ${task.description}`.toLowerCase()).filter(
+      (w) => !CANCEL_MATCH_STOPWORDS.has(w) && (containsCJK(w) || w.length >= 4),
+    )
     if (words.some((w) => lower.includes(w))) {
       return { taskId: task.id, taskDescription: task.description }
     }

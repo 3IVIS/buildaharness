@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { ExternalContradictionInput } from '@buildaharness/harness'
+import { getCodingFactMarkerPatterns, testAny } from './lexical/patterns.js'
 
 export interface BeliefCandidate {
   id: string
@@ -91,8 +92,10 @@ export interface BeliefCandidate {
 // but dropped from the "still-untested" tracking list without ever actually being fixed — this
 // closes that stray gap too.) Widened all six for the same reason as before: confirm each live
 // rather than widening speculatively. This closes out the last of the batch10-named sibling gaps.
-const CODING_FACT_MARKERS =
-  /\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|services?|functions?|modules?|dependency|dependencies|errors?|exceptions?|endpoints?|api|databases?|schemas?|branch(?:es)?|commits?|pipeline|ci\/cd|ci|environments?|variables?|packages?|libraries|library|repos?|repository|scripts?|commands?|logs?|status|bugs?|pass(?:ed|ing)?(?!\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\b/i
+// Compiled from packages/personal-assistant/src/lexical/patterns/coding-fact-markers.json (see
+// lexical/patterns.ts) — the historical rationale above documents this pattern's current shape;
+// edit the JSON to change it, not this file.
+const CODING_FACT_MARKERS = getCodingFactMarkerPatterns()
 
 // This substring match, and the shared-subject gate in detect-contradictions.ts's
 // statementsOpposed (packages/harness), only catch a real contradiction when the two compared
@@ -101,7 +104,7 @@ const CODING_FACT_MARKERS =
 // plan-builder.ts prompt task descriptions to be phrased subject-first.
 /** Zero-LLM-call gate: true when a belief statement reads like a structured/technical (build, test, service, file) claim rather than a natural-language personal fact. */
 export function looksLikeCodingFact(statement: string): boolean {
-  return CODING_FACT_MARKERS.test(statement)
+  return testAny(CODING_FACT_MARKERS, statement)
 }
 
 // Phase 2 (layer 1, World Model) writes a synthetic "Completed: <task description>" belief as

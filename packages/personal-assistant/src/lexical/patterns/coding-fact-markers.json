@@ -1,0 +1,5 @@
+{
+  "en": {
+    "codingFactMarkers": "\\b(test|tests|build|deploy(ment)?|compile|file|files|configs?|servers?|services?|functions?|modules?|dependency|dependencies|errors?|exceptions?|endpoints?|api|databases?|schemas?|branch(?:es)?|commits?|pipeline|ci\\/cd|ci|environments?|variables?|packages?|libraries|library|repos?|repository|scripts?|commands?|logs?|status|bugs?|pass(?:ed|ing)?(?!\\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\\b"
+  }
+}

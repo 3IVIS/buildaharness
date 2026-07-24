@@ -1,6 +1,8 @@
 import type { ToolDefinition, ReminderStore } from '@buildaharness/runtime'
 import { requireStringArg } from './file-tools.js'
-import { FACT_MARKERS, HEALTH_OR_DIETARY_MARKERS } from './fact-extraction.js'
+import { getFactMarkerPatterns, testAny } from './lexical/patterns.js'
+
+const factPatterns = getFactMarkerPatterns()
 
 export const CREATE_REMINDER_TOOL: ToolDefinition = {
   name: 'create_reminder',
@@ -61,7 +63,8 @@ export async function executeReminderTool(
       // reminder. Without this, the whole-message check refused the reminder outright any time
       // the raw message mentioned an unrelated fact anywhere, even though `text` itself wasn't the
       // fact (same bug shape file-tools-mcp-server.mjs's create_reminder had — kept in sync here).
-      const isFactShaped = (t: string): boolean => FACT_MARKERS.test(t) || HEALTH_OR_DIETARY_MARKERS.test(t)
+      const isFactShaped = (t: string): boolean =>
+        testAny(factPatterns.factMarkers, t) || testAny(factPatterns.healthOrDietaryMarkers, t)
       const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i
       const sourceIsFactOnly = sourceUserMessage !== undefined && !REMINDER_REQUEST_MARKER.test(sourceUserMessage) && isFactShaped(sourceUserMessage)
       if (isFactShaped(text) || sourceIsFactOnly) {

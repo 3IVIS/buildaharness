@@ -1,3 +1,4 @@
+export * from './lexical/script-utils.js'
 export * from './primitives/index.js'
 export * from './state/world-model.js'
 export * from './state/caller-state.js'

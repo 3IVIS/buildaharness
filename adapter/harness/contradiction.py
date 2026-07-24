@@ -18,32 +18,23 @@ from typing import Any, cast
 
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
+from .lexical_patterns import get_negation_pairs
+from .script_utils import shared_tokens, tokenize
 from .world_model import Belief, Contradiction, ContradictionSeverity, WorldModel
 
-# Matches packages/harness/src/nodes/detect-contradictions.ts's NEGATION_PAIRS.
+# _NEGATION_PAIRS/stopwords/polarity words now live in adapter/harness/lexical_patterns/negation.json
+# (see lexical_patterns.py) — mirrored in packages/harness/src/lexical/patterns/negation.json, read
+# by packages/harness/src/nodes/detect-contradictions.ts's own statementsOpposed.
 #
 # passed/failed, passing/failing, running/stopped, and online/offline exist as literal
 # words in contradiction-checker.ts's CODING_FACT_MARKERS (personal-assistant package)
 # — that regex skips the LLM-backed semantic contradiction check whenever a belief
 # statement matches it, on the assumption this lexical pass already covers
 # build/test/service-state claims. That assumption only holds for the antonym pairs
-# actually listed here, so any status word added to CODING_FACT_MARKERS needs its
-# opposite pair added here too, or a statement using it (e.g. "the tests passed" vs.
-# "the tests failed") silently gets neither check.
-_NEGATION_PAIRS = [
-    ("present", "absent"),
-    ("true", "false"),
-    ("exists", "missing"),
-    ("success", "failure"),
-    ("available", "unavailable"),
-    ("enabled", "disabled"),
-    ("found", "not found"),
-    ("is", "is not"),
-    ("passed", "failed"),
-    ("passing", "failing"),
-    ("running", "stopped"),
-    ("online", "offline"),
-]
+# actually listed in negation.json, so any status word added to CODING_FACT_MARKERS
+# needs its opposite pair added there too, or a statement using it (e.g. "the tests
+# passed" vs. "the tests failed") silently gets neither check.
+_NEGATION_PAIRS, _NEGATION_STOPWORDS, _POLARITY_WORDS = get_negation_pairs()
 
 
 def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
@@ -59,9 +50,7 @@ def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
     a = stmt_a.lower()
     b = stmt_b.lower()
 
-    words_a = set(a.split())
-    words_b = set(b.split())
-    common = words_a & words_b - {"the", "a", "an", "is", "are", "was", "were", "in", "at"}
+    common = shared_tokens(a, b, _NEGATION_STOPWORDS)
     if not common:
         return False
 
@@ -72,13 +61,12 @@ def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
         if neg in a and pos in b:
             return True
 
-    # Check "not X" vs "X" pattern
-    if ("not" in words_a) != ("not" in words_b):
-        return True
-    if ("absent" in words_a) != ("absent" in words_b):
-        return True
-    if ("no" in words_a) != ("no" in words_b):
-        return True
+    # Check "not X" vs "X" pattern (and any other configured polarity word)
+    words_a = set(tokenize(a))
+    words_b = set(tokenize(b))
+    for word in _POLARITY_WORDS:
+        if (word in words_a) != (word in words_b):
+            return True
 
     return False
 

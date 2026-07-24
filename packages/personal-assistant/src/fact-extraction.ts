@@ -1,4 +1,7 @@
 import { looksLikeCodingFact } from './contradiction-checker.js'
+import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.js'
+
+const factPatterns = getFactMarkerPatterns()
 
 export interface UserFact {
   text: string
@@ -85,8 +88,10 @@ export interface UserFact {
 // Texas." was never captured as a fact at all (/memory showed no location fact), even though the
 // pronoun-verb gap fix from batch 23 already handles "I currently live in Austin". Added a second,
 // narrower 0-2-word gap between "live" and "in" for the same reason as the other gaps in this file.
-export const FACT_MARKERS =
-  /\b(my(?:\s+\w+(?:'s)?){0,3}\s+name is|i(?:\s+\w+){0,4}\s+live(?:\s+\w+){0,2}\s+in|i(?:\s+\w+){0,4}\s+work(?:\s+\w+){0,4}\s+(at|as|for)|i am(?:\s+\w+){0,4}\s+a\b|i'm(?:\s+\w+){0,4}\s+a\b|i prefer|remember that|note that|for future reference|call me|i go by|i have (?:a|an|\d+)(?:\s+\w+){0,4}\s+named)\b/i
+// Compiled from packages/personal-assistant/src/lexical/patterns/fact-markers.json's "en".factMarkers
+// (see lexical/patterns.ts) — the historical rationale above documents that pattern's current
+// shape; edit the JSON to change it, not this file.
+const FACT_MARKERS = factPatterns.factMarkers
 
 // Health/dietary self-statements ("I'm allergic to shellfish") are exactly the kind of durable,
 // safety-relevant fact this store exists for, but never matched FACT_MARKERS' identity-statement
@@ -122,8 +127,8 @@ export const FACT_MARKERS =
 // testing: "I am celiac, so please avoid recommending anything with wheat or gluten." was never
 // captured as a durable fact at all (/memory showed "Facts I know: None yet" despite the
 // assistant acknowledging it conversationally).
-export const HEALTH_OR_DIETARY_MARKERS =
-  /\b(i'?m|i am)\b(?:\s+\w+){0,4}\s+(allergic to|diabetic|vegetarian|vegan|lactose intolerant|gluten[\s-]free|celiac)\b|\bi('?ve| have)\b(?:\s+\w+){0,4}\s+(an? .{0,20})?allerg\w*\b|\b(i don'?t eat|i can'?t eat|i cannot eat)\b/i
+// Compiled from fact-markers.json's "en".healthOrDietaryMarkers — see FACT_MARKERS' note above.
+const HEALTH_OR_DIETARY_MARKERS = factPatterns.healthOrDietaryMarkers
 
 // The subset of FACT_MARKERS worth surviving /new: a name or a stated preference is durable and
 // safety/identity-relevant the same way a health/dietary fact is, unlike a current location or
@@ -131,10 +136,11 @@ export const HEALTH_OR_DIETARY_MARKERS =
 // reference" phrasing (context-dependent — could be about anything transient). Deliberately a
 // narrow subset, not all of FACT_MARKERS, so /new keeps clearing everything that isn't clearly
 // meant to persist.
-const DURABLE_NAME_OR_PREFERENCE_MARKERS = /\b(my name is|call me|i prefer|i go by)\b/i
+// Compiled from fact-markers.json's "en".durableNameOrPreferenceMarkers.
+const DURABLE_NAME_OR_PREFERENCE_MARKERS = factPatterns.durableNameOrPreferenceMarkers
 
 function isDurable(text: string): boolean {
-  return DURABLE_NAME_OR_PREFERENCE_MARKERS.test(text) || HEALTH_OR_DIETARY_MARKERS.test(text)
+  return testAny(DURABLE_NAME_OR_PREFERENCE_MARKERS, text) || testAny(HEALTH_OR_DIETARY_MARKERS, text)
 }
 
 // looksLikeCodingFact is a pure keyword match, so "please delete the old backup files" and
@@ -162,8 +168,8 @@ function isDurable(text: string): boolean {
 // match, same noun-vs-verb ambiguity risk-classifier.ts's NOUN_CONTEXT_DETERMINERS lookbehind
 // exists to solve for order/pay/delete/cancel/etc. Widened the exemption to the same
 // determiner/article/quantifier list, not just "i"/"we".
-const NON_CLAIM_MARKERS =
-  /\?\s*$|^(what|when|where|why|who|which|how)\b|\b(please|can you|could you|would you|will you|help me)\b|(?<!\b(?:i|we|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\b(?:\s+\w+){0,4}\s)\b(delete|remove|run|execute|install|deploy|restart|stop|start|create|write|update|set up|change|fix|add|revert|undo)\b/i
+// Compiled from fact-markers.json's "en".nonClaimMarkers.
+const NON_CLAIM_MARKERS = factPatterns.nonClaimMarkers
 
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole
@@ -177,13 +183,11 @@ const NON_CLAIM_MARKERS =
 // recommend...") but wasn't in the list — found via live testing: the whole message fell to the
 // unsplit path, so NON_CLAIM_MARKERS' "please" match (from the trailing clause) suppressed the
 // allergy fact too, reproducing the exact bug class this clause-split fix was meant to close.
-const CLAUSE_BOUNDARY = /[.!?;]+|,\s*(?:so|but|yet|and|because|although|while|whereas)\b/i
+// Compiled from fact-markers.json's "en".clauseBoundary.
+const CLAUSE_BOUNDARY = factPatterns.clauseBoundary
 
 function splitClauses(text: string): string[] {
-  return text
-    .split(CLAUSE_BOUNDARY)
-    .map((clause) => clause.trim())
-    .filter(Boolean)
+  return splitOnAny(CLAUSE_BOUNDARY, text)
 }
 
 /**
@@ -203,9 +207,9 @@ export function extractFactsFromTurn(userMessage: string, sourceTurn: string): U
   const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed) }]
   // FACT_MARKERS' phrases are declarative by construction (unaffected by NON_CLAIM_MARKERS, as
   // before this change) and matched against the whole message, not per clause.
-  if (FACT_MARKERS.test(trimmed)) return admit()
+  if (testAny(FACT_MARKERS, trimmed)) return admit()
   const isClaimClause = splitClauses(trimmed).some(
-    (clause) => (looksLikeCodingFact(clause) || HEALTH_OR_DIETARY_MARKERS.test(clause)) && !NON_CLAIM_MARKERS.test(clause),
+    (clause) => (looksLikeCodingFact(clause) || testAny(HEALTH_OR_DIETARY_MARKERS, clause)) && !testAny(NON_CLAIM_MARKERS, clause),
   )
   return isClaimClause ? admit() : []
 }

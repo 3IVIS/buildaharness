@@ -1,0 +1,22 @@
+{
+  "en": {
+    "stopwords": ["the", "a", "an", "is", "are", "was", "were", "in", "at"],
+    "pairs": [
+      ["present", "absent"],
+      ["true", "false"],
+      ["exists", "missing"],
+      ["success", "failure"],
+      ["available", "unavailable"],
+      ["enabled", "disabled"],
+      ["found", "not found"],
+      ["is", "is not"],
+      ["passed", "failed"],
+      ["passing", "failing"],
+      ["running", "stopped"],
+      ["online", "offline"]
+    ],
+    "polarityWords": ["not", "absent", "no"],
+    "reviewStopwords": ["the", "a", "an", "is", "are", "was", "were", "in", "at", "to", "of", "and"],
+    "reviewTriggers": ["not ", "removes ", "remove ", "delete ", "revert ", "contradicts ", "negate ", "negates ", "no longer "]
+  }
+}
