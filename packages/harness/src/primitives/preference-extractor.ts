@@ -4,6 +4,12 @@
  * Parses free-text feedback into structured preference updates via
  * configurable keyword-to-field signal mappings.
  * Port of adapter/harness/preference_extractor.py. No domain vocabulary.
+ *
+ * Accepted as-is (plans/lexical_functions_hardening_plan.html Phase 3 step 5): this primitive is a
+ * generic, caller-configured substring-matching engine with no content of its own. Any consumer
+ * supplying `PreferenceSignal.patterns` inherits the same language/rephrasing limits as every other
+ * lexical check in this plan — a future consumer shouldn't assume the primitive itself handles
+ * non-English phrasing or paraphrase tolerance.
  */
 
 export interface PreferenceSignal {

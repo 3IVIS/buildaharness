@@ -1,11 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer, type Server } from 'node:http'
 import type { FsBackend } from '@buildaharness/runtime'
 import { executeShellTool, type ShellStagingContext } from './shell-tools.js'
 import { loadPendingAction, applyPendingAction } from './file-tools.js'
 import { runApprovedShellCommand } from './shell-executor.js'
+import { resetNetworkContainmentProxiesForTests } from './network-containment.js'
 
 function makeFakeBackend(root: string): FsBackend {
   const files = new Map<string, string>()
@@ -71,6 +73,64 @@ describe('runApprovedShellCommand (real subprocess)', () => {
   it('truncates combined stdout/stderr past the byte cap', async () => {
     const result = await runApprovedShellCommand('yes x | head -c 5000', process.cwd(), { maxOutputBytes: 100 })
     expect(result.output.endsWith('(truncated)')).toBe(true)
+  })
+})
+
+// Phase 4 of plans/lexical_functions_hardening_plan.html (Decision 6): proves the network
+// containment claim directly rather than just documenting intent — a legitimate command with no
+// network need is unaffected, an allowlisted host is actually reachable, and a non-allowlisted
+// host is actually blocked (not just declined at some earlier approval-prompt stage).
+function listenOnLoopback(server: Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'string') {
+        reject(new Error('failed to bind test server to a loopback port'))
+        return
+      }
+      resolve(address.port)
+    })
+  })
+}
+
+describe('runApprovedShellCommand network containment (Decision 6)', () => {
+  afterEach(async () => {
+    await resetNetworkContainmentProxiesForTests()
+  })
+
+  it('a command with no network need still runs unaffected by containment', async () => {
+    const result = await runApprovedShellCommand('echo still-works', process.cwd(), { networkAllowlist: ['example.com'] })
+    expect(result.exitCode).toBe(0)
+    expect(result.output.trim()).toBe('still-works')
+  })
+
+  it('reaches an allowlisted host through the loopback proxy', async () => {
+    const server = createServer((_req, res) => res.end('ok-from-allowlisted-host'))
+    const port = await listenOnLoopback(server)
+    try {
+      const result = await runApprovedShellCommand(`curl -s http://127.0.0.1:${port}/`, process.cwd(), {
+        networkAllowlist: ['127.0.0.1'],
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.output).toContain('ok-from-allowlisted-host')
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
+  it('actually blocks a request to a host not on the allowlist, rather than just documenting intent', async () => {
+    const server = createServer((_req, res) => res.end('should-never-be-reached'))
+    const port = await listenOnLoopback(server)
+    try {
+      const result = await runApprovedShellCommand(`curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${port}/`, process.cwd(), {
+        networkAllowlist: ['some-other-host.example'],
+      })
+      expect(result.exitCode).toBe(0)
+      expect(result.output.trim()).toBe('403')
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
   })
 })
 

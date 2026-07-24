@@ -82,7 +82,23 @@ function seedAdversarialPrior(
   return selected
 }
 
-function implementerLens(worldModel: WorldModel, successCriteria: string[]): ReviewLensResult {
+/**
+ * Optional semantic escalation layered on top of the plain `.includes()` substring check below —
+ * called only for a criterion the substring check found no coverage for, so a belief that covers
+ * a success criterion in different words (a paraphrase, or any non-English phrasing) isn't
+ * wrongly reported as an uncovered gap. See Phase 2/Decision 3b of
+ * plans/lexical_functions_hardening_plan.html — mirrors the existing
+ * contradictionChecker/semanticChangeReviewer/semanticFailureMatcher hooks on HarnessRuntime
+ * (packages/harness/src/harness-runtime.ts). A caller can cheaply return `false` without an LLM
+ * call for a criterion it judges the substring check already covers.
+ */
+export type SemanticCriterionCoverage = (criterion: string, beliefs: Belief[]) => Promise<boolean>
+
+async function implementerLens(
+  worldModel: WorldModel,
+  successCriteria: string[],
+  semanticCriterionCoverage?: SemanticCriterionCoverage,
+): Promise<ReviewLensResult> {
   const findings: string[] = []
   const reopened: string[] = []
 
@@ -92,7 +108,10 @@ function implementerLens(worldModel: WorldModel, successCriteria: string[]): Rev
       b.statement.toLowerCase().includes(criterion.toLowerCase()),
     )
     if (!covered) {
-      findings.push(`Success criterion not covered by any belief: "${criterion}"`)
+      const semanticallyCovered = semanticCriterionCoverage ? await semanticCriterionCoverage(criterion, worldModel.beliefs) : false
+      if (!semanticallyCovered) {
+        findings.push(`Success criterion not covered by any belief: "${criterion}"`)
+      }
     }
   }
 
@@ -185,7 +204,7 @@ export function drainPropagationQueue(queue: PropagationQueue): string[] {
   return ids
 }
 
-export function reviewerPass(
+export async function reviewerPass(
   worldModel: WorldModel,
   successCriteria: string[],
   failureDiagnostics: FailureDiagnostics,
@@ -201,9 +220,10 @@ export function reviewerPass(
   // adversarial challenge (see Phase 2, layer 11 of the harness layer activation plan).
   // Defaults true so every existing call site keeps running all 3 lenses unchanged.
   runAdversarialLens = true,
-): ReviewPassResult {
+  semanticCriterionCoverage?: SemanticCriterionCoverage,
+): Promise<ReviewPassResult> {
   // 3 lenses in fixed sequence (adversarial conditionally)
-  const implResult = implementerLens(worldModel, successCriteria)
+  const implResult = await implementerLens(worldModel, successCriteria, semanticCriterionCoverage)
   const reviewResult = reviewerLens(worldModel, successCriteria)
   const adversarialResult = runAdversarialLens
     ? adversarialLens(worldModel, successCriteria, failureDiagnostics, beliefDepGraph)

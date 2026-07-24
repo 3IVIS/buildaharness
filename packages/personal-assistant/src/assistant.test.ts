@@ -15,7 +15,7 @@ import { classifyRisk } from './risk-classifier.js'
 // ILLMClient below recognize that call and answer it separately from whatever else the fake is
 // scripted to simulate (a tool loop, a decomposition call, ...), instead of it silently consuming
 // a slot meant for something else.
-const TURN_INTENT_MARKER = 'six independent judgments'
+const TURN_INTENT_MARKER = 'seven independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))
@@ -221,7 +221,10 @@ function scriptedResponses(
  */
 class DecompositionAwareLLMClient implements ILLMClient {
   calls = 0
-  constructor(private readonly reply: string, private readonly decomposedTasks: { id: string; description: string; depends_on: string[] }[] = []) {}
+  constructor(
+    private readonly reply: string,
+    private readonly decomposedTasks: { id: string; description: string; depends_on: string[]; riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' }[] = [],
+  ) {}
 
   async *callChat(): AsyncIterable<string> {
     this.calls++
@@ -234,7 +237,8 @@ class DecompositionAwareLLMClient implements ILLMClient {
   }
 
   async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
-    return { content: deriveTurnIntentJSON(messages, { decomposedTasks: this.decomposedTasks }) }
+    const tasksWithRisk = this.decomposedTasks.map((t) => ({ riskLevel: 'LOW' as const, ...t }))
+    return { content: deriveTurnIntentJSON(messages, { decomposedTasks: tasksWithRisk }) }
   }
 }
 
@@ -1748,30 +1752,42 @@ describe('PersonalAssistant structured planning', () => {
     const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm })
 
-    // planBuilderResponse's 'schedule' step description ("Schedule the redesign kickoff meeting")
-    // matches classifyRisk's MEDIUM-risk `schedule` keyword — SCHEDULE_VERB_PATTERN's
-    // noun-context exclusion (added to fix a false positive on "my schedule is packed") only
-    // excludes "schedule" when it's preceded by a determiner, so this leading-verb phrasing still
-    // gates correctly. Phase 4 of the harness layer
-    // activation plan assesses each plan step's own risk from its own description (not the
-    // turn's message) and pauses right after a MEDIUM/HIGH-risk step resolves, so this plan
-    // runs 5 of its 6 steps in the first turn and stops for confirmation before 'kickoff'
-    // (the harness's own success accounting was fixed in Phase 0, so this plan does genuinely
-    // execute — Phase 4 is what stops it running to completion in one shot regardless).
+    // Phase 1 of plans/lexical_functions_hardening_plan.html: each step's riskLevel now comes
+    // from project_planning.json's own curated risk_level (attached by buildPlanFromTemplate via
+    // task id, not re-derived per-step via classifyRisk on the personalized description text) —
+    // see plan-builder.ts. That template curates every step except 'kickoff' as MEDIUM/HIGH
+    // (scope_definition/work_breakdown/resource_planning/schedule: MEDIUM, risk_assessment: HIGH),
+    // more conservative than the old per-description lexical guess (which happened to read most of
+    // these personalized one-line descriptions as LOW purely because they don't contain a
+    // risk-classifier keyword). Phase 4's pacing gate pauses right after each MEDIUM/HIGH step
+    // resolves, so this plan now takes one resume turn per step rather than one big first-turn
+    // burst — a real, expected behavior change from Phase 1's fix, not a bug: the template's own
+    // curated risk levels are the more accurate signal here, and this test now proves the pacing
+    // mechanism honors them correctly across a genuinely multi-turn resume sequence.
     const first = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(2) // classification + plan-builder structured calls
     expect(first.status).toBe('ok')
-    expect(first.planStatus?.completionPct).toBeCloseTo(83.33, 1)
-    expect(first.reply).toContain('Kick off the redesign')
+    expect(first.planStatus?.completionPct).toBeCloseTo(100 / 6, 1) // only scope_definition (MEDIUM) done
+    expect(first.reply).toContain('Break down the redesign work')
 
-    // Any next message resumes the paused harness run (Phase 4.1 keeps the checkpoint
-    // instead of deleting it) and completes the plan's one remaining LOW-risk step — no
-    // fresh plan-builder call, and no re-pausing since 'kickoff' isn't MEDIUM/HIGH risk. It
-    // does still spend the one mandatory classifyTurnIntent call every turn now makes.
-    const second = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
-    expect(second.status).toBe('ok')
-    expect(second.planStatus?.completionPct).toBe(100)
-    expect(llm.calls).toBe(3)
+    // Every next message resumes the paused harness run (Phase 4.1 keeps the checkpoint instead
+    // of deleting it) — no fresh plan-builder call on any resume, just the one mandatory
+    // classifyTurnIntent call per turn, and completion climbs by exactly one task each time until
+    // the whole plan (6 tasks) is done.
+    let last = first
+    let resumes = 0
+    while (last.planStatus && last.planStatus.completionPct < 100 && resumes < 8) {
+      const before = last.planStatus.completionPct
+      last = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
+      resumes++
+      expect(last.status).toBe('ok')
+      expect(last.planStatus?.completionPct).toBeGreaterThan(before)
+      expect(llm.calls).toBe(2 + resumes) // one additional classifyTurnIntent call per resume, nothing else
+    }
+
+    expect(resumes).toBe(5) // one resume per remaining task (work_breakdown, resource_planning, risk_assessment, schedule, kickoff)
+    expect(last.planStatus?.completionPct).toBe(100)
+    expect(last.reply).toBe('All set.')
   })
 
   it('does not resume a plan from a different session', async () => {
@@ -1819,9 +1835,9 @@ describe('PersonalAssistant structured planning', () => {
       templateName: 'trip_planning',
       successCriteria: 'The trip is booked and planned.',
       tasks: [
-        { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [] },
-        { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'] },
-        { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'] },
+        { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [], riskLevel: 'LOW' },
+        { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'], riskLevel: 'MEDIUM' },
+        { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'], riskLevel: 'LOW' },
       ],
     })
     await savePlan(memory, sessionId, plan)
@@ -1866,6 +1882,71 @@ describe('PersonalAssistant structured planning', () => {
     expect(classified).toMatchObject({ kind: 'plan_classified', isCandidate: true, matchedTemplate: 'project_planning' })
     const updated = events.find((e) => e.kind === 'plan_updated')
     expect(updated).toMatchObject({ kind: 'plan_updated', templateName: 'project_planning' })
+  })
+})
+
+describe('PersonalAssistant durable fact capture — classifyTurnIntent LLM backstop (Phase 1 of the lexical hardening plan)', () => {
+  it('records the LLM-derived fact when the lexical FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS pass finds nothing for a paraphrased statement', async () => {
+    // Deliberately avoids every fact-extraction.ts marker phrase ("allergic to", "i'm a", "my name
+    // is", ...) — a real paraphrase the lexical pass has no way to recognize, in any language.
+    const message = 'Just so you know, tomatoes make me break out in hives.'
+    const memory = new InMemoryAdapter()
+    // Beyond the mandatory classifyTurnIntent call, this message's new belief is worth a real
+    // semantic contradiction check (not coding-fact-shaped) — '{}' is a safe, inert stand-in
+    // response for that (and any other) structured call this scenario happens to trigger; every
+    // one of those callers parses defensively and falls back to "nothing found" on a shape it
+    // doesn't recognize.
+    const llm = new ScriptedToolLLMClient(
+      () => ({ content: '{}' }),
+      [''],
+      undefined,
+      (userMessage) =>
+        userMessage === message
+          ? { statesDurableFact: { text: 'the user breaks out in hives from tomatoes', durable: true } }
+          : undefined,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session' })
+
+    const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean }>
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('the user breaks out in hives from tomatoes')
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('does not use the LLM-derived fact when the lexical pass already found one — lexical stays authoritative', async () => {
+    const message = "My name is Priya and, incidentally, tomatoes make me break out in hives."
+    const memory = new InMemoryAdapter()
+    const llm = new ScriptedToolLLMClient(
+      () => ({ content: '{}' }),
+      [''],
+      undefined,
+      (userMessage) =>
+        userMessage === message
+          ? { statesDurableFact: { text: 'the user breaks out in hives from tomatoes', durable: true } }
+          : undefined,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session-2' })
+
+    const facts = (await memory.get('facts:fact-session-2')) as Array<{ text: string; durable: boolean }>
+    expect(facts).toHaveLength(1)
+    // The lexical FACT_MARKERS match ("My name is Priya") wins verbatim — the LLM's paraphrased
+    // hives fact is not additionally recorded.
+    expect(facts[0].text).toBe(message)
+  })
+
+  it('still records nothing when neither the lexical pass nor the LLM find a fact', async () => {
+    const message = 'What time is it in Tokyo right now?'
+    const memory = new InMemoryAdapter()
+    const llm = new FakeLLMClient('Tokyo is in Japan Standard Time (UTC+9).')
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session-3' })
+
+    expect(await memory.get('facts:fact-session-3')).toBeUndefined()
   })
 })
 
@@ -2137,7 +2218,7 @@ describe('PersonalAssistant batch research — detection gating', () => {
     const plan = createPlanRecord({
       templateName: 'trip_planning',
       successCriteria: 'The trip is booked and planned.',
-      tasks: [{ id: 'destination_research', description: 'Research the destination', depends_on: [] }],
+      tasks: [{ id: 'destination_research', description: 'Research the destination', depends_on: [], riskLevel: 'LOW' }],
     })
     await savePlan(memory, sessionId, plan)
 

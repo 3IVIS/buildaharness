@@ -5,6 +5,7 @@ import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import type { Diagnostics } from '../state/diagnostics.js'
 import { normalise, assertNormalised, DimensionType } from '../normalise.js'
 import { computeSourceEntropy } from './generate-update-hypotheses.js'
+import { getGranularityMarkers } from '../lexical/patterns.js'
 
 /**
  * Matches adapter/harness/task_graph.py's estimate_world_model_granularity():
@@ -15,8 +16,10 @@ function estimateWorldModelGranularity(worldModel: WorldModel): number {
   const beliefs = worldModel.beliefs
   if (beliefs.length === 0) return 0
 
-  const statementMarkers = ['line ', 'line:', 'statement', 'expression', 'lineno']
-  const functionMarkers = ['function', 'method', 'def ', 'procedure', '()']
+  // Was a locally-hardcoded list, narrower than and drifted from detect-contradictions.ts's own
+  // LINE_LEVEL_KEYWORDS (a different check with substantially overlapping vocabulary) — both now
+  // read the same granularity-markers.json (see getGranularityMarkers()'s doc comment).
+  const { statementLevelMarkers: statementMarkers, functionLevelMarkers: functionMarkers } = getGranularityMarkers()
 
   let statementCount = 0
   let functionCount = 0

@@ -29,6 +29,18 @@ export interface AssistantConfig {
   braveApiKey?: string
   enableShell: boolean
   shellTimeoutMs?: number
+  /**
+   * Node-level network containment for an approved run_shell_command execution (Decision 6,
+   * plans/lexical_functions_hardening_plan.html Phase 4 step 2): the spawned command's
+   * HTTP(S)_PROXY env vars are forced to point at a loopback-only proxy (see
+   * network-containment.ts) that only relays a CONNECT/request whose target host matches an
+   * entry here (exact match or subdomain). Undefined/empty denies all network access from an
+   * approved shell command — the safe default, since no host is a legitimate target until the
+   * user opts one in. This is a Node-level restriction, not an OS sandbox — see the plan's
+   * Decision 6 for why that tradeoff was chosen (identical across CLI/desktop, no new
+   * dependency) over real OS-native sandboxing or a container-per-command.
+   */
+  shellNetworkAllowlist?: string[]
   workspaceRoot?: string
   /**
    * Equivalent of Claude Code's own --dangerously-skip-permissions: when true, both approval
@@ -63,6 +75,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'braveApiKey',
   'enableShell',
   'shellTimeoutMs',
+  'shellNetworkAllowlist',
   'workspaceRoot',
   'dangerouslySkipPermissions',
   'sessionCostLimitUsd',

@@ -340,9 +340,10 @@ const risk = getRiskPatterns()
 // "create an event" already was, but had no alternative of its own — found via live testing:
 // "Please create reminders for calling the bank, emailing the landlord, and picking up dry
 // cleaning." bypassed the reminder pattern entirely (falling through as LOW, skipping the same
-// bulk-confirmation gate) purely because it used "create" instead of "set". Duplicated identically
-// in reminder-tools.ts and file-tools-mcp-server.mjs's REMINDER_REQUEST_MARKER — keep all three in
-// sync by hand (see the playbook's claude-cli-backend gotcha).
+// bulk-confirmation gate) purely because it used "create" instead of "set". reminder-tools.ts now
+// imports this same reminderPattern instead of re-declaring it; file-tools-mcp-server.mjs's
+// REMINDER_REQUEST_MARKER stays a hand-synced literal (it can't import this module graph) — keep
+// that one copy in sync by hand (see the playbook's claude-cli-backend gotcha).
 
 // "remind me what my job is?" / "remind me again what the first item was?" ask the assistant to
 // RECALL something already stated in the conversation — they contain "remind me" but aren't a

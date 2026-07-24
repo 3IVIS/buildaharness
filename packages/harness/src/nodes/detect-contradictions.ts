@@ -1,7 +1,7 @@
 import type { WorldModel, Contradiction, Belief, BeliefDepGraph, EnvironmentChange } from '../state/world-model.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
-import { getNegationPairs } from '../lexical/patterns.js'
+import { getNegationPairs, getGranularityMarkers } from '../lexical/patterns.js'
 import { sharedTokens, tokenize } from '../lexical/script-utils.js'
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
@@ -169,7 +169,10 @@ export interface AbstractionContext {
   abstraction_level?: string
 }
 
-const LINE_LEVEL_KEYWORDS = ['line ', 'line\t', ':line', ' ln ', ' l', 'column ', 'char ']
+// Was a locally-hardcoded, narrower list than update-diagnostics.ts's own statementMarkers (a
+// different check with substantially overlapping vocabulary) — both now read the same
+// granularity-markers.json (see getGranularityMarkers()'s doc comment).
+const LINE_LEVEL_KEYWORDS = getGranularityMarkers().statementLevelMarkers
 
 /**
  * Matches detect_abstraction_contradictions(): advisory-only (LOW severity) — flags

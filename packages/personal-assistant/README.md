@@ -365,6 +365,24 @@ whole process group on expiry, and combined stdout+stderr truncated to a byte
 cap (default 20KB). A non-zero exit code is reported normally, not thrown —
 only a rejected `cwd` or a spawn failure throws.
 
+**Network containment (`ASSISTANT_SHELL_NETWORK_ALLOWLIST`):** the spawned
+command's `HTTP_PROXY`/`HTTPS_PROXY` env vars are forced to point at a
+loopback-only proxy (`network-containment.ts`) that only relays a request
+whose target host matches an entry in `shellNetworkAllowlist` (exact match or
+subdomain — comma-separated hostnames via the env var, e.g.
+`ASSISTANT_SHELL_NETWORK_ALLOWLIST=api.example.com,registry.npmjs.org`).
+**Undefined/empty denies all network access** from an approved shell
+command — the safe default, since no host is a legitimate target until the
+user opts one in. This is a Node-level restriction, not an OS sandbox: it
+stops any tool that honors proxy env vars (`curl`, `wget`, most language HTTP
+clients) from reaching a non-allowlisted host, but does **not** stop a tool
+that opens raw sockets and ignores those env vars entirely. That tradeoff —
+weaker than real OS-native sandboxing (Linux seccomp/landlock, macOS
+`sandbox-exec`, Windows job objects) or a container-per-command, but
+identical across the CLI and the Tauri desktop app with no new dependency —
+is deliberate; see `plans/lexical_functions_hardening_plan.html`'s Decision 6
+for the full comparison.
+
 **The command's output gets the same trust boundary as `fetch_url`/`web_search`.**
 Once approved, stdout+stderr is wrapped in `<untrusted_external_content>` (with
 the same injection-heuristic warning prefix — see `trust-tagging.ts`) before

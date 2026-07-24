@@ -48,6 +48,7 @@ function response(overrides: Record<string, unknown> = {}): string {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    statesDurableFact: null,
     ...overrides,
   })
 }
@@ -68,6 +69,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       isBulkReminderRequest: false,
       isAbandonRequest: false,
       matchedPlanTemplate: null,
+      statesDurableFact: null,
     })
     expect(llm.calls).toBe(1)
   })
@@ -143,7 +145,9 @@ describe('classifyTurnIntent — happy path field derivation', () => {
 
   it('collapses an empty or single-item decomposedTasks array to null (not decomposed)', async () => {
     const llmEmpty = new StructuredOnlyLLMClient(response({ decomposedTasks: [] }))
-    const llmOne = new StructuredOnlyLLMClient(response({ decomposedTasks: [{ id: 'a', description: 'do the one thing', depends_on: [] }] }))
+    const llmOne = new StructuredOnlyLLMClient(
+      response({ decomposedTasks: [{ id: 'a', description: 'do the one thing', depends_on: [], riskLevel: 'LOW' }] }),
+    )
 
     expect((await classifyTurnIntent('anything', llmEmpty, NO_PLAN)).decomposedTasks).toBeNull()
     expect((await classifyTurnIntent('anything', llmOne, NO_PLAN)).decomposedTasks).toBeNull()
@@ -153,9 +157,11 @@ describe('classifyTurnIntent — happy path field derivation', () => {
     const llm = new StructuredOnlyLLMClient(
       response({
         decomposedTasks: [
-          { id: 'step-1', description: 'Book the flight', depends_on: [] },
-          { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
-          { id: 'step-3', description: 123, depends_on: [] }, // malformed — description not a string
+          { id: 'step-1', description: 'Book the flight', depends_on: [], riskLevel: 'MEDIUM' },
+          { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'], riskLevel: 'MEDIUM' },
+          { id: 'step-3', description: 123, depends_on: [], riskLevel: 'LOW' }, // malformed — description not a string
+          { id: 'step-4', description: 'Missing risk level entirely', depends_on: [] }, // malformed — no riskLevel
+          { id: 'step-5', description: 'Invalid risk level', depends_on: [], riskLevel: 'EXTREME' }, // malformed — not one of LOW/MEDIUM/HIGH
         ],
       }),
     )
@@ -163,9 +169,59 @@ describe('classifyTurnIntent — happy path field derivation', () => {
     const result = await classifyTurnIntent('First book my flight, then book a hotel.', llm, NO_PLAN)
 
     expect(result.decomposedTasks).toEqual([
-      { id: 'step-1', description: 'Book the flight', depends_on: [] },
-      { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
+      { id: 'step-1', description: 'Book the flight', depends_on: [], riskLevel: 'MEDIUM' },
+      { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'], riskLevel: 'MEDIUM' },
     ])
+  })
+
+  it('gives each decomposed task its own riskLevel, not a broadcast of the overall turn-level riskLevel', async () => {
+    // A compound request mixing a LOW step and a HIGH step — the point of per-task riskLevel is
+    // that these don't have to match each other or the overall classification.riskLevel.
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        riskLevel: 'HIGH',
+        decomposedTasks: [
+          { id: 'step-1', description: 'the email: reply to the landlord', depends_on: [], riskLevel: 'LOW' },
+          { id: 'step-2', description: 'the drafts folder: delete it', depends_on: ['step-1'], riskLevel: 'HIGH' },
+        ],
+      }),
+    )
+
+    const result = await classifyTurnIntent('Reply to the landlord, then delete the drafts folder.', llm, NO_PLAN)
+
+    expect(result.decomposedTasks).toEqual([
+      { id: 'step-1', description: 'the email: reply to the landlord', depends_on: [], riskLevel: 'LOW' },
+      { id: 'step-2', description: 'the drafts folder: delete it', depends_on: ['step-1'], riskLevel: 'HIGH' },
+    ])
+  })
+})
+
+describe('classifyTurnIntent — statesDurableFact', () => {
+  it('passes through a stated fact', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({ statesDurableFact: { text: 'the user is allergic to peanuts', durable: true } }),
+    )
+    const result = await classifyTurnIntent("I'm allergic to peanuts.", llm, NO_PLAN)
+    expect(result.statesDurableFact).toEqual({ text: 'the user is allergic to peanuts', durable: true })
+  })
+
+  it('defaults to null when the message states no fact', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: null }))
+    const result = await classifyTurnIntent('What time is it in Tokyo?', llm, NO_PLAN)
+    expect(result.statesDurableFact).toBeNull()
+  })
+
+  it('treats a malformed statesDurableFact (missing durable) as null rather than failing the whole classification', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: { text: 'the user likes tea' } }))
+    const result = await classifyTurnIntent('I really like tea.', llm, NO_PLAN)
+    expect(result.statesDurableFact).toBeNull()
+    expect(result.riskLevel).toBe('LOW') // rest of the classification is unaffected
+  })
+
+  it('treats an empty-string text as null', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: { text: '', durable: true } }))
+    const result = await classifyTurnIntent('...', llm, NO_PLAN)
+    expect(result.statesDurableFact).toBeNull()
   })
 })
 
@@ -222,6 +278,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    statesDurableFact: null,
   }
 
   it('falls back on malformed JSON instead of throwing', async () => {

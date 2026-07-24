@@ -220,7 +220,21 @@ function pendingActionPath(workspaceRoot: string, id: string): string {
   return `${pendingActionsDir(workspaceRoot)}/${id}.json`
 }
 
-/** Stages an action for later approval. `id` is a random UUID, not derived from the session — see T4 of the file-tools plan. */
+/**
+ * Stages an action for later approval. `id` is a random UUID, not derived from the session — see
+ * T4 of the file-tools plan.
+ *
+ * Structural hardening principle (plans/lexical_functions_hardening_plan.html Phase 4 step 1):
+ * this gate runs unconditionally on the tool call's own concrete arguments (the literal path/
+ * content or command/cwd being proposed), independent of whatever risk-classifier.ts's pre-flight
+ * text patterns concluded about the user's phrasing. That's deliberate — it's the same "gate on
+ * the concrete tool call, not the free text" pattern Claude Code and Codex CLI use (matching
+ * literal tool-call/command strings, not classifying natural-language risk). Any future
+ * consequential tool (an MCP-provided send_email, a payments API, a social-posting integration)
+ * must get this same unconditional stagePendingAction-style gate on its own call arguments — it
+ * must not rely solely on risk-classifier.ts catching the request first, since a classifier can
+ * always miss a phrasing it wasn't built to recognize.
+ */
 export async function stagePendingAction(
   backend: FsBackend,
   workspaceRoot: string,

@@ -323,16 +323,16 @@ describe('reviewerPass', () => {
     return { wm, bd, dd, hs, tg, diag, fd, es, pq }
   }
 
-  it('implementerLens then reviewerLens then adversarialLens in fixed sequence', () => {
+  it('implementerLens then reviewerLens then adversarialLens in fixed sequence', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
-    const result = reviewerPass(wm, ['test passes'], fd, bd, dd, hs, tg, diag, es, pq)
+    const result = await reviewerPass(wm, ['test passes'], fd, bd, dd, hs, tg, diag, es, pq)
     // All three fields present in result
     expect(Array.isArray(result.implementer_findings)).toBe(true)
     expect(Array.isArray(result.reviewer_findings)).toBe(true)
     expect(Array.isArray(result.adversarial_findings)).toBe(true)
   })
 
-  it('adversarial_prior seeded only on beliefs with causal_proximity ≥ 0.5 (3-hop BFS from success_criteria chain)', () => {
+  it('adversarial_prior seeded only on beliefs with causal_proximity ≥ 0.5 (3-hop BFS from success_criteria chain)', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
     // Add a belief that matches success criteria
     wm.addBelief({
@@ -351,23 +351,23 @@ describe('reviewerPass', () => {
       recorded_at: new Date().toISOString(),
     })
     // Should not throw — adversarial_prior is seeded from matching beliefs
-    expect(() => reviewerPass(wm, ['tests pass'], fd, bd, dd, hs, tg, diag, es, pq)).not.toThrow()
+    await expect(reviewerPass(wm, ['tests pass'], fd, bd, dd, hs, tg, diag, es, pq)).resolves.not.toThrow()
   })
 
-  it('adversarial_prior discarded after adversarialLens() completes — not stored in worldModel', () => {
+  it('adversarial_prior discarded after adversarialLens() completes — not stored in worldModel', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
     const initialBeliefCount = wm.beliefs.length
-    reviewerPass(wm, ['objective'], fd, bd, dd, hs, tg, diag, es, pq)
+    await reviewerPass(wm, ['objective'], fd, bd, dd, hs, tg, diag, es, pq)
     // worldModel.beliefs should not have grown from adversarial seeding
     expect(wm.beliefs.length).toBe(initialBeliefCount)
   })
 
-  it('abstraction_fit recomputed unconditionally (not guarded by task_graph.changed)', () => {
+  it('abstraction_fit recomputed unconditionally (not guarded by task_graph.changed)', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
     tg.tasks.push(makeTask('t1', 'COMPLETE'))
     tg.changed = false  // set to false — reviewer pass must still recompute
     const before = diag.verification_health.feasibility
-    reviewerPass(wm, ['done'], fd, bd, dd, hs, tg, diag, es, pq)
+    await reviewerPass(wm, ['done'], fd, bd, dd, hs, tg, diag, es, pq)
     // feasibility was recomputed (value may differ from before since tasks exist)
     expect(diag.verification_health.feasibility).toBeGreaterThanOrEqual(0)
     expect(diag.verification_health.feasibility).toBeLessThanOrEqual(1)
@@ -382,18 +382,58 @@ describe('reviewerPass', () => {
     expect(queue.reopenedTaskIds).toEqual([])
   })
 
-  it('non-empty reopened_task_ids causes HarnessRuntime to re-enter main loop', () => {
+  it('non-empty reopened_task_ids causes HarnessRuntime to re-enter main loop', async () => {
     // Tested via HarnessRuntime smoke test — here just verify the result shape
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
     pq.reopenedTaskIds.push('task-needs-reopen')
-    const result = reviewerPass(wm, [], fd, bd, dd, hs, tg, diag, es, pq)
+    const result = await reviewerPass(wm, [], fd, bd, dd, hs, tg, diag, es, pq)
     expect(result.reopened_task_ids).toContain('task-needs-reopen')
   })
 
-  it('empty reopened_task_ids allows HarnessRuntime to advance to outputValidation', () => {
+  it('empty reopened_task_ids allows HarnessRuntime to advance to outputValidation', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
-    const result = reviewerPass(wm, [], fd, bd, dd, hs, tg, diag, es, pq)
+    const result = await reviewerPass(wm, [], fd, bd, dd, hs, tg, diag, es, pq)
     expect(result.reopened_task_ids).toEqual([])
+  })
+
+  it('semanticCriterionCoverage suppresses an implementer finding for a criterion the substring check misses but the semantic check recognizes as covered', async () => {
+    const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
+    wm.addBelief({
+      id: 'b1',
+      statement: 'the deployment finished cleanly',
+      confidence: 0.9,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    // "the build succeeded" shares no substring with "the deployment finished cleanly" — the
+    // lexical .includes() check alone would report this as uncovered.
+    const semanticCriterionCoverage = async (criterion: string) => criterion === 'the build succeeded'
+
+    const withoutHook = await reviewerPass(wm, ['the build succeeded'], fd, bd, dd, hs, tg, diag, es, pq)
+    expect(withoutHook.implementer_findings).toContainEqual(expect.stringContaining('the build succeeded'))
+
+    const withHook = await reviewerPass(wm, ['the build succeeded'], fd, bd, dd, hs, tg, diag, es, pq, true, semanticCriterionCoverage)
+    expect(withHook.implementer_findings).toEqual([])
+  })
+
+  it('does not consult semanticCriterionCoverage when the lexical substring check already finds coverage', async () => {
+    const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
+    wm.addBelief({
+      id: 'b1',
+      statement: 'the build succeeded after the last retry',
+      confidence: 0.9,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    let calls = 0
+    const semanticCriterionCoverage = async () => {
+      calls++
+      return true
+    }
+
+    await reviewerPass(wm, ['the build succeeded'], fd, bd, dd, hs, tg, diag, es, pq, true, semanticCriterionCoverage)
+
+    expect(calls).toBe(0)
   })
 })
 
@@ -412,6 +452,12 @@ describe('outputValidation', () => {
     // has no matching subject in the result, so it isn't flagged as violated
     const result = outputValidation({ summary: 'done' }, contract, callerState)
     expect(result.passed).toBe(true)
+  })
+
+  it('caller_specific_constraints negation check still fires after NEGATION_KEYWORDS migrated to getConstraintNegationWords()', () => {
+    const contract = new OutputContract({ required_sections: ['summary'], caller_specific_constraints: [] })
+    const callerState = new CallerState({ current_constraints: ['must not mention pricing details'] })
+    expect(() => outputValidation({ summary: 'Our pricing details are $10/month.' }, contract, callerState)).toThrow(OutputContractError)
   })
 
   it('catches contract violation not caught by postExecGate shadow check → raises OutputContractError with field name', () => {

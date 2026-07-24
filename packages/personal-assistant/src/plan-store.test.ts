@@ -21,9 +21,9 @@ function makePlan(): Plan {
     templateName: 'project_planning',
     successCriteria: 'The launch ships on time.',
     tasks: [
-      { id: 't1', description: 'Gather requirements', depends_on: [] },
-      { id: 't2', description: 'Build the thing', depends_on: ['t1'] },
-      { id: 't3', description: 'Ship it', depends_on: ['t2'] },
+      { id: 't1', description: 'Gather requirements', depends_on: [], riskLevel: 'LOW' },
+      { id: 't2', description: 'Build the thing', depends_on: ['t1'], riskLevel: 'LOW' },
+      { id: 't3', description: 'Ship it', depends_on: ['t2'], riskLevel: 'LOW' },
     ],
   }
 }
@@ -151,9 +151,9 @@ function makeTripPlan(): PlanRecord {
     templateName: 'trip_planning',
     successCriteria: 'The trip is booked and planned.',
     tasks: [
-      { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [] },
-      { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'] },
-      { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'] },
+      { id: 'destination_research', description: 'Research the Kyoto destination', depends_on: [], riskLevel: 'LOW' },
+      { id: 'book_transport', description: 'Book flights to Kyoto', depends_on: ['destination_research'], riskLevel: 'MEDIUM' },
+      { id: 'itinerary_planning', description: 'Draft the daily-budget itinerary', depends_on: ['book_transport'], riskLevel: 'LOW' },
     ],
   })
 }
@@ -199,6 +199,7 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
           id: 'logistics_prep',
           description: 'travel logistics: arrange travel insurance, verify passport/visa validity, prepare packing list',
           depends_on: [],
+          riskLevel: 'LOW',
         },
       ],
     })
@@ -211,7 +212,7 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
     const plan = createPlanRecord({
       templateName: 'trip_planning',
       successCriteria: 'The trip is booked and planned.',
-      tasks: [{ id: 'itinerary_planning', description: '起草每日预算行程', depends_on: [] }],
+      tasks: [{ id: 'itinerary_planning', description: '起草每日预算行程', depends_on: [], riskLevel: 'LOW' }],
     })
     const match = matchTaskCancelAttempt('cancel the 每日预算 task for now', plan)
     expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: '起草每日预算行程' })

@@ -141,6 +141,14 @@ function compileRiskPatternsAcrossLanguages(data: RiskPatternsJson): RiskPattern
 
 const riskPatterns = compileRiskPatternsAcrossLanguages(riskPatternsData as RiskPatternsJson)
 
+// Forward-looking, not inert (plans/lexical_functions_hardening_plan.html Phase 4 step 1):
+// risk-patterns.json's send-email/pay-or-buy/publish/cancel-subscription highRiskPatterns
+// currently gate on this text alone because no corresponding tool exists yet for this assistant
+// to call (there's no send_email/payments/social-posting tool the way write_file/run_shell_command
+// exist). Per the "gate on the concrete tool call, not the free text" principle documented next to
+// stagePendingAction in file-tools.ts, if any such tool is ever added it must get that same
+// unconditional stagePendingAction-style gate on its own call arguments — these text patterns
+// alone would not be sufficient once a real tool exists to invoke.
 /** Matches risk-classifier.ts's HIGH_RISK_PATTERNS/MEDIUM_RISK_PATTERNS/REMINDER_PATTERN/etc. */
 export function getRiskPatterns(): RiskPatterns {
   return riskPatterns

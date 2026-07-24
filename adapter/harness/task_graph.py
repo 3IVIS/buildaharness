@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_patterns import get_granularity_markers
+
 TaskStatus = Literal["PENDING", "ACTIVE", "VERIFYING", "COMPLETE", "FAILED", "BLOCKED"]
 TaskRisk = Literal["LOW", "MEDIUM", "HIGH"]
 
@@ -398,8 +400,10 @@ def estimate_world_model_granularity(world_model: Any) -> int:
     statement_count = 0
     function_count = 0
 
-    statement_markers = ("line ", "line:", "statement", "expression", "lineno")
-    function_markers = ("function", "method", "def ", "procedure", "()")
+    # Was a locally-hardcoded list, narrower than and drifted from contradiction.py's own
+    # line_level_keywords (a different check with substantially overlapping vocabulary) — both
+    # now read the same granularity-markers.json (see get_granularity_markers()'s doc comment).
+    statement_markers, function_markers = get_granularity_markers()
 
     for b in beliefs:
         stmt = getattr(b, "statement", "").lower()

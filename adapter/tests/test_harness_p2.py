@@ -32,6 +32,7 @@ from harness.contradiction import (
     detect_pairwise_contradictions,
     detect_set_level_contradictions,
     detect_temporal_contradictions,
+    record_external_contradiction,
 )
 from harness.evidence import Evidence, EvidenceStore, ReliabilityClass
 from harness.hypothesis import Hypothesis, HypothesisSet
@@ -400,6 +401,60 @@ def test_t15_resolution_policy_idempotent():
     confidence_after_second = wm.beliefs[0].confidence
 
     assert confidence_after_first == pytest.approx(confidence_after_second)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 2 (lexical hardening plan) — record_external_contradiction
+# Python port of packages/harness/src/nodes/detect-contradictions.ts's
+# recordExternalContradiction — mirrors that file's own test cases.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_record_external_contradiction_records_a_semantically_detected_conflict():
+    """Records a contradiction the lexical detector would miss (no shared negation-pair keyword)."""
+    wm = WorldModel()
+    wm.beliefs.append(Belief(id="b1", statement="the user lives in Boston", confidence=0.5, derived_from=["o1"]))
+    wm.beliefs.append(Belief(id="b2", statement="the user lives in Seattle", confidence=0.5, derived_from=["o2"]))
+
+    recorded = record_external_contradiction(
+        wm, ["b1", "b2"], "The user cannot live in both Boston and Seattle at once."
+    )
+
+    assert recorded is not None
+    assert len(wm.contradictions) == 1
+    assert wm.contradictions[0].severity == "MEDIUM"  # default when the caller omits severity
+    assert sorted(wm.contradictions[0].involved_belief_ids) == ["b1", "b2"]
+    assert wm.contradictions[0].description == "The user cannot live in both Boston and Seattle at once."
+    # Goes through the same resolution policy a lexically-found contradiction does —
+    # MEDIUM reduces confidence by 25%.
+    assert wm.beliefs[0].confidence == pytest.approx(0.375)
+
+
+def test_record_external_contradiction_respects_explicit_severity():
+    wm = WorldModel()
+    wm.beliefs.append(Belief(id="b1", statement="the deployment is healthy", confidence=0.9, derived_from=["o1"]))
+
+    recorded = record_external_contradiction(wm, ["b1"], "Contradicts a HIGH-reliability observation.", severity="HIGH")
+
+    assert recorded is not None
+    assert recorded.severity == "HIGH"
+
+
+def test_record_external_contradiction_skips_an_already_recorded_belief_group():
+    """Same involved_belief_ids (any order) is not double-recorded or double-penalised."""
+    wm = WorldModel()
+    wm.beliefs.append(Belief(id="b1", statement="the user lives in Boston", confidence=0.5, derived_from=["o1"]))
+    wm.beliefs.append(Belief(id="b2", statement="the user lives in Seattle", confidence=0.5, derived_from=["o2"]))
+
+    first = record_external_contradiction(wm, ["b1", "b2"], "first description")
+    assert first is not None
+    confidence_after_first = wm.beliefs[0].confidence
+
+    second = record_external_contradiction(wm, ["b2", "b1"], "same group, different order/description")
+
+    assert second is None
+    assert len(wm.contradictions) == 1
+    assert wm.beliefs[0].confidence == pytest.approx(confidence_after_first)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

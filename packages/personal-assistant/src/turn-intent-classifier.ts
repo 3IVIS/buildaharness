@@ -28,6 +28,14 @@ export interface TurnIntentClassification {
   isAbandonRequest: boolean
   /** One of listTemplateNames()'s names, or null. Only ever set when context.hasActivePlan is false. */
   matchedPlanTemplate: string | null
+  /**
+   * Set when the message states a durable/session fact about the user (name, preference,
+   * health/dietary, current location/job, ...) — the LLM-backed backstop for
+   * fact-extraction.ts's lexical FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS, which have no fallback of
+   * their own. assistant.ts only trusts this when the lexical pass found nothing for the same
+   * message; the lexical path stays authoritative (and free) when it already matches.
+   */
+  statesDurableFact: { text: string; durable: boolean } | null
 }
 
 const FAIL_SAFE_REASON = 'Conversational request with no detected side effects.'
@@ -43,6 +51,7 @@ function failSafeClassification(): TurnIntentClassification {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    statesDurableFact: null,
   }
 }
 
@@ -52,8 +61,18 @@ const TASK_SCHEMA = {
     id: { type: 'string' },
     description: { type: 'string' },
     depends_on: { type: 'array', items: { type: 'string' } },
+    riskLevel: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'] },
   },
-  required: ['id', 'description', 'depends_on'],
+  required: ['id', 'description', 'depends_on', 'riskLevel'],
+}
+
+const STATES_DURABLE_FACT_SCHEMA = {
+  type: ['object', 'null'],
+  properties: {
+    text: { type: 'string' },
+    durable: { type: 'boolean' },
+  },
+  required: ['text', 'durable'],
 }
 
 const TURN_INTENT_SCHEMA = {
@@ -67,8 +86,19 @@ const TURN_INTENT_SCHEMA = {
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
+    statesDurableFact: STATES_DURABLE_FACT_SCHEMA,
   },
-  required: ['riskLevel', 'riskReason', 'isTrivial', 'decomposedTasks', 'isReminderRequest', 'isBulkReminderRequest', 'isAbandonRequest', 'matchedPlanTemplate'],
+  required: [
+    'riskLevel',
+    'riskReason',
+    'isTrivial',
+    'decomposedTasks',
+    'isReminderRequest',
+    'isBulkReminderRequest',
+    'isAbandonRequest',
+    'matchedPlanTemplate',
+    'statesDurableFact',
+  ],
 }
 
 /**
@@ -83,7 +113,7 @@ const TURN_INTENT_SCHEMA = {
  * English-only by construction; this prompt is explicitly instructed not to assume English.
  */
 const TURN_INTENT_SYSTEM_PROMPT =
-  "Classify the user's message across six independent judgments, for a personal-assistant that " +
+  "Classify the user's message across seven independent judgments, for a personal-assistant that " +
   'can send messages, delete files, spend money, publish content, manage subscriptions/bookings, ' +
   'create reminders, and run durable multi-step plans on the user\'s behalf. The message may be in ' +
   'any language — judge the actual meaning, never assume English.\n\n' +
@@ -103,7 +133,10 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'concrete subject or object it acts on (e.g. "the login tests: rerun after the config fix" rather ' +
   'than "rerun the login tests after the config fix"). `id` values must be unique; `depends_on` ' +
   'lists the ids of tasks that must complete first (usually just the previous task, or empty for ' +
-  'the first one).\n\n' +
+  'the first one). Each task also gets its own `riskLevel` (same HIGH/MEDIUM/LOW definitions as ' +
+  'judgment 1, applied to that one sub-task alone) — a compound request can mix risk levels across ' +
+  'its steps (e.g. "reply to the email, then delete the drafts folder" is LOW then HIGH), so do not ' +
+  'just repeat the overall riskLevel for every task.\n\n' +
   '4. isReminderRequest: true if the request asks to create a reminder or calendar entry. ' +
   'isBulkReminderRequest: only meaningful when isReminderRequest is true — true if it names or ' +
   'implies more than one distinct reminder in this single turn.\n\n' +
@@ -114,10 +147,18 @@ const TURN_INTENT_SYSTEM_PROMPT =
   `to warrant a durable, tracked plan (decomposes into several sub-tasks toward one of the named ` +
   `kinds below), return the single best-matching name from: ${listTemplateNames().join(', ')}. ` +
   'Otherwise return null. If told a plan is already active, always return null.\n\n' +
+  '7. statesDurableFact: set only if the message states a durable or session-scoped fact about the ' +
+  "user themselves (their name, a stated preference, an allergy/dietary restriction, their current " +
+  'location or job, "remember that..." framing, ...) — not a question, request, or fact about ' +
+  'something else. `text` is the fact restated concisely in the third person (e.g. "the user is ' +
+  'allergic to peanuts"); `durable` is true only for identity/safety-relevant facts meant to persist ' +
+  'indefinitely (name, stated preference, health/dietary) — false for something expected to change ' +
+  '(current location, current job, one-off context). Otherwise return null.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
-  'string, "depends_on": string[]}], "isReminderRequest": boolean, "isBulkReminderRequest": boolean, ' +
-  '"isAbandonRequest": boolean, "matchedPlanTemplate": string|null}'
+  'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
+  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
+  'string|null, "statesDurableFact": {"text": string, "durable": boolean}|null}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -128,6 +169,7 @@ interface RawTurnIntent {
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
   matchedPlanTemplate?: unknown
+  statesDurableFact?: unknown
 }
 
 function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
@@ -136,6 +178,7 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
   return (
     typeof v.id === 'string' &&
     typeof v.description === 'string' &&
+    (v.riskLevel === 'LOW' || v.riskLevel === 'MEDIUM' || v.riskLevel === 'HIGH') &&
     Array.isArray(v.depends_on) &&
     v.depends_on.every((d) => typeof d === 'string')
   )
@@ -162,6 +205,16 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
       ? parsed.matchedPlanTemplate
       : null
 
+  const rawFact = parsed.statesDurableFact
+  const statesDurableFact =
+    typeof rawFact === 'object' &&
+    rawFact !== null &&
+    typeof (rawFact as Record<string, unknown>).text === 'string' &&
+    (rawFact as Record<string, unknown>).text !== '' &&
+    typeof (rawFact as Record<string, unknown>).durable === 'boolean'
+      ? { text: (rawFact as { text: string; durable: boolean }).text, durable: (rawFact as { text: string; durable: boolean }).durable }
+      : null
+
   return {
     riskLevel: parsed.riskLevel,
     riskReason,
@@ -172,15 +225,22 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isBulkReminderRequest,
     isAbandonRequest,
     matchedPlanTemplate,
+    statesDurableFact,
   }
 }
 
 /**
  * Runs the single consolidated LLM call every turn (replacing the old lexical-gate-then-maybe-
- * LLM-call chain) and derives all five downstream judgments from one structured response. Falls
+ * LLM-call chain) and derives all seven downstream judgments from one structured response. Falls
  * back to the same safe defaults each former classifier fell back to individually on any parse
  * failure or LLM error: LOW risk / not trivial / no decomposition / no abandon / no template match
- * — i.e. "do the careful thing" (run the full harness, don't auto-approve, don't auto-abandon).
+ * / no stated fact — i.e. "do the careful thing" (run the full harness, don't auto-approve, don't
+ * auto-abandon, don't silently claim a fact was stated when the call failed). Per-task riskLevel
+ * (Phase 1 of plans/lexical_functions_hardening_plan.html) and statesDurableFact are this call's
+ * LLM-backed backstops for what used to be pure-lexical, no-fallback judgments — risk-classifier.ts's
+ * standalone per-task classifyRisk and fact-extraction.ts's FACT_MARKERS respectively — both of
+ * which stay as the free, zero-latency first check; this call is only trusted when they find
+ * nothing (see assistant.ts's call sites for exactly how each is gated).
  */
 export async function classifyTurnIntent(
   message: string,

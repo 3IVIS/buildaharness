@@ -18,7 +18,7 @@ from typing import Any, cast
 
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
-from .lexical_patterns import get_negation_pairs
+from .lexical_patterns import get_granularity_markers, get_negation_pairs
 from .script_utils import shared_tokens, tokenize
 from .world_model import Belief, Contradiction, ContradictionSeverity, WorldModel
 
@@ -221,8 +221,10 @@ def detect_abstraction_contradictions(
         return results
 
     abstraction_level = task_graph.get("abstraction_level", "module")
-    # Heuristics: line-level indicators in belief statements
-    line_level_keywords = ["line ", "line\t", ":line", " ln ", " L", "column ", "char "]
+    # Was a locally-hardcoded, narrower list than task_graph.py's own statement_markers (a
+    # different check with substantially overlapping vocabulary) — both now read the same
+    # granularity-markers.json (see get_granularity_markers()'s doc comment).
+    line_level_keywords, _function_level_keywords = get_granularity_markers()
 
     if abstraction_level in ("module", "component", "system"):
         for belief in beliefs:
@@ -408,3 +410,52 @@ def apply_resolution_policy(
         _resolve_high(contradiction, world_model, task_graph, belief_dep_graph)
     elif contradiction.severity == "SYSTEM_BREAKING":
         _resolve_system_breaking(contradiction, world_model)
+
+
+def record_external_contradiction(
+    world_model: WorldModel,
+    belief_ids: list[str],
+    description: str,
+    severity: ContradictionSeverity | None = None,
+    belief_dep_graph: Any | None = None,
+) -> Contradiction | None:
+    """Records a contradiction found by an external (e.g. LLM-based semantic) check — not one this
+    module's own lexical/negation-pair detectors found. Python port of
+    packages/harness/src/nodes/detect-contradictions.ts's `recordExternalContradiction` — see
+    Phase 2 of plans/lexical_functions_hardening_plan.html.
+
+    Unlike TS (where this is called from inside HarnessRuntime's own async loop, since
+    driveMainLoop folds the outer iteration loop and per-step logic into one async generator),
+    Python's adapter/harness/loop.py deliberately keeps `run_one_iteration` a synchronous, pure
+    state-transition function — there is no async entry point inside harness-core itself to hang
+    an async hook parameter on. The intended caller is whichever *outer*, already-async driver
+    repeatedly invokes `run_one_iteration()` (e.g. `_run_planner` in adapter/planner_api.py, or the
+    per-adapter run functions in adapter/run_api.py): call a real semantic check between
+    iterations, then call this function with its result to fold the finding into world_model
+    through the exact same resolution-policy pipeline a lexically-detected contradiction gets.
+    Wiring an actual LLM-backed check into any specific adapter's run loop is a separate, later
+    task per adapter — this function is the self-contained, testable primitive that makes that
+    wiring possible, not the wiring itself.
+
+    Goes through the same add_contradiction + apply_resolution_policy pipeline as a lexically-
+    detected one, so it gets identical treatment (confidence decay, invalidation frontier,
+    SYSTEM_BREAKING handling). Skips a belief-id group already recorded (order-independent) so
+    re-checking a belief set that hasn't changed doesn't double-apply confidence decay for the
+    same underlying conflict.
+    """
+    key = "|".join(sorted(belief_ids))
+    already_recorded = any("|".join(sorted(c.involved_belief_ids)) == key for c in world_model.contradictions)
+    if already_recorded:
+        return None
+
+    contradiction = Contradiction(
+        id=str(uuid.uuid4()),
+        type="pairwise",
+        severity=severity or "MEDIUM",
+        scope="local",
+        involved_belief_ids=belief_ids,
+        description=description,
+    )
+    world_model.add_contradiction(contradiction)
+    apply_resolution_policy(contradiction, world_model, belief_dep_graph=belief_dep_graph)
+    return contradiction

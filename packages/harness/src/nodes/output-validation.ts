@@ -1,5 +1,11 @@
 import type { OutputContract } from '../state/output-contract.js'
 import type { CallerState } from '../state/caller-state.js'
+import { getConstraintNegationWords } from '../lexical/patterns.js'
+
+// Was a locally-hardcoded 6-word set, independently duplicated (byte-for-byte identical) in
+// adapter/harness/output_contract.py's check_caller_specific_constraints — now the same shared
+// source both read; see getConstraintNegationWords()'s doc comment.
+const NEGATION_KEYWORDS = getConstraintNegationWords()
 
 export class OutputContractError extends Error {
   violatedDimension: string
@@ -70,7 +76,6 @@ export function outputValidation(
   // (may differ from init if updated mid-run) — matches output_contract.py's
   // check_caller_specific_constraints(): a "must not/never/no/without/exclude" constraint
   // is violated when its subject (the words following the negation keyword) shows up in the result.
-  const NEGATION_KEYWORDS = ['not', 'never', 'no', 'without', 'exclude', 'must not']
   const resultText = (
     (typeof finalResult === 'string' ? finalResult : '') + ' ' +
     Object.values(result).map(v => String(v)).join(' ')
@@ -79,7 +84,7 @@ export function outputValidation(
   for (const constraint of callerState.current_constraints) {
     const constraintLower = constraint.toLowerCase()
     const constraintTokens = new Set(constraintLower.split(/\s+/))
-    if (![...constraintTokens].some(t => NEGATION_KEYWORDS.includes(t))) continue
+    if (![...constraintTokens].some(t => NEGATION_KEYWORDS.has(t))) continue
 
     for (const kw of NEGATION_KEYWORDS) {
       const idx = constraintLower.indexOf(kw)

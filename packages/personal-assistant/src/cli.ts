@@ -124,7 +124,9 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     webTools: config.enableWeb ? { search } : undefined,
     // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
     // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
-    shellTools: config.enableShell ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: runApprovedShellCommand } : undefined,
+    shellTools: config.enableShell
+      ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
+      : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
     spendCap:
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined

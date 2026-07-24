@@ -12,6 +12,8 @@
  *
  *   packages/harness/src/lexical/patterns/negation.json
  *     <-> adapter/harness/lexical_patterns/negation.json
+ *   packages/harness/src/lexical/patterns/granularity-markers.json
+ *     <-> adapter/harness/lexical_patterns/granularity-markers.json
  *   packages/personal-assistant/src/lexical/patterns/template-keywords.json
  *     <-> adapter/agents/planner/lexical_patterns/template-keywords.json
  *
@@ -37,6 +39,11 @@ const PAIRS = [
     name: 'negation.json (harness-core)',
     a: 'packages/harness/src/lexical/patterns/negation.json',
     b: 'adapter/harness/lexical_patterns/negation.json',
+  },
+  {
+    name: 'granularity-markers.json (harness-core)',
+    a: 'packages/harness/src/lexical/patterns/granularity-markers.json',
+    b: 'adapter/harness/lexical_patterns/granularity-markers.json',
   },
   {
     name: 'template-keywords.json (plan-templates)',

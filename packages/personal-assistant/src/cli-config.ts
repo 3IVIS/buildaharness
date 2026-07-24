@@ -25,6 +25,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   braveApiKey: 'BRAVE_SEARCH_API_KEY',
   enableShell: 'ASSISTANT_ENABLE_SHELL',
   shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
+  shellNetworkAllowlist: 'ASSISTANT_SHELL_NETWORK_ALLOWLIST',
   workspaceRoot: 'ASSISTANT_WORKSPACE_DIR',
   dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
@@ -33,6 +34,14 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
   return (CONFIG_KEYS as readonly string[]).includes(key)
+}
+
+/** Shared by envOverridesFromProcessEnv and parseConfigValue for shellNetworkAllowlist's comma-separated hostname-list syntax. */
+function parseShellNetworkAllowlist(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((host) => host.trim())
+    .filter((host) => host.length > 0)
 }
 
 /**
@@ -67,6 +76,7 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.BRAVE_SEARCH_API_KEY !== undefined) overrides.braveApiKey = env.BRAVE_SEARCH_API_KEY
   if (env.ASSISTANT_ENABLE_SHELL !== undefined) overrides.enableShell = env.ASSISTANT_ENABLE_SHELL === '1'
   if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
+  if (env.ASSISTANT_SHELL_NETWORK_ALLOWLIST !== undefined) overrides.shellNetworkAllowlist = parseShellNetworkAllowlist(env.ASSISTANT_SHELL_NETWORK_ALLOWLIST)
   if (env.ASSISTANT_WORKSPACE_DIR !== undefined) overrides.workspaceRoot = env.ASSISTANT_WORKSPACE_DIR
   if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
   if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
@@ -90,6 +100,8 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('shellTimeoutMs must be a positive number')
       return n
     }
+    case 'shellNetworkAllowlist':
+      return parseShellNetworkAllowlist(raw)
     case 'sessionCostLimitUsd': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('sessionCostLimitUsd must be a positive number')

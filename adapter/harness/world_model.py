@@ -82,6 +82,14 @@ class Contradiction:
     severity: ContradictionSeverity
     scope: ContradictionScope
     involved_belief_ids: list[str] = field(default_factory=list)
+    # Matches TS's Contradiction.description (packages/harness/src/state/world-model.ts) — was
+    # missing here entirely; defaulted to "" (not None) so every existing to_dict()/from_dict()
+    # round-trip and internal detector constructor call stays byte-compatible without needing to
+    # touch each one. Populated for record_external_contradiction() (Phase 2 of
+    # plans/lexical_functions_hardening_plan.html), which needs somewhere to put the semantic
+    # check's own finding text — the four internal lexical detectors don't set this yet, a known,
+    # separate gap from that same file's TS/Python description-text drift, not fixed here.
+    description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -90,6 +98,7 @@ class Contradiction:
             "severity": self.severity,
             "scope": self.scope,
             "involved_belief_ids": self.involved_belief_ids,
+            "description": self.description,
         }
 
     @classmethod
@@ -100,6 +109,7 @@ class Contradiction:
             severity=d["severity"],
             scope=d["scope"],
             involved_belief_ids=d.get("involved_belief_ids", []),
+            description=d.get("description", ""),
         )
 
 

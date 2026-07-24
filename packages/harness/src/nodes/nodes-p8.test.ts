@@ -327,6 +327,15 @@ describe('detect_contradictions', () => {
     expect(wmBreaking.contradictions[0].severity).toBe('SYSTEM_BREAKING')
     expect(wmBreaking.contradictions[0].scope).toBe('global')
   })
+
+  it('detectAbstractionContradictions now recognizes "statement"/"expression" — regression for LINE_LEVEL_KEYWORDS migrating to the shared, wider granularity-markers.json', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the return statement has an off-by-one expression error', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet(), { abstraction_level: 'module' })
+    const abstractionFindings = wm.contradictions.filter((c) => c.type === 'abstraction')
+    expect(abstractionFindings).toHaveLength(1)
+    expect(abstractionFindings[0].severity).toBe('LOW')
+  })
 })
 
 describe('record_external_contradiction', () => {
@@ -581,5 +590,21 @@ describe('update_diagnostics', () => {
       changed: true,
     })
     expect(checkAbstractionAlignment(mismatchedGraph, wm, true)).toBeCloseTo(0.0)
+  })
+
+  it('estimateWorldModelGranularity now recognizes "column"/"char" as statement-level — regression for update-diagnostics.ts\'s own statementMarkers migrating to the shared, wider granularity-markers.json', () => {
+    // Before this fix, task_graph.py's/update-diagnostics.ts's own statementMarkers list had no
+    // "column "/"char " entries (only detect-contradictions.ts's separate LINE_LEVEL_KEYWORDS
+    // did) — these beliefs would have been misclassified as module-level (0) instead of
+    // statement-level (2), and a task at abstraction_level=3 would have scored a false 0.0 mismatch.
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: 'the parser fails at column 5, char 12 of the input', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: 'the tokenizer breaks at column 8 of the same line', confidence: 0.8, derived_from: ['o2'], recorded_at: '' })
+
+    const statementLevelGraph = new TaskGraph({
+      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'LOW', depends_on: [], parallel_write_domains: [], abstraction_level: 3, assigned_strategy: null }],
+      changed: true,
+    })
+    expect(checkAbstractionAlignment(statementLevelGraph, wm, true)).toBeCloseTo(1.0)
   })
 })

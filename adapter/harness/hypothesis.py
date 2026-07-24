@@ -16,9 +16,15 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from .evidence import EvidenceStore
+from .lexical_patterns import get_evidence_negation_words
 
 if TYPE_CHECKING:
     from .world_model import WorldModel
+
+# Was a locally-hardcoded 8-word set, drifted from reviewer.py's identical-purpose 7-word set (that
+# one was missing "unavailable") — now the same shared source both read; see
+# lexical_patterns.get_evidence_negation_words()'s doc comment.
+_EVIDENCE_NEGATION_WORDS = get_evidence_negation_words()
 
 EliminationReason = Literal[
     "CONTRADICTING_EVIDENCE",
@@ -356,8 +362,6 @@ def check_contradicting_evidence(
     evidence_store: EvidenceStore,
 ) -> bool:
     """Return True if any HIGH-reliability evidence contradicts a predicted observation."""
-    _negation_keywords = {"no", "not", "absent", "missing", "failed", "none", "error", "unavailable"}
-
     for entry in evidence_store.entries:
         if entry.reliability != "HIGH":
             continue
@@ -369,7 +373,7 @@ def check_contradicting_evidence(
             if not pred_words:
                 continue
             common = obs_words & pred_words
-            if common and (obs_words & _negation_keywords):
+            if common and (obs_words & _EVIDENCE_NEGATION_WORDS):
                 return True
     return False
 

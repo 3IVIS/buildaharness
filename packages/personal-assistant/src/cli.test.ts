@@ -21,7 +21,7 @@ import { classifyRisk } from './risk-classifier.js'
 // isTurnIntentRequest/deriveTurnIntentJSON, so the fakes below can answer that call with a
 // realistic risk/triviality classification instead of it falling back to LOW by default.
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
-  return messages.some((m) => m.role === 'system' && m.content.includes('six independent judgments'))
+  return messages.some((m) => m.role === 'system' && m.content.includes('seven independent judgments'))
 }
 
 // Trimmed test-only stand-in for the deleted triviality-classifier.ts's classifyTriviality — see

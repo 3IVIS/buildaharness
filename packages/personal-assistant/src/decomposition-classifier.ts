@@ -135,6 +135,15 @@ export interface DecomposedTaskSpec {
   id: string
   description: string
   depends_on: string[]
+  /**
+   * Per-task risk (LOW/MEDIUM/HIGH), not the turn-level risk broadcast across every task —
+   * see Phase 4.2 of the harness layer activation plan: a step like "delete the draft file"
+   * shouldn't inherit an unrelated sibling step's risk profile just because they were rendered
+   * from the same turn. classifyTurnIntent's LLM call judges this directly for ad hoc
+   * decompositions; buildPlanFromTemplate (plan-builder.ts) attaches it from the template's own
+   * already-curated per-task risk_level instead of asking the LLM to re-derive it.
+   */
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
 }
 
 const REFRAME_SCHEMA = {

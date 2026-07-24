@@ -17,6 +17,8 @@
     ],
     "polarityWords": ["not", "absent", "no"],
     "reviewStopwords": ["the", "a", "an", "is", "are", "was", "were", "in", "at", "to", "of", "and"],
-    "reviewTriggers": ["not ", "removes ", "remove ", "delete ", "revert ", "contradicts ", "negate ", "negates ", "no longer "]
+    "reviewTriggers": ["not ", "removes ", "remove ", "delete ", "revert ", "contradicts ", "negate ", "negates ", "no longer "],
+    "evidenceNegationWords": ["no", "not", "absent", "missing", "failed", "none", "error", "unavailable"],
+    "constraintNegationWords": ["not", "never", "no", "without", "exclude", "must not"]
   }
 }

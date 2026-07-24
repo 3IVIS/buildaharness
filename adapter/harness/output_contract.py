@@ -16,6 +16,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .lexical_patterns import get_constraint_negation_words
+
+_CONSTRAINT_NEGATION_WORDS = get_constraint_negation_words()
+
 
 @dataclass
 class OutputContract:
@@ -196,17 +200,15 @@ def check_caller_specific_constraints(result: Any, caller_state: Any) -> list[st
     result_str = result if isinstance(result, str) else ""
     result_dict = _to_dict(result) or {}
 
-    negation_keywords = {"not", "never", "no", "without", "exclude", "must not"}
-
     for constraint in current_constraints:
         constraint_lower = constraint.lower()
         constraint_tokens = set(constraint_lower.split())
 
         # "output must not reference X" — check absence
-        if constraint_tokens & negation_keywords:
+        if constraint_tokens & _CONSTRAINT_NEGATION_WORDS:
             # Extract the subject of the negation (heuristic: words after the negation keyword)
             violated = False
-            for kw in negation_keywords:
+            for kw in _CONSTRAINT_NEGATION_WORDS:
                 if kw in constraint_lower:
                     subject = constraint_lower.split(kw, 1)[-1].strip()
                     subject_tokens = set(subject.split()[:4])  # first 4 words

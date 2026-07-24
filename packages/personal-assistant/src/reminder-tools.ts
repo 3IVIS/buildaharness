@@ -1,8 +1,13 @@
 import type { ToolDefinition, ReminderStore } from '@buildaharness/runtime'
 import { requireStringArg } from './file-tools.js'
-import { getFactMarkerPatterns, testAny } from './lexical/patterns.js'
+import { getFactMarkerPatterns, getRiskPatterns, testAny } from './lexical/patterns.js'
 
 const factPatterns = getFactMarkerPatterns()
+// Reuses risk-classifier.ts's own reminderPattern (risk-patterns.json) instead of re-declaring an
+// identical regex literal — this file used to hand-duplicate it, one of 3 existing copies
+// alongside risk-patterns.json's own and file-tools-mcp-server.mjs's (that last one stays a
+// hand-synced literal per the existing convention; it can't import this module graph).
+const REMINDER_REQUEST_MARKER = getRiskPatterns().reminderPattern.pattern
 
 export const CREATE_REMINDER_TOOL: ToolDefinition = {
   name: 'create_reminder',
@@ -65,7 +70,6 @@ export async function executeReminderTool(
       // fact (same bug shape file-tools-mcp-server.mjs's create_reminder had — kept in sync here).
       const isFactShaped = (t: string): boolean =>
         testAny(factPatterns.factMarkers, t) || testAny(factPatterns.healthOrDietaryMarkers, t)
-      const REMINDER_REQUEST_MARKER = /\b(remind me|set (?:a |)reminders?|create (?:a |an )?(?:reminders?|events?))\b/i
       const sourceIsFactOnly = sourceUserMessage !== undefined && !REMINDER_REQUEST_MARKER.test(sourceUserMessage) && isFactShaped(sourceUserMessage)
       if (isFactShaped(text) || sourceIsFactOnly) {
         return `Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.`

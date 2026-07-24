@@ -21,6 +21,17 @@ P7 additions (wired per-iteration):
 P8 additions:
   - warm_start() called once on step_count == 0 (P8.2)
   - update_experience_store() hook when a completed_task is passed (P8.3)
+
+Semantic-check hooks (Phase 2 of plans/lexical_functions_hardening_plan.html): unlike the TS
+harness (packages/harness/src/harness-runtime.ts), whose driveMainLoop folds the outer per-turn
+loop and the async contradictionChecker/semanticChangeReviewer/semanticFailureMatcher hooks into
+one async generator, run_one_iteration() here is deliberately kept a synchronous, pure state
+transition with no async parameters of its own. The equivalent integration points instead live in
+contradiction.py's record_external_contradiction(), review_gate.py's apply_review_outcome(), and
+failure_modes.py's FailureDiagnostics.matched_pattern field — see each one's own doc comment.
+Whichever outer, already-async driver repeatedly calls run_one_iteration() (adapter/planner_api.py's
+_run_planner, or the per-adapter run functions in adapter/run_api.py) is where a real semantic
+check would run between iterations and feed its result in through one of those three.
 """
 
 from __future__ import annotations

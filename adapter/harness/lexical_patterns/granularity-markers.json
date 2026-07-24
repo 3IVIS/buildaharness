@@ -1,0 +1,6 @@
+{
+  "en": {
+    "statementLevelMarkers": ["line ", "line\t", ":line", " ln ", " l", "column ", "char ", "line:", "statement", "expression", "lineno"],
+    "functionLevelMarkers": ["function", "method", "def ", "procedure", "()"]
+  }
+}

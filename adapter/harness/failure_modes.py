@@ -178,7 +178,19 @@ class FailureEntry:
 
 @dataclass
 class FailureDiagnostics:
-    """Typed replacement for the failure_diagnostics raw dict in HarnessRunState."""
+    """Typed replacement for the failure_diagnostics raw dict in HarnessRunState.
+
+    matched_pattern is also where an external semantic failure-match check's result belongs —
+    matches TS's semanticFailureMatcher hook (packages/harness/src/harness-runtime.ts), which is
+    only ever consulted when the exact/lexical match above already found nothing
+    (matched_pattern is still None) and assigns its result to this same field directly, no
+    separate "record" function needed (unlike record_external_contradiction, which has to check
+    for duplicates against a growing list — matched_pattern is a single slot, so last-write-wins
+    is already correct). See record_external_contradiction's doc comment (contradiction.py) for
+    why the integration point for this lives in whichever outer, already-async driver repeatedly
+    calls run_one_iteration() (e.g. adapter/planner_api.py's `_run_planner`, or the per-adapter
+    run functions in adapter/run_api.py) rather than inside harness-core's own synchronous loop.
+    """
 
     failure_history: list[FailureEntry] = field(default_factory=list)
     matched_pattern: MatchResult | None = None

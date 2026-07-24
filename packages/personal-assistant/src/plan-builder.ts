@@ -44,7 +44,17 @@ function buildSystemPrompt(template: PlanTemplate): string {
   )
 }
 
-function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
+// Only the shape the LLM actually returns (id/description/depends_on) — riskLevel isn't asked for
+// here at all (see buildPlanFromTemplate's doc comment for why) and gets attached afterward from
+// the template's own already-curated risk_level, so this is deliberately narrower than
+// DecomposedTaskSpec itself.
+interface RawPlanTask {
+  id: string
+  description: string
+  depends_on: string[]
+}
+
+function isRawPlanTask(value: unknown): value is RawPlanTask {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   return (
@@ -62,6 +72,14 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
  * failure mode, not the edge case" fallback classifyTurnIntent itself uses: any parse
  * failure or a response with fewer than 2 usable tasks returns null, meaning "fall back to
  * the caller's own ad hoc decomposition for this turn" rather than throwing.
+ *
+ * Each output task's `riskLevel` is attached from the matching skeleton task's own
+ * `risk_level` (curated by whoever wrote the template's JSON) by id, not asked of the LLM —
+ * the template already has this, more accurately than an LLM re-deriving it from a
+ * personalized one-line description would, and it costs zero extra output tokens. Falls back
+ * to 'LOW' only for the pathological case of a task id the LLM invented that doesn't match any
+ * skeleton task (the id/depends_on-must-match-skeleton instruction above means this should not
+ * happen in practice).
  */
 export async function buildPlanFromTemplate(
   llmClient: ILLMClient,
@@ -81,8 +99,10 @@ export async function buildPlanFromTemplate(
     )
     const parsed = JSON.parse(response.content) as { tasks?: unknown }
     if (!Array.isArray(parsed.tasks)) return null
-    const tasks = parsed.tasks.filter(isDecomposedTaskSpec)
-    if (tasks.length <= 1) return null
+    const rawTasks = parsed.tasks.filter(isRawPlanTask)
+    if (rawTasks.length <= 1) return null
+    const riskByTemplateId = new Map(template.tasks.map((t) => [t.id, t.risk_level]))
+    const tasks: DecomposedTaskSpec[] = rawTasks.map((t) => ({ ...t, riskLevel: riskByTemplateId.get(t.id) ?? 'LOW' }))
     return { templateName: template.name, successCriteria: template.success_criteria, tasks }
   } catch {
     return null

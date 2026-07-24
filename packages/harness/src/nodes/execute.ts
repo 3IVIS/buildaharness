@@ -66,6 +66,14 @@ const SYSTEM_ERROR_SYMPTOM_PATTERNS: SymptomPattern[] = [
 // Raw error text (e.g. "ENOENT: no such file or directory") rarely shares literal
 // vocabulary with a curated FailureModeEntry symptom phrase (e.g. "file not found"),
 // so this bridges the two before SYSTEM_ERROR evidence is written.
+//
+// Accepted as-is (plans/lexical_functions_hardening_plan.html Phase 3 step 3): unlike the
+// user-phrasing lexical checks elsewhere in this plan, these tokens are largely language-agnostic
+// OS/protocol vocabulary (errno names, HTTP status codes), not natural language a non-English or
+// paraphrased-English speaker would author differently — the language/rephrasing framing doesn't
+// map cleanly onto it. The real, ongoing cost is a new tool surfacing an error format not in this
+// list falling through unclassified (returns null, degrades gracefully); worth a note, not a
+// redesign.
 function classifySystemErrorSymptom(message: string): string | null {
   const lower = message.toLowerCase()
   for (const { test, symptom } of SYSTEM_ERROR_SYMPTOM_PATTERNS) {

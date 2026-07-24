@@ -16,7 +16,7 @@ import {
 export type ShellCommandExecutor = (
   command: string,
   cwd: string,
-  options?: { timeoutMs?: number; maxOutputBytes?: number },
+  options?: { timeoutMs?: number; maxOutputBytes?: number; networkAllowlist?: string[] },
 ) => Promise<ShellExecutionResult>
 
 export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
@@ -60,6 +60,13 @@ export interface ShellStagingContext {
 export interface ShellToolsContext extends ShellStagingContext {
   /** Hard timeout for an approved command, in ms. Passed through to executeCommand at apply time. Default 30000. */
   timeoutMs?: number
+  /**
+   * Hostnames an approved command's HTTP(S)_PROXY traffic may reach (exact match or subdomain) —
+   * see network-containment.ts and shell-executor.ts's networkContainmentEnv. Passed through to
+   * executeCommand at apply time, same as timeoutMs. Undefined/empty denies all network access,
+   * the safe default (Decision 6, plans/lexical_functions_hardening_plan.html Phase 4).
+   */
+  networkAllowlist?: string[]
   executeCommand: ShellCommandExecutor
 }
 
@@ -78,6 +85,11 @@ function requireStringArg(input: Record<string, unknown>, key: string): string {
  * write_file does for file-tools — UNLESS an identical (command, cwd) pair was already resolved
  * earlier this session (see file-tools.ts's shell-result-cache doc comment for why this exists),
  * in which case it returns that cached result directly instead of staging a new approval.
+ *
+ * The cwd validation above and the stagePendingAction call below both run unconditionally on this
+ * call's own concrete (command, cwd) arguments, regardless of what risk-classifier.ts concluded
+ * about the user's message text — see stagePendingAction's doc comment in file-tools.ts for the
+ * general "gate on the concrete tool call, not the free text" principle this follows.
  */
 export async function executeShellTool(
   ctx: ShellStagingContext,

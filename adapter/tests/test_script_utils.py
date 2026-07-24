@@ -11,7 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.lexical_patterns import get_negation_pairs, get_review_negation_triggers
+from harness.lexical_patterns import (
+    get_constraint_negation_words,
+    get_evidence_negation_words,
+    get_granularity_markers,
+    get_negation_pairs,
+    get_review_negation_triggers,
+)
 from harness.script_utils import contains_cjk, shared_tokens, split_clauses, token_count, tokenize
 
 
@@ -84,3 +90,41 @@ def test_get_review_negation_triggers_matches_ts_fixture():
     assert "not " in triggers
     assert "no longer " in triggers
     assert "and" in stopwords
+
+
+def test_get_evidence_negation_words_matches_ts_fixture():
+    # 8-word union of reviewer.py's and hypothesis.py's formerly-separate, drifted sets — see
+    # get_evidence_negation_words()'s doc comment. "unavailable" is the word reviewer.py's own
+    # copy used to be missing relative to hypothesis.py's.
+    words = get_evidence_negation_words()
+    assert words == frozenset({"no", "not", "absent", "missing", "failed", "none", "error", "unavailable"})
+
+
+def test_get_constraint_negation_words_matches_ts_fixture():
+    # Shared source for output_contract.py's check_caller_specific_constraints and
+    # output-validation.ts's outputValidation — previously two byte-identical hardcoded copies.
+    words = get_constraint_negation_words()
+    assert words == frozenset({"not", "never", "no", "without", "exclude", "must not"})
+
+
+def test_get_granularity_markers_matches_ts_fixture():
+    # Merges what used to be two separate, overlapping-but-not-identical lists: contradiction.py's
+    # line_level_keywords and task_graph.py's statement_markers/function_markers.
+    statement_markers, function_markers = get_granularity_markers()
+    expected_statement_markers = (
+        "line ",
+        "line\t",
+        ":line",
+        " ln ",
+        " l",
+        "column ",
+        "char ",
+        "line:",
+        "statement",
+        "expression",
+        "lineno",
+    )
+    for marker in expected_statement_markers:
+        assert marker in statement_markers
+    for marker in ("function", "method", "def ", "procedure", "()"):
+        assert marker in function_markers

@@ -34,7 +34,14 @@ def compute_file_centrality(file_path: str, world_model: Any) -> float:
 
 
 def compute_change_scope(task: Any) -> float:
-    """Estimate scope from task description text."""
+    """Estimate scope from task description text.
+
+    English-only keyword/regex matching (deferred, per
+    plans/lexical_functions_hardening_plan.html Phase 3 step 2): a scoring heuristic, not a hard
+    gate, so this rides the same JSON-pattern-store mechanism the rest of this repo already uses
+    once a language decision lands in the sibling
+    plans/personal_assistant_chinese_lexical_checks_plan.html. No action until that decision lands.
+    """
     description = str(getattr(task, "description", "") or "")
     score = 0.0
     # Functions/methods mentioned

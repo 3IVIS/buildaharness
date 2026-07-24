@@ -221,6 +221,42 @@ def check_hypothesis_compatibility(
     )
 
 
+def apply_review_outcome(
+    task_id: str,
+    passed: bool,
+    consecutive_failures_map: dict[str, int],
+    failed_dimensions: list[DimensionResult] | None = None,
+) -> ReviewResult:
+    """Records a single review outcome into the per-task consecutive-failure counter and derives
+    escalation_triggered from it — the same bookkeeping review_proposed_change() itself uses for
+    its 5 lexical dimensions, extracted so an *additional* check (e.g. a semantic consistency
+    check layered on top — see Phase 2 of plans/lexical_functions_hardening_plan.html and
+    record_external_contradiction's doc comment for why Python's harness-core loop stays
+    synchronous and the integration point for an async semantic check lives one layer up, in
+    whichever outer driver repeatedly calls run_one_iteration()) gets identical consecutive-
+    failure/escalation treatment instead of a second, divergent mechanism.
+
+    Matches TS's applyReviewOutcome (packages/harness/src/nodes/review-proposed-change.ts), with
+    one deliberate difference: this takes a *list* of failed dimensions, not a single one. TS
+    short-circuits review_proposed_change on the first failing dimension, so one is all it ever
+    has; this Python implementation always evaluates and collects every failing dimension in one
+    pass (see below), so a single-item shape here would silently narrow what
+    ReviewResult.failed_dimensions already promises its existing callers.
+    """
+    if passed:
+        consecutive_failures_map[task_id] = 0
+        return ReviewResult(passed=True, failed_dimensions=[], consecutive_failures=0, escalation_triggered=False)
+
+    consec = consecutive_failures_map.get(task_id, 0) + 1
+    consecutive_failures_map[task_id] = consec
+    return ReviewResult(
+        passed=False,
+        failed_dimensions=failed_dimensions or [],
+        consecutive_failures=consec,
+        escalation_triggered=consec >= ESCALATION_THRESHOLD,
+    )
+
+
 def review_proposed_change(
     proposed_change: Any,
     current_task: Any,
@@ -246,23 +282,7 @@ def review_proposed_change(
     ]
 
     failed = [r for r in dim_results if not r.passed]
-    overall_passed = len(failed) == 0
-
-    # Update consecutive failures tracking
-    if not overall_passed:
-        consecutive_failures_map[task_id] = consecutive_failures_map.get(task_id, 0) + 1
-    else:
-        consecutive_failures_map[task_id] = 0
-
-    consec = consecutive_failures_map.get(task_id, 0)
-    escalation_triggered = consec >= ESCALATION_THRESHOLD
-
-    return ReviewResult(
-        passed=overall_passed,
-        failed_dimensions=failed,
-        consecutive_failures=consec,
-        escalation_triggered=escalation_triggered,
-    )
+    return apply_review_outcome(task_id, len(failed) == 0, consecutive_failures_map, failed)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────

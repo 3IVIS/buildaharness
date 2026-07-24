@@ -277,21 +277,26 @@ function formatCachedShellResult(command: string, cwd: string, execution: ShellE
  * a completed dependency that got filtered out of initialTasks would never register as
  * satisfied and its dependents would stay permanently blocked.
  *
- * `riskLevel` accepts either one flat level (broadcast to every task — the ad hoc
- * single-task/decomposed-turn shape) or a per-task function keyed off each task's own
- * description (a durable plan's shape — see Phase 4.2 of the harness layer activation
- * plan: a plan step like "delete the draft file" shouldn't inherit step 1's risk profile
- * just because they're rendered from the same turn-level classification).
+ * A task's own `riskLevel` (classifyTurnIntent's per-task judgment for ad hoc decompositions,
+ * or buildPlanFromTemplate's template-curated risk_level for a plan — see plan-store.ts's
+ * PlanTaskRecord) is used directly when present — see Phase 4.2 of the harness layer activation
+ * plan: a plan step like "delete the draft file" shouldn't inherit an unrelated sibling step's
+ * risk profile just because they were rendered from the same turn-level classification.
+ * `fallbackRiskLevel` (one flat level, or a per-task function keyed off description) is only
+ * consulted when a task has no `riskLevel` of its own — the single-task path (never has one,
+ * always uses the flat turn-level classification.riskLevel) and a plan persisted before this
+ * field existed (falls back to lexical planTaskRiskLevel/classifyRisk, exactly as every task
+ * used to unconditionally).
  */
 function toHarnessTasks(
-  tasks: { id: string; description: string; depends_on: string[]; status?: Task['status'] }[],
-  riskLevel: Task['risk_level'] | ((description: string) => Task['risk_level']),
+  tasks: { id: string; description: string; depends_on: string[]; status?: Task['status']; riskLevel?: Task['risk_level'] }[],
+  fallbackRiskLevel: Task['risk_level'] | ((description: string) => Task['risk_level']),
 ): Task[] {
   return tasks.map((t): Task => ({
     id: t.id,
     description: t.description,
     status: t.status ?? 'PENDING',
-    risk_level: typeof riskLevel === 'function' ? riskLevel(t.description) : riskLevel,
+    risk_level: t.riskLevel ?? (typeof fallbackRiskLevel === 'function' ? fallbackRiskLevel(t.description) : fallbackRiskLevel),
     depends_on: t.depends_on,
     parallel_write_domains: [],
     abstraction_level: 0,
@@ -299,7 +304,7 @@ function toHarnessTasks(
   }))
 }
 
-/** Per-task risk for a durable plan's steps — reuses classifyRisk's own keyword patterns against each step's own description, instead of broadcasting the turn-level classification (based on the original request, e.g. "what's next?") across every step. */
+/** Lexical fallback for a durable plan's steps that were persisted before per-task riskLevel existed (see toHarnessTasks) — reuses classifyRisk's own keyword patterns against each step's own description. */
 function planTaskRiskLevel(description: string): Task['risk_level'] {
   return classifyRisk(description).riskLevel
 }
@@ -1350,7 +1355,7 @@ export class PersonalAssistant {
     if (classification.isTrivial) {
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
-      await this.recordFacts(sessionId, userMessage)
+      await this.recordFacts(sessionId, userMessage, classification.statesDurableFact)
       // No layer fired this turn — an empty trace rather than an absent one, so the "Why?"/
       // "Run detail" UI can still render (all 11 layer cells shown, none highlighted) instead
       // of hiding the panel outright, which read as broken rather than "skipped on purpose".
@@ -1648,7 +1653,7 @@ export class PersonalAssistant {
 
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
-        await this.recordFacts(sessionId, userMessage)
+        await this.recordFacts(sessionId, userMessage, classification.statesDurableFact)
 
         return {
           status: 'ok',
@@ -1704,7 +1709,7 @@ export class PersonalAssistant {
 
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
-      await this.recordFacts(sessionId, userMessage)
+      await this.recordFacts(sessionId, userMessage, classification.statesDurableFact)
 
       return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, usage: usageTotal }
     } catch (err) {
@@ -1742,10 +1747,20 @@ export class PersonalAssistant {
    * no-op for ordinary turns. Facts flagged `durable` (name, preference, health/dietary — see
    * fact-extraction.ts) are ALSO appended to DURABLE_FACTS_KEY, a store clearSession() never
    * touches, so they survive /new instead of vanishing with the rest of the session's facts.
+   *
+   * `llmStatedFact` is classifyTurnIntent's statesDurableFact — only trusted when the free
+   * lexical pass above found nothing at all for this message, so a phrasing FACT_MARKERS/
+   * HEALTH_OR_DIETARY_MARKERS doesn't recognize (any language, or an English paraphrase the
+   * marker list doesn't cover) still gets captured instead of silently dropped. The lexical
+   * pass stays authoritative — and free — whenever it does find something.
    */
-  private async recordFacts(sessionId: string, userMessage: string): Promise<void> {
+  private async recordFacts(sessionId: string, userMessage: string, llmStatedFact?: { text: string; durable: boolean } | null): Promise<void> {
     const facts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
-    for (const fact of facts) {
+    const factsToRecord: UserFact[] =
+      facts.length === 0 && llmStatedFact
+        ? [{ text: llmStatedFact.text, extractedAt: new Date().toISOString(), sourceTurn: `turn:${sessionId}`, durable: llmStatedFact.durable }]
+        : facts
+    for (const fact of factsToRecord) {
       await this.memory.set(`facts:${sessionId}`, fact, 'append')
       if (fact.durable) {
         await this.memory.set(DURABLE_FACTS_KEY, fact, 'append')
@@ -2391,7 +2406,11 @@ export class PersonalAssistant {
 
     const applied = await applyPendingAction(backend, workspaceRoot, pendingActionId, {
       executeShell: shellTools
-        ? (command, cwd) => shellTools.executeCommand(command, cwd, { timeoutMs: shellTools.timeoutMs })
+        ? (command, cwd) =>
+            shellTools.executeCommand(command, cwd, {
+              timeoutMs: shellTools.timeoutMs,
+              networkAllowlist: shellTools.networkAllowlist,
+            })
         : undefined,
     })
 

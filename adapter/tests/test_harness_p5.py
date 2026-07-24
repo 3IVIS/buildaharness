@@ -19,6 +19,8 @@ from harness.evidence import Evidence, EvidenceStore
 from harness.execution import action_dep_overlap, execute, select_reversibility_strategy
 from harness.output_contract import OutputContract, contract_shadow_check
 from harness.review_gate import (
+    DimensionResult,
+    apply_review_outcome,
     check_output_contract,
     check_world_model_consistency,
     review_proposed_change,
@@ -504,6 +506,63 @@ def test_T09_success_resets_consecutive_count():
     assert failures_map.get("task-9b", 0) == 0
     assert result.consecutive_failures == 0
     assert result.escalation_triggered is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 2 (lexical hardening plan) — apply_review_outcome, extracted from
+# review_proposed_change() so an external semantic check (an outer async driver
+# layering one on top of review_proposed_change's own lexical dimensions) shares
+# identical consecutive-failure/escalation bookkeeping instead of a second mechanism.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_apply_review_outcome_resets_on_pass():
+    failures_map: dict[str, int] = {"task-x": 1}
+    result = apply_review_outcome("task-x", True, failures_map)
+    assert result.passed is True
+    assert result.failed_dimensions == []
+    assert failures_map["task-x"] == 0
+
+
+def test_apply_review_outcome_increments_and_carries_failed_dimensions_on_fail():
+    failures_map: dict[str, int] = {}
+    finding = DimensionResult(dimension="world_model_consistency", passed=False, reason="semantic conflict")
+
+    first = apply_review_outcome("task-y", False, failures_map, [finding])
+    assert first.passed is False
+    assert first.consecutive_failures == 1
+    assert first.escalation_triggered is False
+    assert first.failed_dimensions == [finding]
+
+    second = apply_review_outcome("task-y", False, failures_map, [finding])
+    assert second.consecutive_failures == 2
+    assert second.escalation_triggered is True  # ESCALATION_THRESHOLD == 2
+
+
+def test_apply_review_outcome_is_the_same_bookkeeping_review_proposed_change_uses():
+    """review_proposed_change's own consecutive-failure counting and apply_review_outcome's are
+    the same underlying mechanism, not two divergent copies — driving both against the same
+    failures_map produces identical escalation behavior."""
+    failures_map_a: dict[str, int] = {}
+    failures_map_b: dict[str, int] = {}
+    task = _task("task-z", description="a change")
+
+    for _ in range(2):
+        via_review = review_proposed_change(
+            proposed_change={},  # missing description → task_alignment dimension fails
+            current_task=task,
+            world_model=None,
+            output_contract=None,
+            hypothesis_set=None,
+            tool_manifest=None,
+            consecutive_failures_map=failures_map_a,
+        )
+        via_apply = apply_review_outcome(
+            "task-z", False, failures_map_b, [DimensionResult(dimension="task_alignment", passed=False)]
+        )
+
+    assert via_review.escalation_triggered == via_apply.escalation_triggered
+    assert via_review.consecutive_failures == via_apply.consecutive_failures
 
 
 # ══════════════════════════════════════════════════════════════════════════════

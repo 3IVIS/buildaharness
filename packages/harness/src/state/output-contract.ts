@@ -50,6 +50,11 @@ export class OutputContract {
  * caller_specific_constraints from the caller's current constraints, and re-derives
  * required_interface_fields from any "required: <field>" constraint syntax.
  * Returns a new OutputContract (immutable update).
+ *
+ * Accepted as-is (plans/lexical_functions_hardening_plan.html Phase 3 step 4): the "required:"
+ * convention parsed here is a flow-designer-authored DSL syntax embedded in a constraint string,
+ * not open-ended conversational input, so it's out of scope for this plan's actual concern
+ * (understanding free-form human phrasing in any language).
  */
 export function updateOutputContract(callerState: CallerState, outputContract: OutputContract): OutputContract {
   const newConstraints = [...callerState.current_constraints]

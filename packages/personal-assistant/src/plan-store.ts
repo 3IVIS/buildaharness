@@ -9,6 +9,13 @@ export interface PlanTaskRecord {
   depends_on: string[]
   status: TaskStatus
   /**
+   * Per-task risk, attached at plan-creation time (see plan-builder.ts's buildPlanFromTemplate)
+   * instead of re-derived from the description text on every resume. Optional only for backward
+   * compatibility with a plan persisted before this field existed — assistant.ts's
+   * toHarnessTasks falls back to the lexical planTaskRiskLevel/classifyRisk for those.
+   */
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH'
+  /**
    * True once the user explicitly cancelled this specific task (see matchTaskCancelAttempt/
    * cancelPlanTask) — distinct from `status`, which gets set to 'COMPLETE' alongside this so the
    * harness's task-graph selection and dependent-unblocking treat it as resolved the same way a
@@ -45,7 +52,7 @@ export function createPlanRecord(plan: Plan): PlanRecord {
   return {
     templateName: plan.templateName,
     successCriteria: plan.successCriteria,
-    tasks: plan.tasks.map((t): PlanTaskRecord => ({ id: t.id, description: t.description, depends_on: t.depends_on, status: 'PENDING' })),
+    tasks: plan.tasks.map((t): PlanTaskRecord => ({ id: t.id, description: t.description, depends_on: t.depends_on, status: 'PENDING', riskLevel: t.riskLevel })),
     status: 'active',
     createdAt: now,
     updatedAt: now,

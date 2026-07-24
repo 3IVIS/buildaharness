@@ -21,6 +21,13 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_patterns import get_evidence_negation_words
+
+# Was a locally-hardcoded 7-word set missing "unavailable" relative to hypothesis.py's
+# identical-purpose set — now the same shared source both read (lexical_patterns.py's
+# negation.json), closing that drift; see get_evidence_negation_words()'s doc comment.
+_EVIDENCE_NEGATION_WORDS = get_evidence_negation_words()
+
 ReviewFindingLens = Literal["implementer", "reviewer", "adversarial"]
 ReviewFindingType = Literal[
     "contradiction",
@@ -412,7 +419,6 @@ def reviewer_lens(
 
     if evidence_store is not None:
         entries = getattr(evidence_store, "entries", [])
-        negation_keywords = {"no", "not", "absent", "missing", "failed", "none", "error"}
         for entry in entries:
             if getattr(entry, "reliability", "") != "HIGH":
                 continue
@@ -422,7 +428,7 @@ def reviewer_lens(
                     continue
                 stmt_words = set(belief.statement.lower().split())
                 common = obs_words & stmt_words
-                if common and (obs_words & negation_keywords):
+                if common and (obs_words & _EVIDENCE_NEGATION_WORDS):
                     findings.append(
                         ReviewFinding(
                             lens="reviewer",

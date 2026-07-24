@@ -19,7 +19,7 @@ import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
-import { reviewerPass, type PropagationQueue } from './nodes/reviewer-pass.js'
+import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
@@ -138,6 +138,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
+  /**
+   * Optional semantic escalation layered on top of reviewerPass's implementer lens, which
+   * otherwise only checks success-criteria coverage via a plain `.includes()` substring match —
+   * called only for a criterion that substring check found no coverage for. A caller can cheaply
+   * return `false` without an LLM call for a criterion it judges the substring check already
+   * covers. See Phase 2/Decision 3b of plans/lexical_functions_hardening_plan.html.
+   */
+  semanticCriterionCoverage?: SemanticCriterionCoverage
 }
 
 export interface HarnessRunResult {
@@ -218,6 +226,7 @@ interface LoopContext {
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
+  semanticCriterionCoverage?: SemanticCriterionCoverage
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
 }
@@ -272,6 +281,7 @@ function buildInitialContext(
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
+    semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
   }
 
@@ -328,6 +338,7 @@ function buildResumedContext(checkpoint: HarnessCheckpoint, options: HarnessRunO
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
+    semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
   }
 }
@@ -1013,10 +1024,10 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
   const runAdversarialLens = (sigForReview?.riskLevel ?? 'LOW') !== 'LOW' || (sigForReview?.taskCount ?? 1) >= 3
 
   ctx.nodeExecutionOrder.push('reviewer_pass')
-  const reviewPassResult = reviewerPass(
+  const reviewPassResult = await reviewerPass(
     ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
     ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-    runAdversarialLens,
+    runAdversarialLens, ctx.semanticCriterionCoverage,
   )
   const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
   reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
@@ -1034,10 +1045,10 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     if (second.status === 'paused') return second
 
     ctx.nodeExecutionOrder.push('reviewer_pass_2')
-    reviewerPass(
+    await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-      runAdversarialLens,
+      runAdversarialLens, ctx.semanticCriterionCoverage,
     )
   }
 
