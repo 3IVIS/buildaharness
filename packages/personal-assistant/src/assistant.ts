@@ -789,9 +789,19 @@ export class PersonalAssistant {
    * not raw internal LLM calls (see SpendCapConfig's doc comment for why). Estimates cost the
    * same way cli.ts's withCostEstimate does for a backend that doesn't report a real costUsd,
    * so the cap enforces against the same number /cost displays, not a second cost model.
+   *
+   * Always records, even when no cap is currently configured (`this.spendCap` undefined) — the
+   * ledger must reflect true cumulative spend regardless of whether a cap happens to exist yet,
+   * or a session that chats for a while uncapped and only later runs `/config set
+   * sessionCostLimitUsd ...` would have every turn before that point silently excluded from the
+   * cumulative total checkSpendCap enforces against, understating real spend (potentially never
+   * triggering the cap at all) — found via live testing: exactly that sequence (an uncapped turn,
+   * then `/config set sessionCostLimitUsd` below that turn's own real cost, then another turn)
+   * was not blocked, because the first turn's cost was never persisted to `spend:${sessionId}` at
+   * the time it completed. The enforcement gate itself (`this.spendCap` check in `turn()`) already
+   * correctly no-ops whenever no cap is configured, so this never enforces a cap that isn't set.
    */
   private async recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
-    if (!this.spendCap) return
     const state = await this.getSpendState(sessionId)
     const costUsd = usage?.costUsd ?? (usage ? estimateCostUsd(this.model ?? DEFAULT_MODEL_FOR_COST_ESTIMATE, usage) : undefined) ?? 0
     await this.memory.set(`spend:${sessionId}`, {

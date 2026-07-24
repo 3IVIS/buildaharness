@@ -2543,5 +2543,20 @@ describe('PersonalAssistant spend cap (T2)', () => {
     const state = await assistant.getSpendState('s1')
     expect(state.cumulativeCalls).toBe(0)
   })
+
+  it('spend from turns before a cap was ever configured still counts once a cap is added later — cli.ts rebuilds the assistant on every /config set, so this is the live shape of "set the cap mid-session"', async () => {
+    const llm = new FakeLLMClient('ok', undefined, { inputTokens: 10, outputTokens: 10, costUsd: 0.01 })
+    const memory = new InMemoryAdapter()
+    const uncapped = new PersonalAssistant({ llmClient: llm, memory })
+    await uncapped.turn('hi', { sessionId: 's1' }) // no cap configured yet — must still be tracked
+
+    // Mirrors cli.ts's reloadAssistant(): a fresh PersonalAssistant sharing the same memory, now with a cap.
+    const capped = new PersonalAssistant({ llmClient: llm, memory, spendCap: { sessionCostLimitUsd: 0.005 } })
+    const stateBeforeSecondTurn = await capped.getSpendState('s1')
+    expect(stateBeforeSecondTurn.cumulativeCostUsd).toBeCloseTo(0.01) // the pre-cap turn's cost was not dropped
+
+    const second = await capped.turn('hi again', { sessionId: 's1' })
+    expect(second.status).toBe('escalated') // already over the $0.005 ceiling from the pre-cap turn alone
+  })
 })
 
