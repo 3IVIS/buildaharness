@@ -18,8 +18,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.failure_modes import FailurePattern  # noqa: E402
-from harness.semantic_checks import semantic_contradiction_check, semantic_failure_match  # noqa: E402
+from harness.failure_modes import FailurePattern
+from harness.semantic_checks import semantic_contradiction_check, semantic_failure_match
 
 _mock_litellm = MagicMock()
 _mock_litellm.acompletion = AsyncMock()
