@@ -65,7 +65,7 @@ import { reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomp
 import { checkForContradictions, looksLikeCodingFact, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
-import { checkSemanticCriterionCoverage } from './semantic-criterion-coverage.js'
+import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
@@ -1616,7 +1616,7 @@ export class PersonalAssistant {
         ? await runtime.resume(priorCheckpoint, runOptions)
         : await runtime.run(
             userMessage,
-            ['Respond helpfully, accurately, and safely to the user request.'],
+            [NON_CHECKABLE_DEFAULT_CRITERION],
             runOptions,
           )
       // resume() (if that's the path taken above) returned normally — paused or completed,

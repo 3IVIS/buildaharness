@@ -1,6 +1,22 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { Belief } from '@buildaharness/harness'
 
+/**
+ * assistant.ts's single ad hoc/single-task turn always passes this exact sentence as its harness
+ * run's successCriteria — a meta-instruction ("respond helpfully"), not a factual claim a belief
+ * could ever state or paraphrase. Every other one of HarnessRuntime's semantic hooks has its own
+ * cheap, no-LLM-call skip for the domain it knows doesn't need escalation (looksLikeCodingFact for
+ * contradictionChecker/semanticChangeReviewer, empty symptoms/patterns for semanticFailureMatcher);
+ * this is that skip for criterion coverage. Without it, any ad hoc turn with at least one recorded
+ * belief would spend a real LLM call every single time, forever, on a criterion that structurally
+ * can never be "covered" by a belief in the first place — found by running the existing test suite
+ * against a freshly-built @buildaharness/harness dist (see this plan's Phase 5 corrections) rather
+ * than by design; a durable plan's own successCriteria (real, task-specific text like "the login
+ * tests pass" — see plan-store.ts's PlanRecord) is exactly the case this hook exists for and is
+ * NOT skipped.
+ */
+export const NON_CHECKABLE_DEFAULT_CRITERION = 'Respond helpfully, accurately, and safely to the user request.'
+
 const COVERAGE_SCHEMA = {
   type: 'object',
   properties: {
@@ -36,7 +52,7 @@ export async function checkSemanticCriterionCoverage(
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
 ): Promise<boolean> {
-  if (beliefs.length === 0) return false
+  if (beliefs.length === 0 || criterion === NON_CHECKABLE_DEFAULT_CRITERION) return false
 
   try {
     const response = await llmClient.callChatStructured(
