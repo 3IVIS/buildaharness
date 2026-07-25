@@ -22,6 +22,11 @@ P8 additions:
   - warm_start() called once on step_count == 0 (P8.2)
   - update_experience_store() hook when a completed_task is passed (P8.3)
 
+P9 additions (wired per-iteration, Phase 5 of plans/lexical_functions_hardening_plan.html):
+  - detect_contradictions() and FailureModeLibrary.match() — the lexical/free baseline, called
+    unconditionally every iteration (mirroring TS's detectContradictions/updateDiagnostics call
+    sites in driveMainLoop), right before the P9 reviewer pass block below
+
 Semantic-check hooks (Phase 2 of plans/lexical_functions_hardening_plan.html): unlike the TS
 harness (packages/harness/src/harness-runtime.ts), whose driveMainLoop folds the outer per-turn
 loop and the async contradictionChecker/semanticChangeReviewer/semanticFailureMatcher hooks into
@@ -31,7 +36,9 @@ contradiction.py's record_external_contradiction(), review_gate.py's apply_revie
 failure_modes.py's FailureDiagnostics.matched_pattern field — see each one's own doc comment.
 Whichever outer, already-async driver repeatedly calls run_one_iteration() (adapter/planner_api.py's
 _run_planner, or the per-adapter run functions in adapter/run_api.py) is where a real semantic
-check would run between iterations and feed its result in through one of those three.
+check runs between iterations, gated on the lexical baseline above having found nothing, and feeds
+its result in through one of those three. See adapter/harness/semantic_checks.py for the
+litellm-backed implementations and planner_api.py's _run_planner for the gating/wiring itself.
 """
 
 from __future__ import annotations
@@ -403,6 +410,30 @@ def run_one_iteration(
     # Track risk state history for oscillation proxy
     if strategy_state is not None:
         strategy_state.risk_state_history.append(control_state_b.risk_state)
+
+    # ── Lexical contradiction + failure-pattern detection (Phase 5 of plans/
+    # lexical_functions_hardening_plan.html) — unconditional every iteration, mirroring TS's
+    # detectContradictions/updateDiagnostics call sites in driveMainLoop exactly. This is the
+    # missing free/lexical baseline a semantic (LLM-backed) escalation needs to layer on top of —
+    # without it, "only call the LLM when the lexical check found nothing" can't hold, since the
+    # lexical check never ran. The semantic escalation itself belongs one layer up, in whichever
+    # async driver calls run_one_iteration() (e.g. planner_api.py's `_run_planner`), per
+    # record_external_contradiction's and matched_pattern's own doc comments — this block only
+    # produces the lexical result those hooks are gated on.
+    if evidence_store is not None:
+        from .contradiction import detect_contradictions
+
+        # task_graph here is a live TaskGraph object, not the dict-shaped structure
+        # detect_abstraction_contradictions expects (task_graph.get("abstraction_level", ...)) — so
+        # abstraction-level contradictions are skipped (None) while pairwise/set-level/temporal
+        # detection (the other three of detect_contradictions's four checks) still run against the
+        # real belief set. Converting task_graph to that dict shape is a separate, smaller
+        # follow-up, not a blocker for this fix.
+        detect_contradictions(world_model, evidence_store, hypothesis_set, None)
+
+    if failure_diagnostics is not None:
+        match_result = failure_diagnostics.failure_mode_library.match(world_model, hypothesis_set, task_graph)
+        failure_diagnostics.matched_pattern = match_result if match_result.matched else None
 
     # ── P9 — reviewer pass after post_exec_gate ───────────────────────────────
     review_result: Any = None

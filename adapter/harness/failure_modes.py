@@ -190,10 +190,21 @@ class FailureDiagnostics:
     why the integration point for this lives in whichever outer, already-async driver repeatedly
     calls run_one_iteration() (e.g. adapter/planner_api.py's `_run_planner`, or the per-adapter
     run functions in adapter/run_api.py) rather than inside harness-core's own synchronous loop.
+
+    failure_mode_library mirrors TS's `readonly failure_mode_library: FailureModeLibrary` field
+    (packages/harness/src/state/failure-diagnostics.ts) — previously absent here, which meant
+    nothing ever populated matched_pattern from a real lexical match (see loop.py's per-iteration
+    wiring, Phase 5 of plans/lexical_functions_hardening_plan.html). Defaults to the 4 seed
+    patterns from build_default_library() rather than an empty library, since an empty one would
+    make the lexical match (and everything layered on top of it) permanently inert by default —
+    every existing caller that never set this field gets real patterns to match against instead of
+    silent no-ops, which is a behavior change only for callers that start using the new
+    per-iteration wiring; nothing sets it today, so no existing test observes a difference.
     """
 
     failure_history: list[FailureEntry] = field(default_factory=list)
     matched_pattern: MatchResult | None = None
+    failure_mode_library: FailureModeLibrary = field(default_factory=lambda: build_default_library())
 
     def to_dict(self) -> dict[str, Any]:
         return {

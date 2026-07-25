@@ -13,6 +13,7 @@ import {
   type LayerActivityEvent,
   type HarnessCheckpoint,
   type FailureModeEntry,
+  type Belief,
   type StrategyWeightKey,
   type DecompositionEntry,
   type RecoverySequenceEntry,
@@ -64,6 +65,7 @@ import { reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomp
 import { checkForContradictions, looksLikeCodingFact, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
+import { checkSemanticCriterionCoverage } from './semantic-criterion-coverage.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
@@ -1550,6 +1552,11 @@ export class PersonalAssistant {
         // symptom list almost never happens for free-text observations in practice.
         semanticFailureMatcher: (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
           checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model, accumulateUsage),
+        // Layered on top of reviewerPass's implementerLens's own `.includes()` substring check —
+        // called only for a success criterion that substring check found no coverage for. See
+        // semantic-criterion-coverage.ts's doc comment.
+        semanticCriterionCoverage: (criterion: string, beliefs: Belief[]) =>
+          checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model, accumulateUsage),
         // Phase 4.1: stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or
         // FAILED), before the loop would go pick the next one — undefined for a non-plan turn,
         // so shouldPause is simply never checked and behavior is unchanged from before Phase 4.
