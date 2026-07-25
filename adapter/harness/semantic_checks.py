@@ -32,11 +32,11 @@ _CONTRADICTION_SYSTEM_PROMPT = (
     "claims). Do not flag beliefs that are merely about different topics, or that could both be "
     "true. Do not flag a new belief that explicitly updates or corrects an existing one (e.g. "
     '"Actually, I\'m now a senior analyst" superseding "I\'m an analyst") — that is a stated change '
-    "over time, not two simultaneously-held conflicting claims. You are given \"new_beliefs\" (just "
+    'over time, not two simultaneously-held conflicting claims. You are given "new_beliefs" (just '
     'learned) and "existing_beliefs" (already known and already mutually consistent with each '
-    "other) as JSON, each entry {\"id\": string, \"statement\": string}. Check new_beliefs against "
+    'other) as JSON, each entry {"id": string, "statement": string}. Check new_beliefs against '
     "existing_beliefs, and against each other. The message may be in any language — judge the "
-    "actual meaning, never assume English. Respond with JSON only: {\"contradictions\": "
+    'actual meaning, never assume English. Respond with JSON only: {"contradictions": '
     '[{"belief_ids": [id, id, ...], "description": string}]}. "description" describes what the '
     "beliefs say, never their ids. Empty array if none."
 )
