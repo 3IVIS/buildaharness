@@ -9,6 +9,52 @@ describe('extractFactsFromTurn', () => {
     expect(facts[0].sourceTurn).toBe('turn:1')
   })
 
+  // Chinese (Simplified) fixtures below are a first pass, not verified by a fluent Chinese
+  // speaker — see fact-markers.json's "zh" entry and
+  // plans/personal_assistant_chinese_lexical_checks_plan.html for the design rationale. Per the
+  // plan, allergy/health cases are prioritized first — this is the file where a missed match
+  // means the fact is never captured, full stop (no LLM fallback exists at all).
+  it('captures an allergy statement in Chinese and flags it durable', () => {
+    const facts = extractFactsFromTurn('我对花生过敏', 'turn:zh1')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe('我对花生过敏')
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('captures an allergy statement in Chinese with an intensifier between the pronoun and the marker', () => {
+    // Mirrors the English h6 fix (an intervening intensifier breaking strict adjacency) — the
+    // Chinese healthOrDietaryMarkers pattern uses a 0-15-character gap after 我 rather than a
+    // proximity-window check, per the plan's note that English's "0-4 words of a pronoun"
+    // proximity check has no clean Chinese analogue.
+    const facts = extractFactsFromTurn('我严重对花生过敏，请一定要注意', 'turn:zh2')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('does not capture a general statement about allergies in Chinese with no first-person subject', () => {
+    // Confirms the plan's prediction that a simpler, direct-substring strategy (here: requiring 我
+    // to be present) is enough to keep precision without porting English's proximity window.
+    expect(extractFactsFromTurn('过敏反应通常在几分钟内发生', 'turn:zh3')).toEqual([])
+  })
+
+  it('captures other health/dietary phrasings in Chinese', () => {
+    expect(extractFactsFromTurn('我是糖尿病患者', 'turn:zh4')).toHaveLength(1)
+    expect(extractFactsFromTurn('我不能吃辣', 'turn:zh5')).toHaveLength(1)
+    expect(extractFactsFromTurn('我是素食者', 'turn:zh6')).toHaveLength(1)
+  })
+
+  it('captures a Chinese health fact wrapped inside a single polite-request clause with no separator ("请注意" framing)', () => {
+    // Mirrors the English h4 "please note that" fix — "请注意" is admitted unconditionally via
+    // factMarkers, sidestepping nonClaimMarkers' "请" rejection the same way.
+    const facts = extractFactsFromTurn('请注意，我对贝类过敏', 'turn:zh7')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('does not capture a Chinese question/recall about an allergy as a claim', () => {
+    expect(extractFactsFromTurn('医生说我对什么过敏？', 'turn:zh8')).toEqual([])
+  })
+
   it('captures a stated preference', () => {
     const facts = extractFactsFromTurn('I prefer tea over coffee.', 'turn:2')
     expect(facts).toHaveLength(1)
@@ -133,6 +179,48 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn("I'm allergic to shellfish.", 'turn:20')[0].durable).toBe(true)
   })
 
+  it('flags Chinese name, preference, and health/dietary facts as durable', () => {
+    expect(extractFactsFromTurn('我叫李明', 'turn:zh9')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('叫我阿力就行', 'turn:zh10')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('我更喜欢喝茶', 'turn:zh11')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('我对花生过敏', 'turn:zh12')[0].durable).toBe(true)
+  })
+
+  it('does not capture "叫" (name/call) in its "told someone to do X" sense as a name statement in Chinese', () => {
+    // Genuine finding during fixture-writing: 叫 is a real homograph in Chinese, unlike the
+    // money/deletion/messaging verbs — "我叫" can mean either "my name is" (我叫李明) or "I told
+    // him/her to ..." (我叫他关门 = "I told him to close the door"), and "叫我" can mean either
+    // "call me [name]" or "[someone] told me to ...". Resolved with a lightweight, targeted fix
+    // (excluding a pronoun immediately after 叫 for "我叫"; anchoring the bare "叫我" form to the
+    // start of the message, plus explicit polite lead-ins like "你可以叫我"/"请叫我" for the
+    // non-initial case) rather than porting English's NOUN_CONTEXT_DETERMINERS lookbehind — this
+    // is a different kind of ambiguity (a verb with two unrelated meanings, not a noun/verb
+    // homograph) with its own narrower fix. Known limitation: a filler-prefixed "call me" (e.g.
+    // "其实，叫我阿力就行") won't be captured by the anchored bare form — see final report.
+    expect(extractFactsFromTurn('他叫我关门', 'turn:zh13')).toEqual([])
+  })
+
+  it('captures "call me" in Chinese via an explicit lead-in phrase, not just the message-initial bare form', () => {
+    const facts = extractFactsFromTurn('你可以叫我阿力', 'turn:zh14')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('does not flag a Chinese session-scoped fact (location, job) as durable', () => {
+    expect(extractFactsFromTurn('我现在住在上海', 'turn:zh15')[0].durable).toBe(false)
+    expect(extractFactsFromTurn('我在谷歌工作', 'turn:zh16')[0].durable).toBe(false)
+  })
+
+  it('captures "我住在"/"我在...工作" in Chinese with a modifier word between the pronoun and the verb', () => {
+    // Mirrors the English batch 23/25 fixes (a modifier breaking strict word-adjacency) — Chinese
+    // doesn't need \b word boundaries (substring matching is enough), but still needs a character
+    // gap to tolerate an inserted modifier like "现在"/"目前" the same way English needed a
+    // word-count gap.
+    expect(extractFactsFromTurn('我现在住在上海', 'turn:zh17')).toHaveLength(1)
+    expect(extractFactsFromTurn('我目前居住在上海', 'turn:zh18')).toHaveLength(1)
+    expect(extractFactsFromTurn('我目前在一家科技公司工作', 'turn:zh19')).toHaveLength(1)
+  })
+
   it('does not flag a session-scoped fact (location, job, generic "remember that") as durable', () => {
     expect(extractFactsFromTurn('I live in Seattle.', 'turn:21')[0].durable).toBe(false)
     expect(extractFactsFromTurn('I work as a nurse.', 'turn:22')[0].durable).toBe(false)
@@ -196,6 +284,11 @@ describe('extractFactsFromTurn', () => {
     const facts = extractFactsFromTurn("My dog's name is Biscuit, he's a 3 year old beagle.", 'turn:30')
     expect(facts).toHaveLength(1)
     expect(facts[0].durable).toBe(false)
+  })
+
+  it('captures an ordinary pet-ownership/naming statement in Chinese', () => {
+    expect(extractFactsFromTurn('我有一只叫Max的金毛', 'turn:zh20')[0].durable).toBe(false)
+    expect(extractFactsFromTurn('我养了一只叫豆豆的猫', 'turn:zh21')).toHaveLength(1)
   })
 
   it('captures "i work" with a modifier word between the pronoun and the verb (batch 23, conv354/373)', () => {

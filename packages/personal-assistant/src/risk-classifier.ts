@@ -341,9 +341,11 @@ const risk = getRiskPatterns()
 // "Please create reminders for calling the bank, emailing the landlord, and picking up dry
 // cleaning." bypassed the reminder pattern entirely (falling through as LOW, skipping the same
 // bulk-confirmation gate) purely because it used "create" instead of "set". reminder-tools.ts now
-// imports this same reminderPattern instead of re-declaring it; file-tools-mcp-server.mjs's
-// REMINDER_REQUEST_MARKER stays a hand-synced literal (it can't import this module graph) — keep
-// that one copy in sync by hand (see the playbook's claude-cli-backend gotcha).
+// imports this same reminderPattern instead of re-declaring it; file-tools-mcp-server.mjs can't
+// import this compiled module (standalone script copied verbatim to dist), but reads
+// risk-patterns.json directly instead — same plain-JSON-read approach as its FACT_MARKERS/
+// INJECTION_PATTERNS — so this is no longer a hand-synced copy either (fixed 2026-07-27 during the
+// Chinese-content pass; previously it was, see the playbook's claude-cli-backend gotcha for history).
 
 // "remind me what my job is?" / "remind me again what the first item was?" ask the assistant to
 // RECALL something already stated in the conversation — they contain "remind me" but aren't a

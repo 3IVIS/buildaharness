@@ -414,6 +414,43 @@ def test_T07_unrelated_change_sharing_only_a_trigger_word_does_not_fail():
     assert result.passed is True
 
 
+# Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker; see
+# plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+def test_T07_chinese_literal_negation_trigger_concatenation_fails():
+    """_is_negation's *primary* check — a trigger word immediately followed by the verbatim
+    belief statement — is a plain substring check, so it works unchanged for Chinese."""
+    wm = WorldModel()
+    high_belief = _belief("b1", "登录功能是必需的", reliability="HIGH")
+    wm.beliefs.append(high_belief)
+
+    proposed_change = {"description": "移除登录功能是必需的"}
+
+    result = check_world_model_consistency(proposed_change, wm)
+
+    assert result.passed is False
+    assert "HIGH-reliability" in result.reason
+
+
+# Regression: _is_negation's *fallback* path (a trigger word + significant shared vocabulary)
+# used to be structurally unable to fire for a belief statement made purely of CJK characters —
+# tokenize() emits one token per CJK character, and the fallback filtered stmt_words to
+# len(w) > 3 before computing overlap, which discarded every single-character CJK token. Fixed by
+# exempting CJK tokens from that length cutoff (see _is_negation's own docstring) — this now
+# behaves the same as the English "paraphrased negation" case above.
+def test_T07_chinese_paraphrase_of_high_reliability_belief_fails():
+    wm = WorldModel()
+    high_belief = _belief("b1", "登录功能是必需的", reliability="HIGH")
+    wm.beliefs.append(high_belief)
+
+    # Contains the trigger word "移除" but is a paraphrase, not the verbatim statement.
+    proposed_change = {"description": "把旧的登录功能彻底移除"}
+
+    result = check_world_model_consistency(proposed_change, wm)
+
+    assert result.passed is False
+    assert "HIGH-reliability" in result.reason
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # T08  Change removing required_interface_field fails dimension 3
 # ══════════════════════════════════════════════════════════════════════════════

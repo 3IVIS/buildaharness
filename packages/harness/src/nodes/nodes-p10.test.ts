@@ -185,6 +185,47 @@ describe('reviewProposedChange', () => {
     expect(result.failed_dimensions[0].dimension).toBe('output_contract_precheck')
   })
 
+  // Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker;
+  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  it('world-model consistency check catches a literal Chinese negation trigger + verbatim belief-statement concatenation', () => {
+    const wm = makeWorldModel()
+    wm.beliefs.push({
+      id: 'b1',
+      statement: '登录功能是必需的',
+      confidence: 1.0,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    const change = { description: '移除登录功能是必需的' }
+    const map = new Map<string, number>()
+    const result = reviewProposedChange(change, null, wm, null, null, null, map)
+    expect(result.passed).toBe(false)
+    expect(result.failed_dimensions[0].dimension).toBe('world_model_consistency')
+  })
+
+  // Regression: isNegation's *fallback* path (a trigger word + significant shared vocabulary)
+  // used to be structurally unable to fire for a belief statement made purely of CJK characters —
+  // tokenize() emits one token per CJK character, and the fallback filtered stmtWords to
+  // length > 3 before computing overlap, which discarded every single-character CJK token. Fixed
+  // by exempting CJK tokens from that length cutoff (see isNegation's own doc comment) — this now
+  // behaves the same as the English "paraphrased negation" case above.
+  it('world-model consistency check catches a paraphrased Chinese negation, not just a literal one', () => {
+    const wm = makeWorldModel()
+    wm.beliefs.push({
+      id: 'b1',
+      statement: '登录功能是必需的',
+      confidence: 1.0,
+      derived_from: ['obs1'],
+      recorded_at: new Date().toISOString(),
+    })
+    // Contains the trigger word "移除" but is a paraphrase, not the verbatim statement.
+    const change = { description: '把旧的登录功能彻底移除' }
+    const map = new Map<string, number>()
+    const result = reviewProposedChange(change, null, wm, null, null, null, map)
+    expect(result.passed).toBe(false)
+    expect(result.failed_dimensions[0].dimension).toBe('world_model_consistency')
+  })
+
   it('second consecutive failure on same task triggers escalate_to_human', () => {
     const wm = makeWorldModel()
     wm.beliefs.push({

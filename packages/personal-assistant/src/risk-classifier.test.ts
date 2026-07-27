@@ -6,8 +6,52 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Please delete my old invoices').riskLevel).toBe('HIGH')
   })
 
+  // Chinese (Simplified) fixtures below are a first pass, not verified by a fluent Chinese
+  // speaker — see this file's own risk-patterns.json "zh" entry and the plan doc
+  // (plans/personal_assistant_chinese_lexical_checks_plan.html) for the design rationale behind
+  // each pattern. Prioritized per that plan: money, deletion, and messaging first (the highest-
+  // stakes HIGH-risk categories), since a missed match here means an approval gate never fires.
+  it('flags a HIGH risk request in Chinese (delete)', () => {
+    expect(classifyRisk('请把这些旧发票删除').riskLevel).toBe('HIGH')
+  })
+
+  it('flags a HIGH risk request in Chinese (money transfer)', () => {
+    expect(classifyRisk('帮我转账500元给房东').riskLevel).toBe('HIGH')
+    expect(classifyRisk('帮我付款给这家供应商').riskLevel).toBe('HIGH')
+  })
+
+  it('flags a HIGH risk request in Chinese (send a message on the user\'s behalf)', () => {
+    expect(classifyRisk('帮我发邮件给我的经理').riskLevel).toBe('HIGH')
+    expect(classifyRisk('帮我转发这份报告给财务部').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag Chinese "邮件"/"过敏"-adjacent noun usages as HIGH — confirms no noun/verb-homograph disambiguation apparatus is needed for these verbs the way English needs NOUN_CONTEXT_DETERMINERS', () => {
+    // Chinese uses an entirely different word for "check/view" (查看) than for "send" (发/发送),
+    // unlike English's single word "email" doubling as noun and verb — so plain substring
+    // matching disambiguates "check my email" from "email someone" with no lookbehind needed.
+    expect(classifyRisk('查看我的邮件').riskLevel).toBe('LOW')
+    // "转发量" (share/retweet count) IS a genuine counter-example found during fixture-writing:
+    // 转发 alone is ambiguous between the verb "forward" and this noun-compound — unlike the
+    // English lookbehind apparatus (excluding on a preceding determiner), this is resolved with a
+    // single lightweight trailing exclusion (?!量), the same kind of trailing noun-compound
+    // exclusion English's own patterns already use generously (e.g. "confirmation"/"button").
+    expect(classifyRisk('这条微博的转发量很高').riskLevel).toBe('LOW')
+    expect(classifyRisk('键盘上的删除键坏了').riskLevel).toBe('LOW')
+    expect(classifyRisk('查看支付方式').riskLevel).toBe('LOW')
+    expect(classifyRisk('我想看看我的购买记录').riskLevel).toBe('LOW')
+    expect(classifyRisk('新品发布会明天举行').riskLevel).toBe('LOW')
+  })
+
   it('flags a MEDIUM risk request', () => {
     expect(classifyRisk('Can you book a table for two tonight').riskLevel).toBe('MEDIUM')
+  })
+
+  it('flags a MEDIUM risk request in Chinese', () => {
+    expect(classifyRisk('帮我安排下周的会议').riskLevel).toBe('MEDIUM')
+  })
+
+  it('does not flag "我的日程安排很满" (my schedule is packed) as a MEDIUM scheduling request in Chinese', () => {
+    expect(classifyRisk('我的日程安排很满').riskLevel).not.toBe('MEDIUM')
   })
 
   it('requires approval for a reminder-shaped request that looks enumerated (bulk creation risk)', () => {
@@ -20,6 +64,12 @@ describe('classifyRisk', () => {
 
   it('does not require approval for an ordinary single-item reminder request', () => {
     const result = classifyRisk('Remind me to call the dentist tomorrow.')
+    expect(result.riskLevel).toBe('MEDIUM')
+    expect(result.requiresApproval).toBe(false)
+  })
+
+  it('does not require approval for an ordinary single-item reminder request in Chinese', () => {
+    const result = classifyRisk('提醒我明天早上八点开会')
     expect(result.riskLevel).toBe('MEDIUM')
     expect(result.requiresApproval).toBe(false)
   })
@@ -39,6 +89,14 @@ describe('classifyRisk', () => {
     expect(classifyRisk('And can you remind me again what the very first item was?').riskLevel).toBe('LOW')
   })
 
+  it('does not flag a "提醒我" (remind me) recall question as MEDIUM in Chinese', () => {
+    // Chinese marks this create-vs-recall distinction via aspect particles/retrospective markers
+    // (了/过/来着) rather than English's past-tense auxiliary + trailing "?" shape — see
+    // risk-patterns.json's "zh".reminderRecallQuestion.
+    expect(classifyRisk('你刚才提醒我的是什么？').riskLevel).toBe('LOW')
+    expect(classifyRisk('提醒我的事情是什么来着').riskLevel).toBe('LOW')
+  })
+
   it('still flags an actual create-reminder request even when phrased with "remind me" and a question mark', () => {
     expect(classifyRisk('Could you remind me to call the dentist tomorrow?').riskLevel).toBe('MEDIUM')
   })
@@ -52,8 +110,35 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Did that actually send a real email just now?').riskLevel).not.toBe('HIGH')
   })
 
+  it('does not flag a Chinese past-tense-shaped yes/no question asking whether a HIGH-risk action already happened', () => {
+    // Chinese marks a completed action via the aspect particle 了/过, not a fronted auxiliary —
+    // "那笔钱真的转账了吗？" ("did that money actually get transferred?") is asking ABOUT a
+    // completed action, not requesting one.
+    expect(classifyRisk('那笔钱真的转账了吗？').riskLevel).not.toBe('HIGH')
+  })
+
+  it('still flags a live Chinese HIGH-risk request phrased as a polite question using the same 了 particle', () => {
+    // Genuine finding during fixture-writing: Chinese's "把 X V 了" construction is also the
+    // ordinary way to politely phrase a LIVE request ("可以帮我把这个删除了吗？" = "could you
+    // delete this?"), using the exact same 了...吗？ shape the past-tense-question exemption
+    // above relies on to recognize an already-completed action. A naive "ends in 了/过 + 吗？"
+    // pattern would wrongly exempt this genuine HIGH-risk request from gating (a false negative —
+    // the dangerous direction). Resolved by requiring the clause NOT also contain a
+    // request/politeness marker (帮我/请/可以/能/麻烦) — this is a different, Chinese-specific
+    // disambiguation than English's noun/verb-homograph lookbehind, not a port of it.
+    expect(classifyRisk('可以帮我把这个删除了吗？').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a Chinese present-tense/habitual yes/no question about a HIGH-risk-keyword topic', () => {
+    expect(classifyRisk('这个订阅到期后会自动取消吗？').riskLevel).not.toBe('HIGH')
+  })
+
   it('classifies ordinary conversation as LOW', () => {
     expect(classifyRisk('What timezone is Tokyo in?').riskLevel).toBe('LOW')
+  })
+
+  it('classifies ordinary conversation as LOW in Chinese', () => {
+    expect(classifyRisk('东京是哪个时区？').riskLevel).toBe('LOW')
   })
 
   it('flags a genuine purchase request using "order" as a verb', () => {
@@ -79,6 +164,13 @@ describe('classifyRisk', () => {
     expect(classifyRisk('Please order the parts from the supplier').riskLevel).toBe('HIGH')
   })
 
+  it('confirms Chinese has no "order" noun/verb homograph — 订单 (the order-noun) and 下单/购买 (the order-verbs) are entirely different words, unlike English\'s single word "order"', () => {
+    // This is the clearest confirmation that Chinese doesn't need NOUN_CONTEXT_DETERMINERS-style
+    // lookbehind for this verb: there's no shared word to disambiguate in the first place.
+    expect(classifyRisk('我的订单还没到').riskLevel).toBe('LOW')
+    expect(classifyRisk('帮我下单买这个').riskLevel).toBe('HIGH')
+  })
+
   it('does not flag a declarative sentence reporting a third party\'s reported/hypothetical action', () => {
     // The user isn't asking the assistant to cancel or pay anything here — they're relaying
     // what someone else said they would do.
@@ -86,8 +178,37 @@ describe('classifyRisk', () => {
     expect(result.riskLevel).not.toBe('HIGH')
   })
 
+  it('does not flag a Chinese declarative sentence reporting a third party\'s reported/hypothetical action', () => {
+    const result = classifyRisk('他告诉我他会取消我的账户')
+    expect(result.riskLevel).not.toBe('HIGH')
+    const result2 = classifyRisk('我的房东说他会取消我的租约，如果我不付房租')
+    expect(result2.riskLevel).not.toBe('HIGH')
+  })
+
   it('still flags a first-person or imperative request even near reported-speech-shaped words', () => {
     expect(classifyRisk('Please cancel my gym membership.').riskLevel).toBe('HIGH')
+  })
+
+  it('still flags a Chinese first-person or imperative cancel/sign/publish request', () => {
+    expect(classifyRisk('帮我取消这个订阅').riskLevel).toBe('HIGH')
+    expect(classifyRisk('帮我签一下这份合同').riskLevel).toBe('HIGH')
+    expect(classifyRisk('帮我发朋友圈公布这个消息').riskLevel).toBe('HIGH')
+  })
+
+  it('does not flag a Chinese first-person past narrative reporting an already-completed action', () => {
+    expect(classifyRisk('我已经取消了健身房会员').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('我不得不删除了那些旧照片').riskLevel).not.toBe('HIGH')
+  })
+
+  it('does not let a Chinese past-narrative clause suppress HIGH-risk gating for a live, different request in the same message', () => {
+    // Mirrors the English h7 fix: the exemption must be scoped per-clause (via riskClauseBoundary),
+    // not run against the whole message, or an unrelated exempt clause silently suppresses gating
+    // for a live, separate request riding along in the same message. Tested with both a halfwidth
+    // and a fullwidth comma, since a message mixing halfwidth punctuation into otherwise-Chinese
+    // text is common in practice and was found, during fixture-writing, to silently fail to
+    // clause-split at all if only the fullwidth comma were recognized as a boundary.
+    expect(classifyRisk('我已经删除了旧照片,请立刻删除我的谷歌相册账户').riskLevel).toBe('HIGH')
+    expect(classifyRisk('我已经删除了旧照片，请立刻删除我的谷歌相册账户').riskLevel).toBe('HIGH')
   })
 
   it('flags "email"/"text" used as verbs, which the literal "send" pattern misses', () => {

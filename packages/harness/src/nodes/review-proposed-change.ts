@@ -4,7 +4,7 @@ import type { HypothesisSet } from '../state/hypothesis-set.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { Task } from '../state/task-graph.js'
 import { getReviewNegationTriggers } from '../lexical/patterns.js'
-import { tokenize } from '../lexical/script-utils.js'
+import { tokenize, containsCJK } from '../lexical/script-utils.js'
 
 export type ReviewDimension =
   | 'task_alignment'
@@ -53,6 +53,15 @@ const { triggers: NEGATION_TRIGGERS, stopwords: NEGATION_STOPWORDS } = getReview
  * changeDesc *and* changeDesc shares significant (non-stopword) vocabulary with stmt — the same
  * shared-subject requirement statementsOpposed (detect-contradictions.ts) uses, so this doesn't
  * regress into over-firing on a change that's merely topically related rather than opposed.
+ *
+ * The `length > 3` cutoff below only makes sense for whitespace-tokenized (Latin-script) words —
+ * it's meant to drop short function words tokenize() didn't already filter as stopwords. CJK
+ * tokens are one character each (see script-utils.ts's tokenize doc comment), so that same cutoff
+ * discarded every CJK token and made this fallback path structurally unable to catch a paraphrased
+ * Chinese negation (only the literal-concatenation check above could fire) — fixed by exempting
+ * CJK tokens from the length cutoff, the same containsCJK-based carve-out statementsOpposed's
+ * sharedTokens gate already relies on (which needs no length cutoff at all, since a single shared
+ * CJK character is exactly as meaningful a signal there as a whole shared English word is here).
  */
 function isNegation(changeDesc: string, stmt: string): boolean {
   if (!changeDesc || !stmt) return false
@@ -60,7 +69,7 @@ function isNegation(changeDesc: string, stmt: string): boolean {
   if (patterns.some(p => changeDesc.includes(p))) return true
 
   if (!NEGATION_TRIGGERS.some(t => changeDesc.includes(t))) return false
-  const stmtWords = tokenize(stmt).filter(w => w.length > 3 && !NEGATION_STOPWORDS.has(w))
+  const stmtWords = tokenize(stmt).filter(w => (containsCJK(w) || w.length > 3) && !NEGATION_STOPWORDS.has(w))
   if (stmtWords.length === 0) return false
   const changeWords = new Set(tokenize(changeDesc))
   const overlap = stmtWords.filter(w => changeWords.has(w))

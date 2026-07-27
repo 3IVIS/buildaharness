@@ -42,4 +42,22 @@ describe('classifyToolYield', () => {
     const text = "We couldn't confirm the exact date, but it's likely mid-September based on prior years."
     expect(classifyToolYield('fetch_url', text)).toBe('productive')
   })
+
+  // Chinese (Simplified) — see plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 3
+  // step 5. Caveat: phrasing here is a first pass, not verified by a fluent Chinese speaker.
+  const realDeadEndPhrasingsZh = [
+    '页面上没有提到具体的开放日日期。',
+    '我找不到关于这次活动的任何信息。',
+    '这个日期在页面上未找到。',
+    '这个日历上没有提到"校园开放日"这个活动。',
+    '日历上没有找到相关活动。',
+  ]
+  it.each(realDeadEndPhrasingsZh)('classifies Chinese dead-end phrasing as dead_end: %s', (text) => {
+    expect(classifyToolYield('fetch_url', text)).toBe('dead_end')
+  })
+
+  it('classifies a Chinese result containing an explicit, confirmed date as productive', () => {
+    const text = '校园开放日定在2025年10月2日星期四,10:00-12:00,学校官网上有明确说明。'
+    expect(classifyToolYield('fetch_url', text)).toBe('productive')
+  })
 })

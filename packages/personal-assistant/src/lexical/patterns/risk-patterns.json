@@ -66,5 +66,57 @@
     "firstPersonPastNarrative": "\\bi (?:had to|already|needed to|decided to|chose to|wanted to)\\b",
     "reportedThirdPartySpeech": "\\b(said|told me|mentioned|warned|threatened)\\b.{0,30}\\b(he|she|they|it)\\b\\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\\b",
     "riskClauseBoundary": ",\\s*(?:so|but|yet|and|because|although|while|whereas)\\b|;\\s*"
+  },
+  "zh": {
+    "highRiskPatterns": [
+      {
+        "source": "(?:发送?|寄)[^。!?？；;，,、]{0,8}(?:邮件|电子邮件|信息|消息|短信|微信|私信)",
+        "reason": "sends a message on the user's behalf"
+      },
+      {
+        "source": "转发(?!量)",
+        "reason": "sends a message on the user's behalf"
+      },
+      {
+        "source": "(?:删除|删掉|清空|抹掉|移除)(?!键|确认|按钮|选项)",
+        "reason": "deletes or removes something, possibly irreversibly"
+      },
+      {
+        "source": "转账|汇款|打钱|(?:付款|支付)(?!方式|页面|页)",
+        "reason": "spends money or moves funds"
+      },
+      {
+        "source": "下单|订购|(?:购买)(?!记录|页面|历史)|结账",
+        "reason": "spends money or moves funds"
+      },
+      {
+        "source": "(?:发布)(?!会)|公开分享|发朋友圈|发微博",
+        "reason": "publishes content publicly"
+      },
+      {
+        "source": "取消|退订",
+        "reason": "cancels a subscription or commitment"
+      },
+      {
+        "source": "签(?:署|订)?.{0,6}(?:合同|协议|合约)|提交.{0,6}(?:申请|表格|表单)|签字(?!笔)",
+        "reason": "signs or submits a binding document"
+      }
+    ],
+    "mediumRiskPatterns": [
+      {
+        "source": "(?:预订|预约)(?!记录|系统|页面)|安排.{0,6}(?:时间|会议|行程)",
+        "reason": "books or schedules something"
+      }
+    ],
+    "reminderPattern": {
+      "source": "提醒我|设置?(?:一?个)?提醒|创建.{0,4}(?:提醒|日程|事件)",
+      "reason": "creates a calendar or reminder entry"
+    },
+    "reminderRecallQuestion": "(?=.*提醒)(?=.*(?:什么|谁|哪(?:里|儿)|为什么|怎么))(?=.*(?:刚才|之前|刚|上次|了|过|来着))",
+    "bulkReminderReason": "creates a calendar or reminder entry and looks like it may create more than one in a single turn — confirm before proceeding",
+    "pastTenseQuestion": "^(?!.*(?:帮我|请|可以|能|麻烦)).*(?:了|过)(?:吗|没有?)?[?？]\\s*$|^(?!.*(?:帮我|请|可以|能|麻烦)).*(?:是否|会不会|会).{0,10}自动.{0,15}吗[?？]?\\s*$",
+    "firstPersonPastNarrative": "我(?:已经|不得不|决定|选择了|刚刚?|之前)",
+    "reportedThirdPartySpeech": "(?:他|她|他们|她们|它).{0,15}(?:说|告诉我|提到|警告|威胁).{0,15}(?:会|要|打算|准备)|(?:说|告诉我|提到|警告|威胁).{0,15}(?:他|她|他们|她们|它).{0,15}(?:会|要|打算|准备)",
+    "riskClauseBoundary": "[，、；;,]+"
   }
 }

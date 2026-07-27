@@ -217,6 +217,49 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
     const match = matchTaskCancelAttempt('cancel the 每日预算 task for now', plan)
     expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: '起草每日预算行程' })
   })
+
+  // Chinese (Simplified) cases — see plans/personal_assistant_chinese_lexical_checks_plan.html's
+  // Phase 3 step 4. The task above already regression-tests the ASCII-only tokenizer fix (an
+  // English verb/marker against a CJK task description); these additionally exercise a
+  // fully-Chinese cancel verb and reference marker. Caveat: phrasing here is a first pass, not
+  // verified by a fluent Chinese speaker.
+  it('matches a fully-Chinese cancel-shaped request referencing a distinctive word from one task', () => {
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [{ id: 'itinerary_planning', description: '起草每日预算行程', depends_on: [], riskLevel: 'LOW' }],
+    })
+    const match = matchTaskCancelAttempt('取消每日预算这个任务吧', plan)
+    expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: '起草每日预算行程' })
+  })
+
+  it('returns null for a fully-Chinese cancel-shaped request unrelated to any task in the plan', () => {
+    const plan = makeTripPlan()
+    expect(matchTaskCancelAttempt('取消我的健身房会员', plan)).toBeNull()
+  })
+
+  it('returns null for Chinese input when there is no cancel-shaped verb at all', () => {
+    const plan = makeTripPlan()
+    expect(matchTaskCancelAttempt('每日预算是多少?', plan)).toBeNull()
+  })
+
+  it('does not hijack a genuine external Chinese cancel request that merely shares a word with a task description', () => {
+    const plan = createPlanRecord({
+      templateName: 'trip_planning',
+      successCriteria: 'The trip is booked and planned.',
+      tasks: [
+        {
+          id: 'logistics_prep',
+          description: '旅行物流:购买旅行保险、确认护照签证有效性、准备打包清单',
+          depends_on: [],
+          riskLevel: 'LOW',
+        },
+      ],
+    })
+    // No explicit 任务/步骤/项/那部分/这部分/计划 reference — falls through to the ordinary
+    // message-level risk gate, same as the English equivalent above.
+    expect(matchTaskCancelAttempt('取消我的旅行保险,我找到了更便宜的。', plan)).toBeNull()
+  })
 })
 
 describe('cancelPlanTask', () => {

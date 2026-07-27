@@ -7,7 +7,11 @@ describe('getNegationPairs', () => {
     expect(pairs).toContainEqual(['passed', 'failed'])
     expect(pairs).toContainEqual(['online', 'offline'])
     expect(stopwords.has('the')).toBe(true)
-    expect(polarityWords).toEqual(['not', 'absent', 'no'])
+    // toContain, not toEqual — this merges every language's polarityWords (see mergeAcrossLanguages),
+    // so the exact array now also includes "zh"'s entries once that language key exists.
+    for (const w of ['not', 'absent', 'no']) {
+      expect(polarityWords).toContain(w)
+    }
   })
 })
 

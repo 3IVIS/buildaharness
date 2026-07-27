@@ -336,6 +336,52 @@ describe('detect_contradictions', () => {
     expect(abstractionFindings).toHaveLength(1)
     expect(abstractionFindings[0].severity).toBe('LOW')
   })
+
+  // Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker;
+  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  it('pairwise contradiction detected on Chinese 通过/失败 (passed/failed) status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '登录测试通过', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: '登录测试失败', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
+  it('pairwise contradiction detected on Chinese 运行中/已停止 (running/stopped) status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '服务器运行中', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: '服务器已停止', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
+  it('pairwise contradiction detected on Chinese 在线/离线 (online/offline) status flip', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '数据库在线', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: '数据库离线', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(1)
+    expect(wm.contradictions[0].type).toBe('pairwise')
+  })
+
+  it('does not flag two unrelated Chinese statements that merely each contain one half of a negation pair (character-level sharedTokens gate)', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '登录测试通过', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: '数据库连接失败', confidence: 0.9, derived_from: ['o2'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions).toHaveLength(0)
+  })
+
+  it('detectAbstractionContradictions recognizes Chinese statement-level markers ("语句"/"表达式")', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '返回语句存在一个表达式错误', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet(), { abstraction_level: 'module' })
+    const abstractionFindings = wm.contradictions.filter((c) => c.type === 'abstraction')
+    expect(abstractionFindings).toHaveLength(1)
+    expect(abstractionFindings[0].severity).toBe('LOW')
+  })
 })
 
 describe('record_external_contradiction', () => {
@@ -600,6 +646,20 @@ describe('update_diagnostics', () => {
     const wm = new WorldModel()
     wm.beliefs.push({ id: 'b1', statement: 'the parser fails at column 5, char 12 of the input', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
     wm.beliefs.push({ id: 'b2', statement: 'the tokenizer breaks at column 8 of the same line', confidence: 0.8, derived_from: ['o2'], recorded_at: '' })
+
+    const statementLevelGraph = new TaskGraph({
+      tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'LOW', depends_on: [], parallel_write_domains: [], abstraction_level: 3, assigned_strategy: null }],
+      changed: true,
+    })
+    expect(checkAbstractionAlignment(statementLevelGraph, wm, true)).toBeCloseTo(1.0)
+  })
+
+  // Chinese-language fixture — first-pass phrasing, not verified by a fluent Chinese speaker;
+  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  it('estimateWorldModelGranularity recognizes Chinese "行号"/"字符"/"列" as statement-level', () => {
+    const wm = new WorldModel()
+    wm.beliefs.push({ id: 'b1', statement: '解析器在行号5、字符12处失败', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })
+    wm.beliefs.push({ id: 'b2', statement: '分词器在同一行的第8列处出错', confidence: 0.8, derived_from: ['o2'], recorded_at: '' })
 
     const statementLevelGraph = new TaskGraph({
       tasks: [{ id: 't1', description: 'd', status: 'PENDING', risk_level: 'LOW', depends_on: [], parallel_write_domains: [], abstraction_level: 3, assigned_strategy: null }],

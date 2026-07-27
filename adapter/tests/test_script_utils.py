@@ -82,7 +82,11 @@ def test_get_negation_pairs_matches_ts_fixture():
     assert ("passed", "failed") in pairs
     assert ("online", "offline") in pairs
     assert "the" in stopwords
-    assert polarity_words == ["not", "absent", "no"]
+    # Containment, not exact equality — merges every language present (see mergeAcrossLanguages'
+    # doc comment); pinning this to the English-only list would break the moment any other
+    # language's content (e.g. "zh") is added, which is exactly what happened here.
+    for word in ("not", "absent", "no"):
+        assert word in polarity_words
 
 
 def test_get_review_negation_triggers_matches_ts_fixture():
@@ -95,16 +99,19 @@ def test_get_review_negation_triggers_matches_ts_fixture():
 def test_get_evidence_negation_words_matches_ts_fixture():
     # 8-word union of reviewer.py's and hypothesis.py's formerly-separate, drifted sets — see
     # get_evidence_negation_words()'s doc comment. "unavailable" is the word reviewer.py's own
-    # copy used to be missing relative to hypothesis.py's.
+    # copy used to be missing relative to hypothesis.py's. Superset check, not exact equality —
+    # merges every language present, so this must not break when another language (e.g. "zh")
+    # adds its own words to the same field.
     words = get_evidence_negation_words()
-    assert words == frozenset({"no", "not", "absent", "missing", "failed", "none", "error", "unavailable"})
+    assert words.issuperset({"no", "not", "absent", "missing", "failed", "none", "error", "unavailable"})
 
 
 def test_get_constraint_negation_words_matches_ts_fixture():
     # Shared source for output_contract.py's check_caller_specific_constraints and
     # output-validation.ts's outputValidation — previously two byte-identical hardcoded copies.
+    # Superset check, not exact equality — see test_get_evidence_negation_words_matches_ts_fixture.
     words = get_constraint_negation_words()
-    assert words == frozenset({"not", "never", "no", "without", "exclude", "must not"})
+    assert words.issuperset({"not", "never", "no", "without", "exclude", "must not"})
 
 
 def test_get_granularity_markers_matches_ts_fixture():

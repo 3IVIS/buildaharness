@@ -115,3 +115,25 @@ def test_estimate_world_model_granularity_now_recognizes_column_and_char():
     wm.beliefs.append(_belief("the parser fails at column 5, char 12 of the input"))
     wm.beliefs.append(_belief("the tokenizer breaks at column 8 of the same line"))
     assert estimate_world_model_granularity(wm) == 2
+
+
+# Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker; see
+# plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+def test_detect_abstraction_contradictions_recognizes_chinese_statement_level_markers():
+    """The shared granularity-markers.json now has a zh statementLevelMarkers entry
+    ("语句"/"表达式") mirroring the English "statement"/"expression" entries exercised above."""
+    belief = _belief("返回语句存在一个表达式错误")
+    task_graph = {"abstraction_level": "module"}
+    results = detect_abstraction_contradictions([belief], task_graph)
+    assert len(results) == 1
+    assert results[0].severity == "LOW"
+    assert results[0].type == "abstraction"
+
+
+def test_estimate_world_model_granularity_recognizes_chinese_line_and_char_markers():
+    """zh statementLevelMarkers ("行号"/"字符"/"列") mirroring the English "column "/"char "
+    entries exercised above."""
+    wm = WorldModel()
+    wm.beliefs.append(_belief("解析器在行号5、字符12处失败"))
+    wm.beliefs.append(_belief("分词器在同一行的第8列处出错"))
+    assert estimate_world_model_granularity(wm) == 2

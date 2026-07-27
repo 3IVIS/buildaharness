@@ -92,6 +92,35 @@ export interface BeliefCandidate {
 // but dropped from the "still-untested" tracking list without ever actually being fixed — this
 // closes that stray gap too.) Widened all six for the same reason as before: confirm each live
 // rather than widening speculatively. This closes out the last of the batch10-named sibling gaps.
+// "zh" content added (plans/personal_assistant_chinese_lexical_checks_plan.html Phase 2a step 3,
+// lower priority within that phase — a missed match here just means the LLM contradiction check
+// always runs instead of being skipped, which is strictly safe, just slower). English loanwords
+// (test, bug, API, CI/CD, ...) were deliberately NOT duplicated in the "zh" entry: testAny() ORs
+// every language's pattern, and the "en" entry's \b-wrapped words already match those exact tokens
+// even when embedded inside a Chinese sentence — JS regex treats CJK ideographs as non-word
+// characters, so e.g. "这个API不可用" and "他说这个bug还没修复" already match \bapi\b/\bbugs?\b
+// today, verified directly, with zero Chinese-side changes needed. Native Chinese equivalents were
+// added instead where standard tech-speech usage exists (测试/构建/部署/.../存在/缺失/缺少).
+// Three entries were deliberately translated to a more specific compound rather than the literal
+// single-character noun a mechanical translation would produce — 软件包 instead of bare 包
+// (package), 代码库 instead of bare 库 (library), 代码仓库 instead of bare 仓库 (repository) —
+// because the bare single characters are extremely common, semantically unrelated everyday words
+// (包 = bag/wrap/red-envelope/include; 库 = garage/warehouse/question-bank; 仓库 = warehouse/
+// storage in the ordinary non-tech sense) and this gate's risky direction is over-inclusion, not
+// under-inclusion: a false positive here wrongly classifies an ordinary personal statement as a
+// "coding fact" and skips the LLM contradiction check on it, which is the one outcome this file's
+// whole design is meant to avoid for genuine personal facts. Three remaining entries carry a
+// similar, lower-severity version of that same risk and were kept anyway (matching the existing
+// English list's own accepted looseness, e.g. "available"/"status" also being generic in everyday
+// English) but are flagged here for native-speaker review: 通过 ("pass", as in "the build passed")
+// is at least as commonly used as the ordinary preposition "via/through" (我通过朋友认识了她 — "I
+// got to know her through a friend"), 状态 ("status") appears in everyday phrases like 婚姻状态
+// (marital status) or 心情状态 (mood/state of mind), and 日志 ("log", as in build/system log) is
+// also the ordinary word for a diary/journal entry (我写了一篇日志记录今天的心情 — "I wrote a
+// journal entry about my mood today") — all three verified to false-positive-match on exactly
+// those benign sentences during fixture-writing. Unlike English's "passed away" vs. "test passed"
+// collision (excluded via a negative lookahead), Chinese "passed away" uses entirely different
+// characters (去世/过世/走了), so no equivalent lookahead is needed or was added for 通过.
 // Compiled from packages/personal-assistant/src/lexical/patterns/coding-fact-markers.json (see
 // lexical/patterns.ts) — the historical rationale above documents this pattern's current shape;
 // edit the JSON to change it, not this file.

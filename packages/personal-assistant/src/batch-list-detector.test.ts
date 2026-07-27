@@ -69,4 +69,20 @@ describe('detectHomogeneousBatchList', () => {
     const result = detectHomogeneousBatchList(message)
     expect(result?.items).toEqual(['Erich-Kästner-Grundschule', 'Grundschule am Rüdesheimer Platz', 'Halensee-Grundschule'])
   })
+
+  // Chinese (Simplified) — documents, rather than fixes, a known accepted limitation (see
+  // plans/lexical_functions_hardening_plan.html Decision 4, and CONNECTOR_WORDS' own doc-comment
+  // in batch-list-detector.ts): the capitalization-ratio signal this detector's nameShapedContent
+  // relies on structurally cannot fire for a script with no letter case. Every word in a CJK line
+  // fails isCapitalizedWord (toLowerCase/toUpperCase are no-ops on CJK characters, so
+  // `first !== first.toLowerCase()` is always false), so the capitalized/significant ratio is
+  // always 0 regardless of what's in batch-list-markers.json's connectorWords — this gate fails
+  // closed for Chinese lines no matter what Chinese content is added there, which is why no
+  // Chinese content was added to that JSON file at all (see this repo's Chinese lexical checks
+  // plan, Group D). Falling through to the ordinary tool loop is the intended, documented cost —
+  // a missed optimization, not a safety gap.
+  it('returns null for a Chinese-language list — the capitalization-ratio heuristic structurally cannot fire for scripts with no letter case (documented limitation)', () => {
+    const message = '光明小学\n阳光小学\n希望小学'
+    expect(detectHomogeneousBatchList(message)).toBeNull()
+  })
 })

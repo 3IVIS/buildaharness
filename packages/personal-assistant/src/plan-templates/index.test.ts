@@ -62,6 +62,31 @@ describe('pickTemplateForTask', () => {
     // "problem" (problem_solving) and "plan" (project_planning) each score 1 — problem_solving wins the tie.
     expect(pickTemplateForTask('There is a problem with the plan.')).toBe('problem_solving')
   })
+
+  // Chinese (Simplified) — see plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 3
+  // step 3. Category-detection keywords only (template task content itself stays English-only,
+  // out of scope here — see that plan). Caveat: phrasing here is a first pass, not verified by a
+  // fluent Chinese speaker.
+  it('matches project_planning for Chinese launch/roadmap-shaped language', () => {
+    expect(pickTemplateForTask('帮我规划并启动新产品的路线图项目。')).toBe('project_planning')
+  })
+
+  it('matches research_analysis for Chinese research/data-shaped language', () => {
+    expect(pickTemplateForTask('我需要研究和分析这些数据来获取洞察。')).toBe('research_analysis')
+  })
+
+  it('matches decision_making for Chinese choose/evaluate-shaped language', () => {
+    expect(pickTemplateForTask('帮我在这些方案里做决定——评估权衡取舍，然后选一个。')).toBe('decision_making')
+  })
+
+  it('matches trip_planning for Chinese trip/travel-shaped language', () => {
+    expect(pickTemplateForTask('帮我规划去日本的旅行——航班、酒店和行程。')).toBe('trip_planning')
+  })
+
+  it('breaks ties by insertion order for Chinese input too (problem_solving first)', () => {
+    // "问题" (problem_solving) and "计划" (project_planning) each score 1 — problem_solving wins the tie.
+    expect(pickTemplateForTask('这里有个问题和计划。')).toBe('problem_solving')
+  })
 })
 
 describe('matchTemplateIfConfident', () => {

@@ -301,6 +301,42 @@ def test_no_contradiction_between_unrelated_statements_sharing_a_negation_pair_w
     assert len(pairwise) == 0
 
 
+# Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker; see
+# plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+def test_pairwise_contradiction_detected_on_chinese_passed_failed_status_flip():
+    b_a = _belief("登录测试通过", confidence=0.9)
+    b_b = _belief("登录测试失败", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
+def test_pairwise_contradiction_detected_on_chinese_running_stopped_status_flip():
+    b_a = _belief("服务器运行中", confidence=0.9)
+    b_b = _belief("服务器已停止", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
+def test_pairwise_contradiction_detected_on_chinese_online_offline_status_flip():
+    b_a = _belief("数据库在线", confidence=0.9)
+    b_b = _belief("数据库离线", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 1
+    assert pairwise[0].type == "pairwise"
+
+
+def test_no_contradiction_between_unrelated_chinese_statements_sharing_a_negation_pair_character():
+    """Character-level mirror of test_no_contradiction_between_unrelated_statements_sharing_a_negation_pair_word:
+    both statements each contain one half of the 通过/失败 pair, but share zero non-stopword
+    characters, so the sharedTokens gate blocks the false positive."""
+    b_a = _belief("登录测试通过", confidence=0.9)
+    b_b = _belief("数据库连接失败", confidence=0.9)
+    pairwise = detect_pairwise_contradictions([b_a, b_b])
+    assert len(pairwise) == 0
+
+
 def test_t12_temporal_contradiction_from_env_change():
     """T12: A belief invalidated by an environment_change_log entry generates a temporal
     contradiction with severity MEDIUM or HIGH."""

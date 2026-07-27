@@ -1,4 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { containsCJK } from '@buildaharness/harness'
 import { getInjectionPatterns } from './lexical/patterns.js'
 
 /**
@@ -36,6 +37,24 @@ export function detectInjectionLikely(text: string): InjectionDetection {
 // skips the LLM call for short, ordinary tool output ("5 files found", "200 OK", a one-line
 // answer) where the regex check above is already sufficient.
 const MIN_LENGTH_FOR_LLM_CHECK = 200
+
+// A flat `.length` (UTF-16 code units) count under-weights CJK text: Chinese has no inter-word
+// whitespace and each character carries roughly a full syllable/morpheme of meaning, so a fixed
+// character count holds substantially more content than the same count of English (which includes
+// plenty of spaces and averages ~5 characters per word). Weighting each CJK character at 3x
+// brings a Chinese string's "effective length" back in line with an equivalent-content English
+// string, so the same MIN_LENGTH_FOR_LLM_CHECK threshold triggers at a comparable amount of real
+// content for both, rather than requiring roughly 3x more actual Chinese text before the LLM
+// escalation ever fires. The 3x weight is a first-pass estimate (not derived from a corpus
+// analysis) — worth a native/fluent-speaker sanity check alongside the rest of this plan's
+// Chinese content, per plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 2b step 2.
+function effectiveLengthForLLMCheck(text: string): number {
+  let weighted = 0
+  for (const ch of text) {
+    weighted += containsCJK(ch) ? 3 : 1
+  }
+  return weighted
+}
 
 const INJECTION_SCHEMA = {
   type: 'object',
@@ -75,7 +94,7 @@ export async function detectInjectionLikelyWithLLM(
 ): Promise<InjectionDetection> {
   const regexResult = detectInjectionLikely(text)
   if (regexResult.flagged) return regexResult
-  if (text.trim().length < MIN_LENGTH_FOR_LLM_CHECK) return { flagged: false }
+  if (effectiveLengthForLLMCheck(text.trim()) < MIN_LENGTH_FOR_LLM_CHECK) return { flagged: false }
 
   try {
     const response = await llmClient.callChatStructured(

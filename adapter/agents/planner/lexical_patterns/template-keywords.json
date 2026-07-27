@@ -7,5 +7,14 @@
     "process_improvement": ["process", "improve", "optimise", "optimize", "efficiency", "workflow", "bottleneck", "streamline", "kaizen", "lean"],
     "content_creation": ["write", "draft", "article", "report", "blog", "document", "content", "copy", "proposal", "presentation", "essay"],
     "trip_planning": ["trip", "travel", "vacation", "itinerary", "flight", "flights", "hotel", "destination", "pack for", "holiday"]
+  },
+  "zh": {
+    "problem_solving": ["问题", "故障", "解决", "修复", "排查", "根本原因", "诊断", "调试", "调查", "解决方案"],
+    "project_planning": ["项目", "计划", "启动", "上线", "搭建", "开发", "交付", "里程碑", "路线图", "进度安排", "资源"],
+    "research_analysis": ["研究", "分析", "调研", "查阅", "探索", "调查", "文献", "数据", "洞察"],
+    "decision_making": ["决定", "选择", "挑选", "评估", "比较", "权衡", "标准"],
+    "process_improvement": ["流程", "改进", "优化", "效率", "工作流程", "瓶颈", "精简", "精益"],
+    "content_creation": ["写作", "起草", "文章", "报告", "博客", "文档", "内容", "文案", "提案", "演示文稿"],
+    "trip_planning": ["旅行", "旅游", "度假", "行程", "航班", "酒店", "目的地", "打包", "假期"]
   }
 }

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from .lexical_patterns import get_review_negation_triggers
-from .script_utils import tokenize
+from .script_utils import contains_cjk, tokenize
 
 ReviewDimension = Literal[
     "task_alignment",
@@ -313,6 +313,15 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
     the same shared-subject requirement _statements_opposed() (contradiction.py) uses, so this
     doesn't regress into over-firing on a change that's merely topically related rather than
     opposed.
+
+    The `len(w) > 3` cutoff below only makes sense for whitespace-tokenized (Latin-script) words —
+    it's meant to drop short function words tokenize() didn't already filter as stopwords. CJK
+    tokens are one character each (see script_utils.py's tokenize docstring), so that same cutoff
+    discarded every CJK token and made this fallback path structurally unable to catch a paraphrased
+    Chinese negation (only the literal-concatenation check above could fire) — fixed by exempting
+    CJK tokens from the length cutoff, the same contains_cjk-based carve-out _statements_opposed's
+    shared_tokens gate already relies on (which needs no length cutoff at all, since a single shared
+    CJK character is exactly as meaningful a signal there as a whole shared English word is here).
     """
     if not belief_stmt or not change_desc:
         return False
@@ -322,7 +331,7 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
 
     if not any(trigger in change_desc for trigger in _NEGATION_TRIGGERS):
         return False
-    stmt_words = [w for w in tokenize(belief_stmt) if len(w) > 3 and w not in _NEGATION_STOPWORDS]
+    stmt_words = [w for w in tokenize(belief_stmt) if (contains_cjk(w) or len(w) > 3) and w not in _NEGATION_STOPWORDS]
     if not stmt_words:
         return False
     change_words = set(tokenize(change_desc))

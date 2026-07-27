@@ -118,6 +118,41 @@ describe('looksLikeEnumeratedItems', () => {
   it('does not flag "first" used mid-sentence or without a following "and"', () => {
     expect(looksLikeEnumeratedItems('This is my first time trying sushi.')).toBe(false)
   })
+
+  // Chinese (Simplified) cases — see plans/personal_assistant_chinese_lexical_checks_plan.html's
+  // Phase 3 step 1. Chinese has no \b word-boundary support for CJK content (JS regex treats CJK
+  // characters as non-word chars, so \b never fires around them — verified against the underlying
+  // patterns before writing this file), and reworks list-enumeration around 、 (the Chinese
+  // enumeration comma, an unambiguous list-item separator, unlike English's comma which also joins
+  // ordinary compound sentences) rather than porting the English comma+determiner-exclusion
+  // heuristic. Caveat: phrasing here is a first pass, not verified by a fluent Chinese speaker.
+  it('flags a Chinese request with a sequencing marker (然后)', () => {
+    expect(looksLikeEnumeratedItems('先帮我订去巴黎的机票,然后在卢浮宫附近订一家酒店。')).toBe(true)
+  })
+
+  it('does not flag a short, single-step Chinese request', () => {
+    expect(looksLikeEnumeratedItems('提醒我明天打电话给牙医。')).toBe(false)
+  })
+
+  it('flags a Chinese enumeration using 、 (the Chinese enumeration comma) twice', () => {
+    expect(looksLikeEnumeratedItems('提醒我:给银行打电话、给房东发邮件、还要去取干洗的衣服。')).toBe(true)
+  })
+
+  it('flags a Chinese semicolon-separated 2-subtask request with a second-task cue word (另外)', () => {
+    expect(looksLikeEnumeratedItems('查一下天气；另外也帮我订一家素食餐厅。')).toBe(true)
+  })
+
+  it('does not flag an ordinary Chinese compound sentence with a single semicolon and no cue word', () => {
+    expect(looksLikeEnumeratedItems('会议是三点；如果不行让我知道。')).toBe(false)
+  })
+
+  it('flags a Chinese numbered-list enumeration', () => {
+    expect(looksLikeEnumeratedItems('1、预订机票 2、预订酒店 3、租车')).toBe(true)
+  })
+
+  it('does not flag a Chinese fact followed by exactly one single reminder', () => {
+    expect(looksLikeEnumeratedItems('我是素食者,记得提醒我路上买燕麦奶。')).toBe(false)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {
