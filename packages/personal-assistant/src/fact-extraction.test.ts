@@ -181,7 +181,7 @@ describe('extractFactsFromTurn', () => {
 
   it('flags Chinese name, preference, and health/dietary facts as durable', () => {
     expect(extractFactsFromTurn('我叫李明', 'turn:zh9')[0].durable).toBe(true)
-    expect(extractFactsFromTurn('叫我阿力就行', 'turn:zh10')[0].durable).toBe(true)
+    expect(extractFactsFromTurn('叫我阿里就行', 'turn:zh10')[0].durable).toBe(true)
     expect(extractFactsFromTurn('我更喜欢喝茶', 'turn:zh11')[0].durable).toBe(true)
     expect(extractFactsFromTurn('我对花生过敏', 'turn:zh12')[0].durable).toBe(true)
   })
@@ -192,16 +192,25 @@ describe('extractFactsFromTurn', () => {
     // him/her to ..." (我叫他关门 = "I told him to close the door"), and "叫我" can mean either
     // "call me [name]" or "[someone] told me to ...". Resolved with a lightweight, targeted fix
     // (excluding a pronoun immediately after 叫 for "我叫"; anchoring the bare "叫我" form to the
-    // start of the message, plus explicit polite lead-ins like "你可以叫我"/"请叫我" for the
-    // non-initial case) rather than porting English's NOUN_CONTEXT_DETERMINERS lookbehind — this
-    // is a different kind of ambiguity (a verb with two unrelated meanings, not a noun/verb
-    // homograph) with its own narrower fix. Known limitation: a filler-prefixed "call me" (e.g.
-    // "其实，叫我阿力就行") won't be captured by the anchored bare form — see final report.
+    // start of the message, plus explicit polite lead-ins like "你可以叫我"/"请叫我"/"其实，叫我"
+    // for the non-initial case) rather than porting English's NOUN_CONTEXT_DETERMINERS lookbehind
+    // — this is a different kind of ambiguity (a verb with two unrelated meanings, not a noun/verb
+    // homograph) with its own narrower fix.
     expect(extractFactsFromTurn('他叫我关门', 'turn:zh13')).toEqual([])
   })
 
   it('captures "call me" in Chinese via an explicit lead-in phrase, not just the message-initial bare form', () => {
-    const facts = extractFactsFromTurn('你可以叫我阿力', 'turn:zh14')
+    const facts = extractFactsFromTurn('你可以叫我阿里', 'turn:zh14')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
+  })
+
+  it('captures a filler-prefixed "call me" ("其实，叫我阿里就行") — native-speaker review flagged this as worth', () => {
+    // fixing (plans/personal_assistant_chinese_lexical_checks_plan.html's native-speaker review):
+    // "其实" ("actually") is a common lead-in before a polite bare "叫我" restatement, the same
+    // shape as "你可以叫我"/"请叫我" above — added as its own explicit lead-in rather than a
+    // generic filler-skipping rule, matching this fix's existing narrow-enumeration style.
+    const facts = extractFactsFromTurn('其实，叫我阿里就行', 'turn:zh14b')
     expect(facts).toHaveLength(1)
     expect(facts[0].durable).toBe(true)
   })

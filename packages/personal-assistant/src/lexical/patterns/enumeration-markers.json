@@ -9,7 +9,7 @@
     "remindWord": "\\bremind\\b"
   },
   "zh": {
-    "sequencingMarkers": "(然后|接着|首先|最后|第\\d{1,2}步)",
+    "sequencingMarkers": "(然后|接着|下一步|首先|其次|最后|第\\d{1,2}步)",
     "oneCommaListMarker": "、([^、]+)",
     "twoCommaListMarker": "(?:、[^、]*){2,}",
     "semicolonListMarker": "[;\\uFF1B].*[;\\uFF1B]|[;\\uFF1B]\\s*(?:而且|另外|此外|还|也)",

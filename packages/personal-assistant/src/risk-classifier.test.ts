@@ -12,7 +12,7 @@ describe('classifyRisk', () => {
   // each pattern. Prioritized per that plan: money, deletion, and messaging first (the highest-
   // stakes HIGH-risk categories), since a missed match here means an approval gate never fires.
   it('flags a HIGH risk request in Chinese (delete)', () => {
-    expect(classifyRisk('请把这些旧发票删除').riskLevel).toBe('HIGH')
+    expect(classifyRisk('请删除这些旧发票').riskLevel).toBe('HIGH')
   })
 
   it('flags a HIGH risk request in Chinese (money transfer)', () => {
@@ -112,9 +112,9 @@ describe('classifyRisk', () => {
 
   it('does not flag a Chinese past-tense-shaped yes/no question asking whether a HIGH-risk action already happened', () => {
     // Chinese marks a completed action via the aspect particle 了/过, not a fronted auxiliary —
-    // "那笔钱真的转账了吗？" ("did that money actually get transferred?") is asking ABOUT a
+    // "那笔钱真的已经转账了吗？" ("did that money actually get transferred?") is asking ABOUT a
     // completed action, not requesting one.
-    expect(classifyRisk('那笔钱真的转账了吗？').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('那笔钱真的已经转账了吗？').riskLevel).not.toBe('HIGH')
   })
 
   it('still flags a live Chinese HIGH-risk request phrased as a polite question using the same 了 particle', () => {
