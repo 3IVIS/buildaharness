@@ -114,13 +114,16 @@ export interface BeliefCandidate {
 // English list's own accepted looseness, e.g. "available"/"status" also being generic in everyday
 // English) but are flagged here for native-speaker review: 通过 ("pass", as in "the build passed")
 // is at least as commonly used as the ordinary preposition "via/through" (我通过朋友认识了她 — "I
-// got to know her through a friend"), 状态 ("status") appears in everyday phrases like 婚姻状态
-// (marital status) or 心情状态 (mood/state of mind), and 日志 ("log", as in build/system log) is
-// also the ordinary word for a diary/journal entry (我写了一篇日志记录今天的心情 — "I wrote a
-// journal entry about my mood today") — all three verified to false-positive-match on exactly
-// those benign sentences during fixture-writing. Unlike English's "passed away" vs. "test passed"
-// collision (excluded via a negative lookahead), Chinese "passed away" uses entirely different
-// characters (去世/过世/走了), so no equivalent lookahead is needed or was added for 通过.
+// got to know her through a friend"), and 状态 ("status") appears in everyday phrases like 婚姻状态
+// (marital status) or 心情状态 (mood/state of mind) — both verified to false-positive-match on
+// exactly those benign sentences during fixture-writing. Unlike English's "passed away" vs. "test
+// passed" collision (excluded via a negative lookahead), Chinese "passed away" uses entirely
+// different characters (去世/过世/走了), so no equivalent lookahead is needed or was added for 通过.
+// 日志 ("log", as in build/system log) does NOT carry the same everyday-ambiguity risk — a fluent
+// speaker confirmed (native-speaker review, plans/personal_assistant_chinese_lexical_checks_plan.html)
+// that an ordinary personal diary/journal entry is 日记, not 日志; 日志 is close to unambiguously
+// technical (build/system/error log, or a formal record like 航海日志 "ship's log"), so it's kept
+// in this list with no everyday-collision caveat, unlike its 通过/状态 siblings above.
 // Compiled from packages/personal-assistant/src/lexical/patterns/coding-fact-markers.json (see
 // lexical/patterns.ts) — the historical rationale above documents this pattern's current shape;
 // edit the JSON to change it, not this file.

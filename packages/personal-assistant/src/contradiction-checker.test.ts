@@ -146,11 +146,18 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('我通过朋友认识了她。')).toBe(true)
   })
 
-  it('known false-positive risk: 状态 ("status") and 日志 ("log") also match their everyday, non-technical senses', () => {
-    // 状态 appears in "marital status" (婚姻状态) and general mood/state phrasing; 日志 is also the
-    // ordinary word for a diary/journal entry, not just a system/build log.
+  it('known false-positive risk: 状态 ("status") also matches its everyday, non-technical sense', () => {
+    // 状态 appears in "marital status" (婚姻状态) and general mood/state phrasing.
     expect(looksLikeCodingFact('我现在的状态很好，谢谢关心。')).toBe(true)
-    expect(looksLikeCodingFact('我写了一篇日志记录今天的心情。')).toBe(true)
+  })
+
+  it('日志 ("log") does not carry the same everyday-ambiguity risk as 通过/状态 — confirmed by native-speaker review', () => {
+    // An ordinary personal diary/journal entry is 日记, not 日志 — a native speaker rejected the
+    // original fixture here (plans/personal_assistant_chinese_lexical_checks_plan.html's
+    // native-speaker review), so 日志 stays flagged as (near-)unambiguously technical, unlike its
+    // 通过/状态 siblings above.
+    expect(looksLikeCodingFact('构建日志显示部署失败了。')).toBe(true)
+    expect(looksLikeCodingFact('我写了一篇日记记录今天的心情。')).toBe(false)
   })
 
   it('does not flag bare "package"/"library"/"repository" senses that are unrelated to code, since those Chinese entries require the more specific compound word', () => {
