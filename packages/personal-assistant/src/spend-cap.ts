@@ -33,7 +33,7 @@ export function checkSpendCap(state: SpendState, config: SpendCapConfig): SpendC
   if (config.sessionCostLimitUsd !== undefined && state.cumulativeCostUsd >= config.sessionCostLimitUsd) {
     return {
       allowed: false,
-      reason: `Session cost ceiling reached: $${state.cumulativeCostUsd.toFixed(4)} spent, ceiling is $${config.sessionCostLimitUsd.toFixed(2)}. Raise it with "/config set sessionCostLimitUsd <amount>" to continue this session.`,
+      reason: `Session cost ceiling reached: $${state.cumulativeCostUsd.toFixed(4)} spent, ceiling is $${config.sessionCostLimitUsd.toFixed(4)}. Raise it with "/config set sessionCostLimitUsd <amount>" to continue this session.`,
     }
   }
   if (config.sessionCallLimit !== undefined && state.cumulativeCalls >= config.sessionCallLimit) {
@@ -51,7 +51,7 @@ export function formatSpendCapStatus(state: SpendState, config: SpendCapConfig):
   const parts: string[] = []
   if (config.sessionCostLimitUsd !== undefined) {
     const pct = config.sessionCostLimitUsd > 0 ? Math.min(100, (state.cumulativeCostUsd / config.sessionCostLimitUsd) * 100) : 100
-    parts.push(`$${state.cumulativeCostUsd.toFixed(4)} / $${config.sessionCostLimitUsd.toFixed(2)} (${pct.toFixed(0)}% of ceiling)`)
+    parts.push(`$${state.cumulativeCostUsd.toFixed(4)} / $${config.sessionCostLimitUsd.toFixed(4)} (${pct.toFixed(0)}% of ceiling)`)
   }
   if (config.sessionCallLimit !== undefined) {
     parts.push(`${state.cumulativeCalls}/${config.sessionCallLimit} turns`)

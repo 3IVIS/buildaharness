@@ -604,6 +604,24 @@ describe('classifyRisk', () => {
     ).not.toBe('MEDIUM')
   })
 
+  it('does not flag a sentence-initial "Schedule overview..." as a MEDIUM scheduling request (h10, re-probing conv381/397)', () => {
+    // Same sentence-initial noun-compound gap as "conflicts"/"funds"/"requirements"/"changes"/
+    // "details"/"adjustments"/"template" above — "overview(s)" wasn't in the trailing exclusion.
+    // Confirmed via direct regex testing: "Schedule overview for next quarter still needs a lot
+    // of work before the review." misfired MEDIUM with no live scheduling request present.
+    expect(
+      classifyRisk('Schedule overview for next quarter still needs a lot of work before the review.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
+  it('does not flag a sentence-initial "Schedule format..." as a MEDIUM scheduling request (h10, re-probing conv381/397)', () => {
+    // "format(s)" is the same still-untested trailing-exclusion gap h10's hypothesis named
+    // alongside "overview".
+    expect(
+      classifyRisk('Schedule format for next quarter needs work.').riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
   it('does not flag "...last week\'s email campaign..." as a HIGH send-message request (batch 29, surfaced re-probing h3)', () => {
     // EMAIL_TEXT_VERB_PATTERN's trailing exclusion never covered "campaign(s)" — an email
     // marketing campaign is a noun-compound, not a live send-a-message request. This pattern is

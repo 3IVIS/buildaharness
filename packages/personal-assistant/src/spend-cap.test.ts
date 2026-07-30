@@ -19,6 +19,12 @@ describe('checkSpendCap', () => {
     expect((result as { reason: string }).reason).toMatch(/sessionCostLimitUsd/)
   })
 
+  it('renders a sub-cent ceiling with visible precision in the refusal reason, not $0.00', () => {
+    const result = checkSpendCap(state(0.0067, 1), { sessionCostLimitUsd: 0.001 })
+    expect(result.allowed).toBe(false)
+    expect((result as { reason: string }).reason).toContain('$0.0010')
+  })
+
   it('refuses a turn once cumulative cost exceeds the ceiling', () => {
     expect(checkSpendCap(state(5.01, 3), { sessionCostLimitUsd: 5 }).allowed).toBe(false)
   })
@@ -52,8 +58,14 @@ describe('formatSpendCapStatus', () => {
 
   it('shows a dollar-and-percent line when a cost ceiling is configured', () => {
     const line = formatSpendCapStatus(state(2.5, 3), { sessionCostLimitUsd: 5 })
-    expect(line).toContain('$2.5000 / $5.00')
+    expect(line).toContain('$2.5000 / $5.0000')
     expect(line).toContain('50%')
+  })
+
+  it('renders a sub-cent ceiling with visible precision instead of rounding to $0.00', () => {
+    const line = formatSpendCapStatus(state(0.0067, 1), { sessionCostLimitUsd: 0.001 })
+    expect(line).toContain('$0.0010')
+    expect(line).not.toContain('$0.00 ')
   })
 
   it('caps the displayed percentage at 100% even when over the ceiling', () => {
@@ -68,6 +80,6 @@ describe('formatSpendCapStatus', () => {
 
   it('shows both lines, comma-joined, when both ceilings are configured', () => {
     const line = formatSpendCapStatus(state(1, 2), { sessionCostLimitUsd: 5, sessionCallLimit: 10 })
-    expect(line).toBe('$1.0000 / $5.00 (20% of ceiling), 2/10 turns')
+    expect(line).toBe('$1.0000 / $5.0000 (20% of ceiling), 2/10 turns')
   })
 })

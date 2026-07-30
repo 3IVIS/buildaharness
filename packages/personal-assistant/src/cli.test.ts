@@ -284,8 +284,8 @@ describe('/status and /cost — spend cap display (T2)', () => {
     await cli.dispatchLine('/cost')
 
     const output = lines.join('\n')
-    expect(output).toMatch(/spend cap\s+\$2\.0000 \/ \$5\.00/)
-    expect(output).toMatch(/Session ceiling: \$2\.0000 \/ \$5\.00/)
+    expect(output).toMatch(/spend cap\s+\$2\.0000 \/ \$5\.0000/)
+    expect(output).toMatch(/Session ceiling: \$2\.0000 \/ \$5\.0000/)
   })
 })
 

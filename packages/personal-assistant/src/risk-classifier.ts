@@ -192,6 +192,11 @@ const risk = getRiskPatterns()
 // trailing exclusion list either — found via live testing: "Schedule template for the new hires
 // still needs work, nobody's touched it in weeks." misfired MEDIUM with no live scheduling
 // request present. Added "templates?" to the trailing exclusion.
+// h10 (re-probing conv381/conv397): same gap again — "overview(s)" wasn't in the trailing
+// exclusion list either — found via direct pattern testing: "Schedule overview for next quarter
+// still needs a lot of work before the review." misfired MEDIUM with no live scheduling request
+// present. Added "overviews?"/"formats?" to the trailing exclusion (the latter added
+// speculatively alongside it, same noun-compound shape, not yet independently live-tested).
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in highRiskPatterns for a long time —
