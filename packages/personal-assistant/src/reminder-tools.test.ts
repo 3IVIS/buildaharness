@@ -38,6 +38,23 @@ describe('executeReminderTool', () => {
     expect(await store.list()).toHaveLength(1)
   })
 
+  it('creates the reminder for a to-do-shaped "i\'m [verb]ing a ..." trip-planning message, not refused as fact-shaped', async () => {
+    // convA (batch 49): "I'm planning a trip to Portland..." used to match FACT_MARKERS' "i'm a"
+    // branch (the gerund "planning" slipped through the 0-4-word modifier gap meant for adverbs
+    // like "actually"/"now"), so sourceUserMessage was wrongly treated as fact-only and every
+    // create_reminder call for the trip's sub-tasks was refused. See fact-extraction.test.ts's
+    // sibling regression test for the underlying regex fix.
+    const store = makeStore('gerund-gap-todo')
+    const result = await executeReminderTool(
+      store,
+      'create_reminder',
+      { text: 'Book a flight to Portland' },
+      "I'm planning a trip to Portland next month — I need to book a flight, reserve a hotel, and rent a car.",
+    )
+    expect(result).toMatch(/Reminder created/)
+    expect(await store.list()).toHaveLength(1)
+  })
+
   it('still creates the reminder when sourceUserMessage combines an unrelated fact with a genuine reminder-request clause', async () => {
     // h7: the fact-vs-todo guard used to check sourceUserMessage as a whole with no scoping — a
     // message combining a genuine to-do with an unrelated durable fact ("I'm vegetarian, so

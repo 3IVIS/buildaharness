@@ -278,6 +278,24 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
   })
 
+  it('does not treat a to-do-shaped "i\'m [verb]ing a ..." statement as an identity fact', () => {
+    // convA (batch 49): FACT_MARKERS' "i'm a"/"i am a" branches' 0-4-word modifier gap (added by
+    // the batch-20 job-correction fix above) allowed ANY word in the gap, including a gerund verb
+    // immediately after "i'm" — so "I'm planning a trip to Portland..." matched "i'm (planning) a"
+    // as if "planning" were an adverb like "actually"/"now" modifying an identity statement. This
+    // misclassified a plain to-do-shaped compound request as fact-shaped, which made
+    // reminder-tools.ts's/file-tools-mcp-server.mjs's isFactShaped() backstop silently refuse to
+    // create a reminder for it (observed live: three separate create_reminder tool calls for the
+    // trip's flight/hotel/car sub-tasks all got rejected with "already captured"). Excluding a
+    // gerund (a word ending in "ing") from the gap keeps "i'm actually a product manager" (an
+    // adverb) matching while no longer matching "i'm planning/going/trying a ..." (a verb phrase).
+    const facts = extractFactsFromTurn(
+      "I'm planning a trip to Portland next month — I need to book a flight, reserve a hotel, and rent a car.",
+      'turn:31',
+    )
+    expect(facts).toEqual([])
+  })
+
   it('captures an ordinary pet-ownership/naming statement', () => {
     // batch 21 (h2/convA, re-probing conv354): matched none of FACT_MARKERS, CODING_FACT_MARKERS,
     // or HEALTH_OR_DIETARY_MARKERS — "Also, I have a golden retriever named Max." never appeared
