@@ -1646,9 +1646,19 @@ export class PersonalAssistant {
             tasks: activePlan.tasks.map((t) => ({ id: t.id, description: t.description, status: t.status })),
           }
           const next = nextPendingTask(activePlan)
-          reply = next
+          const pacingNote = next
             ? `Ready to continue with: ${next.description}? (reply to proceed)`
             : 'All plan steps have run — let me know if you want anything else.'
+          // draftReply (the LLM's own answer to this turn, computed and streamed to the
+          // caller via onToken well before the harness ever ran — see this method's own
+          // earlier draftReply block) must not be dropped here. It was already shown live
+          // to a streaming caller (cli.ts's streamedAnyTokens path prints nothing further
+          // once tokens have streamed, trusting that whatever gets returned/persisted below
+          // matches what's already on screen), so persisting only the pacing note would
+          // leave the transcript — and therefore /export, /search, and every later turn's
+          // LLM context — recording a reply the user never actually saw, while silently
+          // discarding the one they did.
+          reply = draftReply.trim() ? `${draftReply}\n\n${pacingNote}` : pacingNote
         }
         const contradictionNotice = this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
