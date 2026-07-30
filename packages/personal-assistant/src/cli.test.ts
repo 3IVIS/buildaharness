@@ -497,3 +497,60 @@ describe('command dispatch table', () => {
     expect(await configStore.load()).toMatchObject({ enableWeb: true, enableShell: true })
   })
 })
+
+describe('/plan vs. the triviality fast path', () => {
+  // planStatus's own doc comment (assistant.ts): it "can be non-null across many consecutive
+  // turns in the same session" — present only on turns a plan actually drove, absent otherwise,
+  // *not* absent-because-the-plan-ended. The triviality fast path (assistant.ts's isTrivial
+  // branch) never touches plan state at all and always omits planStatus from its result
+  // regardless of whether a plan is active. Before this fix, cli.ts unconditionally did
+  // `lastPlanStatus = result.planStatus` every turn, so a single trivial Q&A aside during an
+  // otherwise-active plan wiped `/plan`'s view of it back to "No active plan for this session" —
+  // reproduced live in a 40-message batch session (batch_1_20260730T084228Z_822271/convB).
+  it('an intervening trivial turn does not make /plan forget an active, in-progress plan', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant })
+
+    const planStatus: NonNullable<Awaited<ReturnType<PersonalAssistant['turn']>>['planStatus']> = {
+      templateName: 'project_planning',
+      successCriteria: 'Launch shipped',
+      completionPct: 100 / 6,
+      tasks: [
+        { id: 'scope_definition', description: 'Define scope', status: 'COMPLETE' },
+        { id: 'asset_prep', description: 'Prep assets', status: 'PENDING' },
+      ],
+    }
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Kicking off the plan.', harnessSkipped: false, planStatus })
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: '96.', harnessSkipped: true }) // trivial fast path: no planStatus field at all
+
+    await cli.dispatchLine('Plan the product launch')
+    await cli.dispatchLine("What's 12 times 8?")
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan')
+
+    const output = lines.join('\n')
+    expect(output).not.toContain('No active plan for this session')
+    expect(output).toContain('project_planning')
+    expect(output).toContain('scope_definition')
+  })
+
+  // Mirror case: once a turn genuinely reports no plan (never created, or abandoned), /plan
+  // must still correctly say so — the fix must not make lastPlanStatus "sticky" forever, only
+  // resilient to a harness-skipped turn's uninformative absence.
+  it('/plan still reports no active plan once a real (non-trivial) turn confirms none exists', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant })
+
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Sure, happy to chat.', harnessSkipped: false }) // non-trivial, no plan
+
+    await cli.dispatchLine('Tell me about your day')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan')
+
+    expect(lines.join('\n')).toContain('No active plan for this session')
+  })
+})

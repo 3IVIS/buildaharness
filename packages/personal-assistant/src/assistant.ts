@@ -42,6 +42,7 @@ import {
   executeFileTool,
   applyPendingAction,
   discardPendingAction,
+  loadPendingAction,
   stagePendingAction,
   sweepAbandonedPendingActions,
   recordShellCacheEntry,
@@ -2405,6 +2406,16 @@ export class PersonalAssistant {
     }
 
     if (!approved) {
+      // write_file/run_shell_command proposals already have the user's originating request
+      // logged (runToolLoop's needs_approval branch appends it before ever returning here) —
+      // but /undo-action <id> is staged directly by the CLI/UI, never by the model (see
+      // pendingActionKind's doc comment), so there is no earlier turn where that request was
+      // recorded. Without this, a declined revert would leave an orphaned "Cancelled ..."
+      // assistant message in the transcript/export with no paired user turn.
+      const record = await loadPendingAction(backend, workspaceRoot, pendingActionId)
+      if (record?.kind === 'revert') {
+        await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: `/undo-action ${record.revertedEntryId}` })
+      }
       await discardPendingAction(backend, workspaceRoot, pendingActionId)
       const reply = 'Cancelled — nothing was written or run.'
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
@@ -2442,6 +2453,8 @@ export class PersonalAssistant {
       if (applied.remove.length > 0) parts.push(`removed ${applied.remove.map((p) => `"${p}"`).join(', ')}`)
       reply = `Reverted "${applied.revertedEntryId}" — ${parts.join(' and ')}.`
       transcriptContent = reply
+      // Same orphan-transcript-message fix as the decline branch above, for the approved path.
+      await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: `/undo-action ${applied.revertedEntryId}` })
     } else {
       // Record this resolution in the shell cache BEFORE anything else — this is the only place
       // a shell command is ever actually executed, regardless of which backend proposed it (the

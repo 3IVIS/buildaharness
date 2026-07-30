@@ -1157,6 +1157,59 @@ describe('PersonalAssistant file tools', () => {
     expect(entriesAfterDecline[0].id).toBe(entry.id)
   })
 
+  // /undo-action <id> is staged directly by the CLI/UI (stageUndoAction), never reached via
+  // the model's tool loop the way write_file/run_shell_command are — so unlike those, there is
+  // no earlier turn where runToolLoop's needs_approval branch already logged a 'user' transcript
+  // message for it. Before this fix, resolvePendingAction only ever appended the 'assistant'
+  // reply for a revert (approved or declined), leaving an orphaned assistant message in the
+  // transcript/export with no paired user turn — found by reading a real /export output byte
+  // for byte, not by inspection alone.
+  it('an approved /undo-action revert logs a paired user transcript message, not an orphaned assistant-only reply', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'final content' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    await assistant.turn('Write a summary to summary.md', { approved: true, pendingActionId: staged.pendingActionId })
+
+    const [entry] = await listUndoLogEntries(backend, ROOT)
+    const revertStage = await assistant.stageUndoAction(entry.id)
+    if (revertStage.status !== 'staged') throw new Error('expected stageUndoAction to succeed')
+    await assistant.turn('irrelevant', { approved: true, pendingActionId: revertStage.pendingActionId })
+
+    const transcript = await assistant.getTranscript('default')
+    const last = transcript.slice(-2)
+    expect(last[0].role).toBe('user')
+    expect(last[0].content).toContain(entry.id)
+    expect(last[1].role).toBe('assistant')
+    expect(last[1].content).toContain('Reverted')
+  })
+
+  it('a declined /undo-action revert also logs a paired user transcript message', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'final content' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    await assistant.turn('Write a summary to summary.md', { approved: true, pendingActionId: staged.pendingActionId })
+
+    const [entry] = await listUndoLogEntries(backend, ROOT)
+    const revertStage = await assistant.stageUndoAction(entry.id)
+    if (revertStage.status !== 'staged') throw new Error('expected stageUndoAction to succeed')
+    await assistant.turn('irrelevant', { approved: false, pendingActionId: revertStage.pendingActionId })
+
+    const transcript = await assistant.getTranscript('default')
+    const last = transcript.slice(-2)
+    expect(last[0].role).toBe('user')
+    expect(last[0].content).toContain(entry.id)
+    expect(last[1].role).toBe('assistant')
+    expect(last[1].content).toContain('Cancelled')
+  })
+
   it('without fileTools configured, behavior is unchanged — no tool loop is entered', async () => {
     const llm = new FakeLLMClient('Plain reply, no tools involved.')
     const assistant = new PersonalAssistant({ llmClient: llm })

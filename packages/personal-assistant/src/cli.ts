@@ -761,7 +761,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
         : undefined
       lastSources = result.sources
-      lastPlanStatus = result.planStatus
+      // A trivial fast-path turn never touches plan state at all (assistant.ts's triviality
+      // branch returns before ever loading/updating activePlan) — result.planStatus is always
+      // undefined there regardless of whether a plan is genuinely active, so clobbering
+      // lastPlanStatus on every turn made /plan wrongly report "No active plan" right after any
+      // ordinary Q&A aside during an in-progress plan (planStatus's own doc comment: it "can be
+      // non-null across many consecutive turns" — a harness-skipped turn just doesn't know either way).
+      if (!result.harnessSkipped) lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
       if (lastTurnUsage) accumulateSessionUsage(lastTurnUsage)
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
