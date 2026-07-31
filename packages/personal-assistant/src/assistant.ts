@@ -32,6 +32,7 @@ import {
   type TokenUsage,
   type ToolDefinition,
   type FsBackend,
+  type MemoryResult,
 } from '@buildaharness/runtime'
 import { classifyRisk, type RiskClassification } from './risk-classifier.js'
 import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
@@ -1143,10 +1144,23 @@ export class PersonalAssistant {
    * unrelated non-transcript entries that happen to score higher. Read-only and synchronous over
    * already-persisted data: never an LLM call, never a network request, never a mutation. Used
    * by `/search`.
+   *
+   * `FileSystemAdapter.search()` (packages/runtime) throws if ANY file under the memory namespace
+   * fails to parse as JSON — e.g. a transcript file left truncated by a process kill mid-write
+   * (see sweepAbandonedPendingActionsOnStartup, which hits the same failure mode and already
+   * treats it as non-fatal). One corrupt entry unrelated to this query must not turn `/search`
+   * into an uncaught error for the user — degrade to "no results" instead, same fail-open posture
+   * as the other two `memory.search()` call sites in this file.
    */
   async searchTranscript(query: string, topK = 10): Promise<TranscriptSearchHit[]> {
     if (!query.trim()) return []
-    const candidates = await this.memory.search(query, Number.MAX_SAFE_INTEGER, 0)
+    let candidates: MemoryResult[]
+    try {
+      candidates = await this.memory.search(query, Number.MAX_SAFE_INTEGER, 0)
+    } catch (err) {
+      console.error('[search] memory search failed:', err)
+      return []
+    }
     const hits: TranscriptSearchHit[] = []
     for (const c of candidates) {
       if (typeof c.key !== 'string' || !c.key.startsWith('transcript-msg:')) continue

@@ -2690,6 +2690,26 @@ describe('PersonalAssistant.searchTranscript (T3)', () => {
 
     expect(await assistant.searchTranscript('   ')).toEqual([])
   })
+
+  // A live batch (LF1) reproduced FileSystemAdapter.search() (packages/runtime) throwing
+  // "Unexpected end of JSON input" after a SIGKILL-mid-write left a transcript file truncated on
+  // disk — one corrupt file aborts that adapter's whole search() call, not just the entry that's
+  // actually broken. Before this fix, that throw propagated straight out of searchTranscript to
+  // the caller; /search degraded gracefully everywhere else this exact failure mode already gets
+  // caught in this file (sweepAbandonedPendingActionsOnStartup, backfillMessageIndex).
+  it('degrades to an empty array, not a throw, when the underlying memory.search() throws', async () => {
+    const memory: MemoryAdapter = {
+      get: async () => undefined,
+      set: async () => {},
+      search: async () => {
+        throw new SyntaxError('Unexpected end of JSON input')
+      },
+      delete: async () => {},
+    }
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+
+    await expect(assistant.searchTranscript('dentist appointment')).resolves.toEqual([])
+  })
 })
 
 describe('PersonalAssistant spend cap (T2)', () => {
