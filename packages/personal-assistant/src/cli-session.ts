@@ -195,7 +195,7 @@ function formatUsageLine(usage: TokenUsage): string {
 
 /** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing); every other backend's cost, when shown, is a static-table estimate (see cli.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
 export function formatCostSummary(info: CostSummaryInfo): string {
-  if (!info.lastTurn && info.session.inputTokens === 0 && info.session.outputTokens === 0) {
+  if (!info.lastTurn && info.session.inputTokens === 0 && info.session.outputTokens === 0 && !info.spendCapLine) {
     return 'No usage yet this session.'
   }
   const lines: string[] = []

@@ -297,6 +297,16 @@ describe('formatCostSummary', () => {
     expect(output).not.toContain('Last turn')
     expect(output).toContain('This session:')
   })
+
+  it('still shows the spend-cap ceiling line even when no usage happened yet this process (e.g. right after a session-cap escalation, or a fresh restart)', () => {
+    const output = formatCostSummary({
+      session: { inputTokens: 0, outputTokens: 0 },
+      backend: 'proxy',
+      spendCapLine: '$0.0755 / $0.0010 (100% of ceiling)',
+    })
+    expect(output).not.toBe('No usage yet this session.')
+    expect(output).toContain('Session ceiling: $0.0755 / $0.0010 (100% of ceiling)')
+  })
 })
 
 describe('formatDoctorReport', () => {
