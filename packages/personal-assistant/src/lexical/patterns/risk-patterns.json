@@ -38,7 +38,7 @@
         "reason": "sends a message on the user's behalf"
       },
       {
-        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|rates?|is|was)\\b|\\s+each\\s+other\\b)",
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:cancel|unsubscribe)\\b(?!\\s+(?:link|option|button|confirmation|confirmations|culture|policy|policies|rates?|is|was|out)\\b|\\s+each\\s+other\\b)",
         "reason": "cancels a subscription or commitment"
       },
       {

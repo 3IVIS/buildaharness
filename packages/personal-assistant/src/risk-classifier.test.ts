@@ -498,6 +498,18 @@ describe('classifyRisk', () => {
     ).not.toBe('HIGH')
   })
 
+  it('does not flag a bare "cancel out" (no "each other") math/physics/finance idiom', () => {
+    // batch 59, h1: the "cancel each other out" fix (h5 above) only excluded that exact phrasing
+    // -- a bare "cancel out" with no "each other" (e.g. two effects that just neutralize) still
+    // misfired HIGH, since "out" wasn't itself in the trailing exclusion list. Found via live
+    // testing: "These two numbers cancel out in the equation." and "In physics, opposite forces
+    // cancel out." both misfired HIGH (a coincidental determiner elsewhere in a nearby sentence
+    // can mask this by satisfying the lookbehind exclusion for unrelated reasons, so a minimal
+    // sentence with no other determiner near "cancel" is needed to actually exercise this gap).
+    expect(classifyRisk('These two numbers cancel out in the equation.').riskLevel).not.toBe('HIGH')
+    expect(classifyRisk('In physics, opposite forces cancel out.').riskLevel).not.toBe('HIGH')
+  })
+
   it('still flags a genuine "cancel each of X" request despite containing "each"', () => {
     expect(classifyRisk('Please cancel each of my recurring subscriptions.').riskLevel).toBe('HIGH')
   })
