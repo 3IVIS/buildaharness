@@ -756,18 +756,36 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // chat-ui can still render its "Why?"/"Run detail" panels with an explanation and an
       // all-unfired grid — the CLI has no such grid, so it keeps printing its existing plain
       // "took the fast path" copy instead of an empty/misleading confidence readout.
-      lastTrace = result.harnessSkipped ? undefined : result.trace
-      lastNoTraceReason = result.harnessSkipped
-        ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
-        : undefined
+      //
+      // A resolved write_file/run_shell_command/revert pendingAction (assistant.ts's
+      // resolvePendingAction, reached whenever this call passed a `pendingActionId`) returns
+      // neither harnessSkipped nor trace at all — it's not the trivial fast path, it just never
+      // runs the per-turn HarnessRuntime. Both call sites that recurse into this same handleTurn()
+      // to resolve one (the pendingActionKind branch below and handleUndoAction) already set
+      // lastNoTraceReason to a specific, accurate "staged ${kind} that was approved/declined
+      // before the harness ran" message right before recursing — unconditionally falling through
+      // to the generic fallback here clobbered that back to undefined, which is exactly what made
+      // /why and /layers report the wrong (fully generic) reason after any staged tool-call
+      // resolution. Guard on the `pendingActionId` parameter (not the result shape, which a test
+      // mock may reasonably leave sparse) so this block is skipped entirely for a pendingAction
+      // resolution, leaving the caller's already-correct state alone.
+      if (!pendingActionId) {
+        lastTrace = result.harnessSkipped ? undefined : result.trace
+        lastNoTraceReason = result.harnessSkipped
+          ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
+          : undefined
+      }
       lastSources = result.sources
       // A trivial fast-path turn never touches plan state at all (assistant.ts's triviality
       // branch returns before ever loading/updating activePlan) — result.planStatus is always
       // undefined there regardless of whether a plan is genuinely active, so clobbering
       // lastPlanStatus on every turn made /plan wrongly report "No active plan" right after any
       // ordinary Q&A aside during an in-progress plan (planStatus's own doc comment: it "can be
-      // non-null across many consecutive turns" — a harness-skipped turn just doesn't know either way).
-      if (!result.harnessSkipped) lastPlanStatus = result.planStatus
+      // non-null across many consecutive turns" — a harness-skipped turn just doesn't know either
+      // way). Same reasoning applies to a resolved pendingAction (resolvePendingAction never
+      // touches plan state either, same as the trivial path) — the `pendingActionId` guard above
+      // covers both cases.
+      if (!pendingActionId && !result.harnessSkipped) lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
       if (lastTurnUsage) accumulateSessionUsage(lastTurnUsage)
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
