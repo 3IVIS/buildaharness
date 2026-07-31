@@ -66,6 +66,11 @@ const SEQUENCING_MARKERS = enumeration.sequencingMarkers
 // — found via live testing: "Remind me to call the bank, and something came up with my car
 // insurance too." (one reminder + an unrelated aside) wrongly tripped the bulk-reminder
 // confirmation gate.
+// re-probing conv01/h2: TWO_COMMA_LIST_MARKER never got the subject-reintroduction exclusion all
+// the fixes just above gave ONE_COMMA_LIST_MARKER — a single "remind me" with an unrelated
+// two-comma rambling aside ending "and I..." ("Remind me to call the bank, honestly I'm not sure
+// why, and I still haven't figured out what to do about dinner tonight.") matched as if it were a
+// 3+-item enumeration. Ported the same lookahead exclusion onto this marker too.
 const ONE_COMMA_LIST_MARKER = enumeration.oneCommaListMarker
 const TWO_COMMA_LIST_MARKER = enumeration.twoCommaListMarker
 

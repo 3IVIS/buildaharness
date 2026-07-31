@@ -56,6 +56,17 @@ describe('looksLikeEnumeratedItems', () => {
     ).toBe(true)
   })
 
+  it("does not flag a single reminder with a two-comma rambling aside that reintroduces its own subject (re-probing conv01/h2)", () => {
+    // TWO_COMMA_LIST_MARKER lacked the same subject-reintroduction exclusion ONE_COMMA_LIST_MARKER
+    // already has -- a single "remind me" with an unrelated two-comma aside ending "and I..."
+    // wrongly matched as a 3+ item enumeration.
+    expect(
+      looksLikeEnumeratedItems(
+        "Remind me to call the bank, honestly I'm not sure why, and I still haven't figured out what to do about dinner tonight.",
+      ),
+    ).toBe(false)
+  })
+
   it('flags a 3-item comma-separated list with no Oxford comma (only 1 comma before and/or)', () => {
     // h4: ENUMERATED_LIST_MARKER required 2+ commas before the closing and/or — a natural list
     // without the Oxford comma has only 1.

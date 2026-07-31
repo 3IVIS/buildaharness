@@ -598,6 +598,30 @@ describe('classifyRisk', () => {
     ).not.toBe('HIGH')
   })
 
+  it('does not flag a physical/noun "sign" near a form as a HIGH signing request (re-probing conv01/h1)', () => {
+    // Unlike every other bare-keyword HIGH-risk pattern in this file, sign|submit|approve had no
+    // noun-context lookbehind at all — "sign" as a physical/road noun within 30 chars of "form"/
+    // "application" misfired HIGH with no live signing request present. conv01's own phrasing kept
+    // the words too far apart to hit this; confirmed directly instead.
+    expect(
+      classifyRisk('There is a sign posted right on this application form.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('does not flag "approve of" (opinion sense) near a form as a HIGH sign-off request (re-probing conv01/h1)', () => {
+    // "approve" is ambiguous between signing/authorizing something (HIGH) and merely having a
+    // positive opinion of it ("approve of") — only the sign-off sense should trigger HIGH.
+    expect(
+      classifyRisk('I approve of this application form design, even though I never actually filed it.').riskLevel,
+    ).not.toBe('HIGH')
+  })
+
+  it('still flags a genuine sign/submit/approve request as HIGH', () => {
+    expect(classifyRisk('Please sign this contract today.').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Can you submit the application form for me?').riskLevel).toBe('HIGH')
+    expect(classifyRisk('Please approve this contract before end of day.').riskLevel).toBe('HIGH')
+  })
+
   it('does not flag a sentence-initial "Schedule adjustments..." as a MEDIUM scheduling request (batch 34, h6)', () => {
     // Same sentence-initial noun-compound gap as "conflicts"/"funds"/"requirements"/"changes"/
     // "details" above — "adjustment(s)" wasn't in the trailing exclusion.

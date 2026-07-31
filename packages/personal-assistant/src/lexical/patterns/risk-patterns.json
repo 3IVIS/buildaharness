@@ -42,7 +42,7 @@
         "reason": "cancels a subscription or commitment"
       },
       {
-        "source": "\\b(sign|submit|approve)\\b.{0,30}\\b(contract|form|application|agreement)\\b",
+        "source": "(?<!\\b(?:my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|several|few|many|most|all)\\b(?:\\s+\\w+){0,4}\\s)\\b(?:sign|submit|approve)\\b(?!\\s+of\\b).{0,30}\\b(?:contract|form|application|agreement)\\b",
         "reason": "signs or submits a binding document"
       }
     ],

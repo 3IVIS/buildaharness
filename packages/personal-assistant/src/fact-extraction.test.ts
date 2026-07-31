@@ -332,6 +332,19 @@ describe('extractFactsFromTurn', () => {
   it('captures "my ... name is" with an adjective before a possessive noun (batch 23, conv380)', () => {
     const facts = extractFactsFromTurn("My good friend's name is Marcus.", 'turn:32')
     expect(facts).toHaveLength(1)
+    // Someone else's name, not the user's own — stays non-durable, same as "my dog's name is ...".
+    expect(facts[0].durable).toBe(false)
+  })
+
+  it('marks "my ... name is" durable when the gap is plain adjectives, not a possessive noun (re-probing conv01/h8)', () => {
+    // batch 23 widened FACT_MARKERS' "my name is" to tolerate a modifier gap, but
+    // DURABLE_NAME_OR_PREFERENCE_MARKERS' own "my name is" was left as a strict zero-gap literal —
+    // this statement matched FACT_MARKERS (so it was captured at all) but not the durable marker,
+    // so it was silently dropped by /new. Live-verified: /memory showed the fact right after
+    // stating it, but "What's my name?" after /new got "I don't have your name".
+    const facts = extractFactsFromTurn('My full legal name is Jordan Ellis Whitfield.', 'turn:35')
+    expect(facts).toHaveLength(1)
+    expect(facts[0].durable).toBe(true)
   })
 
   it('captures "i live in" with a modifier word between "live" and "in" (batch 25, re-probing conv380)', () => {

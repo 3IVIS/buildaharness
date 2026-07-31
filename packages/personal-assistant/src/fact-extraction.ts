@@ -136,6 +136,18 @@ const HEALTH_OR_DIETARY_MARKERS = factPatterns.healthOrDietaryMarkers
 // reference" phrasing (context-dependent — could be about anything transient). Deliberately a
 // narrow subset, not all of FACT_MARKERS, so /new keeps clearing everything that isn't clearly
 // meant to persist.
+// batch (re-probing conv380/h8): batch 23's FACT_MARKERS widening of "my name is" to
+// "my(?:\s+\w+(?:'s)?){0,3}\s+name is" (so "my full legal name is Jordan" is captured at all) was
+// never mirrored here, so that same statement matched FACT_MARKERS but not this stricter,
+// zero-gap "my name is" literal — isDurable() returned false and the name was recorded as a
+// session-only fact, silently dropped by /new. Found via live testing: /memory correctly showed
+// "My full legal name is Jordan Ellis Whitfield." right after stating it, but "What's my name?"
+// after /new got "I don't have your name" — the plain-adjacency control case ("My name is
+// Jordan.") survived /new correctly, isolating the gap to this marker specifically. Widened with
+// a plain \w+ gap (deliberately NOT the `(?:'s)?` suffix FACT_MARKERS' own gap allows) so this
+// still excludes "my dog's name is"/"my good friend's name is" — a possessive-noun gap word can't
+// match a bare \w+ token (the apostrophe breaks it), so those keep falling through to the
+// non-durable FACT_MARKERS-only path, unchanged from before this fix.
 // Compiled from fact-markers.json's "en".durableNameOrPreferenceMarkers.
 const DURABLE_NAME_OR_PREFERENCE_MARKERS = factPatterns.durableNameOrPreferenceMarkers
 
