@@ -285,6 +285,15 @@ export class ClaudeCliLLMClient implements ILLMClient {
   }
 
   /** Diffs .pending-actions/ against the call's start time to detect a write or shell command the MCP server staged during this subprocess call. */
+  /**
+   * When the MCP server staged more than one action this call (e.g. "run X AND write Y" —
+   * see file-tools-mcp-server.mjs's stagePendingAction doc comment), every one of them lands
+   * in `.pending-actions/` with an mtime after `startTimeMs`, in `readdir`-arbitrary order —
+   * not necessarily staging order. Must return the *chain head* (earliest `stagedAt`)
+   * specifically, since resolvePendingAction (assistant.ts) walks `nextPendingActionId`
+   * forward from whichever record it's handed; returning a later link here would surface the
+   * chain out of order and orphan the earlier, still-unresolved action.
+   */
   private async findPendingActionStagedSince(workspaceRoot: string, startTimeMs: number): Promise<PendingActionRecord | undefined> {
     const dir = `${workspaceRoot}/.pending-actions`
     let names: string[]
@@ -293,6 +302,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     } catch {
       return undefined
     }
+    let earliest: PendingActionRecord | undefined
     for (const name of names) {
       if (!name.endsWith('.json')) continue
       const filePath = `${dir}/${name}`
@@ -300,8 +310,9 @@ export class ClaudeCliLLMClient implements ILLMClient {
       // Small buffer against filesystem mtime rounding (e.g. 1s resolution on some
       // filesystems) being coarser than Date.now()'s precision.
       if (stats.mtimeMs < startTimeMs - 1000) continue
-      return JSON.parse(await readFile(filePath, 'utf-8')) as PendingActionRecord
+      const record = JSON.parse(await readFile(filePath, 'utf-8')) as PendingActionRecord
+      if (!earliest || record.stagedAt < earliest.stagedAt) earliest = record
     }
-    return undefined
+    return earliest
   }
 }

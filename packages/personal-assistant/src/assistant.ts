@@ -2443,6 +2443,10 @@ export class PersonalAssistant {
       await discardPendingAction(backend, workspaceRoot, pendingActionId)
       const reply = 'Cancelled — nothing was written or run.'
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+      if (record?.nextPendingActionId) {
+        const chained = await this.loadChainedApproval(backend, workspaceRoot, record.nextPendingActionId, reply)
+        if (chained) return chained
+      }
       return { status: 'ok', reply }
     }
 
@@ -2539,6 +2543,50 @@ export class PersonalAssistant {
     }
 
     await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent })
+    if (applied.nextPendingActionId) {
+      const chained = await this.loadChainedApproval(backend, workspaceRoot, applied.nextPendingActionId, reply)
+      if (chained) return chained
+    }
     return { status: 'ok', reply, usage }
+  }
+
+  /**
+   * After resolvePendingAction resolves one staged action (approved or declined), checks whether
+   * it was chained to a second approval-gated action staged from the same originating turn (see
+   * file-tools-mcp-server.mjs's stagePendingAction doc comment — e.g. a single "run X AND write
+   * Y" request). Without this, the second action sat in `.pending-actions/` forever: never
+   * surfaced for approval, never executed, never even mentioned as still pending — confirmed via
+   * a live re-probe (see the personal-assistant testing loop's "second staged action silently
+   * dropped" finding). `previousOutcome` (the reply text already computed for the just-resolved
+   * action) is folded into the next prompt's `reason` so cli.ts's recursive needs_approval →
+   * handleTurn flow reads as one continuous exchange rather than jumping straight to an
+   * unexplained second question. Returns undefined if the linked record is missing or of a kind
+   * that's never legitimately chained ('revert', staged only by /undo-action, alone) — a broken
+   * link must never crash the turn, just stop chaining and fall back to the caller's own
+   * `status: 'ok'`.
+   */
+  private async loadChainedApproval(
+    backend: FsBackend,
+    workspaceRoot: string,
+    nextPendingActionId: string,
+    previousOutcome: string,
+  ): Promise<AssistantTurnResult | undefined> {
+    const next = await loadPendingAction(backend, workspaceRoot, nextPendingActionId)
+    if (!next) return undefined
+    const reason =
+      next.kind === 'write'
+        ? `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${previewContent(next.content)}`
+        : next.kind === 'shell'
+          ? `${previousOutcome}\n\nNext, it also proposes running: ${next.command}\n  (cwd: ${next.cwd})`
+          : undefined
+    if (!reason) return undefined
+    return {
+      status: 'needs_approval',
+      reply: null,
+      reason,
+      riskLevel: 'HIGH',
+      pendingActionId: next.id,
+      pendingActionKind: next.kind,
+    }
   }
 }

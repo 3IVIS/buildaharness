@@ -195,7 +195,14 @@ export type PendingActionPayload =
    */
   | { kind: 'revert'; revertedEntryId: string; restore: { path: string; content: string }[]; remove: string[] }
 
-export type PendingActionRecord = { id: string; stagedAt: string } & PendingActionPayload
+/**
+ * `nextPendingActionId` chains a second (or later) approval-gated action staged from the same
+ * originating turn — e.g. the claude-cli MCP server (file-tools-mcp-server.mjs) links
+ * consecutive stagePendingAction calls within one `claude -p` subprocess this way, so
+ * resolvePendingAction (assistant.ts) can surface the next one as its own needs_approval instead
+ * of silently dropping it once the first resolves. Absent for a standalone staged action.
+ */
+export type PendingActionRecord = { id: string; stagedAt: string; nextPendingActionId?: string } & PendingActionPayload
 
 /** Result of actually running a previously staged shell command — see shell-executor.ts. */
 export interface ShellExecutionResult {

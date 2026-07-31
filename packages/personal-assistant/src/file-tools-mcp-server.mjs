@@ -151,12 +151,35 @@ function isEnoent(err) {
   return err?.code === 'ENOENT'
 }
 
+// Tracks the most recently staged action *within this MCP server process* (one process per
+// `claude -p` subprocess call, spawned fresh each turn by claude-cli-llm-client.ts — see that
+// file's doc comment — so this never leaks across turns/sessions). Claude Code's own agentic
+// loop can call write_file and run_shell_command as separate MCP tool invocations within one
+// turn (e.g. "run X AND write Y"); without linking them, claude-cli-llm-client.ts's
+// findPendingActionStagedSince only ever surfaced the first one it found, and the second sat in
+// .pending-actions/ forever, never approved or executed. Chaining via nextPendingActionId lets
+// resolvePendingAction (assistant.ts) surface the next staged action as its own needs_approval
+// once the current one resolves, instead of dropping it.
+let lastStagedIdThisProcess
+
 export async function stagePendingAction(workspaceRoot, payload) {
   const id = randomUUID()
   const record = { id, stagedAt: new Date().toISOString(), ...payload }
   const dir = `${workspaceRoot}/${PENDING_ACTIONS_DIR}`
   await mkdir(dir, { recursive: true })
   await writeFile(`${dir}/${id}.json`, JSON.stringify(record), 'utf-8')
+  if (lastStagedIdThisProcess) {
+    const prevPath = `${dir}/${lastStagedIdThisProcess}.json`
+    try {
+      const prevRecord = JSON.parse(await readFile(prevPath, 'utf-8'))
+      prevRecord.nextPendingActionId = id
+      await writeFile(prevPath, JSON.stringify(prevRecord), 'utf-8')
+    } catch {
+      // The earlier action was already resolved (approved/declined) and its file deleted
+      // before this one staged — nothing to link, this one just becomes its own chain head.
+    }
+  }
+  lastStagedIdThisProcess = id
   return { id }
 }
 
