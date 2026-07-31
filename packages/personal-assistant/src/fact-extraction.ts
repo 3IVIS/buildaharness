@@ -183,6 +183,10 @@ function isDurable(text: string): boolean {
 // Compiled from fact-markers.json's "en".nonClaimMarkers.
 const NON_CLAIM_MARKERS = factPatterns.nonClaimMarkers
 
+// Just the question-shaped half of NON_CLAIM_MARKERS (trailing "?" or a leading wh-word) — see
+// extractFactsFromTurn's FACT_MARKERS branch for why the full pattern isn't used there.
+const QUESTION_SHAPE = /\?\s*$|^(what|when|where|why|who|which|how)\b/i
+
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole
 // message let an unrelated trailing clause's "please"/"can you" suppress a genuine fact-bearing
@@ -217,9 +221,15 @@ function splitClauses(text: string): string[] {
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
   const trimmed = userMessage.trim()
   const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed) }]
-  // FACT_MARKERS' phrases are declarative by construction (unaffected by NON_CLAIM_MARKERS, as
-  // before this change) and matched against the whole message, not per clause.
-  if (testAny(FACT_MARKERS, trimmed)) return admit()
+  // FACT_MARKERS' phrases are declarative by construction and matched against the whole message,
+  // not per clause — but the widened "i (...) live in"/"i (...) work" gaps (0-4 words) mean the
+  // literal phrase can now appear inside a genuine question too ("What city do I live in now?"
+  // contains "I live in" verbatim), which used to be impossible when the phrases required an exact
+  // adjacent match. Guarded with just the question-shaped half of NON_CLAIM_MARKERS (trailing "?"
+  // or a leading wh-word) rather than the full pattern, since the request-verb half (please/can
+  // you/delete/...) would wrongly reject a legitimate compound "My name is X, could you also..."
+  // statement that FACT_MARKERS' whole-message (non-clause-split) matching still needs to admit.
+  if (testAny(FACT_MARKERS, trimmed) && !QUESTION_SHAPE.test(trimmed)) return admit()
   const isClaimClause = splitClauses(trimmed).some(
     (clause) => (looksLikeCodingFact(clause) || testAny(HEALTH_OR_DIETARY_MARKERS, clause)) && !testAny(NON_CLAIM_MARKERS, clause),
   )
