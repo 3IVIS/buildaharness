@@ -92,6 +92,23 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('What does missing.txt say?', 'turn:8')).toEqual([])
   })
 
+  it('does not capture a question whose leading wh-word is separated from a coding-domain word by an enumeration comma', () => {
+    // batch (re-probing conv178/h_fact178): CLAUSE_BOUNDARY splits on a comma before "and", so
+    // this single interrogative sentence used to fragment into "What do you remember about my
+    // repo, library" (correctly rejected — starts with "What") and "branch names" (no longer
+    // carries the sentence's leading wh-word, so it passed NON_CLAIM_MARKERS clean and matched
+    // looksLikeCodingFact via "branch") — the whole question got stored verbatim as a UserFact.
+    // Confirmed live via the CLI before this fix.
+    expect(extractFactsFromTurn('What do you remember about my repo, library, and branch names?', 'turn:8g')).toEqual([])
+  })
+
+  it('still captures a genuine coding fact in a sentence that follows an unrelated question in the same message', () => {
+    // Guards the sentence-level question pre-check above from over-widening: only the sentence
+    // that itself reads as a question should be skipped, not the whole message.
+    const facts = extractFactsFromTurn("What's the status of the build? My repo is called buildaharness.", 'turn:8h')
+    expect(facts).toHaveLength(1)
+  })
+
   it('captures a personal-fact statement using the plural form of a CODING_FACT_MARKERS word', () => {
     // batch 10 re-probe (conv166/h12): "package" only matched the singular form — the plural
     // "packages" was silently dropped entirely (not admitted as a fact at all), which is how a

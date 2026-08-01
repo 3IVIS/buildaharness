@@ -187,6 +187,22 @@ const NON_CLAIM_MARKERS = factPatterns.nonClaimMarkers
 // extractFactsFromTurn's FACT_MARKERS branch for why the full pattern isn't used there.
 const QUESTION_SHAPE = /\?\s*$|^(what|when|where|why|who|which|how)\b/i
 
+// batch (re-probing conv178/h_fact178): CLAUSE_BOUNDARY's comma-before-conjunction split can
+// fragment a single interrogative sentence into sub-clauses, separating the leading wh-word from
+// a later, comma-enumerated coding-fact-shaped noun — "What do you remember about my repo,
+// library, and branch names?" splits (at the ", and" boundary) into "What do you remember about
+// my repo, library" and "branch names". The first sub-clause correctly matches QUESTION_SHAPE and
+// is rejected, but the second no longer carries the sentence's leading "What", passes
+// NON_CLAIM_MARKERS clean, and matches looksLikeCodingFact via "branch" — so the whole original
+// question got stored verbatim as a UserFact (confirmed live). Splitting on sentence-ending
+// punctuation first and skipping any whole sentence that itself reads as a question (before
+// CLAUSE_BOUNDARY's finer comma-conjunction split ever fragments it) keeps the wh-word's scope
+// tied to the sentence it actually belongs to. Deliberately a plain ASCII sentence-end, not
+// sourced from CLAUSE_BOUNDARY's per-language JSON, for the same reason QUESTION_SHAPE itself
+// isn't: this pre-check only makes sense paired with QUESTION_SHAPE's own already-English-only
+// anchors, so scoping it the same way avoids a mismatched half-fix for zh.
+const SENTENCE_END = /[.!?;]+/
+
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole
 // message let an unrelated trailing clause's "please"/"can you" suppress a genuine fact-bearing
@@ -230,8 +246,9 @@ export function extractFactsFromTurn(userMessage: string, sourceTurn: string): U
   // you/delete/...) would wrongly reject a legitimate compound "My name is X, could you also..."
   // statement that FACT_MARKERS' whole-message (non-clause-split) matching still needs to admit.
   if (testAny(FACT_MARKERS, trimmed) && !QUESTION_SHAPE.test(trimmed)) return admit()
-  const isClaimClause = splitClauses(trimmed).some(
-    (clause) => (looksLikeCodingFact(clause) || testAny(HEALTH_OR_DIETARY_MARKERS, clause)) && !testAny(NON_CLAIM_MARKERS, clause),
-  )
+  const isClaimClause = splitOnAny([SENTENCE_END], trimmed)
+    .filter((sentence) => !QUESTION_SHAPE.test(sentence))
+    .flatMap((sentence) => splitClauses(sentence))
+    .some((clause) => (looksLikeCodingFact(clause) || testAny(HEALTH_OR_DIETARY_MARKERS, clause)) && !testAny(NON_CLAIM_MARKERS, clause))
   return isClaimClause ? admit() : []
 }
