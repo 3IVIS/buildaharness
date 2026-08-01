@@ -248,6 +248,16 @@ describe('classifyRisk', () => {
     expect(result.riskLevel).not.toBe('HIGH')
   })
 
+  it('does not flag reported third-party speech using a simple-past "was/were going to" continuation', () => {
+    // h9 (re-probing conv565's h3): the future/conditional continuation only covered present-tense
+    // "is going to" — simple past ("was/were going to") reports the same third-party plan and was
+    // silently falling through to bare highRiskPatterns.
+    const result = classifyRisk('My coworker mentioned that she was going to delete the shared drive folder if nobody backed it up, but that never happened.')
+    expect(result.riskLevel).not.toBe('HIGH')
+    const result2 = classifyRisk("My neighbors warned that they were going to cancel our shared streaming subscription, but they never did.")
+    expect(result2.riskLevel).not.toBe('HIGH')
+  })
+
   it('flags a plural "set reminders for X, Y, and Z" bulk request instead of falling through as LOW', () => {
     // h6: REMINDER_PATTERN's fixed phrase list originally only matched the singular "set a
     // reminder" — the plural phrasing never matched at all, skipping both ordinary MEDIUM

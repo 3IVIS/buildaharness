@@ -64,7 +64,7 @@
     "bulkReminderReason": "creates a calendar or reminder entry and looks like it may create more than one in a single turn — confirm before proceeding",
     "pastTenseQuestion": "^\\s*(did|was|were|has|have|does|do|is|are)\\b.*\\?\\s*$",
     "firstPersonPastNarrative": "\\bi (?:had to|already|needed to|decided to|chose to|wanted to)\\b",
-    "reportedThirdPartySpeech": "\\b(said|told me|mentioned|warned|threatened)\\b.{0,30}\\b(he|she|they|it)\\b\\s*(?:'ll|will|would|might|could|is (?:going|planning) to|plans to|intends to|wants to)\\b",
+    "reportedThirdPartySpeech": "\\b(said|told me|mentioned|warned|threatened)\\b.{0,30}\\b(he|she|they|it)\\b\\s*(?:'ll|will|would|might|could|(?:is|was|were) (?:going|planning) to|plans to|intends to|wants to)\\b",
     "riskClauseBoundary": ",\\s*(?:so|but|yet|and|because|although|while|whereas)\\b|;\\s*"
   },
   "zh": {

@@ -442,6 +442,22 @@ const risk = getRiskPatterns()
 // suppress HIGH-risk gating for the live, different second request too. A semicolon is
 // unambiguously a clause boundary in ordinary prose (unlike a bare comma, which needs the
 // conjunction check to avoid over-splitting), so it's split on unconditionally.
+//
+// h9 (re-probing conv565's h3): reportedThirdPartySpeech's future/conditional continuation only
+// covered the present-tense "is (going|planning) to" — a third party's plan reported in simple
+// past ("she was going to delete the shared drive folder") never matched at all, since "was"/
+// "were" weren't in the auxiliary alternation. Widened to "(?:is|was|were) (?:going|planning) to"
+// for the same reason "plans to"/"intends to"/"wants to" were added: reported speech about a
+// third party's plan doesn't stop being reported speech just because the reporting verb and the
+// plan itself are both in past tense. NOTE: as of the consolidated classifier refactor
+// (turn-intent-classifier.ts), classifyRisk/this pattern is no longer the live gate for an
+// ordinary chat turn — assistant.ts's runTurn calls the LLM-backed classifyTurnIntent instead,
+// which has its own prompt instruction covering "reported as a third party's action" independent
+// of this regex. classifyRisk survives only as fallbackRiskLevel's per-task fallback for a
+// persisted plan whose steps predate per-task riskLevel (assistant.ts:313) — a real but narrow
+// legacy path. This fix is still worth making (matches every other widening in this file, and
+// still exercised by that legacy fallback + this file's own unit tests), but doesn't change live
+// conversational behavior for the scenario that originally motivated it.
 
 function splitRiskClauses(message: string): string[] {
   return splitOnAny(risk.riskClauseBoundary, message)
