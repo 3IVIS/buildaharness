@@ -695,7 +695,41 @@ export class PersonalAssistant {
   // unrelated hobby or pet. Keyed by sessionId (cleared in clearSession, i.e. `/new`) and by the
   // sorted statement texts involved (not belief ids, which are reassigned each turn's fresh
   // WorldModel) — see the contradictionChecker wrapper in runTurn for where this is populated.
+  //
+  // batch 76 (h2, re-probing conv493): this in-process cache alone is not enough — every entry
+  // in it is lost on process restart (crash or the ordinary `restart_before` scenario), even
+  // though the underlying persisted facts that produced the original notice are untouched. Since
+  // the lexical Contradiction layer rebuilds its WorldModel fresh from all persisted facts on
+  // every non-trivial turn, a stale, already-acknowledged conflict from days/turns ago gets
+  // rediscovered and re-notified as if brand new on the very first non-trivial turn after any
+  // restart — found via live testing (conv493's own long-form session, and reproduced again in a
+  // dedicated 3x-restart_before session: the identical notice fired after unrelated statements
+  // about a favorite language, a sibling's name, and an allergy, none of which had anything to do
+  // with the actual stale conflict). getNotifiedContradictions/recordNotifiedContradiction below
+  // mirror this in-memory Map into `this.memory` (the same durable store used for
+  // spend/transcript/fact state elsewhere in this file) so the dedup itself survives a restart;
+  // `/new` still clears it via clearSession, same as before.
   private readonly notifiedContradictions = new Map<string, Set<string>>()
+
+  private static notifiedContradictionsKey(sessionId: string): string {
+    return `notified-contradictions:${sessionId}`
+  }
+
+  private async getNotifiedContradictions(sessionId: string): Promise<Set<string>> {
+    const cached = this.notifiedContradictions.get(sessionId)
+    if (cached) return cached
+    const persisted = ((await this.memory.get(
+      PersonalAssistant.notifiedContradictionsKey(sessionId),
+    )) as string[] | undefined) ?? []
+    const seen = new Set(persisted)
+    this.notifiedContradictions.set(sessionId, seen)
+    return seen
+  }
+
+  private async recordNotifiedContradiction(sessionId: string, seen: Set<string>, value: string): Promise<void> {
+    seen.add(value)
+    await this.memory.set(PersonalAssistant.notifiedContradictionsKey(sessionId), [...seen])
+  }
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -960,6 +994,7 @@ export class PersonalAssistant {
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
     await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)
+    await this.memory.delete(PersonalAssistant.notifiedContradictionsKey(sessionId))
     const backend = this.fileTools?.backend ?? this.shellTools?.backend
     const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
     if (backend && workspaceRoot) {
@@ -1010,13 +1045,12 @@ export class PersonalAssistant {
    * lexical Contradiction layer re-fires the identical notice on every subsequent non-trivial
    * turn, since the WorldModel it runs against is rebuilt fresh (re-seeded from all known facts)
    * each turn with no memory of its own that this exact conflict was already surfaced. */
-  private dedupedContradictionNotice(sessionId: string, layerActivity: LayerActivityEvent[]): string | undefined {
+  private async dedupedContradictionNotice(sessionId: string, layerActivity: LayerActivityEvent[]): Promise<string | undefined> {
     const notice = findContradictionNotice(layerActivity)
     if (!notice) return undefined
-    const seen = this.notifiedContradictions.get(sessionId) ?? new Set<string>()
-    this.notifiedContradictions.set(sessionId, seen)
+    const seen = await this.getNotifiedContradictions(sessionId)
     if (seen.has(notice)) return undefined
-    seen.add(notice)
+    await this.recordNotifiedContradiction(sessionId, seen, notice)
     return notice
   }
 
@@ -1548,14 +1582,15 @@ export class PersonalAssistant {
         contradictionChecker: async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
           const results = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model, accumulateUsage)
           const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
-          const seen = this.notifiedContradictions.get(sessionId) ?? new Set<string>()
-          this.notifiedContradictions.set(sessionId, seen)
-          return results.filter((c) => {
-            const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
-            if (seen.has(signature)) return false
-            seen.add(signature)
-            return true
-          })
+          const seen = await this.getNotifiedContradictions(sessionId)
+          const filtered: typeof results = []
+          for (const c of results) {
+            const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
+            if (seen.has(signature)) continue
+            await this.recordNotifiedContradiction(sessionId, seen, signature)
+            filtered.push(c)
+          }
+          return filtered
         },
         // Layered on top of review-proposed-change.ts's lexical isNegation check — same
         // "skip when it reads like a coding fact" gate contradictionChecker uses, since that's
@@ -1674,7 +1709,7 @@ export class PersonalAssistant {
           // discarding the one they did.
           reply = draftReply.trim() ? `${draftReply}\n\n${pacingNote}` : pacingNote
         }
-        const contradictionNotice = this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
+        const contradictionNotice = await this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
         const trace: AssistantTrace = {
           nodeExecutionOrder: outcome.checkpoint.progress.nodeExecutionOrder,
@@ -1719,7 +1754,7 @@ export class PersonalAssistant {
       }
 
       const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
-      const contradictionNotice = this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
+      const contradictionNotice = await this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
       // Write the harness's resulting task statuses back onto the plan only on this
       // success path — an aborted/errored turn leaves the stored plan as-is, so a
