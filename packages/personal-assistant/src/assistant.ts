@@ -1247,7 +1247,20 @@ export class PersonalAssistant {
     const factsBlock = facts.length > 0
       ? `\nKnown facts about the user:\n${facts.slice(-FACT_CAP).map(f => `- ${f.text}`).join('\n')}`
       : ''
-    const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}`
+    // reminderStore is cross-session durable (clearSession() never touches it, same tier as
+    // DURABLE_FACTS_KEY — see clearSession's own doc comment) but, unlike facts, was never
+    // actually surfaced into context: a plain conversational question about a previously-created
+    // reminder ("did I mention X earlier?") got no grounding unless the model happened to call
+    // list_reminders itself — found via live testing (a fresh /new session flatly denied any
+    // record of a reminder created in the prior session, and separately claimed "I don't have
+    // access to other conversations" in the same reply that a durable *fact* from that same prior
+    // session correctly informed). Only undone reminders: a completed one is no longer something
+    // the user would expect the assistant to "remember" as pending.
+    const activeReminders = (await this.reminderStore.list()).filter(r => !r.done)
+    const remindersBlock = activeReminders.length > 0
+      ? `\nExisting reminders:\n${activeReminders.slice(-FACT_CAP).map(r => `- ${r.rawText}`).join('\n')}`
+      : ''
+    const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
 
     // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
     // internal bookkeeping — it never touches anything outside this session's own plan state,

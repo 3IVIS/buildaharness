@@ -398,6 +398,35 @@ describe('PersonalAssistant', () => {
     expect(secondCallSystemMessage?.content).toContain('My name is Ali.')
   })
 
+  it('injects existing reminders into the system prompt so a plain conversational question about one can be answered without a tool call', async () => {
+    // Found via live testing: reminderStore is cross-session durable (clearSession() never
+    // touches it, same tier as durable facts), but before this fix it was never surfaced into
+    // context — a fresh /new session asked about a reminder created in a prior session got a
+    // flat "I don't have any record" because the model had no grounding unless it happened to
+    // call list_reminders itself.
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'reminders-in-prompt-test' }))
+    await reminderStore.create('Dentist appointment reminder for Monday', null)
+    const llm = new FakeLLMClient('You have a dentist reminder for Monday.')
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+
+    await assistant.turn('Did I mention a dentist appointment earlier?', { sessionId: 'reminders-test' })
+
+    const systemMessage = llm.receivedMessages[0].find(m => m.role === 'system')
+    expect(systemMessage?.content).toContain('Existing reminders:')
+    expect(systemMessage?.content).toContain('Dentist appointment reminder for Monday')
+  })
+
+  it('omits the reminders block from the system prompt when there are no reminders, or when every reminder is done', async () => {
+    const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'reminders-in-prompt-empty-test' }))
+    const llm = new FakeLLMClient('Sure.')
+    const assistant = new PersonalAssistant({ llmClient: llm, reminderStore })
+
+    await assistant.turn('Hi there.', { sessionId: 'reminders-empty-test' })
+
+    const systemMessage = llm.receivedMessages[0].find(m => m.role === 'system')
+    expect(systemMessage?.content).not.toContain('Existing reminders:')
+  })
+
   it('instructs the model to resolve backreferences to its own earlier replies from context, not a tool call', async () => {
     // 459fe20: the claude-cli backend was invoking file tools to "look up" things it had already
     // said earlier in the conversation (e.g. a prior suggestions list), landing on unrelated
