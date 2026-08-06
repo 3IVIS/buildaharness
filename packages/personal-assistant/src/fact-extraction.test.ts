@@ -125,6 +125,17 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('Actually I stopped squashing commits a while back, our team keeps full history now.', 'turn:8d')).toHaveLength(1)
   })
 
+  it('captures a personal-fact statement using the remaining plural CODING_FACT_MARKERS gaps (build/deployment/status)', () => {
+    // Batches 21-24 kept re-discovering this same class of gap one noun at a time (api/pipeline,
+    // then repository, then another adjacent one) instead of auditing the whole word list once —
+    // see the 2026-08-06 test-loop coverage review. These three were the remaining singular-only
+    // nouns in the list, closed in one pass rather than waiting for three more conversations to
+    // rediscover them individually.
+    expect(extractFactsFromTurn('Our nightly builds have been flaky all week.', 'turn:8i')).toHaveLength(1)
+    expect(extractFactsFromTurn('I stopped tracking our deployments manually, it is all automated now.', 'turn:8j')).toHaveLength(1)
+    expect(extractFactsFromTurn('I check the statuses of every service before I go to bed.', 'turn:8k')).toHaveLength(1)
+  })
+
   it('does not reject a first-person declarative statement that happens to use a NON_CLAIM_MARKERS action verb', () => {
     // batch 19: found while investigating conv178's re-probe — "I always run a backup script
     // before touching the server." was silently dropped entirely, because bare "run" tripped
