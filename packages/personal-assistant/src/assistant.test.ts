@@ -1155,6 +1155,41 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('original content')
   })
 
+  // A compound "write X and run Y" turn chains two staged actions (see file-tools-mcp-server.mjs's
+  // stagePendingAction doc comment) via nextPendingActionId/chainedFrom. Before this fix,
+  // resolvePendingAction's decline branch always replied "Cancelled — nothing was written or run"
+  // even when the first, already-approved action in the chain had genuinely already run — found
+  // live via a compound-turn conversation where the write had already applied ("Wrote todo.txt")
+  // before the chained shell-command approval was declined, yet the decline reply still falsely
+  // claimed nothing was written.
+  it('declining the second half of a chained approval does not falsely claim nothing was written when the first half already applied', async () => {
+    const backend = makeFakeBackend()
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'todo.txt', content: 'buy milk' })
+    const { id: shellId } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'node --version', cwd: ROOT })
+    // Manually link the two records the way file-tools-mcp-server.mjs's stagePendingAction does
+    // when a second action is staged within the same process (file-tools.ts's own
+    // stagePendingAction, used above, has no chaining of its own — see its doc comment).
+    const writeRecord = await loadPendingAction(backend, ROOT, writeId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${writeId}.json`, JSON.stringify({ ...writeRecord, nextPendingActionId: shellId }))
+    const shellRecord = await loadPendingAction(backend, ROOT, shellId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${shellId}.json`, JSON.stringify({ ...shellRecord, chainedFrom: true }))
+
+    const assistant = new PersonalAssistant({ llmClient: scriptedResponses([]), fileTools: { backend, workspaceRoot: ROOT } })
+
+    const applied = await assistant.turn('irrelevant', { approved: true, pendingActionId: writeId })
+    expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
+    expect(applied.status).toBe('needs_approval')
+    expect(applied.pendingActionId).toBe(shellId)
+
+    const declined = await assistant.turn('irrelevant', { approved: false, pendingActionId: shellId })
+    expect(declined.status).toBe('ok')
+    expect(declined.reply).toBe('Cancelled — that additional action was not run.')
+    expect(declined.reply).not.toContain('nothing was written or run')
+    // The write from the first half of the chain must still be on disk — declining only the
+    // second half must never be misread as having undone the first.
+    expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
+  })
+
   // T7: a revert is exactly as consequential as the action it undoes, so it must go through the
   // same explicit approval step — declining one must leave the workspace untouched and the
   // undo-log entry available for a later attempt, same as declining any other staged action.

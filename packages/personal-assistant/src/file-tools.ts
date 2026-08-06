@@ -201,8 +201,14 @@ export type PendingActionPayload =
  * consecutive stagePendingAction calls within one `claude -p` subprocess this way, so
  * resolvePendingAction (assistant.ts) can surface the next one as its own needs_approval instead
  * of silently dropping it once the first resolves. Absent for a standalone staged action.
+ *
+ * `chainedFrom` marks a record as itself being the *target* of such a chain — i.e. a preceding
+ * action from the same turn was already resolved (approved-and-applied, or declined) before this
+ * one was ever shown for approval. resolvePendingAction's decline branch (assistant.ts) uses this
+ * to avoid claiming "nothing was written or run" when something from earlier in the same chain
+ * may already have been.
  */
-export type PendingActionRecord = { id: string; stagedAt: string; nextPendingActionId?: string } & PendingActionPayload
+export type PendingActionRecord = { id: string; stagedAt: string; nextPendingActionId?: string; chainedFrom?: boolean } & PendingActionPayload
 
 /** Result of actually running a previously staged shell command — see shell-executor.ts. */
 export interface ShellExecutionResult {

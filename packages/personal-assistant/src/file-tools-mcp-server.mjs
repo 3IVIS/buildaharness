@@ -164,21 +164,26 @@ let lastStagedIdThisProcess
 
 export async function stagePendingAction(workspaceRoot, payload) {
   const id = randomUUID()
-  const record = { id, stagedAt: new Date().toISOString(), ...payload }
   const dir = `${workspaceRoot}/${PENDING_ACTIONS_DIR}`
   await mkdir(dir, { recursive: true })
-  await writeFile(`${dir}/${id}.json`, JSON.stringify(record), 'utf-8')
+  let chainedFrom = false
   if (lastStagedIdThisProcess) {
     const prevPath = `${dir}/${lastStagedIdThisProcess}.json`
     try {
       const prevRecord = JSON.parse(await readFile(prevPath, 'utf-8'))
       prevRecord.nextPendingActionId = id
       await writeFile(prevPath, JSON.stringify(prevRecord), 'utf-8')
+      // Only mark this record as chained if the link-back actually succeeded — if the earlier
+      // action's file is already gone (resolved before this one staged), this one is its own
+      // chain head and resolvePendingAction's decline message should describe it as such.
+      chainedFrom = true
     } catch {
       // The earlier action was already resolved (approved/declined) and its file deleted
       // before this one staged — nothing to link, this one just becomes its own chain head.
     }
   }
+  const record = { id, stagedAt: new Date().toISOString(), ...(chainedFrom ? { chainedFrom: true } : {}), ...payload }
+  await writeFile(`${dir}/${id}.json`, JSON.stringify(record), 'utf-8')
   lastStagedIdThisProcess = id
   return { id }
 }
@@ -694,6 +699,17 @@ async function selfTest() {
     const { id: shellId } = await stagePendingAction(dir, { kind: 'shell', command: 'echo hi', cwd: dir })
     const stagedShell = JSON.parse(await readFile(`${dir}/${PENDING_ACTIONS_DIR}/${shellId}.json`, 'utf-8'))
     if (stagedShell.command !== 'echo hi' || stagedShell.kind !== 'shell') throw new Error('staged shell record missing expected command')
+    // Chaining: staging a second action within the same process must link the first record
+    // forward (nextPendingActionId) and mark the second as chainedFrom — resolvePendingAction's
+    // decline branch (assistant.ts) relies on chainedFrom to avoid claiming "nothing was written
+    // or run" when a preceding chained action already applied.
+    const stagedWriteAfterChain = JSON.parse(await readFile(`${dir}/${PENDING_ACTIONS_DIR}/${id}.json`, 'utf-8'))
+    if (stagedWriteAfterChain.nextPendingActionId !== shellId) {
+      throw new Error('first staged action should be linked to the second via nextPendingActionId')
+    }
+    if (stagedShell.chainedFrom !== true) {
+      throw new Error('second staged action in a chain should be marked chainedFrom: true')
+    }
 
     const wrapped = wrapUntrusted('hello page')
     if (wrapped !== '<untrusted_external_content>\nhello page\n</untrusted_external_content>') {

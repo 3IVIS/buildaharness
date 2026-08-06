@@ -2502,7 +2502,11 @@ export class PersonalAssistant {
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: `/undo-action ${record.revertedEntryId}` })
       }
       await discardPendingAction(backend, workspaceRoot, pendingActionId)
-      const reply = 'Cancelled — nothing was written or run.'
+      // A chained (non-first) action from a multi-action turn may be declined after an earlier
+      // action in the same chain already ran (see PendingActionRecord.chainedFrom's doc comment)
+      // — claiming "nothing was written or run" in that case is simply false, so scope the claim
+      // to just this action instead.
+      const reply = record?.chainedFrom ? 'Cancelled — that additional action was not run.' : 'Cancelled — nothing was written or run.'
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
       if (record?.nextPendingActionId) {
         const chained = await this.loadChainedApproval(backend, workspaceRoot, record.nextPendingActionId, reply)
