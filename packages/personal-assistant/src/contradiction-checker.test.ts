@@ -42,11 +42,32 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('I never bother backing up my repos anymore, it\'s not worth the hassle.')).toBe(true)
   })
 
+  it('flags "repositories" the same way it already flags "repo"/"repos"/"repository"', () => {
+    // batch 88 (h6/convC): "repos?|repository" widened "repository" to accept a plural "repos"
+    // sibling, but a bare \brepository\b still can't match inside the longer word "repositories"
+    // (the boundary right after "repository" fails since the word continues with "ies") —
+    // "...cataloguing all our repositories..." never looksLikeCodingFact before this fix.
+    expect(looksLikeCodingFact('I never bother cataloguing our repositories anymore, it\'s not worth the hassle.')).toBe(true)
+  })
+
   it('flags the plural "branches" the same way it already flags singular "branch"', () => {
     // batch 12 re-probe (conv198/h12): same gap as "repo"/"repos", confirmed live for "branch" —
     // "...rebasing branches..." never looksLikeCodingFact, so the contradicting statement was
     // dropped before the belief graph ever saw it.
     expect(looksLikeCodingFact('I never bother squashing or rebasing branches anymore, it\'s not worth the hassle.')).toBe(true)
+  })
+
+  it('flags the plural "APIs" the same way it already flags singular "API"', () => {
+    // batch 86 (h2): bare \bapi\b had no optional trailing "s", unlike package(s)/repo(s)/
+    // branch(es)/library(ies) which were already widened — "Our new APIs are versioned
+    // separately from the old ones now." never looksLikeCodingFact before this fix.
+    expect(looksLikeCodingFact('Our new APIs are versioned separately from the old ones now.')).toBe(true)
+  })
+
+  it('flags the plural "pipelines" the same way it already flags singular "pipeline"', () => {
+    // batch 86 (h2): same singular-only gap as "api"/"apis" — "All three pipelines are green
+    // right now." never looksLikeCodingFact before this fix.
+    expect(looksLikeCodingFact('All three pipelines are green right now.')).toBe(true)
   })
 
   it('flags the plural "libraries" the same way it already flags singular "library"', () => {

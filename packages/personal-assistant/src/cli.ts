@@ -808,7 +808,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
       // crash the REPL via an unhandled rejection — just report it and keep going.
       clearProgress()
-      const { message: errorMessage, retryable } = classifyError(err)
+      const { message: errorMessage, retryable } = classifyError(err, config.llmBackend)
       console.log(`\n[error] ${errorMessage}${retryable ? ' Type the message again to retry.' : ''}\n`)
     }
   }

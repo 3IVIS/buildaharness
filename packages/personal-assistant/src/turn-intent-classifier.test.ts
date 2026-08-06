@@ -174,6 +174,50 @@ describe('classifyTurnIntent — happy path field derivation', () => {
     ])
   })
 
+  it('drops a dangling depends_on reference to a task id that was never actually returned, instead of passing a broken graph through', async () => {
+    // Shape mirrors the live failure (convB, batch 93): task "3" depends on task "2", but "2"
+    // was never emitted. Left unfiltered, this would reach HarnessRuntime.run()'s initialTasks
+    // and throw InvalidTaskGraphError ("Task \"3\" depends on unknown task \"2\"") deep inside
+    // the harness, crashing the whole turn after the draft reply had already been shown.
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        decomposedTasks: [
+          { id: '1', description: "today's date: look it up", depends_on: [], riskLevel: 'LOW' },
+          { id: '3', description: "'quick': give a one-word synonym", depends_on: ['2'], riskLevel: 'LOW' },
+        ],
+      }),
+    )
+
+    const result = await classifyTurnIntent('First look up the date, then give a synonym for quick.', llm, NO_PLAN)
+
+    expect(result.decomposedTasks).toEqual([
+      { id: '1', description: "today's date: look it up", depends_on: [], riskLevel: 'LOW' },
+      { id: '3', description: "'quick': give a one-word synonym", depends_on: [], riskLevel: 'LOW' },
+    ])
+  })
+
+  it('drops a depends_on reference left dangling by isDecomposedTaskSpec filtering out its malformed target', async () => {
+    // step-2 legitimately depends on step-1, but step-1 itself is malformed (no riskLevel) and
+    // gets filtered out by isDecomposedTaskSpec — leaving step-2's depends_on pointing at an id
+    // that no longer exists in the returned array at all.
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        decomposedTasks: [
+          { id: 'step-1', description: 'Book the flight', depends_on: [] }, // malformed — no riskLevel, gets filtered
+          { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'], riskLevel: 'MEDIUM' },
+          { id: 'step-3', description: 'Rent a car', depends_on: ['step-2'], riskLevel: 'MEDIUM' },
+        ],
+      }),
+    )
+
+    const result = await classifyTurnIntent('First book my flight, then a hotel, then a car.', llm, NO_PLAN)
+
+    expect(result.decomposedTasks).toEqual([
+      { id: 'step-2', description: 'Book the hotel', depends_on: [], riskLevel: 'MEDIUM' },
+      { id: 'step-3', description: 'Rent a car', depends_on: ['step-2'], riskLevel: 'MEDIUM' },
+    ])
+  })
+
   it('gives each decomposed task its own riskLevel, not a broadcast of the overall turn-level riskLevel', async () => {
     // A compound request mixing a LOW step and a HIGH step — the point of per-task riskLevel is
     // that these don't have to match each other or the overall classification.riskLevel.

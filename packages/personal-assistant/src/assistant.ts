@@ -220,12 +220,16 @@ function mergeFacts(durableFacts: UserFact[], sessionFacts: UserFact[]): UserFac
 // but still-useful notice instead of ever showing leaked internals.
 const RAW_BELIEF_ID_PATTERN = /\b(?:fact|belief)-[\w-]+-\d+(?:-\d+)?\b/
 
+// Exported as its own constant (not just an inline literal in findContradictionNotice) so
+// dedupedContradictionNotice can recognize this exact fallback and treat it specially — see its
+// doc comment for why a content-free repeat of this one is suppressed once anything's already
+// been shown, even though it isn't textually identical to a prior, more specific notice.
+const GENERIC_CONTRADICTION_NOTICE = 'Heads up — this seems to conflict with something you told me earlier.'
+
 function findContradictionNotice(layerActivity: LayerActivityEvent[]): string | undefined {
   const reason = layerActivity.find((e) => e.layer === 'contradiction' && e.fired)?.reason
   if (reason === undefined) return undefined
-  return RAW_BELIEF_ID_PATTERN.test(reason)
-    ? 'Heads up — this seems to conflict with something you told me earlier.'
-    : reason
+  return RAW_BELIEF_ID_PATTERN.test(reason) ? GENERIC_CONTRADICTION_NOTICE : reason
 }
 
 // batch 10 coverage (conv166): notifiedContradictions (see its own doc comment above) was wired
@@ -1050,6 +1054,15 @@ export class PersonalAssistant {
     if (!notice) return undefined
     const seen = await this.getNotifiedContradictions(sessionId)
     if (seen.has(notice)) return undefined
+    // The generic fallback (used when the raw reason leaked belief ids — see
+    // findContradictionNotice) carries no information beyond "something conflicts", so exact-text
+    // dedup alone doesn't catch it: found via live testing (conv3), the SAME still-unresolved
+    // job-title conflict was already surfaced with full detail two turns earlier, then re-surfaced
+    // here purely because this turn's underlying reason happened to render in the raw-id shape
+    // instead — a different string, so `seen.has(notice)` above missed it. Once the user has
+    // already seen ANY contradiction notice this session, a content-free repeat of this one adds
+    // nothing, so it's suppressed rather than recorded/shown.
+    if (notice === GENERIC_CONTRADICTION_NOTICE && seen.size > 0) return undefined
     await this.recordNotifiedContradiction(sessionId, seen, notice)
     return notice
   }

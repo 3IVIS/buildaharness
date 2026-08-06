@@ -50,6 +50,28 @@ describe('executeWebTool', () => {
   it('throws for an unknown tool name', async () => {
     await expect(executeWebTool(makeCtx(), 'not_a_tool', {})).rejects.toThrow('Unknown web tool')
   })
+
+  it('fetch_url truncates a large page instead of returning it whole', async () => {
+    const bigBody = 'x'.repeat(20_000)
+    const ctx = makeCtx({
+      fetchImpl: (async () => textResponse(bigBody)) as typeof fetch,
+      dns: fakeDns({ 'example.com': ['93.184.216.34'] }),
+    })
+
+    const result = await executeWebTool(ctx, 'fetch_url', { url: 'https://example.com' })
+    expect(result.text.length).toBeLessThan(20_000)
+    expect(result.text).toContain('truncated')
+  })
+
+  it('fetch_url returns a small page untruncated', async () => {
+    const ctx = makeCtx({
+      fetchImpl: (async () => textResponse('short page')) as typeof fetch,
+      dns: fakeDns({ 'example.com': ['93.184.216.34'] }),
+    })
+
+    const result = await executeWebTool(ctx, 'fetch_url', { url: 'https://example.com' })
+    expect(result.text).toBe('short page')
+  })
 })
 
 describe('assertPublicHttpUrl (SSRF guard)', () => {

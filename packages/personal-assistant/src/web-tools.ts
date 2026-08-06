@@ -148,6 +148,21 @@ export type WebToolResult = { kind: 'text'; text: string }
 
 const MAX_REDIRECTS = 5
 
+// Real pages routinely run tens-to-hundreds of KB of raw HTML. On the claude-cli backend, a tool
+// result this large gets written by the `claude -p` subprocess itself to a temp file, and the model
+// falls back to proposing a `sed`/`grep` shell command to page through it — turning a read-only
+// "fetch and summarize a page" request into an unexplained shell-command approval prompt (found live:
+// fetching a real Wikipedia article did exactly this, and declining it — the only possible outcome in
+// a non-interactive/heredoc-driven turn — silently dropped the whole request with no indication a
+// fetch had even succeeded). Capping the returned text well below that threshold keeps fetch_url a
+// single-step, non-shell-gated tool call for the vast majority of real pages.
+const MAX_FETCH_CHARS = 15_000
+
+function truncateFetchedText(text: string): string {
+  if (text.length <= MAX_FETCH_CHARS) return text
+  return `${text.slice(0, MAX_FETCH_CHARS)}\n\n[... truncated at ${MAX_FETCH_CHARS} characters; the page is longer than shown here ...]`
+}
+
 /**
  * Fetches `url`, following redirects manually (not via fetch's automatic redirect-follow) so
  * every hop gets its own assertPublicHttpUrl check — a public URL that 302s to a private target
@@ -166,7 +181,7 @@ async function fetchUrlSafely(ctx: WebToolsContext, url: string): Promise<string
       currentUrl = new URL(location, currentUrl).toString()
       continue
     }
-    return response.text()
+    return truncateFetchedText(await response.text())
   }
   throw new Error(`Too many redirects while fetching "${url}"`)
 }

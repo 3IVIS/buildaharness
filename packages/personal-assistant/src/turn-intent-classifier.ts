@@ -184,6 +184,27 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
   )
 }
 
+/**
+ * Drops any `depends_on` reference that doesn't name another task actually present in this same
+ * decomposedTasks array — found live (convB, batch 93): the LLM returned a task "3" depending on
+ * task "2" while never actually emitting a task "2" (either it never generated one, or
+ * isDecomposedTaskSpec's shape filter just above dropped a malformed one that other tasks still
+ * referenced by id). Left unsanitized, that dangling reference reached HarnessRuntime.run()'s
+ * initialTasks unchanged, and validateTaskGraph (packages/harness) threw InvalidTaskGraphError —
+ * which crashed the ENTIRE turn's finalization (transcript write, fact recording, plan update)
+ * via assistant.ts's catch-and-rethrow, even though the draft reply had already been generated
+ * and streamed correctly to the user. The user saw a fully correct answer immediately followed by
+ * "Something went wrong ... Type the message again to retry", and nothing about that turn was
+ * actually persisted. Dropping the dangling id (rather than discarding the whole decomposition)
+ * is safe here specifically because every task in a decomposed turn executes against the same
+ * single draftReply (see assistant.ts's toolExecutors comment) — depends_on only shapes the
+ * harness's tracked task graph, not which content actually gets produced.
+ */
+function sanitizeDependsOn(tasks: DecomposedTaskSpec[]): DecomposedTaskSpec[] {
+  const knownIds = new Set(tasks.map((t) => t.id))
+  return tasks.map((t) => (t.depends_on.every((d) => knownIds.has(d)) ? t : { ...t, depends_on: t.depends_on.filter((d) => knownIds.has(d)) }))
+}
+
 function parseTurnIntent(content: string, context: TurnIntentContext): TurnIntentClassification | null {
   const parsed = JSON.parse(content) as RawTurnIntent
   if (parsed.riskLevel !== 'HIGH' && parsed.riskLevel !== 'MEDIUM' && parsed.riskLevel !== 'LOW') return null
@@ -195,7 +216,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
 
   const riskReason = typeof parsed.riskReason === 'string' && parsed.riskReason.trim() ? parsed.riskReason : `LLM classified this as ${parsed.riskLevel} risk.`
   const decomposedTasksRaw = Array.isArray(parsed.decomposedTasks) ? parsed.decomposedTasks.filter(isDecomposedTaskSpec) : []
-  const decomposedTasks = decomposedTasksRaw.length > 1 ? decomposedTasksRaw : null
+  const decomposedTasks = decomposedTasksRaw.length > 1 ? sanitizeDependsOn(decomposedTasksRaw) : null
 
   const isTrivial = parsed.riskLevel === 'LOW' && parsed.isTrivial
   const isBulkReminderRequest = parsed.isReminderRequest && parsed.isBulkReminderRequest

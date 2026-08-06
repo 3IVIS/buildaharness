@@ -2191,6 +2191,31 @@ describe('PersonalAssistant cross-turn belief seeding', () => {
     expect(fourth.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired)).toBe(true)
     expect(fourth.contradictionNotice).toBeDefined()
   })
+
+  it('suppresses a content-free generic repeat of an already-surfaced contradiction, even though its text differs from the original notice', async () => {
+    // Found via live testing (conv3): a job-title conflict was correctly surfaced once with full
+    // detail via the LLM-based checker ("... conflicting occupations"), then re-surfaced a turn
+    // later purely because the harness's always-on LEXICAL detector (a different code path,
+    // rebuilt fresh from the same still-unresolved facts every non-trivial turn) independently
+    // re-detected the identical conflict and happened to land last in that turn's
+    // worldModel.contradictions — its raw-id-shaped reason ('Pairwise contradiction between
+    // "fact-..." and "fact-...") gets sanitized to GENERIC_CONTRADICTION_NOTICE, a different
+    // string from the original notice, so exact-text dedup (seen.has(notice)) didn't catch it as
+    // a repeat. Reproduced here with the same nurse/designer conflict (LLM-checker, detailed text)
+    // followed by an unrelated available/unavailable pair (pure lexical, raw-id text) in the same
+    // session, mirroring conv3's specific-then-generic sequence.
+    const llm = new ContradictionAwareLLMClient()
+    const assistant = new PersonalAssistant({ llmClient: llm })
+
+    await assistant.turn('I work as a nurse.', { sessionId: 'contradiction-generic-repeat' })
+    const second = await assistant.turn('I work as a freelance graphic designer.', { sessionId: 'contradiction-generic-repeat' })
+    expect(second.contradictionNotice).toBe('Heads up — this seems to conflict with something you told me earlier: conflicting occupations')
+
+    await assistant.turn('Remember that the server is available.', { sessionId: 'contradiction-generic-repeat' })
+    const fourth = await assistant.turn('Remember that the server is unavailable now.', { sessionId: 'contradiction-generic-repeat' })
+    expect(fourth.trace?.layerActivity.some((e) => e.layer === 'contradiction' && e.fired && /fact-[\w-]+-\d+/.test(e.reason))).toBe(true)
+    expect(fourth.contradictionNotice).toBeUndefined()
+  })
 })
 
 describe('PersonalAssistant world_model layer_activity reporting', () => {

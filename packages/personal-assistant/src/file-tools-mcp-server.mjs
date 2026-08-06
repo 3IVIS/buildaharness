@@ -293,6 +293,18 @@ export async function assertPublicHttpUrl(url) {
 const MAX_REDIRECTS = 5
 
 /** Fetches `url`, following redirects manually so every hop gets its own assertPublicHttpUrl check — a public URL that 302s to a private target is rejected mid-fetch, not silently followed. */
+// Kept in sync by hand with web-tools.ts's own MAX_FETCH_CHARS/truncateFetchedText — see that
+// file's comment for why: on this claude-cli backend specifically, an untruncated large fetch_url
+// result gets written by the `claude -p` subprocess itself to a temp file, and the model falls back
+// to proposing a shell command (sed/grep) to page through it, turning a read-only fetch into an
+// unexplained shell-command approval prompt. Found live fetching a real Wikipedia article.
+const MAX_FETCH_CHARS = 15_000
+
+function truncateFetchedText(text) {
+  if (text.length <= MAX_FETCH_CHARS) return text
+  return `${text.slice(0, MAX_FETCH_CHARS)}\n\n[... truncated at ${MAX_FETCH_CHARS} characters; the page is longer than shown here ...]`
+}
+
 export async function fetchUrlSafely(url) {
   let currentUrl = url
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
@@ -304,7 +316,7 @@ export async function fetchUrlSafely(url) {
       currentUrl = new URL(location, currentUrl).toString()
       continue
     }
-    return response.text()
+    return truncateFetchedText(await response.text())
   }
   throw new Error(`Too many redirects while fetching "${url}"`)
 }
