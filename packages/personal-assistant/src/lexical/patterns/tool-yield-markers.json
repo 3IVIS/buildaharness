@@ -2,8 +2,8 @@
   "en": {
     "deadEndMarkers": [
       "\\bno (specific )?date\\b",
-      "\\bcannot find\\b",
-      "\\bnot (found|mentioned|listed)\\b",
+      "\\b(?:cannot|can'?t|couldn'?t|could not) find\\b",
+      "\\b(?:not|isn'?t|wasn'?t|aren'?t|weren'?t) (found|mentioned|listed)\\b",
       "\\bno mention of\\b",
       "\\bno event called\\b",
       "\\bno results matching\\b"

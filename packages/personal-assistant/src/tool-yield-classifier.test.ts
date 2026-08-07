@@ -28,6 +28,25 @@ describe('classifyToolYield', () => {
     expect(classifyToolYield('fetch_url', text)).toBe('dead_end')
   })
 
+  const contractionDeadEndPhrasings = [
+    "I couldn't find any information about this event.",
+    "I can't find any information about this event.",
+    "The requested date wasn't found on this page.",
+    'The event isn\'t listed on this calendar.',
+  ]
+  it.each(contractionDeadEndPhrasings)('classifies contraction phrasing of the same dead-end markers as dead_end (batch 113, hB1): %s', (text) => {
+    // DEAD_END_MARKERS only listed the spelled-out "cannot find"/"not found" forms — a
+    // contraction ("couldn't find", "wasn't found") is a different literal substring and
+    // silently fell through to the productive default, so a genuine dead end inside a batch
+    // loop could get classified 'productive' purely because of how the model worded it.
+    expect(classifyToolYield('fetch_url', text)).toBe('dead_end')
+  })
+
+  it('still treats "couldn\'t confirm" as productive — the contraction fix is scoped to find/found/mentioned/listed, not every hedge verb', () => {
+    const text = "We couldn't confirm the exact date, but it's likely mid-September based on prior years."
+    expect(classifyToolYield('fetch_url', text)).toBe('productive')
+  })
+
   it('classifies a real Wikipedia no-results search page phrasing as dead_end (found live: en.wikipedia.org search with a nonsense query)', () => {
     expect(classifyToolYield('fetch_url', 'There were no results matching the query.')).toBe('dead_end')
   })

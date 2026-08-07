@@ -188,6 +188,16 @@ describe('looksLikeCodingFact', () => {
     expect(looksLikeCodingFact('我今天买了面包和牛奶。')).toBe(false)
     expect(looksLikeCodingFact('老家有个仓库放粮食。')).toBe(false)
   })
+
+  it('flags third-person-singular "compiles"/"passes" the same way it already flags bare "compile"/"pass"', () => {
+    // batch 113 (hA1, live-observed via convA1): unlike "deploy(?:ment)?s?" and most other
+    // status words in this list, "compile" had no trailing "s?" and "pass(?:ed|ing)?" had no
+    // "es" form — "the build compiles now and the test suite passes after last night's fix"
+    // never looksLikeCodingFact before this fix, so the whole status update was dropped and
+    // never admitted as a fact (confirmed live: /memory showed no fact for that turn at all).
+    expect(looksLikeCodingFact('the build compiles now')).toBe(true)
+    expect(looksLikeCodingFact('the test suite passes after last night\'s fix')).toBe(true)
+  })
 })
 
 class StructuredOnlyLLMClient implements ILLMClient {
