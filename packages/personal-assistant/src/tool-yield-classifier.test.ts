@@ -28,6 +28,10 @@ describe('classifyToolYield', () => {
     expect(classifyToolYield('fetch_url', text)).toBe('dead_end')
   })
 
+  it('classifies a real Wikipedia no-results search page phrasing as dead_end (found live: en.wikipedia.org search with a nonsense query)', () => {
+    expect(classifyToolYield('fetch_url', 'There were no results matching the query.')).toBe('dead_end')
+  })
+
   it('classifies a result containing an explicit, confirmed date as productive', () => {
     const text = 'The Tag der offenen Tür is on Thursday, October 2, 2025, 10:00-12:00, explicitly stated on the school website.'
     expect(classifyToolYield('fetch_url', text)).toBe('productive')

@@ -5,7 +5,8 @@
       "\\bcannot find\\b",
       "\\bnot (found|mentioned|listed)\\b",
       "\\bno mention of\\b",
-      "\\bno event called\\b"
+      "\\bno event called\\b",
+      "\\bno results matching\\b"
     ]
   },
   "zh": {
