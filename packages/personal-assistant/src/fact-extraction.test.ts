@@ -414,4 +414,15 @@ describe('extractFactsFromTurn', () => {
     )
     expect(facts).toHaveLength(1)
   })
+
+  it('does not capture a plain yes/no follow-up question containing a CODING_FACT_MARKERS word (re-probing convB/h2)', () => {
+    // Splitting the message on SENTENCE_END used to strip the trailing "?" before the per-sentence
+    // QUESTION_SHAPE filter ever saw it, so a single-sentence question with no leading wh-word lost
+    // its only question signal: "Did that command actually run?" -> "Did that command actually
+    // run" (no "?"), which then matched looksLikeCodingFact via "command" and was admitted as a
+    // UserFact. Confirmed live in convB, right after a declined `whoami` shell command.
+    expect(extractFactsFromTurn('Did that command actually run?', 'turn:40')).toHaveLength(0)
+    expect(extractFactsFromTurn('Was the build successful?', 'turn:41')).toHaveLength(0)
+    expect(extractFactsFromTurn('Is the server still down?', 'turn:42')).toHaveLength(0)
+  })
 })

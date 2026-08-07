@@ -203,6 +203,25 @@ const QUESTION_SHAPE = /\?\s*$|^(what|when|where|why|who|which|how)\b/i
 // anchors, so scoping it the same way avoids a mismatched half-fix for zh.
 const SENTENCE_END = /[.!?;]+/
 
+// batch (re-probing conv B, h2's shell-decline follow-up): `splitOnAny([SENTENCE_END], trimmed)`
+// below used to feed the per-sentence QUESTION_SHAPE filter, but `String.prototype.split()` on a
+// non-capturing pattern discards the delimiter — so a single-sentence question with no internal
+// wh-word (e.g. "Did that command actually run?") lost its only QUESTION_SHAPE signal (the
+// trailing "?") before the filter ever saw it. With the "?" gone, "Did that command actually run"
+// passed the filter, then matched looksLikeCodingFact via "command" and slipped past
+// NON_CLAIM_MARKERS' action-verb check (its "run" alternative is itself exempted here, since "run"
+// sits within 0-4 words of the determiner "that" — the same noun-context exemption that correctly
+// protects "order me a pizza" vs. "my coffee order" elsewhere in this codebase) — so the whole
+// question got admitted verbatim as a UserFact (confirmed live via convB). Splitting with a
+// lookbehind keeps each sentence's own terminal punctuation attached, so QUESTION_SHAPE's trailing
+// "?" check still has something to match.
+function splitSentencesKeepingTerminator(text: string): string[] {
+  return text
+    .split(/(?<=[.!?;])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 // NON_CLAIM_MARKERS is meant to reject a clause that IS a request/question, not to reject any
 // message that merely contains a request-shaped clause anywhere — but scanning the whole
 // message let an unrelated trailing clause's "please"/"can you" suppress a genuine fact-bearing
@@ -246,7 +265,7 @@ export function extractFactsFromTurn(userMessage: string, sourceTurn: string): U
   // you/delete/...) would wrongly reject a legitimate compound "My name is X, could you also..."
   // statement that FACT_MARKERS' whole-message (non-clause-split) matching still needs to admit.
   if (testAny(FACT_MARKERS, trimmed) && !QUESTION_SHAPE.test(trimmed)) return admit()
-  const isClaimClause = splitOnAny([SENTENCE_END], trimmed)
+  const isClaimClause = splitSentencesKeepingTerminator(trimmed)
     .filter((sentence) => !QUESTION_SHAPE.test(sentence))
     .flatMap((sentence) => splitClauses(sentence))
     .some((clause) => (looksLikeCodingFact(clause) || testAny(HEALTH_OR_DIETARY_MARKERS, clause)) && !testAny(NON_CLAIM_MARKERS, clause))
