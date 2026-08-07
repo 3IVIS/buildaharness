@@ -798,9 +798,11 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
       const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
       if (streamedAnyTokens) {
-        // The reply text is already on screen, printed token-by-token as it
-        // streamed in — just append whatever suffix belongs after it.
-        process.stdout.write(`${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
+        // The reply text is already on screen, printed token-by-token as it streamed in — but
+        // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
+        // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
+        const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
+        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
       } else {
         console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
       }

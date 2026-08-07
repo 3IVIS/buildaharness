@@ -540,6 +540,14 @@ export interface AssistantTurnResult {
   usage?: TokenUsage
   /** Set when the Contradiction layer flagged a conflict with an existing belief this turn — see findContradictionNotice's doc comment for why this is a separate field instead of folded into `reply`. */
   contradictionNotice?: string
+  /**
+   * Set only on a Phase 4.1 plan-pacing pause — the "Ready to continue with: ...?"/"All plan
+   * steps have run..." text appended to `reply` after the model's own draftReply. A caller that
+   * streamed `reply` token-by-token via `onToken` (see TurnOptions.onToken) already showed
+   * draftReply live and must print this separately, since draftReply is all `onToken` ever saw —
+   * this text is computed after the harness run completes, well after streaming finished.
+   */
+  pausedNote?: string
 }
 
 export interface AssistantProgress {
@@ -1709,6 +1717,7 @@ export class PersonalAssistant {
         pausedThisTurn = true
         let planStatus: AssistantTurnResult['planStatus']
         let reply = 'Paused.'
+        let pausedNote: string | undefined
         if (activePlan) {
           activePlan = updatePlanFromRun(activePlan, outcome.checkpoint.runState.taskGraph.tasks)
           await savePlan(this.memory, sessionId, activePlan)
@@ -1734,6 +1743,7 @@ export class PersonalAssistant {
           // LLM context — recording a reply the user never actually saw, while silently
           // discarding the one they did.
           reply = draftReply.trim() ? `${draftReply}\n\n${pacingNote}` : pacingNote
+          pausedNote = pacingNote
         }
         const contradictionNotice = await this.dedupedContradictionNotice(sessionId, layerActivityThisTurn)
 
@@ -1762,6 +1772,7 @@ export class PersonalAssistant {
           sources,
           planStatus,
           contradictionNotice,
+          pausedNote,
           usage: usageTotal,
         }
       }
