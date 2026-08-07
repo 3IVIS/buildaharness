@@ -315,6 +315,19 @@ describe('extractFactsFromTurn', () => {
     expect(facts).toHaveLength(1)
   })
 
+  it('captures an "i\'m an ..." identity statement using the indefinite article "an", not just "a"', () => {
+    // batch 114 (h8): FACT_MARKERS' "i am"/"i'm" identity branches ended in a literal `\s+a\b`,
+    // with no `n?` to also match "an" — so "I'm an architect" missed the lexical fast path
+    // entirely (found live: it was still captured/recalled correctly via turn-intent-classifier.ts's
+    // statesDurableFact LLM backstop, but that backstop only runs when the lexical pass finds
+    // nothing, so every "an"-shaped identity statement was paying for an LLM call the deterministic
+    // fast path exists to avoid). Only FACT_MARKERS admission is at stake here, not durability —
+    // "i'm a"/"i'm an" identity statements are admitted but left non-durable, same as the existing
+    // "product manager" case above; DURABLE_NAME_OR_PREFERENCE_MARKERS is a separate, narrower set.
+    const facts = extractFactsFromTurn("I'm an architect and I have a dog named Biscuit.", 'turn:32')
+    expect(facts).toHaveLength(1)
+  })
+
   it('does not treat a to-do-shaped "i\'m [verb]ing a ..." statement as an identity fact', () => {
     // convA (batch 49): FACT_MARKERS' "i'm a"/"i am a" branches' 0-4-word modifier gap (added by
     // the batch-20 job-correction fix above) allowed ANY word in the gap, including a gerund verb
