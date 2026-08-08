@@ -136,6 +136,14 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('I check the statuses of every service before I go to bed.', 'turn:8k')).toHaveLength(1)
   })
 
+  it('captures a coding-context fact using "release", missing from CODING_FACT_MARKERS despite its widened siblings', () => {
+    // batch 124 (hA-codingfact-release, combo1): "release"/"releases" was never in CODING_FACT_MARKERS
+    // at all (not even singular-only like the other gaps above) -- "The release is blocked on QA
+    // sign-off." matched none of FACT_MARKERS, CODING_FACT_MARKERS, or NON_CLAIM_MARKERS and was
+    // silently dropped as a fact entirely.
+    expect(extractFactsFromTurn('The release is blocked on QA sign-off.', 'turn:8l')).toHaveLength(1)
+  })
+
   it('does not reject a first-person declarative statement that happens to use a NON_CLAIM_MARKERS action verb', () => {
     // batch 19: found while investigating conv178's re-probe — "I always run a backup script
     // before touching the server." was silently dropped entirely, because bare "run" tripped

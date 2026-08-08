@@ -1,6 +1,6 @@
 {
   "en": {
-    "codingFactMarkers": "\\b(test|tests|builds?|deploy(?:ment)?s?|compiles?|file|files|configs?|servers?|services?|functions?|modules?|dependency|dependencies|errors?|exceptions?|endpoints?|apis?|databases?|schemas?|branch(?:es)?|commits?|pipelines?|ci\\/cd|ci|environments?|variables?|packages?|libraries|library|repos?|repositor(?:y|ies)|scripts?|commands?|logs?|status(?:es)?|bugs?|pass(?:es|ed|ing)?(?!\\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\\b"
+    "codingFactMarkers": "\\b(test|tests|builds?|deploy(?:ment)?s?|releases?|compiles?|file|files|configs?|servers?|services?|functions?|modules?|dependency|dependencies|errors?|exceptions?|endpoints?|apis?|databases?|schemas?|branch(?:es)?|commits?|pipelines?|ci\\/cd|ci|environments?|variables?|packages?|libraries|library|repos?|repositor(?:y|ies)|scripts?|commands?|logs?|status(?:es)?|bugs?|pass(?:es|ed|ing)?(?!\\s+away)|fail(ed|ing)?|available|unavailable|enabled|disabled|running|stopped|online|offline|exists?|missing|present|absent)\\b"
   },
   "zh": {
     "codingFactMarkers": "(测试|构建|部署|编译|文件|配置|服务器|服务|函数|模块|依赖|错误|异常|接口|数据库|模式|分支|提交|流水线|环境|变量|软件包|代码库|代码仓库|脚本|命令|日志|状态|缺陷|通过|失败|可用|不可用|启用|禁用|运行中|已停止|在线|离线|存在|缺失|缺少)"
