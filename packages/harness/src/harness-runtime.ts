@@ -24,6 +24,7 @@ import { outputValidation, type OutputValidationResult } from './nodes/output-va
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
 import { DepGraphBudget, WorldModel } from './state/world-model.js'
+import { CHECKPOINT_SCHEMA_VERSION, assertCheckpointSchemaCurrent } from './harness-checkpoint.js'
 import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData } from './harness-checkpoint.js'
 import type { FailureModeEntry } from './state/failure-diagnostics.js'
 import { normalise, DimensionType } from './normalise.js'
@@ -291,7 +292,13 @@ function buildInitialContext(
   return ctx
 }
 
-function buildResumedContext(checkpoint: HarnessCheckpoint, options: HarnessRunOptions): LoopContext {
+function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessRunOptions): LoopContext {
+  // Throws CheckpointSchemaError (not a raw parse error from deep inside a state
+  // structure's fromJSON()) if `rawCheckpoint` can't be migrated to the current
+  // schema — a caller that explicitly handed resume() a checkpoint gets a clear,
+  // identifiable failure to catch, same as EscalationHalt is "rejected rather than
+  // swallowed" elsewhere in this loop.
+  const checkpoint = assertCheckpointSchemaCurrent(rawCheckpoint)
   const hydrated = HarnessRunState.fromJSON(checkpoint.runState)
 
   return {
@@ -376,7 +383,7 @@ function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
     propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
   }
 
-  return { runId: ctx.runId, runState, runConfig, progress }
+  return { runId: ctx.runId, runState, runConfig, progress, schemaVersion: CHECKPOINT_SCHEMA_VERSION }
 }
 
 function toInitResultShape(ctx: LoopContext): HarnessInitResult {

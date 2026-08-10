@@ -18,6 +18,15 @@ export interface HarnessRunProgressData {
 }
 
 /**
+ * Bumped whenever a change to any of the 13 state structures' toJSON()/fromJSON()
+ * shapes would make an older checkpoint unreadable. `schemaVersion` is optional on
+ * the interface because every checkpoint written before this field existed has none —
+ * `CHECKPOINT_MIGRATIONS`/`readCheckpointSchemaVersion` treat that as version 1
+ * (the shape that existed before versioning was introduced), not an error.
+ */
+export const CHECKPOINT_SCHEMA_VERSION = 1
+
+/**
  * A fully serializable snapshot of an in-progress or completed harness run.
  * Everything needed to reconstruct the 13 state structures and resume the
  * main loop lives here — except experienceStore/updateChannel/toolExecutors,
@@ -29,6 +38,54 @@ export interface HarnessCheckpoint {
   runState: HarnessRunStateData
   runConfig: HarnessRunConfigData
   progress: HarnessRunProgressData
+  schemaVersion?: number
+}
+
+/**
+ * Registry of forward migrations, keyed by the version being migrated *from*.
+ * Empty today — CHECKPOINT_SCHEMA_VERSION has only ever been 1. A future phase
+ * that changes a state structure's shape bumps CHECKPOINT_SCHEMA_VERSION and adds
+ * `CHECKPOINT_MIGRATIONS[oldVersion] = (raw) => <checkpoint at oldVersion + 1>`
+ * here — chained automatically by assertCheckpointSchemaCurrent below.
+ */
+export const CHECKPOINT_MIGRATIONS: Record<number, (raw: HarnessCheckpoint) => HarnessCheckpoint> = {}
+
+export class CheckpointSchemaError extends Error {
+  constructor(public readonly foundVersion: number, public readonly currentVersion: number) {
+    super(
+      foundVersion > currentVersion
+        ? `Checkpoint schema version ${foundVersion} is newer than this build understands (current: ${currentVersion}). Refusing to read it rather than silently misinterpreting its shape.`
+        : `Checkpoint schema version ${foundVersion} has no migration path to ${currentVersion}. Refusing to read it rather than letting a stale-shape read throw deep inside a state structure's fromJSON().`,
+    )
+    this.name = 'CheckpointSchemaError'
+  }
+}
+
+/** Missing schemaVersion means "written before versioning existed" — treated as version 1, not an error. */
+function readCheckpointSchemaVersion(checkpoint: HarnessCheckpoint): number {
+  return checkpoint.schemaVersion ?? 1
+}
+
+/**
+ * Migrates `checkpoint` forward to CHECKPOINT_SCHEMA_VERSION if a migration path exists,
+ * throwing CheckpointSchemaError if it doesn't (including when the checkpoint is from a
+ * *newer* schema version than this build knows about). Callers that can tolerate losing
+ * a checkpoint (e.g. the storage-layer read below) should catch this and discard it
+ * instead of propagating; callers that were explicitly handed a checkpoint to resume
+ * (HarnessRuntime.resume()) let it propagate, matching how EscalationHalt is already
+ * "rejected rather than swallowed" in this package.
+ */
+export function assertCheckpointSchemaCurrent(checkpoint: HarnessCheckpoint): HarnessCheckpoint {
+  let current = checkpoint
+  let version = readCheckpointSchemaVersion(current)
+  while (version < CHECKPOINT_SCHEMA_VERSION) {
+    const migrate = CHECKPOINT_MIGRATIONS[version]
+    if (!migrate) throw new CheckpointSchemaError(version, CHECKPOINT_SCHEMA_VERSION)
+    current = migrate(current)
+    version = readCheckpointSchemaVersion(current)
+  }
+  if (version > CHECKPOINT_SCHEMA_VERSION) throw new CheckpointSchemaError(version, CHECKPOINT_SCHEMA_VERSION)
+  return current
 }
 
 /**
@@ -50,9 +107,28 @@ export async function saveHarnessCheckpoint(store: CheckpointStore, checkpoint: 
   await store.set(checkpointKey(checkpoint.runId), checkpoint)
 }
 
+/**
+ * Reads a checkpoint and migrates it to CHECKPOINT_SCHEMA_VERSION if needed. Unlike
+ * HarnessRuntime.resume() (which throws on an unmigratable checkpoint, since a caller
+ * explicitly handed it one to resume), this is the "give me whatever's usable or
+ * nothing" entry point that the rest of this package already treats `undefined` as
+ * meaning — so an unmigratable checkpoint is deleted from the store and this returns
+ * `undefined`, the same as if no checkpoint had ever been saved. Callers that already
+ * have a discard-and-restart path for a checkpoint that fails to resume (e.g. a
+ * RESUME_ATTEMPT_CAP loop) get the same outcome without spending an attempt on a
+ * checkpoint that could never have succeeded.
+ */
 export async function loadHarnessCheckpoint(store: CheckpointStore, runId: string): Promise<HarnessCheckpoint | undefined> {
   const value = await store.get(checkpointKey(runId))
-  return value as HarnessCheckpoint | undefined
+  if (value === undefined) return undefined
+  try {
+    return assertCheckpointSchemaCurrent(value as HarnessCheckpoint)
+  } catch (err) {
+    if (!(err instanceof CheckpointSchemaError)) throw err
+    console.warn(`loadHarnessCheckpoint: discarding unreadable checkpoint for runId="${runId}": ${err.message}`)
+    await store.delete(checkpointKey(runId))
+    return undefined
+  }
 }
 
 export async function deleteHarnessCheckpoint(store: CheckpointStore, runId: string): Promise<void> {

@@ -14,6 +14,13 @@ class MemoryDB extends Dexie {
   constructor(namespace: string) {
     super(`buildaharness-memory-${namespace}`)
     this.version(1).stores({ entries: 'key' })
+    // No-op passthrough bump (Dexie's own versioning covers table/index structure, which
+    // hasn't changed — `value` is an opaque payload Dexie never inspects). Establishes the
+    // upgrade-chain pattern: a future structural change adds a real `.version(3)` with an
+    // `.upgrade()` transform here, rather than inventing the chain from scratch under
+    // pressure. Per-payload-shape versioning (e.g. a durable fact's own schemaVersion field)
+    // is a separate, finer-grained concern than this table-level version number.
+    this.version(2).stores({ entries: 'key' })
   }
 }
 

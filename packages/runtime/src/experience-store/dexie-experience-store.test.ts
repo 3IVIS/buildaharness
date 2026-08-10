@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect } from 'vitest'
 import { DexieExperienceStore } from './dexie-experience-store'
+import { EXPERIENCE_STORE_SCHEMA_VERSION } from '@buildaharness/harness'
 
 describe('DexieExperienceStore', () => {
   it('available is always true', async () => {
@@ -52,5 +53,31 @@ describe('DexieExperienceStore', () => {
     expect(json.tool_workflows).toHaveLength(1)
     expect(json.verification_plans).toHaveLength(1)
     expect(json.recovery_sequences).toHaveLength(1)
+  })
+
+  it('persisted snapshots carry the current schemaVersion', async () => {
+    const store = await DexieExperienceStore.create({ namespace: 'schema-version-test' })
+    store.setStrategyWeight('a:b', 0.5)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(store.toJSON().schemaVersion).toBe(EXPERIENCE_STORE_SCHEMA_VERSION)
+  })
+
+  it('loading a pre-versioning snapshot (no schemaVersion field) degrades gracefully, not a throw', async () => {
+    // Simulates a real user's on-disk snapshot written before schemaVersion existed —
+    // write the row directly against the underlying Dexie table, bypassing toJSON(),
+    // then confirm DexieExperienceStore.create() still comes up cleanly.
+    const Dexie = (await import('dexie')).default
+    const namespace = 'legacy-snapshot-test'
+    const db = new Dexie(`buildaharness-experience-${namespace}`)
+    db.version(1).stores({ snapshots: 'id' })
+    await db.open()
+    await db.table('snapshots').put({
+      id: 'snapshot',
+      data: { strategy_weights: { 'legacy:key': 0.7 }, class_priors: {}, decompositions: [], tool_workflows: [], verification_plans: [], recovery_sequences: [] },
+    })
+    db.close()
+
+    const store = await DexieExperienceStore.create({ namespace })
+    expect(store.getStrategyWeights()).toEqual({ 'legacy:key': 0.7 })
   })
 })

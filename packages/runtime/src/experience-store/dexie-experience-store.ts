@@ -22,6 +22,11 @@ class ExperienceDB extends Dexie {
   constructor(namespace: string) {
     super(`buildaharness-experience-${namespace}`)
     this.version(1).stores({ snapshots: 'id' })
+    // No-op passthrough bump — see MemoryDB's constructor (packages/runtime/src/memory/
+    // indexeddb.ts) for why this is a table-level version, distinct from ExperienceStoreData's
+    // own `schemaVersion` field (which InMemoryExperienceStore.fromJSON already handles
+    // defensively, including a snapshot newer than this build understands).
+    this.version(2).stores({ snapshots: 'id' })
   }
 }
 

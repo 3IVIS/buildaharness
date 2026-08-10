@@ -67,4 +67,32 @@ describe('IndexedDBAdapter (real IndexedDB via fake-indexeddb)', () => {
     await adapterA.set('key', 'from-a')
     expect(await adapterB.get('key')).toBeUndefined()
   })
+
+  it('the version(1)→version(2) no-op upgrade preserves data written under version 1', async () => {
+    // Simulates an existing user's pre-upgrade database: write directly against a
+    // version-1-only Dexie instance (mirrors what MemoryDB looked like before the
+    // passthrough bump), close it, then reopen through today's IndexedDBAdapter
+    // (which declares both version(1) and version(2)) and confirm the old row survives
+    // the upgrade untouched — this is the regression Phase 0 exists to prevent.
+    const Dexie = (await import('dexie')).default
+    const namespace = 'dexie-upgrade-chain'
+    const v1db = new Dexie(`buildaharness-memory-${namespace}`)
+    v1db.version(1).stores({ entries: 'key' })
+    await v1db.open()
+    await v1db.table('entries').put({ key: 'pre-upgrade', value: 'written under version 1' })
+    v1db.close()
+
+    const adapter = new IndexedDBAdapter({ namespace })
+    expect(await adapter.get('pre-upgrade')).toBe('written under version 1')
+
+    // And the upgrade chain itself still accepts new writes afterward.
+    await adapter.set('post-upgrade', 'written under version 2')
+    expect(await adapter.get('post-upgrade')).toBe('written under version 2')
+  })
+
+  it('a namespace with no prior database initializes directly at the current version', async () => {
+    const adapter = new IndexedDBAdapter({ namespace: 'dexie-fresh-install' })
+    await adapter.set('key', 'value')
+    expect(await adapter.get('key')).toBe('value')
+  })
 })
