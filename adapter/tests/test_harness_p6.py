@@ -38,6 +38,7 @@ from harness.progress import (
     cannot_make_progress,
 )
 from harness.recovery import (
+    RecoveryBudget,
     StrategyState,
     apply_failure_mode_bias,
     get_next_strategy,
@@ -559,3 +560,83 @@ class TestJournalAndBudget:
         assert result_dict.get("escalated") is True
         escalation = result_dict.get("escalation", {})
         assert escalation.get("reason") == "budget_exhausted"
+
+
+class TestRecoveryBudget:
+    """RecoveryBudget (Phase 2 of plans/harness_and_assistant_architecture_remediation_
+    plan.html) — genuine multi-dimensional resource bounds on recovery, additional to (not
+    instead of) the existing STRATEGY_ORDER-length implicit bound TestRecoveryStrategies
+    and TestJournalAndBudget's tests above already cover."""
+
+    def test_fresh_budget_is_not_exhausted(self) -> None:
+        assert RecoveryBudget().is_exhausted() is False
+
+    def test_consume_is_immutable(self) -> None:
+        budget = RecoveryBudget(max_tool_calls=10)
+        consumed = budget.consume(tool_calls=3)
+        assert budget.tool_calls_used == 0  # original untouched
+        assert consumed.tool_calls_used == 3
+
+    def test_each_dimension_independently_triggers_exhaustion(self) -> None:
+        assert RecoveryBudget(max_tool_calls=5, tool_calls_used=5).is_exhausted() is True
+        assert RecoveryBudget(max_cost=1.0, cost_used=1.0).is_exhausted() is True
+        assert RecoveryBudget(max_time_seconds=60, time_used_seconds=60).is_exhausted() is True
+        assert RecoveryBudget(max_plan_revisions=3, plan_revisions_used=3).is_exhausted() is True
+
+    def test_exhausted_in_one_dimension_only_still_exhausts_the_whole_budget(self) -> None:
+        """Recovery isn't allowed to keep going on cost alone once plan revisions run out."""
+        budget = RecoveryBudget(max_plan_revisions=3, plan_revisions_used=3, cost_used=0.0)
+        assert budget.is_exhausted() is True
+
+    def test_round_trips_through_to_dict_from_dict(self) -> None:
+        budget = RecoveryBudget(max_tool_calls=15).consume(tool_calls=4, cost=0.5, time_seconds=12.0, plan_revisions=1)
+        restored = RecoveryBudget.from_dict(budget.to_dict())
+        assert restored == budget
+
+    def test_loop_escalates_instead_of_switching_when_budget_already_exhausted(self) -> None:
+        """The core fix: an exhausted budget escalates BEFORE another plan revision is
+        taken, not after — checked ahead of switch_strategy(), not as an afterthought."""
+        from harness.loop import run_one_iteration
+        from harness.world_model import WorldModel
+
+        fd = _make_failure_diagnostics(["timeout", "timeout", "timeout"])
+        ss = _make_strategy_state(completion_history=[0, 0])  # stalled: no progress
+        exhausted = RecoveryBudget(max_plan_revisions=1, plan_revisions_used=1)
+
+        result = run_one_iteration(
+            world_model=WorldModel(),
+            diagnostics=Diagnostics(),
+            hypothesis_set=None,
+            task_graph=_make_task_graph(),
+            failure_diagnostics=fd,
+            strategy_state=ss,
+            recovery_budget=exhausted,
+        )
+
+        assert result.get("escalated") is True
+        assert result.get("escalation", {}).get("reason") == "budget_exhausted"
+        # switch_strategy() was never reached — strategy_state comes back unchanged.
+        assert result.get("strategy_state") is None or ss.switch_count == 0
+
+    def test_loop_switches_and_consumes_one_plan_revision_when_budget_has_room(self) -> None:
+        from harness.loop import run_one_iteration
+        from harness.world_model import WorldModel
+
+        fd = _make_failure_diagnostics(["timeout", "timeout", "timeout"])
+        ss = _make_strategy_state(completion_history=[0, 0])
+        fresh = RecoveryBudget(max_plan_revisions=3)
+
+        result = run_one_iteration(
+            world_model=WorldModel(),
+            diagnostics=Diagnostics(),
+            hypothesis_set=None,
+            task_graph=_make_task_graph(),
+            failure_diagnostics=fd,
+            strategy_state=ss,
+            recovery_budget=fresh,
+        )
+
+        returned_budget = result.get("recovery_budget")
+        assert returned_budget is not None
+        assert returned_budget.plan_revisions_used == 1
+        assert result.get("strategy_state").switch_count == 1

@@ -52,9 +52,10 @@ from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_u
 from .gates import action_gate, decomposition_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .progress import cannot_make_progress
-from .recovery import StrategyState, switch_strategy
+from .recovery import RecoveryBudget, StrategyState, switch_strategy
 from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
+from .verification import verify
 
 
 def initialize_harness(
@@ -224,11 +225,25 @@ def run_one_iteration(
     evidence_store: Any | None = None,
     plan_template: Any | None = None,
     plan_snapshot_dir: Any | None = None,
+    success_criteria: Any | None = None,
+    assumptions: Any | None = None,
+    tool_manifest: Any | None = None,
+    task_risk: str = "LOW",
+    target_path: str | None = None,
+    workspace_root: str | None = None,
+    recovery_budget: RecoveryBudget | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
     Sub-step A: pre-execution increment → resolve → action_gate
     Sub-step B: post-execution increment → resolve → post_exec_gate
+
+    success_criteria/assumptions/tool_manifest/task_risk/target_path/workspace_root
+    (Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html) feed
+    Sub-step B's real verify() call — all optional, all defaulting to values that reproduce
+    the prior hardcoded `{"has_critical_failure": False}` stub's behavior exactly (tool_manifest
+    defaulting to None means every layer is honestly SKIPPED, same net has_critical_failure
+    outcome as before) for every existing caller that doesn't pass them.
 
     P6 hooks fire at the top of Sub-step A (compression, budget check, stall
     detection) and at the end of Sub-step B (journal retention).
@@ -317,8 +332,34 @@ def run_one_iteration(
     # P6.1/P6.2 — stall detection and strategy switch
     if strategy_state is not None and failure_diagnostics is not None and task_graph is not None:
         if cannot_make_progress(strategy_state, failure_diagnostics, task_graph):
+            # Recovery budget (Phase 2): checked BEFORE switching, not after — an exhausted
+            # budget escalates instead of taking one more revision it can't afford. This is
+            # additional to (not instead of) the existing STRATEGY_ORDER-length bound below.
+            if recovery_budget is not None and recovery_budget.is_exhausted():
+                if harness_run_state is not None:
+                    ctrl_stub = ControlState()
+                    blocker = _build_surface_blocker("budget_exhausted", ctrl_stub, task_graph)
+                    try:
+                        escalate(blocker, harness_run_state, run_id)
+                    except EscalationHalt as exc:
+                        return {
+                            "escalated": True,
+                            "escalation": exc.blocker.to_dict(),
+                            "step_count": step_count,
+                        }
+                return {
+                    "escalated": True,
+                    "escalation": {
+                        "reason": "budget_exhausted",
+                        "missing_info": ["recovery_budget"],
+                    },
+                    "step_count": step_count,
+                }
+
             reason = getattr(strategy_state, "stall_reason", "stall_detected")
             strategy_state = switch_strategy(strategy_state, reason)
+            if recovery_budget is not None:
+                recovery_budget = recovery_budget.consume(plan_revisions=1)
 
             # P7.3 — escalate when strategy reaches ESCALATE
             if strategy_state.current_strategy == "ESCALATE":
@@ -384,7 +425,6 @@ def run_one_iteration(
 
     # ── Sub-step B ────────────────────────────────────────────────────────────
     result: dict[str, Any] = {"action": action, "gate_a": gate_a_result}
-    verification_result: dict[str, Any] = {"has_critical_failure": False}
 
     increment_generation_id(world_model)
     control_state_b = resolve_control_state(
@@ -392,6 +432,23 @@ def run_one_iteration(
         world_model,
         failure_diagnostics,
         step=world_model.generation_id,
+    )
+
+    # Real verify() call (Phase 2) — was a hardcoded {"has_critical_failure": False} stub;
+    # post_exec_gate's _has_critical_failure() already handles either a dict or an object
+    # with a .has_critical_failure attribute, so VerificationResult needs no adapter here.
+    verification_result = verify(
+        result,
+        success_criteria,
+        assumptions,
+        tool_manifest,
+        task_risk,
+        evidence_store=evidence_store,
+        world_model=world_model,
+        output_contract=output_contract,
+        hypothesis_set=hypothesis_set,
+        target_path=target_path,
+        workspace_root=workspace_root,
     )
 
     gate_b_result = post_exec_gate(
@@ -497,6 +554,7 @@ def run_one_iteration(
         "gate_b": gate_b_result,
         "action": action,
         "strategy_state": strategy_state,
+        "recovery_budget": recovery_budget,
         "task_graph": task_graph,
         "escalation": escalation,
         "review_result": review_result.to_dict() if review_result else None,

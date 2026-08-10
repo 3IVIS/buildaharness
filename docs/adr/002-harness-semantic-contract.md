@@ -1,6 +1,6 @@
 # ADR-002 — Harness Semantic Contract
 
-**Status:** Accepted (Phase 1a and 1b implemented; Phases 2/3/4/7 extend it)
+**Status:** Accepted (Phases 1a, 1b, 2 implemented; Phases 3/4/7 extend it)
 **Date:** 2026-08-10
 **Source:** External architectural review — `reports/criticism00.txt` (private)
 **Plan:** `plans/harness_and_assistant_architecture_remediation_plan.html` (private)
@@ -34,9 +34,9 @@ what Phase 1a of the remediation plan actually built versus what later phases st
 | 3 | Every belief has provenance | **Extended** | `Belief.derived_from` already existed (INV-01). Phase 1a adds `Belief.contradicts`, stamped by `WorldModel.add_contradiction()`, so "B17 derived from E42/E51, contradicts B13" is queryable from the belief itself. |
 | 4 | Every plan declares the world-state version it depends upon | **Types defined** | `PlanVersion.world_model_version`, pinned via `new_plan_version()`. Not yet attached to `TaskGraph`/plan objects themselves — a follow-up, not blocking this phase. |
 | 5 | Every verification result identifies its evidence | **Types defined** | `VerificationVersion.execution_id` + `world_model_version`. Real attachment lands with Phase 2, when verification stops being 7/9 stub layers. |
-| 6 | Every recovery consumes bounded resources | **Deferred to Phase 2** | `recovery.py` today has only softmax strategy weighting, no cap. `RecoveryBudget` is Phase 2 scope. |
+| 6 | Every recovery consumes bounded resources | **Enforced** | `RecoveryBudget` (tool calls, cost, time, plan revisions) checked in `loop.py` before every strategy switch — exhaustion escalates through the existing surface-blocker path instead of taking another revision it can't afford. |
 | 7 | Every external effect is idempotently attributable | **Enforced for mechanical checks** | `ExecutionVersion.effect_id` is the idempotency key; `run_mechanical_check()`'s `idempotency_store` returns a cached result rather than re-spawning a subprocess when the same `effect_id` is replayed — tested directly (a second call with the same `effect_id` spawns zero new subprocesses). |
-| 8 | Learning cannot alter correctness within a run | **Partially held (TS side)** | Phase 0's `InMemoryExperienceStore.fromJSON()` degrades to a fresh store rather than ever throwing — consistent with this guarantee, but the full "immutable trace → offline learning → promotion" boundary is Phase 2 scope on the Python side. |
+| 8 | Learning cannot alter correctness within a run | **Enforced** | Every `experience_store.py` write (`append()`, `upsert_strategy_weight()`) lands `promoted=False`; every read (`query_by_type()`, `get_strategy_weights()`, and so `warm_start()`) only sees `promoted=True` rows. Only an explicit, separate `promote_entries()`/`promote_strategy_weights()` call (never auto-invoked) makes a candidate visible. Phase 0's `InMemoryExperienceStore.fromJSON()` degrade-not-throw behavior (TS side) is the same guarantee in a different form. |
 | 9 | Runtime adapters cannot weaken these properties | **Deferred to Phase 7** | Requires the capability manifest / compile-time capability check. |
 | 10 | Unsupported runtime semantics cause compilation failure | **Deferred to Phase 7** | Same capability-check mechanism as #9. |
 
@@ -231,8 +231,8 @@ is the point of the plan's explicit requirement for one, not a formality to sati
       `MechanicalCheckResult`, `DEFAULT_ALLOWED_EXECUTABLES`
 - [x] Argv validation (allowlist on basename only, shell-metacharacter + path-traversal
       rejection), `cwd` containment (realpath-resolved against `allowed_root`), timeout,
-      `RLIMIT_CPU`/`RLIMIT_AS` (not `RLIMIT_NPROC` — see Decision 4), idempotency via
-      `effect_id`, output truncation
+      `RLIMIT_CPU` (not `RLIMIT_NPROC`, not `RLIMIT_AS` — see Decision 4 and its Phase 2
+      update below), idempotency via `effect_id`, output truncation
 - [x] Focused security review run (two-stage: identify, then independently re-assess each
       finding) — see Decision 4 for the three findings and what was fixed vs. documented
 - [x] Environment isolation added post-review: minimal non-inherited `env` by default,
@@ -243,6 +243,165 @@ is the point of the plan's explicit requirement for one, not a formality to sati
       invocation), timeout-as-resource-bound, idempotency (same/different `effect_id`),
       output truncation, environment isolation (4 tests added post-review)
 - [x] Full suite green: 1109 tests. `ruff check`/`ruff format` clean.
+
+**Phase 2 update to Decision 4:** while wiring `verify_syntax`/`verify_unit` to real `ruff`/
+`pytest` invocations (Decision 5 below), `RLIMIT_AS` at 1 GiB — kept from the original
+security review as "seemingly generous" — broke `ruff check` outright on this (22-core)
+machine: `ruff`'s rayon-based thread pool spawns one worker per core, and thread-stack
+allocation across that many threads exceeded the address-space cap, surfaced by
+`pthread_create` as `EAGAIN` rather than a clean memory error (`ruff --version`, which
+doesn't spin up the thread pool, had passed fine — masking this until a real `check` ran
+under the limit). Removed; only `RLIMIT_CPU` remains, for the same class of reason
+`RLIMIT_NPROC` was already removed — see the "resource limits" comment block in
+`execution_boundary.py` itself, updated in place rather than left stale. A new regression
+test (`test_ruff_check_actually_runs_under_resource_limits_on_a_real_file`) exercises a
+real lint, not just a version probe, so a future regression here is caught the same way.
+
+---
+
+## Decision 5 — Verification layers become real, or honestly SKIPPED — never a fake PASS
+
+### Decision
+
+Of the 9 verification layers, 7 checked only whether a *tool* was available, then
+unconditionally returned PASS — never inspecting anything. Each is now one of two honest
+things:
+
+- **Real, subprocess-backed checks** (`syntax` via `ruff`, `unit` via `pytest`) — using
+  Phase 1b's `execution_boundary.run_mechanical_check()`, gated on a new optional
+  `target_path` parameter threaded through `verify()`. No `target_path` (every existing
+  caller, including `node_compilers.py`'s codegen) → honestly `SKIPPED`, never a fake
+  `PASS` — this can only turn a false `PASS` into an honest `SKIPPED` for existing callers,
+  never introduce a new `FAIL` that wasn't already reachable, since the new subprocess path
+  is never entered without an explicit `target_path`.
+- **Real, deterministic state inspection** (`consistency`) — `world_model.contradictions`
+  checked directly for unresolved `HIGH`/`SYSTEM_BREAKING` entries. No subprocess needed.
+- **Honestly `SKIPPED` by design** (`requirements`, `assumptions`, `goal_correctness`,
+  `integration`) — each needs environmental or model-tier judgment this mechanical layer
+  can't provide (`requirements`/`assumptions`: is a criterion/assumption *semantically*
+  satisfied — not this layer's job; `goal_correctness`: is this the right outcome at all —
+  inherently a judgment call; `integration`: no real `integration_runner` binary exists in
+  `execution_boundary`'s allowlist to invoke). Only the clear-cut mechanical case (a
+  criterion/assumption was stated but no result exists at all) still `FAIL`s.
+
+`LAYER_TIER` classifies every layer as `mechanical`/`environmental`/`model` per the
+critique's own hierarchy, for future callers to weight — `has_critical_failure`'s
+aggregation itself (any `FAIL` among all layers) is unchanged this phase, since with only
+one tier occupied by real logic today, building a full precedence system would repeat the
+"false sense of precision" the critique warned about elsewhere.
+
+`loop.py`'s Sub-step B — which had hardcoded `verification_result = {"has_critical_failure":
+False}` instead of ever calling `verify()` — now calls it for real, via new optional
+`success_criteria`/`assumptions`/`tool_manifest`/`task_risk`/`target_path`/`workspace_root`
+parameters on `run_one_iteration()`. Every existing caller omits `tool_manifest`, which
+means every layer is honestly `SKIPPED` and `has_critical_failure` stays `False` — the exact
+net effect the old stub always produced, reproduced by construction, not by coincidence.
+
+### Rationale
+
+The review's objection was specific: "you haven't necessarily increased confidence four
+times... I'd classify verification into Mechanical/Environmental/Model." Forcing every
+stub layer to fake a mechanical check would have repeated the false-confidence problem at
+a different layer. Being honest that several layers need infrastructure that doesn't exist
+yet (a real `integration_runner`, an environmental assumption-checker, a model-based
+goal-correctness judge) is the more defensible fix — `SKIPPED` costs nothing dishonestly
+claimed, where a fabricated `PASS` costs exactly the trust the review flagged as missing.
+
+### Behavior-change note
+
+Turning stub-`PASS` into real pass/fail for `syntax`/`unit`/`consistency` changes outcomes
+for any *existing* FlowSpec/flow that already supplies a `target_path`/`tool_manifest` and
+benefited from the free `PASS` — a flow that was silently "passing" may now genuinely fail.
+No such caller exists yet in this codebase (confirmed: `target_path`/`tool_manifest` are
+new, optional, and unused by every current caller), so this is a live risk for future
+integration work, not a change that affects anything running today. Flagged here so
+whoever wires a real caller in (Phase 2's own `loop.py` change is itself backward-compatible
+by construction, per Decision 5 above) does a differential pass against real flows first.
+
+---
+
+## Decision 6 — RecoveryBudget: genuine multi-dimensional bounds, additive to the existing bound
+
+### Decision
+
+Before this, the only bound on "how much recovery is too much" was `STRATEGY_ORDER`'s
+fixed length (6) — reaching the terminal `ESCALATE` strategy already escalated, but that's
+a strategy-switch count, not a resource budget. New `RecoveryBudget` (`max_tool_calls`,
+`max_cost`, `max_time_seconds`, `max_plan_revisions`, each with a matching `_used` counter,
+immutable — `consume()` returns a new instance) is checked in `loop.py` **before** every
+`switch_strategy()` call, additive to (not replacing) the existing `STRATEGY_ORDER` bound.
+An exhausted budget (any single dimension, not just plan revisions) escalates through the
+same `_build_surface_blocker("budget_exhausted", ...)` path `check_max_steps()`'s
+step-count exhaustion already uses, rather than inventing a parallel escalation mechanism.
+
+### Rationale
+
+"Recovery is where agent systems most easily become pathological... `failure → recovery →
+new plan → failure → recovery...`" per the review. A single-dimension bound (plan
+revisions, i.e. strategy switches) doesn't stop a recovery loop that's cheap in switches
+but expensive in tool calls or wall-clock time — the multi-dimensional budget closes that
+gap without touching the existing, already-correct `STRATEGY_ORDER` exhaustion path.
+
+---
+
+## Decision 7 — Experience store promotion boundary
+
+### Decision
+
+Before this, `update_experience_store()` wrote directly into the same rows `warm_start()`
+read on the very next run — immediate learning, not "immutable trace → offline learning →
+candidate policy → evaluation → promotion → future runs." New migration `0012` adds
+`promoted boolean NOT NULL DEFAULT false` to both `experience_entries` and
+`experience_strategy_weights`. Every write (`append()`, `upsert_strategy_weight()`) now
+always lands/resets `promoted=false`; every read (`query_by_type()`,
+`get_strategy_weights()`, and so `warm_start()`) only ever sees `promoted=true` rows. New
+`ExperienceStore.promote_entries()` / `promote_all_pending_entries()` /
+`promote_strategy_weights()` are the only way a candidate becomes visible — none are called
+automatically by `update_experience_store()`, the main loop, or anything else in this
+module; they exist for an offline evaluation job to call explicitly.
+
+A new invariant test (`test_inv_promotion_disabled_vs_enabled_but_unpromoted_produce_
+identical_mutations`, `test_harness_p8.py`) writes real candidate data (decompositions,
+tool workflows, verification plans, strategy weights) into an available-but-unpromoted
+store and confirms `warm_start()`'s state mutations (`strategy_state`, `task_graph`,
+`dep_graph_budget`) are identical to a fully-absent store — not just "less influential,"
+zero influence. (`WarmStartResult.loaded` legitimately differs — connectivity, not
+behavior — and is deliberately not compared.)
+
+### Rationale
+
+The review's own framing: "Learning must never be on the critical correctness path... Run →
+immutable trace → offline learning → candidate policy → evaluation → promotion → future
+runs. Never: Run A → learn → Run B behaves differently, without a promotion boundary."
+Implementing the full pipeline (offline learning, candidate evaluation) is out of scope for
+this repo — those are external processes. What belongs here, and what was missing, is the
+boundary itself: a structural guarantee that nothing learned is live until something
+explicit says so.
+
+---
+
+## Implementation checklist (Phase 2, complete)
+
+- [x] `verification.py` — 7 stub layers replaced (2 real subprocess-backed, 1 real state
+      inspection, 4 honestly `SKIPPED`-by-design); `LAYER_TIER` classification added
+- [x] `loop.py` — Sub-step B's hardcoded stub replaced with a real `verify()` call;
+      `success_criteria`/`assumptions`/`tool_manifest`/`task_risk`/`target_path`/
+      `workspace_root` added as optional `run_one_iteration()` parameters
+- [x] `recovery.py` — `RecoveryBudget` added; `loop.py`'s stall-recovery block checks it
+      before every `switch_strategy()` call, escalating through the existing surface-blocker
+      path on exhaustion
+- [x] `experience_store.py` — `promoted` column (migration `0012`) on both tables;
+      `append()`/`upsert_strategy_weight()` always write/reset unpromoted;
+      `query_by_type()`/`get_strategy_weights()` filter to promoted-only;
+      `promote_entries()`/`promote_all_pending_entries()`/`promote_strategy_weights()` added
+- [x] Second resource-limit bug found and fixed (see Decision 4's Phase 2 update):
+      `RLIMIT_AS` broke `ruff check` on a 22-core machine; removed
+- [x] 43 new tests: 27 (`test_harness_verification.py`) + 7 (`RecoveryBudget`,
+      `test_harness_p6.py`) + 1 (resource-limit regression, `test_harness_execution_
+      boundary.py`) + 8 (promotion boundary, `test_harness_p8.py`, including the new
+      disabled-vs-unpromoted invariant); 6 existing `test_harness_p8.py` tests updated for
+      the new promotion lifecycle
+- [x] Full suite green: 1152 tests. `ruff check`/`ruff format` clean on every file touched.
 
 ## Consequences
 
@@ -255,9 +414,9 @@ is the point of the plan's explicit requirement for one, not a formality to sati
 - **INV-03's retirement is deliberate and documented**, not an incidental invariant removal —
   flagged explicitly since `test_harness_invariants.py`'s docstring calls all ten invariants
   "a permanent CI gate."
-- **Five of ten Semantic Contract guarantees remain open**, explicitly deferred to the phases
-  that build the machinery they need (Phase 2's verification honesty and recovery budget,
-  Phase 7's capability manifest) rather than claimed early.
+- **Three of ten Semantic Contract guarantees remain open** after Phase 2 (down from five) —
+  #4 (plan/world-model version not yet attached to `TaskGraph` itself), #9 and #10 (both
+  Phase 7's capability manifest) — explicitly deferred, not claimed early.
 - **The security review earned its place in the plan.** It found a real, fixable gap
   (`pytest`/`mypy`'s config-driven code execution bypassing every argv-level check) that a
   purely functional review would likely have missed, since the module's own tests all passed
@@ -266,3 +425,14 @@ is the point of the plan's explicit requirement for one, not a formality to sati
   explicit "don't do this" comment rather than silently dropped, since the failure mode (a
   correct-looking resource limit that breaks unrelated processes sharing the same UID) is
   non-obvious and would be easy to reintroduce without that context.
+- **So is `RLIMIT_AS`, found the same way one phase later.** Both resource-limit bugs were
+  caught by this codebase's own test suite exercising a *real* invocation (not a trivial
+  `--version` probe) under the limit — the pattern, not just the specific fix, is worth
+  keeping: a positive-path test that only checks a cheap/no-op invocation will not catch a
+  resource limit that's wrong for a heavier real one.
+- **Verification honesty was a strictly safe direction, confirmed not just argued.** Every
+  file in the existing 1061→1152-test suite passed unmodified after the stub→real/honest-
+  SKIPPED rewrite, with zero test updates required for the behavior change itself (only for
+  the separately-introduced promotion boundary and `risk_state` migration) — direct evidence
+  that turning a false `PASS` into an honest `SKIPPED` never flips anything that was
+  previously relied upon, for any caller that exists in this codebase today.

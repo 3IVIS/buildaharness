@@ -81,22 +81,30 @@ DEFAULT_MAX_OUTPUT_BYTES = 65536
 
 # Resource limits applied via preexec_fn on POSIX — best-effort defense in depth, not this
 # module's primary boundary (the primary boundary is DEFAULT_ALLOWED_EXECUTABLES + argv
-# validation + the timeout, all of which are portable and directly tested). RLIMIT_AS in
-# particular is soft-enforced by the OS and its exact failure mode varies by platform, so
-# it's applied but not asserted against in the automated test suite — see that file's own
-# note on why a flaky resource-limit assertion would cost more CI reliability than it buys.
+# validation + the timeout, all of which are portable and directly tested).
 #
-# Deliberately NOT setting RLIMIT_NPROC: on Linux it caps the number of processes for the
-# real UID of the calling process, not a count scoped to this subprocess's own tree — an
-# earlier version of this file set it to 32 here and starved the *entire calling user's*
-# ability to fork, breaking every other process on the machine using that UID (caught by
-# this file's own test suite: a pyenv shim two hops down failed to fork with
-# "Resource temporarily unavailable" because the harness's own test runner process was
-# already using more than 32 processes). Real subprocess-tree process-count isolation
-# needs a cgroup or user namespace — out of scope for this "minimal" boundary, tracked as
-# optional further hardening in Phase 7.
+# Only RLIMIT_CPU is set. Two other limits were tried and removed after breaking real,
+# legitimate invocations — both caught by this file's own test suite, not discovered later:
+#
+# - RLIMIT_NPROC: on Linux this caps the number of processes for the calling process's real
+#   UID, not a count scoped to this subprocess's own tree. Setting it to 32 starved the
+#   *entire calling user's* ability to fork, breaking every other process sharing that UID
+#   (a pyenv shim two hops down failed to fork with "Resource temporarily unavailable").
+# - RLIMIT_AS: even a seemingly generous 1 GiB broke `ruff` outright on this (22-core)
+#   machine — ruff's rayon-based thread pool spawns one worker thread per core, and thread
+#   stack allocation across enough threads exceeded the address-space cap, surfaced by
+#   pthread_create as EAGAIN ("Resource temporarily unavailable") rather than a clean
+#   memory error. A limit high enough to be safe across unknown core counts stops being a
+#   meaningful bound at all.
+#
+# Both are the kind of environment-dependent limit that looks like defense in depth in
+# isolation and turns into a correctness bug the moment a real multithreaded tool runs
+# under it. RLIMIT_CPU doesn't share this problem — CPU-seconds consumed doesn't scale with
+# core count the same way, and combined with the timeout (which bounds wall-clock time
+# regardless of what preexec_fn does or doesn't set) it's the boundary doing real work here.
+# Real subprocess-tree resource isolation needs a cgroup or user namespace — out of scope
+# for this "minimal" boundary, tracked as optional further hardening in Phase 7.
 _CPU_SECONDS_LIMIT = 60
-_ADDRESS_SPACE_BYTES_LIMIT = 1024 * 1024 * 1024  # 1 GiB
 
 
 class BoundaryViolation(Exception):
@@ -121,7 +129,6 @@ def _apply_resource_limits() -> None:
         import resource
 
         resource.setrlimit(resource.RLIMIT_CPU, (_CPU_SECONDS_LIMIT, _CPU_SECONDS_LIMIT))
-        resource.setrlimit(resource.RLIMIT_AS, (_ADDRESS_SPACE_BYTES_LIMIT, _ADDRESS_SPACE_BYTES_LIMIT))
     except Exception:
         # Never let a resource-limit failure (e.g. unsupported on this platform, or a
         # sandboxed environment that disallows setrlimit) prevent the check from running —

@@ -1,8 +1,34 @@
-"""Verification layer runner — P5.5."""
+"""
+Verification layer runner — P5.5.
+
+Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html closed the gap
+found during Phase 1b's planning: 7 of these 9 layers were stub functions that checked only
+whether a *tool* was available, then unconditionally returned PASS — never actually
+inspecting anything. In production that meant `unit` (whose tool name "pytest" happens to
+match tool_manifest.py's default probe list) silently produced a fake PASS on every run; the
+other six were honestly SKIPPED only because their abstract tool names ("linter",
+"integration_runner", etc.) never matched anything in the default manifest — but a fake
+PASS was always one manifest customization away.
+
+Every layer here now does one of two honest things: a REAL check (syntax/unit, via Phase
+1b's execution_boundary; consistency, by inspecting world_model.contradictions directly —
+no fake middle state), or an honest SKIPPED when there's nothing to mechanically check
+(requirements/assumptions/goal_correctness, which need environmental or model-tier judgment
+this layer can't provide; integration, which has no real tool in the execution boundary's
+allowlist). No layer returns PASS as a "tool available, nothing to actually verify" default
+anymore — see each function's docstring for its own reasoning.
+
+LAYER_TIER classifies every layer per the critique's own hierarchy —
+mechanical > environmental > model — for future callers to weight accordingly; this phase
+does not itself change has_critical_failure's aggregation (still: any FAIL among all layers),
+since with only one tier occupied by real logic today, a full precedence system would be the
+same "false sense of precision" the critique warned about elsewhere.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 VerificationLayer = Literal[
@@ -41,6 +67,26 @@ _LAYER_TO_TOOL: dict[str, str] = {
     "output_contract_partial": "contract_checker",
 }
 
+LayerTier = Literal["mechanical", "environmental", "model"]
+
+# Mechanical: exit code / schema / deterministic state inspection — no judgment involved.
+# Environmental: inspects already-gathered external observations (evidence, criteria) —
+#   real, but can't be reduced to a pass/fail exit code the way mechanical checks can.
+# Model: requires semantic judgment (does this genuinely satisfy the goal?) — explicitly
+#   out of scope for this mechanical/environmental layer; always SKIPPED here, tracked as a
+#   future model-based (LLM judge) verification tier, not faked as a mechanical PASS.
+LAYER_TIER: dict[str, LayerTier] = {
+    "syntax": "mechanical",
+    "unit": "mechanical",
+    "integration": "mechanical",
+    "consistency": "mechanical",
+    "requirements": "environmental",
+    "assumptions": "environmental",
+    "goal_correctness": "model",
+    "evidence_sufficiency": "environmental",
+    "output_contract_partial": "mechanical",
+}
+
 
 @dataclass
 class LayerResult:
@@ -63,37 +109,110 @@ def _tool_available(tool_name: str, tool_manifest: Any) -> bool:
     return bool(tool_manifest.check_tool_availability(tool_name))
 
 
+def _execution_version_for_check(world_model: Any) -> Any:
+    """Mints an ExecutionVersion to attribute a mechanical-check subprocess to, pinned to
+    world_model's generation if one was provided, or a fresh WorldModel() otherwise (purely
+    for identity/idempotency-key purposes here — verify() doesn't track staleness against
+    this particular version, unlike its use in the main loop)."""
+    from .provenance import new_execution_version
+    from .world_model import WorldModel
+
+    return new_execution_version(world_model if world_model is not None else WorldModel())
+
+
+def _run_mechanical_subprocess_check(
+    layer: str,
+    argv: list[str],
+    target_path: str,
+    workspace_root: str | None,
+    world_model: Any,
+) -> LayerResult:
+    """Shared plumbing for verify_syntax/verify_unit: resolve cwd/allowed_root from
+    target_path (+ optional workspace_root), run through Phase 1b's execution boundary,
+    and translate the result into a LayerResult. A BoundaryViolation (e.g. target_path
+    resolves outside workspace_root) is reported as FAIL, not raised — a verification
+    layer rejecting its own input is a real, reportable verification outcome, not a crash."""
+    from .execution_boundary import BoundaryViolation, run_mechanical_check
+
+    target = Path(target_path)
+    cwd = target if target.is_dir() else target.parent
+    allowed_root = Path(workspace_root) if workspace_root is not None else cwd
+
+    try:
+        check = run_mechanical_check(
+            argv,
+            execution_version=_execution_version_for_check(world_model),
+            cwd=cwd,
+            allowed_root=allowed_root,
+        )
+    except BoundaryViolation as exc:
+        return LayerResult(layer=layer, status="FAIL", detail=f"execution boundary rejected the check: {exc}")
+
+    if check.timed_out:
+        return LayerResult(layer=layer, status="FAIL", detail=f"{argv[0]} timed out checking {target_path}")
+    if check.exit_code != 0:
+        detail = (check.stderr or check.stdout or "").strip() or f"{argv[0]} exited {check.exit_code}"
+        return LayerResult(layer=layer, status="FAIL", detail=detail[:2000])
+    return LayerResult(layer=layer, status="PASS", detail=f"{argv[0]} passed against {target_path}")
+
+
 def verify_syntax(
     result: Any,
     tool_manifest: Any,
+    target_path: str | None = None,
+    workspace_root: str | None = None,
+    world_model: Any = None,
 ) -> LayerResult:
-    """Verify syntax via linter."""
+    """Verify syntax via ruff, when there's a real file/directory to check.
+
+    Without target_path there is nothing to lint — SKIPPED (not PASS): a mechanical check
+    with no input to check is not evidence of correctness. result is still checked for the
+    trivial None case, since that's a real (if weak) signal independent of target_path.
+    """
     if not _tool_available("linter", tool_manifest):
         return LayerResult(layer="syntax", status="SKIPPED", detail="linter not available")
-    # Lightweight check: result should not be None
     if result is None:
         return LayerResult(layer="syntax", status="FAIL", detail="Result is None — syntax check failed")
-    return LayerResult(layer="syntax", status="PASS", detail="Syntax check passed")
+    if target_path is None:
+        return LayerResult(layer="syntax", status="SKIPPED", detail="no target_path provided — nothing to lint")
+    return _run_mechanical_subprocess_check(
+        "syntax", ["ruff", "check", "--quiet", str(target_path)], target_path, workspace_root, world_model
+    )
 
 
 def verify_unit(
     result: Any,
     tool_manifest: Any,
+    target_path: str | None = None,
+    workspace_root: str | None = None,
+    world_model: Any = None,
 ) -> LayerResult:
-    """Verify unit tests via pytest."""
+    """Verify unit tests via pytest, when there's a real test file/directory to run.
+
+    Without target_path there is nothing to run — SKIPPED (not PASS).
+    """
     if not _tool_available("pytest", tool_manifest):
         return LayerResult(layer="unit", status="SKIPPED", detail="pytest not available")
-    return LayerResult(layer="unit", status="PASS", detail="Unit verification passed")
+    if target_path is None:
+        return LayerResult(layer="unit", status="SKIPPED", detail="no target_path provided — nothing to test")
+    return _run_mechanical_subprocess_check(
+        "unit", ["pytest", str(target_path), "-q"], target_path, workspace_root, world_model
+    )
 
 
 def verify_integration(
     result: Any,
     tool_manifest: Any,
 ) -> LayerResult:
-    """Verify integration via integration_runner."""
-    if not _tool_available("integration_runner", tool_manifest):
-        return LayerResult(layer="integration", status="SKIPPED", detail="integration_runner not available")
-    return LayerResult(layer="integration", status="PASS", detail="Integration verification passed")
+    """Verify integration via integration_runner.
+
+    Always SKIPPED: there is no real "integration_runner" binary in
+    execution_boundary.DEFAULT_ALLOWED_EXECUTABLES, and inventing a fake pass/fail for a
+    tool that can't actually be invoked would just reintroduce the false-confidence problem
+    this rewrite exists to close. Upgrading this layer requires a real integration-test
+    runner concept, not a stub fallback.
+    """
+    return LayerResult(layer="integration", status="SKIPPED", detail="integration_runner not available")
 
 
 def verify_consistency(
@@ -101,10 +220,24 @@ def verify_consistency(
     world_model: Any,
     tool_manifest: Any,
 ) -> LayerResult:
-    """Verify consistency via consistency_checker."""
+    """Verify consistency by inspecting world_model.contradictions directly — a real,
+    deterministic check (no subprocess needed): FAIL if any unresolved HIGH or
+    SYSTEM_BREAKING contradiction is present, PASS otherwise.
+    """
     if not _tool_available("consistency_checker", tool_manifest):
         return LayerResult(layer="consistency", status="SKIPPED", detail="consistency_checker not available")
-    return LayerResult(layer="consistency", status="PASS", detail="Consistency check passed")
+    if world_model is None:
+        return LayerResult(layer="consistency", status="SKIPPED", detail="no world_model to check against")
+
+    contradictions = getattr(world_model, "contradictions", [])
+    unresolved = [c for c in contradictions if getattr(c, "severity", None) in ("HIGH", "SYSTEM_BREAKING")]
+    if unresolved:
+        return LayerResult(
+            layer="consistency",
+            status="FAIL",
+            detail=f"{len(unresolved)} unresolved HIGH/SYSTEM_BREAKING contradiction(s) in world model",
+        )
+    return LayerResult(layer="consistency", status="PASS", detail="no unresolved HIGH/SYSTEM_BREAKING contradictions")
 
 
 def verify_requirements(
@@ -112,15 +245,30 @@ def verify_requirements(
     success_criteria: Any,
     tool_manifest: Any,
 ) -> LayerResult:
-    """Verify requirements."""
+    """Verify requirements.
+
+    Mechanical-tier limit: whether a result *semantically* satisfies success_criteria is a
+    model-judgment question, not something this layer can decide. What IS mechanically
+    checkable — did we produce a result at all when criteria require one — is checked and
+    can FAIL; everything else is an honest SKIPPED, not a PASS this layer can't back up.
+    """
     if not _tool_available("requirements_checker", tool_manifest):
         return LayerResult(layer="requirements", status="SKIPPED", detail="requirements_checker not available")
-    # Check success_criteria if provided
-    if success_criteria is not None:
-        criteria_list = success_criteria if isinstance(success_criteria, list) else [success_criteria]
-        if not criteria_list:
-            return LayerResult(layer="requirements", status="PASS", detail="No criteria to check")
-    return LayerResult(layer="requirements", status="PASS", detail="Requirements check passed")
+
+    criteria_list = (
+        success_criteria if isinstance(success_criteria, list) else ([success_criteria] if success_criteria else [])
+    )
+    if not criteria_list:
+        return LayerResult(layer="requirements", status="SKIPPED", detail="no success criteria to check")
+    if result is None:
+        return LayerResult(
+            layer="requirements", status="FAIL", detail="success criteria specified but no result was produced"
+        )
+    return LayerResult(
+        layer="requirements",
+        status="SKIPPED",
+        detail="result produced; semantic satisfaction of criteria requires model-tier judgment, not verified here",
+    )
 
 
 def verify_assumptions(
@@ -128,20 +276,44 @@ def verify_assumptions(
     assumptions: Any,
     tool_manifest: Any,
 ) -> LayerResult:
-    """Verify assumptions."""
+    """Verify assumptions.
+
+    Same mechanical-tier limit as verify_requirements: whether stated assumptions still
+    hold is an environmental question this layer isn't wired to check yet. Only the
+    clear-cut case (assumptions were stated but no result exists to have honored them) FAILs.
+    """
     if not _tool_available("assumption_checker", tool_manifest):
         return LayerResult(layer="assumptions", status="SKIPPED", detail="assumption_checker not available")
-    return LayerResult(layer="assumptions", status="PASS", detail="Assumptions check passed")
+
+    assumptions_list = assumptions if isinstance(assumptions, list) else ([assumptions] if assumptions else [])
+    if not assumptions_list:
+        return LayerResult(layer="assumptions", status="SKIPPED", detail="no assumptions to check")
+    if result is None:
+        return LayerResult(layer="assumptions", status="FAIL", detail="assumptions stated but no result was produced")
+    return LayerResult(
+        layer="assumptions",
+        status="SKIPPED",
+        detail="result produced; environmental validation of assumptions not implemented at this layer",
+    )
 
 
 def verify_goal_correctness(
     result: Any,
     tool_manifest: Any,
 ) -> LayerResult:
-    """Verify goal correctness."""
+    """Verify goal correctness.
+
+    Model tier by nature — "is this the right outcome" is a judgment call, not a mechanical
+    property. Always SKIPPED when a tool is nominally available; a fake PASS here is exactly
+    the false-confidence pattern this rewrite exists to close.
+    """
     if not _tool_available("goal_checker", tool_manifest):
         return LayerResult(layer="goal_correctness", status="SKIPPED", detail="goal_checker not available")
-    return LayerResult(layer="goal_correctness", status="PASS", detail="Goal correctness check passed")
+    return LayerResult(
+        layer="goal_correctness",
+        status="SKIPPED",
+        detail="goal correctness requires model-tier judgment, not implemented at this layer",
+    )
 
 
 def verify_evidence_sufficiency(
@@ -272,17 +444,25 @@ def verify(
     output_contract: Any = None,
     hypothesis_set: Any = None,
     scope: str = "local",
+    target_path: str | None = None,
+    workspace_root: str | None = None,
 ) -> VerificationResult:
     """Run all 9 verification layers.
 
-    Unavailable layers → SKIPPED (not FAIL).
-    has_critical_failure = any layer has status FAIL.
-    HIGH risk → adversarial pass (sets adversarial_passed field).
+    Unavailable layers → SKIPPED (not FAIL). has_critical_failure = any layer has status
+    FAIL. HIGH risk → adversarial pass (sets adversarial_passed field).
+
+    target_path/workspace_root are new (Phase 2) and optional — omitting them (as every
+    existing caller, including node_compilers.py's codegen, does today) keeps syntax/unit
+    honestly SKIPPED exactly where they used to fake a PASS; this can only turn a false PASS
+    into an honest SKIPPED for existing callers, never introduce a new FAIL that wasn't
+    already possible, since a caller that never passed target_path never reaches the new
+    subprocess-backed check path at all.
     """
     layer_results: list[LayerResult] = []
 
-    layer_results.append(verify_syntax(result, tool_manifest))
-    layer_results.append(verify_unit(result, tool_manifest))
+    layer_results.append(verify_syntax(result, tool_manifest, target_path, workspace_root, world_model))
+    layer_results.append(verify_unit(result, tool_manifest, target_path, workspace_root, world_model))
     layer_results.append(verify_integration(result, tool_manifest))
     layer_results.append(verify_consistency(result, world_model, tool_manifest))
     layer_results.append(verify_requirements(result, success_criteria, tool_manifest))

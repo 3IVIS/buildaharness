@@ -4,6 +4,14 @@ Recovery strategies — P6.2.
 Six named strategies in a fixed progression. Advisory bias from the failure mode
 library does not override caller decisions. Adaptive softmax upgrade falls back to
 fixed order when experience_store is unavailable (INV-10).
+
+RecoveryBudget (Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html):
+before this, the only bound on "how much recovery is too much" was implicitly
+STRATEGY_ORDER's fixed length (6) — reaching the terminal "ESCALATE" strategy already
+triggers escalation in loop.py, but that's a strategy-switch count, not a real resource
+budget. RecoveryBudget adds genuine multi-dimensional bounds (tool calls, cost, wall-clock
+time, plan revisions) alongside it, not instead of it — exhausting either still escalates
+through the same existing surface-blocker path.
 """
 
 from __future__ import annotations
@@ -70,6 +78,79 @@ class StrategyState:
             stall_reason=d.get("stall_reason", ""),
             recovery_was_used=d.get("recovery_was_used", False),
             last_failure_class=d.get("last_failure_class", ""),
+        )
+
+
+@dataclass(frozen=True)
+class RecoveryBudget:
+    """Bounds how much recovery effort a single objective may consume. Immutable, like
+    StrategyState — consume() returns a new instance rather than mutating in place, so a
+    caller can't accidentally share/alias a budget across two objectives.
+
+    Any single exhausted dimension exhausts the whole budget — recovery isn't allowed to
+    keep going on cost alone once it's burned through its plan-revision allowance, etc.
+    """
+
+    max_tool_calls: int = 20
+    max_cost: float = 2.0
+    max_time_seconds: float = 300.0
+    max_plan_revisions: int = 3
+
+    tool_calls_used: int = 0
+    cost_used: float = 0.0
+    time_used_seconds: float = 0.0
+    plan_revisions_used: int = 0
+
+    def is_exhausted(self) -> bool:
+        return (
+            self.tool_calls_used >= self.max_tool_calls
+            or self.cost_used >= self.max_cost
+            or self.time_used_seconds >= self.max_time_seconds
+            or self.plan_revisions_used >= self.max_plan_revisions
+        )
+
+    def consume(
+        self,
+        *,
+        tool_calls: int = 0,
+        cost: float = 0.0,
+        time_seconds: float = 0.0,
+        plan_revisions: int = 0,
+    ) -> RecoveryBudget:
+        return RecoveryBudget(
+            max_tool_calls=self.max_tool_calls,
+            max_cost=self.max_cost,
+            max_time_seconds=self.max_time_seconds,
+            max_plan_revisions=self.max_plan_revisions,
+            tool_calls_used=self.tool_calls_used + tool_calls,
+            cost_used=self.cost_used + cost,
+            time_used_seconds=self.time_used_seconds + time_seconds,
+            plan_revisions_used=self.plan_revisions_used + plan_revisions,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "max_tool_calls": self.max_tool_calls,
+            "max_cost": self.max_cost,
+            "max_time_seconds": self.max_time_seconds,
+            "max_plan_revisions": self.max_plan_revisions,
+            "tool_calls_used": self.tool_calls_used,
+            "cost_used": self.cost_used,
+            "time_used_seconds": self.time_used_seconds,
+            "plan_revisions_used": self.plan_revisions_used,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> RecoveryBudget:
+        return cls(
+            max_tool_calls=d.get("max_tool_calls", 20),
+            max_cost=d.get("max_cost", 2.0),
+            max_time_seconds=d.get("max_time_seconds", 300.0),
+            max_plan_revisions=d.get("max_plan_revisions", 3),
+            tool_calls_used=d.get("tool_calls_used", 0),
+            cost_used=d.get("cost_used", 0.0),
+            time_used_seconds=d.get("time_used_seconds", 0.0),
+            plan_revisions_used=d.get("plan_revisions_used", 0),
         )
 
 

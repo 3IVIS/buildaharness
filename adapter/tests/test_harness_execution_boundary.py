@@ -125,6 +125,18 @@ def test_ruff_version_actually_runs_and_returns_real_output(tmp_path):
     assert "ruff" in result.stdout.lower()
 
 
+def test_ruff_check_actually_runs_under_resource_limits_on_a_real_file(tmp_path):
+    """Regression test: `ruff check` (unlike `--version`) spins up ruff's rayon-based
+    thread pool — this is what an earlier RLIMIT_AS setting broke (pthread_create failing
+    with EAGAIN on this machine's core count) even though `--version` passed fine. Runs a
+    real multi-file lint, not just a version probe, so a future resource-limit regression
+    here would be caught the same way this one was."""
+    (tmp_path / "clean.py").write_text("x = 1\n")
+    result = run_mechanical_check(["ruff", "check", "--quiet", str(tmp_path)], execution_version=_ev(), cwd=tmp_path)
+    assert result.timed_out is False
+    assert result.exit_code == 0, f"ruff check unexpectedly failed: {result.stderr}"
+
+
 def test_default_allowlist_matches_tool_manifests_mechanical_tools():
     assert DEFAULT_ALLOWED_EXECUTABLES == frozenset({"ruff", "pytest", "pylint", "mypy", "pyright"})
 

@@ -209,6 +209,7 @@ from .provenance import (
 )
 from .recovery import (
     STRATEGY_ORDER,
+    RecoveryBudget,
     StrategyState,
     StrategyType,
     apply_failure_mode_bias,
@@ -375,6 +376,7 @@ __all__ = [
     "ProcessConceptValidationError",
     "ProcessRegistry",
     "PrunedRegion",
+    "RecoveryBudget",
     "ReliabilityClass",
     "ReplanScope",
     "ReversibilityStrategy",

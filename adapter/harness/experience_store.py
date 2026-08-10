@@ -6,6 +6,21 @@ tool workflows, verification plans, and recovery sequences, then seeds the
 next run via warm_start(). When the store is unavailable every function
 is a silent no-op (INV-10).
 
+Promotion boundary (Phase 2 of plans/harness_and_assistant_architecture_remediation_
+plan.html): before this, update_experience_store() wrote directly into the same rows
+warm_start() read on the very next run — a completed run's own outcome could influence
+that same run's later reads, and definitely influenced every subsequent run immediately.
+docs/adr/002-harness-semantic-contract.md's guarantee #8 ("learning cannot alter
+correctness within a run") had no enforcement point. Now every write (append(),
+upsert_strategy_weight()) always lands with promoted=False, and every read
+(query_by_type(), get_strategy_weights(), and so warm_start()) only ever sees
+promoted=True rows. The only way a candidate becomes visible is an explicit,
+separate call to promote_experience_entries()/promote_strategy_weights() — never invoked
+automatically by anything in this module or the main loop. That's the
+"immutable trace -> offline learning -> candidate policy -> evaluation -> promotion ->
+future runs" pipeline the critique asked for, with the promotion step itself deliberately
+left to the caller (an offline evaluation job), not implemented here.
+
 Temperature semantics for softmax_strategy_policy():
   - Default 1.0: balanced weighting of empirical rates.
   - < 1.0: concentrates ordering around the highest-rate strategy.
@@ -75,6 +90,11 @@ class ExperienceEntry:
     failure_class: str | None = None
     task_class: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Promotion boundary (Phase 2): append() always writes promoted=False regardless of
+    # this field's value on the object passed in — a fresh entry is always an unpromoted
+    # candidate. Only promote_experience_entries() flips it, via a separate UPDATE, never
+    # from inside append() itself. See this module's own docstring.
+    promoted: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +105,7 @@ class ExperienceEntry:
             "payload": self.payload,
             "run_id": self.run_id,
             "created_at": self.created_at.isoformat(),
+            "promoted": self.promoted,
         }
 
     @classmethod
@@ -108,6 +129,7 @@ class ExperienceEntry:
             payload=d.get("payload", {}),
             run_id=d.get("run_id", ""),
             created_at=created_at,
+            promoted=d.get("promoted", False),
         )
 
 
@@ -159,7 +181,11 @@ class ExperienceStore:
             return False
 
     def append(self, entry: ExperienceEntry) -> None:
-        """Insert entry into experience_entries. No-op if unavailable."""
+        """Insert entry into experience_entries. No-op if unavailable.
+
+        Always writes promoted=False, regardless of entry.promoted's value — a fresh
+        write is always an unpromoted candidate (see this module's own docstring).
+        """
         if not self.available:
             return
         try:
@@ -172,9 +198,11 @@ class ExperienceStore:
                     _sql_text(
                         """
                         INSERT INTO experience_entries
-                            (id, entry_type, failure_class, task_class, payload, run_id, created_at)
+                            (id, entry_type, failure_class, task_class, payload, run_id,
+                             created_at, promoted)
                         VALUES
-                            (:id, :entry_type, :failure_class, :task_class, :payload::jsonb, :run_id, :created_at)
+                            (:id, :entry_type, :failure_class, :task_class, :payload::jsonb,
+                             :run_id, :created_at, false)
                         """
                     ),
                     {
@@ -193,13 +221,62 @@ class ExperienceStore:
         except Exception:
             pass
 
+    def promote_entries(self, entry_ids: list[str]) -> int:
+        """Explicitly promote specific entries by id — the only way append()'d candidates
+        become visible to query_by_type(). Never called automatically. Returns the count
+        of ids the store attempted to promote (0 if unavailable or entry_ids is empty)."""
+        if not self.available or not entry_ids:
+            return 0
+        try:
+            assert self.db_session_factory is not None
+            with self.db_session_factory() as session:
+                session.execute(
+                    _sql_text("UPDATE experience_entries SET promoted = true WHERE id IN :ids"),
+                    {"ids": tuple(entry_ids)},
+                )
+                session.commit()
+            return len(entry_ids)
+        except Exception:
+            return 0
+
+    def promote_all_pending_entries(self, entry_type: ExperienceType | None = None) -> bool:
+        """Bulk-promote every unpromoted entry (optionally scoped to one entry_type).
+        Convenience for an offline evaluation job that decided "everything since the last
+        promotion looks fine" rather than tracking individual ids. Returns whether the
+        operation ran (not a row count — a plain UPDATE doesn't cheaply know that here)."""
+        if not self.available:
+            return False
+        try:
+            assert self.db_session_factory is not None
+            with self.db_session_factory() as session:
+                if entry_type is not None:
+                    type_val = entry_type.value if isinstance(entry_type, ExperienceType) else entry_type
+                    session.execute(
+                        _sql_text(
+                            "UPDATE experience_entries SET promoted = true "
+                            "WHERE promoted = false AND entry_type = :entry_type"
+                        ),
+                        {"entry_type": type_val},
+                    )
+                else:
+                    session.execute(_sql_text("UPDATE experience_entries SET promoted = true WHERE promoted = false"))
+                session.commit()
+            return True
+        except Exception:
+            return False
+
     def query_by_type(
         self,
         entry_type: ExperienceType,
         task_class: str | None = None,
         limit: int = 10,
     ) -> list[ExperienceEntry]:
-        """Return most recent entries of entry_type, ordered by created_at DESC."""
+        """Return most recent PROMOTED entries of entry_type, ordered by created_at DESC.
+
+        Unpromoted candidates (every fresh append() until promote_entries()/
+        promote_all_pending_entries() explicitly promotes them) are invisible here —
+        see this module's own docstring for why.
+        """
         if not self.available:
             return []
         try:
@@ -214,7 +291,7 @@ class ExperienceStore:
                             """
                             SELECT id, entry_type, failure_class, task_class, payload, run_id, created_at
                             FROM experience_entries
-                            WHERE entry_type = :entry_type AND task_class = :task_class
+                            WHERE entry_type = :entry_type AND task_class = :task_class AND promoted = true
                             ORDER BY created_at DESC
                             LIMIT :limit
                             """
@@ -227,7 +304,7 @@ class ExperienceStore:
                             """
                             SELECT id, entry_type, failure_class, task_class, payload, run_id, created_at
                             FROM experience_entries
-                            WHERE entry_type = :entry_type
+                            WHERE entry_type = :entry_type AND promoted = true
                             ORDER BY created_at DESC
                             LIMIT :limit
                             """
@@ -256,18 +333,51 @@ class ExperienceStore:
             return []
 
     def get_strategy_weights(self) -> dict[StrategyWeightKey, float]:
-        """Return empirical rates keyed by StrategyWeightKey. Empty dict if unavailable."""
+        """Return empirical rates keyed by StrategyWeightKey, PROMOTED rows only.
+
+        Empty dict if unavailable or nothing has been promoted yet — see this module's
+        own docstring on the promotion boundary.
+        """
         if not self.available:
             return {}
         try:
             assert self.db_session_factory is not None
             with self.db_session_factory() as session:
                 rows = session.execute(
-                    _sql_text("SELECT strategy_type, failure_class, rate FROM experience_strategy_weights")
+                    _sql_text(
+                        "SELECT strategy_type, failure_class, rate FROM experience_strategy_weights "
+                        "WHERE promoted = true"
+                    )
                 ).fetchall()
             return {StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): float(row[2]) for row in rows}
         except Exception:
             return {}
+
+    def promote_strategy_weights(self, keys: list[StrategyWeightKey] | None = None) -> bool:
+        """Explicitly promote strategy-weight rows — specific (strategy_type,
+        failure_class) keys, or every unpromoted row if keys is None. The only way
+        upsert_strategy_weight()'s candidates become visible to get_strategy_weights().
+        Never called automatically."""
+        if not self.available:
+            return False
+        try:
+            assert self.db_session_factory is not None
+            with self.db_session_factory() as session:
+                if keys:
+                    for key in keys:
+                        session.execute(
+                            _sql_text(
+                                "UPDATE experience_strategy_weights SET promoted = true "
+                                "WHERE strategy_type = :strategy_type AND failure_class = :failure_class"
+                            ),
+                            {"strategy_type": key.strategy_type, "failure_class": key.failure_class},
+                        )
+                else:
+                    session.execute(_sql_text("UPDATE experience_strategy_weights SET promoted = true"))
+                session.commit()
+            return True
+        except Exception:
+            return False
 
 
 # ── warm_start() helpers ──────────────────────────────────────────────────────
@@ -425,21 +535,28 @@ def upsert_strategy_weight(
     success: bool,
     session: Any,
 ) -> None:
-    """UPSERT a strategy outcome into experience_strategy_weights."""
+    """UPSERT a strategy outcome into experience_strategy_weights.
+
+    Always resets promoted=False on both insert and update (Phase 2's promotion
+    boundary) — a row with a just-merged new attempt is unpromoted-by-definition, even
+    if it was promoted before this call; get_strategy_weights() won't see it again until
+    promote_strategy_weights() is called explicitly.
+    """
     session.execute(
         _sql_text(
             """
             INSERT INTO experience_strategy_weights
-                (id, strategy_type, failure_class, success_count, attempt_count, rate, updated_at)
+                (id, strategy_type, failure_class, success_count, attempt_count, rate, updated_at, promoted)
             VALUES
                 (:id, :strategy_type, :failure_class,
-                 :success_inc, 1, :initial_rate, CURRENT_TIMESTAMP)
+                 :success_inc, 1, :initial_rate, CURRENT_TIMESTAMP, false)
             ON CONFLICT (strategy_type, failure_class) DO UPDATE SET
                 success_count = experience_strategy_weights.success_count + :success_inc,
                 attempt_count = experience_strategy_weights.attempt_count + 1,
                 rate = (experience_strategy_weights.success_count + :success_inc)::float /
                        (experience_strategy_weights.attempt_count + 1),
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = CURRENT_TIMESTAMP,
+                promoted = false
             """
         ),
         {

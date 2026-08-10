@@ -69,7 +69,8 @@ class _InMemorySession:
 
     def execute(self, stmt, params=None):
         sql = str(stmt).strip()
-        # Handle INSERT into experience_entries
+        # Handle INSERT into experience_entries — always lands promoted=False (Phase 2's
+        # promotion boundary), matching the real SQL's hardcoded `false` literal.
         if "INSERT INTO experience_entries" in sql and params:
             import json
 
@@ -87,11 +88,29 @@ class _InMemorySession:
                         "payload": payload,
                         "run_id": params.get("run_id"),
                         "created_at": params.get("created_at"),
+                        "promoted": False,
                     },
                 )
             )
             return MagicMock()
-        # Handle INSERT/UPSERT into experience_strategy_weights
+        # Handle bulk/targeted promotion UPDATEs on experience_entries
+        if "UPDATE experience_entries SET promoted = true" in sql:
+            rows = self._db.setdefault("experience_entries", [])
+            if params and "ids" in params:
+                ids = set(params["ids"])
+                for r in rows:
+                    if r["id"] in ids:
+                        r["promoted"] = True
+            elif params and params.get("entry_type"):
+                for r in rows:
+                    if r["entry_type"] == params["entry_type"]:
+                        r["promoted"] = True
+            else:
+                for r in rows:
+                    r["promoted"] = True
+            return MagicMock()
+        # Handle INSERT/UPSERT into experience_strategy_weights — always resets
+        # promoted=False on both branches, matching the real SQL.
         if "INSERT INTO experience_strategy_weights" in sql and params:
             key = (params.get("strategy_type"), params.get("failure_class"))
             weights = self._db.setdefault("experience_strategy_weights", [])
@@ -101,6 +120,7 @@ class _InMemorySession:
                 existing["attempt_count"] += 1
                 existing["success_count"] += success_inc
                 existing["rate"] = existing["success_count"] / existing["attempt_count"]
+                existing["promoted"] = False
             else:
                 success_inc = params.get("success_inc", 0)
                 weights.append(
@@ -111,12 +131,24 @@ class _InMemorySession:
                         "success_count": success_inc,
                         "attempt_count": 1,
                         "rate": float(success_inc),
+                        "promoted": False,
                     }
                 )
             return MagicMock()
-        # Handle SELECT on experience_entries
+        # Handle promotion UPDATEs on experience_strategy_weights
+        if "UPDATE experience_strategy_weights SET promoted = true" in sql:
+            rows = self._db.setdefault("experience_strategy_weights", [])
+            if params and params.get("strategy_type") is not None:
+                for r in rows:
+                    if r["strategy_type"] == params["strategy_type"] and r["failure_class"] == params["failure_class"]:
+                        r["promoted"] = True
+            else:
+                for r in rows:
+                    r["promoted"] = True
+            return MagicMock()
+        # Handle SELECT on experience_entries — promoted=true only, matching the real SQL.
         if "SELECT" in sql and "FROM experience_entries" in sql:
-            rows = self._db.get("experience_entries", [])
+            rows = [r for r in self._db.get("experience_entries", []) if r.get("promoted")]
             if params and params.get("entry_type"):
                 rows = [r for r in rows if r["entry_type"] == params["entry_type"]]
             if params and params.get("task_class"):
@@ -137,9 +169,9 @@ class _InMemorySession:
                     for r in rows
                 ]
             )
-        # Handle SELECT on experience_strategy_weights
+        # Handle SELECT on experience_strategy_weights — promoted=true only.
         if "SELECT" in sql and "FROM experience_strategy_weights" in sql:
-            rows = self._db.get("experience_strategy_weights", [])
+            rows = [r for r in self._db.get("experience_strategy_weights", []) if r.get("promoted")]
             return _FakeResult([(r["strategy_type"], r["failure_class"], r["rate"]) for r in rows])
         # SELECT 1 ping
         if sql.strip().upper() == "SELECT 1":
@@ -192,7 +224,9 @@ def test_t01_available_false_on_connection_error():
 
 
 def test_t02_append_query_round_trip():
-    """T02: append() then query_by_type() returns the stored entry with identical payload."""
+    """T02: append() then query_by_type() returns the stored entry with identical payload
+    — now going through the full realistic lifecycle (append lands unpromoted, then an
+    explicit promotion makes it visible), per Phase 2's promotion boundary."""
     store = _make_in_memory_store()
     entry = ExperienceEntry(
         entry_type=ExperienceType.DECOMPOSITION,
@@ -201,11 +235,109 @@ def test_t02_append_query_round_trip():
         task_class="refactor",
     )
     store.append(entry)
-    results = store.query_by_type(ExperienceType.DECOMPOSITION)
-    assert len(results) == 1
-    assert results[0].payload == entry.payload
-    assert results[0].entry_type == ExperienceType.DECOMPOSITION
-    assert results[0].task_class == "refactor"
+
+    # Unpromoted immediately after append — the core Phase 2 behavior.
+    assert store.query_by_type(ExperienceType.DECOMPOSITION) == []
+
+    promoted_count = store.promote_entries([entry.id])
+    assert promoted_count == 1
+
+
+# ─── Promotion boundary: promote_entries/promote_all_pending_entries/promote_strategy_weights ───
+
+
+def test_promote_entries_only_promotes_the_named_ids():
+    store = _make_in_memory_store()
+    kept_unpromoted = ExperienceEntry(entry_type=ExperienceType.TOOL_WORKFLOW, payload={"a": 1}, run_id="r1")
+    to_promote = ExperienceEntry(entry_type=ExperienceType.TOOL_WORKFLOW, payload={"b": 2}, run_id="r2")
+    store.append(kept_unpromoted)
+    store.append(to_promote)
+
+    store.promote_entries([to_promote.id])
+
+    results = store.query_by_type(ExperienceType.TOOL_WORKFLOW, limit=10)
+    assert [r.id for r in results] == [to_promote.id]
+
+
+def test_promote_all_pending_entries_scoped_to_one_type_does_not_promote_other_types():
+    store = _make_in_memory_store()
+    store.append(ExperienceEntry(entry_type=ExperienceType.TOOL_WORKFLOW, payload={}, run_id="r1"))
+    store.append(ExperienceEntry(entry_type=ExperienceType.VERIFICATION_PLAN, payload={}, run_id="r2"))
+
+    store.promote_all_pending_entries(ExperienceType.TOOL_WORKFLOW)
+
+    assert len(store.query_by_type(ExperienceType.TOOL_WORKFLOW)) == 1
+    assert len(store.query_by_type(ExperienceType.VERIFICATION_PLAN)) == 0
+
+
+def test_promote_all_pending_entries_with_no_type_promotes_everything():
+    store = _make_in_memory_store()
+    store.append(ExperienceEntry(entry_type=ExperienceType.TOOL_WORKFLOW, payload={}, run_id="r1"))
+    store.append(ExperienceEntry(entry_type=ExperienceType.VERIFICATION_PLAN, payload={}, run_id="r2"))
+
+    store.promote_all_pending_entries()
+
+    assert len(store.query_by_type(ExperienceType.TOOL_WORKFLOW)) == 1
+    assert len(store.query_by_type(ExperienceType.VERIFICATION_PLAN)) == 1
+
+
+def test_promote_entries_unavailable_store_returns_zero():
+    store = ExperienceStore(db_session_factory=None)
+    assert store.promote_entries(["some-id"]) == 0
+    assert store.promote_all_pending_entries() is False
+
+
+def test_promote_strategy_weights_scoped_to_one_key_leaves_others_unpromoted():
+    store = _make_in_memory_store()
+    with store.db_session_factory() as session:
+        from harness.experience_store import upsert_strategy_weight
+
+        upsert_strategy_weight("DIRECT_EDIT", "syntax_error", True, session)
+        upsert_strategy_weight("TRACE_EXEC", "import_error", True, session)
+        session.commit()
+
+    store.promote_strategy_weights([StrategyWeightKey("DIRECT_EDIT", "syntax_error")])
+
+    weights = store.get_strategy_weights()
+    assert StrategyWeightKey("DIRECT_EDIT", "syntax_error") in weights
+    assert StrategyWeightKey("TRACE_EXEC", "import_error") not in weights
+
+
+def test_promote_strategy_weights_with_no_keys_promotes_everything():
+    store = _make_in_memory_store()
+    with store.db_session_factory() as session:
+        from harness.experience_store import upsert_strategy_weight
+
+        upsert_strategy_weight("DIRECT_EDIT", "syntax_error", True, session)
+        upsert_strategy_weight("TRACE_EXEC", "import_error", True, session)
+        session.commit()
+
+    store.promote_strategy_weights()
+
+    weights = store.get_strategy_weights()
+    assert len(weights) == 2
+
+
+def test_upsert_strategy_weight_resets_promotion_on_new_attempt():
+    """A promoted row that receives a new (unpromoted-by-definition) attempt must stop
+    being visible until re-promoted — otherwise get_strategy_weights() would serve a
+    partially-stale mix of promoted and not-yet-evaluated data under one rate."""
+    store = _make_in_memory_store()
+    with store.db_session_factory() as session:
+        from harness.experience_store import upsert_strategy_weight
+
+        upsert_strategy_weight("DIRECT_EDIT", "syntax_error", True, session)
+        session.commit()
+    store.promote_strategy_weights([StrategyWeightKey("DIRECT_EDIT", "syntax_error")])
+    assert StrategyWeightKey("DIRECT_EDIT", "syntax_error") in store.get_strategy_weights()
+
+    with store.db_session_factory() as session:
+        from harness.experience_store import upsert_strategy_weight
+
+        upsert_strategy_weight("DIRECT_EDIT", "syntax_error", False, session)
+        session.commit()
+
+    assert StrategyWeightKey("DIRECT_EDIT", "syntax_error") not in store.get_strategy_weights()
 
 
 # ─── T03: get_strategy_weights returns StrategyWeightKey tuples ──────────────
@@ -310,6 +442,9 @@ def test_t05_warm_start_seeds_task_graph():
             task_class="refactor",
         )
     )
+    # Phase 2's promotion boundary: a fresh append() is an unpromoted candidate until
+    # explicitly promoted — simulates an offline evaluation job having already done so.
+    store.promote_all_pending_entries(ExperienceType.DECOMPOSITION)
 
     task_graph = TaskGraph()
     result = warm_start(
@@ -344,7 +479,9 @@ def test_t06_warm_start_loads_non_flat_weights():
             MagicMock(),  # bypassed — insert directly into db
             {},
         )
-        # Insert via direct db manipulation in the in-memory session
+        # Insert via direct db manipulation in the in-memory session — promoted=True
+        # since this simulates pre-existing empirical data an offline evaluation job
+        # already promoted, not a fresh write going through upsert_strategy_weight().
         session._db.setdefault("experience_strategy_weights", []).append(
             {
                 "strategy_type": "DIRECT_EDIT",
@@ -352,6 +489,7 @@ def test_t06_warm_start_loads_non_flat_weights():
                 "success_count": 4,
                 "attempt_count": 5,
                 "rate": 0.8,
+                "promoted": True,
             }
         )
 
@@ -396,8 +534,12 @@ def test_t07_strategy_weight_updated_after_success():
         experience_store=store,
     )
 
-    weights = store.get_strategy_weights()
+    # Phase 2's promotion boundary: update_experience_store()'s write lands unpromoted.
     key = StrategyWeightKey("DIRECT_EDIT", "syntax_error")
+    assert key not in store.get_strategy_weights()
+    store.promote_strategy_weights([key])
+
+    weights = store.get_strategy_weights()
     assert key in weights
     # First successful attempt → rate = 1/1 = 1.0 (> 0.5)
     assert weights[key] > 0.5
@@ -427,6 +569,7 @@ def test_t08_recovery_sequence_stored_on_recovery():
         execution_context=context,
         experience_store=store,
     )
+    store.promote_all_pending_entries(ExperienceType.RECOVERY_SEQUENCE)
 
     entries = store.query_by_type(ExperienceType.RECOVERY_SEQUENCE)
     assert len(entries) >= 1
@@ -530,6 +673,7 @@ def test_t12_build_strategy_ordering_changes_with_empirical_data():
                         "success_count": 1,
                         "attempt_count": 1,
                         "rate": 1.0,
+                        "promoted": True,
                     }
                 )
             # DIRECT_EDIT always fails
@@ -552,6 +696,7 @@ def test_t12_build_strategy_ordering_changes_with_empirical_data():
                         "success_count": 0,
                         "attempt_count": 1,
                         "rate": 0.0,
+                        "promoted": True,
                     }
                 )
 
@@ -583,3 +728,84 @@ def test_inv10_warm_start_absent_vs_present_identical_strategy_state():
     assert initial.current_strategy == "DIRECT_EDIT"
     assert initial.prior_strategy_weights == {}
     assert initial.recovery_was_used is False
+
+
+def test_inv_promotion_disabled_vs_enabled_but_unpromoted_produce_identical_mutations():
+    """New invariant (Phase 2 of plans/harness_and_assistant_architecture_remediation_
+    plan.html): warm_start() against a store that's AVAILABLE and holds real candidate
+    data — decompositions, tool workflows, verification plans, strategy weights — but
+    where NONE of it has been promoted, must mutate strategy_state/task_graph/
+    dep_graph_budget identically to warm_start() against a fully-absent store. Unpromoted
+    data must have zero behavioral influence, not just "less" influence.
+
+    (WarmStartResult.loaded legitimately differs — True/reachable vs False/absent is a
+    connectivity fact, not a behavioral one — so it's deliberately not compared here.)
+    """
+    # Store A: absent entirely.
+    absent_store = ExperienceStore(db_session_factory=None)
+    strategy_state_absent = StrategyState()
+    task_graph_absent = TaskGraph()
+    dep_budget_absent = DepGraphBudget()
+
+    warm_start(
+        experience_store=absent_store,
+        strategy_state=strategy_state_absent,
+        failure_diagnostics=None,
+        task_graph=task_graph_absent,
+        task_class="refactor",
+        dep_graph_budget=dep_budget_absent,
+    )
+
+    # Store B: available, populated with real candidate data, none of it promoted.
+    populated_store = _make_in_memory_store()
+    populated_store.append(
+        ExperienceEntry(
+            entry_type=ExperienceType.DECOMPOSITION,
+            payload={"tasks": [{"id": "t1", "description": "Step one"}]},
+            run_id=str(uuid.uuid4()),
+            task_class="refactor",
+        )
+    )
+    populated_store.append(
+        ExperienceEntry(
+            entry_type=ExperienceType.TOOL_WORKFLOW,
+            payload={"workflow": [{"tool": "grep"}]},
+            run_id=str(uuid.uuid4()),
+        )
+    )
+    populated_store.append(
+        ExperienceEntry(
+            entry_type=ExperienceType.VERIFICATION_PLAN,
+            payload={"layers": ["syntax", "unit"]},
+            run_id=str(uuid.uuid4()),
+        )
+    )
+    update_experience_store(
+        completed_task=Task(id="t1", description="x", status="COMPLETE"),
+        strategy_state=StrategyState(current_strategy="DIRECT_EDIT", last_failure_class="syntax_error"),
+        execution_context=ExecutionContext(task_class="refactor", run_id=str(uuid.uuid4())),
+        experience_store=populated_store,
+    )
+    # None of the above was promoted — confirm the store genuinely has unpromoted data,
+    # not an accidentally-empty store that would make this test vacuous.
+    assert populated_store.query_by_type(ExperienceType.DECOMPOSITION) == []
+    assert populated_store.get_strategy_weights() == {}
+
+    strategy_state_populated = StrategyState()
+    task_graph_populated = TaskGraph()
+    dep_budget_populated = DepGraphBudget()
+
+    warm_start(
+        experience_store=populated_store,
+        strategy_state=strategy_state_populated,
+        failure_diagnostics=None,
+        task_graph=task_graph_populated,
+        task_class="refactor",
+        dep_graph_budget=dep_budget_populated,
+    )
+
+    # The actual invariant: identical mutations regardless of unpromoted data's presence.
+    assert strategy_state_populated.prior_strategy_weights == strategy_state_absent.prior_strategy_weights
+    assert strategy_state_populated.current_strategy == strategy_state_absent.current_strategy
+    assert len(task_graph_populated.tasks) == len(task_graph_absent.tasks) == 0
+    assert dep_budget_populated.confidence_decay_rate == dep_budget_absent.confidence_decay_rate
