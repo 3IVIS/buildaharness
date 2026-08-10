@@ -24,6 +24,7 @@ from harness.control_state import (
     compute_elevation_factor,
     detect_deadlock,
     resolve_control_state,
+    risk_summary,
 )
 from harness.diagnostics import (
     BeliefHealth,
@@ -215,7 +216,9 @@ def test_T09_tier1_fires_before_lower_tiers_on_system_breaking():
 
     cs = resolve_control_state(d, wm)
 
-    assert cs.risk_state == "BLOCKED"
+    assert cs.permission == "DENY"
+    assert cs.execution_mode == "RECOVERY"
+    assert cs.escalation == "SYSTEM_BREAKING"
     assert cs.escalation_reason == "SYSTEM_BREAKING_CONTRADICTION"
     # block_mask populated by Tier 1
     assert len(cs.block_mask) >= 1
@@ -235,7 +238,8 @@ def test_T10_tier3_cautious_allows_exploration_actions():
 
     cs = resolve_control_state(d, wm)
 
-    assert cs.risk_state == "CAUTIOUS"
+    assert cs.permission == "ALLOW"
+    assert cs.execution_mode == "CAUTIOUS"
     # block_mask is EMPTY — no dimensions are critically blocked
     assert len(cs.block_mask) == 0
     # Notes include the coverage gap advisory
@@ -265,7 +269,8 @@ def test_T12_tier5_returns_normal_when_all_dims_healthy():
 
     cs = resolve_control_state(d, wm)
 
-    assert cs.risk_state == "NORMAL"
+    assert cs.permission == "ALLOW"
+    assert cs.execution_mode == "NORMAL"
     assert len(cs.block_mask) == 0
     assert cs.escalation_reason is None
 
@@ -308,7 +313,7 @@ def test_T13_mutual_block_triggers_deadlock_and_human_required():
     d.belief_health.freshness = 0.05  # below CRITICAL → Tier 2 blocks belief_freshness
 
     cs = resolve_control_state(d, wm)
-    assert cs.risk_state == "BLOCKED"
+    assert cs.permission == "DENY"
     # dep_graph_refresh requires verification_strength, consistency_repair requires verification_strength
     # belief_refresh requires verification_feasibility (not blocked) — may or may not cycle
     # At minimum, BLOCKED is confirmed
@@ -381,18 +386,18 @@ def test_T16b_action_gate_escalates_on_human_required():
 
     cs = ControlState(generation_id=1)
     cs.escalation_reason = "HUMAN_REQUIRED"
-    cs.risk_state = "BLOCKED"  # would BLOCK, but ESCALATE fires first
+    cs.permission = "DENY"  # would BLOCK, but ESCALATE fires first
 
     result = action_gate({"type": "noop"}, control_state=cs, world_model=wm)
     assert result == "ESCALATE"
 
 
 def test_T16c_action_gate_blocks_on_blocked_risk_state():
-    """T16c — action_gate returns BLOCK when risk_state=BLOCKED and no escalation_reason."""
+    """T16c — action_gate returns BLOCK when permission=DENY and no escalation_reason."""
     wm = _fresh_world_model(generation_id=1)
 
     cs = ControlState(generation_id=1)
-    cs.risk_state = "BLOCKED"
+    cs.permission = "DENY"
 
     result = action_gate({"type": "noop"}, control_state=cs, world_model=wm)
     assert result == "BLOCK"
@@ -418,11 +423,11 @@ def test_T17_post_exec_gate_identifies_substep_a_control_state_as_stale():
 
 
 def test_T18_decomposition_gate_returns_false_when_blocked():
-    """T18 — decomposition_gate returns False when control_state.risk_state == 'BLOCKED'."""
+    """T18 — decomposition_gate returns False when control_state.permission == 'DENY'."""
     wm = _fresh_world_model()
     blocked_cs = ControlState(
         generation_id=0,
-        risk_state="BLOCKED",
+        permission="DENY",
         escalation_reason="SYSTEM_BREAKING_CONTRADICTION",
     )
 
@@ -459,7 +464,7 @@ def test_T20_dep_class_gap_annotation_only_in_notes_not_arithmetic():
     assert any("dep-class-gap" in note for note in cs.notes), f"Annotation not found in notes: {cs.notes}"
 
     # NORMAL state confirms no tier was influenced by the annotation value as a number
-    assert cs.risk_state == "NORMAL"
+    assert cs.execution_mode == "NORMAL"
     assert len(cs.block_mask) == 0
 
     # Verify dep_class_gap_annotation is not a numeric field on Diagnostics
@@ -475,3 +480,74 @@ def test_T20_dep_class_gap_annotation_only_in_notes_not_arithmetic():
 
     # Confirm it's attached at the end (after tier resolution)
     assert cs.notes[-1] == "dep-class-gap: class A missing"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# T21–T25  risk_estimate / confidence_estimate / risk_summary() (Phase 1a)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_T21_healthy_diagnostics_produce_low_risk_high_confidence():
+    """T21 — all-healthy sub-dimensions produce risk_estimate near 0 and confidence_estimate near 1."""
+    wm = _fresh_world_model()
+    cs = resolve_control_state(_healthy_diagnostics(), wm)
+
+    assert cs.risk_estimate == pytest.approx(0.0, abs=1e-9)
+    assert cs.confidence_estimate == pytest.approx(1.0, abs=1e-9)
+
+
+def test_T22_degraded_operational_dims_raise_risk_estimate_not_confidence():
+    """T22 — degrading only the *operational* pool (verification/progress/failure/
+    oscillation) raises risk_estimate but leaves confidence_estimate at its healthy value —
+    the two are computed from disjoint pools, not the same composite number twice."""
+    wm = _fresh_world_model()
+    d = _healthy_diagnostics()
+    d.verification_health.strength = 0.5
+    d.verification_health.feasibility = 0.5
+    d.execution_health.progress_rate = 0.5
+
+    cs = resolve_control_state(d, wm)
+
+    assert cs.risk_estimate > 0.0
+    assert cs.confidence_estimate == pytest.approx(1.0, abs=1e-9)
+
+
+def test_T23_degraded_epistemic_dims_raise_risk_estimate_confidence_lowers_not_risk():
+    """T23 — degrading only the *epistemic* pool (belief/coverage health) lowers
+    confidence_estimate but leaves risk_estimate at its healthy value."""
+    wm = _fresh_world_model()
+    d = _healthy_diagnostics()
+    d.belief_health.freshness = 0.5
+    d.belief_health.consistency = 0.5
+    d.coverage_health.symptom_coverage = 0.5
+
+    cs = resolve_control_state(d, wm)
+
+    assert cs.confidence_estimate < 1.0
+    assert cs.risk_estimate == pytest.approx(0.0, abs=1e-9)
+
+
+def test_T24_estimates_are_attached_even_on_tier1_and_tier2_blocked_exits():
+    """T24 — risk_estimate/confidence_estimate are computed once up front and attached
+    at every exit point, including the early Tier 1/Tier 2 returns — not just Tier 5."""
+    wm = _fresh_world_model()
+    wm.add_contradiction(Contradiction(id="c1", type="pairwise", severity="SYSTEM_BREAKING", scope="global"))
+    d = _healthy_diagnostics()
+
+    cs = resolve_control_state(d, wm)
+
+    assert cs.permission == "DENY"  # Tier 1 fired
+    # Estimates still reflect the (healthy) diagnostics, not left at dataclass defaults
+    # by virtue of an early return skipping their computation.
+    assert cs.risk_estimate == pytest.approx(0.0, abs=1e-9)
+    assert cs.confidence_estimate == pytest.approx(1.0, abs=1e-9)
+
+
+def test_T25_risk_summary_derives_legacy_three_way_reading():
+    """T25 — risk_summary() reconstructs NORMAL/CAUTIOUS/BLOCKED from the split fields,
+    for strategy_state.risk_state_history's oscillation-detection proxy."""
+    assert risk_summary(ControlState(permission="DENY", execution_mode="RECOVERY")) == "BLOCKED"
+    assert risk_summary(ControlState(permission="ALLOW", execution_mode="CAUTIOUS")) == "CAUTIOUS"
+    assert risk_summary(ControlState(permission="ALLOW", execution_mode="NORMAL")) == "NORMAL"
+    # DENY wins over execution_mode regardless of what mode accompanies it.
+    assert risk_summary(ControlState(permission="DENY", execution_mode="NORMAL")) == "BLOCKED"

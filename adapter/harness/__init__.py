@@ -47,10 +47,14 @@ from .contradiction import (
 from .control_state import (
     BlockEntry,
     ControlState,
+    EscalationDecision,
+    ExecutionMode,
+    PermissionDecision,
     RiskState,
     compute_elevation_factor,
     detect_deadlock,
     resolve_control_state,
+    risk_summary,
 )
 from .diagnostics import (
     BeliefHealth,
@@ -187,6 +191,16 @@ from .process_tools import complete_step, get_current_step, list_processes, load
 from .progress import (
     cannot_make_progress,
 )
+from .provenance import (
+    ExecutionVersion,
+    PlanVersion,
+    VerificationVersion,
+    WorldModelVersion,
+    generate_id,
+    new_execution_version,
+    new_plan_version,
+    new_verification_version,
+)
 from .recovery import (
     STRATEGY_ORDER,
     StrategyState,
@@ -234,7 +248,7 @@ from .risk import (
     compute_file_centrality,
     estimate_risk,
 )
-from .staleness import assert_generation_fresh, increment_generation_id, staleness_check, staleness_sweep
+from .staleness import assert_generation_fresh, increment_generation_id, is_stale, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
 from .task_graph import (
     ConflictProbabilityCache,
@@ -313,13 +327,16 @@ __all__ = [
     "DimensionType",
     "EliminationPolicy",
     "EliminationRecord",
+    "EscalationDecision",
     "EscalationHalt",
     "Evidence",
     "EvidenceStore",
     "EvidenceType",
     "ExecutionContext",
     "ExecutionHealth",
+    "ExecutionMode",
     "ExecutionResult",
+    "ExecutionVersion",
     "ExperienceEntry",
     "ExperienceStore",
     "ExperienceType",
@@ -340,6 +357,8 @@ __all__ = [
     "Observation",
     "OutputContract",
     "PendingUpdate",
+    "PermissionDecision",
+    "PlanVersion",
     "PostgresNotifyChannel",
     "ProcessConcept",
     "ProcessConceptNotFoundError",
@@ -374,8 +393,10 @@ __all__ = [
     "VerificationHealth",
     "VerificationLayer",
     "VerificationResult",
+    "VerificationVersion",
     "WarmStartResult",
     "WorldModel",
+    "WorldModelVersion",
     "action_dep_overlap",
     "action_gate",
     "analogy_based_generation",
@@ -453,6 +474,7 @@ __all__ = [
     "failure_mode_library_contribution",
     "generate_from_failure_library",
     "generate_hypotheses",
+    "generate_id",
     "get_current_step",
     "get_envelope",
     "get_next_strategy",
@@ -461,6 +483,7 @@ __all__ = [
     "initialize_harness",
     "inject_clarification",
     "integrate_evidence",
+    "is_stale",
     "list_processes",
     "load_process",
     "load_strategy_priors",
@@ -468,6 +491,9 @@ __all__ = [
     "load_tool_workflow_seeds",
     "load_verification_plan_seeds",
     "merge_world_models",
+    "new_execution_version",
+    "new_plan_version",
+    "new_verification_version",
     "normalise",
     "normalise_confidence",
     "normalise_entropy",
@@ -483,6 +509,7 @@ __all__ = [
     "revalidate_task_graph",
     "review_proposed_change",
     "reviewer_pass",
+    "risk_summary",
     "run_one_iteration",
     "seed_adversarial_prior",
     "select_best_action",

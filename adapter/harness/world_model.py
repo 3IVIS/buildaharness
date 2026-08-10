@@ -47,6 +47,12 @@ class Belief:
     supporting_evidence: list[str] = field(default_factory=list)
     reliability: str = ""
     recorded_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Belief ids this belief has been found to contradict — stamped by
+    # WorldModel.add_contradiction() below, not set directly. Alongside derived_from[]
+    # this makes the provenance graph the critique asked for ("Belief B17, derived from
+    # E42/E51, contradicts B13") queryable from the belief itself, not only recoverable
+    # by scanning world_model.contradictions[].involved_belief_ids for this id.
+    contradicts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +62,7 @@ class Belief:
             "derived_from": self.derived_from,
             "supporting_evidence": self.supporting_evidence,
             "recorded_at": self.recorded_at.isoformat(),
+            "contradicts": self.contradicts,
         }
 
     @classmethod
@@ -67,6 +74,7 @@ class Belief:
             derived_from=d["derived_from"],
             supporting_evidence=d.get("supporting_evidence", []),
             recorded_at=datetime.fromisoformat(d["recorded_at"]) if "recorded_at" in d else datetime.now(UTC),
+            contradicts=d.get("contradicts", []),
         )
 
 
@@ -142,6 +150,19 @@ class WorldModel:
         # next resolve_control_state() Tier 1 pass — they never cause an inline
         # halt or raise an exception at this layer.
         self.contradictions.append(contradiction)
+        # Stamp contradicts[] onto every involved belief so the relationship is
+        # queryable from the belief itself (see Belief.contradicts' own docstring).
+        # Pairwise between all involved beliefs, not just "each points at the
+        # contradiction" — a 3+-way set-level contradiction means every belief in it
+        # contradicts every other one, not just the contradiction record.
+        beliefs_by_id = {b.id: b for b in self.beliefs}
+        for belief_id in contradiction.involved_belief_ids:
+            belief = beliefs_by_id.get(belief_id)
+            if belief is None:
+                continue
+            for other_id in contradiction.involved_belief_ids:
+                if other_id != belief_id and other_id not in belief.contradicts:
+                    belief.contradicts.append(other_id)
 
     def to_dict(self) -> dict[str, Any]:
         return {

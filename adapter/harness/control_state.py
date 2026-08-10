@@ -5,6 +5,25 @@ ControlState is the sole control input for action selection (INV-06).
 resolve_control_state() applies five tiers in strict order.
 detect_deadlock() uses directed cycle detection on the recovery-action graph.
 dep_class_gap_annotation is attached to notes[] only — never enters arithmetic (INV-07).
+
+Phase 1a of plans/harness_and_assistant_architecture_remediation_plan.html split the old
+single `risk_state: NORMAL/CAUTIOUS/BLOCKED` field into five distinct concepts, per the
+critique's "what does CAUTIOUS actually mean — a probability? a permission? a mode?"
+objection:
+  - `permission`         — PermissionDecision, the authoritative ALLOW/DENY action gate.
+  - `execution_mode`     — ExecutionMode, a mode label independent of permission (an ALLOWed
+                            action can still be in CAUTIOUS mode, signalling the caller
+                            should behave more conservatively without being blocked).
+  - `escalation`          — EscalationDecision, a structured category distinct from the
+                            free-text `escalation_reason` detail string.
+  - `risk_estimate`      — a continuous [0,1] score computed from the *operational* sub-
+                            dimensions (verification/progress/failure/oscillation health).
+  - `confidence_estimate` — a continuous [0,1] score computed from the *epistemic* sub-
+                            dimensions (belief/coverage health) — a distinct signal from
+                            risk_estimate, not the same composite number surfaced twice.
+`RiskState` and `risk_summary()` remain as a derived, three-way legacy view used only by
+strategy_state.risk_state_history's oscillation-detection proxy (progress.py), which
+predates this split and is out of this phase's scope to rework.
 """
 
 from __future__ import annotations
@@ -20,9 +39,23 @@ from .diagnostics import (
 )
 
 RiskState = Literal["NORMAL", "CAUTIOUS", "BLOCKED"]
+PermissionDecision = Literal["ALLOW", "DENY"]
+ExecutionMode = Literal["NORMAL", "CAUTIOUS", "RECOVERY"]
+EscalationDecision = Literal["NONE", "HUMAN_REQUIRED", "SYSTEM_BREAKING"]
 
 CRITICAL_THRESHOLD: float = 0.2
 CAUTION_THRESHOLD: float = 0.4
+
+# Disjoint sub-dimension pools risk_estimate/confidence_estimate are computed from — see
+# _compute_risk_and_confidence_estimates(). Every name here must appear in exactly one
+# pool; _extract_sub_dimensions()'s ten names are asserted against this at import time
+# via the module-level check near the bottom of this file.
+_CONFIDENCE_DIMENSIONS: frozenset[str] = frozenset(
+    {"belief_freshness", "belief_consistency", "belief_support", "symptom_coverage", "explanation_coverage"}
+)
+_RISK_DIMENSIONS: frozenset[str] = frozenset(
+    {"verification_strength", "verification_feasibility", "progress_rate", "failure_recurrence", "oscillation_score"}
+)
 
 # Maps recovery_action_class → set of dimension names it requires to be unblocked.
 # A recovery action must NOT depend on the dimension it is recovering — otherwise
@@ -67,7 +100,11 @@ class BlockEntry:
 @dataclass
 class ControlState:
     generation_id: int = 0
-    risk_state: RiskState = "NORMAL"
+    permission: PermissionDecision = "ALLOW"
+    execution_mode: ExecutionMode = "NORMAL"
+    escalation: EscalationDecision = "NONE"
+    risk_estimate: float = 0.0
+    confidence_estimate: float = 1.0
     escalation_reason: str | None = None
     block_mask: list[BlockEntry] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -75,7 +112,11 @@ class ControlState:
     def to_dict(self) -> dict[str, Any]:
         return {
             "generation_id": self.generation_id,
-            "risk_state": self.risk_state,
+            "permission": self.permission,
+            "execution_mode": self.execution_mode,
+            "escalation": self.escalation,
+            "risk_estimate": self.risk_estimate,
+            "confidence_estimate": self.confidence_estimate,
             "escalation_reason": self.escalation_reason,
             "block_mask": [
                 {
@@ -92,7 +133,11 @@ class ControlState:
     def from_dict(cls, d: dict[str, Any]) -> ControlState:
         return cls(
             generation_id=d.get("generation_id", 0),
-            risk_state=d.get("risk_state", "NORMAL"),
+            permission=d.get("permission", "ALLOW"),
+            execution_mode=d.get("execution_mode", "NORMAL"),
+            escalation=d.get("escalation", "NONE"),
+            risk_estimate=d.get("risk_estimate", 0.0),
+            confidence_estimate=d.get("confidence_estimate", 1.0),
             escalation_reason=d.get("escalation_reason"),
             block_mask=[
                 BlockEntry(
@@ -104,6 +149,17 @@ class ControlState:
             ],
             notes=d.get("notes", []),
         )
+
+
+def risk_summary(cs: ControlState) -> RiskState:
+    """Derives the old three-way NORMAL/CAUTIOUS/BLOCKED reading from the split fields —
+    used only where a caller still genuinely needs that shape (today: just
+    strategy_state.risk_state_history's oscillation-detection proxy in progress.py)."""
+    if cs.permission == "DENY":
+        return "BLOCKED"
+    if cs.execution_mode == "CAUTIOUS":
+        return "CAUTIOUS"
+    return "NORMAL"
 
 
 # ── Deadlock detection (P3.4) ─────────────────────────────────────────────────
@@ -199,6 +255,28 @@ def compute_elevation_factor(sub_dims: list[tuple[str, float, Any]]) -> float:
     return min(1.0, mean_distance / CAUTION_THRESHOLD)
 
 
+def _compute_risk_and_confidence_estimates(sub_dims: list[tuple[str, float, Any]]) -> tuple[float, float]:
+    """risk_estimate and confidence_estimate are computed from disjoint sub-dimension
+    pools (_RISK_DIMENSIONS / _CONFIDENCE_DIMENSIONS) so they're genuinely distinct
+    signals, not the same composite number surfaced under two names. Both continuous
+    in [0,1]; a name that appears in neither pool (there shouldn't be one — see the
+    module-level assertion below) is silently ignored rather than raising, since these
+    are additive informational fields that must never be able to break tier resolution.
+    """
+    confidence_values: list[float] = []
+    risk_pool_values: list[float] = []
+    for name, raw_value, dim_type in sub_dims:
+        norm_value = normalise(raw_value, dim_type)
+        if name in _CONFIDENCE_DIMENSIONS:
+            confidence_values.append(norm_value)
+        elif name in _RISK_DIMENSIONS:
+            risk_pool_values.append(norm_value)
+    confidence_estimate = sum(confidence_values) / len(confidence_values) if confidence_values else 1.0
+    risk_pool_health = sum(risk_pool_values) / len(risk_pool_values) if risk_pool_values else 1.0
+    risk_estimate = max(0.0, min(1.0, 1.0 - risk_pool_health))
+    return risk_estimate, confidence_estimate
+
+
 # ── Five-tier resolver (P3.3) ─────────────────────────────────────────────────
 
 
@@ -224,11 +302,17 @@ def resolve_control_state(
 
     cs = ControlState(generation_id=world_model.generation_id)
     sub_dims = _extract_sub_dimensions(diagnostics)
+    # Computed once, attached at every exit point below — continuous and additive,
+    # so they never influence which tier fires (see _compute_risk_and_confidence_estimates'
+    # own docstring on why these must never be able to break tier resolution).
+    cs.risk_estimate, cs.confidence_estimate = _compute_risk_and_confidence_estimates(sub_dims)
 
     # ── Tier 1: SYSTEM_BREAKING contradictions ────────────────────────────────
     for contradiction in world_model.contradictions:
         if getattr(contradiction, "severity", None) == "SYSTEM_BREAKING":
-            cs.risk_state = "BLOCKED"
+            cs.permission = "DENY"
+            cs.execution_mode = "RECOVERY"
+            cs.escalation = "SYSTEM_BREAKING"
             cs.escalation_reason = "SYSTEM_BREAKING_CONTRADICTION"
             cs.block_mask.append(
                 BlockEntry(
@@ -255,8 +339,10 @@ def resolve_control_state(
             )
 
     if cs.block_mask:
-        cs.risk_state = "BLOCKED"
+        cs.permission = "DENY"
+        cs.execution_mode = "RECOVERY"
         if detect_deadlock(cs.block_mask):
+            cs.escalation = "HUMAN_REQUIRED"
             cs.escalation_reason = "HUMAN_REQUIRED"
         _attach_annotation(cs, diagnostics)
         return cs
@@ -270,7 +356,7 @@ def resolve_control_state(
         norm_value = normalise(raw_value, "ratio")
         assert_normalised(norm_value, dim_name)
         if CRITICAL_THRESHOLD <= norm_value < CAUTION_THRESHOLD:
-            cs.risk_state = "CAUTIOUS"
+            cs.execution_mode = "CAUTIOUS"
             cs.notes.append(f"Coverage gap in {dim_name} ({norm_value:.3f}): exploration actions allowed")
 
     # ── Tier 4: Proportional caution elevation ────────────────────────────────
@@ -284,11 +370,11 @@ def resolve_control_state(
             assert_normalised(pattern_confidence, "matched_pattern_confidence")
             elevation_factor = elevation_factor * 0.8 + pattern_confidence * 0.2
 
-    if elevation_factor > 0.05 and cs.risk_state == "NORMAL":
-        cs.risk_state = "CAUTIOUS"
+    if elevation_factor > 0.05 and cs.execution_mode == "NORMAL":
+        cs.execution_mode = "CAUTIOUS"
 
     # ── Tier 5: All clear ─────────────────────────────────────────────────────
-    # risk_state already set correctly; just stamp the generation_id
+    # permission/execution_mode already set correctly; just stamp the generation_id
     _attach_annotation(cs, diagnostics)
     return cs
 

@@ -81,7 +81,8 @@ def emit_iteration_span(
 
     Attributes emitted:
       - step, generation_id
-      - control_state.risk_state (string)
+      - control_state.permission / execution_mode / escalation (strings)
+      - control_state.risk_estimate / confidence_estimate (floats)
       - diagnostics belief/coverage/verification/execution sub-dimensions (10 values)
 
     No-op when tracing is disabled.
@@ -94,10 +95,24 @@ def emit_iteration_span(
             "generation_id": generation_id,
         }
 
-        # Control state risk level
-        risk = getattr(control_state, "risk_state", None)
-        if risk is not None:
-            attrs["control_state.risk_state"] = str(risk)
+        # Control state — the five split concepts (see control_state.py's module
+        # docstring for why permission/execution_mode/escalation/risk_estimate/
+        # confidence_estimate are separate signals rather than one risk_state string).
+        permission = getattr(control_state, "permission", None)
+        if permission is not None:
+            attrs["control_state.permission"] = str(permission)
+        execution_mode = getattr(control_state, "execution_mode", None)
+        if execution_mode is not None:
+            attrs["control_state.execution_mode"] = str(execution_mode)
+        escalation = getattr(control_state, "escalation", None)
+        if escalation is not None:
+            attrs["control_state.escalation"] = str(escalation)
+        risk_estimate = getattr(control_state, "risk_estimate", None)
+        if risk_estimate is not None:
+            attrs["control_state.risk_estimate"] = risk_estimate
+        confidence_estimate = getattr(control_state, "confidence_estimate", None)
+        if confidence_estimate is not None:
+            attrs["control_state.confidence_estimate"] = confidence_estimate
 
         # Diagnostic health sub-dimensions (10 values)
         if diagnostics is not None:

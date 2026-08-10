@@ -7,6 +7,15 @@ via TTL and environment_change_log (P2.6).
 
 Gate implementations were stubs until P3; they are now fully implemented
 in gates.py.
+
+Phase 1a of plans/harness_and_assistant_architecture_remediation_plan.html generalized
+staleness_check()/assert_generation_fresh()'s documented contract: they were written
+against ControlState specifically, but only ever touch `.generation_id` — so they already
+work unchanged against provenance.py's PlanVersion/ExecutionVersion/VerificationVersion,
+each of which exposes `.generation_id` as an alias for its pinned world_model_version.
+`is_stale()` below is the same staleness_check() predicate under a name that doesn't
+read oddly when the thing being checked isn't a ControlState — e.g. "is this
+ExecutionVersion stale" rather than "does this ExecutionVersion have a risk_state".
 """
 
 from __future__ import annotations
@@ -47,8 +56,21 @@ def increment_generation_id(world_model: WorldModel) -> None:
 
 
 def staleness_check(control_state: Any, world_model: WorldModel) -> bool:
-    """Return True when control_state.generation_id is behind world_model.generation_id."""
+    """Return True when control_state.generation_id is behind world_model.generation_id.
+
+    Works against anything exposing `.generation_id` — a ControlState, or a
+    PlanVersion/ExecutionVersion/VerificationVersion from provenance.py. See is_stale()
+    for the same predicate under a name that reads better for the latter.
+    """
     return control_state.generation_id < world_model.generation_id
+
+
+def is_stale(version_holder: Any, world_model: WorldModel) -> bool:
+    """Same predicate as staleness_check(), named for callers checking a
+    PlanVersion/ExecutionVersion/VerificationVersion rather than a ControlState —
+    "is this execution's pinned world-model version stale" reads better than
+    "does this execution have a stale control state"."""
+    return staleness_check(version_holder, world_model)
 
 
 def assert_generation_fresh[F: Callable[..., Any]](fn: F) -> F:

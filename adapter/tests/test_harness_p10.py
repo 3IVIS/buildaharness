@@ -281,7 +281,8 @@ def test_t09_compile_control_state_node():
 
     cs = ns["control_state"]
     assert isinstance(cs, ControlState)
-    assert cs.risk_state in {"NORMAL", "CAUTIOUS", "BLOCKED"}
+    assert cs.permission in {"ALLOW", "DENY"}
+    assert cs.execution_mode in {"NORMAL", "CAUTIOUS", "RECOVERY"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

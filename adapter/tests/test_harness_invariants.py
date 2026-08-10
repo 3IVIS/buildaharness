@@ -8,7 +8,9 @@ Tests use black-box assertions wherever possible: observable behaviour, not inte
 Invariants:
   INV-01  Observation-conclusion separation — no belief without derived_from chain
   INV-02  Normalisation contract — all diagnostic values clamped to [0, 1]
-  INV-03  generation_id double-increment per iteration (Sub-step A + B)
+  INV-03  WorldModel version is monotonic; is_stale() detects drift correctly in both
+          directions (superseded 2026-08-10 from "generation_id increments exactly twice
+          per iteration" — see the test file for why)
   INV-04  Deadlock detection — detect_deadlock identifies HUMAN_REQUIRED when strategies block
   INV-05  SYSTEM_BREAKING via contradictions[] only — no inline raise
   INV-06  control_state as sole control input — world_model/hypothesis_set are read-only context
@@ -22,6 +24,7 @@ Run with: pytest adapter/tests/test_harness_invariants.py -v
 
 from __future__ import annotations
 
+import itertools
 import sys
 import uuid
 from pathlib import Path
@@ -162,39 +165,29 @@ def test_inv_02_all_diagnostic_values_clamped_to_0_1():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# INV-03 — generation_id double-increment per iteration
+# INV-03 — WorldModel version is monotonic; staleness detection is correct
 # ══════════════════════════════════════════════════════════════════════════════
+#
+# Superseded 2026-08-10 (Phase 1a of plans/harness_and_assistant_architecture_remediation_
+# plan.html): the original INV-03 asserted "generation_id increments exactly twice per
+# iteration" — a specific implementation-lifecycle detail (run_one_iteration's Sub-step
+# A / Sub-step B structure), not the property that actually matters. What matters is that
+# staleness detection is reliable, regardless of exactly how or when the version advances.
+# Replaced with two invariants matching that behavioral contract:
+#   1. WorldModelVersion (world_model.generation_id) never decreases within a run — the
+#      minimal fact staleness comparison depends on being meaningful at all.
+#   2. A version-pinned object (PlanVersion/ExecutionVersion/VerificationVersion, or a
+#      ControlState) is judged stale by is_stale() if and only if the world model's
+#      current version has advanced past the version it was pinned to — tested in both
+#      directions, independent of *how* the advancement happened.
 
 
-def test_inv_03_generation_id_incremented_exactly_twice():
-    """INV-03: run_one_iteration increments generation_id exactly twice (Sub-step A + B)."""
+def test_inv_03_world_model_version_is_monotonic_non_decreasing():
+    """INV-03: world_model.generation_id never decreases across any sequence of iterations."""
     state = _make_run_state()
-    before = state.world_model.generation_id
+    observed = [state.world_model.generation_id]
 
-    run_one_iteration(
-        world_model=state.world_model,
-        diagnostics=state.diagnostics,
-        hypothesis_set=state.hypothesis_set,
-        task_graph=state.task_graph,
-        failure_diagnostics=state.failure_diagnostics,
-        memory_state=state.memory_state,
-        strategy_state=state.strategy_state,
-        step_count=0,
-    )
-
-    after = state.world_model.generation_id
-    assert after == before + 2, (
-        f"INV-03 violated: generation_id went from {before} to {after} (expected +2, got +{after - before})"
-    )
-
-
-def test_inv_03_multiple_iterations_each_add_two():
-    """INV-03: Each additional iteration adds exactly 2 to generation_id."""
-    state = _make_run_state()
-    n_iterations = 3
-
-    for step in range(n_iterations):
-        gen_before = state.world_model.generation_id
+    for step in range(4):
         run_one_iteration(
             world_model=state.world_model,
             diagnostics=state.diagnostics,
@@ -205,7 +198,47 @@ def test_inv_03_multiple_iterations_each_add_two():
             strategy_state=state.strategy_state,
             step_count=step,
         )
-        assert state.world_model.generation_id == gen_before + 2
+        observed.append(state.world_model.generation_id)
+
+    for before, after in itertools.pairwise(observed):
+        assert after >= before, (
+            f"INV-03 violated: world_model.generation_id decreased ({before} -> {after}) — "
+            "staleness_check()'s '<' comparison is meaningless if this can happen."
+        )
+    # And it must have actually advanced at least once — a version that never changes
+    # would make the monotonicity check above vacuously true.
+    assert observed[-1] > observed[0]
+
+
+def test_inv_03_staleness_correctly_detects_version_drift():
+    """INV-03: is_stale() is True iff the world model has advanced past a pinned version,
+    tested both directions — not coupled to *how many* increments occurred or when."""
+    from harness.provenance import new_execution_version
+    from harness.staleness import increment_generation_id, is_stale
+
+    state = _make_run_state()
+    wm = state.world_model
+
+    pinned = new_execution_version(wm)
+    assert pinned.world_model_version == wm.generation_id
+
+    # Direction 1: world model unchanged since pinning → not stale.
+    assert is_stale(pinned, wm) is False, (
+        "INV-03 violated: is_stale() reported a freshly-pinned ExecutionVersion as stale "
+        "before the world model advanced at all."
+    )
+
+    # Direction 2: world model advances (by any means — a raw increment here, a full
+    # run_one_iteration() in the sibling test above, doesn't matter which) → stale.
+    increment_generation_id(wm)
+    assert is_stale(pinned, wm) is True, (
+        "INV-03 violated: is_stale() failed to detect that the world model advanced past "
+        f"the pinned version {pinned.world_model_version} (now at {wm.generation_id})."
+    )
+
+    # A freshly re-pinned version against the now-current world model is fresh again.
+    repinned = new_execution_version(wm)
+    assert is_stale(repinned, wm) is False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -294,25 +327,25 @@ def test_inv_05_assign_system_breaking_severity_upgrades_high_contradictions():
 
 
 def test_inv_06_blocked_control_state_prevents_action():
-    """INV-06: select_best_action returns None when control_state.risk_state == BLOCKED."""
-    blocked = ControlState(risk_state="BLOCKED")
+    """INV-06: select_best_action returns None when control_state.permission == DENY."""
+    blocked = ControlState(permission="DENY")
     wm = _make_world_model()
     hs = HypothesisSet(active=[], eliminated=[])
     tg = TaskGraph()
 
     action = select_best_action(blocked, wm, hs, tg)
-    assert action is None, "INV-06 violated: select_best_action should return None when risk_state is BLOCKED"
+    assert action is None, "INV-06 violated: select_best_action should return None when permission is DENY"
 
 
 def test_inv_06_clear_control_state_permits_action():
-    """INV-06: select_best_action returns an action when risk_state is CLEAR."""
-    clear = ControlState(risk_state="CLEAR")
+    """INV-06: select_best_action returns an action when permission is ALLOW."""
+    clear = ControlState(permission="ALLOW")
     wm = _make_world_model()
     hs = HypothesisSet(active=[], eliminated=[])
     tg = TaskGraph()
 
     action = select_best_action(clear, wm, hs, tg)
-    assert action is not None, "INV-06 violated: select_best_action should return an action when risk_state is CLEAR"
+    assert action is not None, "INV-06 violated: select_best_action should return an action when permission is ALLOW"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

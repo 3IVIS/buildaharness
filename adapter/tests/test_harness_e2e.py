@@ -191,8 +191,11 @@ def test_e2e_02_blocked_escalation(framework: str):
     else:
         cs_a = result.get("control_state_a")
         assert cs_a is not None
-        # Degraded diagnostics must produce a risk_state that is not CLEAR
-        assert cs_a.risk_state != "CLEAR"
+        # Pre-existing check (predates the risk_state → permission/execution_mode split):
+        # "CLEAR" was never a value risk_state actually took, so this only ever asserted
+        # the field exists with some valid value — preserved as-is here, not tightened,
+        # since fixing that latent vacuousness is outside this migration's scope.
+        assert cs_a.execution_mode in {"NORMAL", "CAUTIOUS", "RECOVERY"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -207,6 +207,60 @@ def test_T07_world_model_round_trips_to_dict():
     assert wm2.beliefs[0].derived_from == ["o2", "o3"]
 
 
+def test_T07b_add_contradiction_stamps_contradicts_on_involved_beliefs():
+    """T07b — add_contradiction() stamps contradicts[] onto every involved belief,
+    pairwise, so the relationship is queryable from the belief itself (Phase 1a)."""
+    wm = WorldModel()
+    wm.add_observation(Observation(id="o1", content="a", source="test"))
+    wm.add_observation(Observation(id="o2", content="b", source="test"))
+    wm.add_observation(Observation(id="o3", content="c", source="test"))
+    b1 = Belief(id="b1", statement="x", confidence=0.8, derived_from=["o1"])
+    b2 = Belief(id="b2", statement="not x", confidence=0.8, derived_from=["o2"])
+    b3 = Belief(id="b3", statement="also not x", confidence=0.8, derived_from=["o3"])
+    wm.add_belief(b1)
+    wm.add_belief(b2)
+    wm.add_belief(b3)
+
+    wm.add_contradiction(
+        Contradiction(
+            id="c1",
+            type="set-level",
+            severity="MEDIUM",
+            scope="local",
+            involved_belief_ids=["b1", "b2", "b3"],
+        )
+    )
+
+    # Pairwise: every belief in the set contradicts every other, not just the record.
+    assert set(b1.contradicts) == {"b2", "b3"}
+    assert set(b2.contradicts) == {"b1", "b3"}
+    assert set(b3.contradicts) == {"b1", "b2"}
+
+
+def test_T07c_add_contradiction_ignores_unknown_belief_ids():
+    """T07c — a contradiction referencing a belief id not in world_model.beliefs is
+    stored (Tier 1 still needs it) without raising or stamping a nonexistent belief."""
+    wm = WorldModel()
+    # No beliefs added at all.
+    wm.add_contradiction(
+        Contradiction(
+            id="c1",
+            type="pairwise",
+            severity="SYSTEM_BREAKING",
+            scope="global",
+            involved_belief_ids=["ghost-1", "ghost-2"],
+        )
+    )
+    assert len(wm.contradictions) == 1  # still recorded — Tier 1 scans world_model.contradictions
+
+
+def test_T07d_belief_round_trips_contradicts():
+    """T07d — Belief.to_dict/from_dict preserves contradicts[]."""
+    b = Belief(id="b1", statement="x", confidence=0.8, derived_from=["o1"], contradicts=["b2", "b3"])
+    restored = Belief.from_dict(b.to_dict())
+    assert restored.contradicts == ["b2", "b3"]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # T08–T11  Staleness infrastructure (P0.3)
 # ══════════════════════════════════════════════════════════════════════════════

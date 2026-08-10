@@ -80,10 +80,10 @@ def decomposition_gate(
     """
     control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
 
-    if control_state.risk_state == "BLOCKED":
+    if control_state.permission == "DENY":
         return False
 
-    if control_state.risk_state == "CAUTIOUS":
+    if control_state.execution_mode == "CAUTIOUS":
         # Allow decomposition with advisory note (logged via return value context)
         return True
 
@@ -112,7 +112,7 @@ def action_gate(
     if getattr(control_state, "escalation_reason", None) == "HUMAN_REQUIRED":
         return "ESCALATE"
 
-    if control_state.risk_state == "BLOCKED":
+    if control_state.permission == "DENY":
         return "BLOCK"
 
     blocked_dims = {entry.dimension for entry in control_state.block_mask}

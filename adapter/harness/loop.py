@@ -45,7 +45,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from .control_state import ControlState, resolve_control_state
+from .control_state import ControlState, resolve_control_state, risk_summary
 from .diagnostics import Diagnostics
 from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
@@ -153,7 +153,7 @@ def select_best_action(
     context. They must not directly suppress or permit actions — only
     control_state drives that decision.
     """
-    if control_state.risk_state == "BLOCKED":
+    if control_state.permission == "DENY":
         return None
     return {"type": "noop", "exploration": True}
 
@@ -235,7 +235,7 @@ def run_one_iteration(
 
     P7 hook: check_external_updates fires before all P6 hooks. Escalation
     triggers fire after resolve_control_state() in Sub-step A when
-    risk_state==BLOCKED, and after stall detection when strategy==ESCALATE.
+    permission==DENY, and after stall detection when strategy==ESCALATE.
     """
     from .escalation import EscalationHalt, escalate
 
@@ -358,8 +358,8 @@ def run_one_iteration(
         step=world_model.generation_id,
     )
 
-    # P7.3 — escalate when risk_state is BLOCKED (INV-06: triggered by control_state)
-    if control_state.risk_state == "BLOCKED":
+    # P7.3 — escalate when permission is DENY (INV-06: triggered by control_state)
+    if control_state.permission == "DENY":
         if harness_run_state is not None:
             blocker = _build_surface_blocker("blocked_state", control_state, task_graph)
             try:
@@ -407,9 +407,11 @@ def run_one_iteration(
     if memory_state is not None:
         memory_state.journal = apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)
 
-    # Track risk state history for oscillation proxy
+    # Track risk state history for oscillation proxy — risk_summary() derives the legacy
+    # three-way NORMAL/CAUTIOUS/BLOCKED reading progress.py's oscillation proxy expects
+    # from the split permission/execution_mode fields (see control_state.py's docstring).
     if strategy_state is not None:
-        strategy_state.risk_state_history.append(control_state_b.risk_state)
+        strategy_state.risk_state_history.append(risk_summary(control_state_b))
 
     # ── Lexical contradiction + failure-pattern detection (Phase 5 of plans/
     # lexical_functions_hardening_plan.html) — unconditional every iteration, mirroring TS's

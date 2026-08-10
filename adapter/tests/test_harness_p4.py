@@ -252,8 +252,8 @@ def test_T10_system_breaking_contradiction_at_merge_does_not_raise() -> None:
         failure_diagnostics=None,
         step=merged.generation_id,
     )
-    assert control_state.risk_state == "BLOCKED", (
-        f"expected BLOCKED after SYSTEM_BREAKING contradiction, got {control_state.risk_state}"
+    assert control_state.permission == "DENY", (
+        f"expected DENY after SYSTEM_BREAKING contradiction, got {control_state.permission}"
     )
 
 
