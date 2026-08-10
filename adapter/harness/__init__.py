@@ -78,6 +78,12 @@ from .execution import (
     execute,
     select_reversibility_strategy,
 )
+from .execution_boundary import (
+    DEFAULT_ALLOWED_EXECUTABLES,
+    BoundaryViolation,
+    MechanicalCheckResult,
+    run_mechanical_check,
+)
 
 # Phase 8
 from .experience_store import (
@@ -302,6 +308,7 @@ from .world_model import Belief, Contradiction, Observation, WorldModel
 from .world_model_ops import integrate_evidence, recompute_belief_health
 
 __all__ = [
+    "DEFAULT_ALLOWED_EXECUTABLES",
     "DEFAULT_REGISTRY",
     "DEFAULT_STRATEGY_ORDER",
     "HARNESS_NODE_COMPILERS",
@@ -314,6 +321,7 @@ __all__ = [
     "BeliefEdge",
     "BeliefHealth",
     "BlockEntry",
+    "BoundaryViolation",
     "CallerState",
     "CompressionRisk",
     "ConflictProbabilityCache",
@@ -351,6 +359,7 @@ __all__ = [
     "HypothesisSet",
     "LayerResult",
     "MatchResult",
+    "MechanicalCheckResult",
     "MemoryState",
     "NoOpUpdateChannel",
     "NormalisationError",
@@ -510,6 +519,7 @@ __all__ = [
     "review_proposed_change",
     "reviewer_pass",
     "risk_summary",
+    "run_mechanical_check",
     "run_one_iteration",
     "seed_adversarial_prior",
     "select_best_action",
