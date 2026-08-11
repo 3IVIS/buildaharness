@@ -639,4 +639,6 @@ class TestRecoveryBudget:
         returned_budget = result.get("recovery_budget")
         assert returned_budget is not None
         assert returned_budget.plan_revisions_used == 1
-        assert result.get("strategy_state").switch_count == 1
+        returned_strategy_state = result.get("strategy_state")
+        assert returned_strategy_state is not None
+        assert returned_strategy_state.switch_count == 1
