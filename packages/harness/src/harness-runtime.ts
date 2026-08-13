@@ -2,18 +2,20 @@ import { type ExperienceStore, UnavailableExperienceStore } from './state/experi
 import { gatherEvidence } from './nodes/gather-evidence.js'
 import { applyToolReliability } from './nodes/apply-tool-reliability.js'
 import { resolveControlState, CAUTION_THRESHOLD } from './nodes/resolve-control-state.js'
+import { riskSummary } from './state/control-state.js'
 import { updateDiagnostics } from './nodes/update-diagnostics.js'
 import { detectContradictions, recordExternalContradiction, type ExternalContradictionInput } from './nodes/detect-contradictions.js'
 import { generateUpdateHypotheses } from './nodes/generate-update-hypotheses.js'
 import { updateWorldModel, propagateBeliefs } from './nodes/update-world-model.js'
 import { updateTaskGraph } from './nodes/update-task-graph.js'
+import type { Task } from './state/task-graph.js'
 import { selectTask, reconcileParallelBranches } from './nodes/select-task.js'
 import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
 import { reviewProposedChange, applyReviewOutcome } from './nodes/review-proposed-change.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange } from './nodes/execute.js'
-import { verify } from './nodes/verify.js'
+import { verify, type VerificationResult } from './nodes/verify.js'
 import { rollbackAndReplan, cannotMakeProgress } from './nodes/rollback-replan.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
@@ -25,7 +27,7 @@ import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } fr
 import { HarnessRunState } from './harness-run-state.js'
 import { DepGraphBudget, WorldModel } from './state/world-model.js'
 import { CHECKPOINT_SCHEMA_VERSION, assertCheckpointSchemaCurrent } from './harness-checkpoint.js'
-import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData } from './harness-checkpoint.js'
+import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData, PendingProposalData } from './harness-checkpoint.js'
 import type { FailureModeEntry } from './state/failure-diagnostics.js'
 import { normalise, DimensionType } from './normalise.js'
 
@@ -87,6 +89,15 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   complexitySignal?: TurnComplexitySignal
   /** Fired or skipped, every one of the 11 harness layers reports itself here each iteration — see LayerActivityEvent. */
   onLayerActivity?: (event: LayerActivityEvent) => void
+  /**
+   * Called once per main-loop iteration right after the verification layer runs, with that
+   * iteration's full `VerificationResult` (every layer's PASS/FAIL/SKIPPED, not just the
+   * has_critical_failure summary `LayerActivityEvent.reason` collapses it to). Lets a caller
+   * build a real epistemic-honesty signal (e.g. personal-assistant's AnswerClaim, Phase 6 of
+   * the harness remediation plan) from the same real verification logic Phase 2/3 made
+   * honest, instead of re-deriving a weaker proxy from `onLayerActivity`.
+   */
+  onVerification?: (result: VerificationResult) => void
   /**
    * Per-task rollback hook, keyed like toolExecutors (falls back to 'default'). Called from
    * rollbackAndReplan when a task fails verification/execution — a real rollback action
@@ -211,6 +222,7 @@ interface LoopContext {
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
+  onVerification?: (result: VerificationResult) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
     newBeliefs: Array<{ id: string; statement: string }>,
@@ -230,6 +242,8 @@ interface LoopContext {
   semanticCriterionCoverage?: SemanticCriterionCoverage
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
+  /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
+  pendingProposal?: PendingProposalData
 }
 
 function buildInitialContext(
@@ -277,6 +291,7 @@ function buildInitialContext(
     factExtractor: options.factExtractor,
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
+    onVerification: options.onVerification,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
     lastContradictionCheckCount: 0,
@@ -284,6 +299,7 @@ function buildInitialContext(
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
+    pendingProposal: undefined,
   }
 
   // Warm start from ExperienceStore (no-op if unavailable) — only on a fresh run.
@@ -336,6 +352,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     factExtractor: options.factExtractor,
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
+    onVerification: options.onVerification,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
     // Not part of HarnessCheckpoint — resets to 0 on resume, so the first check after a
@@ -347,6 +364,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
+    pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
   }
 }
 
@@ -381,6 +399,7 @@ function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
     finalResult: ctx.finalResult,
     consecutiveReviewFailures: [...ctx.consecutiveReviewFailures.entries()],
     propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
+    pendingProposal: ctx.pendingProposal ?? null,
   }
 
   return { runId: ctx.runId, runState, runConfig, progress, schemaVersion: CHECKPOINT_SCHEMA_VERSION }
@@ -402,7 +421,7 @@ function toInitResultShape(ctx: LoopContext): HarnessInitResult {
     beliefDepGraph: ctx.beliefDepGraph,
     depGraphBudget: ctx.depGraphBudget,
     maxSteps: ctx.maxSteps,
-    decompositionGate: ctx.controlState.risk_state !== 'BLOCKED',
+    decompositionGate: ctx.controlState.permission !== 'DENY',
     valid: true,
     errors: [],
     processConceptId: ctx.processConceptId,
@@ -428,7 +447,11 @@ function anyDiagnosticSubDimensionCautious(diagnostics: LoopContext['diagnostics
 function resolveAndStamp(ctx: LoopContext): void {
   const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics)
   ctx.controlState.generation_id = newCS.generation_id
-  ctx.controlState.risk_state = newCS.risk_state
+  ctx.controlState.permission = newCS.permission
+  ctx.controlState.execution_mode = newCS.execution_mode
+  ctx.controlState.escalation = newCS.escalation
+  ctx.controlState.risk_estimate = newCS.risk_estimate
+  ctx.controlState.confidence_estimate = newCS.confidence_estimate
   ctx.controlState.escalation_reason = newCS.escalation_reason
   ctx.controlState.block_mask = [...newCS.block_mask]
   ctx.controlState.notes = [...newCS.notes]
@@ -445,6 +468,29 @@ function resolveAndStamp(ctx: LoopContext): void {
  */
 async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoint, void, void> {
   while (true) {
+    let currentTask: Task
+    let concurrentTask: Task | null = null
+    let gateResult: 'PASS' | 'BLOCK' | 'ESCALATE'
+    let shouldGatherEvidence = false
+    const sig = ctx.complexitySignal
+
+    if (ctx.pendingProposal) {
+      // Resuming exactly where a prior process paused, mid-iteration, at the new
+      // propose→gate suspend point below (the yield right after action_gate) — re-derive the
+      // same task/decision instead of re-running select_task/estimate_risk/review (which
+      // already ran once, before the pause; re-running them would double-count stepsUsed and
+      // risk a second, redundant estimateVOI mutation to diagnostics). No concurrent-task
+      // parallel branch is resumed this way (deliberate scope reduction, flagged in the plan):
+      // a real process restart loses the opportunistic parallel candidate select_task found —
+      // the resumed task simply executes serially instead.
+      const p = ctx.pendingProposal
+      ctx.pendingProposal = undefined
+      const resumed = ctx.taskGraph.tasks.find(t => t.id === p.taskId)
+      if (!resumed) continue // stale proposal for a task that no longer exists — replan fresh next iteration
+      currentTask = resumed
+      gateResult = p.gateResult
+      shouldGatherEvidence = p.shouldGatherEvidence
+    } else {
     ctx.stepsUsed++
     // Backstop budget check: the "normal path" exhaustion check further down (stepsUsed >=
     // maxSteps) only runs once an iteration reaches the bottom of the loop body, but several
@@ -518,7 +564,6 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       reportLayer(ctx, 'contradiction', false, ctx.worldModel.beliefs.length >= 2 ? 'checked — no conflicts found' : 'fewer than 2 beliefs — nothing to compare')
     }
 
-    const sig = ctx.complexitySignal
     const hypothesisNotable = (sig?.taskCount ?? 1) > 1 || (sig?.riskLevel ?? 'LOW') !== 'LOW' || ctx.failureDiagnostics.failure_history.length > 0
     ctx.nodeExecutionOrder.push('generate_update_hypotheses')
     // Always computed (never skipped) — diagnostics.coverage_health.explanation_coverage is
@@ -539,9 +584,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     ctx.worldModel.incrementGenerationId()
     ctx.nodeExecutionOrder.push('resolve_control_state')
     resolveAndStamp(ctx)
-    reportLayer(ctx, 'control_state', ctx.controlState.risk_state !== 'NORMAL', ctx.controlState.risk_state === 'BLOCKED'
+    reportLayer(ctx, 'control_state', riskSummary(ctx.controlState) !== 'NORMAL', ctx.controlState.permission === 'DENY'
       ? `Pausing — ${ctx.controlState.escalation_reason ?? 'blocked'}`
-      : ctx.controlState.risk_state === 'CAUTIOUS'
+      : ctx.controlState.execution_mode === 'CAUTIOUS'
         ? `Proceeding carefully — ${ctx.controlState.escalation_reason ?? 'elevated risk'}`
         : 'NORMAL')
 
@@ -566,7 +611,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     if (selectResult.task === null) return
 
-    const currentTask = selectResult.task
+    currentTask = selectResult.task
+    concurrentTask = selectResult.concurrentTask
     ctx.taskGraph.setStatus(currentTask.id, 'RUNNING')
 
     ctx.nodeExecutionOrder.push('estimate_risk')
@@ -582,6 +628,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     ctx.nodeExecutionOrder.push('estimate_voi')
     const voiResult = estimateVOI(ctx.diagnostics, ctx.worldModel, ctx.hypothesisSet, ctx.evidenceStore.tool_availability_manifest)
+    shouldGatherEvidence = voiResult.should_gather_evidence
 
     ctx.nodeExecutionOrder.push('review_proposed_change')
     let reviewResult = reviewProposedChange(
@@ -634,7 +681,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     }
 
     ctx.nodeExecutionOrder.push('action_gate')
-    const gateResult = actionGate(
+    gateResult = actionGate(
       { required_resources: [] },
       ctx.controlState,
       ctx.worldModel,
@@ -642,6 +689,21 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.failureDiagnostics,
       resolveControlState,
     )
+
+    // ─── NEW SUSPEND POINT ──────────────────────────────────────────────
+    // The first real pause point between an action proposal and its execution — previously
+    // the only yield was after execute() had already run (post-hoc replay, not a decision
+    // point). Persisted into ctx.pendingProposal (part of the checkpoint toCheckpoint below
+    // produces) before yielding, so a real process restart between this yield and the
+    // caller's resume can still recover exactly this pause via the `if (ctx.pendingProposal)`
+    // branch above — not just an in-memory generator suspension. Only the fresh path yields
+    // here; the resumed path (above) already carries a decision the caller has seen and
+    // asked to resume past, so it falls straight through to the shared BLOCK/ESCALATE-or-
+    // execute handling below instead of re-announcing the same proposal.
+    ctx.pendingProposal = { taskId: currentTask.id, gateResult, shouldGatherEvidence }
+    yield toCheckpoint(ctx)
+    ctx.pendingProposal = undefined
+    }
 
     if (gateResult === 'ESCALATE' || gateResult === 'BLOCK') {
       ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
@@ -680,7 +742,6 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // implemented reconcileParallelBranches/mergeWorldModels right before this iteration's
     // checkpoint. evidenceStore/taskGraph/diagnostics/hypothesisSet stay shared across both
     // branches (reconcileParallelBranches' own design) — only WorldModel forks.
-    const concurrentTask = selectResult.concurrentTask
     const parallelEligible = concurrentTask !== null && currentTask.risk_level !== 'HIGH' && concurrentTask.risk_level !== 'HIGH'
     reportLayer(ctx, 'planning', parallelEligible, parallelEligible && concurrentTask
       ? `Reading "${currentTask.description}" and "${concurrentTask.description}" at once`
@@ -767,7 +828,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // Phase 2, layer 2: escalate past the always-on baseline above — register a real
       // tool_reliability_envelope for consequential tools, or when estimate_voi flagged this
       // turn as evidence-poor — instead of every turn paying for it regardless of stakes.
-      const evidenceShouldEscalate = (sig?.consequentialTools.size ?? 0) > 0 || voiResult.should_gather_evidence
+      const evidenceShouldEscalate = (sig?.consequentialTools.size ?? 0) > 0 || shouldGatherEvidence
       if (evidenceShouldEscalate) {
         for (const tool of sig?.consequentialTools ?? []) {
           if (!ctx.evidenceStore.tool_reliability_envelopes[tool]) {
@@ -903,6 +964,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     reportLayer(ctx, 'verification', true, verifyResult.has_critical_failure
       ? `verification failed: ${verifyResult.layer_results.find(lr => lr.status === 'FAIL')?.detail ?? 'unknown'}`
       : 'all applicable layers passed')
+    ctx.onVerification?.(verifyResult)
 
     ctx.nodeExecutionOrder.push('post_exec_gate')
     const postGatePassed = postExecGate(
@@ -968,7 +1030,11 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       )
       ctx.worldModel = reconciled.worldModel
       ctx.controlState.generation_id = reconciled.controlState.generation_id
-      ctx.controlState.risk_state = reconciled.controlState.risk_state
+      ctx.controlState.permission = reconciled.controlState.permission
+      ctx.controlState.execution_mode = reconciled.controlState.execution_mode
+      ctx.controlState.escalation = reconciled.controlState.escalation
+      ctx.controlState.risk_estimate = reconciled.controlState.risk_estimate
+      ctx.controlState.confidence_estimate = reconciled.controlState.confidence_estimate
       ctx.controlState.escalation_reason = reconciled.controlState.escalation_reason
       ctx.controlState.block_mask = [...reconciled.controlState.block_mask]
       ctx.controlState.notes = [...reconciled.controlState.notes]
@@ -983,7 +1049,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     ctx.strategyState.completion_history.push(
       ctx.taskGraph.tasks.filter(t => t.status === 'COMPLETE').length,
     )
-    ctx.strategyState.risk_state_history.push(ctx.controlState.risk_state)
+    ctx.strategyState.risk_state_history.push(riskSummary(ctx.controlState))
 
     if (ctx.stepsUsed >= Math.floor(0.8 * ctx.maxSteps)) {
       ctx.diagnostics.verification_health.feasibility = Math.min(

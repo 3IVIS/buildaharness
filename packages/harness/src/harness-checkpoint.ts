@@ -9,12 +9,34 @@ export interface HarnessRunConfigData {
   processConceptId: string | null
 }
 
+/**
+ * Captures the new propose→gate→execute suspend point (harness-runtime.ts's driveMainLoop):
+ * set right after action_gate decides, cleared once execution (or the BLOCK/ESCALATE
+ * consequence) has run. A generator's paused stack frame can't survive a real process
+ * restart, so this is what makes the pause resumable across one — buildResumedContext
+ * reads it back into `ctx.pendingProposal` and driveMainLoop's next iteration re-derives
+ * the same task/decision from it instead of re-running select_task/estimate_risk/review
+ * (which already ran once, before the pause). `shouldGatherEvidence` is stashed rather
+ * than recomputed on resume because estimateVOI can mutate diagnostics.verification_health
+ * — recomputing would risk a second, redundant mutation instead of reusing the one that
+ * already happened pre-pause. `null` (not just absent) on a checkpoint written after a
+ * normal end-of-iteration yield, so a reader can tell "no proposal pending" from "written
+ * before this field existed" the same way schemaVersion does.
+ */
+export interface PendingProposalData {
+  taskId: string
+  gateResult: 'PASS' | 'BLOCK' | 'ESCALATE'
+  shouldGatherEvidence: boolean
+}
+
 export interface HarnessRunProgressData {
   stepsUsed: number
   nodeExecutionOrder: string[]
   finalResult: unknown
   consecutiveReviewFailures: [string, number][]
   propagationQueue: { reopenedTaskIds: string[] }
+  /** Optional (not just possibly-null) so a pre-Phase-3 checkpoint without this field deserializes as "nothing pending" — same tolerance Phase 0 established for schemaVersion. */
+  pendingProposal?: PendingProposalData | null
 }
 
 /**
