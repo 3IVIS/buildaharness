@@ -162,6 +162,7 @@ from run_api import router as run_router  # noqa: E402
 from sso_auth import router_scim, router_sso, router_token  # noqa: E402
 from teams_api import router as teams_router  # noqa: E402
 from validate import validate_spec as _validate_spec  # noqa: E402
+from capability_manifest import missing_capabilities, partial_capability_warnings  # noqa: E402
 
 
 @asynccontextmanager
@@ -317,33 +318,50 @@ async def compile_flow(
             status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}"
         )
 
+    # Phase 7 capability manifest: fail fast when the spec structurally requires a capability
+    # (durable checkpoint, human interrupt, parallel join, token streaming) that the chosen
+    # runtime's adapter doesn't implement at all, instead of silently emitting code that drops
+    # the requirement. A "partial" match still compiles but surfaces a warning.
+    missing = missing_capabilities(spec, runtime)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Runtime '{runtime}' does not support capability(ies) {missing} required by this "
+                "spec. See adapter/capability_manifest.py for per-runtime support levels."
+            ),
+        )
+    capability_warnings = partial_capability_warnings(spec, runtime)
+
     if runtime == "crewai":
         try:
             code, warnings = compile_crewai(spec)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"CrewAI codegen failed: {exc}") from exc
-        return CompileResponse(runtime="crewai", code=code, warnings=warnings)
+        return CompileResponse(runtime="crewai", code=code, warnings=capability_warnings + warnings)
 
     if runtime == "mastra":
         try:
             code, warnings = compile_mastra(spec)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Mastra codegen failed: {exc}") from exc
-        return CompileResponse(runtime="mastra", code=code, warnings=warnings)
+        return CompileResponse(runtime="mastra", code=code, warnings=capability_warnings + warnings)
 
     if runtime == "langgraph":
         try:
             code, warnings = compile_langgraph(spec)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"LangGraph codegen failed: {exc}") from exc
-        return CompileResponse(runtime="langgraph", code=code, warnings=warnings)
+        return CompileResponse(runtime="langgraph", code=code, warnings=capability_warnings + warnings)
 
     if runtime == "microsoft_agent_framework":
         try:
             code, warnings = compile_maf(spec)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"MAF codegen failed: {exc}") from exc
-        return CompileResponse(runtime="microsoft_agent_framework", code=code, warnings=warnings)
+        return CompileResponse(
+            runtime="microsoft_agent_framework", code=code, warnings=capability_warnings + warnings
+        )
 
     raise HTTPException(status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
 
