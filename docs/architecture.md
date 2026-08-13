@@ -122,6 +122,8 @@ Langfuse web/worker
 
 **`fn_ref` validation** — validated at all three entry points (`/compile`, `/flows`, `/run`) against a strict allowlist before any codegen or `exec()` call. Path traversal, shell metacharacters, and multiple colons are all rejected with a 400.
 
+**Capability manifest** — `adapter/capability_manifest.py` grades each adapter's real support (`full`/`partial`/`missing`) for five runtime capabilities (`durable_checkpoint`, `human_interrupt`, `parallel_join`, `transactional_tool`, `streaming_tokens`), determined by reading each adapter's actual codegen rather than assumed. `/compile` infers what a FlowSpec requires from its own schema (checkpoint config, streaming mode, `hitl_breakpoint`/`parallel_join` nodes) and fails fast with a 422 if a required capability is `missing` on the target runtime; a `partial` capability compiles with a warning in `CompileResponse.warnings` instead of failing silently.
+
 **Request limits** — body size capped at `MAX_BODY_BYTES` (default 1 MB). Rate limits on all mutating endpoints via slowapi.
 
 **Containers** — both Dockerfiles run as non-root users.
@@ -234,6 +236,22 @@ Nine additional harness node types were added in Phase 10 as first-class canvas 
 `process_concept` is registered in `HARNESS_NODE_COMPILERS` as a compiler-only entry (no canvas schema node type); it is invoked by the harness loop directly rather than authored as a canvas node.
 
 The `DiagnosticsPanel` (`src/components/panels/DiagnosticsPanel.tsx`) renders all 10 sub-dimensions as `[0,1]` bar charts during live runs.
+
+### Canvas node taxonomy and Intent mode
+
+The 13 harness node types are grouped into five categories for canvas display — `HARNESS_NODE_CATEGORY`/`HARNESS_CATEGORY_HEX`/`HARNESS_CATEGORY_LABEL` in `src/canvas/nodes/BaseNode.tsx`, one hue per category:
+
+| Category | Node types |
+|---|---|
+| OBSERVATION | `gather_evidence`, `apply_tool_reliability` |
+| STATE | `world_model`, `hypothesis_set`, `update_world_model`, `evidence_store_node`, `experience_store_node` |
+| POLICY | `control_state`, `reviewer_pass` |
+| CONTROL_FLOW | `task_graph_node`, `verification_gate`, `process_concept` |
+| EFFECT | `recovery_node` |
+
+`src/components/Sidebar.tsx`'s palette groups nodes by these categories (Observation → State → Policy → Control Flow → Effect) instead of one flat "Harness" bucket — UI-side grouping only, no `spec/schema.ts` change.
+
+The sidebar also has an Expert/Intent mode toggle. Expert mode is the full node palette (unchanged). Intent mode swaps it for a small set of high-level templates (`src/spec/intentTemplates.ts` — e.g. "Research → verify sources → draft → human approval → publish") that click-to-insert as a connected chain of real canvas nodes via the `expandIntentTemplate` store action (`src/store/index.ts`); each template step is a `process_concept` node with its `concept_id` set, except steps naming a concrete node type directly (`hitl_breakpoint` for "human approval", `reviewer_pass` for "review"). Templates are click-to-insert at a fixed canvas origin, not drag-and-drop.
 
 ### Process concepts
 

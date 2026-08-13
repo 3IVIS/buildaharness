@@ -82,6 +82,10 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 
 The harness, talking back — Build A Harness's own reference chat agent. Every ordinary message walks the full 11-layer harness; a one-shot fact lookup skips it entirely; a real email send or shell command stops for approval first. One core, three front ends: terminal CLI, browser, native desktop.
 
+- ✅ Fail-safe risk classification — a classifier error requires approval, never silently defaults to low-risk
+- ✅ Typed fact provenance — only facts you actually state promote to durable memory by default; model-inferred facts stay session-scoped until confirmed
+- ✅ AnswerClaim — replies distinguish "verified against evidence" from "found this but couldn't independently confirm it," shown in the chat's "Why?" panel
+
 ```bash
 npm install && npm run build:harness && npm run build:runtime
 ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
@@ -154,11 +158,13 @@ Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — ev
 
 A deeper pseudo-code / state-model architecture walkthrough is maintained privately and isn't part of this public repo — for the architecture that ships here, see [docs/architecture.md](docs/architecture.md).
 
+The sidebar has an **Expert / Intent** toggle. Expert mode is the full palette above. Intent mode swaps it for a small set of high-level templates (e.g. "Research → verify sources → draft → human approval → publish") that click-to-insert as a connected chain of real nodes — the harness nodes themselves are also grouped by category (Observation · State · Policy · Control Flow · Effect) rather than one flat list.
+
 ---
 
 ## Frameworks
 
-All four runtimes compile from the same `flow.json` — no rewriting.
+All four runtimes compile from the same `flow.json` — no rewriting. `/compile` checks the target runtime's actual capabilities first: a FlowSpec requiring something the runtime doesn't support (e.g. durable checkpointing, token streaming) fails fast with a clear error instead of silently degrading.
 
 | Runtime | Language | HITL | Key integration |
 |:--|:--|:--|:--|
