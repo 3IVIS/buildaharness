@@ -3,7 +3,7 @@ import { WorldModel } from '../state/world-model.js'
 import { Diagnostics } from '../state/diagnostics.js'
 import { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { CallerState } from '../state/caller-state.js'
-import { ControlState } from '../state/control-state.js'
+import { ControlState, riskSummary } from '../state/control-state.js'
 import { TaskGraph } from '../state/task-graph.js'
 import { HypothesisSet } from '../state/hypothesis-set.js'
 import { EvidenceStore } from '../state/evidence-store.js'
@@ -71,7 +71,7 @@ describe('resolve_control_state', () => {
     })
     const cs = resolveControlState(healthyDiagnostics(), wm, new FailureDiagnostics())
 
-    expect(cs.risk_state).toBe('BLOCKED')
+    expect(riskSummary(cs)).toBe('BLOCKED')
     expect(cs.escalation_reason).toBe('SYSTEM_BREAKING_CONTRADICTION')
     // TIER 1 adds world_model_integrity block
     expect(cs.block_mask.some(e => e.dimension === 'world_model_integrity')).toBe(true)
@@ -120,7 +120,7 @@ describe('resolve_control_state', () => {
 
     expect(cs.block_mask.length).toBeGreaterThan(1)
     expect(cs.escalation_reason).not.toBe('HUMAN_REQUIRED')
-    expect(cs.risk_state).toBe('BLOCKED')
+    expect(riskSummary(cs)).toBe('BLOCKED')
   })
 
   it('TIER 3 fires on low symptom_coverage even when TIER 2 not triggered', () => {
@@ -134,7 +134,7 @@ describe('resolve_control_state', () => {
     })
     const cs = resolveControlState(diag, wm, new FailureDiagnostics())
 
-    expect(cs.risk_state).toBe('CAUTIOUS')
+    expect(riskSummary(cs)).toBe('CAUTIOUS')
     expect(cs.block_mask).toHaveLength(0)
   })
 
@@ -150,7 +150,7 @@ describe('resolve_control_state', () => {
     const cs = resolveControlState(diag, wm, new FailureDiagnostics())
 
     // TIER 3 fired (CAUTIOUS) but TIER 2 did not — block_mask is empty
-    expect(cs.risk_state).toBe('CAUTIOUS')
+    expect(riskSummary(cs)).toBe('CAUTIOUS')
     expect(cs.block_mask).toHaveLength(0)
   })
 
@@ -169,14 +169,14 @@ describe('resolve_control_state', () => {
     })
     const cs = resolveControlState(diag, wm, new FailureDiagnostics())
 
-    expect(cs.risk_state).toBe('CAUTIOUS')
+    expect(riskSummary(cs)).toBe('CAUTIOUS')
   })
 
   it('TIER 5 returns NORMAL when all signals are above their respective thresholds', () => {
     const wm = new WorldModel({ generation_id: 2 })
     const cs = resolveControlState(healthyDiagnostics(), wm, new FailureDiagnostics())
 
-    expect(cs.risk_state).toBe('NORMAL')
+    expect(riskSummary(cs)).toBe('NORMAL')
     expect(cs.escalation_reason).toBeNull()
     expect(cs.block_mask).toHaveLength(0)
   })
@@ -194,7 +194,7 @@ describe('resolve_control_state', () => {
     const cs = resolveControlState(diag, wm, new FailureDiagnostics())
 
     expect(cs.notes.some(n => n.includes('dep_class_gap'))).toBe(true)
-    expect(cs.risk_state).toBe('NORMAL') // annotation does not trigger any tier
+    expect(riskSummary(cs)).toBe('NORMAL') // annotation does not trigger any tier
     expect(cs.block_mask).toHaveLength(0)
   })
 

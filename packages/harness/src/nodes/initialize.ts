@@ -222,7 +222,7 @@ export function initializeHarness(
   // generation_id++ → resolve_control_state → decomposition_gate
   worldModel.incrementGenerationId()
   const controlState = resolveControlState(diagnostics, worldModel, failureDiagnostics)
-  const decompositionGate = controlState.risk_state !== 'BLOCKED'
+  const decompositionGate = controlState.permission !== 'DENY'
 
   return {
     worldModel,

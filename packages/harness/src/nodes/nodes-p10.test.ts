@@ -295,7 +295,7 @@ describe('actionGate', () => {
     wm.generation_id = 2
     const cs = new ControlState()
     cs.generation_id = 2
-    cs.risk_state = 'CAUTIOUS'
+    cs.execution_mode = 'CAUTIOUS'
     cs.block_mask = [{ dimension: 'belief_freshness', value: 0.1, recovery_action_class: 'belief_refresh' }]
     const action = { required_resources: ['belief_freshness'] }
     const result = actionGate(action, cs, wm)
@@ -308,7 +308,7 @@ describe('actionGate', () => {
     const cs = new ControlState()
     cs.generation_id = 1
     cs.escalation_reason = 'HUMAN_REQUIRED'
-    cs.risk_state = 'BLOCKED'  // would BLOCK but ESCALATE fires first
+    cs.permission = 'DENY'  // would BLOCK but ESCALATE fires first
     cs.block_mask = [{ dimension: 'belief_freshness', value: 0.1, recovery_action_class: 'belief_refresh' }]
     const action = { required_resources: ['belief_freshness'] }
     const result = actionGate(action, cs, wm)
@@ -558,9 +558,66 @@ describe('verify', () => {
     const layers = result.layer_results.map(lr => lr.layer)
     expect(layers).toContain('syntax')
     expect(result.layer_results.find(lr => lr.layer === 'syntax')?.status).toBe('SKIPPED')
-    // unit layer (pytest available) runs normally
+    // unit layer (pytest available, but packages/harness has no execution boundary to run it
+    // against — Phase 3 ports Phase 2's verification-honesty fix forward: an honest SKIPPED,
+    // never a fake PASS) still runs and reports its status
     const unit = result.layer_results.find(lr => lr.layer === 'unit')
-    expect(unit?.status).toBe('PASS')
+    expect(unit?.status).toBe('SKIPPED')
+  })
+
+  it('consistency layer FAILs on an unresolved HIGH/SYSTEM_BREAKING contradiction, PASSes otherwise', () => {
+    const es = new EvidenceStore({
+      tool_availability_manifest: { consistency_checker: { available: true, fallback_tool: null } },
+    })
+    const wm = new WorldModel({ generation_id: 1 })
+    wm.contradictions.push({
+      id: 'c1', type: 'pairwise', severity: 'HIGH',
+      scope: 'global', description: 'unresolved conflict', involved_belief_ids: [],
+    })
+    const failing = verify('output', [], [], es, 'LOW', es, wm)
+    const consistencyFail = failing.layer_results.find(lr => lr.layer === 'consistency')
+    expect(consistencyFail?.status).toBe('FAIL')
+    expect(failing.has_critical_failure).toBe(true)
+
+    const cleanWm = new WorldModel({ generation_id: 1 })
+    const passing = verify('output', [], [], es, 'LOW', es, cleanWm)
+    expect(passing.layer_results.find(lr => lr.layer === 'consistency')?.status).toBe('PASS')
+  })
+
+  it('integration layer is always SKIPPED — no real integration_runner exists to fake a result for', () => {
+    const es = new EvidenceStore({
+      tool_availability_manifest: { integration_runner: { available: true, fallback_tool: null } },
+    })
+    const result = verify('output', [], [], es, 'LOW')
+    expect(result.layer_results.find(lr => lr.layer === 'integration')?.status).toBe('SKIPPED')
+  })
+
+  it('requirements/assumptions FAIL only when criteria/assumptions were stated but no result was produced', () => {
+    const es = new EvidenceStore({
+      tool_availability_manifest: {
+        requirements_checker: { available: true, fallback_tool: null },
+        assumption_checker: { available: true, fallback_tool: null },
+      },
+    })
+    const noResult = verify(null, ['must do X'], ['assumes Y'], es, 'LOW')
+    expect(noResult.layer_results.find(lr => lr.layer === 'requirements')?.status).toBe('FAIL')
+    expect(noResult.layer_results.find(lr => lr.layer === 'assumptions')?.status).toBe('FAIL')
+
+    const withResult = verify('output', ['must do X'], ['assumes Y'], es, 'LOW')
+    expect(withResult.layer_results.find(lr => lr.layer === 'requirements')?.status).toBe('SKIPPED')
+    expect(withResult.layer_results.find(lr => lr.layer === 'assumptions')?.status).toBe('SKIPPED')
+
+    const noCriteria = verify('output', [], [], es, 'LOW')
+    expect(noCriteria.layer_results.find(lr => lr.layer === 'requirements')?.status).toBe('SKIPPED')
+    expect(noCriteria.layer_results.find(lr => lr.layer === 'assumptions')?.status).toBe('SKIPPED')
+  })
+
+  it('goal_correctness is always SKIPPED when nominally available — model-tier judgment, not faked', () => {
+    const es = new EvidenceStore({
+      tool_availability_manifest: { goal_checker: { available: true, fallback_tool: null } },
+    })
+    const result = verify('output', [], [], es, 'LOW')
+    expect(result.layer_results.find(lr => lr.layer === 'goal_correctness')?.status).toBe('SKIPPED')
   })
 
   it('evidence_sufficiency threshold is claim-scoped — local claim requires less evidence than global claim', () => {

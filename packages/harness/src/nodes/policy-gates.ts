@@ -52,7 +52,7 @@ export function actionGate(
   // ESCALATE immediately on HUMAN_REQUIRED without evaluating block_mask
   if (controlState.escalation_reason === 'HUMAN_REQUIRED') return 'ESCALATE'
 
-  if (controlState.risk_state === 'BLOCKED') return 'BLOCK'
+  if (controlState.permission === 'DENY') return 'BLOCK'
 
   if (controlState.block_mask.length > 0 && action !== null) {
     const blockedDims = new Set(controlState.block_mask.map(e => e.dimension))

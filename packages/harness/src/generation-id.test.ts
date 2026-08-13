@@ -13,7 +13,7 @@ describe('_maybeResolve', () => {
     const failureDiagnostics = new FailureDiagnostics()
 
     const resolver: ControlStateResolverFn = vi.fn((d, wm, fd) => {
-      return new ControlState({ generation_id: wm.generation_id, risk_state: 'NORMAL' })
+      return new ControlState({ generation_id: wm.generation_id, execution_mode: 'NORMAL' })
     })
 
     _maybeResolve(controlState, worldModel, diagnostics, failureDiagnostics, resolver)

@@ -28,6 +28,26 @@ export interface VerificationResult {
   adversarial_passed: boolean | null
 }
 
+export type LayerTier = 'mechanical' | 'environmental' | 'model'
+
+// Mechanical: exit code / schema / deterministic state inspection — no judgment involved.
+// Environmental: inspects already-gathered external observations (evidence, criteria) — real,
+//   but can't be reduced to a pass/fail exit code the way mechanical checks can.
+// Model: requires semantic judgment (does this genuinely satisfy the goal?) — explicitly out
+//   of scope for this mechanical/environmental layer; always SKIPPED here. Mirrors
+//   adapter/harness/verification.py's LAYER_TIER exactly (Phase 2 of the remediation plan).
+export const LAYER_TIER: Record<VerificationLayer, LayerTier> = {
+  syntax: 'mechanical',
+  unit: 'mechanical',
+  integration: 'mechanical',
+  consistency: 'mechanical',
+  requirements: 'environmental',
+  assumptions: 'environmental',
+  goal_correctness: 'model',
+  evidence_sufficiency: 'environmental',
+  output_contract_partial: 'mechanical',
+}
+
 // Required tool per verification layer — matches adapter/harness/verification.py's
 // per-function _tool_available() gating (linter, pytest, consistency_checker, etc.)
 const LAYER_TO_TOOL: Record<VerificationLayer, string> = {
@@ -53,45 +73,102 @@ function skipped(layer: VerificationLayer): LayerResult {
   return { layer, status: 'SKIPPED', detail: `${LAYER_TO_TOOL[layer]} not available` }
 }
 
+// Phase 3 of plans/harness_and_assistant_architecture_remediation_plan.html ports Phase 2's
+// verification-honesty fix (adapter/harness/verification.py) forward: a layer whose tool is
+// nominally "available" no longer fakes a PASS it can't back up. syntax/unit have no TS-side
+// execution boundary equivalent to Python's Phase 1b subprocess sandbox (packages/harness runs
+// client-side; there is no sandboxed linter/pytest invocation to call here) — so, matching
+// Python's own "no target_path → SKIPPED, not a fake PASS" rule, they stay SKIPPED whenever
+// there's nothing they can actually run, and now say so honestly instead of assuming PASS the
+// moment a tool name happens to be present in the manifest.
 function runSyntax(result: unknown, manifest: Record<string, { available: boolean }> | undefined): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.syntax, manifest)) return skipped('syntax')
   if (result === null || result === undefined) {
     return { layer: 'syntax', status: 'FAIL', detail: 'Result is null — syntax check failed' }
   }
-  return { layer: 'syntax', status: 'PASS', detail: 'Syntax check passed' }
+  return { layer: 'syntax', status: 'SKIPPED', detail: 'no execution boundary in packages/harness — nothing to lint' }
 }
 
 function runUnit(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.unit, manifest)) return skipped('unit')
-  return { layer: 'unit', status: 'PASS', detail: 'Unit verification passed' }
+  return { layer: 'unit', status: 'SKIPPED', detail: 'no execution boundary in packages/harness — nothing to run' }
 }
 
-function runIntegration(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
-  if (!isToolAvailable(LAYER_TO_TOOL.integration, manifest)) return skipped('integration')
-  return { layer: 'integration', status: 'PASS', detail: 'Integration verification passed' }
+// Always SKIPPED, regardless of manifest: mirrors verification.py's verify_integration —
+// there is no real integration-test runner concept wired up on either side yet; inventing a
+// fake pass/fail for a tool that can't actually be invoked would reintroduce the exact
+// false-confidence problem this rewrite exists to close.
+function runIntegration(): LayerResult {
+  return { layer: 'integration', status: 'SKIPPED', detail: 'integration_runner not available' }
 }
 
-function runConsistency(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+// Real, deterministic check (no subprocess needed): FAIL if any unresolved HIGH or
+// SYSTEM_BREAKING contradiction is present in the world model, PASS otherwise. Mirrors
+// verification.py's verify_consistency exactly.
+function runConsistency(
+  worldModel: WorldModel | null | undefined,
+  manifest: Record<string, { available: boolean }> | undefined,
+): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.consistency, manifest)) return skipped('consistency')
-  return { layer: 'consistency', status: 'PASS', detail: 'Consistency check passed' }
+  if (worldModel === null || worldModel === undefined) {
+    return { layer: 'consistency', status: 'SKIPPED', detail: 'no world_model to check against' }
+  }
+  const unresolved = worldModel.contradictions.filter(c => c.severity === 'HIGH' || c.severity === 'SYSTEM_BREAKING')
+  if (unresolved.length > 0) {
+    return {
+      layer: 'consistency',
+      status: 'FAIL',
+      detail: `${unresolved.length} unresolved HIGH/SYSTEM_BREAKING contradiction(s) in world model`,
+    }
+  }
+  return { layer: 'consistency', status: 'PASS', detail: 'no unresolved HIGH/SYSTEM_BREAKING contradictions' }
 }
 
-function runRequirements(successCriteria: string[], manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+// Mechanical-tier limit (mirrors verify_requirements): whether a result *semantically*
+// satisfies success_criteria is a model-judgment question this layer can't decide. The one
+// mechanically checkable case — criteria were specified but no result was produced at all —
+// can FAIL; everything else is an honest SKIPPED, never a PASS this layer can't back up.
+function runRequirements(result: unknown, successCriteria: string[], manifest: Record<string, { available: boolean }> | undefined): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.requirements, manifest)) return skipped('requirements')
   if (successCriteria.length === 0) {
-    return { layer: 'requirements', status: 'PASS', detail: 'No criteria to check' }
+    return { layer: 'requirements', status: 'SKIPPED', detail: 'no success criteria to check' }
   }
-  return { layer: 'requirements', status: 'PASS', detail: 'Requirements check passed' }
+  if (result === null || result === undefined) {
+    return { layer: 'requirements', status: 'FAIL', detail: 'success criteria specified but no result was produced' }
+  }
+  return {
+    layer: 'requirements',
+    status: 'SKIPPED',
+    detail: 'result produced; semantic satisfaction of criteria requires model-tier judgment, not verified here',
+  }
 }
 
-function runAssumptions(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
+// Same mechanical-tier limit as runRequirements (mirrors verify_assumptions).
+function runAssumptions(result: unknown, assumptions: string[], manifest: Record<string, { available: boolean }> | undefined): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.assumptions, manifest)) return skipped('assumptions')
-  return { layer: 'assumptions', status: 'PASS', detail: 'Assumptions check passed' }
+  if (assumptions.length === 0) {
+    return { layer: 'assumptions', status: 'SKIPPED', detail: 'no assumptions to check' }
+  }
+  if (result === null || result === undefined) {
+    return { layer: 'assumptions', status: 'FAIL', detail: 'assumptions stated but no result was produced' }
+  }
+  return {
+    layer: 'assumptions',
+    status: 'SKIPPED',
+    detail: 'result produced; environmental validation of assumptions not implemented at this layer',
+  }
 }
 
+// Model tier by nature (mirrors verify_goal_correctness): "is this the right outcome" is a
+// judgment call, not a mechanical property. Always SKIPPED when nominally available — a fake
+// PASS here is exactly the false-confidence pattern this rewrite exists to close.
 function runGoalCorrectness(manifest: Record<string, { available: boolean }> | undefined): LayerResult {
   if (!isToolAvailable(LAYER_TO_TOOL.goal_correctness, manifest)) return skipped('goal_correctness')
-  return { layer: 'goal_correctness', status: 'PASS', detail: 'Goal correctness check passed' }
+  return {
+    layer: 'goal_correctness',
+    status: 'SKIPPED',
+    detail: 'goal correctness requires model-tier judgment, not implemented at this layer',
+  }
 }
 
 function runEvidenceSufficiency(
@@ -161,11 +238,11 @@ function runAdversarialPass(result: unknown, hypothesisSet: HypothesisSet | null
 export function verify(
   result: unknown,
   successCriteria: string[],
-  _assumptions: string[],
+  assumptions: string[],
   toolManifest: EvidenceStore | null,
   riskLevel: RiskLevel,
   evidenceStore?: EvidenceStore | null,
-  _worldModel?: WorldModel | null,
+  worldModel?: WorldModel | null,
   outputContract?: OutputContract | null,
   hypothesisSet?: HypothesisSet | null,
   scope: 'local' | 'global' = 'local',
@@ -177,10 +254,10 @@ export function verify(
   const layer_results: LayerResult[] = [
     runSyntax(result, manifest),
     runUnit(manifest),
-    runIntegration(manifest),
-    runConsistency(manifest),
-    runRequirements(successCriteria, manifest),
-    runAssumptions(manifest),
+    runIntegration(),
+    runConsistency(worldModel ?? null, manifest),
+    runRequirements(result, successCriteria, manifest),
+    runAssumptions(result, assumptions, manifest),
     runGoalCorrectness(manifest),
     runEvidenceSufficiency(evidenceStore ?? null, scope, manifest),
     runOutputContractPartial(result, outputContract ?? null, manifest),

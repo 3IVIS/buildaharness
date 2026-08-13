@@ -11,7 +11,7 @@ describe('HarnessRunState', () => {
     const wm = new WorldModel({ generation_id: 3 })
     wm.completeness_flags['test_region'] = false
 
-    const cs = new ControlState({ generation_id: 3, risk_state: 'CAUTIOUS', notes: ['some annotation'] })
+    const cs = new ControlState({ generation_id: 3, execution_mode: 'CAUTIOUS', notes: ['some annotation'] })
 
     const tg = new TaskGraph({
       tasks: [{
@@ -43,7 +43,7 @@ describe('HarnessRunState', () => {
     // Verify all 13 state objects restored
     expect(restored.worldModel.generation_id).toBe(3)
     expect(restored.worldModel.completeness_flags['test_region']).toBe(false)
-    expect(restored.controlState.risk_state).toBe('CAUTIOUS')
+    expect(restored.controlState.execution_mode).toBe('CAUTIOUS')
     expect(restored.controlState.notes[0]).toBe('some annotation')
     expect(restored.taskGraph.tasks[0].id).toBe('task_1')
     expect(restored.taskGraph.getConflictProbability('src/auth.ts', 'src/db.ts')).toBeCloseTo(0.3)

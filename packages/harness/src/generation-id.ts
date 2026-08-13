@@ -40,7 +40,11 @@ export function _maybeResolve(
   const resolved = resolver(diagnostics, worldModel, fd)
 
   controlState.generation_id = resolved.generation_id
-  controlState.risk_state = resolved.risk_state
+  controlState.permission = resolved.permission
+  controlState.execution_mode = resolved.execution_mode
+  controlState.escalation = resolved.escalation
+  controlState.risk_estimate = resolved.risk_estimate
+  controlState.confidence_estimate = resolved.confidence_estimate
   controlState.escalation_reason = resolved.escalation_reason
   controlState.block_mask = [...resolved.block_mask]
   controlState.notes = [...resolved.notes]

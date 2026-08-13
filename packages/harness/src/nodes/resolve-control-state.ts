@@ -99,6 +99,32 @@ function extractSubDimensions(diagnostics: Diagnostics): Array<[string, number]>
   ]
 }
 
+// Disjoint sub-dimension pools risk_estimate/confidence_estimate are computed from — mirrors
+// control_state.py's _CONFIDENCE_DIMENSIONS / _RISK_DIMENSIONS exactly.
+const CONFIDENCE_DIMENSIONS = new Set([
+  'belief_freshness', 'belief_consistency', 'belief_support', 'symptom_coverage', 'explanation_coverage',
+])
+const RISK_DIMENSIONS = new Set([
+  'verification_strength', 'verification_feasibility', 'progress_rate', 'failure_recurrence', 'oscillation_score',
+])
+
+function computeRiskAndConfidenceEstimates(subDims: Array<[string, number]>): { risk_estimate: number; confidence_estimate: number } {
+  const confidenceValues: number[] = []
+  const riskPoolValues: number[] = []
+  for (const [name, normValue] of subDims) {
+    if (CONFIDENCE_DIMENSIONS.has(name)) confidenceValues.push(normValue)
+    else if (RISK_DIMENSIONS.has(name)) riskPoolValues.push(normValue)
+  }
+  const confidence_estimate = confidenceValues.length > 0
+    ? confidenceValues.reduce((a, b) => a + b, 0) / confidenceValues.length
+    : 1.0
+  const riskPoolHealth = riskPoolValues.length > 0
+    ? riskPoolValues.reduce((a, b) => a + b, 0) / riskPoolValues.length
+    : 1.0
+  const risk_estimate = Math.max(0.0, Math.min(1.0, 1.0 - riskPoolHealth))
+  return { risk_estimate, confidence_estimate }
+}
+
 export function resolveControlState(
   diagnostics: Diagnostics,
   worldModel: WorldModel,
@@ -119,9 +145,18 @@ export function resolveControlState(
   const cs = new ControlState()
   const notes: string[] = []
 
+  // Computed once, attached at every exit point below — continuous and additive, so they
+  // never influence which tier fires (mirrors control_state.py's own invariant here).
+  const subDimsForEstimate = extractSubDimensions(diagnostics)
+  const estimates = computeRiskAndConfidenceEstimates(subDimsForEstimate)
+  cs.risk_estimate = estimates.risk_estimate
+  cs.confidence_estimate = estimates.confidence_estimate
+
   // TIER 1: any SYSTEM_BREAKING contradiction → BLOCKED, return immediately; TIER 2+ not evaluated
   if (worldModel.contradictions.some(c => c.severity === 'SYSTEM_BREAKING')) {
-    cs.risk_state = 'BLOCKED'
+    cs.permission = 'DENY'
+    cs.execution_mode = 'RECOVERY'
+    cs.escalation = 'SYSTEM_BREAKING'
     cs.escalation_reason = 'SYSTEM_BREAKING_CONTRADICTION'
     cs.block_mask = [{
       dimension: 'world_model_integrity',
@@ -137,7 +172,7 @@ export function resolveControlState(
   }
 
   // TIER 2: each sub-dim < CRITICAL_THRESHOLD gets its own BlockEntry (individual dimension granularity)
-  const subDims = extractSubDimensions(diagnostics)
+  const subDims = subDimsForEstimate
   const blockMask: BlockEntry[] = []
   for (const [dimName, normValue] of subDims) {
     if (normValue < CRITICAL_THRESHOLD) {
@@ -151,8 +186,10 @@ export function resolveControlState(
 
   if (blockMask.length > 0) {
     cs.block_mask = blockMask
-    cs.risk_state = 'BLOCKED'
+    cs.permission = 'DENY'
+    cs.execution_mode = 'RECOVERY'
     if (detectDeadlock(blockMask)) {
+      cs.escalation = 'HUMAN_REQUIRED'
       cs.escalation_reason = 'HUMAN_REQUIRED'
     }
     cs.generation_id = worldModel.generation_id
@@ -169,7 +206,7 @@ export function resolveControlState(
     (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) ||
     (explanation_coverage >= CRITICAL_THRESHOLD && explanation_coverage < CAUTION_THRESHOLD)
   ) {
-    cs.risk_state = 'CAUTIOUS'
+    cs.execution_mode = 'CAUTIOUS'
     if (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) {
       notes.push(`Coverage gap in symptom_coverage (${symptom_coverage.toFixed(3)}): exploration actions allowed`)
     }
@@ -188,11 +225,11 @@ export function resolveControlState(
     elevationFactor = elevationFactor * 0.8 + patternConfidence * 0.2
   }
 
-  if (elevationFactor > 0.05 && cs.risk_state === 'NORMAL') {
-    cs.risk_state = 'CAUTIOUS'
+  if (elevationFactor > 0.05 && cs.execution_mode === 'NORMAL') {
+    cs.execution_mode = 'CAUTIOUS'
   }
 
-  // TIER 5: NORMAL — implicit; ControlState defaults to 'NORMAL'
+  // TIER 5: NORMAL — implicit; ControlState defaults to permission=ALLOW/execution_mode=NORMAL
 
   // dep_class_gap_annotation attached to notes[] only — NOT evaluated in any tier (INV-07)
   if (diagnostics.dep_class_gap_annotation) {
