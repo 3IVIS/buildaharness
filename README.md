@@ -37,7 +37,7 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 | Input / Caller | **Caller State** — constraints · clarification |
 | ↓ | **World Model** — beliefs · contradictions · generation_id |
 | LLM Call | **Reasoning** — evidence · hypotheses (4 sources) · VOI |
-| ↓ | **Control** ← *key* — 5-tier resolver · NORMAL / CAUTIOUS / BLOCKED |
+| ↓ | **Control** ← *key* — 5-tier resolver · ALLOW/DENY permission · NORMAL/CAUTIOUS/RECOVERY mode |
 | Tool Call ↺ loop | **Planning** — task graph (6-state) · parallel concurrency |
 | ↓ | **Execution** + **Verification** — VOI gate · 9 layers |
 | Output | **Recovery** + **Memory** — 6 strategies · compression |
@@ -128,16 +128,16 @@ Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — ev
 <thead><tr><th colspan="4" align="left">Harness nodes — implement the 11-layer control architecture</th></tr></thead>
 <tbody>
 <tr>
-<td nowrap><abbr title="Observations, beliefs, assumptions, contradictions — generation_id increments on every significant update">🧠 <code>world_model</code></abbr></td>
+<td nowrap><abbr title="Observations, beliefs, assumptions, contradictions — append-only Belief events (derived_from[], contradicts[]), never mutated in place; generation_id is a monotonic version stamp, not a mutation counter">🧠 <code>world_model</code></abbr></td>
 <td nowrap><abbr title="Four generation sources; diversity enforcement (0.7 threshold); K-retention elimination policy">💡 <code>hypothesis_set</code></abbr></td>
 <td nowrap><abbr title="Collects typed Evidence(obs, reliability, source, type, freshness) — observations never auto-promoted to conclusions">🗄️ <code>gather_evidence</code></abbr></td>
 <td nowrap><abbr title="Caps max conclusion reliability per tool given scope limits; updates verification_health.feasibility">⚙️ <code>apply_tool_rel</code></abbr></td>
 </tr>
 <tr>
 <td nowrap><abbr title="Reliability-weighted belief integration; belief_dep_graph propagation; completeness_flags updated">🔄 <code>update_wm</code></abbr></td>
-<td nowrap><abbr title="Five-tier resolver → NORMAL / CAUTIOUS / BLOCKED; deadlock detection; generation_id gate assertions">🛡️ <code>control_state</code></abbr></td>
+<td nowrap><abbr title="Five-tier resolver → permission (ALLOW/DENY) · execution_mode (NORMAL/CAUTIOUS/RECOVERY) · escalation · risk_estimate · confidence_estimate; deadlock detection; staleness gate assertions">🛡️ <code>control_state</code></abbr></td>
 <td nowrap><abbr title="Six-state task decomposition; cycle detection; abstraction_fit recomputed on change">🕸️ <code>task_graph</code></abbr></td>
-<td nowrap><abbr title="9 verification layers pruned by tool_availability_manifest; adversarial pass on HIGH risk">✅ <code>verify_gate</code></abbr></td>
+<td nowrap><abbr title="9 verification layers classified mechanical/environmental/model (LAYER_TIER); real subprocess-backed checks where infrastructure exists, honestly SKIPPED (never a fake PASS) elsewhere; adversarial pass on HIGH risk">✅ <code>verify_gate</code></abbr></td>
 </tr>
 <tr>
 <td nowrap><abbr title="rollback() → record_failure() → strategy switch: DIRECT_EDIT, TRACE_EXEC, BROADER_SEARCH, REIMPLEMENT, MINIMAL_FIX, ESCALATE">♻️ <code>recovery</code></abbr></td>

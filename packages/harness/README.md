@@ -95,6 +95,43 @@ await saveHarnessCheckpoint(store, outcome.checkpoint)
 const reloaded = await loadHarnessCheckpoint(store, 'my-run-id')
 ```
 
+## Suspend point: propose → gate → execute
+
+`driveMainLoop` has a second, earlier pause point in addition to the
+end-of-iteration checkpoint above: it yields immediately after
+`action_gate` produces a decision (`PASS` / `BLOCK` / `ESCALATE`) but
+*before* `execute()` runs, stashing the proposal as `ctx.pendingProposal`
+(`{ taskId, gateResult, shouldGatherEvidence }`) on the checkpoint's
+`HarnessRunProgressData`. This lets a caller inject a real approval step —
+"the LLM proposed this action, a human/policy layer needs to approve it" —
+between the harness deciding what it wants to do and actually doing it,
+instead of only being able to observe an action after it already ran.
+
+A `shouldPause` callback that wants to stop here specifically (rather than
+at the default post-execution checkpoint) can key off the last pushed node
+being `'action_gate'`. Nothing stops on this point by default — supplying
+no `shouldPause` reproduces the pre-existing end-to-end run behavior
+unchanged. On resume, if `ctx.pendingProposal` is present, `driveMainLoop`
+re-derives the same task/decision from the stored data instead of
+re-running task selection, risk estimation, and VOI evaluation a second
+time (which would double-count `stepsUsed` and re-mutate diagnostics).
+
+**Known scope boundary:** resuming after a real process restart (not just
+an in-memory pause) loses `select_task`'s opportunistic concurrent-task
+parallel-execution candidate — the resumed task executes serially. A
+same-process pause/resume never hits this, since the concurrent-task
+candidate only exists within the run that already selected it.
+
+This suspend-point *contract* — propose, gate, then execute, with the
+option to pause between the two — is shared conceptually with Python's
+`loop.py` (both implement the same five-tier `resolve_control_state()` /
+`resolveControlState()` decision before any execution happens), but as of
+this writing the contract is not yet cross-referenced from `loop.py`'s own
+docs/ADR, and Python's loop has no equivalent mid-iteration yield — it is
+synchronous, not a resumable generator. Treat this section as the
+TypeScript-side suspend point specifically, not a claim of a mirrored
+Python suspend point.
+
 ## Cross-run learning (ExperienceStore)
 
 `ExperienceStore` (strategy weights, learned decompositions, verification

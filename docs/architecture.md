@@ -178,8 +178,8 @@ The 11 fundamental layers are the core reasoning and control design. Five additi
 | Control State | `control_state.py` | 5-tier `resolve_control_state()`: Tier 1 SYSTEM_BREAKING → Tier 2 deadlock → Tier 3 block mask → Tier 4 weighted → Tier 5 NORMAL |
 | Planning | `task_graph.py`, `parallel_merge.py` | 6-state task graph, conflict probability cache, parallel branch merge with contradiction detection at join |
 | Execution | `execution.py`, `voi.py`, `risk.py`, `review_gate.py` | VOI-gated evidence gathering, risk estimation, reversibility strategies, pre-execution review gate |
-| Verification | `verification.py` | 9-layer verification (including adversarial pass for HIGH risk actions) |
-| Recovery | `recovery.py`, `replanning.py`, `progress.py`, `failure_modes.py`, `memory.py` | Named strategies (DIRECT_EDIT → TRACE_EXEC → ...), stall detection, global/local replanning, context compression with dependency-risk tracking |
+| Verification | `verification.py` | 9-layer verification, each classified `mechanical`/`environmental`/`model` (`LAYER_TIER`); `syntax`/`unit` are real subprocess-backed checks via the execution boundary, `consistency` is real state inspection, the remaining four are honestly `SKIPPED` (never a fake `PASS`) pending infrastructure that doesn't exist yet; adversarial pass for HIGH risk actions |
+| Recovery | `recovery.py`, `replanning.py`, `progress.py`, `failure_modes.py`, `memory.py` | Named strategies (DIRECT_EDIT → TRACE_EXEC → ...), stall detection, global/local replanning, context compression with dependency-risk tracking; a hard multi-dimensional `RecoveryBudget` (tool calls, cost, time, plan revisions) is checked before every strategy switch, additive to the existing `STRATEGY_ORDER` bound — exhaustion on any single dimension escalates rather than continuing |
 | Reviewer Pass | `reviewer.py` | 3-lens review (consistency, adversarial, abstraction fit); adversarial prior discarded after use (INV-09) |
 
 **Supporting modules (added in later phases)**
@@ -188,7 +188,7 @@ The 11 fundamental layers are the core reasoning and control design. Five additi
 |---|---|---|
 | Caller State | `caller_state.py` | `CallerState` — mutable constraints, clarification history, success criteria, constraint-change propagation |
 | Caller Updates & Escalation | `external_updates.py`, `constraint_propagation.py`, `escalation.py` | PostgreSQL NOTIFY channel for live constraint changes, `surface_blocker` escalation to HITL |
-| Experience Store | `experience_store.py` | Cross-run learning via softmax strategy weights; warm start from prior decompositions; no-op when absent |
+| Experience Store | `experience_store.py` | Cross-run learning via softmax strategy weights; warm start from prior decompositions; no-op when absent; every write lands `promoted=false` (migration `0012`) and every read (including `warm_start()`) only sees `promoted=true` rows — nothing learned is live until an explicit `promote_entries()`/`promote_strategy_weights()` call, never auto-invoked |
 | Process Concepts | `process_concept.py`, `process_registry.py`, `process_tools.py` | Static task graph templates that seed planning without locking it; agent-callable `list_processes()`, `load_process()`, `get_current_step()`, `complete_step()` |
 | Output Contract | `output_contract.py` | 4-check validation: format requirements, required sections, interface constraints, caller-specific constraints |
 
@@ -198,7 +198,7 @@ Ten invariants are permanently enforced by `adapter/tests/test_harness_invariant
 
 - **INV-01** Observations and beliefs are separate structures; HIGH-reliability tool output never auto-promotes to a belief without an explicit `derived_from[]` chain.
 - **INV-02** Every diagnostic sub-dimension entering `resolve_control_state()` is normalised `[0,1]`.
-- **INV-03** `world_model.generation_id` increments exactly twice per loop iteration (pre- and post-execution).
+- **INV-03** `world_model.generation_id` is monotonic (never decreases within a run), and any version-pinned object (`PlanVersion`/`ExecutionVersion`/`VerificationVersion`/`ControlState`) is judged stale by `is_stale()` if and only if the world model's current version has advanced past the version it was pinned to — replaces the earlier "increments exactly twice per loop iteration" wording, which was a proxy tied to one implementation's lifecycle rather than the property that actually matters (see `docs/adr/002-harness-semantic-contract.md`, Decision 3).
 - **INV-04** Mutual deadlock in `block_mask` always escalates to `HUMAN_REQUIRED`, never attempts autonomous recovery.
 - **INV-05** `SYSTEM_BREAKING` contradictions never halt inline; they enter `contradictions[]` and are read by Tier 1 on the next resolve call.
 - **INV-06** `select_best_action()` reads `control_state` exclusively for control decisions.
@@ -274,7 +274,7 @@ In addition to the server-side adapter, buildaharness ships five npm packages:
 
 ### `@buildaharness/harness`
 
-TypeScript mirror of the Python harness state layer. Provides typed interfaces for `WorldModel`, `HypothesisSet`, `ControlState`, `TaskGraph`, `EvidenceStore`, `ExperienceStore`, `CallerState`, `OutputContract`, and all associated sub-structures. Also includes the full set of harness node implementations (e.g. `gather-evidence`, `detect-contradictions`, `resolve-control-state`, `execute`, `verify`, `reviewer-pass`).
+TypeScript mirror of the Python harness state layer, field-for-field with Python's Phase 1a semantic-contract split (`ControlState.permission`/`execution_mode`/`escalation`/`risk_estimate`/`confidence_estimate` replace the old single `risk_state`). Provides typed interfaces for `WorldModel`, `HypothesisSet`, `ControlState`, `TaskGraph`, `EvidenceStore`, `ExperienceStore`, `CallerState`, `OutputContract`, and all associated sub-structures. Also includes the full set of harness node implementations (e.g. `gather-evidence`, `detect-contradictions`, `resolve-control-state`, `execute`, `verify`, `reviewer-pass`). `HarnessRuntime` is a real resumable execution engine, not just types — `run()`/`resume()` drive a generator with two pause points: the default post-execution checkpoint, and a suspend point between `action_gate`'s decision and `execute()` (propose → gate → execute) that a caller can use to inject real approval. See `packages/harness/README.md`.
 
 ### `@buildaharness/runtime`
 

@@ -37,7 +37,7 @@
 | 输入 / 调用者 | **调用者状态** — 约束 · 澄清 |
 | ↓ | **世界模型** — 信念 · 矛盾 · generation_id |
 | LLM 调用 | **推理** — 证据 · 假设（4 种来源）· VOI |
-| ↓ | **控制** ← *核心* — 5 层解析器 · NORMAL / CAUTIOUS / BLOCKED |
+| ↓ | **控制** ← *核心* — 5 层解析器 · ALLOW/DENY 权限 · NORMAL/CAUTIOUS/RECOVERY 模式 |
 | 工具调用 ↺ 循环 | **规划** — 任务图（6 状态）· 并行并发 |
 | ↓ | **执行** + **验证** — VOI 门 · 9 层 |
 | 输出 | **恢复** + **内存** — 6 种策略 · 压缩 |
@@ -115,16 +115,16 @@
 <thead><tr><th colspan="4" align="left">线束节点 — 实现 11 层控制架构</th></tr></thead>
 <tbody>
 <tr>
-<td nowrap><abbr title="观察、信念、假设、矛盾 — generation_id 跟踪每次重要更新">🧠 <code>world_model</code></abbr></td>
+<td nowrap><abbr title="观察、信念、假设、矛盾 — 仅追加的 Belief 事件（derived_from[]、contradicts[]），从不就地修改；generation_id 是单调递增的版本戳，而非变更计数器">🧠 <code>world_model</code></abbr></td>
 <td nowrap><abbr title="四种生成来源；多样性执行（阈值 0.7）；带 K 保留的消除策略">💡 <code>hypothesis_set</code></abbr></td>
 <td nowrap><abbr title="收集类型化 Evidence(obs, reliability, source, type, freshness) — 观察从不自动提升为结论">🗄️ <code>gather_evidence</code></abbr></td>
 <td nowrap><abbr title="在已知范围限制下限制每个工具的最大结论可靠性；更新 verification_health.feasibility">⚙️ <code>apply_tool_rel</code></abbr></td>
 </tr>
 <tr>
 <td nowrap><abbr title="可靠性加权信念整合；belief_dep_graph 传播；更新 completeness_flags">🔄 <code>update_wm</code></abbr></td>
-<td nowrap><abbr title="五层解析器 → NORMAL / CAUTIOUS / BLOCKED；死锁检测；generation_id 门断言">🛡️ <code>control_state</code></abbr></td>
+<td nowrap><abbr title="五层解析器 → permission（ALLOW/DENY）· execution_mode（NORMAL/CAUTIOUS/RECOVERY）· escalation · risk_estimate · confidence_estimate；死锁检测；陈旧性门断言">🛡️ <code>control_state</code></abbr></td>
 <td nowrap><abbr title="6 状态任务分解；循环检测；变化时重新计算 abstraction_fit">🕸️ <code>task_graph</code></abbr></td>
-<td nowrap><abbr title="9 个验证层（由 tool_availability_manifest 修剪）；高风险时对抗性通过">✅ <code>verify_gate</code></abbr></td>
+<td nowrap><abbr title="9 个验证层，按 mechanical/environmental/model 分类（LAYER_TIER）；有基础设施支持的层做真实的子进程检查，其余层诚实地标记为 SKIPPED（绝不伪造 PASS）；高风险时执行对抗性通过">✅ <code>verify_gate</code></abbr></td>
 </tr>
 <tr>
 <td nowrap><abbr title="rollback() → record_failure() → 策略切换：DIRECT_EDIT、TRACE_EXEC、BROADER_SEARCH、REIMPLEMENT、MINIMAL_FIX、ESCALATE">♻️ <code>recovery</code></abbr></td>

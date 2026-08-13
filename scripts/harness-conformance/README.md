@@ -44,7 +44,7 @@ and confirmed otherwise.
 
 Two fixtures surface real, previously-undocumented behavioral drift in
 `dep_class_gap_annotation` handling (advisory-only, per INV-07 — neither
-affects `risk_state`/`block_mask`, only `notes[]` content):
+affects `permission`/`block_mask`, only `notes[]` content):
 
 - **Note formatting**: TS prefixes the note with `dep_class_gap: `;
   Python appends the raw annotation with no prefix.
