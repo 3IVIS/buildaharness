@@ -269,7 +269,8 @@ describe('/status and /cost — spend cap display (T2)', () => {
         options?.onUsage?.({ inputTokens: 100, outputTokens: 100, costUsd: 2 })
         return 'Noted.'
       }
-      async callChatStructured(): Promise<LLMStructuredResponse> {
+      async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+        if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
         return { content: 'Noted.' }
       }
     }

@@ -313,9 +313,9 @@ describe('classifyTurnIntent — context gating', () => {
 
 describe('classifyTurnIntent — fail-safe fallback', () => {
   const FAIL_SAFE = {
-    riskLevel: 'LOW',
-    riskReason: 'Conversational request with no detected side effects.',
-    requiresApproval: false,
+    riskLevel: 'UNKNOWN',
+    riskReason: 'Risk could not be determined — classification failed or returned an unusable result.',
+    requiresApproval: true,
     isTrivial: false,
     decomposedTasks: null,
     isReminderRequest: false,

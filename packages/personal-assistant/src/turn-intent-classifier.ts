@@ -2,7 +2,13 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { listTemplateNames } from './plan-templates/index.js'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
+/**
+ * 'UNKNOWN' is never produced by a successful classification (TURN_INTENT_SCHEMA's riskLevel enum
+ * only ever allows LOW/MEDIUM/HIGH from the model) — it exists solely as failSafeClassification's
+ * fail-safe value, so callers can route a classifier failure to their most conservative branch
+ * instead of silently treating it as LOW risk. See failSafeClassification's doc comment.
+ */
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN'
 
 export interface TurnIntentContext {
   /** Whether an active durable plan exists for this session — gates whether the abandon
@@ -38,13 +44,24 @@ export interface TurnIntentClassification {
   statesDurableFact: { text: string; durable: boolean } | null
 }
 
-const FAIL_SAFE_REASON = 'Conversational request with no detected side effects.'
+const FAIL_SAFE_REASON = 'Risk could not be determined — classification failed or returned an unusable result.'
 
+/**
+ * Fired on any classifier failure (LLM error, unparseable/malformed response) — see
+ * classifyTurnIntent's try/catch and parseTurnIntent's null-return paths below. Deliberately does
+ * NOT reuse the old LOW/no-approval defaults: a classifier failure means the risk is genuinely
+ * unknown, not verified-safe, so this returns `riskLevel: 'UNKNOWN'` and `requiresApproval: true`
+ * to route the turn to the caller's most conservative branch (assistant.ts's approval gate) rather
+ * than silently letting a HIGH-risk request through under a false LOW verdict. `isTrivial: false`
+ * is preserved from the old fallback — that part was already correct: it keeps the full harness
+ * engaged on failure instead of taking the trivial-question fast path. The bug this fixes is
+ * specifically the approval-gate default, not the harness-engagement default.
+ */
 function failSafeClassification(): TurnIntentClassification {
   return {
-    riskLevel: 'LOW',
+    riskLevel: 'UNKNOWN',
     riskReason: FAIL_SAFE_REASON,
-    requiresApproval: false,
+    requiresApproval: true,
     isTrivial: false,
     decomposedTasks: null,
     isReminderRequest: false,
@@ -253,10 +270,11 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
 /**
  * Runs the single consolidated LLM call every turn (replacing the old lexical-gate-then-maybe-
  * LLM-call chain) and derives all seven downstream judgments from one structured response. Falls
- * back to the same safe defaults each former classifier fell back to individually on any parse
- * failure or LLM error: LOW risk / not trivial / no decomposition / no abandon / no template match
- * / no stated fact — i.e. "do the careful thing" (run the full harness, don't auto-approve, don't
- * auto-abandon, don't silently claim a fact was stated when the call failed). Per-task riskLevel
+ * back to failSafeClassification's conservative defaults on any parse failure or LLM error:
+ * UNKNOWN risk requiring approval / not trivial / no decomposition / no abandon / no template
+ * match / no stated fact — i.e. "do the careful thing" (run the full harness, require approval
+ * rather than guessing LOW, don't auto-abandon, don't silently claim a fact was stated when the
+ * call failed). Per-task riskLevel
  * (Phase 1 of plans/lexical_functions_hardening_plan.html) and statesDurableFact are this call's
  * LLM-backed backstops for what used to be pure-lexical, no-fallback judgments — risk-classifier.ts's
  * standalone per-task classifyRisk and fact-extraction.ts's FACT_MARKERS respectively — both of
