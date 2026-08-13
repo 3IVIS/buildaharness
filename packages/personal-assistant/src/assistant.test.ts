@@ -908,8 +908,8 @@ describe('PersonalAssistant session management extras', () => {
         receivedModels.push(options?.model)
         return 'ok'
       }
-      async callChatStructured(): Promise<LLMStructuredResponse> {
-        return { content: 'ok' }
+      async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+        return { content: deriveTurnIntentJSON(messages) }
       }
     }
     const assistant = new PersonalAssistant({ llmClient: new ModelRecordingLLMClient(), model: 'model-a' })
@@ -2026,10 +2026,19 @@ describe('PersonalAssistant durable fact capture — classifyTurnIntent LLM back
 
     await assistant.turn(message, { sessionId: 'fact-session' })
 
-    const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean }>
+    const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean; source: string }>
     expect(facts).toHaveLength(1)
     expect(facts[0].text).toBe('the user breaks out in hives from tomatoes')
-    expect(facts[0].durable).toBe(true)
+    // Phase 5 (memory model separation & fact provenance): a MODEL_INFERRED fact is captured
+    // session-scoped exactly as before, but no longer auto-promoted to the cross-session durable
+    // store on the LLM's own say-so — it has no lexical corroboration (that's this test's whole
+    // premise: the lexical pass found nothing) and there's no explicit user-confirmation flow yet
+    // to earn promotion the other way. Previously asserted `durable: true`, trusting
+    // `statesDurableFact.durable` directly; this is the tightened policy, not a regression.
+    expect(facts[0].source).toBe('model_inferred')
+    expect(facts[0].durable).toBe(false)
+    const durableFacts = (await memory.get('facts:durable')) as Array<{ text: string }> | undefined
+    expect(durableFacts ?? []).toHaveLength(0)
   })
 
   it('does not use the LLM-derived fact when the lexical pass already found one — lexical stays authoritative', async () => {

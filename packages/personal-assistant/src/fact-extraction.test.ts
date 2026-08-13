@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractFactsFromTurn } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, type UserFact } from './fact-extraction.js'
 
 describe('extractFactsFromTurn', () => {
   it('captures a message stating the user\'s name', () => {
@@ -432,5 +432,32 @@ describe('extractFactsFromTurn', () => {
     expect(extractFactsFromTurn('Did that command actually run?', 'turn:40')).toHaveLength(0)
     expect(extractFactsFromTurn('Was the build successful?', 'turn:41')).toHaveLength(0)
     expect(extractFactsFromTurn('Is the server still down?', 'turn:42')).toHaveLength(0)
+  })
+
+  it('always tags a lexically-extracted fact as user_asserted provenance (Phase 5)', () => {
+    expect(extractFactsFromTurn('My name is Ali.', 'turn:43')[0].source).toBe('user_asserted')
+    expect(extractFactsFromTurn('I live in Seattle.', 'turn:44')[0].source).toBe('user_asserted')
+  })
+})
+
+// Phase 5 of the harness/personal-assistant remediation plan: typed fact provenance +
+// migrateFact()'s backfill for facts persisted before the `source` field existed.
+describe('migrateFact', () => {
+  const base = { text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:1', durable: true }
+
+  it('defaults a pre-Phase-5 fact (no source field) to user_asserted', () => {
+    const legacy = base as unknown as UserFact
+    expect(migrateFact(legacy)).toEqual({ ...base, source: 'user_asserted' })
+  })
+
+  it('preserves an already-durable pre-Phase-5 fact\'s durable flag — migration only labels, never demotes', () => {
+    const legacy = { ...base, durable: true } as unknown as UserFact
+    expect(migrateFact(legacy).durable).toBe(true)
+  })
+
+  it('leaves a fact that already carries a source field untouched, including model_inferred', () => {
+    const modern: UserFact = { ...base, durable: false, source: 'model_inferred' }
+    expect(migrateFact(modern)).toEqual(modern)
+    expect(migrateFact(modern)).toBe(modern)
   })
 })

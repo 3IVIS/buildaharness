@@ -3,19 +3,50 @@ import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.j
 
 const factPatterns = getFactMarkerPatterns()
 
+/**
+ * Provenance of a captured fact — Phase 5 of the harness/personal-assistant remediation plan
+ * (plans/harness_and_assistant_architecture_remediation_plan.html), replacing the previous bare
+ * `durable: boolean` with a typed source plus a promotion policy keyed off it (see
+ * assistant.ts's recordFacts()). USER_ASSERTED is this file's own free lexical marker pass
+ * (extractFactsFromTurn) — unchanged in behavior and still auto-promotable, exactly as before
+ * this phase. MODEL_INFERRED is classifyTurnIntent's statesDurableFact free-form LLM read, only
+ * ever consulted when the lexical pass found nothing — no longer auto-promoted to durable status
+ * on its own (see recordFacts). OBSERVED and EXTERNALLY_VERIFIED have no producer in this
+ * codebase yet (e.g. a future tool-observed state claim, or Phase 6's AnswerClaim evidence
+ * trail) — defined now so a future producer has a typed slot to land in rather than overloading
+ * MODEL_INFERRED for something with a different trust profile.
+ */
+export type FactSource = 'user_asserted' | 'model_inferred' | 'observed' | 'externally_verified'
+
 export interface UserFact {
   text: string
   extractedAt: string
   sourceTurn: string
   /**
-   * True for a fact durable/safety-relevant enough to survive /new (name, stated preference,
-   * health/dietary — see DURABLE_MARKERS below), false for a session-scoped detail (current
-   * location, current job, "remember that"-style context) that's expected to change more often
-   * and isn't the kind of thing that should silently reappear in a conversation the user
-   * explicitly started fresh. assistant.ts's recordFacts() stores durable facts in a second,
-   * never-cleared store in addition to the per-session one.
+   * True for a fact currently promoted to the cross-session store that survives /new (name,
+   * stated preference, health/dietary — see DURABLE_MARKERS below), false for a session-scoped
+   * detail (current location, current job, "remember that"-style context, or an unconfirmed
+   * MODEL_INFERRED claim) that's expected to change more often or hasn't earned promotion yet.
+   * Derived from `source` via the promotion policy in recordFacts(), not set independently.
+   * assistant.ts's recordFacts() stores promoted facts in a second, never-cleared store in
+   * addition to the per-session one.
    */
   durable: boolean
+  /** See FactSource. */
+  source: FactSource
+}
+
+// Old, pre-Phase-5 on-disk facts (Dexie `entries` table, keys `facts:<sessionId>`/
+// `facts:durable`) predate the `source` field entirely — Dexie treats `value` as an opaque
+// payload (see packages/runtime/src/memory/indexeddb.ts's `.version(2)` passthrough comment), so
+// a fact captured before this phase shipped reads back with `source: undefined`, not a crash or
+// a dropped record. Applied wherever a UserFact[] is read from `this.memory` (assistant.ts) —
+// defaults to USER_ASSERTED, the sensible choice since every fact captured before this phase
+// existed came from either the lexical pass or the old auto-trusted LLM path, and a fact that's
+// already `durable: true` on disk should stay promoted rather than being silently demoted by a
+// migration that merely adds a label.
+export function migrateFact(fact: UserFact): UserFact {
+  return fact.source ? fact : { ...fact, source: 'user_asserted' }
 }
 
 // Cheap, zero-LLM-call gate — only messages that look like the user is stating
@@ -255,7 +286,7 @@ function splitClauses(text: string): string[] {
  */
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
   const trimmed = userMessage.trim()
-  const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed) }]
+  const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed), source: 'user_asserted' }]
   // FACT_MARKERS' phrases are declarative by construction and matched against the whole message,
   // not per clause — but the widened "i (...) live in"/"i (...) work" gaps (0-4 words) mean the
   // literal phrase can now appear inside a genuine question too ("What city do I live in now?"
