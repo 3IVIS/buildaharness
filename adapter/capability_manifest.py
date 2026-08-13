@@ -114,9 +114,7 @@ def missing_capabilities(spec: dict, runtime: str) -> list[str]:
     """Capabilities this spec requires that `runtime` doesn't support at all ("missing").
     These should fail compilation fast rather than silently degrade."""
     support = RUNTIME_CAPABILITIES.get(runtime, {})
-    return sorted(
-        cap for cap in required_capabilities(spec) if support.get(cap, "missing") == "missing"
-    )
+    return sorted(cap for cap in required_capabilities(spec) if support.get(cap, "missing") == "missing")
 
 
 def partial_capability_warnings(spec: dict, runtime: str) -> list[str]:

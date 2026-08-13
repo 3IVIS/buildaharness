@@ -155,6 +155,7 @@ try:
 except ImportError:
     planner_router = None  # type: ignore[assignment]
     _planner_available = False
+from capability_manifest import missing_capabilities, partial_capability_warnings  # noqa: E402
 from prompt_resolver import resolve_prompts  # noqa: E402
 from prompts_api import router as prompts_router  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -162,7 +163,6 @@ from run_api import router as run_router  # noqa: E402
 from sso_auth import router_scim, router_sso, router_token  # noqa: E402
 from teams_api import router as teams_router  # noqa: E402
 from validate import validate_spec as _validate_spec  # noqa: E402
-from capability_manifest import missing_capabilities, partial_capability_warnings  # noqa: E402
 
 
 @asynccontextmanager
@@ -359,9 +359,7 @@ async def compile_flow(
             code, warnings = compile_maf(spec)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"MAF codegen failed: {exc}") from exc
-        return CompileResponse(
-            runtime="microsoft_agent_framework", code=code, warnings=capability_warnings + warnings
-        )
+        return CompileResponse(runtime="microsoft_agent_framework", code=code, warnings=capability_warnings + warnings)
 
     raise HTTPException(status_code=400, detail=f"Unknown runtime '{runtime}'. Supported: {list(SUPPORTED_RUNTIMES)}")
 
