@@ -19,8 +19,55 @@ const ADAPTERS: AdapterName[] = ['langgraph', 'crewai', 'mastra', 'microsoft_age
 // memory_read/memory_write → one cyan + ↑/↓
 // parallel_fork/parallel_join → one green + ⊕/⊖
 // agent_role/agent_debate → one magenta + ◉/⋯
-// Harness nodes → rose/pink family (#fb7185) with per-node variation.
+//
+// Harness nodes (Phase 8) — reclassified per Phase 1a/ADR-002's semantic
+// categories instead of one flat "Harness" bucket, one hue per category:
+//   OBSERVATION  — perceives the outside world (evidence gathering/scoring)
+//   STATE        — durable, versioned records (world model, stores, beliefs)
+//   POLICY       — authorization/judgment decisions (ADR-002 guarantee #2)
+//   CONTROL_FLOW — routes/structures the execution graph itself
+//   EFFECT       — bounded, idempotently-attributable external action (1b)
 // ──────────────────────────────────────────────────────────────────────────
+export type HarnessCategory = 'OBSERVATION' | 'STATE' | 'POLICY' | 'CONTROL_FLOW' | 'EFFECT'
+
+type HarnessNodeType =
+  | 'world_model' | 'hypothesis_set' | 'gather_evidence' | 'apply_tool_reliability'
+  | 'update_world_model' | 'control_state' | 'task_graph_node' | 'verification_gate'
+  | 'recovery_node' | 'evidence_store_node' | 'experience_store_node' | 'reviewer_pass'
+  | 'process_concept'
+
+export const HARNESS_NODE_CATEGORY: Record<HarnessNodeType, HarnessCategory> = {
+  world_model:            'STATE',
+  hypothesis_set:         'STATE',
+  update_world_model:     'STATE',
+  evidence_store_node:    'STATE',
+  experience_store_node:  'STATE',
+  gather_evidence:        'OBSERVATION',
+  apply_tool_reliability: 'OBSERVATION',
+  control_state:          'POLICY',
+  reviewer_pass:          'POLICY',
+  task_graph_node:        'CONTROL_FLOW',
+  verification_gate:      'CONTROL_FLOW',
+  process_concept:        'CONTROL_FLOW',
+  recovery_node:          'EFFECT',
+}
+
+export const HARNESS_CATEGORY_HEX: Record<HarnessCategory, string> = {
+  STATE:        '#6366f1',
+  OBSERVATION:  '#10b981',
+  POLICY:       '#fb7185',
+  CONTROL_FLOW: '#a78bfa',
+  EFFECT:       '#fb923c',
+}
+
+export const HARNESS_CATEGORY_LABEL: Record<HarnessCategory, string> = {
+  STATE:        'State',
+  OBSERVATION:  'Observation',
+  POLICY:       'Policy',
+  CONTROL_FLOW: 'Control Flow',
+  EFFECT:       'Effect',
+}
+
 export const NODE_HEX: Record<AnyNodeType, string> = {
   input:                  '#3b82f6',
   output:                 '#6b7280',
@@ -36,20 +83,20 @@ export const NODE_HEX: Record<AnyNodeType, string> = {
   transform:              '#facc15',
   agent_role:             '#ec4899',
   agent_debate:           '#ec4899',
-  // Harness nodes
-  world_model:            '#fb7185',
-  hypothesis_set:         '#c084fc',
-  gather_evidence:        '#34d399',
-  apply_tool_reliability: '#2dd4bf',
-  update_world_model:     '#60a5fa',
-  control_state:          '#f87171',
-  task_graph_node:        '#60a5fa',
-  verification_gate:      '#4ade80',
-  recovery_node:          '#fb923c',
-  evidence_store_node:    '#67e8f9',
-  experience_store_node:  '#a78bfa',
-  reviewer_pass:          '#fb7185',
-  process_concept:        '#22d3ee',
+  // Harness nodes — colored by HARNESS_NODE_CATEGORY, not individually.
+  world_model:            HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.world_model],
+  hypothesis_set:         HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.hypothesis_set],
+  gather_evidence:        HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.gather_evidence],
+  apply_tool_reliability: HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.apply_tool_reliability],
+  update_world_model:     HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.update_world_model],
+  control_state:          HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.control_state],
+  task_graph_node:        HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.task_graph_node],
+  verification_gate:      HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.verification_gate],
+  recovery_node:          HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.recovery_node],
+  evidence_store_node:    HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.evidence_store_node],
+  experience_store_node:  HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.experience_store_node],
+  reviewer_pass:          HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.reviewer_pass],
+  process_concept:        HARNESS_CATEGORY_HEX[HARNESS_NODE_CATEGORY.process_concept],
 }
 
 export const NODE_ICONS: Record<AnyNodeType, LucideIcon> = {

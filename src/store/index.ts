@@ -20,6 +20,7 @@ import type {
 import { parseFlowSpec } from '../spec/schema'
 import { validateCrossRefs, type ValidationError } from '../spec/validation'
 import type { EvalScore } from '../services/api'
+import type { IntentStep } from '../spec/intentTemplates'
 
 export interface A2ADeployment {
   flow_id:      string
@@ -177,6 +178,9 @@ export interface CanvasStore extends PersistedState {
   addNode:            (type: AnyNodeType, pos: { x: number; y: number }) => void
   addAnnotation:      (pos: { x: number; y: number }) => void
   insertNodeOnEdge:   (edgeId: string, type: AnyNodeType) => void
+  /** §8 — "Intent mode": expands an IntentTemplate's steps into a connected
+   *  chain of real nodes on the canvas, starting at `origin`. */
+  expandIntentTemplate: (steps: IntentStep[], origin: { x: number; y: number }) => void
   updateNodeData:     (id: string, data: Partial<NodeData>) => void
   deleteNode:         (id: string) => void
   selectNode:         (id: string | null) => void
@@ -474,6 +478,38 @@ export const useCanvasStore = create<CanvasStore>()(
             nodes: [...s.nodes, newNode],
             edges: [...s.edges.filter((e) => e.id !== edgeId), edgeA, edgeB],
             selectedNodeId: nodeId, isPanelOpen: true,
+            _nodeCounter:   counter,
+            lastModifiedAt: Date.now(),
+          }
+        })
+      },
+
+      expandIntentTemplate: (steps, origin) => {
+        if (steps.length === 0) return
+        get()._pushHistory()
+        set((s) => {
+          let counter = s._nodeCounter
+          const STEP_DX = 280
+          const newNodes: CanvasNode[] = steps.map((step, i) => {
+            counter += 1
+            const id = newNodeIdCollab(step.type, counter, s._collabClientId)
+            const data: NodeData = step.type === 'process_concept'
+              ? { label: step.label, harness_config: { concept_id: step.conceptId, show_steps: true } }
+              : { ...(NODE_DEFAULTS[step.type] ?? {}), label: step.label }
+            return {
+              id, type: step.type,
+              position: { x: origin.x + i * STEP_DX, y: origin.y },
+              data,
+            }
+          })
+          const newEdges: XYEdge[] = newNodes.slice(1).map((node, i) => ({
+            id: `e-${newNodes[i].id}-${node.id}`,
+            source: newNodes[i].id, target: node.id, type: 'direct',
+            data: { label: '', context_from: [] },
+          }))
+          return {
+            nodes: [...s.nodes, ...newNodes],
+            edges: [...s.edges, ...newEdges],
             _nodeCounter:   counter,
             lastModifiedAt: Date.now(),
           }

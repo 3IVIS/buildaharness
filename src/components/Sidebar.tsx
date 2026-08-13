@@ -3,12 +3,16 @@ import { StickyNote, Store } from 'lucide-react'
 import type { AnyNodeType } from '../spec/schema'
 import { NODE_SUPPORT_MATRIX } from '../spec/schema'
 import { EXAMPLE_FLOWS } from '../spec/examples'
+import { INTENT_TEMPLATES } from '../spec/intentTemplates'
 import { useCanvasStore, type SettingsTab } from '../store'
 import { useLibraryStore, relativeTime } from '../store/library'
-import { NODE_ICONS, NODE_HEX } from '../canvas/nodes/BaseNode'
+import { NODE_ICONS, NODE_HEX, HARNESS_NODE_CATEGORY, HARNESS_CATEGORY_LABEL } from '../canvas/nodes/BaseNode'
 import { MarketplacePanel } from './MarketplacePanel'
 
 type SidebarTab = 'nodes' | 'marketplace'
+// §8 — Expert mode is today's full 27-node palette; Intent mode is a small
+// set of high-level templates that expand into a full node subgraph.
+type PaletteMode = 'expert' | 'intent'
 
 // §2 — every palette entry carries a one-line description for the hover
 // tooltip. Wording vetted against UI Changes Spec §2.
@@ -29,23 +33,29 @@ const PALETTE: PaletteEntry[] = [
   { type: 'memory_write',    group: 'Memory',  description: 'Persist values from local state into a store.' },
   { type: 'agent_role',      group: 'Agents',  description: 'Dispatch to a registered role-based agent.' },
   { type: 'agent_debate',    group: 'Agents',  description: 'Multi-agent debate with N rounds and a judge.' },
-  // Harness nodes
-  { type: 'world_model',            group: 'Harness', description: 'Durable snapshot of current world state and beliefs.' },
-  { type: 'hypothesis_set',         group: 'Harness', description: 'Set of active hypotheses the agent is evaluating.' },
-  { type: 'gather_evidence',        group: 'Harness', description: 'Collect evidence from external sources for analysis.' },
-  { type: 'apply_tool_reliability', group: 'Harness', description: 'Score and filter evidence by tool reliability.' },
-  { type: 'update_world_model',     group: 'Harness', description: 'Integrate new evidence into the world model.' },
-  { type: 'control_state',          group: 'Harness', description: 'Encapsulates harness control flow and phase transitions.' },
-  { type: 'task_graph_node',        group: 'Harness', description: 'Node in the task decomposition graph.' },
-  { type: 'verification_gate',      group: 'Harness', description: 'Assert invariants before advancing the flow.' },
-  { type: 'recovery_node',          group: 'Harness', description: 'Handle failure and route to a recovery path.' },
-  { type: 'evidence_store_node',    group: 'Harness', description: 'Long-term evidence store with versioned snapshots.' },
-  { type: 'experience_store_node',  group: 'Harness', description: 'Agent experience store for learning from past runs.' },
-  { type: 'reviewer_pass',          group: 'Harness', description: 'Human or LLM reviewer pass with sign-off gate.' },
-  { type: 'process_concept',        group: 'Harness', description: 'Abstract process concept linking theory to execution.' },
+  // Harness nodes — grouped by HARNESS_NODE_CATEGORY (Phase 8), not a flat 'Harness' bucket.
+  { type: 'world_model',            group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.world_model],            description: 'Durable snapshot of current world state and beliefs.' },
+  { type: 'hypothesis_set',         group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.hypothesis_set],         description: 'Set of active hypotheses the agent is evaluating.' },
+  { type: 'gather_evidence',        group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.gather_evidence],        description: 'Collect evidence from external sources for analysis.' },
+  { type: 'apply_tool_reliability', group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.apply_tool_reliability], description: 'Score and filter evidence by tool reliability.' },
+  { type: 'update_world_model',     group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.update_world_model],     description: 'Integrate new evidence into the world model.' },
+  { type: 'control_state',          group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.control_state],          description: 'Encapsulates harness control flow and phase transitions.' },
+  { type: 'task_graph_node',        group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.task_graph_node],        description: 'Node in the task decomposition graph.' },
+  { type: 'verification_gate',      group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.verification_gate],      description: 'Assert invariants before advancing the flow.' },
+  { type: 'recovery_node',          group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.recovery_node],          description: 'Handle failure and route to a recovery path.' },
+  { type: 'evidence_store_node',    group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.evidence_store_node],    description: 'Long-term evidence store with versioned snapshots.' },
+  { type: 'experience_store_node',  group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.experience_store_node],  description: 'Agent experience store for learning from past runs.' },
+  { type: 'reviewer_pass',          group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.reviewer_pass],          description: 'Human or LLM reviewer pass with sign-off gate.' },
+  { type: 'process_concept',        group: HARNESS_CATEGORY_LABEL[HARNESS_NODE_CATEGORY.process_concept],        description: 'Abstract process concept linking theory to execution.' },
 ]
 
-const GROUPS = ['I/O', 'Core', 'Control', 'Memory', 'Agents', 'Harness']
+// §8 — harness categories appended in observe → hold state → decide →
+// route → act order, replacing the old flat 'Harness' group.
+const GROUPS = [
+  'I/O', 'Core', 'Control', 'Memory', 'Agents',
+  HARNESS_CATEGORY_LABEL.OBSERVATION, HARNESS_CATEGORY_LABEL.STATE, HARNESS_CATEGORY_LABEL.POLICY,
+  HARNESS_CATEGORY_LABEL.CONTROL_FLOW, HARNESS_CATEGORY_LABEL.EFFECT,
+]
 
 function onDragStart(e: React.DragEvent, type: AnyNodeType) {
   e.dataTransfer.setData('application/buildaharness-node', type)
@@ -61,11 +71,16 @@ const REGISTRY_SHORTCUTS: RegistryShortcut[] = [
 ]
 
 export function Sidebar() {
-  const { loadFlow, openSettings, memoryStores, tools, agents, stateSchema, addAnnotation, flowMeta } = useCanvasStore()
+  const {
+    loadFlow, openSettings, memoryStores, tools, agents, stateSchema,
+    addAnnotation, flowMeta, expandIntentTemplate,
+  } = useCanvasStore()
   const { entries, getFlow, deleteFlow } = useLibraryStore()
   const [showExamples, setShowExamples] = useState(true)
   const [query, setQuery]               = useState('')
   const [tab, setTab]                   = useState<SidebarTab>('nodes')
+  // §8 — Expert (full palette) vs Intent (high-level templates) mode
+  const [mode, setMode]                 = useState<PaletteMode>('expert')
   // §2 — hover tooltip key; debounced to ~250ms in PaletteItem
   const [tipKey, setTipKey]             = useState<string | null>(null)
   // §15 — currently targeted runtime drives dim/`!` decoration on items
@@ -140,6 +155,28 @@ export function Sidebar() {
       {tab === 'nodes' && (
       <div className="sidebar__scroll">
 
+        {/* §8 — Expert / Intent mode toggle */}
+        <div style={{ display: 'flex', gap: 4, padding: '8px 10px 0' }}>
+          {(['expert', 'intent'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              title={m === 'expert' ? 'Full node palette' : 'High-level templates that expand into a node subgraph'}
+              style={{
+                flex: 1, padding: '4px 0', fontSize: 9, fontWeight: 600,
+                letterSpacing: '0.05em', textTransform: 'uppercase',
+                background: mode === m ? 'var(--surface-2, rgba(139,92,246,0.12))' : 'none',
+                border: '0.5px solid var(--border)', borderRadius: 4,
+                cursor: 'pointer', color: mode === m ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              }}
+            >
+              {m === 'expert' ? 'Expert' : 'Intent'}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'expert' && (
+        <>
         {/* Search */}
         <div style={{ padding: '10px 10px 6px', position: 'relative' }}>
           <input
@@ -182,6 +219,28 @@ export function Sidebar() {
             ))}
           </div>
         ))}
+        </>
+        )}
+
+        {/* §8 — Intent mode: click a template to expand it into a connected
+            node subgraph, dropped at a fixed canvas origin. */}
+        {mode === 'intent' && (
+          <div className="sidebar__section">
+            <div className="sidebar__label">Templates</div>
+            {INTENT_TEMPLATES.map((t) => (
+              <div
+                key={t.id}
+                className="palette-item"
+                style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '6px 8px', height: 'auto' }}
+                onClick={() => expandIntentTemplate(t.steps, { x: 250, y: 150 })}
+                title={`Click to add ${t.steps.length} connected nodes to the canvas`}
+              >
+                <span className="palette-item__name" style={{ fontWeight: 600, whiteSpace: 'normal' }}>{t.label}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.4 }}>{t.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Canvas tools */}
         {!filtered && (
