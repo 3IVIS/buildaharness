@@ -11,6 +11,7 @@ import {
   type AssistantSource,
   type AssistantToolStep,
   type AssistantTurnResult,
+  type AnswerClaim,
 } from '@buildaharness/personal-assistant'
 
 // A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
@@ -29,6 +30,7 @@ interface Props {
   sources?: AssistantSource[]
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
+  answerClaim?: AnswerClaim
   onRetry?: () => void
 }
 
@@ -46,6 +48,24 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
   if (confidence >= 0.7) return 'High confidence'
   if (confidence >= 0.4) return 'Reasonably confident'
   return 'Worth double-checking'
+}
+
+// Phase 6 of the harness/assistant remediation plan: the one place that turns AnswerClaim's
+// mechanically-derived verification_status into the actual "this is true" vs "I found X but
+// couldn't independently verify it" text distinction — kept as one pure, directly-testable
+// function (see ChatMessageBubble.test.tsx's golden-output test) so a future change can't
+// silently collapse the four branches back into one generic phrasing.
+export function answerClaimLabel(claim: AnswerClaim): string {
+  switch (claim.verification_status) {
+    case 'verified':
+      return 'This is true — grounded in evidence that was independently verified.'
+    case 'unverified_attempted':
+      return "I found evidence for this, but couldn't independently verify it."
+    case 'contradicted':
+      return 'This conflicts with something I already believe — worth double-checking.'
+    case 'no_evidence':
+      return "This is my own reasoning, not backed by anything I looked up."
+  }
 }
 
 // Present only on a batch-research turn (see AssistantTrace.batchBudget's doc comment in
@@ -78,7 +98,7 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -167,6 +187,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
               ) : (
                 <>
                   <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
+                  {answerClaim && <div className="bubble__why-confidence">{answerClaimLabel(answerClaim)}</div>}
                   {/* Only layers that actually fired, chained in the order they fired — quiet
                       otherwise (Phase 3.1 of the harness layer activation plan: the common,
                       unremarkable turn stays quiet, matching the "don't badge LOW risk"

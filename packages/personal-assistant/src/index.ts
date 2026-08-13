@@ -1,9 +1,16 @@
 export { PersonalAssistant } from './assistant.js'
 export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
+export type { AnswerClaim, AnswerClaimSourceType, AnswerClaimVerificationStatus } from './answer-claim.js'
 export { classifyRisk } from './risk-classifier.js'
-export type { RiskLevel, RiskClassification } from './risk-classifier.js'
+export type { RiskClassification } from './risk-classifier.js'
 export { classifyTurnIntent } from './turn-intent-classifier.js'
-export type { TurnIntentClassification, TurnIntentContext } from './turn-intent-classifier.js'
+// The publicly-exported `RiskLevel` deliberately comes from turn-intent-classifier.js, not
+// risk-classifier.js: it's the type that actually flows through AssistantTurnResult.riskLevel and
+// TraceEvent's 'risk_classified' event (chat-ui's only consumer of this export), and includes
+// 'UNKNOWN' for a classifier failure — risk-classifier.js's own (unexported) RiskLevel stays a
+// separate, narrower LOW/MEDIUM/HIGH-only concept used solely for its per-message/per-task lexical
+// fallback classification.
+export type { TurnIntentClassification, TurnIntentContext, RiskLevel } from './turn-intent-classifier.js'
 export { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
 export type { LayerSlug, WhyChainItem } from './node-display-names.js'
 export { classifyError } from './error-classifier.js'

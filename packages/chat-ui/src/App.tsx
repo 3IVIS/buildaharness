@@ -476,6 +476,7 @@ export function App(): React.JSX.Element {
             sources: result.sources,
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
             planStatus: result.planStatus,
+            answerClaim: result.answerClaim,
           },
         ])
         setActivePlanStatus(result.planStatus)
@@ -627,6 +628,7 @@ export function App(): React.JSX.Element {
                   sources={entry.sources}
                   toolSteps={entry.toolSteps}
                   planStatus={entry.planStatus}
+                  answerClaim={entry.answerClaim}
                 />
               )
             case 'error':

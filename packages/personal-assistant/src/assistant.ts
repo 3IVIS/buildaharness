@@ -18,7 +18,11 @@ import {
   type DecompositionEntry,
   type RecoverySequenceEntry,
   type ExperienceStoreData,
+  type VerificationResult,
+  riskSummary,
+  ControlState,
 } from '@buildaharness/harness'
+import { buildAnswerClaim, type AnswerClaim } from './answer-claim.js'
 import {
   InMemoryAdapter,
   IndexedDBAdapter,
@@ -34,7 +38,7 @@ import {
   type FsBackend,
   type MemoryResult,
 } from '@buildaharness/runtime'
-import { classifyRisk, type RiskClassification } from './risk-classifier.js'
+import { classifyRisk } from './risk-classifier.js'
 import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
@@ -57,7 +61,7 @@ import {
   buildRevertPlan,
   type UndoLogEntry,
 } from './action-snapshot.js'
-import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, type UserFact } from './fact-extraction.js'
 import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, type ShellToolsContext } from './shell-tools.js'
@@ -312,6 +316,19 @@ function toHarnessTasks(
   }))
 }
 
+/**
+ * packages/harness's own risk-level types (Task['risk_level'], TurnComplexitySignal['riskLevel'])
+ * are a strict LOW/MEDIUM/HIGH enum with no UNKNOWN concept — classification.riskLevel can be
+ * 'UNKNOWN' only via failSafeClassification (turn-intent-classifier.ts), which also always leaves
+ * decomposedTasks null, so in practice this only ever maps the flat, single-task fallback path.
+ * Mapped to 'HIGH' (not 'LOW') as the conservative choice: an unknown risk should get the
+ * harness's most cautious handling, not its least. Shared by every assistant.ts call site that
+ * crosses into a packages/harness-typed field.
+ */
+function toTaskRiskLevel(riskLevel: TurnIntentClassification['riskLevel']): Task['risk_level'] {
+  return riskLevel === 'UNKNOWN' ? 'HIGH' : riskLevel
+}
+
 /** Lexical fallback for a durable plan's steps that were persisted before per-task riskLevel existed (see toHarnessTasks) — reuses classifyRisk's own keyword patterns against each step's own description. */
 function planTaskRiskLevel(description: string): Task['risk_level'] {
   return classifyRisk(description).riskLevel
@@ -504,7 +521,7 @@ export interface AssistantTurnResult {
   status: 'ok' | 'needs_approval' | 'escalated'
   reply: string | null
   reason?: string
-  riskLevel?: RiskClassification['riskLevel']
+  riskLevel?: TurnIntentClassification['riskLevel']
   controlState?: { riskState: RiskState; escalationReason: string | null }
   stepsUsed?: number
   /** True when the turn was answered by the triviality fast path — no HarnessRuntime.run() this turn. */
@@ -540,6 +557,13 @@ export interface AssistantTurnResult {
   usage?: TokenUsage
   /** Set when the Contradiction layer flagged a conflict with an existing belief this turn — see findContradictionNotice's doc comment for why this is a separate field instead of folded into `reply`. */
   contradictionNotice?: string
+  /**
+   * Phase 6 of the harness/assistant remediation plan: an epistemic-honesty signal for replies
+   * that went through the harness loop (absent on the triviality fast path, same "absent when
+   * unused" convention as trace/sources — a harness-skipped reply has no verification/evidence
+   * trail to attach). See answer-claim.ts's doc comment for how each field is derived.
+   */
+  answerClaim?: AnswerClaim
   /**
    * Set only on a Phase 4.1 plan-pacing pause — the "Ready to continue with: ...?"/"All plan
    * steps have run..." text appended to `reply` after the model's own draftReply. A caller that
@@ -1152,8 +1176,8 @@ export class PersonalAssistant {
    * Use `exportMemory()` for the full, unbounded contents. Used by `/memory`.
    */
   async getMemorySummary(sessionId: string): Promise<MemorySummary> {
-    const sessionFacts = ((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []
-    const durableFacts = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
     const reminders = await this.reminderStore.list()
     const experienceData = this.experienceStore.toJSON()
@@ -1262,8 +1286,8 @@ export class PersonalAssistant {
     if (compacted) await this.memory.set(transcriptKey, transcript)
 
     const factsKey = `facts:${sessionId}`
-    const sessionFacts = ((await this.memory.get(factsKey)) as UserFact[] | undefined) ?? []
-    const durableFacts = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const sessionFacts = (((await this.memory.get(factsKey)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
     const factsBlock = facts.length > 0
       ? `\nKnown facts about the user:\n${facts.slice(-FACT_CAP).map(f => `- ${f.text}`).join('\n')}`
@@ -1450,10 +1474,10 @@ export class PersonalAssistant {
 
     // A compound-looking request decomposes into multiple tasks — classifyTurnIntent's single
     // call above already produced this, so no separate LLM call is spent here.
-    let initialTasks: Task[] = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], classification.riskLevel)
+    let initialTasks: Task[] = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], toTaskRiskLevel(classification.riskLevel))
     const decomposed: DecomposedTaskSpec[] | null = classification.decomposedTasks
     if (decomposed) {
-      initialTasks = toHarnessTasks(decomposed, classification.riskLevel)
+      initialTasks = toHarnessTasks(decomposed, toTaskRiskLevel(classification.riskLevel))
     }
 
     // Structured planning: an active plan for this session takes precedence over
@@ -1512,7 +1536,7 @@ export class PersonalAssistant {
     ) {
       const reframed = await reframeTaskDescriptionWithLLM(userMessage, this.llmClient, this.model, accumulateUsage)
       if (reframed) {
-        initialTasks = toHarnessTasks([{ id: 'respond', description: reframed, depends_on: [] }], classification.riskLevel)
+        initialTasks = toHarnessTasks([{ id: 'respond', description: reframed, depends_on: [] }], toTaskRiskLevel(classification.riskLevel))
       }
     }
 
@@ -1531,7 +1555,7 @@ export class PersonalAssistant {
     // the read-only tool kinds actually exercised via `sources`, included for the day a
     // harness-driven mutation path exists.
     const complexitySignal: TurnComplexitySignal = {
-      riskLevel: classification.riskLevel,
+      riskLevel: toTaskRiskLevel(classification.riskLevel),
       taskCount: initialTasks.length,
       hasDurablePlan: activePlan !== null,
       consequentialTools: new Set(sources?.map(s => s.tool) ?? []),
@@ -1554,6 +1578,10 @@ export class PersonalAssistant {
     // so AssistantTrace.layerActivity is populated the same "absent caller, still works" way
     // nodeExecutionOrder/verificationHealth already are (Phase 3.1).
     const layerActivityThisTurn: LayerActivityEvent[] = []
+    // Phase 6: the last real VerificationResult this turn produced (a multi-task turn can call
+    // verify() more than once; the last one reflects the final task's outcome) — feeds
+    // buildAnswerClaim below. null if verify() never ran at all this turn.
+    let lastVerification: VerificationResult | null = null
 
     let pausedThisTurn = false
 
@@ -1605,6 +1633,9 @@ export class PersonalAssistant {
         onLayerActivity: (event: LayerActivityEvent) => {
           layerActivityThisTurn.push(event)
           this.onTrace?.({ kind: 'layer_activity', layer: event.layer, fired: event.fired, reason: event.reason })
+        },
+        onVerification: (result: VerificationResult) => {
+          lastVerification = result
         },
         // Layered on top of the harness's own always-on lexical/negation-pair check — one
         // call per belief-set growth (never per-pair, never a full re-scan), and skipped
@@ -1754,6 +1785,13 @@ export class PersonalAssistant {
           batchBudget: batchBudgetTrace,
         }
 
+        const answerClaim = buildAnswerClaim({
+          evidence: outcome.checkpoint.runState.evidenceStore.observations,
+          verification: lastVerification,
+          contradicted: contradictionNotice !== undefined,
+          verificationHealth: trace.verificationHealth,
+        })
+
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
         await this.recordFacts(sessionId, userMessage, classification.statesDurableFact)
@@ -1763,7 +1801,7 @@ export class PersonalAssistant {
           reply,
           riskLevel: classification.riskLevel,
           controlState: {
-            riskState: outcome.checkpoint.runState.controlState.risk_state,
+            riskState: riskSummary(new ControlState(outcome.checkpoint.runState.controlState)),
             escalationReason: outcome.checkpoint.runState.controlState.escalation_reason,
           },
           stepsUsed: outcome.checkpoint.progress.stepsUsed,
@@ -1772,6 +1810,7 @@ export class PersonalAssistant {
           sources,
           planStatus,
           contradictionNotice,
+          answerClaim,
           pausedNote,
           usage: usageTotal,
         }
@@ -1780,7 +1819,7 @@ export class PersonalAssistant {
       const result = outcome.result
       stepsUsed = result.stepsUsed
       controlState = {
-        riskState: result.initResult.controlState.risk_state,
+        riskState: riskSummary(new ControlState(result.initResult.controlState)),
         escalationReason: result.initResult.controlState.escalation_reason,
       }
       const trace: AssistantTrace = {
@@ -1811,11 +1850,18 @@ export class PersonalAssistant {
         }
       }
 
+      const answerClaim = buildAnswerClaim({
+        evidence: result.initResult.evidenceStore.observations,
+        verification: lastVerification,
+        contradicted: contradictionNotice !== undefined,
+        verificationHealth: trace.verificationHealth,
+      })
+
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
       await this.recordFacts(sessionId, userMessage, classification.statesDurableFact)
 
-      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, usage: usageTotal }
+      return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, answerClaim, usage: usageTotal }
     } catch (err) {
       if (err instanceof EscalationHalt) {
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
@@ -1852,17 +1898,25 @@ export class PersonalAssistant {
    * fact-extraction.ts) are ALSO appended to DURABLE_FACTS_KEY, a store clearSession() never
    * touches, so they survive /new instead of vanishing with the rest of the session's facts.
    *
-   * `llmStatedFact` is classifyTurnIntent's statesDurableFact — only trusted when the free
-   * lexical pass above found nothing at all for this message, so a phrasing FACT_MARKERS/
-   * HEALTH_OR_DIETARY_MARKERS doesn't recognize (any language, or an English paraphrase the
-   * marker list doesn't cover) still gets captured instead of silently dropped. The lexical
-   * pass stays authoritative — and free — whenever it does find something.
+   * `llmStatedFact` is classifyTurnIntent's statesDurableFact — only trusted (as a session-scoped
+   * capture) when the free lexical pass above found nothing at all for this message, so a
+   * phrasing FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS doesn't recognize (any language, or an
+   * English paraphrase the marker list doesn't cover) still gets captured instead of silently
+   * dropped. The lexical pass stays authoritative — and free — whenever it does find something.
+   *
+   * Promotion policy (Phase 5): only USER_ASSERTED facts (the lexical pass, via `isDurable()`)
+   * promote to the cross-session DURABLE_FACTS_KEY store automatically. `llmStatedFact`'s own
+   * `durable` bit is an advisory LLM opinion, not authoritative — a MODEL_INFERRED fact is always
+   * recorded session-scoped (still available for this session's prompt context) but never
+   * auto-promoted, since it has no corroboration (the lexical pass, checked first, found nothing)
+   * and there's no explicit user-confirmation flow yet to earn promotion the other way. Tightens
+   * the previous behavior, which trusted `llmStatedFact.durable` directly.
    */
   private async recordFacts(sessionId: string, userMessage: string, llmStatedFact?: { text: string; durable: boolean } | null): Promise<void> {
     const facts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
     const factsToRecord: UserFact[] =
       facts.length === 0 && llmStatedFact
-        ? [{ text: llmStatedFact.text, extractedAt: new Date().toISOString(), sourceTurn: `turn:${sessionId}`, durable: llmStatedFact.durable }]
+        ? [{ text: llmStatedFact.text, extractedAt: new Date().toISOString(), sourceTurn: `turn:${sessionId}`, source: 'model_inferred', durable: false }]
         : facts
     for (const fact of factsToRecord) {
       await this.memory.set(`facts:${sessionId}`, fact, 'append')

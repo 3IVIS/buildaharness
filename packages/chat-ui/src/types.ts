@@ -1,4 +1,4 @@
-import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult } from '@buildaharness/personal-assistant'
+import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim } from '@buildaharness/personal-assistant'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }
@@ -14,6 +14,8 @@ export type ChatEntry =
       toolSteps?: AssistantToolStep[]
       /** Durable plan progress as of this turn — see AssistantTurnResult.planStatus. Powers the plan checklist in the "Run detail" panel (Phase 3.3 of the harness layer activation plan). */
       planStatus?: AssistantTurnResult['planStatus']
+      /** Epistemic-honesty signal — see AssistantTurnResult.answerClaim's doc comment. Absent on the triviality fast path, same convention as trace/sources. */
+      answerClaim?: AnswerClaim
     }
   | {
       id: string
