@@ -197,6 +197,12 @@ const risk = getRiskPatterns()
 // still needs a lot of work before the review." misfired MEDIUM with no live scheduling request
 // present. Added "overviews?"/"formats?" to the trailing exclusion (the latter added
 // speculatively alongside it, same noun-compound shape, not yet independently live-tested).
+// h2 (re-probing conv381/conv397): same gap again, this time on "reserve" rather than
+// "schedule" — "seating" (reserve seating) wasn't in the trailing exclusion list either —
+// found via live testing: "Reserve seating opens at noon for tonight's show, so let's plan to
+// arrive by 11:30." misfired MEDIUM with no live reservation request present (an FYI about
+// when reserved seating opens, not a request to reserve anything). Added "seating" to the
+// trailing exclusion.
 
 // "forward" is a send-a-message action just as much as "send"/"email"/"text" ("forward this
 // email to my accountant") but wasn't a keyword anywhere in highRiskPatterns for a long time —

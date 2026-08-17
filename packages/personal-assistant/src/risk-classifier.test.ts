@@ -562,6 +562,15 @@ describe('classifyRisk', () => {
     ).not.toBe('MEDIUM')
   })
 
+  it('does not flag a sentence-initial "Reserve seating..." as a MEDIUM scheduling request (h2, re-probing conv381/conv397)', () => {
+    // "seating" (reserve seating) is the same sentence-initial noun-compound gap as
+    // funds/requirements/changes/details/adjustments/templates/overviews/formats above,
+    // just on "reserve" instead of "schedule" — "seating" wasn't in the trailing exclusion.
+    expect(
+      classifyRisk("Reserve seating opens at noon for tonight's show, so let's plan to arrive by 11:30.").riskLevel,
+    ).not.toBe('MEDIUM')
+  })
+
   it('does not flag a sentence-initial "Purchase orders..." as a money-spend request', () => {
     // h12: "purchase orders" is a common business noun-compound never added to
     // PURCHASE_VERB_PATTERN's trailing exclusion.
