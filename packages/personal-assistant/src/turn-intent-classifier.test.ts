@@ -325,10 +325,13 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     statesDurableFact: null,
   }
 
-  it('falls back on malformed JSON instead of throwing', async () => {
+  it('falls back on malformed JSON instead of throwing, folding the JSON.parse error into riskReason (same classifyError path as a genuine LLM-call throw, since JSON.parse throwing inside parseTurnIntent is likewise a real caught error, not a semantic-validation null-return)', async () => {
     const llm = new StructuredOnlyLLMClient('not json at all')
 
-    expect(await classifyTurnIntent('anything', llm, NO_PLAN)).toEqual(FAIL_SAFE)
+    const result = await classifyTurnIntent('anything', llm, NO_PLAN)
+
+    expect(result.riskReason).toMatch(/^Risk could not be determined.*Something went wrong.*not valid JSON/)
+    expect(result).toEqual({ ...FAIL_SAFE, riskReason: result.riskReason })
   })
 
   it('falls back on an unrecognized riskLevel value', async () => {
@@ -357,10 +360,15 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     expect(result.riskReason).toBe('LLM classified this as LOW risk.')
   })
 
-  it('falls back when the LLM call itself throws', async () => {
+  it('falls back when the LLM call itself throws, folding the classified error into riskReason instead of discarding it (conv03 batch finding: a broken CLAUDE_PATH silently fell back to the generic reason on every turn, never surfacing error-classifier.ts\'s actionable ENOENT message)', async () => {
     const llm = new ThrowingLLMClient()
 
-    expect(await classifyTurnIntent('anything', llm, NO_PLAN)).toEqual(FAIL_SAFE)
+    const result = await classifyTurnIntent('anything', llm, NO_PLAN)
+
+    expect(result).toEqual({
+      ...FAIL_SAFE,
+      riskReason: `${FAIL_SAFE.riskReason} (Something went wrong (proxy unreachable). Try again in a moment.)`,
+    })
   })
 })
 

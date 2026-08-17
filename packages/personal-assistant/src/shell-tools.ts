@@ -19,14 +19,35 @@ export type ShellCommandExecutor = (
   options?: { timeoutMs?: number; maxOutputBytes?: number; networkAllowlist?: string[] },
 ) => Promise<ShellExecutionResult>
 
+/**
+ * Heuristic-only: flags a command whose text contains a literal `..` parent-directory path
+ * segment (e.g. `cd ..`, `mkdir ../foo`, `cat ../../etc/passwd`). Unlike write_file, there is no
+ * real filesystem containment for run_shell_command once approved — shell-executor.ts's
+ * runApprovedShellCommand validates only that the *starting* `cwd` resolves inside the workspace
+ * (assertRealPathInWorkspace below); the command text itself then runs with the process's real
+ * OS-level filesystem access, so `cd ..` or a `../`-relative path genuinely escapes the workspace
+ * root on disk (confirmed live — see the conv06 batch finding this heuristic exists to surface).
+ * This exists purely to append an honest heads-up to the approval prompt so a human approver
+ * isn't misled by write_file's "sandboxed workspace" framing into assuming the same containment
+ * applies here. It is NOT a guard: it doesn't block anything, and it cannot catch every escape
+ * vector (absolute paths, symlinks, `cd $(pwd)/..`, indirection through env vars, etc.) — treat a
+ * `false` result as "this particular heuristic didn't fire," not "this command is contained."
+ */
+export function commandMayLeaveWorkspace(command: string): boolean {
+  return /(?:^|[\s"'`(;&|])\.\.(?:[\/\\]|[\s;&|]|$)/.test(command)
+}
+
 export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
   name: 'run_shell_command',
   description:
-    'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
-    'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
-    'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-    '`cwd` outside the workspace is rejected immediately, before anything is staged. An identical repeat of a ' +
-    'command already resolved earlier in this conversation (same command, same cwd) returns that cached result ' +
+    'Propose running a shell command with its working directory validated to start inside the workspace. This ' +
+    'never runs the command immediately — it always stages the proposal for the user to explicitly approve or ' +
+    'decline before anything executes, regardless of what the command looks like (there is no "safe" subset that ' +
+    'skips approval). `cwd` outside the workspace is rejected immediately, before anything is staged — but unlike ' +
+    'write_file/read_file, the command itself is NOT filesystem-sandboxed once approved: a `cd ..`, `../`-relative ' +
+    'path, or absolute path in the command text can read or write outside the workspace with the real OS-level ' +
+    'permissions of the process. Approval is the only gate against that, not a containment boundary. An identical ' +
+    'repeat of a command already resolved earlier in this conversation (same command, same cwd) returns that cached result ' +
     'immediately instead of staging a new approval — you do not need to avoid calling this for a genuine repeat; ' +
     "it's handled automatically.",
   input_schema: {

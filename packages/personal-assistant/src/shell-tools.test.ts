@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { FsBackend } from '@buildaharness/runtime'
-import { executeShellTool, type ShellStagingContext } from './shell-tools.js'
+import { executeShellTool, commandMayLeaveWorkspace, type ShellStagingContext } from './shell-tools.js'
 import { PathOutsideWorkspaceError, loadPendingAction, discardPendingAction, recordShellCacheEntry, clearShellCache } from './file-tools.js'
 
 /** In-memory FsBackend, standing in for a real disk — mirrors file-tools.test.ts's fake. */
@@ -155,6 +155,27 @@ describe('executeShellTool — shell result cache (conv4/12/21 shell-reuse findi
 
     const result = await executeShellTool(ctx, 'run_shell_command', { command: 'date +%s%N' })
     expect(result.kind).toBe('staged_shell')
+  })
+})
+
+describe('commandMayLeaveWorkspace (conv06 batch finding: cwd validation does not contain the command itself)', () => {
+  it('flags a relative parent-directory reference', () => {
+    expect(commandMayLeaveWorkspace('mkdir -p ../outside-workspace-test')).toBe(true)
+    expect(commandMayLeaveWorkspace('cd .. && rm file')).toBe(true)
+    expect(commandMayLeaveWorkspace('cat ../../etc/passwd')).toBe(true)
+  })
+
+  it('does not flag ordinary commands with no parent-directory segment', () => {
+    expect(commandMayLeaveWorkspace('ls -la')).toBe(false)
+    expect(commandMayLeaveWorkspace('echo hello')).toBe(false)
+    expect(commandMayLeaveWorkspace("git log --format='%H'")).toBe(false)
+  })
+
+  it('does not false-positive on ".." appearing without a path-segment boundary', () => {
+    // A commit-range-shaped token ("HEAD~1..HEAD") or a plain string containing ".." mid-word
+    // should not trip the heuristic — it's specifically about a `..` path segment.
+    expect(commandMayLeaveWorkspace('git diff HEAD~1..HEAD')).toBe(false)
+    expect(commandMayLeaveWorkspace("echo '2..3'")).toBe(false)
   })
 })
 

@@ -1485,7 +1485,25 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.pendingActionId).toBeTruthy()
     expect(result.pendingActionKind).toBe('shell')
     expect(result.reason).toContain('ls -la')
+    expect(result.reason).not.toContain('Warning')
     expect(executeCommand).not.toHaveBeenCalled()
+  })
+
+  it('appends a heads-up warning to the approval reason when the command references a parent directory (conv06 batch finding)', async () => {
+    const { ctx } = makeShellTools()
+    const llm = scriptedResponses([
+      {
+        content: '',
+        toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'mkdir -p ../outside-workspace-test' } }],
+      },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+
+    const result = await assistant.turn('Make a directory next to the workspace')
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.reason).toContain('mkdir -p ../outside-workspace-test')
+    expect(result.reason).toContain('not filesystem-sandboxed')
   })
 
   it('dangerouslySkipPermissions auto-executes a staged run_shell_command with no needs_approval round trip', async () => {

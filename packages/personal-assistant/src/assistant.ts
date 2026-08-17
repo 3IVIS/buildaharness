@@ -64,7 +64,7 @@ import {
 import { extractFactsFromTurn, migrateFact, type UserFact } from './fact-extraction.js'
 import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
-import { SHELL_TOOLS, executeShellTool, type ShellToolsContext } from './shell-tools.js'
+import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomposition-classifier.js'
@@ -266,6 +266,22 @@ function previewContent(content: string, maxLines = 20): string {
   const lines = content.split('\n')
   if (lines.length <= maxLines) return content
   return `${lines.slice(0, maxLines).join('\n')}\n… (truncated)`
+}
+
+/**
+ * Builds the shell approval prompt text shared by both the claude-cli backend's `__staged_action`
+ * path and the proxy backend's direct executeShellTool path (the two call sites below) — one
+ * function, so the commandMayLeaveWorkspace heads-up applies identically regardless of backend.
+ * See commandMayLeaveWorkspace's doc comment (shell-tools.ts) for exactly what it does and
+ * doesn't catch.
+ */
+function shellApprovalReason(command: string, cwd: string): string {
+  const base = `Proposes running: ${command}\n  (cwd: ${cwd})`
+  if (!commandMayLeaveWorkspace(command)) return base
+  return (
+    `${base}\n  [Warning: this command references a path outside its working directory — unlike file writes, ` +
+    'shell commands are not filesystem-sandboxed once approved; approval is the only gate.]'
+  )
 }
 
 /** Formats a shell-cache hit (see file-tools.ts's ShellCacheEntry) as a tool result the model can
@@ -2080,7 +2096,7 @@ export class PersonalAssistant {
         return {
           result: {
             kind: 'needs_approval',
-            reason: `Proposes running: ${command}\n  (cwd: ${cwd})`,
+            reason: shellApprovalReason(command, cwd),
             pendingActionId: id,
             pendingActionKind: 'shell',
           },
@@ -2133,7 +2149,7 @@ export class PersonalAssistant {
         return {
           result: {
             kind: 'needs_approval',
-            reason: `Proposes running: ${result.command}\n  (cwd: ${result.cwd})`,
+            reason: shellApprovalReason(result.command, result.cwd),
             pendingActionId: result.id,
             pendingActionKind: 'shell',
           },

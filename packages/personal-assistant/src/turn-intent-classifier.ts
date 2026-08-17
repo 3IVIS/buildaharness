@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { listTemplateNames } from './plan-templates/index.js'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
+import { classifyError } from './error-classifier.js'
 
 /**
  * 'UNKNOWN' is never produced by a successful classification (TURN_INTENT_SCHEMA's riskLevel enum
@@ -56,11 +57,26 @@ const FAIL_SAFE_REASON = 'Risk could not be determined — classification failed
  * is preserved from the old fallback — that part was already correct: it keeps the full harness
  * engaged on failure instead of taking the trivial-question fast path. The bug this fixes is
  * specifically the approval-gate default, not the harness-engagement default.
+ *
+ * `cause`, when provided (a genuine thrown error — either the LLM call itself, or
+ * JSON.parse(content) throwing inside parseTurnIntent on unparseable content below; NOT set for a
+ * structurally-valid-JSON-but-semantically-invalid response, e.g. an unrecognized riskLevel, which
+ * parseTurnIntent handles by returning null rather than throwing and has no underlying error object
+ * to classify), is run through error-classifier.ts's classifyError() and folded into riskReason.
+ * Without this, a broken
+ * CLAUDE_PATH (or any other spawn-shaped failure) silently discarded the real ENOENT error here
+ * and surfaced only the generic FAIL_SAFE_REASON on every turn — error-classifier.ts's specific,
+ * actionable "Couldn't find the Claude CLI..." message existed but was never reached, because this
+ * consolidated classification call fails before the main conversational turn (which does route
+ * errors through classifyError) ever runs. classifyError doesn't need a `backend` argument for the
+ * ENOENT pattern this was found against, and PersonalAssistant has no backend concept to plumb in
+ * anyway (it only ever sees an ILLMClient) — omitted here for that reason, same as elsewhere
+ * classifyError is called without one.
  */
-function failSafeClassification(): TurnIntentClassification {
+function failSafeClassification(cause?: unknown): TurnIntentClassification {
   return {
     riskLevel: 'UNKNOWN',
-    riskReason: FAIL_SAFE_REASON,
+    riskReason: cause === undefined ? FAIL_SAFE_REASON : `${FAIL_SAFE_REASON} (${classifyError(cause).message})`,
     requiresApproval: true,
     isTrivial: false,
     decomposedTasks: null,
@@ -301,7 +317,7 @@ export async function classifyTurnIntent(
       { model, onUsage, structuredOutput: { schema: TURN_INTENT_SCHEMA } },
     )
     return parseTurnIntent(response.content, context) ?? failSafeClassification()
-  } catch {
-    return failSafeClassification()
+  } catch (err) {
+    return failSafeClassification(err)
   }
 }

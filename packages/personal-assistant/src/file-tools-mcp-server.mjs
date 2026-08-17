@@ -535,10 +535,14 @@ async function main() {
       'run_shell_command',
       {
         description:
-          'Propose running a shell command inside the sandboxed workspace directory. This never runs the command ' +
-          'immediately — it always stages the proposal for the user to explicitly approve or decline before anything ' +
-          'executes, regardless of what the command looks like (there is no "safe" subset that skips approval). ' +
-          '`cwd` outside the workspace is rejected immediately, before anything is staged. An identical repeat of a ' +
+          'Propose running a shell command with its working directory validated to start inside the workspace. ' +
+          'This never runs the command immediately — it always stages the proposal for the user to explicitly ' +
+          'approve or decline before anything executes, regardless of what the command looks like (there is no ' +
+          '"safe" subset that skips approval). `cwd` outside the workspace is rejected immediately, before ' +
+          'anything is staged — but unlike write_file/read_file, the command itself is NOT filesystem-sandboxed ' +
+          'once approved: a `cd ..`, `../`-relative path, or absolute path in the command text can read or write ' +
+          'outside the workspace with the real OS-level permissions of the process. Approval is the only gate ' +
+          'against that, not a containment boundary. An identical repeat of a ' +
           'command already resolved earlier in this conversation (same command, same cwd) returns that cached ' +
           'result immediately instead of staging a new approval — you do not need to avoid calling this for a ' +
           "genuine repeat; it's handled automatically.",
