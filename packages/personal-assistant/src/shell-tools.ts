@@ -37,6 +37,22 @@ export function commandMayLeaveWorkspace(command: string): boolean {
   return /(?:^|[\s"'`(;&|])\.\.(?:[\/\\]|[\s;&|]|$)/.test(command)
 }
 
+/**
+ * Heuristic-only: flags a command that looks like it makes an outbound HTTP(S) request (curl,
+ * wget, or a bare http(s):// URL), the shape network-containment.ts's proxy actually intercepts.
+ * Used to decide whether an executed command's output needs an explicit note that a deny-all
+ * network allowlist (the default — see AssistantConfig.shellNetworkAllowlist's doc comment)
+ * turns any such request into an immediate local 403, indistinguishable in the raw output from a
+ * real server response — found live (conv B, 2026-08-18 batch): without this, the LLM call that
+ * synthesizes a reply from the raw output has no way to know containment was even in play (it
+ * never sees run_shell_command's tool description, only the command + its output) and reliably
+ * misattributes the block to the destination server. A tool-description-only fix does not reach
+ * this synthesis call, so this deterministic check is required in addition to it.
+ */
+export function commandLooksLikeNetworkRequest(command: string): boolean {
+  return /\b(curl|wget)\b|https?:\/\//i.test(command)
+}
+
 export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
   name: 'run_shell_command',
   description:
@@ -46,7 +62,12 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
     'skips approval). `cwd` outside the workspace is rejected immediately, before anything is staged — but unlike ' +
     'write_file/read_file, the command itself is NOT filesystem-sandboxed once approved: a `cd ..`, `../`-relative ' +
     'path, or absolute path in the command text can read or write outside the workspace with the real OS-level ' +
-    'permissions of the process. Approval is the only gate against that, not a containment boundary. An identical ' +
+    'permissions of the process. Approval is the only gate against that, not a containment boundary. Outbound network ' +
+    'access IS restricted once approved: only hosts on a configured allowlist are reachable (none, by default), so a ' +
+    'request to a non-allowlisted host never reaches the real destination — it gets an immediate local HTTP 403 instead. ' +
+    "If a command's output shows a 403 (or a connection failure) for an external host, treat that as this local " +
+    "containment blocking the request, not as the remote server's own response — do not describe it as the destination " +
+    'declining or rejecting the request. An identical ' +
     'repeat of a command already resolved earlier in this conversation (same command, same cwd) returns that cached result ' +
     'immediately instead of staging a new approval — you do not need to avoid calling this for a genuine repeat; ' +
     "it's handled automatically.",

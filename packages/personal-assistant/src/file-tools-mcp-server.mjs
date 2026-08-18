@@ -542,7 +542,12 @@ async function main() {
           'anything is staged — but unlike write_file/read_file, the command itself is NOT filesystem-sandboxed ' +
           'once approved: a `cd ..`, `../`-relative path, or absolute path in the command text can read or write ' +
           'outside the workspace with the real OS-level permissions of the process. Approval is the only gate ' +
-          'against that, not a containment boundary. An identical repeat of a ' +
+          'against that, not a containment boundary. Outbound network access IS restricted once approved: only ' +
+          'hosts on a configured allowlist are reachable (none, by default), so a request to a non-allowlisted ' +
+          'host never reaches the real destination — it gets an immediate local HTTP 403 instead. If a command\'s ' +
+          'output shows a 403 (or a connection failure) for an external host, treat that as this local containment ' +
+          'blocking the request, not as the remote server\'s own response — do not describe it as the destination ' +
+          'declining or rejecting the request. An identical repeat of a ' +
           'command already resolved earlier in this conversation (same command, same cwd) returns that cached ' +
           'result immediately instead of staging a new approval — you do not need to avoid calling this for a ' +
           "genuine repeat; it's handled automatically.",

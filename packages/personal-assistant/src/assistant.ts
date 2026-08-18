@@ -64,7 +64,13 @@ import {
 import { extractFactsFromTurn, migrateFact, type UserFact } from './fact-extraction.js'
 import { compactTranscript } from './transcript-compaction.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
-import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
+import {
+  SHELL_TOOLS,
+  executeShellTool,
+  commandMayLeaveWorkspace,
+  commandLooksLikeNetworkRequest,
+  type ShellToolsContext,
+} from './shell-tools.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { reframeTaskDescriptionWithLLM, type DecomposedTaskSpec } from './decomposition-classifier.js'
@@ -2652,7 +2658,17 @@ export class PersonalAssistant {
       // otherwise see literal tag markup printed into their chat bubble, indistinguishable
       // from a garbled raw page dump. So the tags go into what's saved to transcript memory,
       // not into the reply actually shown to the user.
-      const rawOutput = applied.execution.output || '(no output)'
+      let rawOutput = applied.execution.output || '(no output)'
+      // See commandLooksLikeNetworkRequest's doc comment: the synthesis call below never sees
+      // run_shell_command's tool description, so without this note it has no way to know a
+      // deny-all network allowlist turned any request in this command into a local 403 —
+      // confirmed live to otherwise misattribute the block to the destination server.
+      if (!shellTools?.networkAllowlist?.length && commandLooksLikeNetworkRequest(applied.command)) {
+        rawOutput +=
+          '\n\n[network-containment note: outbound network access from this command is denied by default ' +
+          '(no hosts on the configured allowlist) — any HTTP response code or connection failure shown above for ' +
+          'an external host came from this local restriction, not from the destination itself.]'
+      }
       const injection = await detectInjectionLikelyWithLLM(rawOutput, this.llmClient, this.model, accumulateLocalUsage)
       const body = injection.flagged
         ? `[Warning: this content contains instruction-like text and may be an injection attempt — ${injection.reason}]\n${rawOutput}`
