@@ -277,7 +277,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   let lastSources: AssistantSource[] | undefined
   let lastPlanStatus: AssistantTurnResult['planStatus']
   let lastTurnUsage: TokenUsage | undefined
-  let sessionUsage: TokenUsage | undefined
   // Tool calls made by the most recent turn — used only so /undo can warn about a real
   // side effect (e.g. a created reminder) it's about to claim to have removed but can't
   // actually reverse. Reset at the start of every handleTurn call, see writeToolStep below.
@@ -295,14 +294,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
     const estimated = estimateCostUsd(config.model ?? 'claude-3-5-sonnet-20241022', usage)
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
-  }
-
-  function accumulateSessionUsage(usage: TokenUsage): void {
-    sessionUsage = {
-      inputTokens: (sessionUsage?.inputTokens ?? 0) + usage.inputTokens,
-      outputTokens: (sessionUsage?.outputTokens ?? 0) + usage.outputTokens,
-      costUsd: usage.costUsd !== undefined ? (sessionUsage?.costUsd ?? 0) + usage.costUsd : sessionUsage?.costUsd,
-    }
   }
 
   const PLAN_TASK_STATUS_ICON: Record<string, string> = {
@@ -422,7 +413,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     lastSources = undefined
     lastPlanStatus = undefined
     lastTurnUsage = undefined
-    sessionUsage = undefined
     lastNoTraceReason = undefined
     console.log('\n✓ Started a fresh conversation.\n')
   }
@@ -613,7 +603,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   async function printCost(): Promise<void> {
     const spendCapLine = await spendCapStatusLine()
-    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 }, backend: config.llmBackend, spendCapLine })}\n`)
+    // Source "This session" from the persisted spend ledger (assistant.getSpendState) — the same
+    // cross-turn, cross-/new store the spend-cap line above is drawn from (recordSpend() always
+    // updates it, regardless of backend or whether a cap is configured). An earlier version of
+    // this tracked tokens separately in an in-process variable that reset on /new and on every
+    // fresh CLI process, while the persisted ledger did not — sourcing the two numbers from
+    // different scopes used to show e.g. "0 in / 0 out tokens" next to a real nonzero dollar cost
+    // once any turn had run before the current /new.
+    const spendState = await assistant.getSpendState('cli')
+    const session = { inputTokens: spendState.cumulativeInputTokens, outputTokens: spendState.cumulativeOutputTokens, costUsd: spendState.cumulativeCostUsd }
+    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session, backend: config.llmBackend, spendCapLine })}\n`)
   }
 
   async function handleDoctor(): Promise<void> {
@@ -800,7 +799,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // covers both cases.
       if (!pendingActionId && !result.harnessSkipped) lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
-      if (lastTurnUsage) accumulateSessionUsage(lastTurnUsage)
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
       const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''

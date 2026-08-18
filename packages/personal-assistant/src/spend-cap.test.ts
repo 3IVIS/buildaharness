@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { checkSpendCap, formatSpendCapStatus, type SpendState } from './spend-cap.js'
 
-const state = (cumulativeCostUsd: number, cumulativeCalls: number): SpendState => ({ cumulativeCostUsd, cumulativeCalls })
+const state = (cumulativeCostUsd: number, cumulativeCalls: number): SpendState => ({
+  cumulativeCostUsd,
+  cumulativeCalls,
+  cumulativeInputTokens: 0,
+  cumulativeOutputTokens: 0,
+})
 
 describe('checkSpendCap', () => {
   it('allows a turn when no ceiling is configured', () => {

@@ -288,6 +288,38 @@ describe('/status and /cost — spend cap display (T2)', () => {
     expect(output).toMatch(/spend cap\s+\$2\.0000 \/ \$5\.0000/)
     expect(output).toMatch(/Session ceiling: \$2\.0000 \/ \$5\.0000/)
   })
+
+  it('/cost after /new still shows the tokens behind the carried-over spend, not "0 in / 0 out" next to a nonzero cost', async () => {
+    class UsageReportingLLMClient implements ILLMClient {
+      async *callChat(_messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+        options?.onUsage?.({ inputTokens: 100, outputTokens: 100, costUsd: 2 })
+        yield 'Noted.'
+      }
+      async callChatSync(_messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+        options?.onUsage?.({ inputTokens: 100, outputTokens: 100, costUsd: 2 })
+        return 'Noted.'
+      }
+      async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+        if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        return { content: 'Noted.' }
+      }
+    }
+    // sessionCostLimitUsd configured purely so /cost's spend-cap line (and the underlying
+    // persisted ledger it reads) is populated — recordSpend() itself always records regardless.
+    const configStore = makeConfigStore({ sessionCostLimitUsd: 100 })
+    const assistant = new PersonalAssistant({ llmClient: new UsageReportingLLMClient(), spendCap: { sessionCostLimitUsd: 100 } })
+    const { cli } = await setupCli({ configStore, assistant })
+
+    await cli.dispatchLine('hi') // spend:cli ledger now has 100 in / 100 out / $2 — persists past /new
+    await cli.dispatchLine('/new')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/cost')
+
+    const output = lines.join('\n')
+    expect(output).toContain('This session: 100 in / 100 out tokens')
+    expect(output).not.toContain('0 in / 0 out')
+  })
 })
 
 describe('/checkpoint', () => {

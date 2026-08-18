@@ -22,9 +22,21 @@ export interface SpendCapConfig {
 export interface SpendState {
   cumulativeCostUsd: number
   cumulativeCalls: number
+  /** Tracked alongside cumulativeCostUsd (same cross-turn, cross-session lifetime) so /cost's
+   * token tally and its dollar/ceiling figures always describe the same scope — previously the
+   * token counts lived only in cli.ts's in-process `sessionUsage`, which resets on /new (and on
+   * every fresh process) while this store does not, producing a "0 in / 0 out tokens" line next
+   * to a real nonzero dollar cost once any turn had run before the current /new. */
+  cumulativeInputTokens: number
+  cumulativeOutputTokens: number
 }
 
-export const EMPTY_SPEND_STATE: SpendState = { cumulativeCostUsd: 0, cumulativeCalls: 0 }
+export const EMPTY_SPEND_STATE: SpendState = {
+  cumulativeCostUsd: 0,
+  cumulativeCalls: 0,
+  cumulativeInputTokens: 0,
+  cumulativeOutputTokens: 0,
+}
 
 export type SpendCapCheck = { allowed: true } | { allowed: false; reason: string }
 

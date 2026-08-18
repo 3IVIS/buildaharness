@@ -83,7 +83,7 @@ import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { estimateCostUsd } from './model-pricing.js'
-import { checkSpendCap, type SpendCapConfig, type SpendState } from './spend-cap.js'
+import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
 import { loadTemplate } from './plan-templates/index.js'
 import {
@@ -896,7 +896,7 @@ export class PersonalAssistant {
 
   /** Persisted alongside transcript/facts/plan (this.memory) — survives a process restart, same as everything else keyed by sessionId, so the ceiling is genuinely cross-session, not just cross-turn within one process lifetime. */
   async getSpendState(sessionId: string): Promise<SpendState> {
-    return ((await this.memory.get(`spend:${sessionId}`)) as SpendState | undefined) ?? { cumulativeCostUsd: 0, cumulativeCalls: 0 }
+    return ((await this.memory.get(`spend:${sessionId}`)) as SpendState | undefined) ?? EMPTY_SPEND_STATE
   }
 
   /**
@@ -922,6 +922,8 @@ export class PersonalAssistant {
     await this.memory.set(`spend:${sessionId}`, {
       cumulativeCostUsd: state.cumulativeCostUsd + costUsd,
       cumulativeCalls: state.cumulativeCalls + 1,
+      cumulativeInputTokens: state.cumulativeInputTokens + (usage?.inputTokens ?? 0),
+      cumulativeOutputTokens: state.cumulativeOutputTokens + (usage?.outputTokens ?? 0),
     } satisfies SpendState)
   }
 
