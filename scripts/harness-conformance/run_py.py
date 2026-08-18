@@ -24,20 +24,7 @@ from harness.world_model import WorldModel  # noqa: E402
 
 
 def control_state_to_dict(cs: ControlState) -> dict:
-    return {
-        "generation_id": cs.generation_id,
-        "risk_state": cs.risk_state,
-        "escalation_reason": cs.escalation_reason,
-        "block_mask": [
-            {
-                "dimension": b.dimension,
-                "value": b.value,
-                "recovery_action_class": b.recovery_action_class,
-            }
-            for b in cs.block_mask
-        ],
-        "notes": list(cs.notes),
-    }
+    return cs.to_dict()
 
 
 def main() -> None:

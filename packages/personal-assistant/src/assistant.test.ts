@@ -2102,10 +2102,15 @@ describe('PersonalAssistant onTrace', () => {
 
     await assistant.turn('What timezone is Tokyo in?', { sessionId: 'trace-trivial' })
 
-    expect(events.map(e => e.kind)).toEqual(['turn_start', 'risk_classified', 'triviality_classified', 'turn_end'])
+    // execution_mode_classified (Phase 4) is new since controlPlaneMode defaults to 'enabled' —
+    // see control-plane-flag.ts.
+    expect(events.map(e => e.kind)).toEqual([
+      'turn_start', 'risk_classified', 'triviality_classified', 'execution_mode_classified', 'turn_end',
+    ])
     expect(events[0]).toMatchObject({ kind: 'turn_start', sessionId: 'trace-trivial' })
     expect(events[2]).toMatchObject({ kind: 'triviality_classified', isTrivial: true })
-    expect(events[3]).toMatchObject({ kind: 'turn_end', status: 'ok' })
+    expect(events[3]).toMatchObject({ kind: 'execution_mode_classified', mode: 'FAST' })
+    expect(events[4]).toMatchObject({ kind: 'turn_end', status: 'ok' })
   })
 
   it('emits at least one harness_node event for a non-trivial turn that runs the full harness', async () => {
@@ -2943,6 +2948,134 @@ describe('PersonalAssistant spend cap (T2)', () => {
 
     const second = await capped.turn('hi again', { sessionId: 's1' })
     expect(second.status).toBe('escalated') // already over the $0.005 ceiling from the pre-cap turn alone
+  })
+})
+
+describe('PersonalAssistant control plane (Phase 4 of the harness/assistant architecture remediation plan)', () => {
+  function traceCollector(): { events: TraceEvent[]; onTrace: (e: TraceEvent) => void } {
+    const events: TraceEvent[] = []
+    return { events, onTrace: (e) => events.push(e) }
+  }
+
+  it('controlPlaneMode "disabled" never emits execution_mode_classified or tool_policy_decision — true no-op', async () => {
+    const { events, onTrace } = traceCollector()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
+      { content: 'Here is the answer.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, controlPlaneMode: 'disabled', onTrace })
+    const result = await assistant.turn('Please search for something.')
+
+    expect(result.status).toBe('ok')
+    expect(events.some((e) => e.kind === 'execution_mode_classified')).toBe(false)
+    expect(events.some((e) => e.kind === 'tool_policy_decision')).toBe(false)
+  })
+
+  it('controlPlaneMode "disabled" produces byte-identical trivial-turn behavior to a run with no onTrace at all', async () => {
+    const llmA = new FakeLLMClient('The answer is 4.')
+    const assistantA = new PersonalAssistant({ llmClient: llmA, controlPlaneMode: 'disabled' })
+    const resultA = await assistantA.turn('What is 2+2?')
+
+    const llmB = new FakeLLMClient('The answer is 4.')
+    const assistantB = new PersonalAssistant({ llmClient: llmB })
+    const resultB = await assistantB.turn('What is 2+2?')
+
+    expect(resultA.reply).toBe(resultB.reply)
+    expect(resultA.status).toBe(resultB.status)
+    expect(resultA.harnessSkipped).toBe(resultB.harnessSkipped)
+  })
+
+  it('controlPlaneMode "enabled" classifies and traces FAST for a trivial turn', async () => {
+    const { events, onTrace } = traceCollector()
+    const llm = new FakeLLMClient('The answer is 4.')
+    const assistant = new PersonalAssistant({ llmClient: llm, controlPlaneMode: 'enabled', onTrace })
+    await assistant.turn('What is 2+2?')
+
+    const modeEvents = events.filter((e) => e.kind === 'execution_mode_classified')
+    expect(modeEvents).toHaveLength(1)
+    expect(modeEvents[0]).toMatchObject({ mode: 'FAST' })
+  })
+
+  it('controlPlaneMode "enabled" classifies and traces CONSEQUENTIAL for a HIGH-risk turn awaiting approval', async () => {
+    const { events, onTrace } = traceCollector()
+    const llm = new FakeLLMClient('unused')
+    const assistant = new PersonalAssistant({ llmClient: llm, controlPlaneMode: 'enabled', onTrace })
+    const result = await assistant.turn('Please send an email to my boss telling him I quit.')
+
+    expect(result.status).toBe('needs_approval')
+    const modeEvents = events.filter((e) => e.kind === 'execution_mode_classified')
+    expect(modeEvents).toHaveLength(1)
+    expect(modeEvents[0]).toMatchObject({ mode: 'CONSEQUENTIAL' })
+  })
+
+  it('controlPlaneMode "enabled" classifies and traces PLAN for a plan-task-cancel turn', async () => {
+    const { events, onTrace } = traceCollector()
+    const memory = new InMemoryAdapter()
+    const plan = createPlanRecord({
+      templateName: 'test-plan',
+      successCriteria: 'done',
+      tasks: [{ id: 't1', description: 'the first step', depends_on: [], riskLevel: 'LOW' }],
+    })
+    await savePlan(memory, 's1', plan)
+    const llm = new FakeLLMClient('unused')
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, controlPlaneMode: 'enabled', onTrace })
+    const result = await assistant.turn('cancel the first step', { sessionId: 's1' })
+
+    expect(result.status).toBe('ok')
+    const modeEvents = events.filter((e) => e.kind === 'execution_mode_classified')
+    expect(modeEvents).toHaveLength(1)
+    expect(modeEvents[0]).toMatchObject({ mode: 'PLAN' })
+  })
+
+  it('controlPlaneMode "enabled" traces a tool_policy_decision (ALLOW) for each read-only tool call in an ordinary tool-using turn', async () => {
+    const { events, onTrace } = traceCollector()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
+      { content: 'Here is the answer.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, controlPlaneMode: 'enabled', onTrace })
+    const result = await assistant.turn('Please search for something.')
+
+    expect(result.status).toBe('ok')
+    const policyEvents = events.filter((e) => e.kind === 'tool_policy_decision')
+    expect(policyEvents).toHaveLength(1)
+    expect(policyEvents[0]).toMatchObject({ tool: 'web_search', decision: 'ALLOW' })
+  })
+
+  it('differential: an ordinary tool-using turn produces the same reply/status/sources whether controlPlaneMode is "enabled" or "disabled"', async () => {
+    const scriptFor = () =>
+      scriptedResponses([
+        { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
+        { content: 'Here is the answer.' },
+      ])
+    const webTools = { search: async () => [] }
+
+    const disabled = new PersonalAssistant({ llmClient: scriptFor(), webTools, controlPlaneMode: 'disabled' })
+    const resultDisabled = await disabled.turn('Please search for something.')
+
+    const enabled = new PersonalAssistant({ llmClient: scriptFor(), webTools, controlPlaneMode: 'enabled' })
+    const resultEnabled = await enabled.turn('Please search for something.')
+
+    expect(resultEnabled.status).toBe(resultDisabled.status)
+    expect(resultEnabled.reply).toBe(resultDisabled.reply)
+    expect(resultEnabled.sources).toEqual(resultDisabled.sources)
+  })
+
+  it('differential: write_file staging (needs_approval + pendingActionId round trip) is unaffected by controlPlaneMode', async () => {
+    const backend = makeFakeBackend()
+    const ROOT = '/ws'
+    const scriptFor = () =>
+      scriptedResponses([{ content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'notes.txt', content: 'hello' } }] }])
+
+    const disabled = new PersonalAssistant({ llmClient: scriptFor(), fileTools: { backend, workspaceRoot: ROOT }, controlPlaneMode: 'disabled' })
+    const resultDisabled = await disabled.turn('write hello to notes.txt')
+
+    const enabled = new PersonalAssistant({ llmClient: scriptFor(), fileTools: { backend, workspaceRoot: ROOT }, controlPlaneMode: 'enabled' })
+    const resultEnabled = await enabled.turn('write hello to notes.txt')
+
+    expect(resultDisabled.status).toBe('needs_approval')
+    expect(resultEnabled.status).toBe('needs_approval')
+    expect(resultEnabled.pendingActionKind).toBe(resultDisabled.pendingActionKind)
   })
 })
 

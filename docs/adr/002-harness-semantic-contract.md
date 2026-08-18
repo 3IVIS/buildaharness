@@ -436,3 +436,54 @@ explicit says so.
   the separately-introduced promotion boundary and `risk_state` migration) — direct evidence
   that turning a false `PASS` into an honest `SKIPPED` never flips anything that was
   previously relied upon, for any caller that exists in this codebase today.
+
+---
+
+## Decision 8 — Propose → gate → execute suspend point is TS-only; Python has no equivalent
+
+### Decision
+
+Phase 3 of `plans/harness_and_assistant_architecture_remediation_plan.html` gave
+`packages/harness`'s `driveMainLoop` (`harness-runtime.ts:684-706`) a real suspend point
+between an action's proposal and its execution: after `actionGate()` resolves a
+`gateResult`, the generator stashes `{ taskId, gateResult, shouldGatherEvidence }` into
+`ctx.pendingProposal` (`PendingProposalData`, `harness-checkpoint.ts:26-30`) and `yield`s a
+checkpoint *before* running the action's consequence, rather than only yielding after
+`execute()` has already happened (post-hoc replay). `buildResumedContext` reads
+`pendingProposal` back on resume and re-derives the same task/decision instead of
+re-running `select_task`/`estimate_risk`/review, which already ran once pre-pause.
+
+This is **TS-only**. `adapter/harness/loop.py` has no generator/yield equivalent and was
+not given one as part of this phase — that was an explicit user decision, not an oversight.
+`run_one_iteration()` remains a synchronous, single-shot function; its own module docstring
+(`loop.py:1-41`) already documents why it's kept that way (see "Semantic-check hooks" in the
+docstring: unlike TS's `driveMainLoop`, which folds the outer loop and async
+contradiction/review/failure-match hooks into one async generator, Python deliberately keeps
+`run_one_iteration()` a pure, synchronous state transition, with the equivalent integration
+points living in `contradiction.py`/`review_gate.py`/`failure_modes.py` instead, called by
+whichever outer async driver — `planner_api.py`'s `_run_planner` or `run_api.py`'s per-adapter
+run functions — repeatedly invokes it). Python's only pause mechanism is `EscalationHalt`
+(`escalation.py:63-72`), a non-error exception `escalate()` raises to halt the loop entirely;
+the caller catches it and converts the run to a paused state. That is a coarser,
+one-directional "stop and wait for a human" escalation, not a resumable
+propose-before-consequence decision point — there is no Python analog to pausing *before* an
+approved-but-not-yet-executed action, resuming past exactly that decision, or replaying a
+`pendingProposal` across a real process restart the way `harness-runtime-checkpoint.test.ts`
+exercises for TS.
+
+No Python implementation of this suspend point is planned as part of this phase. If a future
+phase needs Python to gate on a per-action basis rather than per-run, that is new scope, not
+an extension of Phase 3.
+
+### Rationale
+
+Phase 3's job was TS/Python convergence on the parts of the architecture both languages
+share (`ControlState`, `resolveControlState`/`resolve_control_state`, the five-tier
+resolver — see Decision 1 and the cross-language conformance harness in
+`scripts/harness-conformance/`). The propose→gate→execute suspend point is a TS-specific
+capability serving TS's own resumable-generator architecture (crash-mid-turn resume for
+`packages/personal-assistant`), not a semantic-contract guarantee Python's synchronous,
+Postgres-backed `HarnessRunState` loop currently needs or was asked to replicate. Documenting
+the asymmetry here — rather than either silently leaving it unexplained or building an
+unrequested Python equivalent — keeps this ADR's own convention of recording what was
+deliberately deferred and why, not just what shipped.

@@ -40,6 +40,12 @@ jobs:
       - name: Check lexical patterns sync
         run: node scripts/check-lexical-patterns-sync.mjs
 
+      # Phase 3 completion: guards against the hand-duplicated control-state
+      # constants (thresholds, recovery-action maps) drifting between
+      # adapter/harness/control_state.py and packages/harness/src.
+      - name: Check harness constants sync
+        run: node scripts/check-harness-constants-sync.mjs
+
   canvas-package:
     name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest
@@ -93,9 +99,18 @@ jobs:
           cache-dependency-path: |
             adapter/requirements.txt
             adapter/requirements-dev.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
       - name: Install adapter + dev deps
         run: pip install -r adapter/requirements.txt -r adapter/requirements-dev.txt
+
+      # Needed for the TS side of the cross-language conformance harness below
+      # (npx tsx run-ts.mts, importing packages/harness/src directly).
+      - name: Install node deps
+        run: npm ci
 
       - name: Lint (ruff)
         run: ruff check adapter/
@@ -123,6 +138,13 @@ jobs:
           JWT_SECRET: test-secret-for-ci-only
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           TESTING: "true"
+
+      # Phase 3 completion: cross-language conformance harness for
+      # resolve_control_state() (TS vs Python) — see scripts/harness-conformance/.
+      # Exits 1 only on an untracked MISMATCH; tracked discrepancies in
+      # known-discrepancies.json still exit 0.
+      - name: Harness TS/Python conformance
+        run: node scripts/harness-conformance/compare.mjs
 
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'

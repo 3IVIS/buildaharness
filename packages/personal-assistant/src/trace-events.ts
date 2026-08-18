@@ -1,4 +1,6 @@
 import type { RiskLevel } from './turn-intent-classifier.js'
+import type { ExecutionMode } from './execution-mode.js'
+import type { ToolPolicyDecision } from './tool-policy.js'
 
 /**
  * Structured turn telemetry — deliberately name/status-only, never full message
@@ -32,3 +34,15 @@ export type TraceEvent =
    * equivalent, and RESUME_ATTEMPT_CAP in assistant.ts for the threshold.
    */
   | { kind: 'checkpoint_discarded'; sessionId: string; failedAttempts: number }
+  /**
+   * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html — see
+   * execution-mode.ts's own doc comment for each mode's guarantee level. Only emitted when
+   * PersonalAssistantOptions.controlPlaneMode is 'enabled' (control-plane-flag.ts).
+   */
+  | { kind: 'execution_mode_classified'; mode: ExecutionMode }
+  /**
+   * ToolPolicy's decision for one specific tool call, before it runs — the deterministic,
+   * harness-state-informed gate replacing "advisory classification checked after the fact" (see
+   * tool-policy.ts). Only emitted when controlPlaneMode is 'enabled'.
+   */
+  | { kind: 'tool_policy_decision'; tool: string; decision: ToolPolicyDecision; reason: string }

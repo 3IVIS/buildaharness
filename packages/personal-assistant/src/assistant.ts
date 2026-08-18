@@ -21,6 +21,7 @@ import {
   type VerificationResult,
   riskSummary,
   ControlState,
+  Budget,
 } from '@buildaharness/harness'
 import { buildAnswerClaim, type AnswerClaim } from './answer-claim.js'
 import {
@@ -41,6 +42,9 @@ import {
 import { classifyRisk } from './risk-classifier.js'
 import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
+import { classifyExecutionMode, type ExecutionMode } from './execution-mode.js'
+import { evaluateToolPolicy } from './tool-policy.js'
+import { DEFAULT_CONTROL_PLANE_MODE, type ControlPlaneMode } from './control-plane-flag.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import {
   FILE_TOOLS,
@@ -719,6 +723,18 @@ export interface PersonalAssistantOptions {
    * would make (see turn()) — never mid-turn.
    */
   spendCap?: SpendCapConfig
+  /**
+   * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html — see
+   * control-plane-flag.ts's doc comment for the full rollout rationale. 'enabled' (the default):
+   * ExecutionMode is computed and traced every turn, and ToolPolicy is the authoritative gate for
+   * write_file/run_shell_command staging and (once real per-turn ControlState is available)
+   * read-only tool calls. 'disabled': today's pre-Phase-4 behavior, byte-for-byte — this option
+   * exists only for the rollout window's flag-off no-op verification and emergency rollback, not
+   * as a permanent dual-path. Browser/desktop callers that never read process.env should pass
+   * this explicitly rather than relying on an env-derived default, since only cli.ts calls
+   * resolveControlPlaneMode(process.env) — assistant.ts itself never touches process.env.
+   */
+  controlPlaneMode?: ControlPlaneMode
 }
 
 /**
@@ -744,6 +760,7 @@ export class PersonalAssistant {
   private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
   private readonly spendCap?: SpendCapConfig
+  private readonly controlPlaneMode: ControlPlaneMode
   // The harness's WorldModel (and its own recordExternalContradiction dedup) is rebuilt empty
   // every turn (see runTurn's factExtractor doc comment below), so an unresolved contradiction
   // between two still-stored facts (e.g. two different stated occupations) gets independently
@@ -804,6 +821,7 @@ export class PersonalAssistant {
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     this.spendCap = options.spendCap
+    this.controlPlaneMode = options.controlPlaneMode ?? DEFAULT_CONTROL_PLANE_MODE
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
     // constructor or the first turn/render. Covers every front end (CLI, chat-ui, desktop)
     // and both construction paths (this constructor directly, and static create() below,
@@ -1277,6 +1295,38 @@ export class PersonalAssistant {
     this.model = model
   }
 
+  /**
+   * Phase 4: classifies and traces this turn's ExecutionMode — a no-op (returns 'TOOL' without
+   * ever calling onTrace) when controlPlaneMode is 'disabled', so the flag-off path is a true
+   * no-op relative to pre-Phase-4 behavior. See execution-mode.ts for what each mode guarantees.
+   */
+  private classifyAndTraceExecutionMode(input: {
+    isPlanCancelBypass: boolean
+    isBatchResearch: boolean
+    isTrivial: boolean
+    requiresApproval: boolean
+  }): ExecutionMode {
+    const mode = classifyExecutionMode(input)
+    if (this.controlPlaneMode === 'enabled') {
+      this.onTrace?.({ kind: 'execution_mode_classified', mode })
+    }
+    return mode
+  }
+
+  /**
+   * Phase 4: the deterministic, harness-state-informed authority for whether `toolName` may
+   * proceed — see tool-policy.ts. A no-op passthrough (always ALLOW, no trace) when
+   * controlPlaneMode is 'disabled', so the flag-off path never changes behavior. `controlState`
+   * is omitted for now (pre-evidence baseline) at every call site — see tool-policy.ts's own doc
+   * comment on why that's a safe default, not a gap.
+   */
+  private checkToolPolicy(toolName: string, riskHint: TurnIntentClassification['riskLevel']): ReturnType<typeof evaluateToolPolicy> {
+    if (this.controlPlaneMode !== 'enabled') return { decision: 'ALLOW', reason: 'controlPlaneMode is disabled' }
+    const result = evaluateToolPolicy({ toolName, riskHint })
+    this.onTrace?.({ kind: 'tool_policy_decision', tool: toolName, decision: result.decision, reason: result.reason })
+    return result
+  }
+
   private async runTurn(userMessage: string, options: TurnOptions, sessionId: string): Promise<AssistantTurnResult> {
     const transcriptKey = `transcript:${sessionId}`
 
@@ -1350,6 +1400,7 @@ export class PersonalAssistant {
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
         const completionPct = planCompletionPct(updatedPlan)
         this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct })
+        this.classifyAndTraceExecutionMode({ isPlanCancelBypass: true, isBatchResearch: false, isTrivial: false, requiresApproval: false })
         const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [] }
         return {
           status: 'ok',
@@ -1407,6 +1458,7 @@ export class PersonalAssistant {
       // method reintroduced exactly this duplicate, since nothing here deduplicates
       // against the retry's own append. Keep this simple: nothing persisted until the
       // outcome is actually known.
+      this.classifyAndTraceExecutionMode({ isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
       return {
         status: 'needs_approval',
         reply: null,
@@ -1431,10 +1483,11 @@ export class PersonalAssistant {
       const batch = this.webTools && !planForCancelCheck ? detectHomogeneousBatchList(userMessage) : null
       const loopResult = batch
         ? await this.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
-        : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
+        : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel)
 
       if (loopResult.kind === 'needs_approval') {
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+        this.classifyAndTraceExecutionMode({ isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
         // dangerouslySkipPermissions auto-applies the staged action the same way a second
         // turn() call with `approved: true` would — resolvePendingAction is exactly that
         // path, just invoked immediately instead of waiting for the caller to resume it.
@@ -1483,6 +1536,12 @@ export class PersonalAssistant {
     // conservative: see turn-intent-classifier.ts's isTrivial contract for what disqualifies
     // a turn from this path.
     this.onTrace?.({ kind: 'triviality_classified', isTrivial: classification.isTrivial })
+    this.classifyAndTraceExecutionMode({
+      isPlanCancelBypass: false,
+      isBatchResearch: batchBudgetTrace !== undefined,
+      isTrivial: classification.isTrivial,
+      requiresApproval: classification.requiresApproval,
+    })
     if (classification.isTrivial) {
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
       await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
@@ -1964,6 +2023,7 @@ export class PersonalAssistant {
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
+    riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
   ): Promise<ToolLoopResult> {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -1976,7 +2036,7 @@ export class PersonalAssistant {
       ...transcript,
       { role: 'user', content: userMessage },
     ]
-    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage)
+    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint)
     return result
   }
 
@@ -2004,6 +2064,12 @@ export class PersonalAssistant {
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
     onToolResult?: (toolName: string, resultText: string) => 'continue' | 'stop',
+    // Phase 4: advisory input to ToolPolicy (tool-policy.ts) — never itself the gate. Defaults to
+    // 'LOW' for callers that don't have a per-turn classification in scope (resolveBatchItem's
+    // batch sub-loop below), which is conservative-neutral: it only affects ToolPolicy's
+    // fail-safe 'UNKNOWN' branch, and a batch item's own turn already passed the message-level
+    // requiresApproval gate before ever reaching here.
+    riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
   ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
     const sources: AssistantSource[] = []
 
@@ -2167,6 +2233,31 @@ export class PersonalAssistant {
       dispatchedAnyToolCall = true
       for (const call of response.toolCalls) {
         reportStep(call.name, call.input)
+        // Phase 4: deterministic, harness-state-informed gate, checked before this call
+        // executes rather than only classified in advance and never re-checked — see
+        // tool-policy.ts. A no-op passthrough (always ALLOW) while controlPlaneMode is
+        // 'disabled' or while no live per-turn ControlState has been wired in yet (both
+        // real today — see this method's own doc comment on the pre-evidence baseline).
+        const policy = this.checkToolPolicy(call.name, riskHint)
+        if (policy.decision === 'DENY') {
+          const resultText = `Denied by tool policy: ${policy.reason}`
+          messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
+          this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
+          continue
+        }
+        if (policy.decision === 'REQUIRE_APPROVAL') {
+          // Unlike write_file/run_shell_command (which stage a concrete, resumable action by ID
+          // — see file-tools.ts's stagePendingAction), a read-only tool call ToolPolicy flags here
+          // has nothing concrete to stage: the harness's own control state, not a specific
+          // pending mutation, is what's asking for a human to look at this turn before more tool
+          // use continues. Surfaced as an escalation (same shape maxIterations exhaustion already
+          // uses below) rather than a fabricated needs_approval with no real pendingActionId
+          // behind it.
+          return {
+            result: { kind: 'escalated', reason: policy.reason },
+            iterationsUsed: iteration + 1,
+          }
+        }
         let resultText: string
         try {
           resultText = await this.executeToolCall(call.name, call.input, userMessage, onUsage)
@@ -2311,17 +2402,23 @@ export class PersonalAssistant {
       slackFactor: BATCH_SLACK_FACTOR,
       absoluteTurnCeiling: BATCH_ABSOLUTE_TURN_CEILING,
     }
-    let totalCallsUsed = budgetState.callsPerItemHistory.reduce((sum, c) => sum + c, 0)
+    // Aggregate turn-wide ceiling, tracked via the generic Budget type (packages/harness) rather
+    // than a bare counter compared against the module constant — same isExhausted()/consume()
+    // shape as adapter/harness/recovery.py's RecoveryBudget (Phase 7). Only the `calls` dimension
+    // is used here; cost/time/parallelism stay at their default-unbounded value since batch-
+    // research doesn't track those today.
+    let turnBudget = new Budget({ maxCalls: BATCH_ABSOLUTE_TURN_CEILING }).consume({
+      calls: budgetState.callsPerItemHistory.reduce((sum, c) => sum + c, 0),
+    })
     const allItems = [...probedResults.map((r) => r.item), ...remainingItems]
 
     for (const item of remainingItems) {
-      if (totalCallsUsed >= BATCH_ABSOLUTE_TURN_CEILING) break
-      const remainingRoom = BATCH_ABSOLUTE_TURN_CEILING - totalCallsUsed
-      const budget = Math.max(1, Math.min(nextItemBudget(budgetState), remainingRoom))
+      if (turnBudget.isExhausted()) break
+      const budget = Math.max(1, Math.min(nextItemBudget(budgetState), turnBudget.remaining('calls')))
       const resolution = await this.resolveBatchItem(item, budget, allItems, systemPrompt, sessionId, onToolStep, onUsage)
       resolutions.push(resolution)
       budgetState.callsPerItemHistory.push(resolution.callsUsed)
-      totalCallsUsed += resolution.callsUsed
+      turnBudget = turnBudget.consume({ calls: resolution.callsUsed })
     }
 
     const notAttempted = remainingItems.slice(resolutions.length - probedResults.length)
@@ -2463,6 +2560,7 @@ export class PersonalAssistant {
     batchState: BatchPendingState,
   ): Promise<AssistantTurnResult> {
     await this.memory.delete(`batch-pending:${pendingActionId}`)
+    this.classifyAndTraceExecutionMode({ isPlanCancelBypass: false, isBatchResearch: true, isTrivial: false, requiresApproval: false })
 
     // Both outcomes below skip the per-turn HarnessRuntime run entirely (same as the triviality
     // fast path) — an empty nodeExecutionOrder/verificationHealth/layerActivity plus a populated
