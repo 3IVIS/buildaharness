@@ -1,12 +1,33 @@
 {
   "name": "@buildaharness/react",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "React bindings for Build A Harness — a useHarness() hook wrapping @buildaharness/runtime.",
+  "license": "Apache-2.0",
+  "homepage": "https://buildaharness.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3IVIS/buildaharness.git",
+    "directory": "packages/react"
+  },
+  "keywords": [
+    "buildaharness",
+    "agent-harness",
+    "ai-agent",
+    "react",
+    "hooks"
+  ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "react": ">=18.0.0"
@@ -17,7 +38,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@buildaharness/runtime": "*"
+    "@buildaharness/runtime": "^0.2.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",

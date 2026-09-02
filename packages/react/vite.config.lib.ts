@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [
     dts({
       include: ['src'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+      entryRoot: resolve(__dirname, 'src'),
       insertTypesEntry: true,
       tsconfigPath: resolve(__dirname, 'tsconfig.json'),
     }),

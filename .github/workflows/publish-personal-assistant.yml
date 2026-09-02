@@ -1,0 +1,79 @@
+name: Publish @buildaharness/personal-assistant
+
+# Triggers on tags matching pa-v* pushed to the repo.
+#
+#   git tag pa-v0.2.0 && git push origin pa-v0.2.0
+#
+# Depends on @buildaharness/harness + @buildaharness/runtime — publish those
+# (harness-v*, runtime-v*) first so `npx @buildaharness/personal-assistant` can
+# resolve them from the registry.
+
+on:
+  push:
+    tags:
+      - 'pa-v*'
+
+jobs:
+  publish:
+    name: Build, test, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@buildaharness'
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build workspace dependencies
+        run: |
+          npm run build --workspace=packages/harness
+          npm run build --workspace=packages/runtime
+
+      - name: Type-check
+        run: npm run typecheck --workspace=packages/personal-assistant
+
+      - name: Unit tests
+        run: npm run test --workspace=packages/personal-assistant
+
+      - name: Build lib
+        run: npm run build --workspace=packages/personal-assistant
+
+      - name: Check dist artefacts
+        working-directory: packages/personal-assistant
+        run: |
+          for f in dist/index.js dist/cli.js dist/file-tools-mcp-server.mjs; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          if ! head -1 dist/cli.js | grep -q '^#!/usr/bin/env node'; then
+            echo "❌  dist/cli.js is missing its shebang — npx will not work"
+            exit 1
+          fi
+          echo "✅  All dist artefacts present, cli.js has a shebang"
+
+      - name: Check version matches tag
+        working-directory: packages/personal-assistant
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#pa-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/personal-assistant/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      - name: Publish to npm
+        run: npm publish --workspace=packages/personal-assistant --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

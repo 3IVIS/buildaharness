@@ -1,0 +1,73 @@
+name: Publish @buildaharness/harness
+
+# Triggers on tags matching harness-v* pushed to the repo.
+#
+#   git tag harness-v0.2.0 && git push origin harness-v0.2.0
+#
+# Per-package tag prefix so each package in the monorepo releases on its own
+# cadence — same model as publish-canvas.yml (canvas-v*) and publish-spec.yml.
+# harness has no @buildaharness/* dependencies, so it publishes first when the
+# whole set is being cut.
+
+on:
+  push:
+    tags:
+      - 'harness-v*'
+
+jobs:
+  publish:
+    name: Build, test, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for npm provenance attestation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@buildaharness'
+
+      # Root install links every workspace, so an unpublished @buildaharness/*
+      # dependency still resolves locally during CI.
+      - name: Install root deps
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck --workspace=packages/harness
+
+      - name: Unit tests
+        run: npm run test --workspace=packages/harness
+
+      - name: Build lib
+        run: npm run build --workspace=packages/harness
+
+      - name: Check dist artefacts
+        working-directory: packages/harness
+        run: |
+          for f in dist/index.js dist/index.d.ts; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          echo "✅  All dist artefacts present"
+
+      - name: Check version matches tag
+        working-directory: packages/harness
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#harness-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/harness/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      - name: Publish to npm
+        run: npm publish --workspace=packages/harness --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
