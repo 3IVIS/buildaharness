@@ -6,13 +6,14 @@
 v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place. No open RFCs.
 
 **What's shipped:**
-- FlowSpec schema v1.0.0, 26 canvas node types (14 base + 12 harness), 5 reference flows, ADR-001 closed
+- FlowSpec schema v1.0.0, 27 canvas node types (14 base + 13 harness), 5 reference flows, ADR-001 closed
 - XYFlow canvas, LangGraph + CrewAI + Mastra + MAF adapters, auth, Langfuse, execution, HITL
 - Observability stack (ClickHouse + Redis + Langfuse), OTel traces, token counts
 - Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
 - SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@buildaharness/canvas` package
-- Full harness architecture: 11-layer reasoning and control system, 470 harness tests (P0–P11, P-PC, integration, E2E, invariants)
-- npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/proxy`
+- Full harness architecture: 11-layer reasoning and control system, harness tests (P0–P11, P-PC, integration, E2E, invariants)
+- **Aielia** — a personal assistant running the full harness client-side every turn (`@buildaharness/personal-assistant`), with a CLI, a browser build (`@buildaharness/chat-ui`), and a native desktop app (`@buildaharness/desktop`)
+- npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/canvas`, `@buildaharness/personal-assistant`, `@buildaharness/proxy`
 
 **Not in this repo:** a few pieces referenced in internal docs are maintained in a private overlay
 and aren't part of this public clone — most visibly the coaching-agent example flow and its
@@ -48,6 +49,55 @@ Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with n
 
 ---
 
+## Good first issues
+
+Scoped, real gaps with a clear finish line. Each is named in
+`packages/personal-assistant/README.md` already — the doc comment it points at is
+the spec.
+
+### 1 · `web_search` for the Claude CLI backend `[assistant]`
+
+`ASSISTANT_ENABLE_WEB=1` gives the model `web_search`/`fetch_url` **only** on the
+proxy / Anthropic backends — `ClaudeCliLLMClient` has no web wiring (see
+`packages/personal-assistant/src/claude-cli-llm-client.ts`'s doc comment and the
+"Web access via tools" section of the package README). The file-tools path solves
+the same "Claude Code runs its own agentic loop, no outer TS loop to intercept"
+problem with an MCP server (`src/file-tools-mcp-server.mjs`, copied into `dist/`
+by the build). Mirror that: a small web-tools MCP server exposing
+`web_search`/`fetch_url` backed by the existing `duckDuckGoSearch` / `braveSearch`
+/ `fetchUrl` implementations in `@buildaharness/runtime`, wired in only when
+`enableWeb` is set. Keep the untrusted-content wrapping the proxy path already
+does. Done when `ASSISTANT_ENABLE_WEB=1` + `claude-cli` backend actually searches,
+with a test alongside `file-tools-mcp-server`'s.
+
+### 2 · chat-ui write-approval UI `[chat-ui]`
+
+`write_file` / `run_shell_command` stage a `.pending-actions/<id>.json` record and
+return `needs_approval` with `pendingActionKind`. The CLI and desktop resolve it;
+`packages/chat-ui`'s `ApprovalCard` shows the *request* but not *what will be
+written* — so file tools are CLI/desktop-only for now (package README, "File
+access via tools"). Add a diff/content preview to `ApprovalCard` for
+`pendingActionKind: 'write'` (and the command + resolved `cwd` for `'shell'`),
+sourced from the staged record, so a browser user can approve a staged write with
+the same information the CLI prints. `App.tsx` already threads `pendingActionId`
+through `handleApprove` / `handleDeny`.
+
+### 3 · `.pending-actions/` auto-sweep `[assistant]`
+
+A staged action from a crashed or abandoned turn sits in
+`<workspaceRoot>/.pending-actions/` indefinitely — harmless (never applied without
+an explicit `approved: true` + matching id) but not swept (package README, "File
+access via tools"). Add a bounded cleanup: on `PersonalAssistant` construction (or
+first `turn()`), delete `.pending-actions/*.json` older than a cutoff (e.g. 24h),
+in the background, never blocking the turn — same shape as the existing
+`backfillMessageIndex()` call. Done with a test that an old record is removed and
+a fresh one is left alone.
+
+To pick one up, open an issue with the matching label describing your approach
+before starting.
+
+---
+
 ## Issue labels
 
 | Label | Use for |
@@ -64,6 +114,8 @@ Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with n
 | `[observability]` | Tracing, token counts, Langfuse wiring |
 | `[collab]` | Yjs real-time collaboration, presence, offline persistence |
 | `[canvas-pkg]` | `@buildaharness/canvas` npm package — props API, embedding, theming |
+| `[assistant]` | Aielia / `@buildaharness/personal-assistant` — harness bridge, risk gate, tools, memory, CLI |
+| `[chat-ui]` | `@buildaharness/chat-ui` browser build — approval UI, settings, `/try` |
 
 ---
 
@@ -191,6 +243,40 @@ Props changes require updating `packages/canvas/src/BuildAHarnessCanvas.tsx`, `p
 Real-time collab lives in `src/collab/`. The Yjs document structure (`doc.ts`) and the bidirectional sync with Zustand (`syncToYjs.ts` / `syncFromYjs.ts`) are the core of the layer. Any change that causes the Yjs doc and the Zustand store to diverge will cause split-brain for collaborators — test this carefully.
 
 The y-websocket server is stateless with respect to the flow spec (it only relays CRDT ops). Do not add server-side state to the collab infrastructure.
+
+---
+
+## Working on Aielia & the npm packages
+
+No Docker, no stack. `@buildaharness/personal-assistant` and its front ends run
+against `@buildaharness/harness` + `@buildaharness/runtime` by workspace link.
+
+```bash
+npm install
+npm run build:harness && npm run build:runtime      # workspace deps the assistant imports
+
+# CLI — the fastest loop. claude-cli backend needs no API key (shells to `claude`).
+printf 'what time zone is Tokyo in?\nexit\n' | \
+  ASSISTANT_LLM_BACKEND=claude-cli node packages/personal-assistant/dist/cli.js
+# or, without a build step:
+npm run cli --workspace=packages/personal-assistant
+
+# Browser build (chat-ui / the /try page)
+npm run dev --workspace=packages/chat-ui           # → http://localhost:3010, paste a key in Settings
+
+npm test --workspace=packages/personal-assistant   # ~900 tests, must stay green
+npm test --workspace=packages/chat-ui
+```
+
+The full 11-layer harness runs client-side every turn — the harness loop itself
+makes no LLM calls (it's synchronous state-machine bookkeeping), so the per-turn
+cost is one real model call, or zero for a risk-gated one. `packages/personal-assistant/README.md`
+is the design reference; keep it in sync with behaviour changes. Any change to
+risk classification, the tool-policy gate, or the approval flow needs a test that
+pins the new behaviour.
+
+If you touch a counted number quoted in `README.md` / `README_CN.md` / `docs/`,
+run `node scripts/gen-stats.mjs` (CI runs `--check`).
 
 ---
 
