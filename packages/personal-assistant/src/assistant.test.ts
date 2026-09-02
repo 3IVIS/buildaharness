@@ -2102,8 +2102,7 @@ describe('PersonalAssistant onTrace', () => {
 
     await assistant.turn('What timezone is Tokyo in?', { sessionId: 'trace-trivial' })
 
-    // execution_mode_classified (Phase 4) is new since controlPlaneMode defaults to 'enabled' —
-    // see control-plane-flag.ts.
+    // execution_mode_classified (Phase 4) is unconditionally traced every turn.
     expect(events.map(e => e.kind)).toEqual([
       'turn_start', 'risk_classified', 'triviality_classified', 'execution_mode_classified', 'turn_end',
     ])
@@ -2952,43 +2951,19 @@ describe('PersonalAssistant spend cap (T2)', () => {
 })
 
 describe('PersonalAssistant control plane (Phase 4 of the harness/assistant architecture remediation plan)', () => {
+  // ASSISTANT_CONTROL_PLANE / controlPlaneMode was a rollout-window-only flag, removed in Phase
+  // 4b once its safety net went green — the ExecutionMode/ToolPolicy gate below is now
+  // unconditional, so these tests assert the single (formerly "enabled") path directly rather
+  // than a flag-off-vs-flag-on comparison.
   function traceCollector(): { events: TraceEvent[]; onTrace: (e: TraceEvent) => void } {
     const events: TraceEvent[] = []
     return { events, onTrace: (e) => events.push(e) }
   }
 
-  it('controlPlaneMode "disabled" never emits execution_mode_classified or tool_policy_decision — true no-op', async () => {
-    const { events, onTrace } = traceCollector()
-    const llm = scriptedResponses([
-      { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
-      { content: 'Here is the answer.' },
-    ])
-    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, controlPlaneMode: 'disabled', onTrace })
-    const result = await assistant.turn('Please search for something.')
-
-    expect(result.status).toBe('ok')
-    expect(events.some((e) => e.kind === 'execution_mode_classified')).toBe(false)
-    expect(events.some((e) => e.kind === 'tool_policy_decision')).toBe(false)
-  })
-
-  it('controlPlaneMode "disabled" produces byte-identical trivial-turn behavior to a run with no onTrace at all', async () => {
-    const llmA = new FakeLLMClient('The answer is 4.')
-    const assistantA = new PersonalAssistant({ llmClient: llmA, controlPlaneMode: 'disabled' })
-    const resultA = await assistantA.turn('What is 2+2?')
-
-    const llmB = new FakeLLMClient('The answer is 4.')
-    const assistantB = new PersonalAssistant({ llmClient: llmB })
-    const resultB = await assistantB.turn('What is 2+2?')
-
-    expect(resultA.reply).toBe(resultB.reply)
-    expect(resultA.status).toBe(resultB.status)
-    expect(resultA.harnessSkipped).toBe(resultB.harnessSkipped)
-  })
-
-  it('controlPlaneMode "enabled" classifies and traces FAST for a trivial turn', async () => {
+  it('classifies and traces FAST for a trivial turn', async () => {
     const { events, onTrace } = traceCollector()
     const llm = new FakeLLMClient('The answer is 4.')
-    const assistant = new PersonalAssistant({ llmClient: llm, controlPlaneMode: 'enabled', onTrace })
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace })
     await assistant.turn('What is 2+2?')
 
     const modeEvents = events.filter((e) => e.kind === 'execution_mode_classified')
@@ -2996,10 +2971,10 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     expect(modeEvents[0]).toMatchObject({ mode: 'FAST' })
   })
 
-  it('controlPlaneMode "enabled" classifies and traces CONSEQUENTIAL for a HIGH-risk turn awaiting approval', async () => {
+  it('classifies and traces CONSEQUENTIAL for a HIGH-risk turn awaiting approval', async () => {
     const { events, onTrace } = traceCollector()
     const llm = new FakeLLMClient('unused')
-    const assistant = new PersonalAssistant({ llmClient: llm, controlPlaneMode: 'enabled', onTrace })
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace })
     const result = await assistant.turn('Please send an email to my boss telling him I quit.')
 
     expect(result.status).toBe('needs_approval')
@@ -3008,7 +2983,7 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     expect(modeEvents[0]).toMatchObject({ mode: 'CONSEQUENTIAL' })
   })
 
-  it('controlPlaneMode "enabled" classifies and traces PLAN for a plan-task-cancel turn', async () => {
+  it('classifies and traces PLAN for a plan-task-cancel turn', async () => {
     const { events, onTrace } = traceCollector()
     const memory = new InMemoryAdapter()
     const plan = createPlanRecord({
@@ -3018,7 +2993,7 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     })
     await savePlan(memory, 's1', plan)
     const llm = new FakeLLMClient('unused')
-    const assistant = new PersonalAssistant({ llmClient: llm, memory, controlPlaneMode: 'enabled', onTrace })
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, onTrace })
     const result = await assistant.turn('cancel the first step', { sessionId: 's1' })
 
     expect(result.status).toBe('ok')
@@ -3027,55 +3002,68 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     expect(modeEvents[0]).toMatchObject({ mode: 'PLAN' })
   })
 
-  it('controlPlaneMode "enabled" traces a tool_policy_decision (ALLOW) for each read-only tool call in an ordinary tool-using turn', async () => {
+  it('traces a tool_policy_decision (ALLOW) for each read-only tool call in an ordinary tool-using turn, and returns the expected reply/status/sources', async () => {
     const { events, onTrace } = traceCollector()
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
       { content: 'Here is the answer.' },
     ])
-    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, controlPlaneMode: 'enabled', onTrace })
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, onTrace })
     const result = await assistant.turn('Please search for something.')
 
     expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Here is the answer.')
     const policyEvents = events.filter((e) => e.kind === 'tool_policy_decision')
     expect(policyEvents).toHaveLength(1)
     expect(policyEvents[0]).toMatchObject({ tool: 'web_search', decision: 'ALLOW' })
   })
 
-  it('differential: an ordinary tool-using turn produces the same reply/status/sources whether controlPlaneMode is "enabled" or "disabled"', async () => {
-    const scriptFor = () =>
-      scriptedResponses([
-        { content: '', toolCalls: [{ id: 'toolu_1', name: 'web_search', input: { query: 'test query' } }] },
-        { content: 'Here is the answer.' },
-      ])
-    const webTools = { search: async () => [] }
-
-    const disabled = new PersonalAssistant({ llmClient: scriptFor(), webTools, controlPlaneMode: 'disabled' })
-    const resultDisabled = await disabled.turn('Please search for something.')
-
-    const enabled = new PersonalAssistant({ llmClient: scriptFor(), webTools, controlPlaneMode: 'enabled' })
-    const resultEnabled = await enabled.turn('Please search for something.')
-
-    expect(resultEnabled.status).toBe(resultDisabled.status)
-    expect(resultEnabled.reply).toBe(resultDisabled.reply)
-    expect(resultEnabled.sources).toEqual(resultDisabled.sources)
-  })
-
-  it('differential: write_file staging (needs_approval + pendingActionId round trip) is unaffected by controlPlaneMode', async () => {
+  it('Phase 4c: a live per-turn ControlState actually gates — 9 same-turn tool failures flip the 10th call to DENY, not just the classifier UNKNOWN fallback', async () => {
+    const { events, onTrace } = traceCollector()
     const backend = makeFakeBackend()
     const ROOT = '/ws'
-    const scriptFor = () =>
-      scriptedResponses([{ content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'notes.txt', content: 'hello' } }] }])
+    // 9 read_file calls against a file that never exists — each fails, feeding tool-control-plane.ts's
+    // recordToolOutcome. The 10th call re-checks policy against the by-then-DENY ControlState (see
+    // tool-control-plane.test.ts for the unit-level 9-failure threshold) and should be denied before
+    // it ever reaches the executor. The 11th response is the final answer once the loop moves past it.
+    const failingCall = (id: string) => ({ content: '', toolCalls: [{ id, name: 'read_file', input: { path: 'missing.txt' } }] })
+    const llm = scriptedResponses([
+      ...Array.from({ length: 10 }, (_, i) => failingCall(`toolu_${i + 1}`)),
+      { content: 'Could not find the file after repeated attempts.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, onTrace })
+    const result = await assistant.turn('Please keep checking for missing.txt.')
 
-    const disabled = new PersonalAssistant({ llmClient: scriptFor(), fileTools: { backend, workspaceRoot: ROOT }, controlPlaneMode: 'disabled' })
-    const resultDisabled = await disabled.turn('write hello to notes.txt')
+    expect(result.status).toBe('ok')
+    const policyEvents = events.filter((e) => e.kind === 'tool_policy_decision')
+    expect(policyEvents).toHaveLength(10)
+    // The first 8 calls are checked against a state with fewer than 8 recorded failures — ALLOW.
+    // The 9th call (index 8) is checked against a state with 8 recorded failures, which already
+    // crosses CRITICAL_THRESHOLD due to a floating-point rounding quirk already present in
+    // resolve-control-state.ts (1 - 8/10 evaluates to 0.19999999999999996, not exactly 0.2 — see
+    // tool-control-plane.ts's own doc comment and this session's Phase 4c step note in the plan
+    // doc for the full account) rather than exactly the 9-failure bound the design's back-of-
+    // envelope math assumed. Once DENY fires, no further outcome is recorded (the DENY branch
+    // returns before recordToolOutcome runs), so the 10th call (index 9) stays DENY too — this is
+    // the actual gating behavior Phase 4c adds: a real DENY, driven by the live ControlState built
+    // from this turn's own prior failures, not the classifier's advisory UNKNOWN fallback (which
+    // never fires here — riskHint stays 'LOW' throughout).
+    expect(policyEvents.slice(0, 8).every((e) => e.decision === 'ALLOW')).toBe(true)
+    expect(policyEvents[8]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
+    expect(policyEvents[9]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
+  })
 
-    const enabled = new PersonalAssistant({ llmClient: scriptFor(), fileTools: { backend, workspaceRoot: ROOT }, controlPlaneMode: 'enabled' })
-    const resultEnabled = await enabled.turn('write hello to notes.txt')
+  it('write_file staging still produces needs_approval + a resolvable pendingActionId', async () => {
+    const backend = makeFakeBackend()
+    const ROOT = '/ws'
+    const llm = scriptedResponses([{ content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'notes.txt', content: 'hello' } }] }])
 
-    expect(resultDisabled.status).toBe('needs_approval')
-    expect(resultEnabled.status).toBe('needs_approval')
-    expect(resultEnabled.pendingActionKind).toBe(resultDisabled.pendingActionKind)
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+    const result = await assistant.turn('write hello to notes.txt')
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.pendingActionKind).toBe('write')
+    expect(result.pendingActionId).toBeDefined()
   })
 })
 

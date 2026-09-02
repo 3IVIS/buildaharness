@@ -44,7 +44,7 @@ import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyExecutionMode, type ExecutionMode } from './execution-mode.js'
 import { evaluateToolPolicy } from './tool-policy.js'
-import { DEFAULT_CONTROL_PLANE_MODE, type ControlPlaneMode } from './control-plane-flag.js'
+import { createTurnControlPlaneState, recordToolOutcome, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import {
   FILE_TOOLS,
@@ -169,6 +169,15 @@ const FACT_CAP = 20
 // experienceStore already do (see clearSession's doc comment on why those stay untouched). This
 // personal-assistant is single-user/single-install, so one global durable-fact list (not
 // per-session) is the right shape — matching reminderStore/experienceStore's own precedent.
+//
+// Storage-key taxonomy (Phase 5b, packages/personal-assistant/README.md's "Memory, Knowledge,
+// and the other four" section has the full table): `transcript:${sessionId}` is Memory ("what
+// was said"); `facts:${sessionId}` and this key are Knowledge ("what we believe" — session-scoped
+// vs. promoted, see fact-extraction.ts's FactSource for the Evidence tier behind each fact);
+// `plan:${sessionId}` (plan-store.ts) is State ("what's true now"); reminderStore sits at the
+// State/Knowledge boundary (durable like Knowledge, but describes pending intent rather than a
+// belief); experienceStore (see DexieExperienceStore) is Experience ("what worked before"). No
+// keys are renamed by this taxonomy — it's a naming/doc-comment pass, not a storage migration.
 const DURABLE_FACTS_KEY = 'facts:durable'
 
 // A harness checkpoint left behind by a process that died mid-run (see runTurn's runId doc
@@ -723,18 +732,6 @@ export interface PersonalAssistantOptions {
    * would make (see turn()) — never mid-turn.
    */
   spendCap?: SpendCapConfig
-  /**
-   * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html — see
-   * control-plane-flag.ts's doc comment for the full rollout rationale. 'enabled' (the default):
-   * ExecutionMode is computed and traced every turn, and ToolPolicy is the authoritative gate for
-   * write_file/run_shell_command staging and (once real per-turn ControlState is available)
-   * read-only tool calls. 'disabled': today's pre-Phase-4 behavior, byte-for-byte — this option
-   * exists only for the rollout window's flag-off no-op verification and emergency rollback, not
-   * as a permanent dual-path. Browser/desktop callers that never read process.env should pass
-   * this explicitly rather than relying on an env-derived default, since only cli.ts calls
-   * resolveControlPlaneMode(process.env) — assistant.ts itself never touches process.env.
-   */
-  controlPlaneMode?: ControlPlaneMode
 }
 
 /**
@@ -760,7 +757,6 @@ export class PersonalAssistant {
   private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
   private readonly spendCap?: SpendCapConfig
-  private readonly controlPlaneMode: ControlPlaneMode
   // The harness's WorldModel (and its own recordExternalContradiction dedup) is rebuilt empty
   // every turn (see runTurn's factExtractor doc comment below), so an unresolved contradiction
   // between two still-stored facts (e.g. two different stated occupations) gets independently
@@ -821,7 +817,6 @@ export class PersonalAssistant {
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     this.spendCap = options.spendCap
-    this.controlPlaneMode = options.controlPlaneMode ?? DEFAULT_CONTROL_PLANE_MODE
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
     // constructor or the first turn/render. Covers every front end (CLI, chat-ui, desktop)
     // and both construction paths (this constructor directly, and static create() below,
@@ -1298,9 +1293,8 @@ export class PersonalAssistant {
   }
 
   /**
-   * Phase 4: classifies and traces this turn's ExecutionMode — a no-op (returns 'TOOL' without
-   * ever calling onTrace) when controlPlaneMode is 'disabled', so the flag-off path is a true
-   * no-op relative to pre-Phase-4 behavior. See execution-mode.ts for what each mode guarantees.
+   * Phase 4: classifies and traces this turn's ExecutionMode. See execution-mode.ts for what
+   * each mode guarantees.
    */
   private classifyAndTraceExecutionMode(input: {
     isPlanCancelBypass: boolean
@@ -1309,22 +1303,23 @@ export class PersonalAssistant {
     requiresApproval: boolean
   }): ExecutionMode {
     const mode = classifyExecutionMode(input)
-    if (this.controlPlaneMode === 'enabled') {
-      this.onTrace?.({ kind: 'execution_mode_classified', mode })
-    }
+    this.onTrace?.({ kind: 'execution_mode_classified', mode })
     return mode
   }
 
   /**
-   * Phase 4: the deterministic, harness-state-informed authority for whether `toolName` may
-   * proceed — see tool-policy.ts. A no-op passthrough (always ALLOW, no trace) when
-   * controlPlaneMode is 'disabled', so the flag-off path never changes behavior. `controlState`
-   * is omitted for now (pre-evidence baseline) at every call site — see tool-policy.ts's own doc
-   * comment on why that's a safe default, not a gap.
+   * Phase 4/4c: the deterministic, harness-state-informed authority for whether `toolName` may
+   * proceed — see tool-policy.ts. `controlState` is the live, per-turn ControlState built by
+   * tool-control-plane.ts and threaded down from runTurn (see createTurnControlPlaneState);
+   * `undefined` at the very first tool call of a turn (nothing recorded yet — the pre-evidence
+   * baseline tool-policy.ts's own doc comment describes) or for a caller that never wired one in.
    */
-  private checkToolPolicy(toolName: string, riskHint: TurnIntentClassification['riskLevel']): ReturnType<typeof evaluateToolPolicy> {
-    if (this.controlPlaneMode !== 'enabled') return { decision: 'ALLOW', reason: 'controlPlaneMode is disabled' }
-    const result = evaluateToolPolicy({ toolName, riskHint })
+  private checkToolPolicy(
+    toolName: string,
+    riskHint: TurnIntentClassification['riskLevel'],
+    controlState?: TurnControlPlaneState['controlState'],
+  ): ReturnType<typeof evaluateToolPolicy> {
+    const result = evaluateToolPolicy({ toolName, riskHint, controlState })
     this.onTrace?.({ kind: 'tool_policy_decision', tool: toolName, decision: result.decision, reason: result.reason })
     return result
   }
@@ -1476,6 +1471,16 @@ export class PersonalAssistant {
     // batch loop itself finishes long before the harness run that ultimately builds `trace` (T6).
     let batchBudgetTrace: AssistantTrace['batchBudget']
     if (toolLoopWillRun) {
+      // Phase 4c: one live ControlState per turn, shared across every tool call this turn makes —
+      // including across batch items (see tool-control-plane.ts) — so a failure pattern discovered
+      // partway through the turn can actually gate a later call via checkToolPolicy. Tool-name list
+      // mirrors runToolLoop/resolveBatchItem's own `tools` array construction exactly.
+      const controlPlaneState = createTurnControlPlaneState([
+        ...(this.fileTools ? FILE_TOOLS : []),
+        ...(this.webTools ? WEB_TOOLS : []),
+        ...(this.shellTools ? SHELL_TOOLS : []),
+        ...REMINDER_TOOLS,
+      ].map((tool) => tool.name))
       // Gated entry point for the batch-research path: only when webTools is configured, the
       // message is an explicit ≥3-item list (batch-list-detector.ts's narrow, syntactic-only
       // shape), and this turn isn't already inside a plan-driven run (planForCancelCheck, loaded
@@ -1484,8 +1489,8 @@ export class PersonalAssistant {
       // unchanged — see plans/personal_assistant_dynamic_tool_budget_plan.html.
       const batch = this.webTools && !planForCancelCheck ? detectHomogeneousBatchList(userMessage) : null
       const loopResult = batch
-        ? await this.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage)
-        : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel)
+        ? await this.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, controlPlaneState)
+        : await this.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel, controlPlaneState)
 
       if (loopResult.kind === 'needs_approval') {
         await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
@@ -2026,6 +2031,7 @@ export class PersonalAssistant {
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
+    controlPlaneState?: TurnControlPlaneState,
   ): Promise<ToolLoopResult> {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -2038,7 +2044,7 @@ export class PersonalAssistant {
       ...transcript,
       { role: 'user', content: userMessage },
     ]
-    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint)
+    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint, controlPlaneState)
     return result
   }
 
@@ -2072,6 +2078,13 @@ export class PersonalAssistant {
     // fail-safe 'UNKNOWN' branch, and a batch item's own turn already passed the message-level
     // requiresApproval gate before ever reaching here.
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
+    // Phase 4c: shared, turn-scoped live ControlState (tool-control-plane.ts), constructed once
+    // by runTurn and threaded through every sub-loop that dispatches tool calls within the same
+    // turn — including across batch items, so a failure pattern discovered in one item's sub-loop
+    // is visible to the next item's, not reset per call. `undefined` for callers that never wire
+    // one in (e.g. resolvePendingBatchConfirmation's resume path — see tool-control-plane.ts's own
+    // doc comment on why that's a deliberate scope boundary, not an oversight).
+    controlPlaneState?: TurnControlPlaneState,
   ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
     const sources: AssistantSource[] = []
 
@@ -2235,12 +2248,12 @@ export class PersonalAssistant {
       dispatchedAnyToolCall = true
       for (const call of response.toolCalls) {
         reportStep(call.name, call.input)
-        // Phase 4: deterministic, harness-state-informed gate, checked before this call
+        // Phase 4/4c: deterministic, harness-state-informed gate, checked before this call
         // executes rather than only classified in advance and never re-checked — see
-        // tool-policy.ts. A no-op passthrough (always ALLOW) while controlPlaneMode is
-        // 'disabled' or while no live per-turn ControlState has been wired in yet (both
-        // real today — see this method's own doc comment on the pre-evidence baseline).
-        const policy = this.checkToolPolicy(call.name, riskHint)
+        // tool-policy.ts. controlPlaneState?.controlState is the live ControlState built from
+        // every earlier tool call this turn (see recordToolOutcome below) — undefined only for
+        // this turn's very first tool call, or a caller that never wired one in.
+        const policy = this.checkToolPolicy(call.name, riskHint, controlPlaneState?.controlState)
         if (policy.decision === 'DENY') {
           const resultText = `Denied by tool policy: ${policy.reason}`
           messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
@@ -2261,6 +2274,7 @@ export class PersonalAssistant {
           }
         }
         let resultText: string
+        let toolOk = true
         try {
           resultText = await this.executeToolCall(call.name, call.input, userMessage, onUsage)
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: true })
@@ -2289,6 +2303,17 @@ export class PersonalAssistant {
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
           this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${call.name}(${JSON.stringify(call.input)}) → ${resultText}` })
+          toolOk = false
+        }
+        // Phase 4c: feed this call's outcome into the same live ControlState checkToolPolicy
+        // reads at the top of the next iteration of this loop — a short summary only, never the
+        // full resultText (which can be large or come from untrusted web content).
+        if (controlPlaneState) {
+          recordToolOutcome(controlPlaneState, {
+            toolName: call.name,
+            ok: toolOk,
+            summary: toolOk ? `${call.name} succeeded` : `${call.name} failed: ${resultText.slice(0, 200)}`,
+          })
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
 
@@ -2325,6 +2350,7 @@ export class PersonalAssistant {
     sessionId: string,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
+    controlPlaneState?: TurnControlPlaneState,
   ): Promise<BatchItemResolution> {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -2351,7 +2377,7 @@ export class PersonalAssistant {
     }
 
     const { result, iterationsUsed, deadEndStopped } = await this.runToolIterations(
-      messages, budget, tools, sessionId, itemPrompt, undefined, onToolStep, onUsage, trackYield,
+      messages, budget, tools, sessionId, itemPrompt, undefined, onToolStep, onUsage, trackYield, undefined, controlPlaneState,
     )
 
     if (deadEndStopped) {
@@ -2396,6 +2422,7 @@ export class PersonalAssistant {
     sessionId: string,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
+    controlPlaneState?: TurnControlPlaneState,
   ): Promise<{ resolutions: BatchItemResolution[]; notAttempted: string[] }> {
     const resolutions: BatchItemResolution[] = [...probedResults]
     const budgetState: BatchBudgetState = {
@@ -2417,7 +2444,7 @@ export class PersonalAssistant {
     for (const item of remainingItems) {
       if (turnBudget.isExhausted()) break
       const budget = Math.max(1, Math.min(nextItemBudget(budgetState), turnBudget.remaining('calls')))
-      const resolution = await this.resolveBatchItem(item, budget, allItems, systemPrompt, sessionId, onToolStep, onUsage)
+      const resolution = await this.resolveBatchItem(item, budget, allItems, systemPrompt, sessionId, onToolStep, onUsage, controlPlaneState)
       resolutions.push(resolution)
       budgetState.callsPerItemHistory.push(resolution.callsUsed)
       turnBudget = turnBudget.consume({ calls: resolution.callsUsed })
@@ -2492,6 +2519,7 @@ export class PersonalAssistant {
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
+    controlPlaneState?: TurnControlPlaneState,
   ): Promise<ToolLoopResult> {
     // Probe phase (T3 step 2): N==3 probes just item[0] so at least one item stays unprobed even
     // for the smallest qualifying batch; larger batches probe the first two.
@@ -2501,7 +2529,7 @@ export class PersonalAssistant {
 
     const probeResolutions: BatchItemResolution[] = []
     for (const item of probeItems) {
-      probeResolutions.push(await this.resolveBatchItem(item, BATCH_PROBE_ITEM_CAP, items, systemPrompt, sessionId, onToolStep, onUsage))
+      probeResolutions.push(await this.resolveBatchItem(item, BATCH_PROBE_ITEM_CAP, items, systemPrompt, sessionId, onToolStep, onUsage, controlPlaneState))
     }
 
     // Calibrate (T3 step 3).
@@ -2542,6 +2570,7 @@ export class PersonalAssistant {
       sessionId,
       onToolStep,
       onUsage,
+      controlPlaneState,
     )
     const content = await this.synthesizeBatchReply(userMessage, systemPrompt, resolutions, notAttempted, onToken, onUsage)
     const sources = resolutions.flatMap((r) => r.sources)

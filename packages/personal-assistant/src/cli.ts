@@ -36,7 +36,6 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
-import { resolveControlPlaneMode } from './control-plane-flag.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -55,8 +54,6 @@ const defaultRemindersFile = join(defaultDataDir, 'reminders', 'reminders.json')
 const defaultEnvOverrides = envOverridesFromProcessEnv(process.env)
 
 const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
-
-const defaultControlPlaneMode = resolveControlPlaneMode(process.env)
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
@@ -131,7 +128,6 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
       : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    controlPlaneMode: defaultControlPlaneMode,
     spendCap:
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
         ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
@@ -250,15 +246,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ? '\nASSISTANT_NON_INTERACTIVE_APPROVAL=decline is set — every approval prompt auto-declines.\n'
       : ''
 
-  // Phase 4 of the harness/assistant architecture remediation plan — see control-plane-flag.ts.
-  // Shown only for the rollout window's opt-out (the flag is intended to be removed once
-  // controlPlaneMode's default is fully trusted), same "never silently in effect" reasoning as
-  // dangerBanner/nonInteractiveBanner above.
-  const controlPlaneBanner =
-    defaultControlPlaneMode === 'disabled'
-      ? '\nASSISTANT_CONTROL_PLANE=disabled is set — ExecutionMode classification and ToolPolicy gating are off (pre-Phase-4 behavior).\n'
-      : ''
-
   // The undo-log persists across sessions (it's on disk under the workspace, not in-memory) —
   // surfaced here so a user doesn't discover leftover revertible actions from a prior session
   // only by happening to run /undo-action or /status (T6).
@@ -269,7 +256,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
       : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${controlPlaneBanner}${undoBanner}`)
+  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 

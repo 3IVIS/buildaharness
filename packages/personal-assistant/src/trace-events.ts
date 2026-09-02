@@ -36,13 +36,12 @@ export type TraceEvent =
   | { kind: 'checkpoint_discarded'; sessionId: string; failedAttempts: number }
   /**
    * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html — see
-   * execution-mode.ts's own doc comment for each mode's guarantee level. Only emitted when
-   * PersonalAssistantOptions.controlPlaneMode is 'enabled' (control-plane-flag.ts).
+   * execution-mode.ts's own doc comment for each mode's guarantee level.
    */
   | { kind: 'execution_mode_classified'; mode: ExecutionMode }
   /**
    * ToolPolicy's decision for one specific tool call, before it runs — the deterministic,
    * harness-state-informed gate replacing "advisory classification checked after the fact" (see
-   * tool-policy.ts). Only emitted when controlPlaneMode is 'enabled'.
+   * tool-policy.ts).
    */
   | { kind: 'tool_policy_decision'; tool: string; decision: ToolPolicyDecision; reason: string }
