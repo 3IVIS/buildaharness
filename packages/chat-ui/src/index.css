@@ -536,6 +536,23 @@ body {
   font-size: 12.5px;
 }
 
+.app__demo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
+  opacity: 0.92;
+}
+
+.app__demo-note {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .approval-card, .escalation-banner {
   border: 1px solid var(--amber);
   border-radius: 10px;
