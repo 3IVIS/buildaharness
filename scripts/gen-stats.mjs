@@ -277,7 +277,9 @@ function buildReplacements(stats) {
       ),
     },
     {
-      file: 'README.md',
+      // Moved out of README.md into docs/nodes.md when the README was
+      // restructured to lead with the assistant (2026-09-02).
+      file: 'docs/nodes.md',
       apply: single(
         /(built from \*\*)(\d+)( core nodes\*\* and \*\*)(\d+)( harness-layer nodes\*\*)/,
         (_m, p1, _n1, p2, _n2, p3) => `${p1}${nodeTypes.execution}${p2}${nodeTypes.harness}${p3}`,
@@ -327,13 +329,6 @@ function buildReplacements(stats) {
       apply: single(
         /(画布，含 )(\d+)( 种节点类型（)(\d+)( 个执行节点 \+ )(\d+)( 个线束节点）)/,
         (_m, p1, _n1, p2, _n2, p3, _n3, p4) => `${p1}${nodeTypes.total}${p2}${nodeTypes.execution}${p3}${nodeTypes.harness}${p4}`,
-      ),
-    },
-    {
-      file: 'README_CN.md',
-      apply: single(
-        /(线束由 \*\*)(\d+)( 个核心节点\*\*和 \*\*)(\d+)( 个线束层节点\*\*构建)/,
-        (_m, p1, _n1, p2, _n2, p3) => `${p1}${nodeTypes.execution}${p2}${nodeTypes.harness}${p3}`,
       ),
     },
     {
