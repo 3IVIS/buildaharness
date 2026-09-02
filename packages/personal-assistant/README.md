@@ -98,6 +98,32 @@ without waiting for that automatic cap, and without the collateral damage of
 facts, and plan — previously the only in-product recovery option, short of
 moving `checkpointStore`'s whole backing directory aside by hand.
 
+### Memory, Knowledge, and the other four
+
+"Memory" gets used loosely for six conceptually different things in this
+package. None of the underlying storage was restructured to enforce this —
+it's a naming map over the stores that already exist, added so future changes
+land in the right conceptual bucket instead of overloading whichever store is
+closest to hand:
+
+| Tier | Answers | Where it lives |
+|---|---|---|
+| **Memory** | "What was said?" | `transcript:<sessionId>` — the conversation transcript (see above) |
+| **Knowledge** | "What do we believe?" | `UserFact` (`fact-extraction.ts`) — `facts:<sessionId>` (session-scoped) and `facts:durable` (promoted; see `DURABLE_FACTS_KEY`'s doc comment in `assistant.ts`) |
+| **Evidence** | "Why do we believe it?" | `UserFact.source` (`FactSource`: `user_asserted` / `model_inferred` / `observed` / `externally_verified`) — see `fact-extraction.ts`; separately, `AnswerClaim` (below) carries the same evidence-vs-claim distinction for a single turn's reply |
+| **Preference** | "What does the user want?" | Split across two stores today, worth distinguishing when reading either: a *stated* preference is just a `durable` `UserFact` like any other belief; a *configured* one (backend, model, `enableShell`, etc.) is `AssistantConfig` (`config.ts`) |
+| **State** | "What's true right now?" | `plan:<sessionId>` (`plan-store.ts`, the active task graph) plus session bookkeeping (`spend:<sessionId>`, `resume-attempts:<sessionId>`) |
+| **Experience** | "What worked before?" | `ExperienceStore` / `DexieExperienceStore` — strategy weights, learned decompositions, recovery sequences |
+
+Reminders (`reminderStore`) sit at the State/Knowledge boundary — durable like
+Knowledge (never cleared by `clearSession()`), but describing pending intent
+rather than a belief about the world.
+
+This table is the canonical reference the doc comments on `DURABLE_FACTS_KEY`
+(`assistant.ts`), `fact-extraction.ts`, `plan-store.ts`, and
+`DexieExperienceStore` each cross-reference — update it there rather than
+re-deriving the mapping if it changes.
+
 ## Usage
 
 ```ts

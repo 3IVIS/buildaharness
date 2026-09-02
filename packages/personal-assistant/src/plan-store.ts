@@ -3,6 +3,13 @@ import { containsCJK, tokenize, type TaskStatus } from '@buildaharness/harness'
 import type { Plan } from './plan-builder.js'
 import { getTaskCancelPatterns, testAny } from './lexical/patterns.js'
 
+// Storage-taxonomy note (Phase 5b): this is the personal-assistant's State tier ("what's true
+// now") — `plan:${sessionId}` records the currently-active task graph and its per-task status,
+// distinct from Knowledge (fact-extraction.ts's UserFact, "what we believe") or Experience
+// (DexieExperienceStore, "what worked before"). See
+// packages/personal-assistant/README.md's "Memory, Knowledge, and the other four" section for
+// the full six-tier map.
+
 export interface PlanTaskRecord {
   id: string
   description: string

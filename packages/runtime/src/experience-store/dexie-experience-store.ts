@@ -46,6 +46,11 @@ export interface DexieExperienceStoreOptions {
  * background after every mutation. A storage failure is swallowed (matching
  * the harness's own "unavailable store degrades to a silent no-op" contract)
  * so it never breaks a run.
+ *
+ * Storage-taxonomy note (personal-assistant's Phase 5b): this is the Experience tier ("what
+ * worked before"), distinct from Knowledge (a UserFact belief) or State (a Plan's current
+ * status) — see packages/personal-assistant/README.md's "Memory, Knowledge, and the other four"
+ * section for the full six-tier map this store fits into.
  */
 export class DexieExperienceStore implements ExperienceStore {
   private readonly inner: InMemoryExperienceStore
