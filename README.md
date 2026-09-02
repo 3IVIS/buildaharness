@@ -85,6 +85,7 @@ The harness, talking back — Build A Harness's own reference chat agent. Every 
 - ✅ Fail-safe risk classification — a classifier error requires approval, never silently defaults to low-risk
 - ✅ Typed fact provenance — only facts you actually state promote to durable memory by default; model-inferred facts stay session-scoped until confirmed
 - ✅ AnswerClaim — replies distinguish "verified against evidence" from "found this but couldn't independently confirm it," shown in the chat's "Why?" panel
+- ✅ Live tool-policy gate — every read-only tool call is checked against a per-turn `ControlState` before it runs, deterministic ALLOW/DENY/REQUIRE_APPROVAL rather than advisory, so a developing failure pattern can trip a real deny mid-turn
 
 ```bash
 npm install && npm run build:harness && npm run build:runtime

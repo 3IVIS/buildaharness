@@ -78,6 +78,24 @@
 
 ---
 
+## 个人助手
+
+会说话的线束 —— Build A Harness 自带的参考聊天代理。普通消息会完整走完 11 层线束；一次性事实查询则直接跳过；真正发送邮件或执行 shell 命令前会停下来等待批准。一套核心逻辑，三种前端：终端 CLI、浏览器、原生桌面应用。
+
+- ✅ 故障安全风险分类 —— 分类器出错时要求批准，绝不会静默降级为低风险
+- ✅ 类型化事实溯源 —— 只有你亲口陈述的事实才会默认提升为持久记忆；模型推断的事实在得到确认前仅限本次会话
+- ✅ AnswerClaim —— 回复会区分"有证据支持并已验证"与"找到了但无法独立确认"，并显示在聊天的"Why?"面板中
+- ✅ 实时工具策略门 —— 每次只读工具调用执行前，都会依据本轮的 `ControlState` 进行检查，是确定性的 ALLOW/DENY/REQUIRE_APPROVAL 判定，而非仅供参考的建议，因此本轮中逐渐显现的失败模式也能真正触发拒绝
+
+```bash
+npm install && npm run build:harness && npm run build:runtime
+ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
+```
+
+[buildaharness.com/personal-assistant](https://buildaharness.com/personal-assistant) · [`packages/personal-assistant/README.md`](packages/personal-assistant/README.md)
+
+---
+
 ## 节点面板
 
 线束由 **14 个核心节点**和 **13 个线束层节点**构建 — 每个节点均可编译到全部四个运行时。悬停节点名称可查看说明。
