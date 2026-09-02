@@ -297,7 +297,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
       : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
+  console.log(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 

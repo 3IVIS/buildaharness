@@ -59,7 +59,7 @@ export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial
   if (!isInteractive) return persisted
 
   log('')
-  log("Welcome — this looks like your first run. Let's pick how to reach a model.")
+  log("Welcome to Aielia — this looks like your first run. Let's pick how to reach a model.")
   log('(You can change any of this later with /config, or skip with Ctrl+C.)')
   log('')
 

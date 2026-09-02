@@ -25,7 +25,7 @@ export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 export const OPENROUTER_DEFAULT_MODEL = 'anthropic/claude-sonnet-5'
 /** OpenRouter's recommended (not required) leaderboard-attribution headers — see https://openrouter.ai/docs. */
 export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
-  'HTTP-Referer': 'https://github.com/buildaharness/buildaharness',
+  'HTTP-Referer': 'https://github.com/3IVIS/buildaharness',
   'X-Title': 'Build A Harness',
 }
 
