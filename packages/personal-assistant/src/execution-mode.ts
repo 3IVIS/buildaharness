@@ -80,3 +80,23 @@ export function classifyExecutionMode(input: ExecutionModeInput): ExecutionMode 
   if (input.isTrivial) return 'FAST'
   return 'TOOL'
 }
+
+/**
+ * classifyExecutionMode() plus the trace-emission wrapper every call site used to repeat inline
+ * (PersonalAssistant.classifyAndTraceExecutionMode, before the Phase 4d module split) — always
+ * traces unconditionally (the ASSISTANT_CONTROL_PLANE flag this used to gate on was removed in
+ * Phase 4b). Shared by every module that needs to classify-and-trace this turn's ExecutionMode
+ * (action-approval-service.ts's resolvePendingBatchConfirmation, and assistant.ts's own
+ * sequencer — TurnInterpreter deliberately never touches onTrace at all, see its own doc
+ * comment) instead of each repeating `onTrace?.(...)` separately. Takes the narrowest event
+ * shape it actually emits (not the full TraceEvent union) so this file never needs to import
+ * trace-events.ts, which itself imports ExecutionMode from here.
+ */
+export function classifyAndTraceExecutionMode(
+  onTrace: ((event: { kind: 'execution_mode_classified'; mode: ExecutionMode }) => void) | undefined,
+  input: ExecutionModeInput,
+): ExecutionMode {
+  const mode = classifyExecutionMode(input)
+  onTrace?.({ kind: 'execution_mode_classified', mode })
+  return mode
+}

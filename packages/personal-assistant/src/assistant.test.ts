@@ -920,6 +920,47 @@ describe('PersonalAssistant session management extras', () => {
 
     expect(receivedModels).toEqual(['model-a', 'model-b'])
   })
+
+  // Phase 4d regression coverage: model must be threaded as a getter closure (`() => string |
+  // undefined`), never a captured string value, into every module that reads it — TurnInterpreter,
+  // AgentLoop, HarnessBridge, ActionApprovalService, AssistantSession all read the current model
+  // per-call. The plain-chat-path test above only exercises PersonalAssistant's own field read;
+  // this covers AgentLoop separately, since a tool-loop-configured assistant routes every model
+  // call through a completely different module that could regress independently (e.g. by
+  // capturing `options.model` in its constructor instead of calling the getter each time).
+  it('setModel changes the model passed to the llmClient on the next turn, mid-session, on the tool-loop path too', async () => {
+    const receivedModels: (string | undefined)[] = []
+    class ToolLoopModelRecordingLLMClient implements ILLMClient {
+      async *callChat(): AsyncIterable<string> {
+        yield 'ok'
+      }
+      async callChatSync(): Promise<string> {
+        return 'ok'
+      }
+      async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+        if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        // Every non-classifyTurnIntent callChatStructured call here is the tool loop's own
+        // final-answer round trip (no tool calls scripted) — records the model it was called
+        // with and answers immediately, so the turn takes the triviality fast path with no
+        // further LLM calls (keeping this test's LLM client trivially simple).
+        receivedModels.push(options?.model)
+        return { content: 'A trivial factual answer.' }
+      }
+    }
+    const backend = makeFakeBackend()
+    const ROOT = '/workspace'
+    const assistant = new PersonalAssistant({
+      llmClient: new ToolLoopModelRecordingLLMClient(),
+      model: 'model-a',
+      fileTools: { backend, workspaceRoot: ROOT },
+    })
+
+    await assistant.turn('What is 2+2?', { sessionId: 'set-model-tool-loop-test' })
+    assistant.setModel('model-b')
+    await assistant.turn('What is 3+3?', { sessionId: 'set-model-tool-loop-test' })
+
+    expect(receivedModels).toEqual(['model-a', 'model-b'])
+  })
 })
 
 describe('PersonalAssistant usage tracking', () => {
