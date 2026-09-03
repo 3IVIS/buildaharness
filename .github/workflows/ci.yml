@@ -57,6 +57,11 @@ jobs:
       - name: Check security docs
         run: node scripts/check-security-docs.mjs
 
+      # Adoption plan F9: the specific factual claims Aielia's comparison page +
+      # README depend on, each pinned to the code that makes it true or false.
+      - name: Check comparison claims
+        run: node scripts/check-comparison-claims.mjs
+
   canvas-package:
     name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest
