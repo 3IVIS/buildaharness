@@ -16,6 +16,7 @@ import type { FileToolsContext } from './file-tools.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import type { WebToolsContext } from './web-tools.js'
 import type { ShellToolsContext } from './shell-tools.js'
+import type { ActionToolsContext } from './action-tools.js'
 import type { SpendCapConfig, SpendState } from './spend-cap.js'
 import { SYSTEM_PROMPT } from './system-prompt.js'
 import type { TraceEvent } from './trace-events.js'
@@ -121,6 +122,15 @@ export interface PersonalAssistantOptions {
    * caller can enable file/web access without ever exposing shell.
    */
   shellTools?: ShellToolsContext
+  /**
+   * When set, `turn()` gives the model real "effect" tools — today `send_email` — scoped to
+   * `workspaceRoot` for staging. Every call is approval-gated exactly like `write_file` /
+   * `run_shell_command`: the model can only propose a message, never deliver one. On approval,
+   * `applyPendingAction` calls `sendEmail` (email.ts's Resend transport / email-smtp.ts's SMTP
+   * transport — wired in by a Node caller, never imported here). Independent of
+   * `fileTools`/`webTools`/`shellTools`. Absent by default — no `send_email` tool exists unless set.
+   */
+  actionTools?: ActionToolsContext
   /** Stores reminders detected from "remind me"/"set a reminder"-shaped requests — defaults to an in-process store. See ReminderStore's `dueAt` doc: v1 stores raw text only, no time parsing, so `listDue()` won't return these yet. */
   reminderStore?: ReminderStore
   /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
@@ -197,12 +207,13 @@ export class PersonalAssistant {
     const fileTools = options.fileTools
     this.webTools = options.webTools
     const shellTools = options.shellTools
+    const actionTools = options.actionTools
     const reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
     this.onTrace = options.onTrace
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     const spendCap = options.spendCap
-    this.toolLoopWillRun = Boolean(fileTools || this.webTools || shellTools)
+    this.toolLoopWillRun = Boolean(fileTools || this.webTools || shellTools || actionTools)
 
     // Threaded as a getter closure — never a captured string — into every collaborator that
     // reads the current model, so `setModel()` (the `/model` command) keeps working for all of
@@ -210,7 +221,7 @@ export class PersonalAssistant {
     const model = (): string | undefined => this.model
 
     this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore)
-    this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools)
+    this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools, actionTools)
     this.agentLoop = new AgentLoop(
       this.memory,
       this.llmClient,
@@ -218,6 +229,7 @@ export class PersonalAssistant {
       fileTools,
       this.webTools,
       shellTools,
+      actionTools,
       reminderStore,
       maxSteps,
       this.onTrace,
@@ -230,6 +242,7 @@ export class PersonalAssistant {
       model,
       fileTools,
       shellTools,
+      actionTools,
       this.session,
       this.agentLoop,
       this.onTrace,

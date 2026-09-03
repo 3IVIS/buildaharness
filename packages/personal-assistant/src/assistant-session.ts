@@ -21,6 +21,7 @@ import {
   type UndoLogEntry,
 } from './action-snapshot.js'
 import type { ShellToolsContext } from './shell-tools.js'
+import type { ActionToolsContext } from './action-tools.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
 
@@ -143,6 +144,7 @@ export class AssistantSession {
     private readonly model: () => string | undefined,
     private readonly fileTools: FileToolsContext | undefined,
     private readonly shellTools: ShellToolsContext | undefined,
+    private readonly actionTools: ActionToolsContext | undefined,
   ) {}
 
   private static notifiedContradictionsKey(sessionId: string): string {
@@ -327,8 +329,8 @@ export class AssistantSession {
    */
   async sweepAbandonedPendingActionsOnStartup(): Promise<void> {
     try {
-      const backend = this.fileTools?.backend ?? this.shellTools?.backend
-      const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+      const backend = this.fileTools?.backend ?? this.shellTools?.backend ?? this.actionTools?.backend
+      const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? this.actionTools?.workspaceRoot
       if (!backend || !workspaceRoot) return
 
       const hits = await this.memory.search('', Number.MAX_SAFE_INTEGER, 0)
@@ -388,8 +390,8 @@ export class AssistantSession {
     await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)
     await this.memory.delete(AssistantSession.notifiedContradictionsKey(sessionId))
-    const backend = this.fileTools?.backend ?? this.shellTools?.backend
-    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+    const backend = this.fileTools?.backend ?? this.shellTools?.backend ?? this.actionTools?.backend
+    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? this.actionTools?.workspaceRoot
     if (backend && workspaceRoot) {
       await clearShellCache(backend, workspaceRoot)
     }
@@ -448,8 +450,8 @@ export class AssistantSession {
 
   /** The workspace backend/root a staged write/shell/revert action lives under — `undefined` when neither fileTools nor shellTools is configured (e.g. a webTools-only assistant). Public: also used by ActionApprovalService for the same lookup. */
   undoWorkspace(): { backend: FsBackend; workspaceRoot: string } | undefined {
-    const backend = this.fileTools?.backend ?? this.shellTools?.backend
-    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot
+    const backend = this.fileTools?.backend ?? this.shellTools?.backend ?? this.actionTools?.backend
+    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? this.actionTools?.workspaceRoot
     return backend && workspaceRoot ? { backend, workspaceRoot } : undefined
   }
 

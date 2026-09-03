@@ -1,4 +1,5 @@
 import type { FsBackend, ToolDefinition } from '@buildaharness/runtime'
+import type { EmailMessage, SendEmail, SendEmailResult } from './email.js'
 import {
   snapshotBeforeWrite,
   snapshotWorkspaceTree,
@@ -186,6 +187,13 @@ export type PendingActionPayload =
   | { kind: 'write'; path: string; content: string }
   | { kind: 'shell'; command: string; cwd: string }
   /**
+   * An email the model has proposed via send_email (action-tools.ts). Staged like write/shell and
+   * never delivered until a human approves — see applyPendingAction's email branch, which calls the
+   * injected SendEmail transport. Deliberately not in the undo-log: a sent email is one-shot and
+   * irreversible, the same reason `kind: 'revert'` below writes no undo entry either.
+   */
+  | { kind: 'email'; to: string; subject: string; body: string; cc?: string; bcc?: string }
+  /**
    * Staged by /undo-action (T3), never by the model — reverts a previously-applied write/shell
    * action back to its pre-action state. `revertedEntryId` names the undo-log entry this reverts
    * (deleted once applied — see applyPendingAction's revert branch). `restore`/`remove` are the
@@ -222,6 +230,7 @@ export type ApplyPendingActionResult =
   | ({ kind: 'write' } & PendingActionRecord)
   | ({ kind: 'shell' } & PendingActionRecord & { execution: ShellExecutionResult })
   | ({ kind: 'revert' } & PendingActionRecord)
+  | ({ kind: 'email' } & PendingActionRecord & { delivery: SendEmailResult })
 
 const PENDING_ACTIONS_DIR = '.pending-actions'
 
@@ -277,7 +286,10 @@ export async function applyPendingAction(
   backend: FsBackend,
   workspaceRoot: string,
   id: string,
-  options: { executeShell?: (command: string, cwd: string) => Promise<ShellExecutionResult> } = {},
+  options: {
+    executeShell?: (command: string, cwd: string) => Promise<ShellExecutionResult>
+    sendEmail?: SendEmail
+  } = {},
 ): Promise<ApplyPendingActionResult> {
   const record = await loadPendingAction(backend, workspaceRoot, id)
   if (!record) throw new Error(`No pending action staged with id "${id}"`)
@@ -343,6 +355,23 @@ export async function applyPendingAction(
     // approval prompt at all, presented as if it were current.
     await clearShellCache(backend, workspaceRoot)
     return record as ApplyPendingActionResult
+  }
+
+  if (record.kind === 'email') {
+    // One-shot and irreversible — like the revert branch above, it deliberately writes no
+    // undo-log entry. Delivery is the injected transport's job (email.ts / email-smtp.ts); this
+    // module never talks to a mail server itself, the same reason the shell branch takes an
+    // injected executeShell. A delivery failure propagates to the caller with the staging record
+    // left in place, so an approved-but-failed send can be retried rather than silently lost.
+    if (!options.sendEmail) {
+      throw new Error(`Cannot apply a staged email action ("${id}") — no sendEmail transport was provided`)
+    }
+    const message: EmailMessage = { to: record.to, subject: record.subject, body: record.body }
+    if (record.cc) message.cc = record.cc
+    if (record.bcc) message.bcc = record.bcc
+    const delivery = await options.sendEmail(message)
+    await backend.removeFile(pendingActionPath(workspaceRoot, id))
+    return { ...record, delivery }
   }
 
   if (!options.executeShell) {

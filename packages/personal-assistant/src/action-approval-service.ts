@@ -8,6 +8,7 @@ import {
 import { recordShellCacheEntry } from './file-tools.js'
 import type { ShellToolsContext } from './shell-tools.js'
 import { commandLooksLikeNetworkRequest } from './shell-tools.js'
+import type { ActionToolsContext } from './action-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { AssistantSession } from './assistant-session.js'
@@ -40,6 +41,7 @@ export class ActionApprovalService {
     private readonly model: () => string | undefined,
     private readonly fileTools: FileToolsContext | undefined,
     private readonly shellTools: ShellToolsContext | undefined,
+    private readonly actionTools: ActionToolsContext | undefined,
     private readonly session: AssistantSession,
     private readonly agentLoop: AgentLoop,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
@@ -58,13 +60,14 @@ export class ActionApprovalService {
 
     const fileTools = this.fileTools
     const shellTools = this.shellTools
-    // A pending action is staged under whichever workspace it belongs to — fileTools and
-    // shellTools are configured independently but, in practice, share the same backend/
-    // workspaceRoot pair (see PersonalAssistantOptions.shellTools's doc comment).
-    const backend = fileTools?.backend ?? shellTools?.backend
-    const workspaceRoot = fileTools?.workspaceRoot ?? shellTools?.workspaceRoot
+    const actionTools = this.actionTools
+    // A pending action is staged under whichever workspace it belongs to — fileTools,
+    // shellTools, and actionTools are configured independently but, in practice, share the same
+    // backend/workspaceRoot pair (see PersonalAssistantOptions.shellTools's doc comment).
+    const backend = fileTools?.backend ?? shellTools?.backend ?? actionTools?.backend
+    const workspaceRoot = fileTools?.workspaceRoot ?? shellTools?.workspaceRoot ?? actionTools?.workspaceRoot
     if (!backend || !workspaceRoot) {
-      throw new Error('turn() received pendingActionId but neither fileTools nor shellTools are configured')
+      throw new Error('turn() received pendingActionId but none of fileTools/shellTools/actionTools are configured')
     }
 
     if (!approved) {
@@ -100,6 +103,7 @@ export class ActionApprovalService {
               networkAllowlist: shellTools.networkAllowlist,
             })
         : undefined,
+      sendEmail: actionTools?.sendEmail,
     })
 
     let reply: string
@@ -125,6 +129,11 @@ export class ActionApprovalService {
       transcriptContent = reply
       // Same orphan-transcript-message fix as the decline branch above, for the approved path.
       await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: `/undo-action ${applied.revertedEntryId}` })
+    } else if (applied.kind === 'email') {
+      // One-shot, already delivered by applyPendingAction's injected transport — nothing to cache
+      // or synthesize, just confirm what went out.
+      reply = `Sent the email to ${applied.to} — subject "${applied.subject}".`
+      transcriptContent = reply
     } else {
       // Record this resolution in the shell cache BEFORE anything else — this is the only place
       // a shell command is ever actually executed, regardless of which backend proposed it (the
@@ -228,7 +237,9 @@ export class ActionApprovalService {
         ? `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${previewContent(next.content)}`
         : next.kind === 'shell'
           ? `${previousOutcome}\n\nNext, it also proposes running: ${next.command}\n  (cwd: ${next.cwd})`
-          : undefined
+          : next.kind === 'email'
+            ? `${previousOutcome}\n\nNext, it also proposes sending an email:\n  To: ${next.to}\n  Subject: ${next.subject}\n\n${previewContent(next.body)}`
+            : undefined
     if (!reason) return undefined
     return {
       status: 'needs_approval',
