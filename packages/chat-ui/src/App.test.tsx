@@ -276,6 +276,32 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Undo last exchange' })).toBeDisabled()
   })
 
+  describe('first-load risk-gate demo (plain browser only)', () => {
+    it('shows the illustrative approval card before any message, with no live Approve/Deny', async () => {
+      render(<App />)
+      // Once in the user bubble, once in the approval card's quoted pending message.
+      expect(await screen.findAllByText('Send an email to my boss saying I quit.')).toHaveLength(2)
+      expect(screen.getByText(/Needs approval — HIGH/)).toBeInTheDocument()
+      // Illustrative: no live buttons to resolve it against (no key configured).
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument()
+      // Export/Undo still count it as an empty conversation.
+      expect(screen.getByRole('button', { name: 'Export transcript' })).toBeDisabled()
+    })
+
+    it('clears once the visitor sends their own first message', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+      await screen.findAllByText('Send an email to my boss saying I quit.')
+
+      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+      expect(screen.queryByText('Send an email to my boss saying I quit.')).not.toBeInTheDocument()
+    })
+  })
+
   it('Settings shows Diagnostics data once loaded (memory, usage, health)', async () => {
     const user = userEvent.setup()
     render(<App />)

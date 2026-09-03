@@ -35,7 +35,7 @@
     "ai-agents", "langgraph", "crewai", "mastra", "workflow", "spec", "schema"
   ],
   "license": "Apache-2.0",
-  "repository": { "type": "git", "url": "https://github.com/buildaharness/buildaharness" },
-  "bugs":       { "url": "https://github.com/buildaharness/buildaharness/issues" },
+  "repository": { "type": "git", "url": "git+https://github.com/3IVIS/buildaharness.git", "directory": "spec" },
+  "bugs":       { "url": "https://github.com/3IVIS/buildaharness/issues" },
   "homepage":   "https://buildaharness.com"
 }

@@ -1,12 +1,35 @@
 {
   "name": "@buildaharness/harness",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "TypeScript implementation of the Build A Harness 11-layer agent reasoning and control architecture — a resumable async engine (world model, control state, verification, recovery, reviewer pass).",
+  "license": "Apache-2.0",
+  "homepage": "https://buildaharness.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3IVIS/buildaharness.git",
+    "directory": "packages/harness"
+  },
+  "keywords": [
+    "buildaharness",
+    "agent-harness",
+    "ai-agent",
+    "llm",
+    "control-state",
+    "verification",
+    "human-in-the-loop"
+  ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "vite build --config vite.config.lib.ts",

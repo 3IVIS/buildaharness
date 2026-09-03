@@ -7,13 +7,16 @@ interface Props {
    * cli.ts's own kindLabel ternary for the same pause. */
   pendingActionKind?: 'write' | 'shell' | 'batch' | 'revert'
   resolution?: 'approved' | 'denied'
+  /** Read-only sample (the /try first-load demo): render an explanatory line instead of
+   * live Approve/Deny buttons — a visitor with no key configured can't actually resolve it. */
+  illustrative?: boolean
   onApprove: () => void
   onDeny: () => void
 }
 
 const KIND_LABELS: Record<string, string> = { write: 'write', shell: 'shell command', batch: 'batch research', revert: 'revert' }
 
-export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionKind, resolution, onApprove, onDeny }: Props): React.JSX.Element {
+export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionKind, resolution, illustrative, onApprove, onDeny }: Props): React.JSX.Element {
   const label = pendingActionKind ? KIND_LABELS[pendingActionKind] : riskLevel
   return (
     <div className="approval-card">
@@ -22,7 +25,12 @@ export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionK
       </div>
       <blockquote className="approval-card__pending">{pendingMessage}</blockquote>
       <div className="approval-card__reason">{reason}</div>
-      {resolution ? (
+      {illustrative ? (
+        <div className="approval-card__resolution">
+          This is a sample. Add a model in Settings (⚙) and send your own message — a real
+          high-risk request pauses here before Aielia makes any model call.
+        </div>
+      ) : resolution ? (
         <div className="approval-card__resolution">{resolution === 'approved' ? 'Approved.' : 'Denied.'}</div>
       ) : (
         <div className="approval-card__actions">

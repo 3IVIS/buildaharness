@@ -36,6 +36,7 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
+import { maybeRunFirstRunSetup } from './first-run.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -153,6 +154,12 @@ export interface RunCliOptions {
   assistant?: PersonalAssistant
   /** Overrides the rl.question-based approval prompt — lets tests script approve/decline answers without faking stdin/a real TTY. */
   askYesNo?: (question: string) => Promise<boolean>
+  /** Test seam: skip the interactive first-run setup regardless of TTY state (also implied when `assistant` is passed). */
+  skipFirstRunSetup?: boolean
+  /** Test seam: stub `claude` binary detection for the first-run setup. */
+  detectClaudeCli?: () => Promise<boolean>
+  /** Test seam: script the first-run setup's line reads. */
+  firstRunAsk?: (question: string) => Promise<string>
 }
 
 export interface CliInstance {
@@ -175,8 +182,42 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   const envOverrides = options.envOverrides ?? defaultEnvOverrides
   const nonInteractiveApprovalMode = options.nonInteractiveApprovalMode ?? defaultNonInteractiveApprovalMode
 
-  const persisted = await configStore.load()
+  const inputStream = options.input ?? process.stdin
+  const outputStream = options.output ?? process.stdout
+
+  let persisted = await configStore.load()
   let { config, overriddenKeys } = resolveConfig(persisted, envOverrides)
+
+  // First run with nothing configured: offer a one-line setup rather than
+  // silently starting on the proxy backend against a proxy that isn't running.
+  if (!options.skipFirstRunSetup && !options.assistant) {
+    const isInteractive = (inputStream as NodeJS.ReadStream).isTTY === true
+    let setupRl: ReturnType<typeof createInterface> | undefined
+    const firstRunAsk =
+      options.firstRunAsk ??
+      ((question: string) => {
+        setupRl ??= createInterface({ input: inputStream, output: outputStream })
+        return new Promise<string>((resolvePrompt) => {
+          setupRl!.question(question, (answer) => resolvePrompt(answer.trim()))
+        })
+      })
+    try {
+      persisted = await maybeRunFirstRunSetup({
+        configStore,
+        persisted,
+        overriddenKeys,
+        isInteractive,
+        ask: firstRunAsk,
+        detectClaudeCli:
+          options.detectClaudeCli ??
+          (async () => (await checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')).ok),
+        log: (line) => outputStream.write(`${line}\n`),
+      })
+    } finally {
+      setupRl?.close()
+    }
+    ;({ config, overriddenKeys } = resolveConfig(persisted, envOverrides))
+  }
 
   try {
     validateConfig({}, config)
@@ -256,7 +297,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
       : ''
 
-  console.log(`Personal assistant — 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
+  console.log(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
   rl.prompt()
 

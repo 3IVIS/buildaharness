@@ -1,0 +1,74 @@
+name: Publish @buildaharness/react
+
+# Triggers on tags matching react-v* pushed to the repo.
+#
+#   git tag react-v0.2.0 && git push origin react-v0.2.0
+#
+# Depends on @buildaharness/runtime (which depends on @buildaharness/harness) —
+# publish those first.
+
+on:
+  push:
+    tags:
+      - 'react-v*'
+
+jobs:
+  publish:
+    name: Build, test, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@buildaharness'
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build workspace dependencies
+        run: |
+          npm run build --workspace=packages/harness
+          npm run build --workspace=packages/runtime
+
+      - name: Type-check
+        run: npm run typecheck --workspace=packages/react
+
+      - name: Unit tests
+        run: npm run test --workspace=packages/react
+
+      - name: Build lib
+        run: npm run build --workspace=packages/react
+
+      - name: Check dist artefacts
+        working-directory: packages/react
+        run: |
+          for f in dist/index.js dist/index.d.ts; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          echo "✅  All dist artefacts present"
+
+      - name: Check version matches tag
+        working-directory: packages/react
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#react-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/react/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      - name: Publish to npm
+        run: npm publish --workspace=packages/react --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -46,6 +46,7 @@ import { SearchPanel } from './components/SearchPanel'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
+import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
 import { checkProxyReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
 
@@ -239,6 +240,11 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
 
 export function App(): React.JSX.Element {
   const [entries, setEntries] = useState<ChatEntry[]>([])
+  // First-load risk-gate illustration for the hosted browser trial — shown only in a plain
+  // browser tab (never the desktop build) and only until the visitor sends their own first
+  // message or starts a new chat. Kept separate from `entries` so Export/Undo stay disabled
+  // and its card never collides with a real approval card. See demo-seed.ts.
+  const [showDemo, setShowDemo] = useState<boolean>(() => !isTauri())
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
@@ -336,6 +342,7 @@ export function App(): React.JSX.Element {
     const assistant = assistantRef.current
     if (!assistant) return
     await assistant.clearSession(sessionIdRef.current)
+    setShowDemo(false)
     setEntries([])
     setLastTurnUsage(undefined)
     setSessionUsage(undefined)
@@ -524,6 +531,7 @@ export function App(): React.JSX.Element {
   function submitMessage(): void {
     const message = input.trim()
     if (!message || busy) return
+    setShowDemo(false)
     setInput('')
     // The composer's height was grown by handleComposerInput as the user typed multiple
     // lines — reset it here rather than waiting for the now-empty value to reflow next paint.
@@ -602,7 +610,7 @@ export function App(): React.JSX.Element {
   return (
     <div className="app">
       <header className="app__header">
-        <span className="app__header-title">Assistant</span>
+        <span className="app__header-title">Aielia</span>
         <div className="app__header-actions">
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
@@ -612,6 +620,20 @@ export function App(): React.JSX.Element {
         </div>
       </header>
       <div className="app__messages">
+        {showDemo && entries.length === 0 && (
+          <div className="app__demo">
+            <div className="app__demo-note">{DEMO_NOTE}</div>
+            <ChatMessageBubble role="user" content={DEMO_USER_MESSAGE} />
+            <ApprovalCard
+              pendingMessage={DEMO_USER_MESSAGE}
+              reason={DEMO_APPROVAL_REASON}
+              riskLevel="HIGH"
+              illustrative
+              onApprove={() => setShowDemo(false)}
+              onDeny={() => setShowDemo(false)}
+            />
+          </div>
+        )}
         {entries.map((entry) => {
           switch (entry.kind) {
             case 'user':

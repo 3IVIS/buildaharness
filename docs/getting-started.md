@@ -1,6 +1,32 @@
 # Getting started
 
-This guide takes you from a fresh clone to a running flow in the canvas. It takes about 15 minutes.
+There are two ways in. Pick the one that matches what you want.
+
+---
+
+## The 5-minute path — the assistant (Aielia)
+
+No clone, no Docker. You need Node.js 18+ and one of: a `claude` CLI already
+logged in, or an Anthropic / OpenAI / OpenRouter API key.
+
+```bash
+npx @buildaharness/personal-assistant
+```
+
+On the first run it asks how to reach a model — pick the `claude` CLI if it's
+found (no key needed), or paste a key. Then talk to it. Try a harmless question,
+then something consequential like *"send an email to my boss saying I quit"* to
+watch the approval gate fire before any model call is made.
+
+Prefer a browser? Open **[buildaharness.com/try](https://buildaharness.com/try)**,
+paste a key in Settings (it stays in your browser), and go.
+
+---
+
+## The 15-minute path — build and compile harnesses
+
+This takes you from a fresh clone to a running flow in the canvas. You need the
+full stack (canvas + adapter API + Langfuse). It takes about 15 minutes.
 
 ---
 
@@ -22,7 +48,7 @@ At least one of the following is required to run LLM nodes:
 ## Step 1 — Clone and run setup
 
 ```bash
-git clone https://github.com/buildaharness/buildaharness.git
+git clone https://github.com/3IVIS/buildaharness.git
 cd buildaharness
 chmod +x scripts/setup-env.sh
 ./scripts/setup-env.sh

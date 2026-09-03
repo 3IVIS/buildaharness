@@ -1,0 +1,74 @@
+name: Publish @buildaharness/runtime
+
+# Triggers on tags matching runtime-v* pushed to the repo.
+#
+#   git tag runtime-v0.2.0 && git push origin runtime-v0.2.0
+#
+# Depends on @buildaharness/harness — publish harness-v* first (its build is
+# re-run here anyway so CI is self-contained, but the published dependency must
+# exist on the registry before a consumer can `npm install @buildaharness/runtime`).
+
+on:
+  push:
+    tags:
+      - 'runtime-v*'
+
+jobs:
+  publish:
+    name: Build, test, and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@buildaharness'
+
+      - name: Install root deps
+        run: npm ci
+
+      # Workspace dependency must be built before runtime's own typecheck/build.
+      - name: Build workspace dependencies
+        run: npm run build --workspace=packages/harness
+
+      - name: Type-check
+        run: npm run typecheck --workspace=packages/runtime
+
+      - name: Unit tests
+        run: npm run test --workspace=packages/runtime
+
+      - name: Build lib
+        run: npm run build --workspace=packages/runtime
+
+      - name: Check dist artefacts
+        working-directory: packages/runtime
+        run: |
+          for f in dist/index.js dist/index.d.ts; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected dist file: $f"
+              exit 1
+            fi
+          done
+          echo "✅  All dist artefacts present"
+
+      - name: Check version matches tag
+        working-directory: packages/runtime
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#runtime-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/runtime/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+
+      - name: Publish to npm
+        run: npm publish --workspace=packages/runtime --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,7 +1,30 @@
 {
   "name": "@buildaharness/personal-assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "An open-source AI chat assistant that runs the full 11-layer Build A Harness every turn — light for a fact lookup, and it stops for approval before it sends an email or runs a shell command. CLI, browser, and desktop.",
+  "license": "Apache-2.0",
+  "homepage": "https://buildaharness.com/personal-assistant",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3IVIS/buildaharness.git",
+    "directory": "packages/personal-assistant"
+  },
+  "keywords": [
+    "ai-assistant",
+    "personal-assistant",
+    "chat-agent",
+    "agent-harness",
+    "human-in-the-loop",
+    "tool-approval",
+    "self-hosted",
+    "llm",
+    "openclaw-alternative",
+    "open-source"
+  ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -11,16 +34,19 @@
   "bin": {
     "personal-assistant": "./dist/cli.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs && mkdir -p dist/lexical/patterns && cp src/lexical/patterns/*.json dist/lexical/patterns/",
+    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs && mkdir -p dist/lexical/patterns && cp src/lexical/patterns/*.json dist/lexical/patterns/ && node -e \"const f='dist/cli.js',s=require('fs'),c=s.readFileSync(f,'utf8');if(!c.startsWith('#!'))s.writeFileSync(f,'#!/usr/bin/env node\\n'+c)\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
     "eval:turn-intent": "tsx scripts/eval-turn-intent.ts"
   },
   "dependencies": {
-    "@buildaharness/harness": "^0.1.0",
-    "@buildaharness/runtime": "^0.1.0",
+    "@buildaharness/harness": "^0.2.0",
+    "@buildaharness/runtime": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"
   },

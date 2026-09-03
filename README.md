@@ -2,17 +2,15 @@
 
 # Build A Harness
 
-**Build complete AI agent harnesses on canvas. Compile to any orchestrator. Observe with Langfuse.**
+**An open-source AI assistant that thinks before it acts — and stops before it sends.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/tests-2%2C846%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-2%2C856%20passing-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Python](https://img.shields.io/badge/Python-3.10+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-required-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
 [English](README.md) · [中文](README_CN.md)
 
@@ -20,17 +18,95 @@
 
 ---
 
-A workflow routes prompts from node to node. A **harness** governs what the agent *believes*, what it is *allowed* to do, how it catches its own mistakes, and what it learns. Build A Harness delivers the complete 11-layer architecture — draw it on a canvas, compile to any framework, trace every decision.
+Most AI assistants run the tool the moment the model decides to. **Aielia** —
+the Build A Harness personal assistant — routes every turn through an 11-layer
+*harness*: a control architecture that governs what the agent believes, what
+it's allowed to do, how it catches its own mistakes, and what it learns. A quick
+fact lookup stays light. Sending an email, paying an invoice, running a shell
+command, or deleting a file **stops for your approval first** — and a classifier
+that errors out requires approval rather than sailing through as safe.
+
+The assistant is the front door. Underneath it is a full visual **harness
+builder** — draw the same 11 layers on a canvas, compile to LangGraph / CrewAI /
+Mastra / MS Agent Framework, trace every decision in Langfuse.
+
+---
+
+## 1 · The assistant — Aielia
+
+```bash
+npx @buildaharness/personal-assistant
+```
+
+First run walks you through picking a model — reuse an existing `claude` CLI
+login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
+talk to it.
+
+```ts
+import { LLMClient } from '@buildaharness/runtime'
+import { PersonalAssistant } from '@buildaharness/personal-assistant'
+
+const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
+
+await aielia.turn('What time zone is Tokyo in?')
+// { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
+
+await aielia.turn('Send an email to my boss saying I quit.')
+// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  — no LLM call made
+
+await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
+// approved — proceeds and runs the harness normally
+```
+
+**[Try it in your browser → buildaharness.com/try](https://buildaharness.com/try)**
+— bring your own key (stored only in your browser), or see the approval gate
+fire before you add one.
+
+One core, three front ends: terminal CLI, browser (`@buildaharness/chat-ui`),
+and native desktop (`@buildaharness/desktop`).
+
+---
+
+## 2 · Why it's different
+
+The [`/harness-comparison`](https://buildaharness.com/harness-comparison) page
+maps the three most-used open agents (Hermes Agent, Kilo Code, OpenClaw) against
+this architecture. None of them ships both a tiered Control State resolver *and*
+a reviewer/output gate. Aielia ships:
+
+- **Live per-tool-call ControlState gate** — every read-only tool call is checked
+  against a per-turn `ControlState` *before* it runs (deterministic
+  ALLOW / DENY / REQUIRE_APPROVAL, not advisory), so a developing failure pattern
+  can trip a real deny mid-turn.
+- **Fail-safe risk classification** — a classifier error or unparseable response
+  returns `UNKNOWN → requires approval`, never a silent default to low-risk.
+- **Reviewer Pass** — a 3-lens review (consistency, adversarial, abstraction fit)
+  and output-contract validation run before a reply goes out.
+- **Typed fact provenance** — only facts you actually *state* promote to durable
+  memory by default; model-inferred facts stay session-scoped until confirmed.
+- **AnswerClaim** — replies distinguish "verified against evidence" from "found
+  this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
+- **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
+  last checkpoint instead of silently starting over; a checkpoint that keeps
+  crashing on replay is discarded automatically after two attempts.
+- **Untrusted-content boundary** — web results and shell output are wrapped as
+  data the model is instructed never to follow as commands.
+
+Full write-up: [`packages/personal-assistant/README.md`](packages/personal-assistant/README.md).
+
+---
+
+## 3 · Build your own harness
+
+A workflow routes prompts from node to node. A **harness** governs belief,
+permission, self-correction, and learning. Build A Harness delivers the complete
+11-layer architecture as a visual builder.
 
 ```
 Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework  →  Langfuse
 ```
 
 > The spec is the contract. The canvas is the editor. The adapters are the compilers.
-
----
-
-## Why a harness, not just a workflow
 
 | Simple Agent Loop | Full Harness — Implemented |
 |:--|:--|
@@ -44,10 +120,6 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 | | **Learning** — experience store · warm start *(optional)* |
 | | **Output & Reviewer Pass** — contract · 3-lens review |
 | *prompt in → answer out* | *27 nodes · 11 layers · 759 harness-layer tests* |
-
----
-
-## What's implemented
 
 <table>
 <tr valign="top">
@@ -76,96 +148,16 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 </tr>
 </table>
 
----
+The full node palette and schema-sync mechanics live in
+[docs/nodes.md](docs/nodes.md); the field-level FlowSpec reference is
+[docs/flowspec.md](docs/flowspec.md).
 
-## Personal Assistant
+### Frameworks
 
-The harness, talking back — Build A Harness's own reference chat agent. Every ordinary message walks the full 11-layer harness; a one-shot fact lookup skips it entirely; a real email send or shell command stops for approval first. One core, three front ends: terminal CLI, browser, native desktop.
-
-- ✅ Fail-safe risk classification — a classifier error requires approval, never silently defaults to low-risk
-- ✅ Typed fact provenance — only facts you actually state promote to durable memory by default; model-inferred facts stay session-scoped until confirmed
-- ✅ AnswerClaim — replies distinguish "verified against evidence" from "found this but couldn't independently confirm it," shown in the chat's "Why?" panel
-- ✅ Live tool-policy gate — every read-only tool call is checked against a per-turn `ControlState` before it runs, deterministic ALLOW/DENY/REQUIRE_APPROVAL rather than advisory, so a developing failure pattern can trip a real deny mid-turn
-
-```bash
-npm install && npm run build:harness && npm run build:runtime
-ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
-```
-
-[buildaharness.com/personal-assistant](https://buildaharness.com/personal-assistant) · [`packages/personal-assistant/README.md`](packages/personal-assistant/README.md)
-
----
-
-## Node palette
-
-Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — every node compiles to all four runtimes. Hover a node name for its description.
-
-<table>
-<thead><tr><th colspan="4" align="left">Core nodes</th></tr></thead>
-<tbody>
-<tr>
-<td nowrap><abbr title="Flow entry point — receives the initial request and state">⤵ <code>input</code></abbr></td>
-<td nowrap><abbr title="Flow exit point — returns the final result to the caller">⤴ <code>output</code></abbr></td>
-<td nowrap><abbr title="LLM invocation — structured output, validator, fail_branch, managed Langfuse prompts">✨ <code>llm_call</code></abbr></td>
-<td nowrap><abbr title="Named tool from the flow's tools[] registry">🔧 <code>tool_invoke</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="Branching — JSONPath or fn_ref expression evaluates to a named branch target">⎇ <code>condition</code></abbr></td>
-<td nowrap><abbr title="Fan-out to N concurrent branches">⑂ <code>parallel_fork</code></abbr></td>
-<td nowrap><abbr title="Fan-in — merge / append / fn_ref reducer waits for all branches to complete">⊖ <code>parallel_join</code></abbr></td>
-<td nowrap><abbr title="Suspend and wait for a typed human resume payload — sequential HITL across all runtimes">⏸ <code>hitl_breakpoint</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="Read from key-value or semantic memory store">📖 <code>memory_read</code></abbr></td>
-<td nowrap><abbr title="Write to a named memory store">🔖 <code>memory_write</code></abbr></td>
-<td nowrap><abbr title="Embed another flow as a reusable node — LangGraph/Mastra: full support; CrewAI: partial">📦 <code>subgraph</code></abbr></td>
-<td nowrap><abbr title="State transform — field mapping or fn_ref function applied to the flow state">⇌ <code>transform</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="Execute an agent persona from the flow's agents[] registry — native in CrewAI, synthesised in others">🤖 <code>agent_role</code></abbr></td>
-<td nowrap><abbr title="Multi-agent loop with configurable termination condition — native in MS Agent Framework, synthesised in others">👥 <code>agent_debate</code></abbr></td>
-<td></td><td></td>
-</tr>
-</tbody>
-</table>
-
-<table>
-<thead><tr><th colspan="4" align="left">Harness nodes — implement the 11-layer control architecture</th></tr></thead>
-<tbody>
-<tr>
-<td nowrap><abbr title="Observations, beliefs, assumptions, contradictions — append-only Belief events (derived_from[], contradicts[]), never mutated in place; generation_id is a monotonic version stamp, not a mutation counter">🧠 <code>world_model</code></abbr></td>
-<td nowrap><abbr title="Four generation sources; diversity enforcement (0.7 threshold); K-retention elimination policy">💡 <code>hypothesis_set</code></abbr></td>
-<td nowrap><abbr title="Collects typed Evidence(obs, reliability, source, type, freshness) — observations never auto-promoted to conclusions">🗄️ <code>gather_evidence</code></abbr></td>
-<td nowrap><abbr title="Caps max conclusion reliability per tool given scope limits; updates verification_health.feasibility">⚙️ <code>apply_tool_rel</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="Reliability-weighted belief integration; belief_dep_graph propagation; completeness_flags updated">🔄 <code>update_wm</code></abbr></td>
-<td nowrap><abbr title="Five-tier resolver → permission (ALLOW/DENY) · execution_mode (NORMAL/CAUTIOUS/RECOVERY) · escalation · risk_estimate · confidence_estimate; deadlock detection; staleness gate assertions">🛡️ <code>control_state</code></abbr></td>
-<td nowrap><abbr title="Six-state task decomposition; cycle detection; abstraction_fit recomputed on change">🕸️ <code>task_graph</code></abbr></td>
-<td nowrap><abbr title="9 verification layers classified mechanical/environmental/model (LAYER_TIER); real subprocess-backed checks where infrastructure exists, honestly SKIPPED (never a fake PASS) elsewhere; adversarial pass on HIGH risk">✅ <code>verify_gate</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="rollback() → record_failure() → strategy switch: DIRECT_EDIT, TRACE_EXEC, BROADER_SEARCH, REIMPLEMENT, MINIMAL_FIX, ESCALATE">♻️ <code>recovery</code></abbr></td>
-<td nowrap><abbr title="Evidence store with tool_reliability_envelopes and tool_availability_manifest">📋 <code>evidence_store</code></abbr></td>
-<td nowrap><abbr title="Optional cross-run structural reuse of decompositions, tool workflows, verification plans, recovery sequences">📊 <code>exp_store</code></abbr></td>
-<td nowrap><abbr title="Three-lens review: implementer · reviewer · adversarial — adversarial prior seeded on causal proximity">👁️ <code>reviewer_pass</code></abbr></td>
-</tr>
-<tr>
-<td nowrap><abbr title="Pre-seeded conceptual process scaffolds for common task patterns">🧭 <code>process_concept</code></abbr></td>
-<td></td><td></td><td></td>
-</tr>
-</tbody>
-</table>
-
-A deeper pseudo-code / state-model architecture walkthrough is maintained privately and isn't part of this public repo — for the architecture that ships here, see [docs/architecture.md](docs/architecture.md).
-
-The sidebar has an **Expert / Intent** toggle. Expert mode is the full palette above. Intent mode swaps it for a small set of high-level templates (e.g. "Research → verify sources → draft → human approval → publish") that click-to-insert as a connected chain of real nodes — the harness nodes themselves are also grouped by category (Observation · State · Policy · Control Flow · Effect) rather than one flat list.
-
----
-
-## Frameworks
-
-All four runtimes compile from the same `flow.json` — no rewriting. `/compile` checks the target runtime's actual capabilities first: a FlowSpec requiring something the runtime doesn't support (e.g. durable checkpointing, token streaming) fails fast with a clear error instead of silently degrading.
+All four runtimes compile from the same `flow.json` — no rewriting. `/compile`
+checks the target runtime's actual capabilities first: a FlowSpec requiring
+something the runtime doesn't support (durable checkpointing, token streaming)
+fails fast with a clear error instead of silently degrading.
 
 | Runtime | Language | HITL | Key integration |
 |:--|:--|:--|:--|
@@ -174,23 +166,29 @@ All four runtimes compile from the same `flow.json` — no rewriting. `/compile`
 | **Mastra** | TypeScript | `suspend()/resume()` | Node.js sidecar |
 | **MS Agent Framework** | Python | `_HitlPause` | `AgentGroupChat` native · OTel → Langfuse |
 
-Compile: `POST /compile?runtime=langgraph` — same spec, any runtime.  
-Deploy as a **REST endpoint**, **MCP tool**, or **A2A agent** in one step.
+Compile: `POST /compile?runtime=langgraph`. Deploy as a **REST endpoint**,
+**MCP tool**, or **A2A agent** in one step.
 
----
+### Observability
 
-## Observability
-
-Self-hosted **Langfuse** starts with `docker compose up` — no extra configuration needed.
-
-- Per-node child spans across all four runtimes (world model, control state, verification, recovery)
-- Token counts, latency, and cost per node via LiteLLM
-- Live **View trace →** link in the canvas after each run
-- Managed prompts via Langfuse prompt API (`prompt_ref` on any `llm_call` node)
+Self-hosted **Langfuse** starts with `docker compose up` — no extra config.
+Per-node child spans across all four runtimes, token/latency/cost per node via
+LiteLLM, a live **View trace →** link in the canvas after each run, and managed
+prompts via the Langfuse prompt API (`prompt_ref` on any `llm_call` node).
 
 ---
 
 ## Quick start
+
+**Just want the assistant?** Nothing to clone:
+
+```bash
+npx @buildaharness/personal-assistant          # terminal
+# or open https://buildaharness.com/try         # browser, bring your own key
+```
+
+**Building and compiling harnesses** needs the full stack (canvas + adapter API
++ Langfuse):
 
 ```bash
 ./scripts/setup-env.sh   # generate secrets, write .env
@@ -231,7 +229,9 @@ pytest adapter/tests/test_maf_adapter.py -v     # MAF suite (42 tests)
 
 ## LLM providers
 
-All calls route through **LiteLLM** — add the key to `.env`.
+The assistant reaches a model directly (Anthropic, OpenAI, OpenRouter, or a
+`claude` CLI login). The full stack routes every call through **LiteLLM** — add
+the key to `.env`:
 
 | Provider | Env var | Example models |
 |:--|:--|:--|
@@ -271,7 +271,8 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 
 | | |
 |:--|:--|
-| [docs/getting-started.md](docs/getting-started.md) | Step-by-step: clone → secrets → LLM → first run |
+| [docs/getting-started.md](docs/getting-started.md) | Fresh clone → secrets → LLM → first run |
+| [docs/nodes.md](docs/nodes.md) | The 27-node palette + schema-sync mechanics |
 | [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — all 27 node types, edges, fields |
 | [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows |
 | [docs/api.md](docs/api.md) | REST API reference — compile, execute, deploy, HITL resume |

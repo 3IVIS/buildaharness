@@ -1,8 +1,9 @@
 {
   "name": "@buildaharness/canvas",
-  "version": "0.1.0",
-  "description": "Embeddable buildaharness flow canvas — spec in, spec changes out",
-  "license": "MIT",
+  "version": "0.2.0",
+  "description": "Embeddable Build A Harness flow canvas — author a FlowSpec visually, get spec changes out",
+  "license": "Apache-2.0",
+  "homepage": "https://buildaharness.com",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -51,14 +52,19 @@
   "keywords": [
     "buildaharness",
     "ai-agent",
+    "agent-harness",
+    "llm",
     "flow",
     "canvas",
     "react",
     "xyflow"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/buildaharness/buildaharness",
+    "url": "git+https://github.com/3IVIS/buildaharness.git",
     "directory": "packages/canvas"
   }
 }
