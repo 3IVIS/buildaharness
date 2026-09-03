@@ -52,6 +52,11 @@ jobs:
       - name: Check model defaults
         run: node scripts/check-model-defaults.mjs
 
+      # Adoption plan F8: SECURITY.md + docs/threat-model.md must exist, stay
+      # linked from the README, and not cite a boundary symbol that's been removed.
+      - name: Check security docs
+        run: node scripts/check-security-docs.mjs
+
   canvas-package:
     name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest
