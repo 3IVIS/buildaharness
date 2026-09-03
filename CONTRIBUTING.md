@@ -51,26 +51,9 @@ Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with n
 
 ## Good first issues
 
-Scoped, real gaps with a clear finish line. Each is named in
-`packages/personal-assistant/README.md` already — the doc comment it points at is
-the spec.
+Scoped, real gaps with a clear finish line.
 
-### 1 · `web_search` for the Claude CLI backend `[assistant]`
-
-`ASSISTANT_ENABLE_WEB=1` gives the model `web_search`/`fetch_url` **only** on the
-proxy / Anthropic backends — `ClaudeCliLLMClient` has no web wiring (see
-`packages/personal-assistant/src/claude-cli-llm-client.ts`'s doc comment and the
-"Web access via tools" section of the package README). The file-tools path solves
-the same "Claude Code runs its own agentic loop, no outer TS loop to intercept"
-problem with an MCP server (`src/file-tools-mcp-server.mjs`, copied into `dist/`
-by the build). Mirror that: a small web-tools MCP server exposing
-`web_search`/`fetch_url` backed by the existing `duckDuckGoSearch` / `braveSearch`
-/ `fetchUrl` implementations in `@buildaharness/runtime`, wired in only when
-`enableWeb` is set. Keep the untrusted-content wrapping the proxy path already
-does. Done when `ASSISTANT_ENABLE_WEB=1` + `claude-cli` backend actually searches,
-with a test alongside `file-tools-mcp-server`'s.
-
-### 2 · chat-ui write-approval UI `[chat-ui]`
+### 1 · chat-ui write-approval UI `[chat-ui]`
 
 `write_file` / `run_shell_command` stage a `.pending-actions/<id>.json` record and
 return `needs_approval` with `pendingActionKind`. The CLI and desktop resolve it;
@@ -82,16 +65,23 @@ sourced from the staged record, so a browser user can approve a staged write wit
 the same information the CLI prints. `App.tsx` already threads `pendingActionId`
 through `handleApprove` / `handleDeny`.
 
-### 3 · `.pending-actions/` auto-sweep `[assistant]`
+### 2 · Make cross-run learning legible and deletable `[assistant]`
 
-A staged action from a crashed or abandoned turn sits in
-`<workspaceRoot>/.pending-actions/` indefinitely — harmless (never applied without
-an explicit `approved: true` + matching id) but not swept (package README, "File
-access via tools"). Add a bounded cleanup: on `PersonalAssistant` construction (or
-first `turn()`), delete `.pending-actions/*.json` older than a cutoff (e.g. 24h),
-in the background, never blocking the turn — same shape as the existing
-`backfillMessageIndex()` call. Done with a test that an old record is removed and
-a fresh one is left alone.
+The assistant already learns across runs via `ExperienceStore`
+(`packages/personal-assistant/src/`), but there's no user-facing surface for it —
+you can't see what it has generalised or forget a specific lesson. Add a
+`/experience` CLI command (list + delete-by-id) and a short "What Aielia has
+learned" section to the package README, sourced from the existing store API. Done
+when a user can enumerate stored experience entries and delete one, with tests.
+
+### 3 · Inverted index for transcript search `[assistant]`
+
+Transcript search is a linear scan over every stored message
+(`packages/personal-assistant/src/`). Fine for now, O(n) per query as history
+grows. Add an in-memory inverted index (token → message ids) built lazily on first
+search and updated on append, falling back to the linear scan when absent. Done
+when search returns identical results with the index enabled and a benchmark shows
+the win past ~10k messages.
 
 To pick one up, open an issue with the matching label describing your approach
 before starting.
