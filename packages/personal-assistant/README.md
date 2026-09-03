@@ -233,7 +233,39 @@ without writing. A pending action left over from a crashed/abandoned turn sits
 in `.pending-actions/` indefinitely — harmless (never applied without an explicit
 `approved: true` with the matching ID) but not currently auto-swept. This same
 staging record shape (a `kind` discriminator) is shared with `run_shell_command`
-— see "Shell access via tools" below.
+(see "Shell access via tools" below) and `send_email`.
+
+### `send_email` — a real "effect" tool behind the gate
+
+The flagship demo ("send an email to my boss saying I quit") only means
+something if there's an actual send behind the approval. Pass `actionTools` with
+a delivery transport and the model gets a `send_email` tool staged exactly like
+`write_file` — it can only ever *propose* a recipient/subject/body; the message
+is delivered only after `{ approved: true, pendingActionId }`, through the
+injected transport, never by the model.
+
+```ts
+import { PersonalAssistant, createResendSender } from '@buildaharness/personal-assistant'
+// or: import { createSmtpSender } from '@buildaharness/personal-assistant'
+
+const assistant = new PersonalAssistant({
+  llmClient,
+  actionTools: {
+    backend, workspaceRoot,
+    sendEmail: createResendSender({ apiKey: process.env.RESEND_API_KEY!, from: 'me@example.com' }),
+  },
+})
+
+const staged = await assistant.turn('Email my boss that I quit.')
+// { status: 'needs_approval', pendingActionKind: 'email', reason: 'To: … / Subject: … / …' }
+await assistant.turn('Email my boss that I quit.', { approved: true, pendingActionId: staged.pendingActionId })
+// delivers the exact staged message; { status: 'ok', reply: 'Sent the email to …' }
+```
+
+In the CLI, set `enableEmail` + `emailProvider` (`resend` or `smtp`) + `emailFrom`
+and the provider credentials via `/config` or `ASSISTANT_EMAIL_*` /
+`ASSISTANT_SMTP_*` env vars. Without a transport configured, no `send_email` tool
+exists — the model can't propose what it can't be given.
 
 Both backends enforce the same "never write inline" rule, by different
 mechanisms:

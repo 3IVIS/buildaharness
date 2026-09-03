@@ -114,9 +114,11 @@ export const CLAIMS = [
   },
   {
     id: 'send_effect_tool',
-    description: 'Aielia has a real "send" tool (email / message / payment) it can be asked to use.',
-    expected: false, // F2 is unresolved — the flagship demo phrase gates an action Aielia cannot take
-    resolve: () => sourceHas("(name|tool):\\s*['\\\"]send_(email|message|sms)['\\\"]"),
+    description: 'Aielia has a real "send" tool (email) it can be asked to use — staged behind approval like write_file.',
+    expected: true, // F2(a) — send_email; flip to false only if action-tools.ts is removed
+    resolve: () =>
+      sourceHas("name:\\s*['\\\"]send_email['\\\"]") &&
+      fileHas('packages/personal-assistant/src/file-tools.ts', /kind: 'email'/),
   },
   {
     id: 'os_level_shell_sandbox',
