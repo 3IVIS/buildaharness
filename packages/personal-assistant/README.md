@@ -572,10 +572,11 @@ These three go straight from this process to the provider's own API
 — no proxy deployment needed, but unlike `authToken` (a self-hosted proxy's
 own bearer token), `ASSISTANT_API_KEY`/`apiKey` is a *real* provider key.
 It's stored the same way as every other secret field here — plaintext in
-`config.json`, not an OS keychain — so treat that file accordingly. `openai`
-defaults to `gpt-4o-mini` and `openrouter` to `anthropic/claude-3.5-sonnet`
-when `ASSISTANT_MODEL`/`/config set model` isn't set; `anthropic` defaults to
-the same `claude-3-5-sonnet-20241022` the proxy backend does.
+`config.json`, not an OS keychain — so treat that file accordingly. When
+`ASSISTANT_MODEL`/`/config set model` isn't set, each backend falls back to the
+current-generation default id exported from `@buildaharness/runtime`'s
+`model-defaults.ts` (`openai` → `gpt-5-mini`, `openrouter` →
+`anthropic/claude-sonnet-5`, `anthropic` and `proxy` → `claude-sonnet-5`).
 
 Transcript, learned experience, reminders, and any in-flight turn's checkpoint
 persist as real files under `~/.buildaharness/personal-assistant/`
