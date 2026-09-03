@@ -5,9 +5,9 @@ name: Deploy chat-ui to /try
 # https://buildaharness.com/try. Bring-your-own-key only — the page keeps API keys
 # in the visitor's browser (localStorage), nothing is proxied server-side.
 #
-# Needs secrets.PAGES_DEPLOY_TOKEN: a token that can push to 3IVIS/buildaharness-pages
-# (a fine-grained PAT with Contents: read/write on that repo, or a classic PAT with
-# `repo`). Without it the deploy step fails fast with a clear message.
+# Needs secrets.PAGES_DEPLOY_KEY: the private half of an SSH deploy key with write
+# access on 3IVIS/buildaharness-pages (Settings → Deploy keys, "Allow write access").
+# Without it the deploy step fails fast with a clear message.
 
 on:
   push:
@@ -53,11 +53,11 @@ jobs:
           CHAT_UI_BASE: /try/
         run: npm run build --workspace=packages/chat-ui
 
-      - name: Check deploy token is present
+      - name: Check deploy key is present
         run: |
-          if [ -z "${{ secrets.PAGES_DEPLOY_TOKEN }}" ]; then
-            echo "❌  secrets.PAGES_DEPLOY_TOKEN is not set — cannot push to 3IVIS/buildaharness-pages."
-            echo "    Add a fine-grained PAT (Contents: read/write on buildaharness-pages) as that secret."
+          if [ -z "${{ secrets.PAGES_DEPLOY_KEY }}" ]; then
+            echo "❌  secrets.PAGES_DEPLOY_KEY is not set — cannot push to 3IVIS/buildaharness-pages."
+            echo "    Add the private half of a write-enabled SSH deploy key for that repo as this secret."
             exit 1
           fi
 
@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 3IVIS/buildaharness-pages
-          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          ssh-key: ${{ secrets.PAGES_DEPLOY_KEY }}
           path: pages
 
       - name: Sync build into pages/try
