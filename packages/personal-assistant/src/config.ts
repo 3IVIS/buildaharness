@@ -43,6 +43,27 @@ export interface AssistantConfig {
   shellNetworkAllowlist?: string[]
   workspaceRoot?: string
   /**
+   * When true, `turn()` gives the model a real `send_email` tool — every call staged for
+   * approval exactly like `write_file` (adoption plan F2). Off by default: no send tool exists
+   * unless a transport is also configured below. The model can only ever propose a message.
+   */
+  enableEmail: boolean
+  /** Which transport delivers an approved email. `resend` needs `resendApiKey`; `smtp` needs `smtpHost`/`smtpPort` (+ `smtpUser`/`smtpPass` if the server requires auth). */
+  emailProvider?: 'resend' | 'smtp'
+  /** The sender address an approved email is delivered as. Required whenever `enableEmail` is set — the model never chooses it. */
+  emailFrom?: string
+  /**
+   * Resend API key (https://resend.com). Stored at the same low trust boundary as `apiKey` /
+   * `braveApiKey` — plaintext in config.json, not an OS keychain; SettingsScreen warns next to
+   * the input the same way it does for `apiKey`.
+   */
+  resendApiKey?: string
+  smtpHost?: string
+  smtpPort?: number
+  smtpUser?: string
+  /** SMTP password — same plaintext-in-config trust boundary as `resendApiKey` / `apiKey`. */
+  smtpPass?: string
+  /**
    * Equivalent of Claude Code's own --dangerously-skip-permissions: when true, both approval
    * gates PersonalAssistant otherwise always enforces — the message-level risk gate
    * (risk-classifier.ts) and write_file/run_shell_command's per-call staging (file-tools.ts/
@@ -77,6 +98,14 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'shellTimeoutMs',
   'shellNetworkAllowlist',
   'workspaceRoot',
+  'enableEmail',
+  'emailProvider',
+  'emailFrom',
+  'resendApiKey',
+  'smtpHost',
+  'smtpPort',
+  'smtpUser',
+  'smtpPass',
   'dangerouslySkipPermissions',
   'sessionCostLimitUsd',
   'sessionCallLimit',
@@ -90,6 +119,7 @@ export const DEFAULT_CONFIG: AssistantConfig = {
   enableWeb: false,
   searchBackend: 'ddg',
   enableShell: false,
+  enableEmail: false,
   dangerouslySkipPermissions: false,
 }
 
@@ -148,5 +178,19 @@ export function validateConfig(patch: Partial<AssistantConfig>, existing: Assist
   }
   if (DIRECT_API_BACKENDS.has(merged.llmBackend) && !merged.apiKey) {
     throw new ConfigValidationError(`llmBackend "${merged.llmBackend}" requires apiKey to be set.`)
+  }
+  if (merged.enableEmail) {
+    if (!merged.emailFrom) {
+      throw new ConfigValidationError('enableEmail requires emailFrom (the sender address) to be set.')
+    }
+    if (merged.emailProvider === 'resend' && !merged.resendApiKey) {
+      throw new ConfigValidationError('emailProvider "resend" requires resendApiKey to be set.')
+    }
+    if (merged.emailProvider === 'smtp' && (!merged.smtpHost || !merged.smtpPort)) {
+      throw new ConfigValidationError('emailProvider "smtp" requires smtpHost and smtpPort to be set.')
+    }
+    if (!merged.emailProvider) {
+      throw new ConfigValidationError('enableEmail requires emailProvider ("resend" or "smtp") to be set.')
+    }
   }
 }

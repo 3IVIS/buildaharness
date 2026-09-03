@@ -2,10 +2,10 @@ interface Props {
   pendingMessage: string
   reason: string
   riskLevel?: string
-  /** A staged write_file/run_shell_command/batch-research action's kind — see ChatEntry's
+  /** A staged write_file/run_shell_command/send_email/batch-research action's kind — see ChatEntry's
    * 'approval' doc comment. Takes precedence over riskLevel for the header label, mirroring
    * cli.ts's own kindLabel ternary for the same pause. */
-  pendingActionKind?: 'write' | 'shell' | 'batch' | 'revert'
+  pendingActionKind?: 'write' | 'shell' | 'email' | 'batch' | 'revert'
   resolution?: 'approved' | 'denied'
   /** Read-only sample (the /try first-load demo): render an explanatory line instead of
    * live Approve/Deny buttons — a visitor with no key configured can't actually resolve it. */
@@ -14,7 +14,7 @@ interface Props {
   onDeny: () => void
 }
 
-const KIND_LABELS: Record<string, string> = { write: 'write', shell: 'shell command', batch: 'batch research', revert: 'revert' }
+const KIND_LABELS: Record<string, string> = { write: 'write', shell: 'shell command', email: 'send email', batch: 'batch research', revert: 'revert' }
 
 export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionKind, resolution, illustrative, onApprove, onDeny }: Props): React.JSX.Element {
   const label = pendingActionKind ? KIND_LABELS[pendingActionKind] : riskLevel
