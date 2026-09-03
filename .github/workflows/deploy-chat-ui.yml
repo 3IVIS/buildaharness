@@ -1,0 +1,88 @@
+name: Deploy chat-ui to /try
+
+# Builds the browser build of the Aielia assistant (packages/chat-ui) and publishes
+# it to the buildaharness-pages repo under /try/, which GitHub Pages serves at
+# https://buildaharness.com/try. Bring-your-own-key only — the page keeps API keys
+# in the visitor's browser (localStorage), nothing is proxied server-side.
+#
+# Needs secrets.PAGES_DEPLOY_TOKEN: a token that can push to 3IVIS/buildaharness-pages
+# (a fine-grained PAT with Contents: read/write on that repo, or a classic PAT with
+# `repo`). Without it the deploy step fails fast with a clear message.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/chat-ui/**'
+      - 'packages/personal-assistant/**'
+      - 'packages/runtime/**'
+      - 'packages/harness/**'
+      - '.github/workflows/deploy-chat-ui.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-chat-ui
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout buildaharness
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deps
+        run: npm ci
+
+      # chat-ui imports @buildaharness/personal-assistant + runtime by workspace link;
+      # build their dist first (personal-assistant's build also pulls harness).
+      - name: Build workspace deps
+        run: |
+          npm run build --workspace=packages/harness
+          npm run build --workspace=packages/runtime
+          npm run build --workspace=packages/personal-assistant
+
+      - name: Build chat-ui
+        env:
+          CHAT_UI_BASE: /try/
+        run: npm run build --workspace=packages/chat-ui
+
+      - name: Check deploy token is present
+        run: |
+          if [ -z "${{ secrets.PAGES_DEPLOY_TOKEN }}" ]; then
+            echo "❌  secrets.PAGES_DEPLOY_TOKEN is not set — cannot push to 3IVIS/buildaharness-pages."
+            echo "    Add a fine-grained PAT (Contents: read/write on buildaharness-pages) as that secret."
+            exit 1
+          fi
+
+      - name: Checkout buildaharness-pages
+        uses: actions/checkout@v4
+        with:
+          repository: 3IVIS/buildaharness-pages
+          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          path: pages
+
+      - name: Sync build into pages/try
+        run: |
+          rm -rf pages/try
+          mkdir -p pages/try
+          cp -R packages/chat-ui/dist/. pages/try/
+
+      - name: Commit and push if changed
+        working-directory: pages
+        run: |
+          git config user.name  "buildaharness-ci"
+          git config user.email "ci@buildaharness.com"
+          git add try
+          if git diff --cached --quiet; then
+            echo "No changes to /try — nothing to deploy."
+            exit 0
+          fi
+          git commit -m "deploy: chat-ui /try build from ${GITHUB_SHA::7}"
+          git push
