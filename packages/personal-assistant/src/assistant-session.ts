@@ -4,6 +4,7 @@ import {
   type CheckpointStore,
   type LayerActivityEvent,
 } from '@buildaharness/harness'
+import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
 import { compactTranscript } from './transcript-compaction.js'
 import {
@@ -23,8 +24,8 @@ import type { ShellToolsContext } from './shell-tools.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
 
-/** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — kept in sync by hand, same convention as cli.ts's own backendDisplayModel table. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
-const DEFAULT_MODEL_FOR_COST_ESTIMATE = 'claude-3-5-sonnet-20241022'
+/** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — both now import @buildaharness/runtime's ANTHROPIC_DEFAULT_MODEL rather than hand-syncing a literal. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
+const DEFAULT_MODEL_FOR_COST_ESTIMATE = ANTHROPIC_DEFAULT_MODEL
 
 // A harness checkpoint left behind by a process that died mid-run is normally resumed
 // transparently on the session's next turn. If resume() itself reliably fails for that

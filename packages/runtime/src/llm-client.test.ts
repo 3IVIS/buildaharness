@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { LLMClient } from './llm-client'
+import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 import { FlowExecutionError } from './errors'
 
 const PROXY_URL = 'http://localhost:8787'
@@ -166,7 +167,7 @@ describe('LLMClient', () => {
 
       for await (const _ of client.callChat(
         [{ role: 'user', content: 'test' }],
-        { model: 'claude-3-5-sonnet-20241022', maxTokens: 100, temperature: 0.5 }
+        { model: 'claude-opus-5', maxTokens: 100, temperature: 0.5 }
       )) {
         // consume
       }
@@ -178,7 +179,7 @@ describe('LLMClient', () => {
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
 
       const body = JSON.parse(init.body as string)
-      expect(body.model).toBe('claude-3-5-sonnet-20241022')
+      expect(body.model).toBe('claude-opus-5')
       expect(body.max_tokens).toBe(100)
       expect(body.temperature).toBe(0.5)
       expect(body.stream).toBe(true)
@@ -198,7 +199,7 @@ describe('LLMClient', () => {
       }
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
-      expect(body.model).toBe('claude-3-5-sonnet-20241022')
+      expect(body.model).toBe(ANTHROPIC_DEFAULT_MODEL)
     })
   })
 

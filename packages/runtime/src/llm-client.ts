@@ -1,5 +1,6 @@
 import { FlowExecutionError } from './errors'
 import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
+import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -88,7 +89,7 @@ export class LLMClient implements ILLMClient {
         'Authorization': `Bearer ${this.authToken}`,
       },
       body: JSON.stringify({
-        model: options.model ?? 'claude-3-5-sonnet-20241022',
+        model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
         messages,
         stream: true,
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
@@ -162,7 +163,7 @@ export class LLMClient implements ILLMClient {
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
     const body: Record<string, unknown> = {
-      model: options.model ?? 'claude-3-5-sonnet-20241022',
+      model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
       messages: anthropicMessages,
       stream: false,
       ...(system ? { system } : {}),

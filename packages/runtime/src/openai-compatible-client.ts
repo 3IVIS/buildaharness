@@ -4,7 +4,7 @@ import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolC
 export interface OpenAICompatibleLLMClientOptions {
   apiKey: string
   baseUrl: string
-  /** Used whenever a call doesn't specify options.model — the caller picks this per provider (e.g. 'gpt-4o-mini' for OpenAI, 'anthropic/claude-sonnet-5' for OpenRouter) rather than this client inferring it from baseUrl. */
+  /** Used whenever a call doesn't specify options.model — the caller picks this per provider (see OPENAI_DEFAULT_MODEL / OPENROUTER_DEFAULT_MODEL in model-defaults.ts) rather than this client inferring it from baseUrl. */
   defaultModel: string
   /** OpenRouter's recommended (not required) HTTP-Referer/X-Title headers, or any other provider-specific extras — merged into every request. */
   extraHeaders?: Record<string, string>
@@ -14,15 +14,13 @@ export interface OpenAICompatibleLLMClientOptions {
  * baseUrl/defaultModel for the two OpenAI-compatible providers this app wires up out of the
  * box — exported so every call site (CLI, chat-ui browser build, Tauri desktop build)
  * constructs an OpenAICompatibleLLMClient from the exact same values instead of each surface
- * hardcoding its own copy that can silently drift.
+ * hardcoding its own copy that can silently drift. The default-model ids themselves live in
+ * model-defaults.ts (with ANTHROPIC_DEFAULT_MODEL) and are re-exported here so existing
+ * `@buildaharness/runtime` importers are unaffected.
  */
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
-export const OPENAI_DEFAULT_MODEL = 'gpt-4o-mini'
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-// Verified live against OpenRouter's /models endpoint — OpenRouter's slugs for older dated
-// Claude snapshots (e.g. 'anthropic/claude-3.5-sonnet') get removed as models are
-// decommissioned, so this needs occasional re-verification, not a "set once" constant.
-export const OPENROUTER_DEFAULT_MODEL = 'anthropic/claude-sonnet-5'
+export { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL } from './model-defaults'
 /** OpenRouter's recommended (not required) leaderboard-attribution headers — see https://openrouter.ai/docs. */
 export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
   'HTTP-Referer': 'https://github.com/3IVIS/buildaharness',

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { AnthropicLLMClient } from './anthropic-client'
+import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 import { FlowExecutionError } from './errors'
 
 const API_KEY = 'test-api-key'
@@ -193,7 +194,7 @@ describe('AnthropicLLMClient', () => {
       await client.callChatStructured([{ role: 'user', content: 'hi' }])
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
-      expect(body.model).toBe('claude-3-5-sonnet-20241022')
+      expect(body.model).toBe(ANTHROPIC_DEFAULT_MODEL)
     })
   })
 })

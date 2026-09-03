@@ -274,7 +274,9 @@ const assistant = new PersonalAssistant({
 
 `WebToolsContext.search` has no built-in default (the caller supplies a real
 backend, an API client, etc.) — `web-search-provider.ts` ships two ready-made
-ones, both wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set:
+ones, wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set (on the
+`claude-cli` backend the same two run inside the file-tools MCP server, since
+that backend's tools can't take an injected function):
 
 - `duckDuckGoSearch` (default) — queries DuckDuckGo's HTML endpoint, no API
   key needed (the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed
@@ -471,9 +473,10 @@ ASSISTANT_ENABLE_WEB=1 ASSISTANT_ENABLE_SHELL=1 npm run cli --workspace=packages
 
 The startup banner only mentions a capability when it's actually enabled —
 nothing implies web/shell access is available when neither env var is set.
-Note: `ASSISTANT_ENABLE_WEB` only takes effect on the proxy backend for
-now — the Claude CLI backend has no web_search wiring yet (see
-`claude-cli-llm-client.ts`'s doc comment).
+`ASSISTANT_ENABLE_WEB` now works on both backends: the proxy backend calls the
+injected search function directly, and the Claude CLI backend registers
+`web_search` on its file-tools MCP server (DuckDuckGo by default, Brave when
+`ASSISTANT_SEARCH_BACKEND=brave` + `BRAVE_SEARCH_API_KEY` are set).
 
 #### `--dangerously-skip-permissions` equivalent
 
@@ -572,10 +575,11 @@ These three go straight from this process to the provider's own API
 — no proxy deployment needed, but unlike `authToken` (a self-hosted proxy's
 own bearer token), `ASSISTANT_API_KEY`/`apiKey` is a *real* provider key.
 It's stored the same way as every other secret field here — plaintext in
-`config.json`, not an OS keychain — so treat that file accordingly. `openai`
-defaults to `gpt-4o-mini` and `openrouter` to `anthropic/claude-3.5-sonnet`
-when `ASSISTANT_MODEL`/`/config set model` isn't set; `anthropic` defaults to
-the same `claude-3-5-sonnet-20241022` the proxy backend does.
+`config.json`, not an OS keychain — so treat that file accordingly. When
+`ASSISTANT_MODEL`/`/config set model` isn't set, each backend falls back to the
+current-generation default id exported from `@buildaharness/runtime`'s
+`model-defaults.ts` (`openai` → `gpt-5-mini`, `openrouter` →
+`anthropic/claude-sonnet-5`, `anthropic` and `proxy` → `claude-sonnet-5`).
 
 Transcript, learned experience, reminders, and any in-flight turn's checkpoint
 persist as real files under `~/.buildaharness/personal-assistant/`

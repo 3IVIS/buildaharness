@@ -10,7 +10,7 @@ import {
   type MemorySummary,
   type DoctorCheck,
 } from '@buildaharness/personal-assistant'
-import { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
 
 const BACKEND_LABEL: Record<AssistantConfig['llmBackend'], string> = {
@@ -23,9 +23,9 @@ const BACKEND_LABEL: Record<AssistantConfig['llmBackend'], string> = {
 
 /** Shown as the model input's placeholder, not written into the form — an empty field still falls through to each backend's own hardcoded default (LLMClient/AnthropicLLMClient/OpenAICompatibleLLMClient). */
 const MODEL_PLACEHOLDER: Record<AssistantConfig['llmBackend'], string> = {
-  proxy: 'claude-3-5-sonnet-20241022',
+  proxy: ANTHROPIC_DEFAULT_MODEL,
   'claude-cli': '(your Claude Code default)',
-  anthropic: 'claude-3-5-sonnet-20241022',
+  anthropic: ANTHROPIC_DEFAULT_MODEL,
   openai: OPENAI_DEFAULT_MODEL,
   openrouter: OPENROUTER_DEFAULT_MODEL,
 }

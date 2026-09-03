@@ -26,6 +26,7 @@ import {
   LLMClient,
   AnthropicLLMClient,
   OpenAICompatibleLLMClient,
+  ANTHROPIC_DEFAULT_MODEL,
   OPENAI_BASE_URL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_BASE_URL,
@@ -50,8 +51,8 @@ import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
 import { checkProxyReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
 
-/** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's llm-client.ts) — used only to pick a pricing tier when no model is explicitly configured. */
-const DEFAULT_PROXY_MODEL = 'claude-3-5-sonnet-20241022'
+/** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's model-defaults.ts) — used only to pick a pricing tier when no model is explicitly configured. */
+const DEFAULT_PROXY_MODEL = ANTHROPIC_DEFAULT_MODEL
 
 /**
  * Full conversation content (user messages, assistant replies, real tool calls with their

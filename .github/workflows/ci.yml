@@ -46,6 +46,22 @@ jobs:
       - name: Check harness constants sync
         run: node scripts/check-harness-constants-sync.mjs
 
+      # Adoption plan F1: default model ids live only in
+      # packages/runtime/src/model-defaults.ts — fail if a previous-generation
+      # or dated-snapshot id reappears as a literal in a client or a display surface.
+      - name: Check model defaults
+        run: node scripts/check-model-defaults.mjs
+
+      # Adoption plan F8: SECURITY.md + docs/threat-model.md must exist, stay
+      # linked from the README, and not cite a boundary symbol that's been removed.
+      - name: Check security docs
+        run: node scripts/check-security-docs.mjs
+
+      # Adoption plan F9: the specific factual claims Aielia's comparison page +
+      # README depend on, each pinned to the code that makes it true or false.
+      - name: Check comparison claims
+        run: node scripts/check-comparison-claims.mjs
+
   canvas-package:
     name: '@buildaharness/canvas — typecheck, test, build'
     runs-on: ubuntu-latest

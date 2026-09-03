@@ -52,6 +52,17 @@ export interface ClaudeCliLLMClientOptions {
    * typically the same value for both on this backend.
    */
   shellTools?: { workspaceRoot: string }
+  /**
+   * When set, also registers `web_search` on the same MCP server (started
+   * whenever fileTools, shellTools, or webTools is configured), backed by
+   * DuckDuckGo (keyless, the default) or the Brave Search API. Gated behind the
+   * `WEB_SEARCH_BACKEND` env var passed to the server, the same way shell is
+   * gated behind `ENABLE_SHELL_TOOLS`. `fetch_url` is registered independently
+   * whenever the server runs at all — this option only adds the search half,
+   * closing the gap where the keyless first-run-recommended backend couldn't
+   * browse (see web-search-provider.ts).
+   */
+  webTools?: { searchBackend?: 'ddg' | 'brave'; braveApiKey?: string }
 }
 
 /**
@@ -162,12 +173,14 @@ export class ClaudeCliLLMClient implements ILLMClient {
   private readonly fileTools?: { workspaceRoot: string }
   private readonly remindersFile?: string
   private readonly shellTools?: { workspaceRoot: string }
+  private readonly webTools?: { searchBackend?: 'ddg' | 'brave'; braveApiKey?: string }
 
   constructor(options: ClaudeCliLLMClientOptions = {}) {
     this.claudePath = options.claudePath ?? process.env.CLAUDE_PATH ?? 'claude'
     this.fileTools = options.fileTools
     this.remindersFile = options.remindersFile
     this.shellTools = options.shellTools
+    this.webTools = options.webTools
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -200,9 +213,9 @@ export class ClaudeCliLLMClient implements ILLMClient {
    * call the way the proxy backend's manual tool loop does (see
    * plans/personal_assistant_file_tools_plan.html, T6). fetch_url is always
    * registered on that server; create_reminder/list_reminders only when
-   * `remindersFile` is set; run_shell_command only when `shellTools` is set.
-   * web_search is never registered — there is no default search backend to call on
-   * either LLM backend from here (see web-search-provider.ts's doc comment). Three
+   * `remindersFile` is set; run_shell_command only when `shellTools` is set;
+   * web_search only when `webTools` is set (DuckDuckGo by default, Brave with a
+   * key — see the `webTools` option). Three
    * possible outcomes: a final text reply (no tool call this backend needs to
    * surface), a write or shell command staged by the MCP server mid-call (surfaced
    * as a synthetic `__staged_action` tool call so assistant.ts's tool loop treats it
@@ -222,12 +235,15 @@ export class ClaudeCliLLMClient implements ILLMClient {
       const content = await this.callChatSync(messages, options)
       return { content: options.structuredOutput ? stripJsonCodeFence(content) : content }
     }
-    if (!this.fileTools && !this.shellTools) {
-      throw new Error('ClaudeCliLLMClient does not support tool calls unless constructed with fileTools or shellTools configured')
+    if (!this.fileTools && !this.shellTools && !this.webTools) {
+      throw new Error('ClaudeCliLLMClient does not support tool calls unless constructed with fileTools, shellTools, or webTools configured')
     }
 
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
-    const workspaceRoot = (this.fileTools ?? this.shellTools)!.workspaceRoot
+    // web_search needs no workspace; fall back to the temp dir when webTools is the only
+    // capability configured (the CLI always sets fileTools for this backend, so in practice
+    // this is the real workspace root).
+    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? tmpdir()
     // The current turn's raw user message, before Claude Code's own agentic loop (and any
     // rewording it does before calling a tool) ever sees it — passed through to the MCP
     // server so create_reminder can check the *original* phrasing against fact-shaped
@@ -251,6 +267,12 @@ export class ClaudeCliLLMClient implements ILLMClient {
             WORKSPACE_ROOT: workspaceRoot,
             ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile, CURRENT_USER_MESSAGE: lastUserMessage } : {}),
             ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
+            ...(this.webTools
+              ? {
+                  WEB_SEARCH_BACKEND: this.webTools.searchBackend ?? 'ddg',
+                  ...(this.webTools.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
+                }
+              : {}),
           },
         },
       },

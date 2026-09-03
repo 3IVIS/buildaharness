@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DEFAULT_CONFIG, type AssistantConfig } from '@buildaharness/personal-assistant'
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from '@buildaharness/runtime'
 import { SettingsScreen } from './SettingsScreen'
 
 function renderSettings(overrides: Partial<React.ComponentProps<typeof SettingsScreen>> = {}) {
@@ -188,10 +189,10 @@ describe('SettingsScreen', () => {
     it('always shows the Model field, with a backend-specific placeholder', async () => {
       const user = userEvent.setup()
       renderSettings()
-      expect(screen.getByPlaceholderText('claude-3-5-sonnet-20241022')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(ANTHROPIC_DEFAULT_MODEL)).toBeInTheDocument()
 
       await user.selectOptions(screen.getByLabelText('LLM backend'), 'openai')
-      expect(screen.getByPlaceholderText('gpt-4o-mini')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(OPENAI_DEFAULT_MODEL)).toBeInTheDocument()
     })
 
     it("Save's changed-keys diff includes apiKey when switching to a direct backend", async () => {

@@ -1,10 +1,10 @@
 import { FlowExecutionError } from './errors'
 import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
+import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from './llm-client'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
-const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022'
 const DEFAULT_MAX_TOKENS = 4096
 
 export interface AnthropicLLMClientOptions {
@@ -53,7 +53,7 @@ export class AnthropicLLMClient implements ILLMClient {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
-        model: options.model ?? DEFAULT_MODEL,
+        model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
         messages: anthropicMessages,
         stream: true,
         max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -116,7 +116,7 @@ export class AnthropicLLMClient implements ILLMClient {
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
     const body: Record<string, unknown> = {
-      model: options.model ?? DEFAULT_MODEL,
+      model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
       messages: anthropicMessages,
       stream: false,
       max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,

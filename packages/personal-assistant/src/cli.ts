@@ -8,6 +8,7 @@ import {
   LLMClient,
   AnthropicLLMClient,
   OpenAICompatibleLLMClient,
+  ANTHROPIC_DEFAULT_MODEL,
   OPENAI_BASE_URL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_BASE_URL,
@@ -72,7 +73,14 @@ const defaultBackend = createNodeFsBackend()
 function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
   switch (config.llmBackend) {
     case 'claude-cli':
-      return new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
+      return new ClaudeCliLLMClient({
+        fileTools: { workspaceRoot },
+        remindersFile,
+        shellTools: config.enableShell ? { workspaceRoot } : undefined,
+        webTools: config.enableWeb
+          ? { searchBackend: config.searchBackend === 'brave' ? 'brave' : 'ddg', braveApiKey: config.braveApiKey as string | undefined }
+          : undefined,
+      })
     case 'anthropic':
       return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
     case 'openai':
@@ -108,10 +116,11 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       ? (query: string) => braveSearch(query, config.braveApiKey as string)
       : (query: string) => duckDuckGoSearch(query)
 
-  // Note: unlike the proxy backend, claude-cli has no web_search/fetch_url wiring for
-  // enableWeb yet — web_search has no default backend on this path either (see
-  // claude-cli-llm-client.ts's doc comment), so enableWeb only takes effect on the proxy
-  // (LLMClient) backend below.
+  // `search` above is the proxy backend's injected web_search implementation (its manual
+  // tool loop calls it directly). The claude-cli backend can't take an injected function —
+  // its tools run inside the `claude -p` subprocess — so buildLlmClient passes the same
+  // DDG/Brave selection through to the file-tools MCP server as env instead. Either way,
+  // `enableWeb` now wires web_search on both backends.
   const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
   return PersonalAssistant.create({
@@ -258,12 +267,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   // Display-only defaults, mirroring each backend's own fallback so the banner shows the
   // model that will actually be used even when config.model is unset — not authoritative
-  // (each llmClient picks its own default independently), just kept in sync by hand the same
-  // way chat-ui/App.tsx's DEFAULT_PROXY_MODEL already does for the proxy backend.
+  // (each llmClient picks its own default independently), but sourced from the same
+  // @buildaharness/runtime constants those clients use so the banner can't drift from them.
   const backendDisplayModel: Record<AssistantConfig['llmBackend'], string> = {
-    proxy: 'claude-3-5-sonnet-20241022',
+    proxy: ANTHROPIC_DEFAULT_MODEL,
     'claude-cli': '(your Claude Code default)',
-    anthropic: 'claude-3-5-sonnet-20241022',
+    anthropic: ANTHROPIC_DEFAULT_MODEL,
     openai: OPENAI_DEFAULT_MODEL,
     openrouter: OPENROUTER_DEFAULT_MODEL,
   }
@@ -320,7 +329,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   /** claude-cli is the only backend that returns a real dollar cost (--output-format json's total_cost_usd) — every other backend (proxy, and now anthropic/openai/openrouter, none of which surface billing via TokenUsage.costUsd) gets an approximate estimate instead, see model-pricing.ts. */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
     if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? 'claude-3-5-sonnet-20241022', usage)
+    const estimated = estimateCostUsd(config.model ?? ANTHROPIC_DEFAULT_MODEL, usage)
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
   }
 
