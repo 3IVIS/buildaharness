@@ -407,6 +407,63 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
+  it('actionTools configured adds ENABLE_EMAIL_TOOL to the MCP config, not to --tools', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('drafted')))
+      const client = new ClaudeCliLLMClient({ actionTools: { workspaceRoot } })
+
+      await client.callChatStructured(
+        [{ role: 'user', content: 'email my boss that I quit' }],
+        [{ name: 'send_email', input_schema: {} }],
+      )
+
+      const args = spawnMock.mock.calls[0][1] as string[]
+      expect(args[args.indexOf('--tools') + 1]).toBe('')
+      const mcpConfig = JSON.parse(args[args.indexOf('--mcp-config') + 1]) as {
+        mcpServers: Record<string, { env: Record<string, string> }>
+      }
+      expect(mcpConfig.mcpServers['file-tools'].env.WORKSPACE_ROOT).toBe(workspaceRoot)
+      expect(mcpConfig.mcpServers['file-tools'].env.ENABLE_EMAIL_TOOL).toBe('1')
+      expect(mcpConfig.mcpServers['file-tools'].env.ENABLE_SHELL_TOOLS).toBeUndefined()
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('an email staged by the MCP server mid-call is surfaced as __staged_action with kind: email', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => {
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const dir = join(workspaceRoot, '.pending-actions')
+          await mkdir(dir, { recursive: true })
+          await writeFile(
+            join(dir, 'email-1.json'),
+            JSON.stringify({ id: 'email-1', kind: 'email', to: 'boss@example.com', subject: 'I quit', body: 'Bye.', stagedAt: new Date().toISOString() }),
+          )
+          proc.stdout.emit('data', Buffer.from(JSON.stringify({ result: '' })))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ actionTools: { workspaceRoot } })
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'email my boss that I quit' }],
+        [{ name: 'send_email', input_schema: {} }],
+      )
+
+      expect(result.toolCalls?.[0].name).toBe('__staged_action')
+      expect(result.toolCalls?.[0].input).toMatchObject({ id: 'email-1', kind: 'email', to: 'boss@example.com', subject: 'I quit', body: 'Bye.' })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   it('invariant: Bash never appears in --tools under any combination of fileTools/shellTools/remindersFile', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

@@ -23,9 +23,14 @@ describe('isLikelyEmailAddress', () => {
 describe('createResendSender', () => {
   const opts = { apiKey: 'test-key', from: 'me@example.com' }
 
+  type FetchArgs = [input: string | URL | Request, init?: RequestInit]
+
   it('POSTs to the Resend API with auth and the staged message, returns the provider id', async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ id: 'resend-123' }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    const fetchImpl = vi.fn(
+      (..._args: FetchArgs) =>
+        Promise.resolve(
+          new Response(JSON.stringify({ id: 'resend-123' }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        ),
     )
     const send = createResendSender({ ...opts, fetchImpl: fetchImpl as unknown as typeof fetch })
 
@@ -35,9 +40,9 @@ describe('createResendSender', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     const [url, init] = fetchImpl.mock.calls[0]
     expect(url).toBe('https://api.resend.com/emails')
-    expect((init as RequestInit).method).toBe('POST')
-    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer test-key' })
-    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+    expect(init?.method).toBe('POST')
+    expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-key' })
+    expect(JSON.parse(init?.body as string)).toEqual({
       from: 'me@example.com',
       to: ['boss@example.com'],
       subject: 'I quit',
@@ -46,28 +51,26 @@ describe('createResendSender', () => {
   })
 
   it('uses the per-message from when provided, and threads cc/bcc', async () => {
-    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }))
+    const fetchImpl = vi.fn((..._args: FetchArgs) => Promise.resolve(new Response('{}', { status: 200 })))
     const send = createResendSender({ ...opts, fetchImpl: fetchImpl as unknown as typeof fetch })
 
     await send({ to: 'a@example.com', subject: 's', body: 'b', from: 'other@example.com', cc: 'c@example.com', bcc: 'd@example.com' })
 
-    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string)
+    const body = JSON.parse(fetchImpl.mock.calls[0][1]?.body as string)
     expect(body.from).toBe('other@example.com')
     expect(body.cc).toEqual(['c@example.com'])
     expect(body.bcc).toEqual(['d@example.com'])
   })
 
   it('throws EmailDeliveryError on a non-2xx response, carrying the status', async () => {
-    const fetchImpl = vi.fn(async () => new Response('nope', { status: 422 }))
+    const fetchImpl = vi.fn((..._args: FetchArgs) => Promise.resolve(new Response('nope', { status: 422 })))
     const send = createResendSender({ ...opts, fetchImpl: fetchImpl as unknown as typeof fetch })
 
     await expect(send({ to: 'a@example.com', subject: 's', body: 'b' })).rejects.toBeInstanceOf(EmailDeliveryError)
   })
 
   it('throws EmailDeliveryError when fetch itself rejects', async () => {
-    const fetchImpl = vi.fn(async () => {
-      throw new Error('network down')
-    })
+    const fetchImpl = vi.fn((..._args: FetchArgs): Promise<Response> => Promise.reject(new Error('network down')))
     const send = createResendSender({ ...opts, fetchImpl: fetchImpl as unknown as typeof fetch })
 
     await expect(send({ to: 'a@example.com', subject: 's', body: 'b' })).rejects.toThrow(/network down/)

@@ -694,6 +694,52 @@ async function main() {
     )
   }
 
+  if (process.env.ENABLE_EMAIL_TOOL === '1') {
+    // Kept in lockstep with action-tools.ts's SEND_EMAIL_TOOL / isLikelyEmailAddress — the --test
+    // self-check below asserts this tool is registered/not per the env gate. Staging only: the
+    // parent process delivers the approved message through its own SendEmail transport.
+    const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
+    server.registerTool(
+      'send_email',
+      {
+        description:
+          'Propose sending an email. This NEVER sends immediately — it always stages the message for the user to ' +
+          'explicitly approve or decline first, regardless of the recipient or contents (there is no "safe" email ' +
+          'that skips approval). Provide the final recipient, subject, and body; the sender address is configured ' +
+          'by the user, not chosen here. A malformed recipient address is rejected immediately, before anything is ' +
+          'staged. Once the user approves, the message is delivered through their configured email provider exactly ' +
+          'as staged.',
+        inputSchema: {
+          to: z.string().describe('Recipient email address.'),
+          subject: z.string().describe('Subject line.'),
+          body: z.string().describe('Plain-text body of the email.'),
+          cc: z.string().optional().describe('Optional CC recipient email address.'),
+          bcc: z.string().optional().describe('Optional BCC recipient email address.'),
+        },
+      },
+      async ({ to, subject, body, cc, bcc }) => {
+        try {
+          for (const [label, value] of [['to', to], ['cc', cc], ['bcc', bcc]]) {
+            if (value !== undefined && value !== '' && !looksLikeEmail(value)) {
+              throw new Error(`"${label}" is not a valid email address: ${value}`)
+            }
+          }
+          const payload = { kind: 'email', to, subject, body }
+          if (cc) payload.cc = cc
+          if (bcc) payload.bcc = bcc
+          const { id } = await stagePendingAction(workspaceRoot, payload)
+          return {
+            content: [
+              { type: 'text', text: `Staged an email to ${to} — subject "${subject}" (id: ${id}). Nothing has been sent yet — it needs the user's approval.` },
+            ],
+          }
+        } catch (err) {
+          return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
+        }
+      },
+    )
+  }
+
   server.registerTool(
     'fetch_url',
     {
@@ -837,6 +883,13 @@ async function selfTest() {
     }
     if (stagedShell.chainedFrom !== true) {
       throw new Error('second staged action in a chain should be marked chainedFrom: true')
+    }
+
+    // send_email staging: same generalized stagePendingAction path, { kind: 'email' } payload.
+    const { id: emailId } = await stagePendingAction(dir, { kind: 'email', to: 'boss@example.com', subject: 'I quit', body: 'Bye.' })
+    const stagedEmail = JSON.parse(await readFile(`${dir}/${PENDING_ACTIONS_DIR}/${emailId}.json`, 'utf-8'))
+    if (stagedEmail.kind !== 'email' || stagedEmail.to !== 'boss@example.com' || stagedEmail.subject !== 'I quit') {
+      throw new Error('staged email record missing expected recipient/subject')
     }
 
     const wrapped = wrapUntrusted('hello page')
