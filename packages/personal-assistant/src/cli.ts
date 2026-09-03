@@ -28,6 +28,8 @@ import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
 import { runApprovedShellCommand } from './shell-executor.js'
+import { createResendSender, type SendEmail } from './email.js'
+import { createSmtpSender } from './email-smtp.js'
 import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
@@ -63,6 +65,28 @@ const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(proc
 const defaultBackend = createNodeFsBackend()
 
 /**
+ * Builds the SendEmail transport for an approved `send_email` action, or undefined when email
+ * isn't fully configured (validateConfig already rejects `enableEmail` without a usable transport,
+ * so in practice this only returns undefined when `enableEmail` is off). The model never reaches
+ * this — it only ever proposes; delivery happens here after approval.
+ */
+function buildEmailSender(config: AssistantConfig): SendEmail | undefined {
+  if (!config.enableEmail || !config.emailFrom) return undefined
+  if (config.emailProvider === 'smtp' && config.smtpHost && config.smtpPort) {
+    return createSmtpSender({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      auth: config.smtpUser && config.smtpPass ? { user: config.smtpUser, pass: config.smtpPass } : undefined,
+      from: config.emailFrom,
+    })
+  }
+  if (config.emailProvider === 'resend' && config.resendApiKey) {
+    return createResendSender({ apiKey: config.resendApiKey, from: config.emailFrom })
+  }
+  return undefined
+}
+
+/**
  * Picks the ILLMClient for config.llmBackend — one branch per backend, shared in shape with
  * chat-ui's App.tsx createLlmClient() (both switch over the same 5 values), but this one stays
  * CLI-only: claude-cli here is a real node:child_process subprocess (ClaudeCliLLMClient), not
@@ -80,6 +104,7 @@ function buildLlmClient(config: AssistantConfig, workspaceRoot: string, reminder
         webTools: config.enableWeb
           ? { searchBackend: config.searchBackend === 'brave' ? 'brave' : 'ddg', braveApiKey: config.braveApiKey as string | undefined }
           : undefined,
+        actionTools: config.enableEmail ? { workspaceRoot } : undefined,
       })
     case 'anthropic':
       return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
@@ -137,6 +162,12 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     shellTools: config.enableShell
       ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
       : undefined,
+    // The Resend/SMTP transport is wired in here, not inside assistant.ts, so the browser build
+    // never needs nodemailer or a mail server — same split as shellTools' executeCommand.
+    actionTools: (() => {
+      const sendEmail = buildEmailSender(config)
+      return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
+    })(),
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
     spendCap:
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
@@ -755,13 +786,22 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // its own label and prompt — falling through to the 'write' case here would print
         // "[needs approval — write]" and "Apply this write?" over a message that's actually
         // about how many more searches a batch research turn is projected to need.
-        const kindLabel = result.pendingActionKind === 'shell' ? 'shell command' : result.pendingActionKind === 'batch' ? 'batch research' : 'write'
+        const kindLabel =
+          result.pendingActionKind === 'shell'
+            ? 'shell command'
+            : result.pendingActionKind === 'email'
+              ? 'send email'
+              : result.pendingActionKind === 'batch'
+                ? 'batch research'
+                : 'write'
         const promptText =
           result.pendingActionKind === 'shell'
             ? 'Run this command? (y/N) '
-            : result.pendingActionKind === 'batch'
-              ? 'Continue? (y/N) '
-              : 'Apply this write? (y/N) '
+            : result.pendingActionKind === 'email'
+              ? 'Send this email? (y/N) '
+              : result.pendingActionKind === 'batch'
+                ? 'Continue? (y/N) '
+                : 'Apply this write? (y/N) '
         console.log(`\n[needs approval — ${kindLabel}] ${result.reason}`)
         const confirmed = await askYesNo(promptText)
         lastTrace = undefined

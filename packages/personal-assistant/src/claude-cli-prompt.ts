@@ -18,9 +18,10 @@ export const ALREADY_STAGED_ACTION_TOOL = '__staged_action'
  * — a revert is only ever staged directly (assistant.ts's stageUndoAction, driven by
  * /undo-action), never proposed by the model through the claude-cli MCP server's staging path.
  */
-export function stagedActionInput(record: PendingActionRecord): { id: string; kind: 'write' | 'shell' } & Record<string, unknown> {
+export function stagedActionInput(record: PendingActionRecord): { id: string; kind: 'write' | 'shell' | 'email' } & Record<string, unknown> {
   if (record.kind === 'write') return { id: record.id, kind: 'write', path: record.path, content: record.content }
   if (record.kind === 'shell') return { id: record.id, kind: 'shell', command: record.command, cwd: record.cwd }
+  if (record.kind === 'email') return { id: record.id, kind: 'email', to: record.to, subject: record.subject, body: record.body }
   throw new Error(`stagedActionInput does not support kind "${record.kind}" — reverts are never staged through the claude-cli MCP server`)
 }
 

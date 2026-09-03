@@ -68,4 +68,38 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ llmBackend: 'proxy' }, DEFAULT_CONFIG)).not.toThrow()
     expect(() => validateConfig({ llmBackend: 'claude-cli' }, DEFAULT_CONFIG)).not.toThrow()
   })
+
+  it('rejects enableEmail without emailFrom', () => {
+    expect(() => validateConfig({ enableEmail: true, emailProvider: 'resend', resendApiKey: 'k' }, DEFAULT_CONFIG)).toThrow(
+      ConfigValidationError,
+    )
+  })
+
+  it('rejects enableEmail without a provider', () => {
+    expect(() => validateConfig({ enableEmail: true, emailFrom: 'me@x.co' }, DEFAULT_CONFIG)).toThrow(ConfigValidationError)
+  })
+
+  it('rejects emailProvider "resend" without resendApiKey, and "smtp" without host/port', () => {
+    expect(() => validateConfig({ enableEmail: true, emailFrom: 'me@x.co', emailProvider: 'resend' }, DEFAULT_CONFIG)).toThrow(
+      /resendApiKey/,
+    )
+    expect(() => validateConfig({ enableEmail: true, emailFrom: 'me@x.co', emailProvider: 'smtp' }, DEFAULT_CONFIG)).toThrow(
+      /smtpHost and smtpPort/,
+    )
+  })
+
+  it('accepts a fully-specified Resend email config', () => {
+    expect(() =>
+      validateConfig({ enableEmail: true, emailFrom: 'me@x.co', emailProvider: 'resend', resendApiKey: 're_k' }, DEFAULT_CONFIG),
+    ).not.toThrow()
+  })
+
+  it('accepts a fully-specified SMTP email config', () => {
+    expect(() =>
+      validateConfig(
+        { enableEmail: true, emailFrom: 'me@x.co', emailProvider: 'smtp', smtpHost: 'smtp.x.co', smtpPort: 587 },
+        DEFAULT_CONFIG,
+      ),
+    ).not.toThrow()
+  })
 })

@@ -37,10 +37,10 @@ export interface AssistantTurnResult {
   harnessSkipped?: boolean
   /** Structured harness telemetry for a "Why?" disclosure — the step sequence and verification confidence, not free-text reasoning. */
   trace?: AssistantTrace
-  /** Set only when `needs_approval` was triggered by a `write_file`/`run_shell_command` tool call — pass back into `turn(message, { approved, pendingActionId })` to apply or discard it. */
+  /** Set only when `needs_approval` was triggered by a `write_file`/`run_shell_command`/`send_email` tool call — pass back into `turn(message, { approved, pendingActionId })` to apply or discard it. */
   pendingActionId?: string
-  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd, a batch confirmation shows the projected remaining search count, a revert (staged only via /undo-action, never by the model) shows which paths will be restored/removed. */
-  pendingActionKind?: 'write' | 'shell' | 'batch' | 'revert'
+  /** Which kind of action `pendingActionId` refers to — a write shows path + content preview, a shell command shows the exact command + resolved cwd, an email shows recipient + subject + body, a batch confirmation shows the projected remaining search count, a revert (staged only via /undo-action, never by the model) shows which paths will be restored/removed. */
+  pendingActionKind?: 'write' | 'shell' | 'email' | 'batch' | 'revert'
   /** Real read_file/list_directory calls made while producing this reply, in call order. Only set when fileTools is configured and at least one such call happened this turn. */
   sources?: AssistantSource[]
   /**

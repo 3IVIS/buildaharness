@@ -22,13 +22,15 @@ import {
 } from './file-tools.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
+import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
+import { formatEmailApprovalReason } from './email.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
-  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'batch' }
+  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch' }
   | { kind: 'escalated'; reason: string }
 
 // Batch-research tuning constants (dynamic tool-call budget for batch research tasks): a
@@ -195,6 +197,7 @@ export class AgentLoop {
     private readonly fileTools: FileToolsContext | undefined,
     private readonly webTools: WebToolsContext | undefined,
     private readonly shellTools: ShellToolsContext | undefined,
+    private readonly actionTools: ActionToolsContext | undefined,
     private readonly reminderStore: ReminderStore,
     private readonly maxSteps: number,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
@@ -215,6 +218,7 @@ export class AgentLoop {
       ...(this.fileTools ? FILE_TOOLS : []),
       ...(this.webTools ? WEB_TOOLS : []),
       ...(this.shellTools ? SHELL_TOOLS : []),
+      ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
     ].map((tool) => tool.name)
     return createTurnControlPlaneState(toolNames)
@@ -260,6 +264,7 @@ export class AgentLoop {
       ...(this.fileTools ? FILE_TOOLS : []),
       ...(this.webTools ? WEB_TOOLS : []),
       ...(this.shellTools ? SHELL_TOOLS : []),
+      ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
     ]
     const messages: ChatMessage[] = [
@@ -389,7 +394,7 @@ export class AgentLoop {
       // than staging a second, redundant pending action.
       const alreadyStagedCall = response.toolCalls.find(call => call.name === '__staged_action')
       if (alreadyStagedCall) {
-        const { id, kind, ...payload } = alreadyStagedCall.input as { id: string; kind: 'write' | 'shell' } & Record<string, unknown>
+        const { id, kind, ...payload } = alreadyStagedCall.input as { id: string; kind: 'write' | 'shell' | 'email' } & Record<string, unknown>
         if (kind === 'write') {
           const { path, content } = payload as { path: string; content: string }
           return {
@@ -398,6 +403,18 @@ export class AgentLoop {
               reason: `Proposes writing to "${path}":\n${previewContent(content)}`,
               pendingActionId: id,
               pendingActionKind: 'write',
+            },
+            iterationsUsed: iteration + 1,
+          }
+        }
+        if (kind === 'email') {
+          const { to, subject, body } = payload as { to: string; subject: string; body: string }
+          return {
+            result: {
+              kind: 'needs_approval',
+              reason: formatEmailApprovalReason({ to, subject, body }),
+              pendingActionId: id,
+              pendingActionKind: 'email',
             },
             iterationsUsed: iteration + 1,
           }
@@ -461,6 +478,25 @@ export class AgentLoop {
             reason: shellApprovalReason(result.command, result.cwd),
             pendingActionId: result.id,
             pendingActionKind: 'shell',
+          },
+          iterationsUsed: iteration + 1,
+        }
+      }
+
+      const emailCall = response.toolCalls.find(call => call.name === 'send_email')
+      if (emailCall) {
+        if (!this.actionTools) throw new Error('send_email tool call received but actionTools is not configured')
+        reportStep('send_email', emailCall.input)
+        // Same as write_file/run_shell_command: stop immediately, stage the proposal, never deliver
+        // inline. executeActionTool throws InvalidEmailArgsError on a malformed recipient — that
+        // propagates and the loop's own error handling turns it into a tool error the model sees.
+        const result = await executeActionTool(this.actionTools, 'send_email', emailCall.input)
+        return {
+          result: {
+            kind: 'needs_approval',
+            reason: formatEmailApprovalReason(result),
+            pendingActionId: result.id,
+            pendingActionKind: 'email',
           },
           iterationsUsed: iteration + 1,
         }
@@ -575,6 +611,7 @@ export class AgentLoop {
       ...(this.fileTools ? FILE_TOOLS : []),
       ...(this.webTools ? WEB_TOOLS : []),
       ...(this.shellTools ? SHELL_TOOLS : []),
+      ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
     ]
     const itemPrompt =

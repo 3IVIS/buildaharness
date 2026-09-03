@@ -21,7 +21,7 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['@buildaharness/harness', '@buildaharness/runtime', 'node:readline', 'node:process', 'node:fs/promises', 'node:os', 'node:path', 'node:child_process', 'node:url', 'node:dns/promises', 'node:crypto', 'node:net'],
+      external: ['@buildaharness/harness', '@buildaharness/runtime', 'nodemailer', 'node:readline', 'node:process', 'node:fs/promises', 'node:os', 'node:path', 'node:child_process', 'node:url', 'node:dns/promises', 'node:crypto', 'node:net'],
     },
     minify: false,
     sourcemap: true,

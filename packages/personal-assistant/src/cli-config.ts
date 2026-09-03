@@ -27,6 +27,14 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
   shellNetworkAllowlist: 'ASSISTANT_SHELL_NETWORK_ALLOWLIST',
   workspaceRoot: 'ASSISTANT_WORKSPACE_DIR',
+  enableEmail: 'ASSISTANT_ENABLE_EMAIL',
+  emailProvider: 'ASSISTANT_EMAIL_PROVIDER',
+  emailFrom: 'ASSISTANT_EMAIL_FROM',
+  resendApiKey: 'ASSISTANT_RESEND_API_KEY',
+  smtpHost: 'ASSISTANT_SMTP_HOST',
+  smtpPort: 'ASSISTANT_SMTP_PORT',
+  smtpUser: 'ASSISTANT_SMTP_USER',
+  smtpPass: 'ASSISTANT_SMTP_PASS',
   dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
   sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
@@ -78,6 +86,14 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
   if (env.ASSISTANT_SHELL_NETWORK_ALLOWLIST !== undefined) overrides.shellNetworkAllowlist = parseShellNetworkAllowlist(env.ASSISTANT_SHELL_NETWORK_ALLOWLIST)
   if (env.ASSISTANT_WORKSPACE_DIR !== undefined) overrides.workspaceRoot = env.ASSISTANT_WORKSPACE_DIR
+  if (env.ASSISTANT_ENABLE_EMAIL !== undefined) overrides.enableEmail = env.ASSISTANT_ENABLE_EMAIL === '1'
+  if (env.ASSISTANT_EMAIL_PROVIDER !== undefined) overrides.emailProvider = env.ASSISTANT_EMAIL_PROVIDER === 'smtp' ? 'smtp' : 'resend'
+  if (env.ASSISTANT_EMAIL_FROM !== undefined) overrides.emailFrom = env.ASSISTANT_EMAIL_FROM
+  if (env.ASSISTANT_RESEND_API_KEY !== undefined) overrides.resendApiKey = env.ASSISTANT_RESEND_API_KEY
+  if (env.ASSISTANT_SMTP_HOST !== undefined) overrides.smtpHost = env.ASSISTANT_SMTP_HOST
+  if (env.ASSISTANT_SMTP_PORT !== undefined) overrides.smtpPort = Number(env.ASSISTANT_SMTP_PORT)
+  if (env.ASSISTANT_SMTP_USER !== undefined) overrides.smtpUser = env.ASSISTANT_SMTP_USER
+  if (env.ASSISTANT_SMTP_PASS !== undefined) overrides.smtpPass = env.ASSISTANT_SMTP_PASS
   if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
   if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
   if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
@@ -92,9 +108,18 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
   switch (key) {
     case 'enableWeb':
     case 'enableShell':
+    case 'enableEmail':
     case 'dangerouslySkipPermissions':
       if (raw !== 'true' && raw !== 'false') throw new ConfigValueParseError(`${key} must be "true" or "false"`)
       return raw === 'true'
+    case 'emailProvider':
+      if (raw !== 'resend' && raw !== 'smtp') throw new ConfigValueParseError('emailProvider must be "resend" or "smtp"')
+      return raw
+    case 'smtpPort': {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('smtpPort must be a positive integer')
+      return n
+    }
     case 'shellTimeoutMs': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('shellTimeoutMs must be a positive number')

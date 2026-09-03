@@ -37,8 +37,8 @@ describe('check-comparison-claims', () => {
     expect(results).toContain(false)
   })
 
-  it('the send-effect-tool claim is still false (F2 unresolved) and web_search_on_claude_cli is true (F3 landed)', () => {
-    expect(CLAIMS.find((c) => c.id === 'send_effect_tool').resolve()).toBe(false)
+  it('send_effect_tool (F2a) and web_search_on_claude_cli (F3) both resolve true now that the wiring landed', () => {
+    expect(CLAIMS.find((c) => c.id === 'send_effect_tool').resolve()).toBe(true)
     expect(CLAIMS.find((c) => c.id === 'web_search_on_claude_cli').resolve()).toBe(true)
   })
 })

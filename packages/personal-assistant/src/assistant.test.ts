@@ -6,6 +6,7 @@ import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, InMemoryExperienceStore, type Task } from '@buildaharness/harness'
 import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState, type IndexedMessage } from './assistant.js'
 import { stagePendingAction, loadPendingAction } from './file-tools.js'
+import type { SendEmail } from './email.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 import { classifyRisk } from './risk-classifier.js'
@@ -1396,6 +1397,98 @@ describe('PersonalAssistant file tools', () => {
 
     expect(result.status).toBe('escalated')
     expect(llm.calls).toBe(6)
+  })
+})
+
+describe('PersonalAssistant send_email (F2 — the flagship "stops before it sends" action)', () => {
+  const ROOT = '/workspace'
+  const EMAIL_CALL = { id: 'toolu_1', name: 'send_email', input: { to: 'boss@example.com', subject: 'I quit', body: 'Effective today.' } }
+
+  const mockSender = (result: Awaited<ReturnType<SendEmail>>) =>
+    vi.fn<Parameters<SendEmail>, ReturnType<SendEmail>>(async () => result)
+
+  function emailAssistant(sendEmail: SendEmail, opts: { dangerouslySkipPermissions?: boolean } = {}) {
+    const backend = makeFakeBackend()
+    // Two identical scripted turns: one for the message-gate approve-retry (which re-enters
+    // runTurn from scratch), one in case a test only drives a single tool turn.
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [EMAIL_CALL] },
+      { content: '', toolCalls: [EMAIL_CALL] },
+    ])
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      actionTools: { backend, workspaceRoot: ROOT, sendEmail },
+      dangerouslySkipPermissions: opts.dangerouslySkipPermissions,
+    })
+    return { assistant, llm, backend }
+  }
+
+  const MSG = 'Send an email to my boss saying I quit.'
+
+  it('the message-level risk gate stops "send an email…" before any tool call or model reply', async () => {
+    const sendEmail = mockSender({ provider: 'resend', id: 'x' })
+    const { assistant } = emailAssistant(sendEmail)
+
+    const result = await assistant.turn(MSG)
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.riskLevel).toBe('HIGH')
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('past the message gate, the send_email tool call stages a second approval with the recipient/subject/body — still nothing sent', async () => {
+    const sendEmail = mockSender({ provider: 'resend', id: 'x' })
+    const { assistant } = emailAssistant(sendEmail)
+
+    await assistant.turn(MSG)
+    const staged = await assistant.turn(MSG, { approved: true })
+
+    expect(staged.status).toBe('needs_approval')
+    expect(staged.pendingActionKind).toBe('email')
+    expect(staged.pendingActionId).toBeTruthy()
+    expect(staged.reason).toContain('boss@example.com')
+    expect(staged.reason).toContain('I quit')
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('approving the staged email delivers the exact message via the injected transport, with zero extra LLM calls', async () => {
+    const sendEmail = mockSender({ provider: 'smtp', id: 'msg-1' })
+    const { assistant, llm } = emailAssistant(sendEmail)
+
+    await assistant.turn(MSG)
+    const staged = await assistant.turn(MSG, { approved: true })
+    const callsAfterStaging = llm.calls
+    const applied = await assistant.turn(MSG, { approved: true, pendingActionId: staged.pendingActionId })
+
+    expect(applied.status).toBe('ok')
+    expect(applied.reply).toContain('boss@example.com')
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail).toHaveBeenCalledWith({ to: 'boss@example.com', subject: 'I quit', body: 'Effective today.' })
+    expect(llm.calls).toBe(callsAfterStaging)
+  })
+
+  it('declining the staged email discards it — the transport is never called', async () => {
+    const sendEmail = mockSender({ provider: 'resend' })
+    const { assistant, backend } = emailAssistant(sendEmail)
+
+    await assistant.turn(MSG)
+    const staged = await assistant.turn(MSG, { approved: true })
+    const declined = await assistant.turn(MSG, { approved: false, pendingActionId: staged.pendingActionId })
+
+    expect(declined.status).toBe('ok')
+    expect(sendEmail).not.toHaveBeenCalled()
+    expect(await loadPendingAction(backend, ROOT, staged.pendingActionId as string)).toBeUndefined()
+  })
+
+  it('dangerouslySkipPermissions sends without either approval round trip', async () => {
+    const sendEmail = mockSender({ provider: 'resend', id: 'auto' })
+    const { assistant } = emailAssistant(sendEmail, { dangerouslySkipPermissions: true })
+
+    const result = await assistant.turn(MSG)
+
+    expect(result.status).toBe('ok')
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(sendEmail).toHaveBeenCalledWith({ to: 'boss@example.com', subject: 'I quit', body: 'Effective today.' })
   })
 })
 

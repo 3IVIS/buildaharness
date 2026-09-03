@@ -63,6 +63,14 @@ export interface ClaudeCliLLMClientOptions {
    * browse (see web-search-provider.ts).
    */
   webTools?: { searchBackend?: 'ddg' | 'brave'; braveApiKey?: string }
+  /**
+   * When set, also registers send_email on the same MCP server (started whenever any of
+   * fileTools/shellTools/webTools/actionTools is configured), gated behind an env var the same
+   * way run_shell_command is. The MCP server only ever *stages* the message — the parent process
+   * delivers it, after approval, through its own configured SendEmail transport (email.ts /
+   * email-smtp.ts). Kept separate from fileTools so email can be enabled without file access.
+   */
+  actionTools?: { workspaceRoot: string }
 }
 
 /**
@@ -174,6 +182,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
   private readonly remindersFile?: string
   private readonly shellTools?: { workspaceRoot: string }
   private readonly webTools?: { searchBackend?: 'ddg' | 'brave'; braveApiKey?: string }
+  private readonly actionTools?: { workspaceRoot: string }
 
   constructor(options: ClaudeCliLLMClientOptions = {}) {
     this.claudePath = options.claudePath ?? process.env.CLAUDE_PATH ?? 'claude'
@@ -181,6 +190,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     this.remindersFile = options.remindersFile
     this.shellTools = options.shellTools
     this.webTools = options.webTools
+    this.actionTools = options.actionTools
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -235,15 +245,18 @@ export class ClaudeCliLLMClient implements ILLMClient {
       const content = await this.callChatSync(messages, options)
       return { content: options.structuredOutput ? stripJsonCodeFence(content) : content }
     }
-    if (!this.fileTools && !this.shellTools && !this.webTools) {
-      throw new Error('ClaudeCliLLMClient does not support tool calls unless constructed with fileTools, shellTools, or webTools configured')
+    if (!this.fileTools && !this.shellTools && !this.webTools && !this.actionTools) {
+      throw new Error(
+        'ClaudeCliLLMClient does not support tool calls unless constructed with fileTools, shellTools, webTools, or actionTools configured',
+      )
     }
 
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
-    // web_search needs no workspace; fall back to the temp dir when webTools is the only
-    // capability configured (the CLI always sets fileTools for this backend, so in practice
-    // this is the real workspace root).
-    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? tmpdir()
+    // web_search / send_email need no workspace; fall back to the temp dir when one of those is
+    // the only capability configured (the CLI always sets fileTools for this backend, so in
+    // practice this is the real workspace root).
+    const workspaceRoot =
+      this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? this.actionTools?.workspaceRoot ?? tmpdir()
     // The current turn's raw user message, before Claude Code's own agentic loop (and any
     // rewording it does before calling a tool) ever sees it — passed through to the MCP
     // server so create_reminder can check the *original* phrasing against fact-shaped
@@ -273,6 +286,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
                   ...(this.webTools.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
                 }
               : {}),
+            ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
           },
         },
       },

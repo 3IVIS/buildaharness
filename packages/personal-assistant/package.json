@@ -48,10 +48,12 @@
     "@buildaharness/harness": "^0.2.0",
     "@buildaharness/runtime": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "nodemailer": "^6.9.14",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.15",
     "tsx": "^4.16.0",
     "typescript": "^5.4.5",
     "vite": "^5.3.4",
