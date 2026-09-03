@@ -337,6 +337,42 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
+  it('webTools threads the search backend + Brave key through the MCP config; both absent when webTools is not set', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    const mcpEnvFromLastSpawn = (): Record<string, string> => {
+      const args = spawnMock.mock.calls.at(-1)![1] as string[]
+      return JSON.parse(args[args.indexOf('--mcp-config') + 1]).mcpServers['file-tools'].env
+    }
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('searched the web')))
+      await new ClaudeCliLLMClient({
+        fileTools: { workspaceRoot },
+        webTools: { searchBackend: 'brave', braveApiKey: 'bk-123' },
+      }).callChatStructured([{ role: 'user', content: 'what happened today' }], [{ name: 'web_search', input_schema: {} }])
+      expect(mcpEnvFromLastSpawn().WEB_SEARCH_BACKEND).toBe('brave')
+      expect(mcpEnvFromLastSpawn().BRAVE_SEARCH_API_KEY).toBe('bk-123')
+
+      spawnMock.mockClear()
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('read the file')))
+      await new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, webTools: {} }).callChatStructured(
+        [{ role: 'user', content: 'search' }],
+        [{ name: 'web_search', input_schema: {} }],
+      )
+      expect(mcpEnvFromLastSpawn().WEB_SEARCH_BACKEND).toBe('ddg') // omitted searchBackend defaults to keyless DDG
+      expect(mcpEnvFromLastSpawn().BRAVE_SEARCH_API_KEY).toBeUndefined()
+
+      spawnMock.mockClear()
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('read the file')))
+      await new ClaudeCliLLMClient({ fileTools: { workspaceRoot } }).callChatStructured(
+        [{ role: 'user', content: 'read a file' }],
+        [{ name: 'read_file', input_schema: {} }],
+      )
+      expect(mcpEnvFromLastSpawn().WEB_SEARCH_BACKEND).toBeUndefined()
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   it('a shell command staged by the MCP server mid-call is detected and surfaced as __staged_action with kind: shell', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

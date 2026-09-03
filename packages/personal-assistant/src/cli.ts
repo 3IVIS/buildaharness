@@ -73,7 +73,14 @@ const defaultBackend = createNodeFsBackend()
 function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
   switch (config.llmBackend) {
     case 'claude-cli':
-      return new ClaudeCliLLMClient({ fileTools: { workspaceRoot }, remindersFile, shellTools: config.enableShell ? { workspaceRoot } : undefined })
+      return new ClaudeCliLLMClient({
+        fileTools: { workspaceRoot },
+        remindersFile,
+        shellTools: config.enableShell ? { workspaceRoot } : undefined,
+        webTools: config.enableWeb
+          ? { searchBackend: config.searchBackend === 'brave' ? 'brave' : 'ddg', braveApiKey: config.braveApiKey as string | undefined }
+          : undefined,
+      })
     case 'anthropic':
       return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
     case 'openai':
@@ -109,10 +116,11 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       ? (query: string) => braveSearch(query, config.braveApiKey as string)
       : (query: string) => duckDuckGoSearch(query)
 
-  // Note: unlike the proxy backend, claude-cli has no web_search/fetch_url wiring for
-  // enableWeb yet — web_search has no default backend on this path either (see
-  // claude-cli-llm-client.ts's doc comment), so enableWeb only takes effect on the proxy
-  // (LLMClient) backend below.
+  // `search` above is the proxy backend's injected web_search implementation (its manual
+  // tool loop calls it directly). The claude-cli backend can't take an injected function —
+  // its tools run inside the `claude -p` subprocess — so buildLlmClient passes the same
+  // DDG/Brave selection through to the file-tools MCP server as env instead. Either way,
+  // `enableWeb` now wires web_search on both backends.
   const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
   return PersonalAssistant.create({

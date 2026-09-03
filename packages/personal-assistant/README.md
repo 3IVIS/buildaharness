@@ -274,7 +274,9 @@ const assistant = new PersonalAssistant({
 
 `WebToolsContext.search` has no built-in default (the caller supplies a real
 backend, an API client, etc.) — `web-search-provider.ts` ships two ready-made
-ones, both wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set:
+ones, wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set (on the
+`claude-cli` backend the same two run inside the file-tools MCP server, since
+that backend's tools can't take an injected function):
 
 - `duckDuckGoSearch` (default) — queries DuckDuckGo's HTML endpoint, no API
   key needed (the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed
@@ -471,9 +473,10 @@ ASSISTANT_ENABLE_WEB=1 ASSISTANT_ENABLE_SHELL=1 npm run cli --workspace=packages
 
 The startup banner only mentions a capability when it's actually enabled —
 nothing implies web/shell access is available when neither env var is set.
-Note: `ASSISTANT_ENABLE_WEB` only takes effect on the proxy backend for
-now — the Claude CLI backend has no web_search wiring yet (see
-`claude-cli-llm-client.ts`'s doc comment).
+`ASSISTANT_ENABLE_WEB` now works on both backends: the proxy backend calls the
+injected search function directly, and the Claude CLI backend registers
+`web_search` on its file-tools MCP server (DuckDuckGo by default, Brave when
+`ASSISTANT_SEARCH_BACKEND=brave` + `BRAVE_SEARCH_API_KEY` are set).
 
 #### `--dangerously-skip-permissions` equivalent
 
