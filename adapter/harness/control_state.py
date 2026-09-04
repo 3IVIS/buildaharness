@@ -31,6 +31,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from ._core_generated import (
+    CAUTION_THRESHOLD,
+    CRITICAL_THRESHOLD,
+    DEP_CLASS_GAP_NOTE_PREFIX,
+    RECOVERY_ACTION_DEPENDENCIES,
+)
+from ._core_generated import CONFIDENCE_DIMENSIONS as _CONFIDENCE_DIMENSIONS
+from ._core_generated import DIMENSION_RECOVERY as _DIMENSION_RECOVERY
+from ._core_generated import RISK_DIMENSIONS as _RISK_DIMENSIONS
 from .diagnostics import (
     Diagnostics,
     DimensionType,
@@ -38,56 +47,23 @@ from .diagnostics import (
     normalise,
 )
 
+# CRITICAL_THRESHOLD, CAUTION_THRESHOLD, RECOVERY_ACTION_DEPENDENCIES,
+# _DIMENSION_RECOVERY, _CONFIDENCE_DIMENSIONS, _RISK_DIMENSIONS and
+# DEP_CLASS_GAP_NOTE_PREFIX are generated from spec/harness-core.json into
+# ._core_generated (Phase C1 — docs/adr/004-shared-semantic-core.md), the single
+# source of truth shared with packages/harness/src/_core-generated.ts. The
+# resolver ALGORITHM below stays hand-mirrored with resolve-control-state.ts,
+# guarded by scripts/harness-conformance/compare.mjs.
+#
+# _CONFIDENCE_DIMENSIONS / _RISK_DIMENSIONS are disjoint sub-dimension pools
+# risk_estimate/confidence_estimate are computed from — see
+# _compute_risk_and_confidence_estimates(). Every name in
+# _extract_sub_dimensions()'s ten appears in exactly one pool.
+
 RiskState = Literal["NORMAL", "CAUTIOUS", "BLOCKED"]
 PermissionDecision = Literal["ALLOW", "DENY"]
 ExecutionMode = Literal["NORMAL", "CAUTIOUS", "RECOVERY"]
 EscalationDecision = Literal["NONE", "HUMAN_REQUIRED", "SYSTEM_BREAKING"]
-
-CRITICAL_THRESHOLD: float = 0.2
-CAUTION_THRESHOLD: float = 0.4
-
-# Disjoint sub-dimension pools risk_estimate/confidence_estimate are computed from — see
-# _compute_risk_and_confidence_estimates(). Every name here must appear in exactly one
-# pool; _extract_sub_dimensions()'s ten names are asserted against this at import time
-# via the module-level check near the bottom of this file.
-_CONFIDENCE_DIMENSIONS: frozenset[str] = frozenset(
-    {"belief_freshness", "belief_consistency", "belief_support", "symptom_coverage", "explanation_coverage"}
-)
-_RISK_DIMENSIONS: frozenset[str] = frozenset(
-    {"verification_strength", "verification_feasibility", "progress_rate", "failure_recurrence", "oscillation_score"}
-)
-
-# Maps recovery_action_class → set of dimension names it requires to be unblocked.
-# A recovery action must NOT depend on the dimension it is recovering — otherwise
-# a single blocked dimension would always detect as a deadlock (self-loop).
-RECOVERY_ACTION_DEPENDENCIES: dict[str, set[str]] = {
-    "dep_graph_refresh": {"verification_strength"},  # refresh dep graph → needs verification
-    "verification_pass": {"dep_graph_quality"},  # run verification → needs dep graph
-    "belief_refresh": {"verification_feasibility"},  # refresh beliefs → needs feasibility
-    "coverage_expand": {"verification_strength"},  # expand coverage → needs verification
-    "execution_retry": {"dep_graph_quality"},  # retry execution → needs dep graph
-    "oscillation_stabilise": {"belief_freshness"},  # stabilise → needs fresh beliefs
-    "failure_recovery": {"dep_graph_quality"},  # recover from failure → needs dep graph
-    "consistency_repair": {"verification_strength"},  # repair consistency → needs verification
-    "support_augment": {"belief_freshness"},  # augment support → needs fresh beliefs
-    "feasibility_check": {"dep_graph_quality"},  # check feasibility → needs dep graph
-    "explanation_expand": {"belief_freshness"},  # expand explanations → needs fresh beliefs
-}
-
-_DIMENSION_RECOVERY: dict[str, str] = {
-    "belief_freshness": "belief_refresh",
-    "belief_consistency": "consistency_repair",
-    "belief_support": "support_augment",
-    "symptom_coverage": "coverage_expand",
-    "explanation_coverage": "explanation_expand",
-    "verification_strength": "verification_pass",
-    "verification_feasibility": "feasibility_check",
-    "progress_rate": "execution_retry",
-    "failure_recurrence": "failure_recovery",
-    "oscillation_score": "oscillation_stabilise",
-    "dep_graph_quality": "dep_graph_refresh",
-    "world_model_integrity": "consistency_repair",
-}
 
 
 @dataclass
@@ -380,6 +356,13 @@ def resolve_control_state(
 
 
 def _attach_annotation(cs: ControlState, diagnostics: Diagnostics) -> None:
-    """Attach dep_class_gap_annotation to notes[] — never to arithmetic (INV-07)."""
-    if diagnostics.dep_class_gap_annotation is not None:
-        cs.notes.append(diagnostics.dep_class_gap_annotation)
+    """Attach dep_class_gap_annotation to notes[] — never to arithmetic (INV-07).
+
+    Canonical format (Phase C1, docs/adr/004): a non-empty annotation is prefixed
+    with DEP_CLASS_GAP_NOTE_PREFIX; an absent (None) or explicit empty-string
+    annotation adds no note. Mirrors resolve-control-state.ts exactly — this
+    retired the two tracked dep_class_gap discrepancies in
+    scripts/harness-conformance/known-discrepancies.json.
+    """
+    if diagnostics.dep_class_gap_annotation:
+        cs.notes.append(f"{DEP_CLASS_GAP_NOTE_PREFIX}{diagnostics.dep_class_gap_annotation}")

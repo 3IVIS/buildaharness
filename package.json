@@ -12,6 +12,7 @@
     "test": "vitest run",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "gen:harness-core": "node spec/gen-harness-core.mjs",
     "build:canvas": "npm run build --workspace=packages/canvas",
     "test:canvas": "npm test --workspace=packages/canvas",
     "typecheck:canvas": "npm run typecheck --workspace=packages/canvas",

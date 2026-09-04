@@ -4,41 +4,27 @@ import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { ControlState, type BlockEntry } from '../state/control-state.js'
 import { assertNormalised, normalise, DimensionType } from '../normalise.js'
 import { computeElevationFactor } from '../generation-id.js'
+import {
+  CRITICAL_THRESHOLD,
+  CAUTION_THRESHOLD,
+  RECOVERY_ACTION_DEPENDENCIES,
+  DIMENSION_RECOVERY,
+  CONFIDENCE_DIMENSIONS,
+  RISK_DIMENSIONS,
+  DEP_CLASS_GAP_NOTE_PREFIX,
+} from '../_core-generated.js'
 
-export const CRITICAL_THRESHOLD = 0.2
-export const CAUTION_THRESHOLD = 0.4
-
-// Maps recovery_action_class → dimension names it requires to be unblocked.
-// Cross-dimension only — self-referential deps would make every single block a deadlock.
-export const RECOVERY_ACTION_DEPENDENCIES: Record<string, string[]> = {
-  dep_graph_refresh: ['verification_strength'],
-  verification_pass: ['dep_graph_quality'],
-  belief_refresh: ['verification_feasibility'],
-  coverage_expand: ['verification_strength'],
-  execution_retry: ['dep_graph_quality'],
-  oscillation_stabilise: ['belief_freshness'],
-  failure_recovery: ['dep_graph_quality'],
-  consistency_repair: ['verification_strength'],
-  support_augment: ['belief_freshness'],
-  feasibility_check: ['dep_graph_quality'],
-  explanation_expand: ['belief_freshness'],
-}
-
-// Maps sub-dimension name → recovery action class for that dimension.
-const DIMENSION_RECOVERY: Record<string, string> = {
-  belief_freshness: 'belief_refresh',
-  belief_consistency: 'consistency_repair',
-  belief_support: 'support_augment',
-  symptom_coverage: 'coverage_expand',
-  explanation_coverage: 'explanation_expand',
-  verification_strength: 'verification_pass',
-  verification_feasibility: 'feasibility_check',
-  progress_rate: 'execution_retry',
-  failure_recurrence: 'failure_recovery',
-  oscillation_score: 'oscillation_stabilise',
-  dep_graph_quality: 'dep_graph_refresh',
-  world_model_integrity: 'consistency_repair',
-}
+// CRITICAL_THRESHOLD, CAUTION_THRESHOLD, RECOVERY_ACTION_DEPENDENCIES,
+// DIMENSION_RECOVERY, CONFIDENCE_DIMENSIONS, RISK_DIMENSIONS and
+// DEP_CLASS_GAP_NOTE_PREFIX are generated from spec/harness-core.json into
+// _core-generated.ts (Phase C1 — docs/adr/004-shared-semantic-core.md), the single
+// source of truth shared with adapter/harness/control_state.py. The resolver
+// ALGORITHM below stays hand-mirrored with control_state.py, guarded by
+// scripts/harness-conformance/compare.mjs.
+//
+// Re-exported so existing importers (harness-runtime.ts, nodes/initialize.ts)
+// keep resolving them from this module.
+export { CRITICAL_THRESHOLD, CAUTION_THRESHOLD, RECOVERY_ACTION_DEPENDENCIES }
 
 function buildRecoveryActionGraph(blockMask: BlockEntry[]): Map<string, Set<string>> {
   const blockedDims = new Set(blockMask.map(e => e.dimension))
@@ -99,14 +85,9 @@ function extractSubDimensions(diagnostics: Diagnostics): Array<[string, number]>
   ]
 }
 
-// Disjoint sub-dimension pools risk_estimate/confidence_estimate are computed from — mirrors
-// control_state.py's _CONFIDENCE_DIMENSIONS / _RISK_DIMENSIONS exactly.
-const CONFIDENCE_DIMENSIONS = new Set([
-  'belief_freshness', 'belief_consistency', 'belief_support', 'symptom_coverage', 'explanation_coverage',
-])
-const RISK_DIMENSIONS = new Set([
-  'verification_strength', 'verification_feasibility', 'progress_rate', 'failure_recurrence', 'oscillation_score',
-])
+// CONFIDENCE_DIMENSIONS / RISK_DIMENSIONS: disjoint sub-dimension pools
+// risk_estimate/confidence_estimate are computed from — imported from the
+// generated core above (mirrors control_state.py exactly).
 
 function computeRiskAndConfidenceEstimates(subDims: Array<[string, number]>): { risk_estimate: number; confidence_estimate: number } {
   const confidenceValues: number[] = []
@@ -165,7 +146,7 @@ export function resolveControlState(
     }]
     cs.generation_id = worldModel.generation_id
     if (diagnostics.dep_class_gap_annotation) {
-      notes.push(`dep_class_gap: ${diagnostics.dep_class_gap_annotation}`)
+      notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
     }
     cs.notes = notes
     return cs
@@ -194,7 +175,7 @@ export function resolveControlState(
     }
     cs.generation_id = worldModel.generation_id
     if (diagnostics.dep_class_gap_annotation) {
-      notes.push(`dep_class_gap: ${diagnostics.dep_class_gap_annotation}`)
+      notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
     }
     cs.notes = notes
     return cs
@@ -233,7 +214,7 @@ export function resolveControlState(
 
   // dep_class_gap_annotation attached to notes[] only — NOT evaluated in any tier (INV-07)
   if (diagnostics.dep_class_gap_annotation) {
-    notes.push(`dep_class_gap: ${diagnostics.dep_class_gap_annotation}`)
+    notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
   }
 
   cs.notes = notes

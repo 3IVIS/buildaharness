@@ -1,0 +1,84 @@
+{
+  "_README": "Canonical source of truth for the harness's pure-data decision constants, shared by the Python harness (adapter/harness/) and the TypeScript harness (packages/harness/src/). Edit THIS file, then run `node spec/gen-harness-core.mjs` to regenerate adapter/harness/_core_generated.py and packages/harness/src/_core-generated.ts. CI (.github/workflows/ci.yml) fails if the generated files are stale. See docs/adr/004-shared-semantic-core.md (Phase C1). The ~150-line resolver ALGORITHM stays hand-mirrored in control_state.py / resolve-control-state.ts and is guarded by scripts/harness-conformance/compare.mjs.",
+  "version": "1.0.0",
+
+  "thresholds": {
+    "critical": 0.2,
+    "caution": 0.4
+  },
+
+  "recovery_action_dependencies": {
+    "_README": "recovery_action_class -> dimension names that class requires to be unblocked. Cross-dimension only: a recovery action must never depend on the dimension it is recovering, or a single blocked dimension would always detect as a deadlock self-loop.",
+    "dep_graph_refresh": ["verification_strength"],
+    "verification_pass": ["dep_graph_quality"],
+    "belief_refresh": ["verification_feasibility"],
+    "coverage_expand": ["verification_strength"],
+    "execution_retry": ["dep_graph_quality"],
+    "oscillation_stabilise": ["belief_freshness"],
+    "failure_recovery": ["dep_graph_quality"],
+    "consistency_repair": ["verification_strength"],
+    "support_augment": ["belief_freshness"],
+    "feasibility_check": ["dep_graph_quality"],
+    "explanation_expand": ["belief_freshness"]
+  },
+
+  "dimension_recovery": {
+    "_README": "sub-dimension name -> the recovery_action_class for that dimension.",
+    "belief_freshness": "belief_refresh",
+    "belief_consistency": "consistency_repair",
+    "belief_support": "support_augment",
+    "symptom_coverage": "coverage_expand",
+    "explanation_coverage": "explanation_expand",
+    "verification_strength": "verification_pass",
+    "verification_feasibility": "feasibility_check",
+    "progress_rate": "execution_retry",
+    "failure_recurrence": "failure_recovery",
+    "oscillation_score": "oscillation_stabilise",
+    "dep_graph_quality": "dep_graph_refresh",
+    "world_model_integrity": "consistency_repair"
+  },
+
+  "sub_dimension_order": [
+    "belief_freshness",
+    "belief_consistency",
+    "belief_support",
+    "symptom_coverage",
+    "explanation_coverage",
+    "verification_strength",
+    "verification_feasibility",
+    "progress_rate",
+    "failure_recurrence",
+    "oscillation_score"
+  ],
+
+  "confidence_dimensions": [
+    "belief_freshness",
+    "belief_consistency",
+    "belief_support",
+    "symptom_coverage",
+    "explanation_coverage"
+  ],
+
+  "risk_dimensions": [
+    "verification_strength",
+    "verification_feasibility",
+    "progress_rate",
+    "failure_recurrence",
+    "oscillation_score"
+  ],
+
+  "layer_tier": {
+    "_README": "verification layer -> epistemic tier. mechanical: exit code / schema / deterministic state inspection. environmental: inspects already-gathered external observations. model: requires semantic judgment (SKIPPED in the mechanical/environmental verifier; a future LLM-judge tier).",
+    "syntax": "mechanical",
+    "unit": "mechanical",
+    "integration": "mechanical",
+    "consistency": "mechanical",
+    "requirements": "environmental",
+    "assumptions": "environmental",
+    "goal_correctness": "model",
+    "evidence_sufficiency": "environmental",
+    "output_contract_partial": "mechanical"
+  },
+
+  "dep_class_gap_note_prefix": "dep_class_gap: "
+}

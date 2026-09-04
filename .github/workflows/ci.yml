@@ -40,11 +40,15 @@ jobs:
       - name: Check lexical patterns sync
         run: node scripts/check-lexical-patterns-sync.mjs
 
-      # Phase 3 completion: guards against the hand-duplicated control-state
-      # constants (thresholds, recovery-action maps) drifting between
-      # adapter/harness/control_state.py and packages/harness/src.
-      - name: Check harness constants sync
-        run: node scripts/check-harness-constants-sync.mjs
+      # Phase C1 (docs/adr/004-shared-semantic-core.md): the harness decision
+      # constants (thresholds, recovery-action maps, dimension pools, LAYER_TIER,
+      # dep_class_gap note prefix) are generated from spec/harness-core.json into
+      # adapter/harness/_core_generated.py and packages/harness/src/_core-generated.ts.
+      # Fail if either generated file is stale. (Replaced the old regex-diff
+      # drift detector scripts/check-harness-constants-sync.mjs — generation makes
+      # that drift structurally impossible.)
+      - name: Check harness core generated files are current
+        run: node spec/gen-harness-core.mjs --check
 
       # Adoption plan F1: default model ids live only in
       # packages/runtime/src/model-defaults.ts — fail if a previous-generation

@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from ._core_generated import LAYER_TIER as LAYER_TIER
+
 VerificationLayer = Literal[
     "syntax",
     "unit",
@@ -69,23 +71,16 @@ _LAYER_TO_TOOL: dict[str, str] = {
 
 LayerTier = Literal["mechanical", "environmental", "model"]
 
+# LAYER_TIER is generated from spec/harness-core.json into ._core_generated
+# (Phase C1 — docs/adr/004-shared-semantic-core.md), the single source of truth
+# shared with packages/harness/src/verify.ts via _core-generated.ts.
+#
 # Mechanical: exit code / schema / deterministic state inspection — no judgment involved.
 # Environmental: inspects already-gathered external observations (evidence, criteria) —
 #   real, but can't be reduced to a pass/fail exit code the way mechanical checks can.
 # Model: requires semantic judgment (does this genuinely satisfy the goal?) — explicitly
 #   out of scope for this mechanical/environmental layer; always SKIPPED here, tracked as a
 #   future model-based (LLM judge) verification tier, not faked as a mechanical PASS.
-LAYER_TIER: dict[str, LayerTier] = {
-    "syntax": "mechanical",
-    "unit": "mechanical",
-    "integration": "mechanical",
-    "consistency": "mechanical",
-    "requirements": "environmental",
-    "assumptions": "environmental",
-    "goal_correctness": "model",
-    "evidence_sufficiency": "environmental",
-    "output_contract_partial": "mechanical",
-}
 
 
 @dataclass

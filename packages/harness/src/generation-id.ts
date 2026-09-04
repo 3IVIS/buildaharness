@@ -2,6 +2,7 @@ import type { ControlState } from './state/control-state.js'
 import type { WorldModel } from './state/world-model.js'
 import type { Diagnostics } from './state/diagnostics.js'
 import { FailureDiagnostics } from './state/failure-diagnostics.js'
+import { CAUTION_THRESHOLD } from './_core-generated.js'
 
 export interface GateContext {
   subStepA: number
@@ -58,7 +59,7 @@ export function _maybeResolve(
 
 export function computeElevationFactor(subDims: number[]): number {
   if (subDims.length === 0) return 0
-  const CAUTION_THRESHOLD = 0.4
+  // CAUTION_THRESHOLD imported from the generated core (spec/harness-core.json).
   const below = subDims.filter(d => d < CAUTION_THRESHOLD)
   if (below.length === 0) return 0
   const avgDeficit = below.reduce((acc, d) => acc + (CAUTION_THRESHOLD - d), 0) / below.length

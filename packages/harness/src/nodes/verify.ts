@@ -4,6 +4,7 @@ import type { OutputContract } from '../state/output-contract.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
 import type { RiskLevel } from '../state/task-graph.js'
 import { contractShadowCheck } from './policy-gates.js'
+import { LAYER_TIER, type LayerTier } from '../_core-generated.js'
 
 export type VerificationLayer =
   | 'syntax'
@@ -28,25 +29,17 @@ export interface VerificationResult {
   adversarial_passed: boolean | null
 }
 
-export type LayerTier = 'mechanical' | 'environmental' | 'model'
-
+// LayerTier / LAYER_TIER are generated from spec/harness-core.json into
+// _core-generated.ts (Phase C1 — docs/adr/004-shared-semantic-core.md), the
+// single source of truth shared with adapter/harness/verification.py.
+// Re-exported so existing importers keep resolving them from this module.
+//
 // Mechanical: exit code / schema / deterministic state inspection — no judgment involved.
 // Environmental: inspects already-gathered external observations (evidence, criteria) — real,
 //   but can't be reduced to a pass/fail exit code the way mechanical checks can.
 // Model: requires semantic judgment (does this genuinely satisfy the goal?) — explicitly out
-//   of scope for this mechanical/environmental layer; always SKIPPED here. Mirrors
-//   adapter/harness/verification.py's LAYER_TIER exactly (Phase 2 of the remediation plan).
-export const LAYER_TIER: Record<VerificationLayer, LayerTier> = {
-  syntax: 'mechanical',
-  unit: 'mechanical',
-  integration: 'mechanical',
-  consistency: 'mechanical',
-  requirements: 'environmental',
-  assumptions: 'environmental',
-  goal_correctness: 'model',
-  evidence_sufficiency: 'environmental',
-  output_contract_partial: 'mechanical',
-}
+//   of scope for this mechanical/environmental layer; always SKIPPED here.
+export { LAYER_TIER, type LayerTier }
 
 // Required tool per verification layer — matches adapter/harness/verification.py's
 // per-function _tool_available() gating (linter, pytest, consistency_checker, etc.)
