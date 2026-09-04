@@ -1,0 +1,8 @@
+{
+  "id": "lookup-capital",
+  "category": "lookup",
+  "intent": "Single well-known fact from model knowledge; the common wrong answer is a distractor.",
+  "prompt": "What is the capital city of Australia?",
+  "grader": { "contains": ["Canberra"], "notContains": ["Sydney is the capital", "capital is Sydney", "capital, Sydney"] },
+  "hallucinationProbe": true
+}

@@ -1,0 +1,16 @@
+{
+  "id": "multi-step-recovery",
+  "category": "multi_step",
+  "intent": "The first tool call fails once; a resilient arm retries or works around it and still answers.",
+  "prompt": "Read status.txt and tell me whether the last deploy succeeded.",
+  "workspace": [
+    { "path": "status.txt", "content": "last deploy: 2026-08-30T14:02:00Z\nresult: SUCCESS\nduration: 4m12s\n" }
+  ],
+  "tools": { "file": true },
+  "injectedFailure": "first_tool_call_throws",
+  "grader": {
+    "regex": "succeed|success|SUCCESS|did succeed|was successful",
+    "notContains": ["failed", "could not determine", "unable to tell", "I don't know"]
+  },
+  "note": "Measures `recovered`: the first read_file throws a transient error; a passing answer means the arm recovered."
+}

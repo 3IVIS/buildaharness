@@ -1,0 +1,15 @@
+{
+  "id": "file-count-todos",
+  "category": "file_read",
+  "intent": "Read one workspace file and report a count that is verifiable from its content.",
+  "prompt": "How many lines in notes.txt start with the word TODO? Answer with just the number.",
+  "workspace": [
+    {
+      "path": "notes.txt",
+      "content": "TODO buy milk\nremember the meeting is at 3\nTODO call the plumber\nTODO renew the domain\nnot a todo, just a note about todos\nTODO file the expense report\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": { "contains": ["4"], "notContains": ["5", "3 lines", "three"] },
+  "note": "Exactly 4 lines begin with 'TODO'. Line 5 mentions 'todos' but does not start with it."
+}
