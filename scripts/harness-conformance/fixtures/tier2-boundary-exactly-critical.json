@@ -1,0 +1,29 @@
+{
+  "id": "tier2-boundary-exactly-critical",
+  "description": "verification_strength resolves to exactly 0.2 (CRITICAL_THRESHOLD). The check is strict `<`, so this must NOT block — expect no block_mask entry from it. It is also < CAUTION_THRESHOLD (0.4), so tier-4 elevation applies → execution_mode should be CAUTIOUS, permission ALLOW.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1,
+      "consistency": 1,
+      "support": 1
+    },
+    "coverage_health": {
+      "symptom_coverage": 1,
+      "explanation_coverage": 1
+    },
+    "verification_health": {
+      "strength": 0.2,
+      "feasibility": 1
+    },
+    "execution_health": {
+      "progress_rate": 1,
+      "failure_recurrence": 0,
+      "oscillation_score": 0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  }
+}

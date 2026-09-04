@@ -30,7 +30,32 @@ own implementation (via `npx tsx run-ts.mts <fixture>` and
 - Any other mismatch: `MISMATCH (untracked!)` — a new divergence. Exit
   code 1, so this is safe to wire into CI as a regression gate later.
 
-## What this first pass found
+## Coverage
+
+**Expanded to 27 fixtures (2026-09-04).** The 20 `tier2-block-*` / `tier2-boundary-*` /
+`tier3-*` / `tier4-elevation-no-pattern` / `estimates-*` /
+`tier1-*` fixtures added then systematically cover: every one of the 10
+sub-dimensions individually below `CRITICAL_THRESHOLD`; the exact `0.2`
+and `0.4` boundaries (strict `<` on both); single- and dual-coverage-gap
+tier-3; tier-4 elevation with no matched pattern; the two disjoint
+`risk_estimate` / `confidence_estimate` pools; a SYSTEM_BREAKING
+contradiction dominating otherwise-healthy diagnostics; and a
+non-SYSTEM_BREAKING contradiction correctly *not* firing tier 1.
+
+Result: **25 PASS, 2 tracked discrepancies, 0 untracked** — the two
+resolvers are byte-identical across the whole boundary space, not just the
+original 5 tier examples. One finding baked into a fixture:
+`tier2-block-multi-no-deadlock` confirms a pure-sub-dimension deadlock is
+structurally unreachable (`dep_graph_quality` / `world_model_integrity`
+are not sub-dimensions, so no recovery-action cycle forms from sub-dim
+blocks alone) — `escalation` stays `NONE`, matching on both sides.
+
+Treat this fixture set as the **equivalence contract** for the resolver
+algorithm: a change to either side's algorithm that is not accompanied by
+fixtures proving the other side still matches should not merge. Growing it
+toward ~40 (covering `verify()` next) is the natural next step.
+
+## What the original pass found
 
 Five fixtures (`tier1-system-breaking`, `tier2-blocked-multi-dim`,
 `tier3-coverage-gap`, `tier4-elevation-with-matched-pattern`,

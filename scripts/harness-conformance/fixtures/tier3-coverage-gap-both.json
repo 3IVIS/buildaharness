@@ -1,0 +1,29 @@
+{
+  "id": "tier3-coverage-gap-both",
+  "description": "Both coverage dims in [0.2, 0.4). Expect CAUTIOUS with two coverage-gap notes (one per dim).",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1,
+      "consistency": 1,
+      "support": 1
+    },
+    "coverage_health": {
+      "symptom_coverage": 0.25,
+      "explanation_coverage": 0.35
+    },
+    "verification_health": {
+      "strength": 1,
+      "feasibility": 1
+    },
+    "execution_health": {
+      "progress_rate": 1,
+      "failure_recurrence": 0,
+      "oscillation_score": 0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  }
+}

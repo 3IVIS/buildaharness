@@ -1,0 +1,41 @@
+{
+  "id": "tier1-non-system-breaking-contradiction-ignored",
+  "description": "A contradiction with severity HIGH (not SYSTEM_BREAKING) plus all-healthy dims. Tier 1 checks specifically for SYSTEM_BREAKING, so it must not fire → NORMAL/ALLOW.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1,
+      "consistency": 1,
+      "support": 1
+    },
+    "coverage_health": {
+      "symptom_coverage": 1,
+      "explanation_coverage": 1
+    },
+    "verification_health": {
+      "strength": 1,
+      "feasibility": 1
+    },
+    "execution_health": {
+      "progress_rate": 1,
+      "failure_recurrence": 0,
+      "oscillation_score": 0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": [
+      {
+        "id": "c1",
+        "type": "pairwise",
+        "severity": "HIGH",
+        "scope": "local",
+        "description": "a lesser conflict",
+        "involved_belief_ids": [
+          "b1",
+          "b2"
+        ]
+      }
+    ]
+  }
+}
