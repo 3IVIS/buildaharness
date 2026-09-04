@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline'
 import { writeFile } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -1114,9 +1115,33 @@ async function main(): Promise<void> {
   await runCli()
 }
 
+/**
+ * True when `entryArg` (a `process.argv[1]` value) refers to the same file as
+ * `moduleHref` (an `import.meta.url`).
+ *
+ * The naive check — `moduleHref === pathToFileURL(entryArg).href` — breaks
+ * whenever the script is launched through the npm bin: `npx
+ * @buildaharness/personal-assistant`, a global install, or any
+ * `node_modules/.bin` shim all pass a **symlink** to this file as
+ * `process.argv[1]`, while Node reports `import.meta.url` as the resolved real
+ * path. So resolve `entryArg` to its real path before comparing. `resolveReal`
+ * is injected for tests; it defaults to `fs.realpathSync`.
+ */
+export function entryArgMatchesModule(
+  entryArg: string | undefined,
+  moduleHref: string,
+  resolveReal: (p: string) => string = realpathSync,
+): boolean {
+  if (entryArg === undefined) return false
+  try {
+    return moduleHref === pathToFileURL(resolveReal(entryArg)).href
+  } catch {
+    return false
+  }
+}
+
 function isEntryModule(): boolean {
-  const entry = process.argv[1]
-  return entry !== undefined && import.meta.url === pathToFileURL(entry).href
+  return entryArgMatchesModule(process.argv[1], import.meta.url)
 }
 
 // Guarded so importing this module (e.g. from cli.test.ts, which drives runCli() directly

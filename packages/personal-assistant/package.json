@@ -1,6 +1,6 @@
 {
   "name": "@buildaharness/personal-assistant",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An open-source AI chat assistant that runs the full 11-layer Build A Harness every turn — light for a fact lookup, and it stops for approval before it sends an email or runs a shell command. CLI, browser, and desktop.",
   "license": "Apache-2.0",
   "homepage": "https://buildaharness.com/personal-assistant",
