@@ -3,6 +3,9 @@ import type { EvidenceStore } from '../state/evidence-store.js'
 import type { TaskGraph, Task } from '../state/task-graph.js'
 import type { MemoryState } from '../state/memory-state.js'
 import type { BeliefDepGraph } from '../state/world-model.js'
+import type { Diagnostics } from '../state/diagnostics.js'
+import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
+import type { ControlState } from '../state/control-state.js'
 import { applyTaskOutcome } from './apply-task-outcome.js'
 
 export type ReversibilityStrategy = 'snapshot' | 'git-revert' | 'patch-rollback' | 'ephemeral'
@@ -77,6 +80,39 @@ export interface ExecutionContext {
   memoryState: MemoryState
   beliefDepGraph?: BeliefDepGraph
   planToolWorkflow?: () => void
+  /**
+   * R2 of the D2 one-loop-rewire follow-up plan (plans/harness_d2_one_loop_rewire_plan.html):
+   * this main-loop iteration's already-resolved ControlState (see driveMainLoop's actionGate
+   * block, which runs before execute() is ever called) — optional so every pre-existing test
+   * that builds an ExecutionContext by hand without one keeps compiling unchanged. Threaded
+   * through to toolFn as ToolExecutorContext below so a harness-driven proposer can fold its own
+   * tool-call bookkeeping into the harness's own live state instead of maintaining a second,
+   * parallel ControlState (see personal-assistant's tool-control-plane.ts, which this was written
+   * to let go of duplicating).
+   */
+  controlState?: ControlState
+  diagnostics?: Diagnostics
+  failureDiagnostics?: FailureDiagnostics
+}
+
+/**
+ * R2 of the D2 one-loop-rewire follow-up plan: what a toolFn actually receives when
+ * driveMainLoop calls it. A toolFn written before this phase ignores its argument entirely
+ * (JS/TS both allow calling a function with more arguments than it declares) and is completely
+ * unaffected. A harness-driven proposer (personal-assistant's one-loop-proposer machinery) reads
+ * `controlState` to gate its own tool calls (tool-policy.ts's evaluateToolPolicy) against the
+ * exact same ControlState driveMainLoop's own actionGate will re-resolve on the next iteration —
+ * and, when it records a tool outcome, mutates `worldModel`/`evidenceStore`/`diagnostics`/
+ * `failureDiagnostics` directly (the harness's own live state for this run), so that bookkeeping
+ * feeds the *same* resolveControlState() call the harness's main loop already makes each
+ * iteration instead of a second, disconnected structure.
+ */
+export interface ToolExecutorContext {
+  worldModel: WorldModel
+  evidenceStore: EvidenceStore
+  controlState?: ControlState
+  diagnostics?: Diagnostics
+  failureDiagnostics?: FailureDiagnostics
 }
 
 const UNVERIFIED_EDGE_RATIO_THRESHOLD = 0.5
@@ -132,7 +168,7 @@ function classifySystemErrorSymptom(message: string): string | null {
 
 export async function execute(
   proposedChange: ProposedExecutionChange,
-  toolFn: (() => unknown | Promise<unknown>),
+  toolFn: ((toolCtx: ToolExecutorContext) => unknown | Promise<unknown>),
   ctx: ExecutionContext,
 ): Promise<ExecutionResult> {
   const strategy = selectReversibilityStrategy(proposedChange)
@@ -202,7 +238,13 @@ export async function execute(
   }
 
   try {
-    const raw = await toolFn()
+    const raw = await toolFn({
+      worldModel: ctx.worldModel,
+      evidenceStore: ctx.evidenceStore,
+      controlState: ctx.controlState,
+      diagnostics: ctx.diagnostics,
+      failureDiagnostics: ctx.failureDiagnostics,
+    })
     if (isContinuableOutcome(raw)) {
       status = raw.__harnessExecutionStatus
       output = raw.output ?? null

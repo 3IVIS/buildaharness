@@ -2761,6 +2761,83 @@ describe('PersonalAssistant batch research — confirmation gate', () => {
   })
 })
 
+// R4 of plans/harness_d2_one_loop_rewire_plan.html: with ASSISTANT_ONE_LOOP enabled, batch
+// research is deferred into AgentLoop.createBatchOneLoopProposer and driven by the harness's own
+// driveMainLoop instead of resolving eagerly before harnessBridge.run() is ever called — these
+// mirror the flag-OFF batch tests above (dead-end window, streaming, source tracking, confirmation
+// gate) to confirm none of that behavior regressed under the harness-driven path.
+describe('PersonalAssistant batch research — harness-driven (flag ON)', () => {
+  it('replays the real school-dates transcript under the harness-driven proposer: dead-end window, sources, and the final streamed reply all still work', async () => {
+    const llm = scriptedResponses(
+      fixtureStructuredResponses(SCHOOL_DATES_BATCH_FIXTURE),
+      ['Erich-Kästner-Grundschule: confirmed for June 17, 2025. See the other schools\' findings above.'],
+    )
+    const webTools = { search: fixtureWebSearch(SCHOOL_DATES_BATCH_FIXTURE) }
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools, oneLoopMode: 'enabled' })
+    const received: string[] = []
+
+    const result = await assistant.turn(fixtureUserMessage(SCHOOL_DATES_BATCH_FIXTURE), { onToken: (t) => received.push(t) })
+
+    expect(result.status).toBe('ok')
+    const batchBudget = result.trace?.batchBudget
+    expect(batchBudget).toBeDefined()
+    expect(batchBudget!.itemCount).toBe(7)
+    expect(batchBudget!.perItemOutcomes).toHaveLength(7)
+
+    // Same dead-end-window proof as the flag-OFF version of this test above: the item-scoped
+    // window (a fresh local `toolYields` array per resolveBatchItem call — unchanged by this
+    // phase) still stops a hard item early without dragging down the others, even though a
+    // harness-driven proposer now drives the surrounding turn.
+    const halensee = batchBudget!.perItemOutcomes.find((o) => o.item === 'Halensee-Grundschule')
+    expect(halensee?.status).toBe('not_found')
+    expect(halensee?.callsUsed).toBe(3)
+    const others = batchBudget!.perItemOutcomes.filter((o) => o.item !== 'Halensee-Grundschule')
+    expect(others.every((o) => o.status === 'found')).toBe(true)
+
+    // synthesizeBatchReply's own onToken streaming (unchanged by this phase) is still reached
+    // through the harness's 'complete' output — the reply isn't silently swapped for something
+    // reconstructed only from the harness's finalResult plumbing.
+    expect(received).toEqual(['Erich-Kästner-Grundschule: confirmed for June 17, 2025. See the other schools\' findings above.'])
+    expect(result.reply).toBe(received.join(''))
+
+    // Source tracking (read_file/list_directory/web_search/fetch_url accumulation) survives the
+    // harness detour — every probed/resolved item's web_search hits are still attached.
+    expect(result.sources).toBeDefined()
+    expect(result.sources!.length).toBeGreaterThan(0)
+    expect(result.sources!.every((s) => s.tool === 'web_search')).toBe(true)
+  })
+
+  it('a projected total above the threshold still pauses for confirmation, and approving still resumes and completes — the confirmation round trip is unaffected by the flag since it always skips the harness', async () => {
+    const toolCall = (id: string): LLMStructuredResponse => ({ content: '', toolCalls: [{ id, name: 'web_search', input: { query: 'q' } }] })
+    const probeResponses = [
+      toolCall('p1'), toolCall('p2'), { content: 'Probe item 0 found.' },
+      toolCall('p3'), toolCall('p4'), { content: 'Probe item 1 found.' },
+    ]
+    const tenItemMessage = Array.from({ length: 10 }, (_, i) => `School ${String.fromCharCode(65 + i)}`).join('\n')
+    const productiveSearch = async () => [{ title: 'Result', url: 'https://example.com', snippet: 'Confirmed date found.' }]
+    const remainingResponses = Array.from({ length: 8 }, (_, i) => ({ content: `Remaining item ${i} found.` }))
+    const llm = scriptedResponses([...probeResponses, ...remainingResponses])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: productiveSearch }, oneLoopMode: 'enabled' })
+
+    const staged = await assistant.turn(tenItemMessage)
+
+    expect(staged.status).toBe('needs_approval')
+    expect(staged.pendingActionKind).toBe('batch')
+    expect(staged.pendingActionId).toBeTruthy()
+    expect(staged.reason).toMatch(/8 item/)
+    expect(llm.calls).toBe(7) // only the two probe items ran — the confirmation gate fired before spending the rest
+
+    const resumed = await assistant.turn('', { approved: true, pendingActionId: staged.pendingActionId })
+
+    expect(resumed.status).toBe('ok')
+    expect(llm.calls).toBe(15)
+    const batchBudget = resumed.trace?.batchBudget
+    expect(batchBudget?.itemCount).toBe(10)
+    expect(batchBudget?.perItemOutcomes).toHaveLength(10)
+    expect(batchBudget?.perItemOutcomes.every((o) => o.status === 'found')).toBe(true)
+  })
+})
+
 // T2: per-message search index, written alongside the transcript — see
 // plans/personal_assistant_memory_transparency_search_plan.html.
 describe('PersonalAssistant message index (T2)', () => {

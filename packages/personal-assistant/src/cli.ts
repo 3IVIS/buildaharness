@@ -40,6 +40,7 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
+import { resolveOneLoopMode } from './one-loop-flag.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
@@ -174,6 +175,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
         ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
         : undefined,
+    oneLoopMode: resolveOneLoopMode(process.env),
   })
 }
 

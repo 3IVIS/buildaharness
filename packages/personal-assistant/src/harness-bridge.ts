@@ -13,8 +13,10 @@ import {
   type Belief,
   type VerificationResult,
   type HarnessRunResult,
+  type ToolExecutorContext,
 } from '@buildaharness/harness'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
+import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { extractFactsFromTurn, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
@@ -45,6 +47,16 @@ export interface HarnessRunParams {
   sources: AssistantSource[] | undefined
   onProgress?: (progress: AssistantProgress) => void
   onUsage: (usage: TokenUsage) => void
+  /**
+   * R2 of plans/harness_d2_one_loop_rewire_plan.html: a harness-driven proposer (built by
+   * AgentLoop.createHarnessProposer) swapped in as the toolExecutors 'default' entry instead of
+   * `() => draftReply`, when the one-loop flag is enabled and a caller actually supplies one.
+   * `undefined` (every caller today, before R3 wires runTurn to build one) means `run()` falls
+   * back to `() => draftReply` regardless of the flag — R2 only builds the mechanism and proves it
+   * against a caller that supplies this directly; wiring runTurn to always supply one when the
+   * flag is on is R3's scope.
+   */
+  oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
 }
 
 /**
@@ -65,10 +77,16 @@ export class HarnessBridge {
     private readonly planService: PlanService,
     private readonly assistantSession: AssistantSession,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
+    // R2 of plans/harness_d2_one_loop_rewire_plan.html: injected (not read from process.env here)
+    // so tests never touch real process.env — see one-loop-flag.ts's doc comment, mirroring
+    // control-plane-flag.ts's now-removed injectable-mode convention. Only cli.ts (or an
+    // equivalent surface entry point) is expected to call resolveOneLoopMode(process.env) and
+    // pass the result down; PersonalAssistant itself never touches process.env directly.
+    private readonly oneLoopMode: OneLoopMode = DEFAULT_ONE_LOOP_MODE,
   ) {}
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage } = params
+    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -143,7 +161,12 @@ export class HarnessBridge {
         // (plus decomposeObjective's own call, when it ran). Decomposition changes the harness's
         // task-graph *shape* (visible in stepsUsed/nodeExecutionOrder), not the number of
         // distinct replies produced.
-        toolExecutors: { default: () => draftReply },
+        //
+        // R2 of plans/harness_d2_one_loop_rewire_plan.html: flag-OFF (the default) and flag-ON
+        // with no caller-supplied proposer are byte-identical to the line above — `() =>
+        // draftReply` — satisfying INV-19. Flag-ON with a real oneLoopProposer swaps it in as the
+        // 'default' toolExecutor instead, read once per turn right here.
+        toolExecutors: { default: this.oneLoopMode === 'enabled' && oneLoopProposer ? oneLoopProposer : () => draftReply },
         experienceStore: this.experienceStore,
         // One harness main-loop iteration attempts at most one task, so a flat maxSteps could
         // never let a decomposed/plan-driven task graph even be *attempted* in full once tasks

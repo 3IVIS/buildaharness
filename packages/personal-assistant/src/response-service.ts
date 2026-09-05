@@ -75,6 +75,22 @@ export class ResponseService {
     // as the success path) so the next turn's pacing/position computations start from up-to-date
     // state, and surface a plain "ready to continue?" reply instead of the harness's own
     // draft/final result.
+    // R3 of plans/harness_d2_one_loop_rewire_plan.html: under the one-loop flag, `draftReply` is
+    // deferred (assistant.ts never precomputes it before calling harnessBridge.run() when a
+    // caller-supplied proposer is in play — see agent-loop.ts's createOneLoopProposer) — it stays
+    // `''` unless a plan-pacing pause happens to fire after the harness-driven proposer has
+    // already produced a real answer for the just-completed task. `checkpoint.progress.finalResult`
+    // is exactly that answer: harness-runtime.ts's driveMainLoop sets `ctx.finalResult =
+    // execResult.output` right after a task completes, strictly before shouldPause is ever
+    // checked, so by the time a pause can fire at all, finalResult already holds that task's real
+    // output text. This is also safe (and a no-op) on the flag-OFF path: there,
+    // `toolExecutors.default` is always `() => draftReply` for every task, so finalResult always
+    // equals draftReply already — reading it here instead changes nothing observable (INV-19),
+    // it just also covers the flag-ON case where draftReply alone would otherwise be empty. Same
+    // `typeof ... === 'string' ? ... : draftReply` fallback shape buildSuccessResult below already
+    // uses for the exact same reason.
+    const reportedReply = typeof checkpoint.progress.finalResult === 'string' ? checkpoint.progress.finalResult : draftReply
+
     let planStatus: AssistantTurnResult['planStatus']
     let reply = 'Paused.'
     let pausedNote: string | undefined
@@ -93,7 +109,7 @@ export class ResponseService {
       // already on screen), so persisting only the pacing note would leave the transcript — and
       // therefore /export, /search, and every later turn's LLM context — recording a reply the
       // user never actually saw, while silently discarding the one they did.
-      reply = draftReply.trim() ? `${draftReply}\n\n${pacingNote}` : pacingNote
+      reply = reportedReply.trim() ? `${reportedReply}\n\n${pacingNote}` : pacingNote
       pausedNote = pacingNote
     }
     const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, layerActivity)

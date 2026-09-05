@@ -1,4 +1,4 @@
-import { EscalationHalt, InMemoryExperienceStore, type ExperienceStore, type CheckpointStore } from '@buildaharness/harness'
+import { EscalationHalt, InMemoryExperienceStore, type ExperienceStore, type CheckpointStore, type ToolExecutorContext } from '@buildaharness/harness'
 import {
   InMemoryAdapter,
   IndexedDBAdapter,
@@ -25,11 +25,13 @@ import type { AssistantToolStep } from './tool-step.js'
 
 import { MemoryService, type MemorySummary, type MemoryExport } from './memory-service.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
-import { AgentLoop, type BatchBudgetState, type BatchBudgetTrace, trimmedAverage, nextItemBudget } from './agent-loop.js'
+import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
+import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
+import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { ResponseService } from './response-service.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
@@ -160,6 +162,16 @@ export interface PersonalAssistantOptions {
    * would make (see turn()) — never mid-turn.
    */
   spendCap?: SpendCapConfig
+  /**
+   * R2 of plans/harness_d2_one_loop_rewire_plan.html — see one-loop-flag.ts's doc comment for the
+   * full rollout rationale. 'disabled' (the default, for the whole R2-R4 rollout window): today's
+   * behavior, byte-for-byte — HarnessBridge.run() always uses `() => draftReply` as its toolFn,
+   * regardless of whether a caller happens to supply a proposer. 'enabled' lets a supplied
+   * proposer (see HarnessRunParams.oneLoopProposer) actually be used. PersonalAssistant itself
+   * never touches process.env — only cli.ts (or an equivalent surface entry point) is expected to
+   * call resolveOneLoopMode(process.env) and pass the result here.
+   */
+  oneLoopMode?: OneLoopMode
 }
 
 /**
@@ -188,6 +200,8 @@ export class PersonalAssistant {
   private readonly dangerouslySkipPermissions: boolean
   /** Whenever any of fileTools/webTools/shellTools is configured, `turn()` routes through AgentLoop instead of a single plain chat call — computed once here since it never changes for the lifetime of an instance. */
   private readonly toolLoopWillRun: boolean
+  /** R3 of plans/harness_d2_one_loop_rewire_plan.html — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
+  private readonly oneLoopMode: OneLoopMode
 
   private readonly memoryService: MemoryService
   private readonly session: AssistantSession
@@ -215,6 +229,7 @@ export class PersonalAssistant {
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     const spendCap = options.spendCap
     this.toolLoopWillRun = Boolean(fileTools || this.webTools || shellTools || actionTools)
+    this.oneLoopMode = options.oneLoopMode ?? DEFAULT_ONE_LOOP_MODE
 
     // Threaded as a getter closure — never a captured string — into every collaborator that
     // reads the current model, so `setModel()` (the `/model` command) keeps working for all of
@@ -249,7 +264,10 @@ export class PersonalAssistant {
       this.onTrace,
     )
     this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore)
-    this.harnessBridge = new HarnessBridge(this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps, this.planService, this.session, this.onTrace)
+    this.harnessBridge = new HarnessBridge(
+      this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
+      this.planService, this.session, this.onTrace, this.oneLoopMode,
+    )
     this.responseService = new ResponseService(this.memoryService, this.session, this.planService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
@@ -461,12 +479,21 @@ export class PersonalAssistant {
     // though the batch loop itself finishes long before the harness run that ultimately builds
     // `trace`.
     let batchBudgetTrace: BatchBudgetTrace | undefined
+    // R3 of plans/harness_d2_one_loop_rewire_plan.html: set only on the flag-ON, non-batch,
+    // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
+    // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
+    // driveMainLoop drives the actual tool calls one iteration at a time.
+    let oneLoopProposer: ((toolCtx: ToolExecutorContext) => Promise<unknown>) | undefined
+    // The mutable array AgentLoop.createOneLoopProposer's proposer pushes to as it dispatches
+    // tool calls during the harness run — read back into `sources` once that run finishes (see
+    // below), mirroring `loopResult.sources` on the flag-OFF path.
+    let oneLoopSources: AssistantSource[] | undefined
+    // R4: set only on the flag-ON batch path — the batch counterpart to oneLoopSources, since a
+    // batch turn also needs to read its BatchBudgetTrace back once the harness run building it
+    // (via AgentLoop.createBatchOneLoopProposer) has finished, mirroring `loopResult.batchBudget`
+    // on the flag-OFF path.
+    let oneLoopBatchBudget: (() => BatchBudgetTrace | undefined) | undefined
     if (this.toolLoopWillRun) {
-      // Phase 4c: one live ControlState per turn, shared across every tool call this turn makes
-      // — including across batch items (see AgentLoop.createControlPlaneState /
-      // tool-control-plane.ts) — so a failure pattern discovered partway through the turn can
-      // actually gate a later call via checkToolPolicy.
-      const controlPlaneState = this.agentLoop.createControlPlaneState()
       // Gated entry point for the batch-research path: only when webTools is configured, the
       // message is an explicit ≥3-item list (batch-list-detector.ts's narrow, syntactic-only
       // shape), and this turn isn't already inside a plan-driven run (planForCancelCheck is the
@@ -474,39 +501,48 @@ export class PersonalAssistant {
       // `activePlan`). Every other case falls straight into today's flat AgentLoop.runToolLoop,
       // byte-for-byte unchanged.
       const batch = this.webTools && !planForCancelCheck ? detectHomogeneousBatchList(userMessage) : null
-      const loopResult = batch
-        ? await this.agentLoop.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, controlPlaneState)
-        : await this.agentLoop.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel, controlPlaneState)
+      // R3 routed the flat (non-batch) tool loop under the harness's own driveMainLoop when the
+      // flag is enabled; R4 (plans/harness_d2_one_loop_rewire_plan.html) does the same for batch
+      // research, via AgentLoop.createBatchOneLoopProposer — so `!batch` no longer excludes a
+      // turn from useOneLoop. A trivial turn still returns below without ever calling
+      // harnessBridge.run() (see classification.isTrivial below) — there is no harness run to
+      // defer the tool loop into, so it keeps resolving synchronously here too, same as flag-OFF.
+      const useOneLoop = this.oneLoopMode === 'enabled' && !classification.isTrivial
 
-      if (loopResult.kind === 'needs_approval') {
-        await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
-        classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
-        // dangerouslySkipPermissions auto-applies the staged action the same way a second
-        // turn() call with `approved: true` would — resolvePendingAction is exactly that path,
-        // just invoked immediately instead of waiting for the caller to resume it.
-        if (this.dangerouslySkipPermissions) {
-          return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+      if (useOneLoop && batch) {
+        const built = this.agentLoop.createBatchOneLoopProposer(
+          batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage,
+        )
+        oneLoopProposer = built.proposer
+        oneLoopSources = built.sources
+        oneLoopBatchBudget = built.getBatchBudget
+        draftReply = ''
+      } else if (useOneLoop) {
+        const built = this.agentLoop.createOneLoopProposer(
+          sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
+        )
+        oneLoopProposer = built.proposer
+        oneLoopSources = built.sources
+        draftReply = ''
+      } else {
+        // Phase 4c: one live ControlState per turn, shared across every tool call this turn
+        // makes — including across batch items (see AgentLoop.createControlPlaneState /
+        // tool-control-plane.ts) — so a failure pattern discovered partway through the turn can
+        // actually gate a later call via checkToolPolicy. Only needed on this branch: the
+        // harness-driven proposer above folds in the harness's own live ControlState instead
+        // (see createHarnessProposer's doc comment) rather than this separate structure.
+        const controlPlaneState = this.agentLoop.createControlPlaneState()
+        const loopResult = batch
+          ? await this.agentLoop.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, controlPlaneState)
+          : await this.agentLoop.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel, controlPlaneState)
+
+        if (loopResult.kind === 'needs_approval' || loopResult.kind === 'escalated') {
+          return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, loopResult, classification)
         }
-        return {
-          status: 'needs_approval',
-          reply: null,
-          reason: loopResult.reason,
-          // A write_file/run_shell_command call is consequential regardless of what the
-          // classifier made of the message text — this is a tool-call-level gate, not the
-          // message-level one above.
-          riskLevel: 'HIGH',
-          pendingActionId: loopResult.pendingActionId,
-          pendingActionKind: loopResult.pendingActionKind,
-        }
+        draftReply = loopResult.content
+        sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
+        batchBudgetTrace = loopResult.batchBudget
       }
-      if (loopResult.kind === 'escalated') {
-        await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
-        this.onTrace?.({ kind: 'escalation', reason: loopResult.reason })
-        return { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: classification.riskLevel }
-      }
-      draftReply = loopResult.content
-      sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
-      batchBudgetTrace = loopResult.batchBudget
     } else {
       // The only real network call this turn makes — everything the harness does around it
       // (risk, gating, verification, recovery, review) is local bookkeeping. Read via callChat
@@ -561,7 +597,17 @@ export class PersonalAssistant {
         sources,
         onProgress: options.onProgress,
         onUsage: accumulateUsage,
+        oneLoopProposer,
       })
+
+      // R3: oneLoopSources is only set on the flag-ON path above, and only gets pushed to once
+      // the harness run just awaited has actually dispatched tool calls through the proposer — so
+      // this can only be read back afterward, unlike the flag-OFF path's `sources`, which is
+      // already known by the time harnessBridge.run() is called.
+      if (oneLoopSources) sources = oneLoopSources.length > 0 ? oneLoopSources : undefined
+      // R4: the batch counterpart to the sources read-back above — only set once the harness run
+      // driven by AgentLoop.createBatchOneLoopProposer has reached its 'synthesize' phase.
+      if (oneLoopBatchBudget) batchBudgetTrace = oneLoopBatchBudget()
 
       if (outcome.status === 'paused') {
         return this.responseService.buildPausedResult({
@@ -598,7 +644,53 @@ export class PersonalAssistant {
       if (err instanceof EscalationHalt) {
         return this.responseService.buildEscalatedResult({ sessionId, transcriptKey, userMessage, err, classification })
       }
+      // R3 of plans/harness_d2_one_loop_rewire_plan.html: the harness-driven proposer's
+      // counterpart to the flag-OFF loopResult.kind === 'needs_approval'/'escalated' branches
+      // above — execute.ts rethrows a HarnessPauseSignal (which OneLoopPause implements)
+      // unexamined, so it propagates out of harnessBridge.run() as a thrown error rather than a
+      // `{ status: 'paused' }` outcome; caught here instead.
+      if (err instanceof OneLoopPause) {
+        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification)
+      }
       throw err
     }
+  }
+
+  /**
+   * Shared by the flag-OFF flat/batch tool loop's own needs_approval/escalated ToolLoopResult and
+   * the flag-ON harness-driven proposer's equivalent OneLoopPause (R3 of
+   * plans/harness_d2_one_loop_rewire_plan.html, see runTurn's two call sites) — "the model wants
+   * to write/run/send something" or "the tool loop gave up" means the same thing to the caller
+   * regardless of which loop discovered it.
+   */
+  private async buildToolLoopPauseResult(
+    sessionId: string,
+    transcriptKey: string,
+    userMessage: string,
+    loopResult: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
+    classification: TurnIntentClassification,
+  ): Promise<AssistantTurnResult> {
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    if (loopResult.kind === 'needs_approval') {
+      classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
+      // dangerouslySkipPermissions auto-applies the staged action the same way a second turn()
+      // call with `approved: true` would — resolvePendingAction is exactly that path, just
+      // invoked immediately instead of waiting for the caller to resume it.
+      if (this.dangerouslySkipPermissions) {
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+      }
+      return {
+        status: 'needs_approval',
+        reply: null,
+        reason: loopResult.reason,
+        // A write_file/run_shell_command call is consequential regardless of what the classifier
+        // made of the message text — this is a tool-call-level gate, not the message-level one.
+        riskLevel: 'HIGH',
+        pendingActionId: loopResult.pendingActionId,
+        pendingActionKind: loopResult.pendingActionKind,
+      }
+    }
+    this.onTrace?.({ kind: 'escalation', reason: loopResult.reason })
+    return { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: classification.riskLevel }
   }
 }

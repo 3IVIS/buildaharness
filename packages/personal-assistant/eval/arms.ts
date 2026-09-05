@@ -32,7 +32,11 @@ export interface Arm {
   run(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null>
 }
 
-async function runAssistant(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null> {
+async function runAssistant(
+  task: TaskSpec,
+  makeLlm: MakeLlm,
+  oneLoopMode: 'enabled' | 'disabled',
+): Promise<ArmTurnOutput | null> {
   if (task.tools.web) return null // web arm not wired — see eval/README.md
 
   const ws = makeWorkspace(task)
@@ -53,6 +57,7 @@ async function runAssistant(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOu
     checkpointStore: new InMemoryAdapter({ scope: 'thread', namespace: `eval-ckpt-${task.id}` }),
     fileTools: ctx.fileTools,
     shellTools: ctx.shellTools,
+    oneLoopMode,
   })
 
   const started = Date.now()
@@ -89,13 +94,13 @@ async function runAssistant(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOu
 export const baselineArm: Arm = {
   name: 'baseline',
   label: "PersonalAssistant as shipped — harness runs post-hoc over the model's reply",
-  run: runAssistant,
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'disabled'),
 }
 
 export const flagOnArm: Arm = {
   name: 'flagOn',
-  label: 'PersonalAssistant with the current phase flag on (identical to baseline until a flag exists)',
-  run: runAssistant,
+  label: 'PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)',
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled'),
 }
 
 export const bareArm: Arm = {

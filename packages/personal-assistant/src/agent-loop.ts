@@ -1,4 +1,4 @@
-import { Budget } from '@buildaharness/harness'
+import { Budget, type ToolExecutorContext, type HarnessPauseSignal } from '@buildaharness/harness'
 import type {
   MemoryAdapter,
   ILLMClient,
@@ -32,6 +32,24 @@ export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
   | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch' }
   | { kind: 'escalated'; reason: string }
+
+/**
+ * R2 of plans/harness_d2_one_loop_rewire_plan.html: thrown by a harness-driven proposer
+ * (createHarnessProposer, below) when runToolIterationStep produces a 'needs_approval' or
+ * 'escalated' ToolLoopResult — the harness's own execute() rethrows anything satisfying
+ * isHarnessPauseSignal unexamined (no SYSTEM_ERROR evidence, no task-FAILED transition), so this
+ * is never misclassified as a tool failure. Carries the original ToolLoopResult so the eventual
+ * catcher (assistant.ts's runTurn, alongside its existing `catch (err) { if (err instanceof
+ * EscalationHalt) ... }` branch — see R3) can build the exact same needs_approval/escalated
+ * AssistantTurnResult it already builds from a flag-OFF ToolLoopResult, without re-deriving it.
+ */
+export class OneLoopPause extends Error implements HarnessPauseSignal {
+  readonly __harnessPause = true as const
+  constructor(readonly result: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>) {
+    super(result.reason)
+    this.name = 'OneLoopPause'
+  }
+}
 
 // Batch-research tuning constants (dynamic tool-call budget for batch research tasks): a
 // self-calibrating alternative to the flat maxSteps cap for the one task shape that needs it —
@@ -225,6 +243,236 @@ export class AgentLoop {
   }
 
   /**
+   * R2 of plans/harness_d2_one_loop_rewire_plan.html: builds the real toolExecutors['default']
+   * entry HarnessBridge.run() swaps in when the one-loop flag is enabled — a proposer that calls
+   * runToolIterationStep once per driveMainLoop iteration and translates its discriminated result
+   * into the primitives D0/D1 already built: a plain return (status 'continue', no output yet) for
+   * `{ done: false }`, the final answer text for a `{ done: true, result: { kind: 'final' } }`
+   * step, or a thrown OneLoopPause for `needs_approval`/`escalated` — never a thrown plain Error,
+   * so execute() never misclassifies this as a tool failure.
+   *
+   * `toolCtx.controlState`, when the harness has one resolved (see execute.ts's ToolExecutorContext
+   * doc comment), is folded in as this step's ControlState for tool-policy.ts's evaluateToolPolicy
+   * — the harness's own live per-iteration ControlState, not a second parallel structure — by
+   * wrapping it in a `{ controlState }` shape matching the one field runToolIterationStep's
+   * `controlPlaneState` parameter actually reads for the gate check. Recording each dispatched
+   * tool call's outcome back into a live ControlState the *next* iteration's actionGate can react
+   * to is real, buildable follow-up (would need worldModel/evidenceStore/diagnostics/
+   * failureDiagnostics from the same ToolExecutorContext threaded into recordToolOutcome) —
+   * deliberately not done here to keep this phase to the proposer + translation it was scoped for;
+   * flagged for R3/R4 to pick up if the validation matrix shows it's needed sooner.
+   */
+  createHarnessProposer(input: {
+    messages: ChatMessage[]
+    tools: ToolDefinition[]
+    sessionId: string
+    userMessage: string
+    maxIterations: number
+    sources: AssistantSource[]
+    onToken?: (token: string) => void
+    onToolStep?: (step: AssistantToolStep) => void
+    onUsage?: (usage: TokenUsage) => void
+    riskHint?: TurnIntentClassification['riskLevel']
+  }): (toolCtx: ToolExecutorContext) => Promise<unknown> {
+    let dispatchedAnyToolCall = false
+    let iteration = 0
+
+    return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
+      if (iteration >= input.maxIterations) {
+        throw new OneLoopPause({ kind: 'escalated', reason: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.` })
+      }
+      iteration++
+
+      const controlPlaneState = toolCtx.controlState
+        ? ({ controlState: toolCtx.controlState } as TurnControlPlaneState)
+        : undefined
+
+      const step = await this.runToolIterationStep(
+        input.messages, input.tools, input.sessionId, input.userMessage, input.sources, dispatchedAnyToolCall,
+        input.onToken, input.onToolStep, input.onUsage, undefined, input.riskHint ?? 'LOW', controlPlaneState,
+      )
+
+      if (!step.done) {
+        dispatchedAnyToolCall = step.dispatchedAnyToolCall
+        return { __harnessExecutionStatus: 'continue' }
+      }
+
+      if (step.result.kind === 'final') {
+        return { __harnessExecutionStatus: 'complete', output: step.result.content }
+      }
+
+      throw new OneLoopPause(step.result)
+    }
+  }
+
+  /**
+   * R3 of plans/harness_d2_one_loop_rewire_plan.html: the wiring-level counterpart to
+   * `createHarnessProposer` above — builds the same `messages`/`tools` shape `runToolLoop` builds
+   * (system prompt + transcript + user message; whichever of FILE_TOOLS/WEB_TOOLS/SHELL_TOOLS/
+   * ACTION_TOOLS/REMINDER_TOOLS are configured) so `assistant.ts`'s `runTurn` doesn't need to
+   * duplicate that list-building just to wire the flag-ON path, and caps iterations at
+   * `this.maxSteps` — the same cap `runToolLoop` applies — rather than something the caller has to
+   * choose. Returns the mutable `sources` array threaded into the proposer so the caller can read
+   * back whatever got pushed to it once the harness run using this proposer has finished (mirrors
+   * `ToolLoopResult`'s `sources` field on the flag-OFF path).
+   */
+  createOneLoopProposer(
+    sessionId: string,
+    transcript: ChatMessage[],
+    userMessage: string,
+    systemPrompt: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+    riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
+  ): { proposer: (toolCtx: ToolExecutorContext) => Promise<unknown>; sources: AssistantSource[] } {
+    const tools = [
+      ...(this.fileTools ? FILE_TOOLS : []),
+      ...(this.webTools ? WEB_TOOLS : []),
+      ...(this.shellTools ? SHELL_TOOLS : []),
+      ...(this.actionTools ? ACTION_TOOLS : []),
+      ...REMINDER_TOOLS,
+    ]
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...transcript,
+      { role: 'user', content: userMessage },
+    ]
+    const sources: AssistantSource[] = []
+    const proposer = this.createHarnessProposer({
+      messages, tools, sessionId, userMessage, maxIterations: this.maxSteps, sources, onToken, onToolStep, onUsage, riskHint,
+    })
+    return { proposer, sources }
+  }
+
+  /**
+   * R4 of plans/harness_d2_one_loop_rewire_plan.html: the batch-research counterpart to
+   * `createOneLoopProposer` above — routes `runBatchToolLoop`'s probe → calibrate → confirm-gate
+   * → resolve-remaining → synthesize sequence through the same harness-driven proposer mechanism,
+   * instead of batch research remaining a second code path that (per R3) never reached the
+   * harness regardless of the flag. Reuses `resolveBatchItem`/`resolveRemainingBatchItems`/
+   * `synthesizeBatchReply` verbatim — the exact same methods the flag-OFF path calls — so the
+   * dead-end window (local `toolYields`, scoped inside `resolveBatchItem`) and the calibrated
+   * per-item budget (`resolveRemainingBatchItems`'s own `Budget`/`nextItemBudget` logic) keep
+   * bounding a hard item's spend identically; nothing here reimplements that math.
+   *
+   * The closure advances through three phases, one per `driveMainLoop` iteration (i.e. one
+   * `__harnessExecutionStatus: 'continue'` per phase transition) rather than one per underlying
+   * tool call the way the flat proposer does: 'probe' (resolve every probe item, calibrate, and
+   * either throw a `needs_approval` OneLoopPause — mirroring `runBatchToolLoop`'s own confirmation
+   * gate, including persisting the same `BatchPendingState` so the existing, flag-independent
+   * `resolvePendingBatchConfirmation` resume path needs no changes — or fall through), 'resolve'
+   * (resolve every remaining item in one `resolveRemainingBatchItems` call), and 'synthesize'
+   * (stream the final reply via `synthesizeBatchReply`, preserving its existing token-by-token
+   * `onToken` semantics, then return `'complete'`). This is coarser-grained resumability than the
+   * flat proposer's per-tool-call steps — a deliberate scope decision (see this phase's
+   * implementation note) rather than reimplementing `resolveRemainingBatchItems`'s calibration
+   * loop one item at a time just to get finer-grained checkpoints.
+   */
+  createBatchOneLoopProposer(
+    items: string[],
+    sessionId: string,
+    userMessage: string,
+    systemPrompt: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): {
+    proposer: (toolCtx: ToolExecutorContext) => Promise<unknown>
+    sources: AssistantSource[]
+    getBatchBudget: () => BatchBudgetTrace | undefined
+  } {
+    const probeCount = items.length === 3 ? 1 : 2
+    const probeItems = items.slice(0, probeCount)
+    const remainingItems = items.slice(probeCount)
+
+    const sources: AssistantSource[] = []
+    let phase: 'probe' | 'resolve' | 'synthesize' | 'done' = 'probe'
+    const probeResolutions: BatchItemResolution[] = []
+    let allResolutions: BatchItemResolution[] = []
+    let notAttempted: string[] = []
+    let projectedTotal = 0
+    let batchBudget: BatchBudgetTrace | undefined
+
+    const proposer = async (_toolCtx: ToolExecutorContext): Promise<unknown> => {
+      // Unlike the flat createHarnessProposer, this does not fold toolCtx.controlState into a
+      // TurnControlPlaneState for resolveBatchItem/resolveRemainingBatchItems: those methods'
+      // shared runToolIterationStep unconditionally calls recordToolOutcome (the write side of
+      // Phase 4c's control-plane state) whenever a controlPlaneState is passed at all, and
+      // recordToolOutcome dereferences state.evidenceStore — a field a synthetic
+      // `{ controlState: toolCtx.controlState }` wrapper (the read-only shape R2's flat proposer
+      // builds) doesn't have. R2's own note already flagged the write-side half of the fold as
+      // deferred, buildable follow-up; discovering it crashes as soon as something exercises it
+      // (a real per-item tool dispatch, which the flat proposer's own test matrix never did) is
+      // this phase's actual finding — passing `undefined` here (no ControlState at all for batch
+      // items, matching the flat proposer's very first call before any ControlState is resolved)
+      // avoids the crash without inventing new write-side plumbing, and is flagged for a human to
+      // resolve properly (either a real evidenceStore-backed control-plane object, or fixing
+      // recordToolOutcome to tolerate a partial state) rather than silently left as a TODO.
+      const controlPlaneState = undefined
+
+      if (phase === 'probe') {
+        for (const item of probeItems) {
+          probeResolutions.push(
+            await this.resolveBatchItem(item, BATCH_PROBE_ITEM_CAP, items, systemPrompt, sessionId, onToolStep, onUsage, controlPlaneState),
+          )
+        }
+
+        const callsPerItemHistory = probeResolutions.map((r) => r.callsUsed)
+        const callsPerItem = Math.max(BATCH_PER_ITEM_FLOOR, trimmedAverage(callsPerItemHistory))
+        projectedTotal = callsPerItem * remainingItems.length * BATCH_SLACK_FACTOR
+
+        if (remainingItems.length > 0 && projectedTotal > BATCH_LARGE_PROJECTION_THRESHOLD) {
+          const pendingActionId = crypto.randomUUID()
+          const pendingState: BatchPendingState = {
+            userMessage,
+            systemPrompt,
+            sessionId,
+            probedResults: probeResolutions,
+            remainingItems,
+            projectedTotal,
+          }
+          await this.memory.set(`batch-pending:${pendingActionId}`, pendingState)
+          phase = 'done'
+          throw new OneLoopPause({
+            kind: 'needs_approval',
+            reason:
+              `This looks like it'll take ~${Math.ceil(projectedTotal)} more searches to cover the remaining ` +
+              `${remainingItems.length} item(s) — continue, or should I do a quick pass first?`,
+            pendingActionId,
+            pendingActionKind: 'batch',
+          })
+        }
+
+        phase = 'resolve'
+        return { __harnessExecutionStatus: 'continue' }
+      }
+
+      if (phase === 'resolve') {
+        const resolved = await this.resolveRemainingBatchItems(
+          probeResolutions, remainingItems, systemPrompt, sessionId, onToolStep, onUsage, controlPlaneState,
+        )
+        allResolutions = resolved.resolutions
+        notAttempted = resolved.notAttempted
+        sources.push(...allResolutions.flatMap((r) => r.sources))
+        phase = 'synthesize'
+        return { __harnessExecutionStatus: 'continue' }
+      }
+
+      if (phase === 'synthesize') {
+        const content = await this.synthesizeBatchReply(userMessage, systemPrompt, allResolutions, notAttempted, onToken, onUsage)
+        batchBudget = buildBatchBudgetTrace(items.length, projectedTotal, allResolutions)
+        phase = 'done'
+        return { __harnessExecutionStatus: 'complete', output: content }
+      }
+
+      throw new Error('Batch one-loop proposer invoked after completion')
+    }
+
+    return { proposer, sources, getBatchBudget: () => batchBudget }
+  }
+
+  /**
    * Phase 4/4c: the deterministic, harness-state-informed authority for whether `toolName` may
    * proceed — see tool-policy.ts. `controlState` is the live, per-turn ControlState built by
    * tool-control-plane.ts and threaded down from runTurn (see createTurnControlPlaneState);
@@ -289,6 +537,11 @@ export class AgentLoop {
    * dead-end window) — a caller that never passes it (runToolLoop, the flat non-batch path)
    * gets today's unmodified behavior: the loop only ever ends via a final answer, an
    * needs_approval bail-out, or maxIterations.
+   *
+   * Thin wrapper (R1 of the D2 one-loop-rewire follow-up plan) around
+   * `runToolIterationStep`, which does one iteration's worth of work and returns a discriminated
+   * `done`/`not done` result — the shape a harness-driven `driveMainLoop` can call once per its
+   * own iteration (R2), instead of only ever being driven by this method's own `for` loop.
    */
   private async runToolIterations(
     messages: ChatMessage[],
@@ -296,6 +549,55 @@ export class AgentLoop {
     tools: ToolDefinition[],
     sessionId: string,
     userMessage: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+    onToolResult?: (toolName: string, resultText: string) => 'continue' | 'stop',
+    riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
+    controlPlaneState?: TurnControlPlaneState,
+  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
+    const sources: AssistantSource[] = []
+    let dispatchedAnyToolCall = false
+
+    for (let iteration = 0; iteration < maxIterations; iteration++) {
+      const step = await this.runToolIterationStep(
+        messages, tools, sessionId, userMessage, sources, dispatchedAnyToolCall,
+        onToken, onToolStep, onUsage, onToolResult, riskHint, controlPlaneState,
+      )
+      if (step.done) {
+        return { result: step.result, iterationsUsed: iteration + 1, deadEndStopped: step.deadEndStopped }
+      }
+      dispatchedAnyToolCall = step.dispatchedAnyToolCall
+    }
+
+    return {
+      result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
+      iterationsUsed: maxIterations,
+    }
+  }
+
+  /**
+   * One iteration's worth of `runToolIterations`' ReAct loop, extracted (R1 of the D2
+   * one-loop-rewire follow-up plan, `plans/harness_d2_one_loop_rewire_plan.html`) so a
+   * harness-driven proposer (R2) can call this directly, once per `driveMainLoop` iteration,
+   * instead of only ever being driven by `runToolIterations`' own `for` loop. Preserves every
+   * early-return branch of the original loop body exactly — the unparsed-tool-call retry,
+   * `__staged_action` adoption, write/shell/email staging, cached-shell replay, per-call
+   * `tool-policy.ts` DENY/REQUIRE_APPROVAL, and the `onToolResult` dead-end-window stop — as a
+   * `{ done: true, result }` return; the two cases that used to `continue` the outer `for` loop
+   * (the unparsed-tool-call retry and a cached-shell replay) become `{ done: false, ... }`
+   * instead, with `dispatchedAnyToolCall` threaded back to the caller since it must persist
+   * across iterations. `sources` is mutated in place (pushed to) rather than threaded through
+   * the result, since it's a plain accumulator shared by reference across every step call for
+   * the same loop.
+   */
+  private async runToolIterationStep(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    sessionId: string,
+    userMessage: string,
+    sources: AssistantSource[],
+    dispatchedAnyToolCall: boolean,
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
@@ -313,25 +615,17 @@ export class AgentLoop {
     // one in (e.g. resolvePendingBatchConfirmation's resume path — see tool-control-plane.ts's own
     // doc comment on why that's a deliberate scope boundary, not an oversight).
     controlPlaneState?: TurnControlPlaneState,
-  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
-    const sources: AssistantSource[] = []
-
+  ): Promise<
+    | { done: true; result: ToolLoopResult; deadEndStopped?: boolean }
+    | { done: false; dispatchedAnyToolCall: boolean }
+  > {
     // Reports a step immediately, before the call executes — a caller wants to see "reading
     // notes.txt" while it's happening, not just after the fact.
     const reportStep = (tool: string, input: Record<string, unknown>): void => {
       onToolStep?.({ tool, input, summary: summarizeToolStep(tool, input) })
     }
 
-    // True once this loop has manually dispatched at least one tool call and pushed its
-    // result into `messages` (the proxy backend's shape — one call per tool round trip,
-    // enriching `messages` with real tool_use/tool_result blocks each time). Stays false
-    // for the claude-cli backend's typical shape, where Claude Code's own agentic loop
-    // resolves every tool call invisibly inside a single callChatStructured call and
-    // `messages` is never touched — see the "no more tool calls" branch below for why this
-    // distinction matters.
-    let dispatchedAnyToolCall = false
-
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
+    {
       // For the claude-cli backend, this one call may run several tool round trips
       // internally (Claude Code's own agentic loop) before returning — onToolStep here is
       // what makes those otherwise-invisible calls show up live; for the proxy backend,
@@ -359,17 +653,18 @@ export class AgentLoop {
         if (looksLikeUnparsedToolCall(response.content)) {
           // Never show this to the user as if it were a real answer — nudge the model to
           // either call a tool properly or answer in plain text, and retry. Bounded by the
-          // same maxIterations cap as any other iteration: a model that keeps doing this falls
-          // through to the 'escalated' return below instead of ever reaching the user.
+          // same maxIterations cap as any other iteration (enforced by the wrapper's loop): a
+          // model that keeps doing this falls through to the 'escalated' return below instead
+          // of ever reaching the user.
           messages.push({ role: 'assistant', content: response.content })
           messages.push({
             role: 'user',
             content: 'Your last reply contained unparsed tool-call syntax (a literal "<tool_call>" tag) instead of either a real tool call or a plain-text answer. Do not include any tool-call-like tags in your reply — either call a tool, or answer in plain text.',
           })
-          continue
+          return { done: false, dispatchedAnyToolCall }
         }
 
-        if (!onToken) return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1 }
+        if (!onToken) return { done: true, result: { kind: 'final', content: response.content, sources } }
 
         if (!dispatchedAnyToolCall) {
           // No tool result was ever manually folded into `messages` this turn — true for
@@ -382,7 +677,7 @@ export class AgentLoop {
           // correct, tool-grounded reply with a wrong one. Just deliver the already-correct
           // content through onToken directly; no second call, no risk of losing grounding.
           onToken(response.content)
-          return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1 }
+          return { done: true, result: { kind: 'final', content: response.content, sources } }
         }
 
         // Re-request the same final answer as a real streamed completion — only
@@ -395,7 +690,7 @@ export class AgentLoop {
           streamed += token
           onToken(token)
         }
-        return { result: { kind: 'final', content: streamed, sources }, iterationsUsed: iteration + 1 }
+        return { done: true, result: { kind: 'final', content: streamed, sources } }
       }
 
       // The Claude CLI backend's own agentic loop resolves read/list/web calls internally
@@ -410,36 +705,36 @@ export class AgentLoop {
         if (kind === 'write') {
           const { path, content } = payload as { path: string; content: string }
           return {
+            done: true,
             result: {
               kind: 'needs_approval',
               reason: `Proposes writing to "${path}":\n${previewContent(content)}`,
               pendingActionId: id,
               pendingActionKind: 'write',
             },
-            iterationsUsed: iteration + 1,
           }
         }
         if (kind === 'email') {
           const { to, subject, body } = payload as { to: string; subject: string; body: string }
           return {
+            done: true,
             result: {
               kind: 'needs_approval',
               reason: formatEmailApprovalReason({ to, subject, body }),
               pendingActionId: id,
               pendingActionKind: 'email',
             },
-            iterationsUsed: iteration + 1,
           }
         }
         const { command, cwd } = payload as { command: string; cwd: string }
         return {
+          done: true,
           result: {
             kind: 'needs_approval',
             reason: shellApprovalReason(command, cwd),
             pendingActionId: id,
             pendingActionKind: 'shell',
           },
-          iterationsUsed: iteration + 1,
         }
       }
 
@@ -454,13 +749,13 @@ export class AgentLoop {
           throw new Error('write_file executor returned an unexpected result kind')
         }
         return {
+          done: true,
           result: {
             kind: 'needs_approval',
             reason: `Proposes writing to "${result.path}":\n${previewContent(result.content)}`,
             pendingActionId: result.id,
             pendingActionKind: 'write',
           },
-          iterationsUsed: iteration + 1,
         }
       }
 
@@ -476,22 +771,21 @@ export class AgentLoop {
         const result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
         if (result.kind === 'cached_shell') {
           messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
-          dispatchedAnyToolCall = true
           messages.push({
             role: 'tool',
             content: formatCachedShellResult(result.command, result.cwd, result.execution),
             toolCallId: shellCall.id,
           })
-          continue
+          return { done: false, dispatchedAnyToolCall: true }
         }
         return {
+          done: true,
           result: {
             kind: 'needs_approval',
             reason: shellApprovalReason(result.command, result.cwd),
             pendingActionId: result.id,
             pendingActionKind: 'shell',
           },
-          iterationsUsed: iteration + 1,
         }
       }
 
@@ -504,18 +798,17 @@ export class AgentLoop {
         // propagates and the loop's own error handling turns it into a tool error the model sees.
         const result = await executeActionTool(this.actionTools, 'send_email', emailCall.input)
         return {
+          done: true,
           result: {
             kind: 'needs_approval',
             reason: formatEmailApprovalReason(result),
             pendingActionId: result.id,
             pendingActionKind: 'email',
           },
-          iterationsUsed: iteration + 1,
         }
       }
 
       messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
-      dispatchedAnyToolCall = true
       for (const call of response.toolCalls) {
         reportStep(call.name, call.input)
         // Phase 4/4c: deterministic, harness-state-informed gate, checked before this call
@@ -539,8 +832,8 @@ export class AgentLoop {
           // uses below) rather than a fabricated needs_approval with no real pendingActionId
           // behind it.
           return {
+            done: true,
             result: { kind: 'escalated', reason: policy.reason },
-            iterationsUsed: iteration + 1,
           }
         }
         let resultText: string
@@ -588,15 +881,12 @@ export class AgentLoop {
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
 
         if (onToolResult && onToolResult(call.name, resultText) === 'stop') {
-          return { result: { kind: 'final', content: response.content, sources }, iterationsUsed: iteration + 1, deadEndStopped: true }
+          return { done: true, result: { kind: 'final', content: response.content, sources }, deadEndStopped: true }
         }
       }
     }
 
-    return {
-      result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
-      iterationsUsed: maxIterations,
-    }
+    return { done: false, dispatchedAnyToolCall: true }
   }
 
   /**

@@ -16,7 +16,7 @@ import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
 import { reviewProposedChange, applyReviewOutcome } from './nodes/review-proposed-change.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
-import { execute, type ProposedExecutionChange } from './nodes/execute.js'
+import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
 import { rollbackAndReplan, cannotMakeProgress } from './nodes/rollback-replan.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
@@ -89,7 +89,7 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * written before this phase) is unaffected — awaiting a non-Promise value just resolves to
    * itself.
    */
-  toolExecutors?: Record<string, () => unknown | Promise<unknown>>
+  toolExecutors?: Record<string, (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>>
   /** Called after every checkpointable main-loop iteration. Persist the checkpoint here to support resume(). */
   onCheckpoint?: (checkpoint: HarnessCheckpoint) => void | Promise<void>
   /** Return true to stop the run at the next checkpoint instead of running to completion. */
@@ -243,7 +243,7 @@ interface LoopContext {
 
   experienceStore: ExperienceStore
   updateChannel: UpdateChannel
-  toolExecutors: Record<string, () => unknown | Promise<unknown>>
+  toolExecutors: Record<string, (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>>
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
@@ -799,6 +799,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       currentTask,
       memoryState: ctx.memoryState,
       beliefDepGraph: ctx.beliefDepGraph,
+      controlState: ctx.controlState,
+      diagnostics: ctx.diagnostics,
+      failureDiagnostics: ctx.failureDiagnostics,
     })
 
     // Phase D1: toolFn reported "more work to do" via a ContinuableExecutionOutcome — the task
@@ -849,6 +852,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           currentTask: concurrentTask,
           memoryState: ctx.memoryState,
           beliefDepGraph: ctx.beliefDepGraph,
+          controlState: ctx.controlState,
+          diagnostics: ctx.diagnostics,
+          failureDiagnostics: ctx.failureDiagnostics,
         },
       )
       branchExecSucceeded = branchExecResult.success
