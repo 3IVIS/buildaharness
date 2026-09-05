@@ -15,9 +15,42 @@ from typing import Any, Literal
 
 DimensionType = Literal["ratio", "composite", "entropy", "match_confidence"]
 
+# Provenance of a diagnostic sub-dimension value (INV-11 — criticism001 #3;
+# docs/adr/004-shared-semantic-core.md). Mirrors packages/harness/src/state/diagnostics.ts.
+#   deterministic — computed from world-model / evidence counts (all ten today)
+#   model         — an LLM-derived estimate
+#   heuristic     — a hand-tuned rule of thumb
+#   default       — nothing stamped one; the fill default
+DimensionSource = Literal["deterministic", "model", "heuristic", "default"]
+
 
 class NormalisationError(Exception):
     """Raised when a value outside [0,1] attempts to enter tier arithmetic."""
+
+
+@dataclass
+class DimensionProvenance:
+    """Where a diagnostic sub-dimension value came from, so an LLM-derived 0.72 and a
+    deterministically-computed 0.72 do not enter the resolver with equal authority (INV-11)."""
+
+    source: DimensionSource = "deterministic"
+    calibrated: bool = False  # is there a calibration curve behind `source: model`?
+    evidence_ids: list[str] = field(default_factory=list)  # EvidenceStore ids this was computed from
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "calibrated": self.calibrated,
+            "evidence_ids": list(self.evidence_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> DimensionProvenance:
+        return cls(
+            source=d.get("source", "deterministic"),
+            calibrated=bool(d.get("calibrated", False)),
+            evidence_ids=list(d.get("evidence_ids") or []),
+        )
 
 
 # ── Health vector dataclasses (P3.1) ─────────────────────────────────────────
@@ -113,6 +146,10 @@ class Diagnostics:
     execution_health: ExecutionHealth = field(default_factory=ExecutionHealth)
     # Advisory string only — never a numeric sub-dimension (INV-07)
     dep_class_gap_annotation: str | None = None
+    # INV-11: provenance for each of the ten sub-dimension names. May be sparse on
+    # construction; ensure_provenance() (called by resolve_control_state) fills any
+    # missing name with the deterministic default before the resolver reads it.
+    provenance: dict[str, DimensionProvenance] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -121,6 +158,7 @@ class Diagnostics:
             "verification_health": self.verification_health.to_dict(),
             "execution_health": self.execution_health.to_dict(),
             "dep_class_gap_annotation": self.dep_class_gap_annotation,
+            "provenance": {k: v.to_dict() for k, v in self.provenance.items()},
         }
 
     @classmethod
@@ -131,6 +169,7 @@ class Diagnostics:
             verification_health=VerificationHealth.from_dict(d.get("verification_health") or {}),
             execution_health=ExecutionHealth.from_dict(d.get("execution_health") or {}),
             dep_class_gap_annotation=d.get("dep_class_gap_annotation"),
+            provenance={k: DimensionProvenance.from_dict(v) for k, v in (d.get("provenance") or {}).items()},
         )
 
 

@@ -35,6 +35,7 @@ from ._core_generated import (
     CAUTION_THRESHOLD,
     CRITICAL_THRESHOLD,
     DEP_CLASS_GAP_NOTE_PREFIX,
+    MODEL_PROVENANCE_NOTE_PREFIX,
     RECOVERY_ACTION_DEPENDENCIES,
 )
 from ._core_generated import CONFIDENCE_DIMENSIONS as _CONFIDENCE_DIMENSIONS
@@ -42,6 +43,7 @@ from ._core_generated import DIMENSION_RECOVERY as _DIMENSION_RECOVERY
 from ._core_generated import RISK_DIMENSIONS as _RISK_DIMENSIONS
 from .diagnostics import (
     Diagnostics,
+    DimensionProvenance,
     DimensionType,
     assert_normalised,
     normalise,
@@ -291,6 +293,11 @@ def resolve_control_state(
 
     cs = ControlState(generation_id=world_model.generation_id)
     sub_dims = _extract_sub_dimensions(diagnostics)
+    # INV-11: every sub-dimension reaching the resolver carries provenance. Any name not
+    # stamped by a producer (today: all ten — the health values are computed
+    # deterministically from world-model / evidence counts) is filled with the
+    # deterministic default here, before any tier reads it.
+    _ensure_provenance(diagnostics, sub_dims)
     # Computed once, attached regardless of which tier fires — continuous and additive,
     # so they never influence which tier fires (see _compute_risk_and_confidence_estimates'
     # own docstring on why these must never be able to break tier resolution).
@@ -364,8 +371,9 @@ def resolve_control_state(
 
     # ── Tier 5 / single exit point ─────────────────────────────────────────────
     # permission/execution_mode already set correctly by whichever tier(s) above fired;
-    # just stamp the annotation and fold in the pending reviewer verdict once.
+    # just stamp the annotations and fold in the pending reviewer verdict once.
     _attach_annotation(cs, diagnostics)
+    _attach_provenance_notes(cs, diagnostics)
     _apply_pending_reviewer_verdict(cs, pending_reviewer_verdict)
     return cs
 
@@ -385,6 +393,33 @@ def _apply_pending_reviewer_verdict(cs: ControlState, verdict: Any | None) -> No
     cs.notes.append(f"Pending reviewer verdict ({verdict.lens}, {severity}): {verdict.summary}")
     if cs.execution_mode == "NORMAL":
         cs.execution_mode = "CAUTIOUS"
+
+
+def _ensure_provenance(
+    diagnostics: Diagnostics,
+    sub_dims: list[tuple[str, float, DimensionType]],
+) -> None:
+    """INV-11: fill a deterministic-default DimensionProvenance for every sub-dimension
+    name that has no entry yet, so no dimension reaches the resolver un-provenanced.
+    Mirrors resolve-control-state.ts's ensureProvenance()."""
+    for name, _raw, _dim_type in sub_dims:
+        if name not in diagnostics.provenance:
+            diagnostics.provenance[name] = DimensionProvenance()
+
+
+def _attach_provenance_notes(cs: ControlState, diagnostics: Diagnostics) -> None:
+    """INV-11 annotation (criticism001 #3, docs/adr/004): when a Tier-1/2 block is driven
+    by a sub-dimension whose value is an uncalibrated model estimate, say so in notes[].
+    Annotation only — the resolver does NOT dampen the block here (that behaviour change is
+    left behind the Phase C flag per ADR-004). Mirrors resolve-control-state.ts exactly.
+    """
+    flagged = sorted(
+        entry.dimension
+        for entry in cs.block_mask
+        if (p := diagnostics.provenance.get(entry.dimension)) is not None and p.source == "model" and not p.calibrated
+    )
+    for dim_name in flagged:
+        cs.notes.append(f"{MODEL_PROVENANCE_NOTE_PREFIX}{dim_name}")
 
 
 def _attach_annotation(cs: ControlState, diagnostics: Diagnostics) -> None:

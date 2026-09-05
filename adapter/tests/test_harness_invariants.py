@@ -1,7 +1,7 @@
 """
 Phase 11 — Architectural invariant tests (P11.4).
 
-10 invariant tests run against the full integrated harness system.
+Invariant tests run against the full integrated harness system.
 These tests are a permanent CI gate — any PR that regresses an invariant is blocked.
 Tests use black-box assertions wherever possible: observable behaviour, not internals.
 
@@ -18,6 +18,8 @@ Invariants:
   INV-08  Failure mode library scope — Tier 4 + hypothesis generation only
   INV-09  Adversarial prior discarded after reviewer_pass — no live references
   INV-10  experience_store is no-op when absent — structurally identical output
+  INV-11  Diagnostic provenance — no sub-dimension reaches the resolver un-provenanced;
+          the uncalibrated-model-block annotation is advisory (Phase C2; docs/adr/004)
 
 Run with: pytest adapter/tests/test_harness_invariants.py -v
 """
@@ -510,6 +512,56 @@ def test_inv_10_run_one_iteration_identical_without_experience_store():
     )
     # Both must have the same escalated status
     assert result_with.get("escalated") == result_without.get("escalated")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INV-11 — Diagnostic provenance (Phase C2; criticism001 #3; docs/adr/004)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_inv_11_no_sub_dimension_reaches_the_resolver_un_provenanced():
+    """INV-11: every name in _extract_sub_dimensions' output has an entry in
+    diagnostics.provenance by the time the resolver has read it — a dimension with
+    no provenance never reaches a tier."""
+    from harness.control_state import _extract_sub_dimensions, resolve_control_state
+    from harness.diagnostics import Diagnostics, DimensionProvenance
+
+    diagnostics = Diagnostics()  # constructed with an empty provenance map
+    assert diagnostics.provenance == {}
+
+    wm = _make_world_model()
+    resolve_control_state(diagnostics, wm)
+
+    sub_dim_names = {name for name, _v, _t in _extract_sub_dimensions(diagnostics)}
+    assert sub_dim_names <= set(diagnostics.provenance), (
+        "INV-11 violated: a sub-dimension reached the resolver with no provenance entry"
+    )
+    for name in sub_dim_names:
+        assert isinstance(diagnostics.provenance[name], DimensionProvenance)
+
+
+def test_inv_11_provenance_annotation_does_not_change_permission_or_mode():
+    """INV-11: the annotation is advisory — flagging an uncalibrated model-derived block
+    adds a note but never changes permission/execution_mode/block_mask vs. the same
+    diagnostics with deterministic provenance."""
+    from harness.control_state import resolve_control_state
+    from harness.diagnostics import Diagnostics, DimensionProvenance
+
+    def _blocked(provenance: dict | None):
+        d = Diagnostics()
+        d.belief_health.support = 0.05  # < CRITICAL_THRESHOLD → Tier 2 block on belief_support
+        if provenance:
+            d.provenance.update(provenance)
+        return resolve_control_state(d, _make_world_model())
+
+    deterministic = _blocked(None)
+    model_flagged = _blocked({"belief_support": DimensionProvenance(source="model", calibrated=False)})
+
+    assert deterministic.permission == model_flagged.permission == "DENY"
+    assert deterministic.execution_mode == model_flagged.execution_mode
+    assert [b.dimension for b in deterministic.block_mask] == [b.dimension for b in model_flagged.block_mask]
+    # ...the only difference is the extra advisory note
+    assert len(model_flagged.notes) == len(deterministic.notes) + 1
 
 
 # ─── Plan-agent invariant smoke tests (Phase 4 hooks) ─────────────────────────

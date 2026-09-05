@@ -13,6 +13,7 @@ import {
   CONFIDENCE_DIMENSIONS,
   RISK_DIMENSIONS,
   DEP_CLASS_GAP_NOTE_PREFIX,
+  MODEL_PROVENANCE_NOTE_PREFIX,
 } from '../_core-generated.js'
 
 // CRITICAL_THRESHOLD, CAUTION_THRESHOLD, RECOVERY_ACTION_DEPENDENCIES,
@@ -67,6 +68,38 @@ function hasCycle(graph: Map<string, Set<string>>): boolean {
 function detectDeadlock(blockMask: BlockEntry[]): boolean {
   const graph = buildRecoveryActionGraph(blockMask)
   return hasCycle(graph)
+}
+
+/**
+ * INV-11: fill a deterministic-default DimensionProvenance for every sub-dimension name
+ * that has no entry yet, so no dimension reaches the resolver un-provenanced. Mirrors
+ * control_state.py's _ensure_provenance().
+ */
+function ensureProvenance(diagnostics: Diagnostics, subDims: Array<[string, number]>): void {
+  for (const [name] of subDims) {
+    if (!(name in diagnostics.provenance)) {
+      diagnostics.provenance[name] = { source: 'deterministic', calibrated: false, evidence_ids: [] }
+    }
+  }
+}
+
+/**
+ * INV-11 annotation (criticism001 #3, docs/adr/004): when a Tier-1/2 block is driven by a
+ * sub-dimension whose value is an uncalibrated model estimate, say so in notes[]. Annotation
+ * only — the resolver does NOT dampen the block (that behaviour change is left behind the
+ * Phase C flag per ADR-004). Mirrors control_state.py's _attach_provenance_notes() exactly.
+ */
+function attachProvenanceNotes(cs: ControlState, notes: string[], diagnostics: Diagnostics): void {
+  const flagged = cs.block_mask
+    .map(e => e.dimension)
+    .filter(dim => {
+      const p = diagnostics.provenance[dim]
+      return p !== undefined && p.source === 'model' && !p.calibrated
+    })
+    .sort()
+  for (const dim of flagged) {
+    notes.push(`${MODEL_PROVENANCE_NOTE_PREFIX}${dim}`)
+  }
 }
 
 function extractSubDimensions(diagnostics: Diagnostics): Array<[string, number]> {
@@ -150,6 +183,11 @@ export function resolveControlState(
   // Computed once, attached regardless of which tier fires below — continuous and additive,
   // so they never influence which tier fires (mirrors control_state.py's own invariant here).
   const subDimsForEstimate = extractSubDimensions(diagnostics)
+  // INV-11: every sub-dimension reaching the resolver carries provenance. Any name not
+  // stamped by a producer (today: all ten — the health values are computed
+  // deterministically from world-model / evidence counts) is filled with the deterministic
+  // default here, before any tier reads it.
+  ensureProvenance(diagnostics, subDimsForEstimate)
   const estimates = computeRiskAndConfidenceEstimates(subDimsForEstimate)
   cs.risk_estimate = estimates.risk_estimate
   cs.confidence_estimate = estimates.confidence_estimate
@@ -234,6 +272,7 @@ export function resolveControlState(
     notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
   }
 
+  attachProvenanceNotes(cs, notes, diagnostics)
   applyPendingReviewerVerdict(cs, notes, pendingReviewerVerdict)
   cs.notes = notes
   cs.generation_id = worldModel.generation_id

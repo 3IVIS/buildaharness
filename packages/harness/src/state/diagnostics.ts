@@ -26,12 +26,27 @@ export const ExecutionHealthSchema = z.object({
 })
 export type ExecutionHealth = z.infer<typeof ExecutionHealthSchema>
 
+// Provenance of a diagnostic sub-dimension value (INV-11 — criticism001 #3;
+// docs/adr/004-shared-semantic-core.md). Mirrors adapter/harness/diagnostics.py's
+// DimensionProvenance.
+//   deterministic — computed from world-model / evidence counts (all ten today)
+//   model         — an LLM-derived estimate
+//   heuristic     — a hand-tuned rule of thumb
+//   default       — nothing stamped one; the fill default
+export const DimensionProvenanceSchema = z.object({
+  source: z.enum(['deterministic', 'model', 'heuristic', 'default']).default('deterministic'),
+  calibrated: z.boolean().default(false),
+  evidence_ids: z.array(z.string()).default([]),
+})
+export type DimensionProvenance = z.infer<typeof DimensionProvenanceSchema>
+
 export const DiagnosticsSchema = z.object({
   belief_health: BeliefHealthSchema,
   coverage_health: CoverageHealthSchema,
   verification_health: VerificationHealthSchema,
   execution_health: ExecutionHealthSchema,
   dep_class_gap_annotation: z.string(),
+  provenance: z.record(z.string(), DimensionProvenanceSchema).default({}),
 })
 export type DiagnosticsData = z.infer<typeof DiagnosticsSchema>
 
@@ -41,6 +56,10 @@ export class Diagnostics {
   verification_health: VerificationHealth
   execution_health: ExecutionHealth
   dep_class_gap_annotation: string
+  // INV-11: provenance for each of the ten sub-dimension names. May be sparse on
+  // construction; ensureProvenance() (called by resolveControlState) fills any missing
+  // name with the deterministic default before the resolver reads it.
+  provenance: Record<string, DimensionProvenance>
 
   constructor(data?: Partial<DiagnosticsData>) {
     this.belief_health = data?.belief_health ?? { freshness: 1.0, consistency: 1.0, support: 1.0 }
@@ -49,6 +68,7 @@ export class Diagnostics {
     // failure_recurrence and oscillation_score: 0=healthy (inverted in resolveControlState)
     this.execution_health = data?.execution_health ?? { progress_rate: 1.0, failure_recurrence: 0.0, oscillation_score: 0.0 }
     this.dep_class_gap_annotation = data?.dep_class_gap_annotation ?? ''
+    this.provenance = data?.provenance ?? {}
   }
 
   toJSON(): DiagnosticsData {
@@ -58,6 +78,7 @@ export class Diagnostics {
       verification_health: this.verification_health,
       execution_health: this.execution_health,
       dep_class_gap_annotation: this.dep_class_gap_annotation,
+      provenance: this.provenance,
     }
   }
 
