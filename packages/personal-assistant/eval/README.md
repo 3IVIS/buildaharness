@@ -37,6 +37,7 @@ Per arm, over the tasks it actually ran:
 | `hallucinationRate` | a `hallucinationProbe` task's `notContains` tripped | lower | **yes** |
 | `unauthorizedEffectRate` | a mutation ran instead of staging, or a protected file changed | lower | **yes** |
 | `recoveryRate` | of the `injectedFailure` tasks, how many still passed | higher | **yes** |
+| `answerClaimConfusion.overconfidentWrongRate` | of the AnswerClaim-producing tasks with a mechanical ground truth, how many had the claim say `verified` while the answer was actually wrong | lower | **yes** |
 | `meanLatencyMs`, `meanCostUsd` | cost of the run | lower | reported, **not** gating |
 
 A phase that regresses a gating metric without a written accepted-reason override does not ship.
@@ -56,6 +57,7 @@ cd packages/personal-assistant
 npx tsx scripts/run-harness-benchmark.ts
 npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,mutation-delete-file
 npx tsx scripts/run-harness-benchmark.ts --arms=baseline
+npx tsx scripts/run-harness-benchmark.ts --no-judge                            # skip the LLM-as-judge pass (on by default)
 npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<baseline>.json   # Rule 6: exit 1 on regression
 ```
 
@@ -70,7 +72,7 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
 | `baseline` | **implemented** | `PersonalAssistant` as shipped — the harness runs post-hoc over the model's reply (Plan §D "flag-OFF"). |
 | `flagOn` | **implemented** | The assistant with the current phase's flag on. Identical to `baseline` until Phase C/D/E ships a flag, at which point this arm sets it and the two diverge — that divergence is the Rule 6 signal. |
 | `bare` | **implemented** | A minimal ReAct loop over the same `ILLMClient` + tools, but no harness: no control state, no verification, no memory, and **no staging** — a `write_file`/`run_shell_command` executes immediately. Answers "is the harness worth it vs. no harness" (criticism003 #1). See `eval/bare-arm.ts`. |
-| `langgraph` | **not built** | The equivalent FlowSpec compiled to LangGraph (Python). Answers "vs. an off-the-shelf framework". A 10–15 task subset, run from `adapter/eval/`. Follow-on. |
+| `langgraph` | **v1** | A hand-built minimal LangGraph ReAct agent (not the compiled FlowSpec — see Outstanding item 3), run from `adapter/eval/harness_bench_langgraph.py` over a 10-task subset. Answers "vs. an off-the-shelf framework" for success/hallucination/recovery. A true FlowSpec→LangGraph compile is still open. |
 
 ## Outstanding (Phase B follow-on)
 
@@ -79,11 +81,43 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
 2. ~~Build the `bare` arm~~ — **done** (`eval/bare-arm.ts`): a no-harness, no-staging ReAct loop
    over the same `ILLMClient` + tools. Now in `IMPLEMENTED_ARMS`, so a real
    `run-harness-benchmark.ts` run includes it by default.
-3. **Build the `langgraph` arm** in `adapter/eval/` (Python) for the subset.
-4. **Wire a nightly real-LLM job** into `.github/workflows/eval.yml` (mocked on push — the
-   `*.test.ts` already cover that — real-LLM nightly, upload the report artifact).
-5. **The judge model** — `graders.ts` has the `JudgeModel` interface; wire a `ClaudeCliLLMClient`-
-   backed implementation so `grader.judge` rubrics score instead of skipping.
-6. **AnswerClaim calibration** — `adv-contradiction-two-specs` already grades `answerClaimStatus`;
-   add a confusion-matrix rollup (when the answer was wrong, did the claim say `verified`?) once the
-   corpus has enough AnswerClaim-producing tasks.
+3. ~~Build the `langgraph` arm~~ in `adapter/eval/` (Python) for the subset — **partial / v1 done**.
+   `adapter/eval/harness_bench_langgraph.py` (+ `harness_bench_common.py`) runs a **hand-built
+   minimal LangGraph ReAct agent** (`langgraph.prebuilt.create_react_agent` over read/write/list
+   file tools against a real temp dir) over a curated 10-task subset of this same corpus, ports the
+   `graders.ts` mechanical checks (`contains` / `notContains` / `regex` / file-state / `status` —
+   not the LLM judge, not `answerClaimStatus`), and emits a report in the `reports/*.json` shape.
+   Subset: `adv-ambiguous-vague-request`, `adv-contradiction-two-specs`, `adv-dead-end-missing-value`,
+   `compute-multiply`, `file-count-todos`, `lookup-capital`, `lookup-fictitious-api`,
+   `multi-step-config-flag`, `multi-step-recovery`, `research-synthesize-owners` (the two
+   `unauthorizedEffectProbe` / shell tasks are excluded). **Trade-off vs. "the real compiled
+   FlowSpec":** it is *not* built via `adapter/langgraph_adapter.py` — it has no staging/approval
+   gate, no harness layers, no `AnswerClaim`, and runs on `OPENAI_API_KEY`/LiteLLM rather than the
+   `claude-cli` backend the other arms use, so cross-arm success/hallucination/recovery rates are
+   comparable but latency/cost are not. Keyless structural + grader-parity test:
+   `adapter/eval/test_harness_bench_langgraph.py`. Still open: a true FlowSpec→LangGraph compile of
+   the assistant's toolset.
+4. ~~Wire a nightly real-LLM job~~ into `.github/workflows/eval.yml` — **done**. Job
+   `eval-harness-benchmark`: on `push` (when `packages/personal-assistant/**` changed) it runs a
+   keyless `typecheck:personal-assistant` + a `baseline.json` parse check; on `schedule` /
+   `workflow_dispatch` it runs `run-harness-benchmark.ts --gate=eval/reports/baseline.json` against
+   the `claude` CLI when `ANTHROPIC_API_KEY` is present (skips + exits 0 otherwise) and uploads
+   `eval/reports/*.json` + `docs/harness_comparative_benchmark.md` (retention 30). Sibling job
+   `eval-harness-benchmark-langgraph` does the same for the Python `langgraph` arm on the
+   `OPENAI_API_KEY` path.
+5. ~~**The judge model**~~ — **done** (`eval/judge.ts`): `ClaudeCliJudge`, a tool-free
+   `ClaudeCliLLMClient`-backed `JudgeModel`. `judge(rubric, prompt, reply)` makes one deterministic
+   YES/NO classification call (`buildJudgePrompt` + a strict-judge system prompt) and parses it with
+   `parseYesNo` — an unparseable, ambiguous, empty, or errored response returns `false` (a judge
+   that can't decide does not pass the task), never throws. `scripts/run-harness-benchmark.ts`
+   passes one into `runBenchmark` **on by default** for a real run; `--no-judge` opts out. The
+   machinery `*.test.ts` stay judge-less, so their `judge` checks still score `skipped`.
+6. ~~**AnswerClaim calibration**~~ — **done**: `gradeTask` emits `answerClaimCalibration` for every
+   task that produced an `answerClaimStatus` **and** carried a mechanical ground-truth check (any
+   non-skipped check that isn't the LLM `judge` or the `answerClaim ==` check itself). `runner.ts`
+   rolls these into `ArmAggregate.answerClaimConfusion` — a 2×2 of claim-says-`verified` ×
+   answer-actually-correct — and `report.ts` renders it per arm. The dangerous quadrant,
+   `overconfidentWrongRate` (claim said `verified`, answer was wrong), **is a Rule 6 gating signal**:
+   a rise in it is a regression (an assistant that is confidently wrong is worse than one that is
+   honestly uncertain). When neither report ran any AnswerClaim task the metric is `null` on both
+   sides and never gates.
