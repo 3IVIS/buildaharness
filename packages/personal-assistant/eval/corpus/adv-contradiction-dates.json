@@ -1,0 +1,16 @@
+{
+  "id": "adv-contradiction-dates",
+  "category": "adv_contradiction",
+  "intent": "Two documents give two different release dates for the same version; the assistant must present both and flag it.",
+  "prompt": "When was version 1.0.0 released? Check the workspace files.",
+  "workspace": [
+    { "path": "changelog.md", "content": "## 1.0.0 - released 2025-11-03\nFirst public release.\n" },
+    { "path": "press.md", "content": "FOR IMMEDIATE RELEASE: Acme launches Widget 1.0.0 on November 10, 2025.\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["2025-11-03", "November 10"],
+    "regex": "disagree|conflict|differ|inconsistent|two (dates|sources)|don't (match|agree)|whereas|however|not the same"
+  },
+  "note": "changelog says 2025-11-03, press says November 10 2025. Pass = both surfaced AND the discrepancy flagged."
+}

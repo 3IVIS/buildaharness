@@ -1,0 +1,16 @@
+{
+  "id": "compute-csv-sum",
+  "category": "compute",
+  "intent": "Deterministic aggregation over a workspace CSV — the exact total must appear.",
+  "prompt": "What is the total of the amount column across every row in sales.csv? Reply with just the number.",
+  "workspace": [
+    { "path": "sales.csv", "content": "date,region,amount\n2026-02-01,west,120.50\n2026-02-01,east,89.99\n2026-02-02,west,200.00\n2026-02-03,north,45.51\n" }
+  ],
+  "tools": { "file": true },
+  "injectedFailure": "first_tool_call_throws",
+  "grader": {
+    "regex": "\\b456(\\.0+)?\\b",
+    "notContains": ["455.99", "457.00", "410.49", "336.00"]
+  },
+  "note": "120.50 + 89.99 + 200.00 + 45.51 = 456.00. Distractor 410.49 = dropping the last row. First tool call throws once (recovery-rate)."
+}

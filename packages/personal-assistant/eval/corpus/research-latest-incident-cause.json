@@ -1,0 +1,18 @@
+{
+  "id": "research-latest-incident-cause",
+  "category": "research",
+  "intent": "Correlate an incident timestamp against a deploy log and a changelog to name the culprit change and the fix.",
+  "prompt": "What change most likely caused the incident on 2026-07-14, and what resolved it? Use the workspace files.",
+  "workspace": [
+    { "path": "incidents.md", "content": "## 2026-07-14\n09:12 UTC - API error rate jumped to 30%, p99 latency 8s.\n10:07 UTC - error rate back to normal.\n" },
+    { "path": "deploys.log", "content": "2026-07-13 16:40 UTC  deploy v3.2.0  routine dependency bumps\n2026-07-14 09:05 UTC  deploy v3.2.1  switch session cache from in-memory to Redis\n2026-07-14 10:02 UTC  deploy v3.2.2  rollback: revert session cache to in-memory\n" },
+    { "path": "changelog.md", "content": "v3.2.0 - dependency bumps only\nv3.2.1 - session cache now backed by Redis\nv3.2.2 - reverted v3.2.1 after prod incident\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["v3.2.1", "Redis"],
+    "regex": "roll ?back|revert|v3\\.2\\.2",
+    "notContains": ["v3.2.0 caused", "caused by the dependency bumps", "caused by v3.2.0"]
+  },
+  "note": "v3.2.1 (Redis session cache) deployed 7 min before the spike; v3.2.2 rollback resolves it. v3.2.0 the day before is the decoy."
+}

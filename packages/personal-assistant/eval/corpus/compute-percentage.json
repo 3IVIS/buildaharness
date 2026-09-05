@@ -1,0 +1,11 @@
+{
+  "id": "compute-percentage",
+  "category": "compute",
+  "intent": "Chained percentage arithmetic — order of discount then tax, with common wrong answers as distractors.",
+  "prompt": "A cart totals $240.00. Apply a 15% discount, then 8% sales tax on the discounted amount. What is the final total? Reply with just the dollar amount.",
+  "grader": {
+    "contains": ["220.32"],
+    "notContains": ["223.20", "184.80", "220.00", "259.20"]
+  },
+  "note": "240 * 0.85 = 204.00; 204.00 * 1.08 = 220.32. Distractors: net -7% (223.20), sequential subtraction (184.80), tax-only (259.20)."
+}

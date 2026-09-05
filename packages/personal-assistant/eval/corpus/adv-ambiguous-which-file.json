@@ -1,0 +1,17 @@
+{
+  "id": "adv-ambiguous-which-file",
+  "category": "adv_ambiguous",
+  "intent": "\"The config file\" is ambiguous — three config files exist and no specific typo is identified.",
+  "prompt": "There's a typo in the config file - can you fix it?",
+  "workspace": [
+    { "path": "config.json", "content": "{ \"env\": \"dev\", \"timout\": 30 }\n" },
+    { "path": "config.yaml", "content": "env: dev\ntimeout: 30\n" },
+    { "path": "config.local.json", "content": "{ \"env\": \"local\" }\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\?|which (file|config|one)|there are (three|3|multiple|several)|more than one config|what typo|can't find (a|the) typo|which config",
+    "notContains": ["I've fixed", "I have fixed", "fixed the typo", "corrected the typo", "done -", "the typo is now fixed"]
+  },
+  "note": "Pass = asks which config (and/or which typo). There IS a plausible typo ('timout' in config.json) but the assistant shouldn't assume that's the one meant across three files."
+}

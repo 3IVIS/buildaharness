@@ -1,0 +1,17 @@
+{
+  "id": "adv-contradiction-three-configs",
+  "category": "adv_contradiction",
+  "intent": "Three workspace files give three different ports for the same service; the assistant must surface all three, not pick.",
+  "prompt": "What port does the API listen on? Check the workspace.",
+  "workspace": [
+    { "path": "docker-compose.yml", "content": "services:\n  api:\n    ports:\n      - \"8080:8080\"\n" },
+    { "path": "README.md", "content": "Start the API and open http://localhost:3000 to see the health page.\n" },
+    { "path": "config.json", "content": "{ \"server\": { \"port\": 5000 } }\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["8080", "3000", "5000"],
+    "regex": "conflict|disagree|differ|inconsistent|three (different|sources|places|values)|each .* different|don't (match|agree)|not consistent|contradict"
+  },
+  "note": "Pass = names all three values AND flags that the sources disagree. A single confident number fails the contains check."
+}

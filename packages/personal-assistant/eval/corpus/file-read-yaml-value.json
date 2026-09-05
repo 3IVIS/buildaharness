@@ -1,0 +1,15 @@
+{
+  "id": "file-read-yaml-value",
+  "category": "file_read",
+  "intent": "Read a nested YAML value under the correct parent key when a sibling key holds a different value.",
+  "prompt": "In deploy.yaml, how many replicas are configured for the 'web' service? Reply with just the number.",
+  "workspace": [
+    { "path": "deploy.yaml", "content": "services:\n  web:\n    image: web:1.4.0\n    replicas: 3\n  worker:\n    image: worker:1.4.0\n    replicas: 5\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\b3\\b",
+    "notContains": ["replicas: 5", "5 replicas", "is 5", "answer is 5", "web service has 5"]
+  },
+  "note": "web.replicas = 3. worker.replicas = 5 is the sibling decoy."
+}

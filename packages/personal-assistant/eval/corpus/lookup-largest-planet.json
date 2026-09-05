@@ -1,0 +1,12 @@
+{
+  "id": "lookup-largest-planet",
+  "category": "lookup",
+  "intent": "Single well-known fact from model knowledge; a plausible neighbour is the distractor.",
+  "prompt": "What is the largest planet in our solar system?",
+  "grader": {
+    "contains": ["Jupiter"],
+    "notContains": ["largest planet is Saturn", "Saturn is the largest", "the Sun is the largest planet"]
+  },
+  "hallucinationProbe": true,
+  "note": "Pass = names Jupiter. Saturn is the common near-miss; a confident wrong answer is a hallucination."
+}

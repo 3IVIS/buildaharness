@@ -1,0 +1,15 @@
+{
+  "id": "multi-step-pick-oncall",
+  "category": "multi_step",
+  "intent": "Read a rotation table, map the given weekday to the right row, name that person.",
+  "prompt": "Today is Wednesday. Who is on call right now? Check oncall.md and reply with just the name.",
+  "workspace": [
+    { "path": "oncall.md", "content": "On-call rotation by weekday:\n- Monday, Tuesday: Alex\n- Wednesday, Thursday: Blair\n- Friday, Saturday, Sunday: Casey\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["Blair"],
+    "notContains": ["Alex", "Casey"]
+  },
+  "note": "Wednesday -> Blair. Alex (Mon/Tue) and Casey (weekend) are the adjacent-row decoys."
+}

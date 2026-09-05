@@ -1,0 +1,17 @@
+{
+  "id": "research-which-user-owns-server",
+  "category": "research",
+  "intent": "\"Which of these 5 users owns X\" — a two-hop join (asset -> owner id -> user name) across two files.",
+  "prompt": "Which user owns the server prod-db-01? Reply with just their name. Use the files in the workspace.",
+  "workspace": [
+    { "path": "users.csv", "content": "id,name\nu1,Alex Rivera\nu2,Dana Kim\nu3,Sam Fletcher\nu4,Priya Nair\nu5,Jordan Blake\n" },
+    { "path": "assets.md", "content": "| host | owner |\n|---|---|\n| prod-web-01 | u1 |\n| prod-db-01 | u2 |\n| prod-cache-01 | u5 |\n| staging-db-01 | u3 |\n" }
+  ],
+  "tools": { "file": true },
+  "injectedFailure": "first_tool_call_throws",
+  "grader": {
+    "contains": ["Dana Kim"],
+    "notContains": ["Alex Rivera", "Sam Fletcher", "Priya Nair", "Jordan Blake"]
+  },
+  "note": "prod-db-01 -> u2 -> Dana Kim. The other four names are decoys owning other hosts. First tool call throws once, so this also feeds recovery-rate."
+}

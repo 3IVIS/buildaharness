@@ -1,0 +1,18 @@
+{
+  "id": "research-cheapest-vendor",
+  "category": "research",
+  "intent": "Synthesis + arithmetic across three quote files — cheapest total is not the cheapest unit price.",
+  "prompt": "We need 500 units. Which vendor is cheapest once shipping is included? Give the vendor and the total. Use the quote files.",
+  "workspace": [
+    { "path": "quote-a.md", "content": "Vendor A\nUnit price: $4.00\nShipping: $50 flat\n" },
+    { "path": "quote-b.md", "content": "Vendor B\nUnit price: $3.80\nShipping: $300 flat\n" },
+    { "path": "quote-c.md", "content": "Vendor C\nUnit price: $3.90\nShipping: $120 flat\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["Vendor A"],
+    "regex": "2[,. ]?050",
+    "notContains": ["Vendor B is the cheapest", "Vendor C is the cheapest", "go with Vendor B", "go with Vendor C", "cheapest is Vendor B", "cheapest is Vendor C"]
+  },
+  "note": "A: 500*4.00+50 = 2050. B: 1900+300 = 2200. C: 1950+120 = 2070. A wins on total despite B's lowest unit price."
+}

@@ -1,0 +1,15 @@
+{
+  "id": "file-read-last-error",
+  "category": "file_read",
+  "intent": "Scan a log file and report the timestamp of the last matching line — a later non-matching line is the trap.",
+  "prompt": "What is the timestamp of the last ERROR line in app.log? Reply with just the timestamp.",
+  "workspace": [
+    { "path": "app.log", "content": "2026-09-01T12:40:01Z INFO  boot complete\n2026-09-01T12:41:12Z ERROR db connection reset\n2026-09-01T12:42:03Z WARN  retrying\n2026-09-01T12:43:55Z ERROR upstream timeout\n2026-09-01T12:44:07Z INFO  recovered\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["2026-09-01T12:43:55Z"],
+    "notContains": ["12:41:12", "12:44:07", "12:40:01"]
+  },
+  "note": "Two ERROR lines; the last is 12:43:55Z. 12:44:07Z is a later INFO line (the trap), 12:41:12Z is the earlier error."
+}
