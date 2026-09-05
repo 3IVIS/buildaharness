@@ -2,9 +2,15 @@
 
 TypeScript implementation of the 11-layer harness — World Model, Evidence,
 Hypothesis, Contradiction, Diagnostics, Control State, Planning, Execution,
-Verification, Recovery, Reviewer Pass. It mirrors the state shapes of the
-Python harness (`adapter/harness/`) field-for-field, and — since the
-HarnessRuntime rewrite — is also a real, resumable execution engine, not just
+Verification, Recovery, Reviewer Pass — a governance and reliability control
+plane around an autonomous agent: the agent proposes, the harness decides
+what's allowed to happen next, evidence decides whether the result is
+accepted (see `docs/adr/003-harness-consolidation.md` for the 5-primitive
+model every layer here implements). Its pure-data constants (thresholds, the
+recovery-dependency table, `LAYER_TIER`) are generated from one shared source
+with the Python harness (`adapter/harness/`) rather than hand-copied
+field-for-field — see "Relationship to the Python harness" below. Since the
+HarnessRuntime rewrite it's also a real, resumable execution engine, not just
 a set of types.
 
 This package has **zero runtime/browser dependencies** (only `zod`). It runs
@@ -158,6 +164,31 @@ client-side. The one thing that *is* now equivalent in capability (not
 implementation) is pause/resume: Python gets it from an async graph runtime
 with DB-backed checkpoints, this package gets it from the async-generator
 `HarnessRuntime` described above.
+
+**Shared semantic core.** The pure-data constants both languages' resolvers
+read — `CRITICAL_THRESHOLD`/`CAUTION_THRESHOLD`, the recovery-dependency
+tables, `LAYER_TIER` — are generated from one file, `spec/harness-core.json`,
+by `spec/gen-harness-core.mjs`, into `adapter/harness/_core_generated.py` and
+this package's `src/_core-generated.ts`. Neither generated file is
+hand-edited (each is stamped "DO NOT EDIT" at the top); CI fails if either is
+stale relative to the source. The `~150`-line resolver *algorithm*
+(`resolve-control-state.ts` here, `control_state.py` in Python) is still
+hand-mirrored, not generated — a 27-fixture conformance run
+(`scripts/harness-conformance/`) found the two implementations already
+byte-identical, so generating the algorithm too would solve a problem that
+doesn't exist. That fixture suite is the actual equivalence contract, run
+against both interpreters on every PR; it replaced an earlier
+field-by-field sync-checking script. See `docs/adr/004-shared-semantic-core.md`.
+
+**Verification's validator-list model.** `verify.ts` (mirroring Python's
+`verification.py`) is a typed list of validators, each classified into one of
+three epistemic tiers via the shared `LAYER_TIER` map — `mechanical` (a real
+subprocess-backed check, e.g. syntax/unit tests), `environmental` (a real
+state inspection, e.g. consistency), or `model` (an LLM judgment). A `model`
+tier result is never counted as independent confirmation of a `mechanical`
+one — `VerificationResult.critical_failure_tiers` names which tiers
+contributed a FAIL, and a structural check enforces it's non-empty if and
+only if `has_critical_failure` is true.
 
 ## Package structure
 

@@ -18,13 +18,16 @@
 
 ---
 
-Most AI assistants run the tool the moment the model decides to. **Aielia** —
-the Build A Harness personal assistant — routes every turn through an 11-layer
-*harness*: a control architecture that governs what the agent believes, what
-it's allowed to do, how it catches its own mistakes, and what it learns. A quick
-fact lookup stays light. Sending an email, paying an invoice, running a shell
-command, or deleting a file **stops for your approval first** — and a classifier
-that errors out requires approval rather than sailing through as safe.
+A harness is a **governance and reliability control plane** around an
+autonomous agent: the agent has intelligence, the harness has authority. The
+agent proposes; the harness decides what's allowed to happen next; evidence
+decides whether the result is accepted. **Aielia** — the Build A Harness
+personal assistant — routes every turn through an 11-layer implementation of
+that control plane, governing what the agent believes, what it's allowed to
+do, how it catches its own mistakes, and what it learns. A quick fact lookup
+stays light. Sending an email, paying an invoice, running a shell command, or
+deleting a file **stops for your approval first** — and a classifier that
+errors out requires approval rather than sailing through as safe.
 
 The assistant is the front door. Underneath it is a full visual **harness
 builder** — draw the same 11 layers on a canvas, compile to LangGraph / CrewAI /
@@ -274,7 +277,7 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 | [docs/getting-started.md](docs/getting-started.md) | Fresh clone → secrets → LLM → first run |
 | [docs/nodes.md](docs/nodes.md) | The 27-node palette + schema-sync mechanics |
 | [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — all 27 node types, edges, fields |
-| [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows |
+| [docs/architecture.md](docs/architecture.md) | System design, service interactions, data flows — the 11 layers as implementations of 5 primitives (State, Evidence, Policy, Effect, Recovery) |
 | [docs/api.md](docs/api.md) | REST API reference — compile, execute, deploy, HITL resume |
 | [docs/llm-setup.md](docs/llm-setup.md) | LLM provider setup — OpenAI, Anthropic, Ollama, custom |
 | [docs/qdrant.md](docs/qdrant.md) | Qdrant vector store — seeding, collections, production |

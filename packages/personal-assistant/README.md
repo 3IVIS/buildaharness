@@ -6,6 +6,23 @@ weather" and consequential enough to gate "send that email" behind approval.
 
 ## Design
 
+The harness here is a governance and reliability control plane, not just a
+bundle of reasoning layers: the agent (the tool-calling loop in
+`agent-loop.ts`) proposes what to do, and a mix of harness- and
+policy-governed gates decide what's actually allowed to happen — see
+`docs/adr/003-harness-consolidation.md` for the 5-primitive model this
+assistant's design is one instance of. **That governance is currently split
+across two mechanisms, not unified into one** (ADR-003 finding F-6): a live,
+per-tool-call gate runs *inside* `AgentLoop.runToolIterations` as each tool
+call happens (below), while the full `HarnessRuntime` — World Model, Evidence,
+Hypothesis, Control State, Planning, Execution, Verification, Recovery,
+Memory, Learning, Reviewer Pass — runs once per turn *after* that loop has
+already produced a reply, as bookkeeping over the finished result rather than
+a second round of calls. Collapsing those into one loop, where the harness
+itself drives tool calls one at a time, is a deliberate, separately-tracked
+rewire (`plans/harness_d2_one_loop_rewire_plan.html`) — not yet the default
+behavior described below.
+
 Where a heavy autonomous agent decomposes an objective into a multi-task plan,
 this assistant treats every chat message as **one objective, one task**. That
 keeps `HarnessRuntime.run()` cheap per turn (no LLM calls inside the harness
@@ -48,6 +65,16 @@ Three things live *outside* a single harness run, deliberately:
   harness — and before the one real network call — ever runs. A `HIGH` risk
   turn returns `status: 'needs_approval'` with zero LLM calls spent; call
   `turn(message, { approved: true })` to proceed after the caller confirms.
+  A separate, LLM-backed `classifyTurnIntent` call (`turn-intent-classifier.ts`)
+  produces non-consequential *hints* — decomposition, plan-template match,
+  triviality — plus `requiresApproval`/`isAbandonRequest` guesses; those two
+  guesses are never trusted directly. `turn-policy.ts`'s
+  `evaluateTurnPolicy()`/`evaluateAbandonPolicy()` always recompute the actual
+  approval requirement and abandon decision from structural signals
+  (`riskLevel`, `isBulkReminderRequest`, `hasActivePlan`) — the classifier's
+  hint is one input, never the decision (INV-14). A classifier error or
+  unparseable response yields `riskLevel: 'UNKNOWN'`, which the policy always
+  routes to `requiresApproval: true`, never a silent low-risk default.
 - **Learning across turns** — `ExperienceStore` (strategy weights, learned
   decompositions, recovery sequences) is in-memory by default; swap in
   `DexieExperienceStore` from `@buildaharness/runtime` so it survives a page
@@ -98,30 +125,42 @@ without waiting for that automatic cap, and without the collateral damage of
 facts, and plan — previously the only in-product recovery option, short of
 moving `checkpointStore`'s whole backing directory aside by hand.
 
-### Memory, Knowledge, and the other four
+### Memory tiers
 
-"Memory" gets used loosely for six conceptually different things in this
-package. None of the underlying storage was restructured to enforce this —
-it's a naming map over the stores that already exist, added so future changes
-land in the right conceptual bucket instead of overloading whichever store is
-closest to hand:
+`fact-extraction.ts`'s `MemoryTier` type (`'episodic' | 'semantic' |
+'procedural' | 'preference' | 'commitment' | 'identity'`) is a real,
+structurally-enforced classification — not just a naming convention — layered
+on top of the stores that already exist (Phase E of the harness consolidation
+plan, `criticism001` #8 / `criticism002` #6: "transcript ≠ memory"). Every
+`UserFact` a turn captures gets routed to exactly one tier by `tierForFact()`,
+and `TIER_RULES` fixes each tier's allowed provenance, retention, and whether
+contradiction detection considers it:
 
-| Tier | Answers | Where it lives |
-|---|---|---|
-| **Memory** | "What was said?" | `transcript:<sessionId>` — the conversation transcript (see above) |
-| **Knowledge** | "What do we believe?" | `UserFact` (`fact-extraction.ts`) — `facts:<sessionId>` (session-scoped) and `facts:durable` (promoted; see `DURABLE_FACTS_KEY`'s doc comment in `assistant.ts`) |
-| **Evidence** | "Why do we believe it?" | `UserFact.source` (`FactSource`: `user_asserted` / `model_inferred` / `observed` / `externally_verified`) — see `fact-extraction.ts`; separately, `AnswerClaim` (below) carries the same evidence-vs-claim distinction for a single turn's reply |
-| **Preference** | "What does the user want?" | Split across two stores today, worth distinguishing when reading either: a *stated* preference is just a `durable` `UserFact` like any other belief; a *configured* one (backend, model, `enableShell`, etc.) is `AssistantConfig` (`config.ts`) |
-| **State** | "What's true right now?" | `plan:<sessionId>` (`plan-store.ts`, the active task graph) plus session bookkeeping (`spend:<sessionId>`, `resume-attempts:<sessionId>`) |
-| **Experience** | "What worked before?" | `ExperienceStore` / `DexieExperienceStore` — strategy weights, learned decompositions, recovery sequences |
+| Tier | Answers | Allowed `FactSource` | Retention | Contradiction-checked | Where it lives |
+|---|---|---|---|---|---|
+| **Episodic** | "What was said or mused, unconfirmed?" | any | session | no | `facts:<sessionId>` — also every `model_inferred`/`observed` `UserFact` lands here regardless of its `durable` bit; an unconfirmed model guess is never Knowledge |
+| **Semantic** | "What's currently stated as true?" | `user_asserted`, `externally_verified` | durable (by tier policy) | yes | `facts:<sessionId>` or `facts:durable`, depending on the existing promotion policy (`durable` bit) — the tier a fact belongs to and whether it's actually promoted are tracked separately today |
+| **Identity** | "Who is this?" (name, "call me X") | `user_asserted` | durable | yes | `facts:durable` |
+| **Preference** | "What does the user want?" (stated preference) | `user_asserted` | durable | yes | `facts:durable`; a *configured* preference (backend, model, `enableShell`) is separately `AssistantConfig` (`config.ts`), not a `UserFact` at all |
+| **Procedural** | "What worked before?" | none — no `UserFact` is ever tagged `procedural` | durable | no | `ExperienceStore` / `DexieExperienceStore` — strategy weights, learned decompositions, recovery sequences |
+| **Commitment** | "What's pending?" | none — no `UserFact` is ever tagged `commitment` | durable | no | `reminderStore` |
 
-Reminders (`reminderStore`) sit at the State/Knowledge boundary — durable like
-Knowledge (never cleared by `clearSession()`), but describing pending intent
-rather than a belief about the world.
+`procedural` and `commitment` having an empty `allowedSources` is
+structural, not just documented: no `UserFact` — and therefore nothing a
+model or the user merely *said* — can ever populate the Experience or
+Commitment stores through `tierForFact()`. That's the enforced half of
+**INV-16** ("no Experience-tier entry is readable as a Knowledge belief");
+the other half is that `isKnowledgeTier()` only returns true for `semantic`,
+`identity`, and `preference` — episodic entries, procedural weights, and
+commitments never enter contradiction detection as if they were beliefs.
 
-This table is the canonical reference the doc comments on `DURABLE_FACTS_KEY`
-(`assistant.ts`), `fact-extraction.ts`, `plan-store.ts`, and
-`DexieExperienceStore` each cross-reference — update it there rather than
+The conversation transcript itself (`transcript:<sessionId>`, "what was
+said" verbatim) and a single turn's `AnswerClaim` (evidence vs. claim for one
+reply, see below) sit outside this tier system — they're the raw material a
+tier's `UserFact`s get extracted *from*, not memory tiers themselves.
+
+`fact-extraction.ts`'s `TIER_RULES`/`tierForFact()`/`isKnowledgeTier()` are
+the canonical reference — update the doc comments there rather than
 re-deriving the mapping if it changes.
 
 ## Usage
@@ -294,8 +333,22 @@ a write-approval UI yet — file tools are CLI/desktop-only for now.
 ## Web access via tools
 
 `web_search`/`fetch_url` are read-only — same trust tier as `read_file`/
-`list_directory` — so both execute for real immediately, with **no approval
-step**, via a `webTools` option:
+`list_directory` — so both execute for real immediately, with **no human
+approval step**, via a `webTools` option. "No human approval" doesn't mean
+unchecked: every read-only call, on either backend, is checked against a
+live, turn-scoped `ControlState` (deterministic ALLOW/DENY/REQUIRE_APPROVAL,
+built from how earlier tool calls the same turn went) before it runs — a
+developing failure pattern can trip a real deny mid-turn. On the proxy
+backend this happens directly in `AgentLoop.runToolIterations`
+(`checkToolPolicy()` → `tool-policy.ts`'s `evaluateToolPolicy()`); on the
+claude-cli backend, where tool calls would otherwise resolve invisibly
+inside the `claude` subprocess, `ClaudeCliLLMClient`'s `startToolGateServer()`
+opens an ephemeral loopback socket before each `callChatStructured` call and
+the MCP server's `requestToolGate()` blocks on it before executing — a deny
+comes back as an MCP tool error the model sees in its own conversation, and
+both sides fail *open* (allow), never closed, on a dead connection or an
+unparseable response. `write_file`/`run_shell_command`/`send_email` are
+untouched by this mechanism — they keep staging unconditionally, as below.
 
 ```ts
 const assistant = new PersonalAssistant({
