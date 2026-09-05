@@ -405,6 +405,30 @@ describe('App', () => {
     })
   })
 
+  describe('oneLoopMode wiring (R5 — browser/desktop counterpart of the CLI\'s ASSISTANT_ONE_LOOP)', () => {
+    function seedConfig(patch: Record<string, unknown>): void {
+      localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify(patch))
+    }
+
+    function lastCreateOptions(): { oneLoopMode?: string } {
+      const calls = (PersonalAssistant.create as unknown as { mock: { calls: Array<[{ oneLoopMode?: string }]> } }).mock.calls
+      return calls.at(-1)?.[0] ?? {}
+    }
+
+    it('passes no oneLoopMode by default (PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE)', async () => {
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastCreateOptions().oneLoopMode).toBeUndefined()
+    })
+
+    it('threads a persisted oneLoopMode through to PersonalAssistant.create', async () => {
+      seedConfig({ oneLoopMode: 'enabled' })
+      render(<App />)
+      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
+      expect(lastCreateOptions().oneLoopMode).toBe('enabled')
+    })
+  })
+
   describe('/search UI (T6)', () => {
     it('opens the Search panel via the header button and renders results for a query with matches', async () => {
       const user = userEvent.setup()

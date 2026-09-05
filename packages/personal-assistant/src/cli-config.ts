@@ -1,5 +1,6 @@
 import type { AssistantConfig } from './config.js'
 import { CONFIG_KEYS } from './config.js'
+import { resolveOneLoopMode } from './one-loop-flag.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -38,6 +39,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
   sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
+  oneLoopMode: 'ASSISTANT_ONE_LOOP',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -97,6 +99,9 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
   if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
   if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
+  // resolveOneLoopMode already warns-and-defaults on an unrecognized value, so an explicit
+  // ASSISTANT_ONE_LOOP always resolves to a concrete 'enabled'/'disabled' override here.
+  if (env.ASSISTANT_ONE_LOOP !== undefined) overrides.oneLoopMode = resolveOneLoopMode(env)
   return overrides
 }
 
@@ -144,6 +149,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return raw
     case 'searchBackend':
       if (raw !== 'ddg' && raw !== 'brave') throw new ConfigValueParseError('searchBackend must be "ddg" or "brave"')
+      return raw
+    case 'oneLoopMode':
+      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('oneLoopMode must be "enabled" or "disabled"')
       return raw
     default:
       return raw

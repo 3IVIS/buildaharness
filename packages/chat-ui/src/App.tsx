@@ -221,6 +221,10 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
       ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
       : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    // R5 of plans/harness_d2_one_loop_rewire_plan.html — resolved through the same AssistantConfig
+    // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
+    // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
+    oneLoopMode: config.oneLoopMode,
     onDebugLog: debugLog,
   })
 }
@@ -235,6 +239,9 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // since it also affects the message-level risk gate, independent of file/shell tools.
     webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    // R5 of plans/harness_d2_one_loop_rewire_plan.html — same AssistantConfig seam as the desktop
+    // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
+    oneLoopMode: config.oneLoopMode,
     onDebugLog: debugLog,
   })
 }
