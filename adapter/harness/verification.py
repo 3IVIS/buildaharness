@@ -483,9 +483,7 @@ def verify(
     layer_results.append(verify_output_contract_partial(result, output_contract, tool_manifest))
 
     has_critical_failure = any(lr.status == "FAIL" for lr in layer_results)
-    critical_failure_tiers = {
-        LAYER_TIER.get(lr.layer, "mechanical") for lr in layer_results if lr.status == "FAIL"
-    }
+    critical_failure_tiers = {LAYER_TIER.get(lr.layer, "mechanical") for lr in layer_results if lr.status == "FAIL"}
 
     adversarial_passed: bool | None = None
     if task_risk == "HIGH":
