@@ -19,7 +19,8 @@ eval/
     *.json           one task per file (id == filename stem)
   fixtures.ts        in-memory FsBackend + per-task tool contexts
   graders.ts         gradeTask() — deterministic, LLM-free (except an optional judge rubric)
-  arms.ts            the arms (baseline + flagOn implemented; bare + langgraph declared)
+  arms.ts            the arms (baseline + flagOn + bare implemented; langgraph declared)
+  bare-arm.ts        the `bare` arm — a no-harness, no-staging ReAct loop
   runner.ts          runBenchmark() — arms × tasks → graded rows → per-arm aggregates
   report.ts          renderMarkdown() + diffReports() (Rule 6)
   reports/           machine reports from real runs (gitignored except a committed baseline)
@@ -68,14 +69,16 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
 |---|---|---|
 | `baseline` | **implemented** | `PersonalAssistant` as shipped — the harness runs post-hoc over the model's reply (Plan §D "flag-OFF"). |
 | `flagOn` | **implemented** | The assistant with the current phase's flag on. Identical to `baseline` until Phase C/D/E ships a flag, at which point this arm sets it and the two diverge — that divergence is the Rule 6 signal. |
-| `bare` | **not built** | A minimal ReAct loop, no harness. Answers "is the harness worth it vs. no harness" (criticism003 #1). Follow-on. |
+| `bare` | **implemented** | A minimal ReAct loop over the same `ILLMClient` + tools, but no harness: no control state, no verification, no memory, and **no staging** — a `write_file`/`run_shell_command` executes immediately. Answers "is the harness worth it vs. no harness" (criticism003 #1). See `eval/bare-arm.ts`. |
 | `langgraph` | **not built** | The equivalent FlowSpec compiled to LangGraph (Python). Answers "vs. an off-the-shelf framework". A 10–15 task subset, run from `adapter/eval/`. Follow-on. |
 
 ## Outstanding (Phase B follow-on)
 
 1. **Grow the corpus** to 40–100 tasks (currently ~12, one or two per category). Every empirically-
    found bug from a Phase C/D differential lands here as a permanent task.
-2. **Build the `bare` arm** — a no-harness ReAct loop over the same `ILLMClient` + tools.
+2. ~~Build the `bare` arm~~ — **done** (`eval/bare-arm.ts`): a no-harness, no-staging ReAct loop
+   over the same `ILLMClient` + tools. Now in `IMPLEMENTED_ARMS`, so a real
+   `run-harness-benchmark.ts` run includes it by default.
 3. **Build the `langgraph` arm** in `adapter/eval/` (Python) for the subset.
 4. **Wire a nightly real-LLM job** into `.github/workflows/eval.yml` (mocked on push — the
    `*.test.ts` already cover that — real-LLM nightly, upload the report artifact).
