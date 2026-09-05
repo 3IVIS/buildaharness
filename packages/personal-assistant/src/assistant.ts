@@ -528,9 +528,10 @@ export class PersonalAssistant {
         // Phase 4c: one live ControlState per turn, shared across every tool call this turn
         // makes — including across batch items (see AgentLoop.createControlPlaneState /
         // tool-control-plane.ts) — so a failure pattern discovered partway through the turn can
-        // actually gate a later call via checkToolPolicy. Only needed on this branch: the
-        // harness-driven proposer above folds in the harness's own live ControlState instead
-        // (see createHarnessProposer's doc comment) rather than this separate structure.
+        // actually gate a later call via checkToolPolicy. The flag-ON harness-driven proposers
+        // above build their own via createControlPlaneState() too (and additionally pin the
+        // harness's own live per-iteration ControlState on as the gate floor — see
+        // createHarnessProposer's doc comment); this branch just constructs it here instead.
         const controlPlaneState = this.agentLoop.createControlPlaneState()
         const loopResult = batch
           ? await this.agentLoop.runBatchToolLoop(batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, controlPlaneState)

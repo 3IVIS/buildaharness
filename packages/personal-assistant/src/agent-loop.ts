@@ -251,16 +251,18 @@ export class AgentLoop {
    * step, or a thrown OneLoopPause for `needs_approval`/`escalated` — never a thrown plain Error,
    * so execute() never misclassifies this as a tool failure.
    *
-   * `toolCtx.controlState`, when the harness has one resolved (see execute.ts's ToolExecutorContext
-   * doc comment), is folded in as this step's ControlState for tool-policy.ts's evaluateToolPolicy
-   * — the harness's own live per-iteration ControlState, not a second parallel structure — by
-   * wrapping it in a `{ controlState }` shape matching the one field runToolIterationStep's
-   * `controlPlaneState` parameter actually reads for the gate check. Recording each dispatched
-   * tool call's outcome back into a live ControlState the *next* iteration's actionGate can react
-   * to is real, buildable follow-up (would need worldModel/evidenceStore/diagnostics/
-   * failureDiagnostics from the same ToolExecutorContext threaded into recordToolOutcome) —
-   * deliberately not done here to keep this phase to the proposer + translation it was scoped for;
-   * flagged for R3/R4 to pick up if the validation matrix shows it's needed sooner.
+   * Control-plane state: the proposer holds one real, turn-scoped `TurnControlPlaneState`
+   * (`createControlPlaneState`, the exact object the flag-OFF flat path threads through
+   * `runToolLoop`) for its whole lifetime — so `runToolIterationStep`'s `recordToolOutcome` has
+   * real evidence/worldModel/diagnostics/failureDiagnostics stores to write each dispatched call's
+   * outcome into, and same-turn tool-failure-pattern gating behaves identically to flag-OFF. On
+   * top of that, the harness's own live per-iteration `toolCtx.controlState` is pinned onto that
+   * state at the start of every iteration as the gate's floor (D2's "one composition, not two"
+   * intent): a harness DENY / HUMAN_REQUIRED escalation is honored by `checkToolPolicy` before the
+   * iteration's first call executes. `recordToolOutcome` re-resolves `.controlState` from the
+   * turn-local stores after each recorded outcome — that only ever escalates further (8+ same-turn
+   * failures) and `evaluateToolPolicy` ignores `execution_mode`, so it never downgrades a harness
+   * escalation that would have mattered.
    */
   createHarnessProposer(input: {
     messages: ChatMessage[]
@@ -276,6 +278,10 @@ export class AgentLoop {
   }): (toolCtx: ToolExecutorContext) => Promise<unknown> {
     let dispatchedAnyToolCall = false
     let iteration = 0
+    // One real, turn-scoped live ControlState for the whole proposer (= the whole turn) — see this
+    // method's doc comment. recordToolOutcome dereferences state.evidenceStore, so this must be a
+    // real createControlPlaneState() object, never a synthetic { controlState }-only wrapper.
+    const controlPlaneState = this.createControlPlaneState()
 
     return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
       if (iteration >= input.maxIterations) {
@@ -283,9 +289,10 @@ export class AgentLoop {
       }
       iteration++
 
-      const controlPlaneState = toolCtx.controlState
-        ? ({ controlState: toolCtx.controlState } as TurnControlPlaneState)
-        : undefined
+      // Pin the harness's own live per-iteration ControlState on as the gate floor for this
+      // iteration (see doc comment); recordToolOutcome re-resolves it from the turn-local stores
+      // after each dispatched call, which only escalates further.
+      if (toolCtx.controlState) controlPlaneState.controlState = toolCtx.controlState
 
       const step = await this.runToolIterationStep(
         input.messages, input.tools, input.sessionId, input.userMessage, input.sources, dispatchedAnyToolCall,
@@ -393,24 +400,17 @@ export class AgentLoop {
     let notAttempted: string[] = []
     let projectedTotal = 0
     let batchBudget: BatchBudgetTrace | undefined
+    // One real, turn-scoped live ControlState shared across every batch item — the same object the
+    // flag-OFF runBatchToolLoop path threads through resolveBatchItem / resolveRemainingBatchItems
+    // (createControlPlaneState). It must be a real createControlPlaneState() object, not a
+    // synthetic { controlState } wrapper: resolveBatchItem's shared runToolIterationStep calls
+    // recordToolOutcome unconditionally when a controlPlaneState is passed, and recordToolOutcome
+    // dereferences state.evidenceStore. Batch items don't pin toolCtx.controlState in the way the
+    // flat proposer does — they already cleared the message-level approval gate, and the flag-OFF
+    // batch path gates on this turn-scoped state alone too.
+    const controlPlaneState = this.createControlPlaneState()
 
     const proposer = async (_toolCtx: ToolExecutorContext): Promise<unknown> => {
-      // Unlike the flat createHarnessProposer, this does not fold toolCtx.controlState into a
-      // TurnControlPlaneState for resolveBatchItem/resolveRemainingBatchItems: those methods'
-      // shared runToolIterationStep unconditionally calls recordToolOutcome (the write side of
-      // Phase 4c's control-plane state) whenever a controlPlaneState is passed at all, and
-      // recordToolOutcome dereferences state.evidenceStore — a field a synthetic
-      // `{ controlState: toolCtx.controlState }` wrapper (the read-only shape R2's flat proposer
-      // builds) doesn't have. R2's own note already flagged the write-side half of the fold as
-      // deferred, buildable follow-up; discovering it crashes as soon as something exercises it
-      // (a real per-item tool dispatch, which the flat proposer's own test matrix never did) is
-      // this phase's actual finding — passing `undefined` here (no ControlState at all for batch
-      // items, matching the flat proposer's very first call before any ControlState is resolved)
-      // avoids the crash without inventing new write-side plumbing, and is flagged for a human to
-      // resolve properly (either a real evidenceStore-backed control-plane object, or fixing
-      // recordToolOutcome to tolerate a partial state) rather than silently left as a TODO.
-      const controlPlaneState = undefined
-
       if (phase === 'probe') {
         for (const item of probeItems) {
           probeResolutions.push(
