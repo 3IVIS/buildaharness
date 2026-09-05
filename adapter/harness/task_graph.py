@@ -143,6 +143,39 @@ class TaskGraph:
         }
 
 
+# ── Effect feedback (Phase H, ADR-003 F-2) ───────────────────────────────────
+
+
+@dataclass
+class TaskOutcome:
+    """What the executor observed for a task — the Effect-feedback primitive.
+
+    apply_task_outcome() is the one State-write path callers use to report it; direct
+    TaskGraph.update_task_status() calls from outside this module are the seam Phase H
+    closes (INV-17 grep-gates it — see test_harness_h.py).
+    """
+
+    status: TaskStatus
+    evidence_ids: list[str] = field(default_factory=list)
+    block_reason: str | None = None
+    # Not yet consumed — Phase D1's "not done → loop again" signal lands here.
+    continue_: bool = False
+
+
+def apply_task_outcome(task_graph: TaskGraph, task_id: str, outcome: TaskOutcome) -> None:
+    """Apply a TaskOutcome to task_graph — the single writer for task-status transitions.
+
+    Wraps TaskGraph.update_task_status() (which still owns transition validation) and,
+    on a COMPLETE outcome carrying evidence_ids, stamps Task.completed_evidence — the
+    belief IDs the P9 reviewer drain (reviewer.py) later checks for invalidation.
+    """
+    task_graph.update_task_status(task_id, outcome.status, block_reason=outcome.block_reason)
+    if outcome.status == "COMPLETE" and outcome.evidence_ids:
+        task = task_graph.get_task(task_id)
+        if task is not None:
+            task.completed_evidence = list(outcome.evidence_ids)
+
+
 # ── P4.1 — Graph operations ───────────────────────────────────────────────────
 
 

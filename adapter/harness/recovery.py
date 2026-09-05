@@ -20,6 +20,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from ._core_generated import RECOVERY_CLASSIFICATION_TABLE
+
 StrategyType = Literal[
     "DIRECT_EDIT",
     "TRACE_EXEC",
@@ -37,6 +39,39 @@ STRATEGY_ORDER: list[StrategyType] = [
     "MINIMAL_FIX",
     "ESCALATE",
 ]
+
+
+# ── Failure → Classification → Recovery Policy → Selected Action (criticism002 #7) ──
+#
+# Phase C2 (docs/adr/004-shared-semantic-core.md) lands this table as DATA + TYPES
+# only. RECOVERY_CLASSIFICATION_TABLE is generated from spec/harness-core.json into
+# ._core_generated, shared byte-for-byte with packages/harness/src/recovery-policy.ts.
+# classify_recovery() is a pure lookup: a CLASSIFIED failure resolves to a
+# RecoveryPolicy naming the short-circuit action; an UNCLASSIFIED failure returns
+# None and the caller falls through to get_next_strategy(STRATEGY_ORDER) + softmax
+# unchanged. Wiring this into switch_strategy() / loop.py is Phase D — nothing in
+# this module calls classify_recovery() yet.
+
+
+@dataclass(frozen=True)
+class RecoveryPolicy:
+    failure_class: str
+    policy: str
+    action: str
+
+
+def classify_recovery(failure_class: str | None) -> RecoveryPolicy | None:
+    """Map a failure class to its deterministic recovery policy, or None if unclassified.
+
+    None (the common case today) means "no short-circuit — use the existing
+    strategy progression". This never raises: an unknown class is simply unclassified.
+    """
+    if not failure_class:
+        return None
+    entry = RECOVERY_CLASSIFICATION_TABLE.get(failure_class)
+    if entry is None:
+        return None
+    return RecoveryPolicy(failure_class=failure_class, policy=entry["policy"], action=entry["action"])
 
 
 @dataclass

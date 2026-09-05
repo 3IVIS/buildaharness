@@ -85,6 +85,10 @@ class HarnessRunState:
     pending_clarification: dict[str, Any] | None = None
     # P-PC — process concept ID that seeded this run's task graph (None for model-driven runs)
     process_concept_id: str | None = None
+    # Phase I — bounded, single-slot ReviewerVerdict carried from one iteration's reviewer
+    # pass into the next iteration's resolve_control_state() call (INV-18); one-shot,
+    # cleared by run_one_iteration() immediately after that one resolve consumes it.
+    pending_reviewer_verdict: Any | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # Persist a presence marker rather than the store contents — actual
@@ -108,6 +112,9 @@ class HarnessRunState:
             "pending_escalation": self.pending_escalation.to_dict() if self.pending_escalation is not None else None,
             "pending_clarification": self.pending_clarification,
             "process_concept_id": self.process_concept_id,
+            "pending_reviewer_verdict": (
+                self.pending_reviewer_verdict.to_dict() if self.pending_reviewer_verdict is not None else None
+            ),
         }
 
     @classmethod
@@ -137,6 +144,7 @@ class HarnessRunState:
             pending_escalation=_deserialise_surface_blocker(d.get("pending_escalation")),
             pending_clarification=d.get("pending_clarification"),
             process_concept_id=d.get("process_concept_id"),
+            pending_reviewer_verdict=_deserialise_reviewer_verdict(d.get("pending_reviewer_verdict")),
         )
 
 
@@ -217,6 +225,18 @@ async def load(run_id: str, db: AsyncSession) -> HarnessRunState | None:
         return None
 
     return HarnessRunState.from_dict(run_id, {k: _deserialise(row[k]) for k in row.keys() if k != "run_id"})
+
+
+def _deserialise_reviewer_verdict(data: Any) -> Any:
+    """Deserialise a persisted ReviewerVerdict dict back to a ReviewerVerdict, or None."""
+    if not data:
+        return None
+    try:
+        from .reviewer import ReviewerVerdict
+
+        return ReviewerVerdict.from_dict(data)
+    except Exception:
+        return None
 
 
 def _deserialise_surface_blocker(data: Any) -> Any:

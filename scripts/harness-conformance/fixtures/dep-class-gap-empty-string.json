@@ -1,6 +1,6 @@
 {
   "id": "dep-class-gap-empty-string",
-  "description": "KNOWN DISCREPANCY (tracked in known-discrepancies.json): an explicit empty-string dep_class_gap_annotation (as opposed to the field being entirely absent/null) is treated as 'no annotation' by TS (`if (diagnostics.dep_class_gap_annotation)` is falsy for '') but as 'a real annotation' by Python (`if diagnostics.dep_class_gap_annotation is not None` is true for ''), so Python appends an empty-string note that TS never adds.",
+  "description": "REGRESSION (Phase C1 / ADR-004 retired this discrepancy): an explicit empty-string dep_class_gap_annotation (as opposed to absent/null) now adds NO note on either side. Python's _attach_annotation was changed from `is not None` to a truthy check to match resolve-control-state.ts. Both sides must produce notes: [].",
   "diagnostics": {
     "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
     "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },

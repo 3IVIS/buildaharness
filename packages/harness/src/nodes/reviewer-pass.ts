@@ -19,11 +19,79 @@ export interface ReviewLensResult {
   reopened_task_ids: string[]
 }
 
+export type ReviewerVerdictSeverity = 'LOW' | 'MEDIUM' | 'HIGH'
+export type ReviewerVerdictLens = 'implementer' | 'reviewer' | 'adversarial'
+
+/**
+ * Bounded, single-slot verdict that survives into the next iteration's ControlState
+ * resolve (Phase I / ADR-003 finding F-3, authority-map ruling A-4). Mirrors
+ * reviewer.py's ReviewerVerdict exactly — see resolve-control-state.ts's
+ * applyPendingReviewerVerdict() for the consuming side (INV-18).
+ */
+export interface ReviewerVerdict {
+  severity: ReviewerVerdictSeverity
+  lens: ReviewerVerdictLens
+  summary: string
+}
+
+const REVIEWER_VERDICT_SEVERITY_RANK: Record<ReviewerVerdictSeverity, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 }
+
+/**
+ * TS findings are plain strings (no structured finding_type/severity like reviewer.py's
+ * ReviewFinding dataclass), so severity is inferred from each lens's fixed finding-text
+ * patterns instead — chosen to mirror reviewer.py's own severity assignment: implementer's
+ * "no supporting observation" / open-HIGH-contradiction checks and reviewer's
+ * required-interface-field miss are HIGH there, but TS's implementerLens/reviewerLens don't
+ * implement those specific checks (only success-criterion coverage and confidence/
+ * contradiction summaries) — so this maps what TS *does* find: an unresolved HIGH/
+ * SYSTEM_BREAKING contradiction (reviewer) and a contradicted high-reliability adversarial
+ * challenge (adversarial) as HIGH, mirroring the severity those same underlying conditions
+ * get on the Python side; everything else defaults to MEDIUM (never LOW — an empty finding
+ * list already short-circuits below, and TS has no lens that only ever produces
+ * informational, non-actionable findings).
+ */
+function classifyFindingSeverity(lens: ReviewerVerdictLens, finding: string): ReviewerVerdictSeverity {
+  if (lens === 'reviewer' && (finding.startsWith('Unresolved HIGH') || finding.startsWith('Unresolved SYSTEM_BREAKING'))) {
+    return 'HIGH'
+  }
+  if (lens === 'adversarial' && finding.startsWith('Adversarial challenge:')) {
+    return 'HIGH'
+  }
+  return 'MEDIUM'
+}
+
+/** The highest-severity finding across all three lenses becomes the pending verdict — a
+ * resolver input, not a log of every finding. None when nothing reaches MEDIUM — mirrors
+ * the Python twin's `_derive_pending_verdict()` (adapter/harness/reviewer.py), which filters
+ * candidates to `severity >= MEDIUM` before picking the max; classifyFindingSeverity() never
+ * actually produces 'LOW' today (same as Python: no *_lens() finding is ever constructed
+ * with severity="LOW" there either — MEDIUM is the floor in both engines currently), but the
+ * filter itself is real, load-bearing parity — without it, a LOW finding either engine adds
+ * in the future would silently start forcing pending_verdict/CAUTIOUS in TS while Python
+ * continues to correctly ignore it. Ties keep the first-encountered finding (lens order:
+ * implementer, reviewer, adversarial — the pass's own fixed sequence). */
+function derivePendingVerdict(
+  implementerFindings: string[],
+  reviewerFindings: string[],
+  adversarialFindings: string[],
+): ReviewerVerdict | null {
+  const candidates: ReviewerVerdict[] = [
+    ...implementerFindings.map(f => ({ severity: classifyFindingSeverity('implementer', f), lens: 'implementer' as const, summary: f })),
+    ...reviewerFindings.map(f => ({ severity: classifyFindingSeverity('reviewer', f), lens: 'reviewer' as const, summary: f })),
+    ...adversarialFindings.map(f => ({ severity: classifyFindingSeverity('adversarial', f), lens: 'adversarial' as const, summary: f })),
+  ].filter(c => REVIEWER_VERDICT_SEVERITY_RANK[c.severity] >= REVIEWER_VERDICT_SEVERITY_RANK.MEDIUM)
+  if (candidates.length === 0) return null
+  return candidates.reduce((top, c) =>
+    REVIEWER_VERDICT_SEVERITY_RANK[c.severity] > REVIEWER_VERDICT_SEVERITY_RANK[top.severity] ? c : top,
+  )
+}
+
 export interface ReviewPassResult {
   implementer_findings: string[]
   reviewer_findings: string[]
   adversarial_findings: string[]
   reopened_task_ids: string[]
+  pending_verdict: ReviewerVerdict | null
 }
 
 // BFS over the belief dep graph, returning beliefs within hop_limit of the success criteria chain
@@ -265,5 +333,6 @@ export async function reviewerPass(
     reviewer_findings: reviewResult.findings,
     adversarial_findings: adversarialResult.findings,
     reopened_task_ids: reopenedTaskIds,
+    pending_verdict: derivePendingVerdict(implResult.findings, reviewResult.findings, adversarialResult.findings),
   }
 }

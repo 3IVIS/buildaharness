@@ -18,8 +18,13 @@ promoted=True rows. The only way a candidate becomes visible is an explicit,
 separate call to promote_experience_entries()/promote_strategy_weights() — never invoked
 automatically by anything in this module or the main loop. That's the
 "immutable trace -> offline learning -> candidate policy -> evaluation -> promotion ->
-future runs" pipeline the critique asked for, with the promotion step itself deliberately
-left to the caller (an offline evaluation job), not implemented here.
+future runs" pipeline the critique asked for. run_offline_eval_pipeline() (bottom of this
+module) is that offline evaluation job: it judges each pending strategy-weight candidate
+against the currently-promoted baseline (a minimum-sample-size bar so one lucky attempt
+can't promote itself, then a no-regression bar) before promoting it. It is a job the
+caller invokes explicitly (a scheduled task, a CLI command) — nothing in the main loop or
+this module calls it automatically, preserving the same "learning cannot alter
+correctness within a run" guarantee the promotion boundary itself provides.
 
 Temperature semantics for softmax_strategy_policy():
   - Default 1.0: balanced weighting of empirical rates.
@@ -79,6 +84,17 @@ class ExperienceType(StrEnum):
 
 
 StrategyWeightKey = namedtuple("StrategyWeightKey", ["strategy_type", "failure_class"])
+
+
+@dataclass
+class StrategyWeightSample:
+    """One (strategy_type, failure_class) row's raw statistics — success_count and
+    attempt_count alongside the derived rate, so an offline evaluator can apply a
+    minimum-sample-size bar instead of trusting a rate computed from one lucky attempt."""
+
+    rate: float
+    success_count: int
+    attempt_count: int
 
 
 @dataclass
@@ -350,6 +366,32 @@ class ExperienceStore:
                     )
                 ).fetchall()
             return {StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): float(row[2]) for row in rows}
+        except Exception:
+            return {}
+
+    def get_pending_strategy_weights(self) -> dict[StrategyWeightKey, StrategyWeightSample]:
+        """Return UNPROMOTED experience_strategy_weights rows, with their sample counts.
+
+        The mirror image of get_strategy_weights() — this is the offline-eval pipeline's
+        input corpus of candidates. Empty dict if unavailable or nothing is pending.
+        """
+        if not self.available:
+            return {}
+        try:
+            assert self.db_session_factory is not None
+            with self.db_session_factory() as session:
+                rows = session.execute(
+                    _sql_text(
+                        "SELECT strategy_type, failure_class, rate, success_count, attempt_count "
+                        "FROM experience_strategy_weights WHERE promoted = false"
+                    )
+                ).fetchall()
+            return {
+                StrategyWeightKey(strategy_type=row[0], failure_class=row[1]): StrategyWeightSample(
+                    rate=float(row[2]), success_count=int(row[3]), attempt_count=int(row[4])
+                )
+                for row in rows
+            }
         except Exception:
             return {}
 
@@ -711,3 +753,92 @@ def build_strategy_ordering(
         return list(DEFAULT_STRATEGY_ORDER)
     weights = experience_store.get_strategy_weights()
     return softmax_strategy_policy(weights, failure_class, temperature=temperature)
+
+
+# ── Offline evaluation pipeline (Phase G) ─────────────────────────────────────
+#
+# The last, deliberately-unimplemented step of Phase 2's promotion boundary (see module
+# docstring): judge each pending candidate before it becomes visible to
+# get_strategy_weights()/build_strategy_ordering(), instead of promoting on faith. This
+# closes the "softmax reinforcement of accidental correlations" risk — a single early
+# success upserting rate=1.0 could otherwise ride straight into the live policy.
+
+
+@dataclass
+class OfflineEvalResult:
+    """One candidate's verdict from evaluate_candidate_strategy_weights()."""
+
+    key: StrategyWeightKey
+    candidate_rate: float
+    sample_size: int
+    promoted: bool
+    reason: str
+
+
+def evaluate_candidate_strategy_weights(
+    experience_store: ExperienceStore,
+    min_sample_size: int = 5,
+    min_success_rate: float = 0.5,
+) -> list[OfflineEvalResult]:
+    """Judge every pending (unpromoted) strategy-weight candidate. Read-only — does not
+    promote anything itself; see run_offline_eval_pipeline().
+
+    A candidate passes only if both hold:
+      - sample_size >= min_sample_size (the "canary" bar that closes the "softmax
+        reinforcement of accidental correlations" risk — a single lucky early attempt
+        can't ride straight into the live policy; it has to accumulate real evidence
+        first, still unpromoted, before it is even considered).
+      - candidate_rate >= min_success_rate (a floor, not a comparison — a candidate
+        that has accumulated enough attempts to be judged but is still failing more
+        than it succeeds shouldn't be promoted just because it hit the sample-size bar).
+
+    Deliberately NOT a comparison against this key's own previously-promoted rate: the
+    schema keeps exactly one cumulative (success_count, attempt_count, rate) row per
+    (strategy_type, failure_class), and upsert_strategy_weight() resets promoted=False on
+    that same row on every new attempt (see this module's docstring). A pending candidate
+    and a still-promoted baseline for the same key can therefore never coexist — by the
+    time a row is visible here, its own prior promoted value has already been overwritten
+    in place, not preserved anywhere. The sample-size and rate-floor bars are the
+    meaningful gate this single-row schema actually supports.
+    """
+    if not experience_store.available:
+        return []
+    candidates = experience_store.get_pending_strategy_weights()
+    results: list[OfflineEvalResult] = []
+    for key, sample in candidates.items():
+        if sample.attempt_count < min_sample_size:
+            reason, promoted = "insufficient_sample", False
+        elif sample.rate < min_success_rate:
+            reason, promoted = "below_min_success_rate", False
+        else:
+            reason, promoted = "passed", True
+        results.append(
+            OfflineEvalResult(
+                key=key,
+                candidate_rate=sample.rate,
+                sample_size=sample.attempt_count,
+                promoted=promoted,
+                reason=reason,
+            )
+        )
+    return results
+
+
+def run_offline_eval_pipeline(
+    experience_store: ExperienceStore,
+    min_sample_size: int = 5,
+    min_success_rate: float = 0.5,
+) -> list[OfflineEvalResult]:
+    """Evaluate every pending strategy-weight candidate and promote the ones that pass.
+
+    This is the offline evaluation job the module docstring's pipeline names but leaves
+    to the caller — a scheduled task or CLI command invokes it explicitly. Nothing in the
+    main harness loop calls this automatically.
+    """
+    results = evaluate_candidate_strategy_weights(
+        experience_store, min_sample_size=min_sample_size, min_success_rate=min_success_rate
+    )
+    to_promote = [r.key for r in results if r.promoted]
+    if to_promote:
+        experience_store.promote_strategy_weights(to_promote)
+    return results

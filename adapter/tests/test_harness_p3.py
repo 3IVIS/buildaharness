@@ -456,12 +456,12 @@ def test_T20_dep_class_gap_annotation_only_in_notes_not_arithmetic():
     """T20 — dep_class_gap_annotation appears only in control_state.notes[], never in tier arithmetic."""
     wm = _fresh_world_model()
     d = _healthy_diagnostics()
-    d.dep_class_gap_annotation = "dep-class-gap: class A missing"
+    d.dep_class_gap_annotation = "class A missing"
 
     cs = resolve_control_state(d, wm)
 
     # Annotation must appear in notes
-    assert any("dep-class-gap" in note for note in cs.notes), f"Annotation not found in notes: {cs.notes}"
+    assert any("class A missing" in note for note in cs.notes), f"Annotation not found in notes: {cs.notes}"
 
     # NORMAL state confirms no tier was influenced by the annotation value as a number
     assert cs.execution_mode == "NORMAL"
@@ -478,8 +478,21 @@ def test_T20_dep_class_gap_annotation_only_in_notes_not_arithmetic():
         "dep_class_gap_annotation should only appear in the notes attachment, not in tier arithmetic"
     )
 
-    # Confirm it's attached at the end (after tier resolution)
-    assert cs.notes[-1] == "dep-class-gap: class A missing"
+    # Confirm it's attached at the end (after tier resolution), in the canonical
+    # prefixed format shared with resolve-control-state.ts (Phase C1, ADR-004).
+    assert cs.notes[-1] == "dep_class_gap: class A missing"
+
+
+def test_T20b_dep_class_gap_empty_string_adds_no_note():
+    """T20b — an explicit empty-string dep_class_gap_annotation adds no note (Phase C1: Python
+    aligned to the TS truthy check; retired the tracked dep-class-gap-empty-string discrepancy)."""
+    wm = _fresh_world_model()
+    d = _healthy_diagnostics()
+    d.dep_class_gap_annotation = ""
+
+    cs = resolve_control_state(d, wm)
+
+    assert cs.notes == []
 
 
 # ══════════════════════════════════════════════════════════════════════════════

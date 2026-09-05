@@ -1,0 +1,13 @@
+{
+  "id": "research-synthesize-owners",
+  "category": "research",
+  "intent": "Synthesise one answer from three workspace files that each hold part of it.",
+  "prompt": "Which team owns the billing service, and who is that team's manager? Use the files in the workspace.",
+  "workspace": [
+    { "path": "services.md", "content": "| service | team |\n|---|---|\n| billing | payments-core |\n| search | discovery |\n| auth | identity |\n" },
+    { "path": "teams.md", "content": "payments-core: 6 engineers, based in Berlin\ndiscovery: 4 engineers, remote\nidentity: 5 engineers, based in Dublin\n" },
+    { "path": "managers.csv", "content": "team,manager\ndiscovery,Priya Raman\npayments-core,Sam Okafor\nidentity,Lena Vogt\n" }
+  ],
+  "tools": { "file": true },
+  "grader": { "contains": ["payments-core", "Sam Okafor"], "notContains": ["Priya Raman", "Lena Vogt"] }
+}

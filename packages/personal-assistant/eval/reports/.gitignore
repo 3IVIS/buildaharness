@@ -1,0 +1,4 @@
+# Machine benchmark reports from real runs — regenerated, not source.
+# A committed `baseline.json` (the "before" side of the Rule 6 gate) is the exception.
+*.json
+!baseline.json

@@ -51,6 +51,7 @@ from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, decomposition_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
+from .policy import select_best_action
 from .progress import cannot_make_progress
 from .recovery import RecoveryBudget, StrategyState, switch_strategy
 from .replanning import ReplanScope, apply_replan, assess_replan_scope
@@ -140,23 +141,6 @@ def initialize_harness(
         "decomposition_gate": gate_result,
         "process_concept_id": getattr(process_concept, "id", None),
     }
-
-
-def select_best_action(
-    control_state: ControlState,
-    world_model: Any,
-    hypothesis_set: Any,
-    task_graph: Any,
-) -> Any:
-    """Stub: select action based solely on control_state (INV-06).
-
-    world_model, hypothesis_set, and task_graph are read-only informational
-    context. They must not directly suppress or permit actions — only
-    control_state drives that decision.
-    """
-    if control_state.permission == "DENY":
-        return None
-    return {"type": "noop", "exploration": True}
 
 
 def _build_surface_blocker(reason: str, control_state: ControlState, task_graph: Any) -> Any:
@@ -392,12 +376,21 @@ def run_one_iteration(
 
     # ── Sub-step A ────────────────────────────────────────────────────────────
     increment_generation_id(world_model)
+    # Phase I / INV-18: a ReviewerVerdict left by the *previous* iteration's reviewer
+    # pass (below) is consumed here, by this one resolve call, then cleared — one-shot,
+    # so a stale finding does not pin CAUTIOUS forever (control_state.py's
+    # _apply_pending_reviewer_verdict). Sub-step B's resolve below deliberately does not
+    # receive it: "the next resolve" means exactly one.
+    _pending_verdict = harness_run_state.pending_reviewer_verdict if harness_run_state is not None else None
     control_state = resolve_control_state(
         diagnostics,
         world_model,
         failure_diagnostics,
         step=world_model.generation_id,
+        pending_reviewer_verdict=_pending_verdict,
     )
+    if harness_run_state is not None and _pending_verdict is not None:
+        harness_run_state.pending_reviewer_verdict = None
 
     # P7.3 — escalate when permission is DENY (INV-06: triggered by control_state)
     if control_state.permission == "DENY":
@@ -514,6 +507,11 @@ def run_one_iteration(
             failure_history=failure_diagnostics,
         )
         tasks_reopened = review_result.tasks_reopened
+
+        # Phase I / INV-18: hand this iteration's verdict to the *next* iteration's
+        # Sub-step A above — one-shot, single-slot (overwrites, never accumulates).
+        if harness_run_state is not None:
+            harness_run_state.pending_reviewer_verdict = review_result.pending_verdict
 
         # If no tasks were reopened, run the final output contract gate
         if not tasks_reopened and harness_run_state is not None:

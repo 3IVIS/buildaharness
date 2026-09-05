@@ -9,7 +9,9 @@ import { generateUpdateHypotheses } from './nodes/generate-update-hypotheses.js'
 import { updateWorldModel, propagateBeliefs } from './nodes/update-world-model.js'
 import { updateTaskGraph } from './nodes/update-task-graph.js'
 import type { Task } from './state/task-graph.js'
-import { selectTask, reconcileParallelBranches } from './nodes/select-task.js'
+import { selectTask } from './nodes/select-task.js'
+import { reconcileParallelBranches } from './nodes/parallel-merge.js'
+import { applyTaskOutcome } from './nodes/apply-task-outcome.js'
 import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
 import { reviewProposedChange, applyReviewOutcome } from './nodes/review-proposed-change.js'
@@ -21,7 +23,7 @@ import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
-import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage } from './nodes/reviewer-pass.js'
+import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
@@ -51,6 +53,20 @@ export interface TurnComplexitySignal {
   consequentialTools: Set<string>
 }
 
+/**
+ * Phase D1: the BLOCK/ESCALATE consequence, surfaced. Before this, action_gate's BLOCK/ESCALATE
+ * branch just reset the task to PENDING and either threw EscalationHalt or silently looped —
+ * the specific decision was invisible to the caller. `haltedRun` mirrors the very next thing
+ * driveMainLoop does: true means cannotMakeProgress already found a stall and an
+ * EscalationHalt throw immediately follows this event.
+ */
+export interface GateDecisionEvent {
+  taskId: string
+  result: 'BLOCK' | 'ESCALATE'
+  reason: string | null
+  haltedRun: boolean
+}
+
 /** Emitted once per layer per main-loop iteration — see HarnessRunOptions.onLayerActivity. */
 export interface LayerActivityEvent {
   layer:
@@ -66,7 +82,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   runId?: string
   experienceStore?: ExperienceStore
   updateChannel?: UpdateChannel
-  toolExecutors?: Record<string, () => unknown>
+  /**
+   * Phase D2: a toolFn may return a Promise — driveMainLoop always awaits the result (see
+   * execute.ts), so a real async proposer (e.g. one LLM round trip + tool dispatch) can sit
+   * behind this exactly like today's synchronous ones. A plain synchronous toolFn (every one
+   * written before this phase) is unaffected — awaiting a non-Promise value just resolves to
+   * itself.
+   */
+  toolExecutors?: Record<string, () => unknown | Promise<unknown>>
   /** Called after every checkpointable main-loop iteration. Persist the checkpoint here to support resume(). */
   onCheckpoint?: (checkpoint: HarnessCheckpoint) => void | Promise<void>
   /** Return true to stop the run at the next checkpoint instead of running to completion. */
@@ -98,6 +121,8 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * honest, instead of re-deriving a weaker proxy from `onLayerActivity`.
    */
   onVerification?: (result: VerificationResult) => void
+  /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
+  onGateDecision?: (event: GateDecisionEvent) => void
   /**
    * Per-task rollback hook, keyed like toolExecutors (falls back to 'default'). Called from
    * rollbackAndReplan when a task fails verification/execution — a real rollback action
@@ -218,11 +243,12 @@ interface LoopContext {
 
   experienceStore: ExperienceStore
   updateChannel: UpdateChannel
-  toolExecutors: Record<string, () => unknown>
+  toolExecutors: Record<string, () => unknown | Promise<unknown>>
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
   onVerification?: (result: VerificationResult) => void
+  onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
     newBeliefs: Array<{ id: string; statement: string }>,
@@ -244,6 +270,9 @@ interface LoopContext {
   lastFailureMatchSymptomCount: number
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
   pendingProposal?: PendingProposalData
+  /** Phase I / INV-18: bounded, single-slot ReviewerVerdict set by reviewerPass(), consumed
+   * and cleared by the very next resolveAndStamp() call (one-shot — see its own doc comment). */
+  pendingReviewerVerdict?: ReviewerVerdict | null
 }
 
 function buildInitialContext(
@@ -292,6 +321,7 @@ function buildInitialContext(
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
+    onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
     lastContradictionCheckCount: 0,
@@ -300,6 +330,7 @@ function buildInitialContext(
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
+    pendingReviewerVerdict: undefined,
   }
 
   // Warm start from ExperienceStore (no-op if unavailable) — only on a fresh run.
@@ -353,6 +384,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
+    onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
     // Not part of HarnessCheckpoint — resets to 0 on resume, so the first check after a
@@ -365,6 +397,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
+    pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
   }
 }
 
@@ -400,6 +433,7 @@ function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
     consecutiveReviewFailures: [...ctx.consecutiveReviewFailures.entries()],
     propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
     pendingProposal: ctx.pendingProposal ?? null,
+    pendingReviewerVerdict: ctx.pendingReviewerVerdict ?? null,
   }
 
   return { runId: ctx.runId, runState, runConfig, progress, schemaVersion: CHECKPOINT_SCHEMA_VERSION }
@@ -445,7 +479,13 @@ function anyDiagnosticSubDimensionCautious(diagnostics: LoopContext['diagnostics
 }
 
 function resolveAndStamp(ctx: LoopContext): void {
-  const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics)
+  // Phase I / INV-18: one-shot — whatever pendingReviewerVerdict is currently set (if
+  // any) is consumed by this one resolve call and cleared immediately after, so a stale
+  // finding does not pin CAUTIOUS forever and the *next* resolveAndStamp call (wherever
+  // it occurs) sees nothing pending.
+  const verdict = ctx.pendingReviewerVerdict
+  ctx.pendingReviewerVerdict = undefined
+  const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics, undefined, verdict)
   ctx.controlState.generation_id = newCS.generation_id
   ctx.controlState.permission = newCS.permission
   ctx.controlState.execution_mode = newCS.execution_mode
@@ -490,6 +530,27 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       currentTask = resumed
       gateResult = p.gateResult
       shouldGatherEvidence = p.shouldGatherEvidence
+      // INV-15: replaying a stored gate decision is still a gate decision covering the execute()
+      // call that follows — recorded so a scan of nodeExecutionOrder can verify the invariant
+      // without needing to know about pendingProposal at all (same as a fresh 'action_gate').
+      ctx.nodeExecutionOrder.push(p.kind === 'continuation' ? 'action_gate_replay_continuation' : 'action_gate_replay')
+      if (p.kind === 'continuation') {
+        // Unlike a 'proposal' resume (which just finishes an iteration whose stepsUsed
+        // increment already happened before the original suspend — see the else branch below),
+        // a 'continuation' resume falls through to a brand-new execute() call further down: it's
+        // a genuine new unit of work, not a replay. Without counting it here, a toolFn that keeps
+        // reporting 'continue' forever never reaches the maxSteps backstop below and spins forever.
+        ctx.stepsUsed++
+        if (ctx.stepsUsed > ctx.maxSteps) {
+          const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
+          throw new EscalationHalt({
+            reason: 'budget_exhausted',
+            missing_info: exhaust.missing_info,
+            current_task_summary: `Exhausted at step ${ctx.stepsUsed} (no iteration reached completion)`,
+            escalated_at: new Date().toISOString(),
+          })
+        }
+      }
     } else {
     ctx.stepsUsed++
     // Backstop budget check: the "normal path" exhaustion check further down (stepsUsed >=
@@ -613,7 +674,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     currentTask = selectResult.task
     concurrentTask = selectResult.concurrentTask
-    ctx.taskGraph.setStatus(currentTask.id, 'RUNNING')
+    applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'RUNNING' })
 
     ctx.nodeExecutionOrder.push('estimate_risk')
     // module_type reflects what this turn actually does (Phase 2, layer 8) instead of a
@@ -668,7 +729,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     }
 
     if (!reviewResult.passed) {
-      ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
+      applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'PENDING', fromExecutionLayer: false })
       if (reviewResult.escalation_triggered) {
         throw new EscalationHalt({
           reason: 'review_failure',
@@ -700,14 +761,21 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // here; the resumed path (above) already carries a decision the caller has seen and
     // asked to resume past, so it falls straight through to the shared BLOCK/ESCALATE-or-
     // execute handling below instead of re-announcing the same proposal.
-    ctx.pendingProposal = { taskId: currentTask.id, gateResult, shouldGatherEvidence }
+    ctx.pendingProposal = { taskId: currentTask.id, gateResult, shouldGatherEvidence, kind: 'proposal' }
     yield toCheckpoint(ctx)
     ctx.pendingProposal = undefined
     }
 
     if (gateResult === 'ESCALATE' || gateResult === 'BLOCK') {
-      ctx.taskGraph.setStatus(currentTask.id, 'PENDING', { fromExecutionLayer: false })
-      if (cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)) {
+      applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'PENDING', fromExecutionLayer: false })
+      const stalled = cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)
+      ctx.onGateDecision?.({
+        taskId: currentTask.id,
+        result: gateResult,
+        reason: ctx.controlState.escalation_reason,
+        haltedRun: stalled,
+      })
+      if (stalled) {
         throw new EscalationHalt({
           reason: 'cannot_make_progress',
           missing_info: [ctx.strategyState.stall_reason ?? 'unknown'],
@@ -724,7 +792,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       change_type: 'file_mutation',
     }
     const toolFn = ctx.toolExecutors[currentTask.id] ?? ctx.toolExecutors['default'] ?? (() => ({ completed: true }))
-    const execResult = execute(proposedChange, toolFn, {
+    const execResult = await execute(proposedChange, toolFn, {
       worldModel: ctx.worldModel,
       evidenceStore: ctx.evidenceStore,
       taskGraph: ctx.taskGraph,
@@ -732,6 +800,24 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       memoryState: ctx.memoryState,
       beliefDepGraph: ctx.beliefDepGraph,
     })
+
+    // Phase D1: toolFn reported "more work to do" via a ContinuableExecutionOutcome — the task
+    // stays RUNNING (never touched above; applyTaskOutcome only set it RUNNING once, on
+    // selection) and this attempt's approval is re-used via the exact same pendingProposal
+    // suspend point Phase 3 built, rather than re-running select_task/estimate_risk/review for
+    // a task that's already mid-flight. A real process restart between two 'continue' steps
+    // resumes correctly because pendingProposal is part of the checkpoint. Deliberately skips
+    // the concurrent-task dispatch below and the verify/postExecGate/update_task_state block —
+    // none of those apply until the task actually finishes (status 'complete' or 'failed').
+    if (execResult.status === 'continue') {
+      // Deliberately left set across the `continue` below (unlike the fresh-proposal suspend
+      // point above, which falls through in the same iteration) — the next while(true) pass's
+      // `if (ctx.pendingProposal)` branch at the top of the loop is what actually resumes this
+      // same task, exactly as it would after a real process restart via buildResumedContext.
+      ctx.pendingProposal = { taskId: currentTask.id, gateResult, shouldGatherEvidence, kind: 'continuation' }
+      yield toCheckpoint(ctx)
+      continue
+    }
 
     // Phase 2, layer 7 (plan sub-item 2.7): dispatch select_task's concurrentTask instead of
     // silently dropping it — real only for a non-HIGH-risk pair (select_task.ts's own
@@ -750,10 +836,10 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     let branchWorldModel: WorldModel | null = null
     let branchExecSucceeded = false
     if (parallelEligible && concurrentTask) {
-      ctx.taskGraph.setStatus(concurrentTask.id, 'RUNNING')
+      applyTaskOutcome(ctx.taskGraph, concurrentTask.id, { status: 'RUNNING' })
       branchWorldModel = WorldModel.fromJSON(ctx.worldModel.toJSON())
       const branchToolFn = ctx.toolExecutors[concurrentTask.id] ?? ctx.toolExecutors['default'] ?? (() => ({ completed: true }))
-      const branchExecResult = execute(
+      const branchExecResult = await execute(
         { description: concurrentTask.description, change_type: 'read-only' },
         branchToolFn,
         {
@@ -980,7 +1066,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     ctx.nodeExecutionOrder.push('update_task_state')
     if (postGatePassed && execResult.success) {
-      ctx.taskGraph.setStatus(currentTask.id, 'COMPLETE', { fromExecutionLayer: true })
+      applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
       ctx.finalResult = execResult.output
 
       if (ctx.experienceStore.available) {
@@ -1040,9 +1126,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.controlState.notes = [...reconciled.controlState.notes]
 
       if (branchExecSucceeded && concurrentTask.status !== 'COMPLETE') {
-        ctx.taskGraph.setStatus(concurrentTask.id, 'COMPLETE', { fromExecutionLayer: true })
+        applyTaskOutcome(ctx.taskGraph, concurrentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
       } else if (concurrentTask.status === 'RUNNING') {
-        ctx.taskGraph.setStatus(concurrentTask.id, 'PENDING', { fromExecutionLayer: false })
+        applyTaskOutcome(ctx.taskGraph, concurrentTask.id, { status: 'PENDING', fromExecutionLayer: false })
       }
     }
 
@@ -1105,6 +1191,12 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
   const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
   reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
 
+  // Phase I / INV-18: hand this pass's verdict to the *next* resolveAndStamp() call —
+  // one-shot, single-slot (overwrites, never accumulates). The only reachable "next
+  // iteration" within one drive() call is the reopened-tasks second main-loop pass below;
+  // if nothing reopened, this just rides along in the final checkpoint unconsumed.
+  ctx.pendingReviewerVerdict = reviewPassResult.pending_verdict
+
   if (reviewPassResult.reopened_task_ids.length > 0) {
     for (const taskId of reviewPassResult.reopened_task_ids) {
       const task = ctx.taskGraph.getTask(taskId)
@@ -1118,11 +1210,12 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     if (second.status === 'paused') return second
 
     ctx.nodeExecutionOrder.push('reviewer_pass_2')
-    await reviewerPass(
+    const reviewPassResult2 = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
       runAdversarialLens, ctx.semanticCriterionCoverage,
     )
+    ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
   }
 
   ctx.nodeExecutionOrder.push('output_validation')

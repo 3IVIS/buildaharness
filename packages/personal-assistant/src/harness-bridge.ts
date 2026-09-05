@@ -15,7 +15,7 @@ import {
   type HarnessRunResult,
 } from '@buildaharness/harness'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
-import { extractFactsFromTurn, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
@@ -124,7 +124,14 @@ export class HarnessBridge {
       const currentTurnFacts = extractFactsFromTurn(objective, runId).map(f => ({ statement: f.text, isNew: true }))
       if (priorFactsSeeded) return currentTurnFacts
       priorFactsSeeded = true
-      const priorFacts = facts.slice(-FACT_CAP).map(f => ({ statement: f.text }))
+      // Phase E / criticism001 #8: contradiction detection reads the Knowledge tier only — a
+      // model_inferred musing recorded on some earlier turn (classifyTurnIntent's unconfirmed
+      // statesDurableFact guess, see fact-extraction.ts's recordFacts doc comment) must not
+      // re-enter the belief pool on a later turn and get treated as an established fact to
+      // contradict against. Every fact this file's own extractFactsFromTurn call below produces
+      // is already user_asserted, so this filter is a no-op for currentTurnFacts and only ever
+      // narrows the re-seeded prior set.
+      const priorFacts = facts.filter(f => isKnowledgeTier(tierForFact(f))).slice(-FACT_CAP).map(f => ({ statement: f.text }))
       return [...priorFacts, ...currentTurnFacts]
     }
 

@@ -12,6 +12,11 @@ Key invariants:
           corrective belief requires an explicit derived_from chain.
   INV-06: loop re-entry triggered by tasks_reopened does not write to
           control_state — only resolve_control_state() may produce a new value.
+  INV-18: a pending ReviewerVerdict of severity >= MEDIUM forces the next
+          resolve_control_state() call's execution_mode into {CAUTIOUS,
+          RECOVERY} (never NORMAL) and never changes permission on its own —
+          see control_state.py's _apply_pending_reviewer_verdict(). One-shot:
+          consumed and cleared by run_one_iteration() after that one resolve.
 """
 
 from __future__ import annotations
@@ -80,11 +85,50 @@ class AdversarialPrior:
 
 
 @dataclass
+class ReviewerVerdict:
+    """Bounded, single-slot verdict that survives into the next iteration's
+    HarnessRunState (Phase I / ADR-003 finding F-3, authority-map ruling A-4).
+
+    Unlike AdversarialPrior, this is deliberately persisted — INV-09 only
+    protects the negated-belief scratch state from serialisation, not this
+    typed summary of the pass's own findings. resolve_control_state() reads
+    this as an input (never writes it); only reviewer_pass() produces one.
+    """
+
+    severity: ReviewFindingSeverity
+    lens: ReviewFindingLens
+    summary: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"severity": self.severity, "lens": self.lens, "summary": self.summary}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> ReviewerVerdict:
+        return cls(severity=d["severity"], lens=d["lens"], summary=d["summary"])
+
+
+_SEVERITY_RANK: dict[ReviewFindingSeverity, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+
+
+def _derive_pending_verdict(findings: list[ReviewFinding]) -> ReviewerVerdict | None:
+    """The highest-severity finding (severity >= MEDIUM only) becomes the pending
+    verdict — a resolver input, not a log of every finding. None when nothing
+    reaches MEDIUM. Ties keep the first-encountered finding (lens order:
+    implementer, reviewer, adversarial — the pass's own fixed sequence)."""
+    candidates = [f for f in findings if _SEVERITY_RANK[f.severity] >= _SEVERITY_RANK["MEDIUM"]]
+    if not candidates:
+        return None
+    top = max(candidates, key=lambda f: _SEVERITY_RANK[f.severity])
+    return ReviewerVerdict(severity=top.severity, lens=top.lens, summary=top.description)
+
+
+@dataclass
 class ReviewPassResult:
     findings: list[ReviewFinding] = field(default_factory=list)
     tasks_reopened: bool = False
     reopened_task_ids: list[str] = field(default_factory=list)
     abstraction_fit_score: float = 1.0
+    pending_verdict: ReviewerVerdict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,6 +136,7 @@ class ReviewPassResult:
             "tasks_reopened": self.tasks_reopened,
             "reopened_task_ids": list(self.reopened_task_ids),
             "abstraction_fit_score": self.abstraction_fit_score,
+            "pending_verdict": self.pending_verdict.to_dict() if self.pending_verdict is not None else None,
         }
 
 
@@ -639,6 +684,7 @@ def reviewer_pass(
         tasks_reopened=bool(reopened_ids),
         reopened_task_ids=reopened_ids,
         abstraction_fit_score=abstraction_score,
+        pending_verdict=_derive_pending_verdict(all_findings),
     )
 
 

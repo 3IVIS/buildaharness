@@ -1,5 +1,6 @@
 import type { HarnessRunStateData } from './harness-run-state.js'
 import type { DepGraphBudgetData } from './state/world-model.js'
+import type { ReviewerVerdict } from './nodes/reviewer-pass.js'
 
 export interface HarnessRunConfigData {
   objective: string
@@ -22,11 +23,18 @@ export interface HarnessRunConfigData {
  * already happened pre-pause. `null` (not just absent) on a checkpoint written after a
  * normal end-of-iteration yield, so a reader can tell "no proposal pending" from "written
  * before this field existed" the same way schemaVersion does.
+ *
+ * `kind` (Phase D1, schema v2): distinguishes a fresh gate decision ('proposal', the only
+ * case that existed before D1) from a still-RUNNING task's toolFn reporting execute.ts's
+ * new `status: 'continue'` (`'continuation'`) — the same pendingProposal plumbing resumes
+ * either one identically (re-derive the task, skip select_task/estimate_risk/review, run
+ * execute() again), so `kind` is informational/audit-trail today, not yet branched on.
  */
 export interface PendingProposalData {
   taskId: string
   gateResult: 'PASS' | 'BLOCK' | 'ESCALATE'
   shouldGatherEvidence: boolean
+  kind: 'proposal' | 'continuation'
 }
 
 export interface HarnessRunProgressData {
@@ -37,6 +45,8 @@ export interface HarnessRunProgressData {
   propagationQueue: { reopenedTaskIds: string[] }
   /** Optional (not just possibly-null) so a pre-Phase-3 checkpoint without this field deserializes as "nothing pending" — same tolerance Phase 0 established for schemaVersion. */
   pendingProposal?: PendingProposalData | null
+  /** Phase I / INV-18. Optional for the same reason as pendingProposal — a pre-Phase-I checkpoint deserializes as "nothing pending". */
+  pendingReviewerVerdict?: ReviewerVerdict | null
 }
 
 /**
@@ -45,8 +55,13 @@ export interface HarnessRunProgressData {
  * the interface because every checkpoint written before this field existed has none —
  * `CHECKPOINT_MIGRATIONS`/`readCheckpointSchemaVersion` treat that as version 1
  * (the shape that existed before versioning was introduced), not an error.
+ *
+ * Bumped to 2 in Phase D1: `PendingProposalData.kind` became required (a v1 proposal was
+ * always a fresh gate decision — `'continuation'` didn't exist yet), so a v1 checkpoint's
+ * `pendingProposal` needs `CHECKPOINT_MIGRATIONS[1]` to stamp `kind: 'proposal'` before it
+ * matches the current shape.
  */
-export const CHECKPOINT_SCHEMA_VERSION = 1
+export const CHECKPOINT_SCHEMA_VERSION = 2
 
 /**
  * A fully serializable snapshot of an in-progress or completed harness run.
@@ -64,13 +79,27 @@ export interface HarnessCheckpoint {
 }
 
 /**
- * Registry of forward migrations, keyed by the version being migrated *from*.
- * Empty today — CHECKPOINT_SCHEMA_VERSION has only ever been 1. A future phase
- * that changes a state structure's shape bumps CHECKPOINT_SCHEMA_VERSION and adds
+ * Registry of forward migrations, keyed by the version being migrated *from*. First real
+ * entry landed in Phase D1 (`[1]`, below) — a future phase that changes a state structure's
+ * shape bumps CHECKPOINT_SCHEMA_VERSION and adds
  * `CHECKPOINT_MIGRATIONS[oldVersion] = (raw) => <checkpoint at oldVersion + 1>`
  * here — chained automatically by assertCheckpointSchemaCurrent below.
  */
-export const CHECKPOINT_MIGRATIONS: Record<number, (raw: HarnessCheckpoint) => HarnessCheckpoint> = {}
+export const CHECKPOINT_MIGRATIONS: Record<number, (raw: HarnessCheckpoint) => HarnessCheckpoint> = {
+  // v1 → v2 (Phase D1): PendingProposalData.kind became required. A v1 pendingProposal
+  // predates the 'continuation' concept entirely, so it was always a fresh 'proposal'.
+  1: (raw) => {
+    const legacyProposal = raw.progress.pendingProposal
+    return {
+      ...raw,
+      progress: {
+        ...raw.progress,
+        pendingProposal: legacyProposal ? { ...legacyProposal, kind: 'proposal' } : (legacyProposal ?? null),
+      },
+      schemaVersion: 2,
+    }
+  },
+}
 
 export class CheckpointSchemaError extends Error {
   constructor(public readonly foundVersion: number, public readonly currentVersion: number) {

@@ -341,6 +341,18 @@ export class AgentLoop {
         model: this.model(),
         onToolStep: onToolStep ? (event) => reportStep(event.tool, event.input) : undefined,
         onUsage,
+        // Phase D0: for a backend that can intercept its own internal tool loop before a
+        // read-only call executes (currently ClaudeCliLLMClient — see its own doc comment),
+        // this is the propose→gate half of propose→gate→execute: the exact same deterministic
+        // checkToolPolicy gate the manual dispatch loop below already runs for every call it
+        // makes directly, now also covering the calls this backend used to resolve invisibly.
+        // A backend without such an internal loop (the proxy client) never calls this — its
+        // calls come back as response.toolCalls and are gated inline below instead.
+        onToolProposal: async (tool) => {
+          const policy = this.checkToolPolicy(tool, riskHint, controlPlaneState?.controlState)
+          if (policy.decision === 'ALLOW') return { decision: 'allow' }
+          return { decision: 'deny', reason: policy.reason }
+        },
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {

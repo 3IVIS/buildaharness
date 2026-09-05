@@ -1,6 +1,6 @@
 {
   "id": "dep-class-gap-notes-format",
-  "description": "KNOWN DISCREPANCY (tracked in known-discrepancies.json): a non-empty dep_class_gap_annotation is attached to notes[] on both sides (INV-07 — advisory only, never enters arithmetic), but with different formatting. TS's resolveControlState does notes.push(`dep_class_gap: ${annotation}`); Python's _attach_annotation does cs.notes.append(diagnostics.dep_class_gap_annotation) with no prefix at all.",
+  "description": "REGRESSION (Phase C1 / ADR-004 retired this discrepancy): a non-empty dep_class_gap_annotation is attached to notes[] on both sides (INV-07 — advisory only, never enters arithmetic) in the SAME canonical format `dep_class_gap: <annotation>`. The prefix is generated from spec/harness-core.json (DEP_CLASS_GAP_NOTE_PREFIX) into both runtimes; Python's _attach_annotation was aligned to resolve-control-state.ts. Must stay byte-identical.",
   "diagnostics": {
     "belief_health": { "freshness": 1.0, "consistency": 1.0, "support": 1.0 },
     "coverage_health": { "symptom_coverage": 1.0, "explanation_coverage": 1.0 },

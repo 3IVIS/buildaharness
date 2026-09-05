@@ -1,0 +1,29 @@
+{
+  "id": "tier2-block-multi-no-deadlock",
+  "description": "Three sub-dims below CRITICAL. Each gets a block_mask entry. detect_deadlock builds the recovery-action graph from RECOVERY_ACTION_DEPENDENCIES restricted to *blocked* dimensions; none of dep_graph_quality / world_model_integrity is a sub-dimension, so no cycle is reachable from sub-dim blocks alone → escalation stays NONE (not HUMAN_REQUIRED). This documents that a pure-sub-dimension deadlock is structurally unreachable today.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 0.1,
+      "consistency": 1,
+      "support": 1
+    },
+    "coverage_health": {
+      "symptom_coverage": 1,
+      "explanation_coverage": 1
+    },
+    "verification_health": {
+      "strength": 0.1,
+      "feasibility": 0.1
+    },
+    "execution_health": {
+      "progress_rate": 1,
+      "failure_recurrence": 0,
+      "oscillation_score": 0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  }
+}

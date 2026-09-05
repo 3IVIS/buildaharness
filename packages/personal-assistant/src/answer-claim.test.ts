@@ -19,6 +19,7 @@ function verification(overrides: Partial<VerificationResult> = {}): Verification
     layer_results: [],
     has_critical_failure: false,
     adversarial_passed: null,
+    critical_failure_tiers: [],
     ...overrides,
   }
 }

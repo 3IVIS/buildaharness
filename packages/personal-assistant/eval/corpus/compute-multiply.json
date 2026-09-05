@@ -1,0 +1,8 @@
+{
+  "id": "compute-multiply",
+  "category": "compute",
+  "intent": "Deterministic arithmetic — the reply must contain the exact answer.",
+  "prompt": "What is 47 * 89 + 12? Reply with just the number.",
+  "grader": { "contains": ["4195"], "notContains": ["4183", "4207"] },
+  "note": "4195 = 47*89 (4183) + 12. Distractors are the off-by-12 and a plausible slip."
+}

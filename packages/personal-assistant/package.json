@@ -42,7 +42,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
-    "eval:turn-intent": "tsx scripts/eval-turn-intent.ts"
+    "eval:turn-intent": "tsx scripts/eval-turn-intent.ts",
+    "eval:harness-benchmark": "tsx scripts/run-harness-benchmark.ts"
   },
   "dependencies": {
     "@buildaharness/harness": "^0.2.0",

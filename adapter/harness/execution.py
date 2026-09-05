@@ -92,6 +92,7 @@ def execute(
     Records successful execution in world_model.environment_change_log.
     """
     from .evidence import Evidence
+    from .task_graph import TaskOutcome, apply_task_outcome
 
     task_risk = str(getattr(current_task, "risk_level", "LOW"))
     strategy = select_reversibility_strategy(proposed_change, task_risk)
@@ -107,7 +108,7 @@ def execute(
         task = task_graph.get_task(task_id) if hasattr(task_graph, "get_task") else None
         if task is not None and task.status == "PENDING":
             try:
-                task_graph.update_task_status(task_id, "ACTIVE")
+                apply_task_outcome(task_graph, task_id, TaskOutcome(status="ACTIVE"))
             except ValueError:
                 pass  # already ACTIVE or invalid transition
 
@@ -152,7 +153,7 @@ def execute(
             task = task_graph.get_task(task_id) if hasattr(task_graph, "get_task") else None
             if task is not None and task.status == "ACTIVE":
                 try:
-                    task_graph.update_task_status(task_id, "FAILED")
+                    apply_task_outcome(task_graph, task_id, TaskOutcome(status="FAILED"))
                 except ValueError:
                     pass
 
@@ -181,7 +182,7 @@ def execute(
         task = task_graph.get_task(task_id) if hasattr(task_graph, "get_task") else None
         if task is not None and task.status == "ACTIVE":
             try:
-                task_graph.update_task_status(task_id, "VERIFYING")
+                apply_task_outcome(task_graph, task_id, TaskOutcome(status="VERIFYING"))
             except ValueError:
                 pass
 

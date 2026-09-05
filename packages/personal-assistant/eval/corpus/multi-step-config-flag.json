@@ -1,0 +1,19 @@
+{
+  "id": "multi-step-config-flag",
+  "category": "multi_step",
+  "intent": "Read a file, parse a nested value, answer a yes/no question about it.",
+  "prompt": "Look at config.json and tell me whether debug logging is currently enabled. Answer yes or no and say which key you checked.",
+  "workspace": [
+    {
+      "path": "config.json",
+      "content": "{\n  \"service\": { \"name\": \"api\", \"port\": 8080 },\n  \"logging\": { \"level\": \"info\", \"debug\": false },\n  \"features\": { \"debug\": true }\n}\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\bno\\b",
+    "contains": ["logging"],
+    "notContains": ["yes, debug logging is enabled", "debug logging is on"]
+  },
+  "note": "logging.debug is false. features.debug is a decoy — the question is about debug LOGGING."
+}

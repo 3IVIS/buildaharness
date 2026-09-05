@@ -55,6 +55,80 @@ export function migrateFact(fact: UserFact): UserFact {
   return fact.source ? fact : { ...fact, source: 'user_asserted' }
 }
 
+/**
+ * The six-tier taxonomy (Phase E of the harness consolidation plan, criticism001 #8 /
+ * criticism002 #6: "transcript ≠ memory"), made real as a type instead of the doc-comment-only
+ * split this file's `FactSource` note above already described. `UserFact` only ever populates
+ * four of these — `procedural` (the `ExperienceStore`) and `commitment` (`ReminderStore`) are
+ * separate stores with their own writers and never routed through `tierForFact`; keeping them in
+ * this union (rather than a narrower `UserFactTier`) is what lets `TIER_RULES.procedural`'s empty
+ * `allowedSources` structurally enforce INV-16 (no Experience entry is ever reachable as a
+ * `UserFact`, let alone a Knowledge one) instead of relying on every caller to remember to check.
+ */
+export type MemoryTier = 'episodic' | 'semantic' | 'procedural' | 'preference' | 'commitment' | 'identity'
+
+export interface TierRule {
+  /** FactSource values allowed to populate this tier — see TIER_RULES. */
+  allowedSources: FactSource[]
+  /** 'session': cleared with the rest of `facts:${sessionId}` on /new. 'durable': survives /new (DURABLE_FACTS_KEY today). */
+  retention: 'session' | 'durable'
+  /** Whether contradiction detection considers entries in this tier (see harness-bridge.ts's factExtractor). */
+  contradictionChecked: boolean
+}
+
+/**
+ * Retention / contradiction / (implicitly, via `retention`) deletion rule per tier, plus the
+ * `FactSource` provenances allowed to populate it — the four properties Phase E's scope calls
+ * for. `procedural` and `commitment` have an empty `allowedSources`: no `UserFact` is ever tagged
+ * with either tier (see `tierForFact` below), so a `UserFact` can never populate the Experience or
+ * Commitment stores through this path — that's the structural half of INV-16, not just a runtime
+ * check.
+ */
+export const TIER_RULES: Record<MemoryTier, TierRule> = {
+  episodic: { allowedSources: ['user_asserted', 'model_inferred', 'observed', 'externally_verified'], retention: 'session', contradictionChecked: false },
+  semantic: { allowedSources: ['user_asserted', 'externally_verified'], retention: 'durable', contradictionChecked: true },
+  identity: { allowedSources: ['user_asserted'], retention: 'durable', contradictionChecked: true },
+  preference: { allowedSources: ['user_asserted'], retention: 'durable', contradictionChecked: true },
+  procedural: { allowedSources: [], retention: 'durable', contradictionChecked: false },
+  commitment: { allowedSources: [], retention: 'durable', contradictionChecked: false },
+}
+
+// Tier-classification only — deliberately separate from DURABLE_NAME_OR_PREFERENCE_MARKERS above
+// (which gates *admission/durability*, not tier). Splitting FACT_MARKERS' hand-tuned admission
+// regex to also carry tier information would risk the admission behavior itself (see this file's
+// extensive live-testing history); a second, coarser pass here only ever narrows which durable
+// tier an already-admitted fact lands in, never whether it's admitted or promoted at all.
+const IDENTITY_TIER_PATTERN = /\b(my name is|i go by|call me|i'm called|everyone calls me)\b/i
+const PREFERENCE_TIER_PATTERN = /\b(i (?:like|love|enjoy|prefer|hate|dislike)|my favorite)\b/i
+
+/**
+ * Routes a `UserFact` to its `MemoryTier` per Phase E / E3's rule: `model_inferred` (the LLM's
+ * unconfirmed `statesDurableFact` guess) and `observed` (a future tool-observed claim) always stay
+ * `episodic` — a musing or an uncorroborated observation, never Knowledge — regardless of their
+ * `durable` bit. `user_asserted`/`externally_verified` facts land in the durable `identity` or
+ * `preference` tier when the text itself reads as a name/preference statement and the fact earned
+ * promotion (`durable: true`); every other `user_asserted`/`externally_verified` fact (a stated
+ * job, location, or coding-fact-shaped claim — see `looksLikeCodingFact` — none of which are
+ * `durable` under `isDurable()` above) is `semantic`: still a stated claim about what's currently
+ * true, still eligible for contradiction detection (the "tests passed"/"tests failed" and
+ * nurse-vs-designer job-flip cases this file's admission logic exists to support), just not
+ * promoted to cross-session storage. Pure and total — every `UserFact` maps to exactly one tier,
+ * and `procedural`/`commitment` are never returned (see `TIER_RULES`'s doc comment).
+ */
+export function tierForFact(fact: UserFact): MemoryTier {
+  if (fact.source === 'model_inferred' || fact.source === 'observed') return 'episodic'
+  if (fact.durable) {
+    if (IDENTITY_TIER_PATTERN.test(fact.text)) return 'identity'
+    if (PREFERENCE_TIER_PATTERN.test(fact.text)) return 'preference'
+  }
+  return 'semantic'
+}
+
+/** Whether `tier` counts as the Knowledge tier for contradiction-detection purposes — see harness-bridge.ts's factExtractor and TIER_RULES.*.contradictionChecked. */
+export function isKnowledgeTier(tier: MemoryTier): boolean {
+  return TIER_RULES[tier].contradictionChecked
+}
+
 // Cheap, zero-LLM-call gate — only messages that look like the user is stating
 // something durable about themselves are captured. Deliberately dumb (verbatim
 // capture of the whole message, no dedup/merge) — see transcript-compaction.ts's
