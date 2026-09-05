@@ -132,6 +132,8 @@ Each flow test class (`TestLangGraphCompile`, `TestMAFCompile`, `TestCrewAICompi
 | `test_harness_e2e.py` | 32 | 8 scenarios × 4 frameworks: happy path, BLOCKED escalation, recovery cycle, warm-start, parallel branch merge, context compression, reviewer re-entry, max_steps budget |
 | `test_harness_invariants.py` | 18 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions; includes multi-case tests for INV-03, INV-04, INV-05, INV-06, INV-10 and three plan-level invariant tests |
 
+INV-11 through INV-18 (added by the harness-consolidation plan, ADR-003) live in their own per-phase test files instead of `test_harness_invariants.py`: `test_harness_c2.py` / `nodes-c2.test.ts` (INV-12), `turn-policy.test.ts` (INV-14), `harness-runtime-suspend.test.ts` (INV-15), `memory-tiers.test.ts` (INV-16), `test_harness_h.py` / `nodes-h.test.ts` (INV-17), `test_harness_i.py` / `nodes-i.test.ts` (INV-18). INV-11 (`Diagnostics.provenance`) lives in `test_harness_c2.py` / `nodes-c2.test.ts` plus a pair in `test_harness_invariants.py`; INV-13 (TS/Python resolver conformance as an invariant) is `scripts/harness-conformance/compare.mjs` plus `test_harness_conformance_gate.py` / `conformance-gate.test.ts`. See `docs/architecture.md` for each invariant's statement.
+
 ### Performance benchmarks
 
 `adapter/tests/benchmark_harness.py` — 50-run benchmarks with `time.perf_counter()`. Results as of P11:
