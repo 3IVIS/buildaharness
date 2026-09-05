@@ -1,0 +1,6 @@
+# Browser-e2e lane (plans/chat_ui_browser_e2e_plan.html) — all generated, never committed.
+dist-e2e/
+playwright-report/
+test-results/
+playwright/.cache/
+blob-report/
