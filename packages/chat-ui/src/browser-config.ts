@@ -1,4 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/personal-assistant'
+import { normalizeOneLoopMode } from '@buildaharness/personal-assistant'
 
 /**
  * Browser-side companion to personal-assistant's cli-config.ts — same idea (env-var-name map
@@ -12,6 +13,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   proxyUrl: 'VITE_ASSISTANT_PROXY_URL',
   authToken: 'VITE_ASSISTANT_PROXY_TOKEN',
   model: 'VITE_ASSISTANT_MODEL',
+  oneLoopMode: 'VITE_ASSISTANT_ONE_LOOP',
 }
 
 /**
@@ -25,5 +27,9 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   if (env.VITE_ASSISTANT_PROXY_URL) overrides.proxyUrl = env.VITE_ASSISTANT_PROXY_URL
   if (env.VITE_ASSISTANT_PROXY_TOKEN) overrides.authToken = env.VITE_ASSISTANT_PROXY_TOKEN
   if (env.VITE_ASSISTANT_MODEL) overrides.model = env.VITE_ASSISTANT_MODEL
+  // R5 of plans/harness_d2_one_loop_rewire_plan.html — the browser/desktop counterpart of the
+  // CLI's ASSISTANT_ONE_LOOP. normalizeOneLoopMode warns-and-defaults on a typo, so a build that
+  // sets this at all always resolves to a concrete 'enabled'/'disabled'.
+  if (env.VITE_ASSISTANT_ONE_LOOP) overrides.oneLoopMode = normalizeOneLoopMode(env.VITE_ASSISTANT_ONE_LOOP, 'VITE_ASSISTANT_ONE_LOOP')
   return overrides
 }

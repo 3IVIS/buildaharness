@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { DEFAULT_CONFIG } from './config.js'
 import {
   isConfigKey,
@@ -64,6 +64,15 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_SESSION_COST_LIMIT_USD: '5.5' })).toEqual({ sessionCostLimitUsd: 5.5 })
     expect(envOverridesFromProcessEnv({ ASSISTANT_SESSION_CALL_LIMIT: '50' })).toEqual({ sessionCallLimit: 50 })
   })
+
+  it('resolves ASSISTANT_ONE_LOOP into oneLoopMode, defaulting a typo to "disabled"', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'enabled' })).toEqual({ oneLoopMode: 'enabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'disabled' })).toEqual({ oneLoopMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'on' })).toEqual({ oneLoopMode: 'disabled' })
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
 })
 
 describe('parseConfigValue', () => {
@@ -94,6 +103,12 @@ describe('parseConfigValue', () => {
   it('accepts a valid searchBackend/llmBackend', () => {
     expect(parseConfigValue('searchBackend', 'brave')).toBe('brave')
     expect(parseConfigValue('llmBackend', 'claude-cli')).toBe('claude-cli')
+  })
+
+  it('accepts "enabled"/"disabled" for oneLoopMode and rejects anything else', () => {
+    expect(parseConfigValue('oneLoopMode', 'enabled')).toBe('enabled')
+    expect(parseConfigValue('oneLoopMode', 'disabled')).toBe('disabled')
+    expect(() => parseConfigValue('oneLoopMode', 'on')).toThrow(ConfigValueParseError)
   })
 
   it.each(['anthropic', 'openai', 'openrouter'] as const)('accepts llmBackend "%s"', (backend) => {

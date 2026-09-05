@@ -75,6 +75,8 @@ export {
 export type { PlanRecord, PlanTaskRecord, PlanPosition } from './plan-store.js'
 export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
+export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
+export type { OneLoopMode } from './one-loop-flag.js'
 // Pure, browser-safe formatters — deliberately NOT cli-config.ts/cli-session.ts's env-var-specific
 // exports (formatHelp, formatStatus, CLI_COMMANDS_HELP), which are CLI-syntax-specific
 // (e.g. "/model [name]") and have no GUI equivalent. These are plain data-in/text-out

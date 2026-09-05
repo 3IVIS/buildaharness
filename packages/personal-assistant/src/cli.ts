@@ -40,7 +40,6 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
-import { resolveOneLoopMode } from './one-loop-flag.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
@@ -175,7 +174,11 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
         ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
         : undefined,
-    oneLoopMode: resolveOneLoopMode(process.env),
+    // Resolved through the shared config seam (cli-config.ts's envOverridesFromProcessEnv reads
+    // ASSISTANT_ONE_LOOP into config.oneLoopMode; /config set oneLoopMode persists it) so the CLI,
+    // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
+    // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
+    oneLoopMode: config.oneLoopMode,
   })
 }
 

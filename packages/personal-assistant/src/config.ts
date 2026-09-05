@@ -6,6 +6,8 @@
  * applies one shared precedence rule so all three surfaces agree on what a given set of inputs means.
  */
 
+import type { OneLoopMode } from './one-loop-flag.js'
+
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
   proxyUrl: string
@@ -82,6 +84,19 @@ export interface AssistantConfig {
   sessionCostLimitUsd?: number
   /** Secondary ceiling on completed turns this session — see SpendCapConfig's doc comment in spend-cap.ts for why this counts turns, not raw internal LLM calls. */
   sessionCallLimit?: number
+  /**
+   * R5 of plans/harness_d2_one_loop_rewire_plan.html — the rollout flag for the harness-driven
+   * one-loop proposer (see one-loop-flag.ts's doc comment for the full rationale). Undefined (the
+   * default, for the whole rollout window) means PersonalAssistant falls back to
+   * DEFAULT_ONE_LOOP_MODE ('disabled') — today's behavior, byte-for-byte. This is the shared
+   * config seam every surface reads it through: the CLI resolves it from `ASSISTANT_ONE_LOOP`
+   * (cli-config.ts's envOverridesFromProcessEnv), chat-ui and the Tauri desktop build from the
+   * build-time `VITE_ASSISTANT_ONE_LOOP` (browser-config.ts's envOverridesFromImportMetaEnv), and
+   * all three from a persisted `oneLoopMode` if one has been set. Kept out of DEFAULT_CONFIG so an
+   * unset value stays undefined and PersonalAssistant owns the default, matching every other
+   * optional field here.
+   */
+  oneLoopMode?: OneLoopMode
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -109,6 +124,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'dangerouslySkipPermissions',
   'sessionCostLimitUsd',
   'sessionCallLimit',
+  'oneLoopMode',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, ddg search, web/shell off) — this plan changes nothing for a caller that never touches config. */

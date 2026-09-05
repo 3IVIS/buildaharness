@@ -24,10 +24,22 @@ export type OneLoopMode = 'enabled' | 'disabled'
 
 export const DEFAULT_ONE_LOOP_MODE: OneLoopMode = 'disabled'
 
-export function resolveOneLoopMode(env: NodeJS.ProcessEnv): OneLoopMode {
-  const raw = env.ASSISTANT_ONE_LOOP
-  if (raw === undefined) return DEFAULT_ONE_LOOP_MODE
+/**
+ * Value-level resolver, shared by every surface: `resolveOneLoopMode` (CLI, reads
+ * `process.env.ASSISTANT_ONE_LOOP`) and chat-ui's `envOverridesFromImportMetaEnv` (browser build,
+ * reads Vite's `import.meta.env.VITE_ASSISTANT_ONE_LOOP`, which has no `process` to hand a
+ * `NodeJS.ProcessEnv` to). An unset or empty value falls back to the default silently; an
+ * unrecognized non-empty value falls back with a startup warning naming `varName`, the same
+ * typo-tolerance-with-a-warning convention resolveControlPlaneMode/resolveNonInteractiveApprovalMode
+ * use, since a silently-misread flag here is safety-relevant.
+ */
+export function normalizeOneLoopMode(raw: string | undefined, varName = 'ASSISTANT_ONE_LOOP'): OneLoopMode {
+  if (raw === undefined || raw === '') return DEFAULT_ONE_LOOP_MODE
   if (raw === 'enabled' || raw === 'disabled') return raw
-  console.error(`[warning] ASSISTANT_ONE_LOOP="${raw}" is not "enabled" or "disabled" — using the default (${DEFAULT_ONE_LOOP_MODE}).`)
+  console.error(`[warning] ${varName}="${raw}" is not "enabled" or "disabled" — using the default (${DEFAULT_ONE_LOOP_MODE}).`)
   return DEFAULT_ONE_LOOP_MODE
+}
+
+export function resolveOneLoopMode(env: NodeJS.ProcessEnv): OneLoopMode {
+  return normalizeOneLoopMode(env.ASSISTANT_ONE_LOOP)
 }
