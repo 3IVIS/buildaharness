@@ -1,0 +1,22 @@
+{
+  "generation_id": 2,
+  "permission": "DENY",
+  "execution_mode": "RECOVERY",
+  "escalation": "NONE",
+  "risk_estimate": 0.16999999999999993,
+  "confidence_estimate": 0.82,
+  "escalation_reason": null,
+  "block_mask": [
+    {
+      "dimension": "belief_freshness",
+      "value": 0.1,
+      "recovery_action_class": "belief_refresh"
+    },
+    {
+      "dimension": "verification_strength",
+      "value": 0.15,
+      "recovery_action_class": "verification_pass"
+    }
+  ],
+  "notes": []
+}

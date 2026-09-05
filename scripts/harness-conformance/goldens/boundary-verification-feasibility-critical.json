@@ -1,0 +1,11 @@
+{
+  "generation_id": 1,
+  "permission": "ALLOW",
+  "execution_mode": "CAUTIOUS",
+  "escalation": "NONE",
+  "risk_estimate": 0.15999999999999992,
+  "confidence_estimate": 1,
+  "escalation_reason": null,
+  "block_mask": [],
+  "notes": []
+}

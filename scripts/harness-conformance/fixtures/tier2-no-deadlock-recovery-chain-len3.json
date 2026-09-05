@@ -1,0 +1,31 @@
+{
+  "id": "tier2-no-deadlock-recovery-chain-len3",
+  "description": "belief_support, belief_freshness and verification_feasibility all < CRITICAL_THRESHOLD -> three block_mask entries forming a length-3 recovery-dependency path: belief_support ->(support_augment needs belief_freshness) belief_freshness ->(belief_refresh needs verification_feasibility) verification_feasibility ->(feasibility_check needs dep_graph_quality, never a blocked sub-dim) DEAD END. A 3-hop chain that still does not close into a cycle -> detect_deadlock False, escalation NONE. Pins that genuine recovery-action cycles are unreachable through sub-dimension blocks alone (every chain terminates at dep_graph_quality).",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 0.1,
+      "consistency": 1.0,
+      "support": 0.1
+    },
+    "coverage_health": {
+      "symptom_coverage": 1.0,
+      "explanation_coverage": 1.0
+    },
+    "verification_health": {
+      "strength": 1.0,
+      "feasibility": 0.1
+    },
+    "execution_health": {
+      "progress_rate": 1.0,
+      "failure_recurrence": 0.0,
+      "oscillation_score": 0.0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 3,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

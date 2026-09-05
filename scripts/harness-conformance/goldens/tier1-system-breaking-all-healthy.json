@@ -1,0 +1,17 @@
+{
+  "generation_id": 1,
+  "permission": "DENY",
+  "execution_mode": "RECOVERY",
+  "escalation": "SYSTEM_BREAKING",
+  "risk_estimate": 0,
+  "confidence_estimate": 1,
+  "escalation_reason": "SYSTEM_BREAKING_CONTRADICTION",
+  "block_mask": [
+    {
+      "dimension": "world_model_integrity",
+      "value": 0,
+      "recovery_action_class": "consistency_repair"
+    }
+  ],
+  "notes": []
+}

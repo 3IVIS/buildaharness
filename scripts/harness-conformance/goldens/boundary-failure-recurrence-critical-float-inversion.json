@@ -1,0 +1,17 @@
+{
+  "generation_id": 1,
+  "permission": "DENY",
+  "execution_mode": "RECOVERY",
+  "escalation": "NONE",
+  "risk_estimate": 0.15999999999999992,
+  "confidence_estimate": 1,
+  "escalation_reason": null,
+  "block_mask": [
+    {
+      "dimension": "failure_recurrence",
+      "value": 0.19999999999999996,
+      "recovery_action_class": "failure_recovery"
+    }
+  ],
+  "notes": []
+}
