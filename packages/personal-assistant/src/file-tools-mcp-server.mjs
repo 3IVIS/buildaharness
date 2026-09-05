@@ -31,6 +31,7 @@
  *         "args": ["/abs/path/to/file-tools-mcp-server.mjs"],
  *         "env": {
  *           "WORKSPACE_ROOT": "/abs/path/to/workspace",
+ *           "TOOL_GATE_PORT": "54321",  // optional — see requestToolGate below; omit and every proposal is allowed
  *           "REMINDERS_FILE": "/abs/path/to/reminders.json",  // optional — omit to leave create_reminder/list_reminders unregistered
  *           "ENABLE_SHELL_TOOLS": "1",  // optional — omit to leave run_shell_command unregistered
  *           "WEB_SEARCH_BACKEND": "ddg",  // optional — "ddg" (keyless) or "brave"; omit to leave web_search unregistered
@@ -50,6 +51,16 @@
  * call before it happens. run_shell_command in particular is gated on every call, full
  * stop — there is no "safe subset" that skips staging (see the web+shell-tools plan's
  * Diagnosis tab).
+ *
+ * Phase D0 (harness_consolidation_and_control_plane_plan.html) added a second gate, for the
+ * read-only tools (read_file/list_directory/fetch_url/web_search/create_reminder/
+ * list_reminders): before executing, each calls requestToolGate() below, which blocks on a
+ * loopback TCP round trip to the parent claude-cli-llm-client.ts process (TOOL_GATE_PORT),
+ * carrying the same deterministic ToolPolicy decision (agent-loop.ts's checkToolPolicy) the
+ * proxy backend's manual tool loop already runs before every call. A `deny` decision returns an
+ * MCP tool error instead of executing — the model sees the denial and its reason in its own
+ * conversation, same as any other tool error. write_file/run_shell_command/send_email are
+ * unaffected: they keep staging unconditionally, exactly as before this phase.
  *
  * Undo/snapshot coverage (the real-undo plan's T1/T2) needs NO mirrored logic in this file,
  * unlike the sandboxing/trust-tagging/shell-cache-read logic above: this server only ever
@@ -82,6 +93,7 @@ import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
+import { createConnection } from 'node:net'
 import { z } from 'zod'
 
 // Resolves lexical pattern JSON files relative to this script's own location — see the
@@ -189,6 +201,125 @@ export async function stagePendingAction(workspaceRoot, payload) {
   await writeFile(`${dir}/${id}.json`, JSON.stringify(record), 'utf-8')
   lastStagedIdThisProcess = id
   return { id }
+}
+
+// ── Phase D0 tool-proposal gate — see this file's own doc comment ──────────
+
+// One persistent loopback connection per TOOL_GATE_PORT, reused across every gated call this
+// subprocess makes (its whole life is already scoped to a single callChatStructured call — see
+// startToolGateServer's own doc comment in claude-cli-llm-client.ts — so this is never shared
+// across unrelated calls). Replaces the original connect-write-read-destroy-per-call version;
+// same wire protocol, same fail-open contract, just amortized over one TCP handshake instead of
+// one per gated tool invocation.
+let gateSocket = null
+let gateSocketPort = null
+// The wire protocol has no request id to pair a response to a specific request out of order, so
+// at most one round trip is ever in flight on the shared socket at a time — this chain is the
+// queue that enforces that, the same way one connection-per-call implicitly did before.
+let gateRequestChain = Promise.resolve()
+
+// A dead peer doesn't always announce itself: destroying the *remote* end of an already-connected
+// socket doesn't guarantee this side ever sees an 'error'/'close' event (no more traffic needs to
+// cross the wire for the OS to consider the old connection gone, and nothing here proactively
+// probes it) — a write onto that stale socket can then just sit forever with no response and no
+// error, wedging this call, its serialization chain, and every gated call queued behind it. This
+// timeout is the actual fail-open backstop for that case: same "allow" outcome as a transport
+// error, and same cached-socket eviction, just triggered by silence instead of an event.
+const GATE_REQUEST_TIMEOUT_MS = 3000
+
+function getGateSocket(port) {
+  if (gateSocket && gateSocketPort === port && !gateSocket.destroyed) return gateSocket
+  if (gateSocket) gateSocket.destroy()
+  gateSocketPort = port
+  const socket = createConnection({ port, host: '127.0.0.1' })
+  // Backstop only: swallows the event so an error between calls (no per-call listener attached
+  // at that moment) can't crash the process via Node's default unhandled-'error' behavior. The
+  // actual fail-open decision for a request in flight is handled by doRequestToolGate's own
+  // per-call 'error' listener below.
+  socket.on('error', () => {})
+  socket.on('close', () => {
+    if (gateSocket === socket) gateSocket = null
+  })
+  gateSocket = socket
+  return socket
+}
+
+/**
+ * Asks the parent claude-cli-llm-client.ts process for permission before executing a read-only
+ * tool call, over a loopback TCP connection to TOOL_GATE_PORT (newline-delimited JSON: `{tool,
+ * input}` out, `{decision, reason?}` back — see startToolGateServer in that file). Absent
+ * TOOL_GATE_PORT (a caller that hasn't wired the gate, including this file's own `--test`
+ * self-check) every call is allowed — unchanged pre-D0 behavior.
+ *
+ * Fails open on a transport error (connection refused, reset, etc.) rather than wedging every
+ * subsequent read-only tool call for the rest of this subprocess's life: this gate is
+ * defense-in-depth layered on top of the real boundary (workspace sandboxing for read_file/
+ * list_directory, the SSRF guard for fetch_url, unconditional staging for write_file/
+ * run_shell_command/send_email), the same layering ADR-003 decision 10 already accepts for the
+ * injection detector — not itself the security control. A broken connection also drops the
+ * cached socket (see getGateSocket) so the *next* call reconnects rather than fail-opening the
+ * rest of this subprocess's life the way a permanently-wedged shared socket would.
+ */
+export async function requestToolGate(tool, input) {
+  const port = process.env.TOOL_GATE_PORT ? Number(process.env.TOOL_GATE_PORT) : undefined
+  if (!port) return { decision: 'allow' }
+  const result = gateRequestChain.then(() => doRequestToolGate(port, tool, input))
+  // However this round trip turns out, the chain must advance — a rejection here would wedge
+  // every subsequent call behind it forever.
+  gateRequestChain = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  return result
+}
+
+function doRequestToolGate(port, tool, input) {
+  return new Promise((resolve) => {
+    let socket
+    try {
+      socket = getGateSocket(port)
+    } catch {
+      resolve({ decision: 'allow' })
+      return
+    }
+    let buffer = ''
+    let settled = false
+    const finish = (decision) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      socket.removeListener('data', onData)
+      socket.removeListener('error', onError)
+      resolve(decision)
+    }
+    const onData = (chunk) => {
+      buffer += chunk.toString('utf-8')
+      const newlineIndex = buffer.indexOf('\n')
+      if (newlineIndex === -1) return
+      try {
+        finish(JSON.parse(buffer.slice(0, newlineIndex)))
+      } catch {
+        finish({ decision: 'allow' })
+      }
+    }
+    const onError = () => {
+      gateSocket = null // drop the broken connection — the next call gets a fresh one
+      finish({ decision: 'allow' })
+    }
+    const timer = setTimeout(() => {
+      // See GATE_REQUEST_TIMEOUT_MS's comment — no error/data ever arrived, so this side has no
+      // way to know if the socket is genuinely dead; evict it rather than risk reusing it again.
+      if (gateSocket === socket) gateSocket = null
+      socket.destroy()
+      finish({ decision: 'allow' })
+    }, GATE_REQUEST_TIMEOUT_MS)
+    timer.unref?.()
+    socket.on('data', onData)
+    socket.on('error', onError)
+    const send = () => socket.write(`${JSON.stringify({ tool, input })}\n`)
+    if (socket.connecting) socket.once('connect', send)
+    else send()
+  })
 }
 
 // ── Trust boundary for fetched content — mirrors trust-tagging.ts ──────────
@@ -563,6 +694,10 @@ async function main() {
     },
     async ({ path }) => {
       try {
+        const gate = await requestToolGate('read_file', { path })
+        if (gate.decision === 'deny') {
+          return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+        }
         const resolved = await resolveAndVerify(workspaceRoot, path)
         const content = await readFile(resolved, 'utf-8').catch((err) => {
           if (isEnoent(err)) return undefined
@@ -586,6 +721,10 @@ async function main() {
     },
     async ({ path }) => {
       try {
+        const gate = await requestToolGate('list_directory', { path })
+        if (gate.decision === 'deny') {
+          return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+        }
         const resolved = await resolveAndVerify(workspaceRoot, path)
         const names = await readdir(resolved).catch((err) => {
           if (isEnoent(err)) return []
@@ -750,6 +889,10 @@ async function main() {
     },
     async ({ url }) => {
       try {
+        const gate = await requestToolGate('fetch_url', { url })
+        if (gate.decision === 'deny') {
+          return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+        }
         const text = await fetchUrlSafely(url)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
       } catch (err) {
@@ -769,6 +912,10 @@ async function main() {
       },
       async ({ query }) => {
         try {
+          const gate = await requestToolGate('web_search', { query })
+          if (gate.decision === 'deny') {
+            return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+          }
           return { content: [{ type: 'text', text: await runWebSearch(query) }] }
         } catch (err) {
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -794,6 +941,10 @@ async function main() {
       },
       async ({ text }) => {
         try {
+          const gate = await requestToolGate('create_reminder', { text })
+          if (gate.decision === 'deny') {
+            return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+          }
           // Deterministic backstop for the description's guidance above — checked against
           // both the tool call's own `text` argument and CURRENT_USER_MESSAGE (the turn's
           // raw, unreworded user message — see claude-cli-llm-client.ts's doc comment on why
@@ -837,6 +988,10 @@ async function main() {
       },
       async () => {
         try {
+          const gate = await requestToolGate('list_reminders', {})
+          if (gate.decision === 'deny') {
+            return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+          }
           const reminders = await readRemindersFile(remindersFile)
           const text = reminders.length === 0
             ? 'No reminders yet.'

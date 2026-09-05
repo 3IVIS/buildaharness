@@ -92,13 +92,17 @@ from .experience_store import (
     ExperienceEntry,
     ExperienceStore,
     ExperienceType,
+    OfflineEvalResult,
     StrategyWeightKey,
+    StrategyWeightSample,
     WarmStartResult,
     build_strategy_ordering,
+    evaluate_candidate_strategy_weights,
     load_strategy_priors,
     load_structural_decompositions,
     load_tool_workflow_seeds,
     load_verification_plan_seeds,
+    run_offline_eval_pipeline,
     softmax_strategy_policy,
     update_experience_store,
     upsert_strategy_weight,
@@ -147,7 +151,7 @@ from .langfuse_tracing import (
     emit_iteration_span,  # noqa: F401
     emit_strategy_change_event,  # noqa: F401
 )
-from .loop import initialize_harness, run_one_iteration, select_best_action
+from .loop import initialize_harness, run_one_iteration
 from .memory import (
     CompressionRisk,
     MemoryState,
@@ -186,6 +190,7 @@ from .output_contract import (
     validate_output_contract,
 )
 from .parallel_merge import merge_world_models, reconcile_parallel_branches
+from .policy import select_best_action
 from .process_concept import (
     ProcessConcept,
     ProcessConceptNotFoundError,
@@ -210,9 +215,11 @@ from .provenance import (
 from .recovery import (
     STRATEGY_ORDER,
     RecoveryBudget,
+    RecoveryPolicy,
     StrategyState,
     StrategyType,
     apply_failure_mode_bias,
+    classify_recovery,
     get_next_strategy,
     get_strategy_with_experience,
     switch_strategy,
@@ -261,8 +268,10 @@ from .task_graph import (
     ConflictProbabilityCache,
     Task,
     TaskGraph,
+    TaskOutcome,
     TaskRisk,
     TaskStatus,
+    apply_task_outcome,
     check_abstraction_alignment,
     compute_initial_conflict_probabilities,
     record_actual_overlap,
@@ -365,6 +374,7 @@ __all__ = [
     "NoOpUpdateChannel",
     "NormalisationError",
     "Observation",
+    "OfflineEvalResult",
     "OutputContract",
     "PendingUpdate",
     "PermissionDecision",
@@ -377,6 +387,7 @@ __all__ = [
     "ProcessRegistry",
     "PrunedRegion",
     "RecoveryBudget",
+    "RecoveryPolicy",
     "ReliabilityClass",
     "ReplanScope",
     "ReversibilityStrategy",
@@ -390,10 +401,12 @@ __all__ = [
     "StrategyState",
     "StrategyType",
     "StrategyWeightKey",
+    "StrategyWeightSample",
     "Structure",
     "SurfaceBlocker",
     "Task",
     "TaskGraph",
+    "TaskOutcome",
     "TaskRisk",
     "TaskStatus",
     "ToolAvailabilityManifest",
@@ -417,6 +430,7 @@ __all__ = [
     "apply_replan",
     "apply_resolution_policy",
     "apply_retention_policy",
+    "apply_task_outcome",
     "apply_tool_reliability_envelope",
     "assert_generation_fresh",
     "assert_normalised",
@@ -443,6 +457,7 @@ __all__ = [
     "check_task_alignment",
     "check_world_model_consistency",
     "classify_module_type",
+    "classify_recovery",
     "compile_apply_tool_reliability",
     "compile_control_state_node",
     "compile_evidence_store_node",
@@ -481,6 +496,7 @@ __all__ = [
     "escalate",
     "estimate_risk",
     "estimate_value_of_information",
+    "evaluate_candidate_strategy_weights",
     "execute",
     "failure_mode_library_contribution",
     "generate_from_failure_library",
@@ -522,6 +538,7 @@ __all__ = [
     "reviewer_pass",
     "risk_summary",
     "run_mechanical_check",
+    "run_offline_eval_pipeline",
     "run_one_iteration",
     "seed_adversarial_prior",
     "select_best_action",

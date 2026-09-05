@@ -55,3 +55,22 @@ export const LAYER_TIER: Record<string, LayerTier> = {
 }
 
 export const DEP_CLASS_GAP_NOTE_PREFIX = "dep_class_gap: "
+
+export interface RecoveryClassification {
+  policy: string
+  action: string
+}
+export const RECOVERY_CLASSIFICATION_TABLE: Record<string, RecoveryClassification> = {
+  "timeout": { policy: "retry_with_backoff", action: "execution_retry" },
+  "transient_tool_error": { policy: "retry_with_backoff", action: "execution_retry" },
+  "missing_evidence": { policy: "gather_evidence", action: "coverage_expand" },
+  "insufficient_context": { policy: "gather_evidence", action: "belief_refresh" },
+  "permission_denied": { policy: "surface_to_human", action: "escalate" },
+  "approval_required": { policy: "surface_to_human", action: "escalate" },
+  "unsafe_state": { policy: "terminate_objective", action: "escalation_halt" },
+  "system_breaking": { policy: "terminate_objective", action: "escalation_halt" },
+  "tool_unreliable": { policy: "switch_method", action: "dep_graph_refresh" },
+  "contradiction": { policy: "refresh_beliefs", action: "consistency_repair" },
+  "stall": { policy: "replan", action: "replan" },
+  "no_progress": { policy: "replan", action: "replan" },
+}

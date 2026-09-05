@@ -3,8 +3,22 @@ import type { EvidenceStore } from '../state/evidence-store.js'
 import type { TaskGraph, Task } from '../state/task-graph.js'
 import type { MemoryState } from '../state/memory-state.js'
 import type { BeliefDepGraph } from '../state/world-model.js'
+import { applyTaskOutcome } from './apply-task-outcome.js'
 
 export type ReversibilityStrategy = 'snapshot' | 'git-revert' | 'patch-rollback' | 'ephemeral'
+
+/**
+ * Phase D1: what a toolFn's return means for the task's lifecycle. 'complete' is what every
+ * toolFn produced before this phase (a plain, non-throwing return) and stays the default for
+ * one — driveMainLoop marks the task COMPLETE exactly as it always has. 'continue' is new: the
+ * task stays RUNNING and the harness re-executes it on the next main-loop iteration (via the
+ * same pendingProposal suspend point Phase 3 built, so a real process restart between two
+ * 'continue' steps resumes correctly — see PendingProposalData.kind). 'failed' from a
+ * non-throwing return gets the identical SYSTEM_ERROR evidence + task-FAILED treatment a thrown
+ * error already gets — a toolFn that already distinguishes its own failure modes doesn't need to
+ * throw just to get that.
+ */
+export type ExecutionStatus = 'continue' | 'complete' | 'failed'
 
 export interface ExecutionResult {
   success: boolean
@@ -12,6 +26,40 @@ export interface ExecutionResult {
   error: string | null
   strategy: ReversibilityStrategy
   rollback_ref: string | null
+  status: ExecutionStatus
+}
+
+/**
+ * Opt-in structured return for a toolFn that needs to signal 'continue' or a non-throwing
+ * 'failed' — a toolFn that just returns a plain value (every toolFn written before Phase D1)
+ * is unaffected and always resolves to status 'complete', exactly as before.
+ */
+export interface ContinuableExecutionOutcome {
+  __harnessExecutionStatus: ExecutionStatus
+  output?: unknown
+  error?: string
+}
+
+function isContinuableOutcome(value: unknown): value is ContinuableExecutionOutcome {
+  if (typeof value !== 'object' || value === null || !('__harnessExecutionStatus' in value)) return false
+  const status = (value as { __harnessExecutionStatus: unknown }).__harnessExecutionStatus
+  return status === 'continue' || status === 'complete' || status === 'failed'
+}
+
+/**
+ * Phase D2: a marker a toolFn's thrown error can carry to mean "this isn't a real execution
+ * failure" — e.g. a harness-driven proposer throwing this to signal a turn needs a human
+ * approval (write_file/run_shell_command/send_email) or has hit its own escalation, neither of
+ * which is "the tool broke." execute() rethrows it unexamined below instead of recording
+ * SYSTEM_ERROR evidence + a task-FAILED transition, the same way EscalationHalt already
+ * propagates untouched out of the main loop rather than being treated as a tool error.
+ */
+export interface HarnessPauseSignal {
+  __harnessPause: true
+}
+
+export function isHarnessPauseSignal(value: unknown): value is HarnessPauseSignal {
+  return typeof value === 'object' && value !== null && (value as { __harnessPause?: unknown }).__harnessPause === true
 }
 
 export interface ProposedExecutionChange {
@@ -82,11 +130,11 @@ function classifySystemErrorSymptom(message: string): string | null {
   return null
 }
 
-export function execute(
+export async function execute(
   proposedChange: ProposedExecutionChange,
-  toolFn: (() => unknown),
+  toolFn: (() => unknown | Promise<unknown>),
   ctx: ExecutionContext,
-): ExecutionResult {
+): Promise<ExecutionResult> {
   const strategy = selectReversibilityStrategy(proposedChange)
   const taskId = ctx.currentTask.id
   let rollback_ref: string | null = null
@@ -122,18 +170,15 @@ export function execute(
   let output: unknown = null
   let error: string | null = null
   let success = false
+  let status: ExecutionStatus = 'failed'
 
-  try {
-    output = toolFn()
-    success = true
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err)
-    const symptom = classifySystemErrorSymptom(error)
+  const recordFailure = (message: string): void => {
+    const symptom = classifySystemErrorSymptom(message)
 
     // Tool error → Evidence(HIGH, SYSTEM_ERROR) in evidence store
     ctx.evidenceStore.observations.push({
       id: `sys-err-${makeRollbackRef()}`,
-      obs: symptom ? `${symptom} — Tool execution failed: ${error}` : `Tool execution failed: ${error}`,
+      obs: symptom ? `${symptom} — Tool execution failed: ${message}` : `Tool execution failed: ${message}`,
       reliability: 'HIGH',
       source: 'execution_engine',
       evidence_type: 'SYSTEM_ERROR',
@@ -143,17 +188,50 @@ export function execute(
     // Update world model observations
     ctx.worldModel.observations.push({
       id: `err-obs-${makeRollbackRef()}`,
-      content: `SYSTEM_ERROR: ${error}`,
+      content: `SYSTEM_ERROR: ${message}`,
       source: 'execution_engine',
       recorded_at: new Date().toISOString(),
     })
 
     // Transition task to FAILED
     try {
-      ctx.taskGraph.setStatus(taskId, 'FAILED', { fromExecutionLayer: true })
+      applyTaskOutcome(ctx.taskGraph, taskId, { status: 'FAILED', fromExecutionLayer: true })
     } catch {
       // task may already be in another state
     }
+  }
+
+  try {
+    const raw = await toolFn()
+    if (isContinuableOutcome(raw)) {
+      status = raw.__harnessExecutionStatus
+      output = raw.output ?? null
+      success = status !== 'failed'
+      if (status === 'failed') {
+        error = raw.error ?? 'execution reported a failed status'
+        recordFailure(error)
+      }
+    } else {
+      output = raw
+      success = true
+      status = 'complete'
+    }
+  } catch (err) {
+    if (isHarnessPauseSignal(err)) {
+      // environment_change_log always recorded, regardless of outcome — including this
+      // rethrow, which otherwise skipped the push below entirely and left a silent gap
+      // for any attempt that ended in a pause rather than a normal complete/fail.
+      ctx.worldModel.environment_change_log.push({
+        id: `change-${makeRollbackRef()}`,
+        description: proposedChange.description ?? 'execution',
+        affected_paths: [],
+        timestamp: new Date().toISOString(),
+      })
+      throw err
+    }
+    error = err instanceof Error ? err.message : String(err)
+    status = 'failed'
+    recordFailure(error)
   }
 
   // environment_change_log always recorded, regardless of outcome
@@ -164,5 +242,5 @@ export function execute(
     timestamp: new Date().toISOString(),
   })
 
-  return { success, output, error, strategy, rollback_ref }
+  return { success, output, error, strategy, rollback_ref, status }
 }

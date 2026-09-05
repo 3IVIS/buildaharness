@@ -31,4 +31,15 @@ describe('classifyExecutionMode', () => {
   it('falls back to TOOL when nothing else applies', () => {
     expect(classifyExecutionMode(base)).toBe('TOOL')
   })
+
+  // Phase D3 validation: classifyExecutionMode is a pure function of its input — same inputs
+  // always produce the same mode, with no LLM call and no hidden state. This is what lets D3's
+  // deterministic policy layer (turn-policy.ts) feed it a recomputed requiresApproval instead of
+  // classification's own boolean without changing anything about how the mode itself is derived.
+  it('is pure — repeated calls with the same input produce the same mode', () => {
+    const input = { ...base, requiresApproval: true, isTrivial: true }
+    const first = classifyExecutionMode(input)
+    const second = classifyExecutionMode(input)
+    expect(second).toBe(first)
+  })
 })

@@ -80,5 +80,21 @@
     "output_contract_partial": "mechanical"
   },
 
-  "dep_class_gap_note_prefix": "dep_class_gap: "
+  "dep_class_gap_note_prefix": "dep_class_gap: ",
+
+  "recovery_classification_table": {
+    "_README": "criticism002 #7 / docs/adr/004-shared-semantic-core.md. failure_class -> { policy, action }: a CLASSIFIED failure short-circuits recovery selection to `action`; an UNCLASSIFIED failure (a class not in this map, or no class at all) falls through to recovery.py's existing next_strategy(STRATEGY_ORDER) + softmax unchanged. DATA + TYPES ONLY in Phase C2 — wiring into recovery.py / recovery.ts is Phase D. `action` values are recovery_action_class names (see dimension_recovery) plus the two terminal pseudo-actions `escalate` (surface to the human, do not auto-retry) and `escalation_halt` (terminate the objective).",
+    "timeout": { "policy": "retry_with_backoff", "action": "execution_retry" },
+    "transient_tool_error": { "policy": "retry_with_backoff", "action": "execution_retry" },
+    "missing_evidence": { "policy": "gather_evidence", "action": "coverage_expand" },
+    "insufficient_context": { "policy": "gather_evidence", "action": "belief_refresh" },
+    "permission_denied": { "policy": "surface_to_human", "action": "escalate" },
+    "approval_required": { "policy": "surface_to_human", "action": "escalate" },
+    "unsafe_state": { "policy": "terminate_objective", "action": "escalation_halt" },
+    "system_breaking": { "policy": "terminate_objective", "action": "escalation_halt" },
+    "tool_unreliable": { "policy": "switch_method", "action": "dep_graph_refresh" },
+    "contradiction": { "policy": "refresh_beliefs", "action": "consistency_repair" },
+    "stall": { "policy": "replan", "action": "replan" },
+    "no_progress": { "policy": "replan", "action": "replan" }
+  }
 }

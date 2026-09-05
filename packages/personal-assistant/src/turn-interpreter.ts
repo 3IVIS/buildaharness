@@ -1,6 +1,7 @@
 import type { Task } from '@buildaharness/harness'
 import type { ILLMClient, TokenUsage, ReminderStore } from '@buildaharness/runtime'
 import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
+import { evaluateTurnPolicy, evaluateAbandonPolicy } from './turn-policy.js'
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
 import { buildPlanFromTemplate } from './plan-builder.js'
@@ -100,6 +101,14 @@ export class TurnInterpreter {
     // turn-intent-classifier.ts.
     const classification = await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null }, this.model(), onUsage)
 
+    // Phase D3: the authoritative approval decision — recomputed from classification's own
+    // riskLevel/isBulkReminderRequest signals via turn-policy.ts rather than trusted directly off
+    // classification.requiresApproval (see turn-policy.ts's own doc comment for why that split
+    // matters). Behaviorally identical to classification.requiresApproval today (both are derived
+    // from the same two fields via the same rule), but no longer relies on that boolean surviving
+    // unmodified from the classifier to this gate.
+    const turnPolicy = evaluateTurnPolicy({ riskHint: classification.riskLevel, isBulkReminderRequest: classification.isBulkReminderRequest })
+
     // A reminder-shaped MEDIUM request stores a record immediately — detection, not action
     // gating, so it happens whether or not the rest of the turn is ultimately
     // approved/completed. v1 stores raw text with no time parsing (dueAt: null) — see
@@ -111,14 +120,14 @@ export class TurnInterpreter {
     // two records for one request. This pre-emptive store is a fallback for backends where no
     // tool loop ever runs at all, not a second insurance policy alongside one.
     //
-    // requiresApproval here means this looks like a BULK reminder request — must not auto-create
-    // anything until the approval gate below actually runs, or this would silently create a
-    // reminder before the user ever sees the prompt.
-    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && classification.isReminderRequest && !classification.requiresApproval) {
+    // turnPolicy.decision === 'REQUIRE_APPROVAL' here means this looks like a BULK reminder
+    // request — must not auto-create anything until the approval gate below actually runs, or
+    // this would silently create a reminder before the user ever sees the prompt.
+    if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && classification.isReminderRequest && turnPolicy.decision === 'ALLOW') {
       await this.reminderStore.create(userMessage, null)
     }
 
-    if (classification.requiresApproval && !approved && !dangerouslySkipPermissions) {
+    if (turnPolicy.decision === 'REQUIRE_APPROVAL' && !approved && !dangerouslySkipPermissions) {
       // Deliberately not persisted to transcript — the outcome isn't known yet (a decline never
       // calls turn() again for this gate, unlike the pendingActionId gate, which always resolves
       // via ActionApprovalService) — see the sequencer for the full reasoning.
@@ -163,7 +172,7 @@ export class TurnInterpreter {
     // when planForCancelCheck (passed as context.hasActivePlan to classifyTurnIntent) was
     // non-null, so it's safe to act on unconditionally here.
     let activePlan: PlanRecord | null = planForCancelCheck
-    if (activePlan && classification.isAbandonRequest) {
+    if (activePlan && evaluateAbandonPolicy({ hasActivePlan: true, abandonHint: classification.isAbandonRequest })) {
       await this.planService.abandonPlan(sessionId, activePlan)
       activePlan = null
     }

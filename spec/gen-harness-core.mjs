@@ -58,6 +58,7 @@ const {
   risk_dimensions: riskDimensions,
   layer_tier: layerTier,
   dep_class_gap_note_prefix: depClassGapNotePrefix,
+  recovery_classification_table: recoveryClassificationTable,
 } = stripReadme(core)
 
 const GEN_HEADER_LINES = [
@@ -130,6 +131,12 @@ function renderPy() {
   lines.push('')
   lines.push(`DEP_CLASS_GAP_NOTE_PREFIX: str = ${pyStr(depClassGapNotePrefix)}`)
   lines.push('')
+  lines.push('RECOVERY_CLASSIFICATION_TABLE: dict[str, dict[str, str]] = {')
+  for (const [k, v] of Object.entries(recoveryClassificationTable)) {
+    lines.push(`    ${pyStr(k)}: {"policy": ${pyStr(v.policy)}, "action": ${pyStr(v.action)}},`)
+  }
+  lines.push('}')
+  lines.push('')
   return lines.join('\n')
 }
 
@@ -173,6 +180,16 @@ function renderTs() {
   lines.push('}')
   lines.push('')
   lines.push(`export const DEP_CLASS_GAP_NOTE_PREFIX = ${tsStr(depClassGapNotePrefix)}`)
+  lines.push('')
+  lines.push('export interface RecoveryClassification {')
+  lines.push('  policy: string')
+  lines.push('  action: string')
+  lines.push('}')
+  lines.push('export const RECOVERY_CLASSIFICATION_TABLE: Record<string, RecoveryClassification> = {')
+  for (const [k, v] of Object.entries(recoveryClassificationTable)) {
+    lines.push(`  ${tsStr(k)}: { policy: ${tsStr(v.policy)}, action: ${tsStr(v.action)} },`)
+  }
+  lines.push('}')
   lines.push('')
   return lines.join('\n')
 }

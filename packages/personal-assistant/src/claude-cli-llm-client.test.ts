@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createConnection } from 'node:net'
 
 const spawnMock = vi.fn()
 vi.mock('node:child_process', () => {
@@ -459,6 +460,144 @@ describe('ClaudeCliLLMClient', () => {
 
       expect(result.toolCalls?.[0].name).toBe('__staged_action')
       expect(result.toolCalls?.[0].input).toMatchObject({ id: 'email-1', kind: 'email', to: 'boss@example.com', subject: 'I quit', body: 'Bye.' })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('Phase D0: TOOL_GATE_PORT is set on the MCP server env, and a proposal round-trips through onToolProposal', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      let gatePort: number | undefined
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        gatePort = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          // Stand in for file-tools-mcp-server.mjs's requestToolGate: connect to the gate port,
+          // send a proposal, and fold the decision into the streamed reply so the test can
+          // assert on it without a real MCP round trip.
+          const decision: { decision: string; reason?: string } = await new Promise((resolvePromise) => {
+            const socket = createConnection({ port: gatePort!, host: '127.0.0.1' })
+            let buffer = ''
+            socket.on('connect', () => socket.write(`${JSON.stringify({ tool: 'read_file', input: { path: 'notes.txt' } })}\n`))
+            socket.on('data', (chunk) => {
+              buffer += chunk.toString('utf-8')
+              const nl = buffer.indexOf('\n')
+              if (nl === -1) return
+              resolvePromise(JSON.parse(buffer.slice(0, nl)))
+              socket.end()
+            })
+          })
+          proc.stdout.emit('data', Buffer.from(streamJsonResult(decision.decision === 'deny' ? `denied: ${decision.reason}` : 'read the file')))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const onToolProposal = vi.fn().mockResolvedValue({ decision: 'deny', reason: 'blocked by test policy' })
+
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'read notes.txt' }],
+        [{ name: 'read_file', input_schema: {} }],
+        { onToolProposal },
+      )
+
+      expect(onToolProposal).toHaveBeenCalledWith('read_file', { path: 'notes.txt' })
+      expect(result).toEqual({ content: 'denied: blocked by test policy' })
+      expect(gatePort).toBeGreaterThan(0)
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('Phase D0: a proposal is allowed by default when the caller supplies no onToolProposal', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        const gatePort = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const decision: { decision: string } = await new Promise((resolvePromise) => {
+            const socket = createConnection({ port: gatePort, host: '127.0.0.1' })
+            let buffer = ''
+            socket.on('connect', () => socket.write(`${JSON.stringify({ tool: 'fetch_url', input: { url: 'https://example.com' } })}\n`))
+            socket.on('data', (chunk) => {
+              buffer += chunk.toString('utf-8')
+              const nl = buffer.indexOf('\n')
+              if (nl === -1) return
+              resolvePromise(JSON.parse(buffer.slice(0, nl)))
+              socket.end()
+            })
+          })
+          proc.stdout.emit('data', Buffer.from(streamJsonResult(decision.decision)))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'fetch a page' }],
+        [{ name: 'fetch_url', input_schema: {} }],
+      )
+
+      expect(result).toEqual({ content: 'allow' })
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('Phase D0: an onToolProposal that throws fails open (allow), not an unhandled rejection', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        const gatePort = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const decision: { decision: string } = await new Promise((resolvePromise) => {
+            const socket = createConnection({ port: gatePort, host: '127.0.0.1' })
+            let buffer = ''
+            socket.on('connect', () => socket.write(`${JSON.stringify({ tool: 'read_file', input: { path: 'notes.txt' } })}\n`))
+            socket.on('data', (chunk) => {
+              buffer += chunk.toString('utf-8')
+              const nl = buffer.indexOf('\n')
+              if (nl === -1) return
+              resolvePromise(JSON.parse(buffer.slice(0, nl)))
+              socket.end()
+            })
+          })
+          proc.stdout.emit('data', Buffer.from(streamJsonResult(decision.decision)))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const onToolProposal = vi.fn().mockRejectedValue(new Error('onTrace blew up'))
+
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'read notes.txt' }],
+        [{ name: 'read_file', input_schema: {} }],
+        { onToolProposal },
+      )
+
+      expect(result).toEqual({ content: 'allow' })
+      expect(consoleErrorSpy).toHaveBeenCalled()
+      consoleErrorSpy.mockRestore()
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

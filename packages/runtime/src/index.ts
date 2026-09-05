@@ -1,6 +1,6 @@
 export { FlowExecutionError, NodeExecutionError, GraphCycleError, UnknownNodeTypeError, AbortedError, UnknownToolError, HITLTimeoutError } from './errors'
 export { LLMClient } from './llm-client'
-export type { ILLMClient, ChatMessage, ChatOptions, ToolCallResult, LLMStructuredResponse, ToolDefinition, ToolStepEvent, TokenUsage } from './llm-client'
+export type { ILLMClient, ChatMessage, ChatOptions, ToolCallResult, LLMStructuredResponse, ToolDefinition, ToolStepEvent, ToolProposalDecision, TokenUsage } from './llm-client'
 export { AnthropicLLMClient } from './anthropic-client'
 export type { AnthropicLLMClientOptions } from './anthropic-client'
 export { OpenAICompatibleLLMClient, OPENAI_BASE_URL, OPENAI_DEFAULT_MODEL, OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, OPENROUTER_EXTRA_HEADERS } from './openai-compatible-client'

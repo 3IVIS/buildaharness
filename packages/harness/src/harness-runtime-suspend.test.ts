@@ -3,6 +3,7 @@ import { HarnessRuntime, type GateDecisionEvent } from './harness-runtime.js'
 import { CHECKPOINT_SCHEMA_VERSION, CHECKPOINT_MIGRATIONS, type HarnessCheckpoint, type PendingProposalData } from './harness-checkpoint.js'
 import type { ContinuableExecutionOutcome } from './nodes/execute.js'
 import type { Task } from './state/task-graph.js'
+import { EscalationHalt } from './nodes/escalate.js'
 
 // Phase D1 — the "not done" signal: execute.ts's ContinuableExecutionOutcome, the
 // pendingProposal suspend point reused for a 'continue' outcome, the BLOCK/ESCALATE
@@ -48,6 +49,27 @@ describe('Phase D1 — continue outcome', () => {
     if (outcome.status !== 'complete') throw new Error('unreachable')
     expect(outcome.result.initResult.taskGraph.tasks[0].status).toBe('COMPLETE')
     expect(outcome.result.finalResult).toEqual({ step: 3, done: true })
+  })
+
+  it('a toolFn that keeps reporting continue forever still hits the maxSteps backstop instead of spinning forever', async () => {
+    // Regression: the pendingProposal resume branch (kind: 'continuation') used to never
+    // increment stepsUsed or check maxSteps — only the fresh-iteration path did — so this
+    // toolFn (never resolves to 'complete') would previously run unbounded.
+    const rt = new HarnessRuntime()
+
+    let caught: unknown
+    try {
+      await rt.run('never finishes objective', ['done'], {
+        initialTasks: [makeTask('t1')],
+        max_steps: 3,
+        toolExecutors: { default: makeMultiStepToolFn(1000) },
+      })
+    } catch (err) {
+      caught = err
+    }
+
+    expect(caught).toBeInstanceOf(EscalationHalt)
+    expect((caught as EscalationHalt).blocker.reason).toBe('budget_exhausted')
   })
 
   it('pauses at a checkpoint mid-continue, and the checkpoint carries a continuation-kind pendingProposal', async () => {

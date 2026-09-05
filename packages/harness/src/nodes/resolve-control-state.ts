@@ -4,6 +4,7 @@ import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { ControlState, type BlockEntry } from '../state/control-state.js'
 import { assertNormalised, normalise, DimensionType } from '../normalise.js'
 import { computeElevationFactor } from '../generation-id.js'
+import type { ReviewerVerdict } from './reviewer-pass.js'
 import {
   CRITICAL_THRESHOLD,
   CAUTION_THRESHOLD,
@@ -106,11 +107,31 @@ function computeRiskAndConfidenceEstimates(subDims: Array<[string, number]>): { 
   return { risk_estimate, confidence_estimate }
 }
 
+/**
+ * A-4 (ADR-003 authority map): a pending reviewer finding of severity >= MEDIUM forces
+ * execution_mode to at least CAUTIOUS — advisory only, never DENY; the resolver's own
+ * tiers still own blocking (Phase I, INV-18). Called once, at resolveControlState's single
+ * exit point below, after whichever tier fired has already set permission/execution_mode,
+ * so it can only raise execution_mode from NORMAL to CAUTIOUS, never lower a tier's own
+ * RECOVERY back down and never touch permission. Mirrors control_state.py's
+ * _apply_pending_reviewer_verdict() exactly. The caller (harness-runtime.ts's
+ * resolveAndStamp) owns the one-shot consume-then-clear.
+ */
+function applyPendingReviewerVerdict(cs: ControlState, notes: string[], verdict: ReviewerVerdict | null | undefined): void {
+  if (verdict == null) return
+  if (verdict.severity !== 'MEDIUM' && verdict.severity !== 'HIGH') return
+  notes.push(`Pending reviewer verdict (${verdict.lens}, ${verdict.severity}): ${verdict.summary}`)
+  if (cs.execution_mode === 'NORMAL') {
+    cs.execution_mode = 'CAUTIOUS'
+  }
+}
+
 export function resolveControlState(
   diagnostics: Diagnostics,
   worldModel: WorldModel,
   failureDiagnostics: FailureDiagnostics,
   _step?: number,
+  pendingReviewerVerdict?: ReviewerVerdict | null,
 ): ControlState {
   assertNormalised(diagnostics.belief_health.freshness, 'belief_health.freshness')
   assertNormalised(diagnostics.belief_health.consistency, 'belief_health.consistency')
@@ -126,14 +147,16 @@ export function resolveControlState(
   const cs = new ControlState()
   const notes: string[] = []
 
-  // Computed once, attached at every exit point below — continuous and additive, so they
-  // never influence which tier fires (mirrors control_state.py's own invariant here).
+  // Computed once, attached regardless of which tier fires below — continuous and additive,
+  // so they never influence which tier fires (mirrors control_state.py's own invariant here).
   const subDimsForEstimate = extractSubDimensions(diagnostics)
   const estimates = computeRiskAndConfidenceEstimates(subDimsForEstimate)
   cs.risk_estimate = estimates.risk_estimate
   cs.confidence_estimate = estimates.confidence_estimate
+  const subDims = subDimsForEstimate
 
-  // TIER 1: any SYSTEM_BREAKING contradiction → BLOCKED, return immediately; TIER 2+ not evaluated
+  // TIER 1: any SYSTEM_BREAKING contradiction → BLOCKED; TIER 2's own checks below are
+  // skipped by the guard on cs.permission.
   if (worldModel.contradictions.some(c => c.severity === 'SYSTEM_BREAKING')) {
     cs.permission = 'DENY'
     cs.execution_mode = 'RECOVERY'
@@ -144,79 +167,74 @@ export function resolveControlState(
       value: 0.0,
       recovery_action_class: 'consistency_repair',
     }]
-    cs.generation_id = worldModel.generation_id
-    if (diagnostics.dep_class_gap_annotation) {
-      notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
-    }
-    cs.notes = notes
-    return cs
   }
 
-  // TIER 2: each sub-dim < CRITICAL_THRESHOLD gets its own BlockEntry (individual dimension granularity)
-  const subDims = subDimsForEstimate
-  const blockMask: BlockEntry[] = []
-  for (const [dimName, normValue] of subDims) {
-    if (normValue < CRITICAL_THRESHOLD) {
-      blockMask.push({
-        dimension: dimName,
-        value: normValue,
-        recovery_action_class: DIMENSION_RECOVERY[dimName] ?? 'consistency_repair',
-      })
+  // TIER 2: each sub-dim < CRITICAL_THRESHOLD gets its own BlockEntry (individual dimension
+  // granularity) — only evaluated if Tier 1 hasn't already denied.
+  if (cs.permission !== 'DENY') {
+    const blockMask: BlockEntry[] = []
+    for (const [dimName, normValue] of subDims) {
+      if (normValue < CRITICAL_THRESHOLD) {
+        blockMask.push({
+          dimension: dimName,
+          value: normValue,
+          recovery_action_class: DIMENSION_RECOVERY[dimName] ?? 'consistency_repair',
+        })
+      }
     }
-  }
 
-  if (blockMask.length > 0) {
-    cs.block_mask = blockMask
-    cs.permission = 'DENY'
-    cs.execution_mode = 'RECOVERY'
-    if (detectDeadlock(blockMask)) {
-      cs.escalation = 'HUMAN_REQUIRED'
-      cs.escalation_reason = 'HUMAN_REQUIRED'
-    }
-    cs.generation_id = worldModel.generation_id
-    if (diagnostics.dep_class_gap_annotation) {
-      notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
-    }
-    cs.notes = notes
-    return cs
-  }
-
-  // TIER 3: coverage gaps in [CRITICAL_THRESHOLD, CAUTION_THRESHOLD) → CAUTIOUS
-  const { symptom_coverage, explanation_coverage } = diagnostics.coverage_health
-  if (
-    (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) ||
-    (explanation_coverage >= CRITICAL_THRESHOLD && explanation_coverage < CAUTION_THRESHOLD)
-  ) {
-    cs.execution_mode = 'CAUTIOUS'
-    if (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) {
-      notes.push(`Coverage gap in symptom_coverage (${symptom_coverage.toFixed(3)}): exploration actions allowed`)
-    }
-    if (explanation_coverage >= CRITICAL_THRESHOLD && explanation_coverage < CAUTION_THRESHOLD) {
-      notes.push(`Coverage gap in explanation_coverage (${explanation_coverage.toFixed(3)}): exploration actions allowed`)
+    if (blockMask.length > 0) {
+      cs.block_mask = blockMask
+      cs.permission = 'DENY'
+      cs.execution_mode = 'RECOVERY'
+      if (detectDeadlock(blockMask)) {
+        cs.escalation = 'HUMAN_REQUIRED'
+        cs.escalation_reason = 'HUMAN_REQUIRED'
+      }
     }
   }
 
-  // TIER 4: proportional caution elevation from all sub-dimensions + matched pattern confidence
-  const allSubDimValues = subDims.map(([, v]) => v)
-  let elevationFactor = computeElevationFactor(allSubDimValues)
+  // TIERS 3 & 4: only matter if nothing above has already denied.
+  if (cs.permission !== 'DENY') {
+    // TIER 3: coverage gaps in [CRITICAL_THRESHOLD, CAUTION_THRESHOLD) → CAUTIOUS
+    const { symptom_coverage, explanation_coverage } = diagnostics.coverage_health
+    if (
+      (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) ||
+      (explanation_coverage >= CRITICAL_THRESHOLD && explanation_coverage < CAUTION_THRESHOLD)
+    ) {
+      cs.execution_mode = 'CAUTIOUS'
+      if (symptom_coverage >= CRITICAL_THRESHOLD && symptom_coverage < CAUTION_THRESHOLD) {
+        notes.push(`Coverage gap in symptom_coverage (${symptom_coverage.toFixed(3)}): exploration actions allowed`)
+      }
+      if (explanation_coverage >= CRITICAL_THRESHOLD && explanation_coverage < CAUTION_THRESHOLD) {
+        notes.push(`Coverage gap in explanation_coverage (${explanation_coverage.toFixed(3)}): exploration actions allowed`)
+      }
+    }
 
-  const matchedPattern = failureDiagnostics.matched_pattern
-  if (matchedPattern !== null) {
-    const patternConfidence = normalise(matchedPattern.confidence, DimensionType.ratio)
-    elevationFactor = elevationFactor * 0.8 + patternConfidence * 0.2
-  }
+    // TIER 4: proportional caution elevation from all sub-dimensions + matched pattern confidence
+    const allSubDimValues = subDims.map(([, v]) => v)
+    let elevationFactor = computeElevationFactor(allSubDimValues)
 
-  if (elevationFactor > 0.05 && cs.execution_mode === 'NORMAL') {
-    cs.execution_mode = 'CAUTIOUS'
+    const matchedPattern = failureDiagnostics.matched_pattern
+    if (matchedPattern !== null) {
+      const patternConfidence = normalise(matchedPattern.confidence, DimensionType.ratio)
+      elevationFactor = elevationFactor * 0.8 + patternConfidence * 0.2
+    }
+
+    if (elevationFactor > 0.05 && cs.execution_mode === 'NORMAL') {
+      cs.execution_mode = 'CAUTIOUS'
+    }
   }
 
   // TIER 5: NORMAL — implicit; ControlState defaults to permission=ALLOW/execution_mode=NORMAL
 
+  // ── Single exit point ──────────────────────────────────────────────────────
   // dep_class_gap_annotation attached to notes[] only — NOT evaluated in any tier (INV-07)
   if (diagnostics.dep_class_gap_annotation) {
     notes.push(`${DEP_CLASS_GAP_NOTE_PREFIX}${diagnostics.dep_class_gap_annotation}`)
   }
 
+  applyPendingReviewerVerdict(cs, notes, pendingReviewerVerdict)
   cs.notes = notes
   cs.generation_id = worldModel.generation_id
   return cs

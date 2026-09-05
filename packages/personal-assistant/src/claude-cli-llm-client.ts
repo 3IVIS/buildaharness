@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
-import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent } from '@buildaharness/runtime'
+import { createServer, type Server } from 'node:net'
+import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent, ToolProposalDecision } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
 import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
@@ -157,6 +158,82 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
 }
 
 /**
+ * Phase D0 (harness_consolidation_and_control_plane_plan.html): a synchronous, per-call gate the
+ * file-tools MCP server (spawned as this `claude` subprocess's own child — see
+ * file-tools-mcp-server.mjs) blocks on before executing a read-only tool (read_file/
+ * list_directory/fetch_url/web_search/create_reminder/list_reminders). write_file/
+ * run_shell_command/send_email are unaffected — they already stage unconditionally and never
+ * call this gate.
+ *
+ * Without this, Claude Code's own agentic loop resolves those read-only calls entirely inside
+ * this one subprocess call: the deterministic, harness-informed check the proxy backend's manual
+ * tool loop already runs before every call (agent-loop.ts's checkToolPolicy) never ran for this
+ * backend at all — onToolStep only reports the call after Claude Code has already decided to
+ * make it, too late to gate.
+ *
+ * Listens on an ephemeral loopback TCP port for the lifetime of one callChatStructured call;
+ * newline-delimited JSON request/response, one request per tool call (`{tool, input}` in,
+ * `{decision, reason?}` out — see ChatOptions.onToolProposal). Absent `onToolProposal` (a caller
+ * that hasn't wired the gate), or an unparseable request, every proposal is allowed — the
+ * pre-D0 behavior, unchanged.
+ */
+function startToolGateServer(
+  onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>,
+): Promise<{ server: Server; port: number }> {
+  return new Promise((resolvePromise, reject) => {
+    const server = createServer((socket) => {
+      let buffer = ''
+      socket.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString('utf-8')
+        let newlineIndex: number
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIndex)
+          buffer = buffer.slice(newlineIndex + 1)
+          if (!line.trim()) continue
+          void (async (requestLine: string) => {
+            let request: { tool?: unknown; input?: unknown }
+            try {
+              request = JSON.parse(requestLine)
+            } catch {
+              socket.write(`${JSON.stringify({ decision: 'allow' })}\n`)
+              return
+            }
+            let decision: ToolProposalDecision
+            try {
+              decision =
+                onToolProposal && typeof request.tool === 'string'
+                  ? await onToolProposal(request.tool, (request.input as Record<string, unknown>) ?? {})
+                  : { decision: 'allow' }
+            } catch (err) {
+              // onToolProposal (agent-loop.ts's wiring) can throw — e.g. a tracing hook
+              // (onTrace) called from inside checkToolPolicy. Left uncaught, this rejection
+              // is unhandled inside the fire-and-forget IIFE below and crashes the whole
+              // process under Node's default throw-on-unhandledRejection. Fail open here,
+              // the same posture file-tools-mcp-server.mjs's requestToolGate already takes
+              // on its own transport errors (ADR-003 decision 10's injection-detector
+              // fail-open) — this is defense-in-depth on top of the real sandboxing/staging
+              // boundaries, not itself the security control.
+              console.error('claude-cli tool gate: onToolProposal threw — failing open:', err)
+              decision = { decision: 'allow' }
+            }
+            socket.write(`${JSON.stringify(decision)}\n`)
+          })(line)
+        }
+      })
+    })
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'string') {
+        reject(new Error('tool gate server failed to bind to a loopback TCP port'))
+        return
+      }
+      resolvePromise({ server, port: address.port })
+    })
+  })
+}
+
+/**
  * ILLMClient backed by a local `claude -p` subprocess instead of a hosted API key —
  * runs PersonalAssistant against an already-authenticated Claude Code CLI session.
  * Always passes --system-prompt (so the CLI's own default prompt/CLAUDE.md/skills
@@ -271,53 +348,63 @@ export class ClaudeCliLLMClient implements ILLMClient {
     // variable keeps this a plain runtime URL resolution instead.
     const mcpServerFileName = 'file-tools-mcp-server.mjs'
     const mcpServerPath = fileURLToPath(new URL(mcpServerFileName, import.meta.url))
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        'file-tools': {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            WORKSPACE_ROOT: workspaceRoot,
-            ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile, CURRENT_USER_MESSAGE: lastUserMessage } : {}),
-            ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
-            ...(this.webTools
-              ? {
-                  WEB_SEARCH_BACKEND: this.webTools.searchBackend ?? 'ddg',
-                  ...(this.webTools.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
-                }
-              : {}),
-            ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
+    // Phase D0: gates read_file/list_directory/fetch_url/web_search/create_reminder/
+    // list_reminders — see startToolGateServer's doc comment. Started before the config is
+    // built (its port needs to go into TOOL_GATE_PORT) and always closed once this call
+    // finishes, gate-decision or not.
+    const gate = await startToolGateServer(options.onToolProposal)
+    try {
+      const mcpConfig = JSON.stringify({
+        mcpServers: {
+          'file-tools': {
+            command: 'node',
+            args: [mcpServerPath],
+            env: {
+              WORKSPACE_ROOT: workspaceRoot,
+              TOOL_GATE_PORT: String(gate.port),
+              ...(this.remindersFile ? { REMINDERS_FILE: this.remindersFile, CURRENT_USER_MESSAGE: lastUserMessage } : {}),
+              ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
+              ...(this.webTools
+                ? {
+                    WEB_SEARCH_BACKEND: this.webTools.searchBackend ?? 'ddg',
+                    ...(this.webTools.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
+                  }
+                : {}),
+              ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
+            },
           },
         },
-      },
-    })
+      })
 
-    const args = [
-      '--print',
-      '--output-format', 'stream-json', // streamed (not the single-object 'json') so tool_use events can be reported live via onToolStep — see invokeClaudeStreaming
-      '--verbose', // required by --print when --output-format is stream-json
-      '--tools', '', // still disable Claude Code's own built-in Read/Write/Bash tools — Bash is never added, regardless of shellTools
-      '--no-session-persistence',
-      '--system-prompt', systemPrompt,
-      '--mcp-config', mcpConfig,
-      '--strict-mcp-config', // ignore any ambient project .mcp.json — the tool surface must be exactly this plan's tools
-      '--dangerously-skip-permissions', // headless -p mode has no way to answer an interactive tool-permission prompt
-    ]
-    if (options.model) args.push('--model', options.model)
-    args.push(prompt)
+      const args = [
+        '--print',
+        '--output-format', 'stream-json', // streamed (not the single-object 'json') so tool_use events can be reported live via onToolStep — see invokeClaudeStreaming
+        '--verbose', // required by --print when --output-format is stream-json
+        '--tools', '', // still disable Claude Code's own built-in Read/Write/Bash tools — Bash is never added, regardless of shellTools
+        '--no-session-persistence',
+        '--system-prompt', systemPrompt,
+        '--mcp-config', mcpConfig,
+        '--strict-mcp-config', // ignore any ambient project .mcp.json — the tool surface must be exactly this plan's tools
+        '--dangerously-skip-permissions', // headless -p mode has no way to answer an interactive tool-permission prompt
+      ]
+      if (options.model) args.push('--model', options.model)
+      args.push(prompt)
 
-    const callStartedAt = Date.now()
-    const { reply, usage } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
-    if (usage) options.onUsage?.(usage)
-    const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)
+      const callStartedAt = Date.now()
+      const { reply, usage } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+      if (usage) options.onUsage?.(usage)
+      const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)
 
-    if (staged) {
-      return {
-        content: '',
-        toolCalls: [{ id: `cli-staged-${staged.id}`, name: ALREADY_STAGED_ACTION_TOOL, input: stagedActionInput(staged) }],
+      if (staged) {
+        return {
+          content: '',
+          toolCalls: [{ id: `cli-staged-${staged.id}`, name: ALREADY_STAGED_ACTION_TOOL, input: stagedActionInput(staged) }],
+        }
       }
+      return { content: reply }
+    } finally {
+      gate.server.close()
     }
-    return { content: reply }
   }
 
   /** Diffs .pending-actions/ against the call's start time to detect a write or shell command the MCP server staged during this subprocess call. */

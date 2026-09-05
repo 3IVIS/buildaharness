@@ -27,6 +27,29 @@ export interface VerificationResult {
   layer_results: LayerResult[]
   has_critical_failure: boolean
   adversarial_passed: boolean | null
+  // Phase C2 (docs/adr/004-shared-semantic-core.md, INV-12) — additive: which
+  // epistemic tiers (mechanical | environmental | model) contributed a FAIL, as a
+  // sorted, de-duplicated list. Empty iff !has_critical_failure. has_critical_failure
+  // stays layer_results.some(FAIL) — this only exposes the provenance of the
+  // criticality. De-duplicated, so N agreeing model-tier layers collapse to one
+  // "model" entry (correlated model opinions count once). Mirrors Python's
+  // VerificationResult.critical_failure_tiers (a set there, a sorted array here for
+  // stable JSON).
+  critical_failure_tiers: LayerTier[]
+}
+
+/** Mirrors Python's `VerificationResult.__post_init__` (adapter/harness/verification.py) —
+ * an interface can't enforce this invariant at the type level (`critical_failure_tiers`
+ * is independently settable), so `verify()` below calls this on its own result before
+ * returning it, the same way Python's dataclass enforces it on every construction. */
+function assertCriticalFailureTiersConsistent(r: Pick<VerificationResult, 'has_critical_failure' | 'critical_failure_tiers'>): void {
+  if (r.has_critical_failure !== (r.critical_failure_tiers.length > 0)) {
+    throw new Error(
+      `VerificationResult.has_critical_failure (${r.has_critical_failure}) is inconsistent with ` +
+        `critical_failure_tiers (${JSON.stringify(r.critical_failure_tiers)}) — critical_failure_tiers must be ` +
+        `empty iff has_critical_failure is false (see its own field comment above).`,
+    )
+  }
 }
 
 // LayerTier / LAYER_TIER are generated from spec/harness-core.json into
@@ -257,11 +280,18 @@ export function verify(
   ]
 
   const has_critical_failure = layer_results.some(lr => lr.status === 'FAIL')
+  const critical_failure_tiers = [
+    ...new Set(
+      layer_results.filter(lr => lr.status === 'FAIL').map(lr => LAYER_TIER[lr.layer] ?? 'mechanical'),
+    ),
+  ].sort() as LayerTier[]
 
   let adversarial_passed: boolean | null = null
   if (riskLevel === 'HIGH') {
     adversarial_passed = runAdversarialPass(result, hypothesisSet ?? null)
   }
 
-  return { layer_results, has_critical_failure, adversarial_passed }
+  const verificationResult = { layer_results, has_critical_failure, adversarial_passed, critical_failure_tiers }
+  assertCriticalFailureTiersConsistent(verificationResult)
+  return verificationResult
 }

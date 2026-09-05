@@ -261,8 +261,10 @@ def resolve_control_state(
     world_model: Any,
     failure_diagnostics: Any | None = None,
     step: int | None = None,
+    pending_reviewer_verdict: Any | None = None,
 ) -> ControlState:
-    """Apply five-tier resolution to produce a ControlState.
+    """Apply five-tier resolution to produce a ControlState, then fold in any pending
+    reviewer verdict.
 
     PRE: asserts world_model.generation_id == step when step is provided.
     Tier 1 — SYSTEM_BREAKING contradictions → BLOCKED immediately.
@@ -270,6 +272,17 @@ def resolve_control_state(
     Tier 3 — Coverage gaps below CAUTION_THRESHOLD → CAUTIOUS.
     Tier 4 — Proportional caution elevation.
     Tier 5 — All clear → NORMAL.
+    Tiers 3 and 4 are skipped once Tier 1 or 2 has already set permission=DENY — there is
+    nothing left for them to elevate.
+
+    pending_reviewer_verdict (Phase I / ADR-003 F-3, authority-map A-4): an
+    optional ReviewerVerdict (reviewer.py) carried over from the prior
+    iteration's reviewer pass. Applied once, at this function's single exit
+    point below, after whichever tier fired has already set
+    permission/execution_mode — advisory only, it can raise execution_mode to
+    CAUTIOUS but never sets permission=DENY and never overrides a tier's own
+    RECOVERY/DENY (INV-18). The caller (run_one_iteration) is responsible for
+    the one-shot consume-then-clear.
     """
     from .staleness import StalenessError  # avoid circular at module level
 
@@ -278,7 +291,7 @@ def resolve_control_state(
 
     cs = ControlState(generation_id=world_model.generation_id)
     sub_dims = _extract_sub_dimensions(diagnostics)
-    # Computed once, attached at every exit point below — continuous and additive,
+    # Computed once, attached regardless of which tier fires — continuous and additive,
     # so they never influence which tier fires (see _compute_risk_and_confidence_estimates'
     # own docstring on why these must never be able to break tier resolution).
     cs.risk_estimate, cs.confidence_estimate = _compute_risk_and_confidence_estimates(sub_dims)
@@ -297,62 +310,81 @@ def resolve_control_state(
                     recovery_action_class="consistency_repair",
                 )
             )
-            _attach_annotation(cs, diagnostics)
-            return cs
+            break  # Tier 1 fired — Tier 2's own checks below are skipped by the guard on cs.permission.
 
     # ── Tier 2: Critical dimension failures ───────────────────────────────────
-    for dim_name, raw_value, dim_type in sub_dims:
-        norm_value = normalise(raw_value, dim_type)  # type: ignore[arg-type]
-        assert_normalised(norm_value, dim_name)
-        if norm_value < CRITICAL_THRESHOLD:
-            recovery = _DIMENSION_RECOVERY.get(dim_name, "consistency_repair")
-            cs.block_mask.append(
-                BlockEntry(
-                    dimension=dim_name,
-                    value=norm_value,
-                    recovery_action_class=recovery,
+    if cs.permission != "DENY":
+        for dim_name, raw_value, dim_type in sub_dims:
+            norm_value = normalise(raw_value, dim_type)  # type: ignore[arg-type]
+            assert_normalised(norm_value, dim_name)
+            if norm_value < CRITICAL_THRESHOLD:
+                recovery = _DIMENSION_RECOVERY.get(dim_name, "consistency_repair")
+                cs.block_mask.append(
+                    BlockEntry(
+                        dimension=dim_name,
+                        value=norm_value,
+                        recovery_action_class=recovery,
+                    )
                 )
-            )
 
-    if cs.block_mask:
-        cs.permission = "DENY"
-        cs.execution_mode = "RECOVERY"
-        if detect_deadlock(cs.block_mask):
-            cs.escalation = "HUMAN_REQUIRED"
-            cs.escalation_reason = "HUMAN_REQUIRED"
-        _attach_annotation(cs, diagnostics)
-        return cs
+        if cs.block_mask:
+            cs.permission = "DENY"
+            cs.execution_mode = "RECOVERY"
+            if detect_deadlock(cs.block_mask):
+                cs.escalation = "HUMAN_REQUIRED"
+                cs.escalation_reason = "HUMAN_REQUIRED"
 
-    # ── Tier 3: Coverage gaps → CAUTIOUS ──────────────────────────────────────
-    coverage_dims = [
-        ("symptom_coverage", diagnostics.coverage_health.symptom_coverage),
-        ("explanation_coverage", diagnostics.coverage_health.explanation_coverage),
-    ]
-    for dim_name, raw_value in coverage_dims:
-        norm_value = normalise(raw_value, "ratio")
-        assert_normalised(norm_value, dim_name)
-        if CRITICAL_THRESHOLD <= norm_value < CAUTION_THRESHOLD:
+    # ── Tiers 3 & 4: only matter if nothing above has already denied ──────────
+    if cs.permission != "DENY":
+        # Tier 3: Coverage gaps → CAUTIOUS
+        coverage_dims = [
+            ("symptom_coverage", diagnostics.coverage_health.symptom_coverage),
+            ("explanation_coverage", diagnostics.coverage_health.explanation_coverage),
+        ]
+        for dim_name, raw_value in coverage_dims:
+            norm_value = normalise(raw_value, "ratio")
+            assert_normalised(norm_value, dim_name)
+            if CRITICAL_THRESHOLD <= norm_value < CAUTION_THRESHOLD:
+                cs.execution_mode = "CAUTIOUS"
+                cs.notes.append(f"Coverage gap in {dim_name} ({norm_value:.3f}): exploration actions allowed")
+
+        # Tier 4: Proportional caution elevation
+        elevation_factor = compute_elevation_factor(sub_dims)  # type: ignore[arg-type]
+
+        if failure_diagnostics is not None:
+            matched_pattern = getattr(failure_diagnostics, "matched_pattern", None)
+            if matched_pattern is not None:
+                raw_confidence = getattr(matched_pattern, "confidence", 0.0)
+                pattern_confidence = normalise(raw_confidence, "match_confidence")
+                assert_normalised(pattern_confidence, "matched_pattern_confidence")
+                elevation_factor = elevation_factor * 0.8 + pattern_confidence * 0.2
+
+        if elevation_factor > 0.05 and cs.execution_mode == "NORMAL":
             cs.execution_mode = "CAUTIOUS"
-            cs.notes.append(f"Coverage gap in {dim_name} ({norm_value:.3f}): exploration actions allowed")
 
-    # ── Tier 4: Proportional caution elevation ────────────────────────────────
-    elevation_factor = compute_elevation_factor(sub_dims)  # type: ignore[arg-type]
-
-    if failure_diagnostics is not None:
-        matched_pattern = getattr(failure_diagnostics, "matched_pattern", None)
-        if matched_pattern is not None:
-            raw_confidence = getattr(matched_pattern, "confidence", 0.0)
-            pattern_confidence = normalise(raw_confidence, "match_confidence")
-            assert_normalised(pattern_confidence, "matched_pattern_confidence")
-            elevation_factor = elevation_factor * 0.8 + pattern_confidence * 0.2
-
-    if elevation_factor > 0.05 and cs.execution_mode == "NORMAL":
-        cs.execution_mode = "CAUTIOUS"
-
-    # ── Tier 5: All clear ─────────────────────────────────────────────────────
-    # permission/execution_mode already set correctly; just stamp the generation_id
+    # ── Tier 5 / single exit point ─────────────────────────────────────────────
+    # permission/execution_mode already set correctly by whichever tier(s) above fired;
+    # just stamp the annotation and fold in the pending reviewer verdict once.
     _attach_annotation(cs, diagnostics)
+    _apply_pending_reviewer_verdict(cs, pending_reviewer_verdict)
     return cs
+
+
+def _apply_pending_reviewer_verdict(cs: ControlState, verdict: Any | None) -> None:
+    """A-4 (ADR-003 authority map): a pending reviewer finding of severity >=
+    MEDIUM forces execution_mode to at least CAUTIOUS — advisory only, never
+    DENY; the resolver's own tiers above still own blocking (Phase I, INV-18).
+    Runs after every tier has set permission/execution_mode, so it can only
+    raise execution_mode from NORMAL to CAUTIOUS, never lower a tier's own
+    RECOVERY back down and never touch permission."""
+    if verdict is None:
+        return
+    severity = getattr(verdict, "severity", "LOW")
+    if severity not in ("MEDIUM", "HIGH"):
+        return
+    cs.notes.append(f"Pending reviewer verdict ({verdict.lens}, {severity}): {verdict.summary}")
+    if cs.execution_mode == "NORMAL":
+        cs.execution_mode = "CAUTIOUS"
 
 
 def _attach_annotation(cs: ControlState, diagnostics: Diagnostics) -> None:

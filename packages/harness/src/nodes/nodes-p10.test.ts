@@ -15,7 +15,7 @@ import { Diagnostics } from '../state/diagnostics.js'
 
 import { reviewProposedChange, applyReviewOutcome } from './review-proposed-change.js'
 import { actionGate, postExecGate, contractShadowCheck } from './policy-gates.js'
-import { execute } from './execute.js'
+import { execute, isHarnessPauseSignal, type HarnessPauseSignal } from './execute.js'
 import { verify } from './verify.js'
 import { rollbackAndReplan, cannotMakeProgress, buildStrategyOrdering, STALL_WINDOW } from './rollback-replan.js'
 import { makeSurfaceBlocker, awaitClarification, EscalationHalt, handleEscalationResponse } from './escalate.js'
@@ -383,7 +383,7 @@ describe('postExecGate', () => {
 // ─── P10.3 execute ────────────────────────────────────────────────────────────
 
 describe('execute', () => {
-  it('snapshot reversibility serialises worldModel state before mutation applied', () => {
+  it('snapshot reversibility serialises worldModel state before mutation applied', async () => {
     const wm = makeWorldModel()
     const ms = new MemoryState()
     const es = new EvidenceStore()
@@ -393,7 +393,7 @@ describe('execute', () => {
 
     // 'schema' change_type → snapshot strategy
     const change = { change_type: 'schema' as const, description: 'db migration' }
-    const result = execute(change, () => 'done', ctx)
+    const result = await execute(change, () => 'done', ctx)
 
     expect(result.strategy).toBe('snapshot')
     expect(result.rollback_ref).not.toBeNull()
@@ -403,7 +403,7 @@ describe('execute', () => {
     expect(rp!.serialised_state).toContain('generation_id')
   })
 
-  it('ephemeral (read-only) action has no rollback_points entry created', () => {
+  it('ephemeral (read-only) action has no rollback_points entry created', async () => {
     const wm = makeWorldModel()
     const ms = new MemoryState()
     const es = new EvidenceStore()
@@ -411,21 +411,21 @@ describe('execute', () => {
     const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
 
     const change = { change_type: 'read-only' as const }
-    const result = execute(change, () => 'read result', ctx)
+    const result = await execute(change, () => 'read result', ctx)
 
     expect(result.strategy).toBe('ephemeral')
     expect(result.rollback_ref).toBeNull()
     expect(ms.rollback_points).toHaveLength(0)
   })
 
-  it('tool error → Evidence(reliability=HIGH, evidence_type=SYSTEM_ERROR) → update_world_model called', () => {
+  it('tool error → Evidence(reliability=HIGH, evidence_type=SYSTEM_ERROR) → update_world_model called', async () => {
     const wm = makeWorldModel()
     const ms = new MemoryState()
     const es = new EvidenceStore()
     const tg = new TaskGraph({ tasks: [makeTask()] })
     const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
 
-    const result = execute({}, () => { throw new Error('connection refused') }, ctx)
+    const result = await execute({}, () => { throw new Error('connection refused') }, ctx)
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('connection refused')
@@ -437,7 +437,7 @@ describe('execute', () => {
     expect(wm.observations.some(o => o.content.includes('SYSTEM_ERROR'))).toBe(true)
   })
 
-  it('classifies recognized error signatures into a canonical symptom prefix on the SYSTEM_ERROR observation', () => {
+  it('classifies recognized error signatures into a canonical symptom prefix on the SYSTEM_ERROR observation', async () => {
     const cases: Array<[string, string]> = [
       ["ENOENT: no such file or directory, open '/x'", 'file not found'],
       ['ETIMEDOUT: request timed out after 30s', 'request timed out'],
@@ -451,7 +451,7 @@ describe('execute', () => {
       const tg = new TaskGraph({ tasks: [makeTask()] })
       const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
 
-      execute({}, () => { throw new Error(message) }, ctx)
+      await execute({}, () => { throw new Error(message) }, ctx)
 
       const sysErr = es.observations.find(e => e.evidence_type === 'SYSTEM_ERROR')
       expect(sysErr).toBeDefined()
@@ -459,27 +459,27 @@ describe('execute', () => {
     }
   })
 
-  it('unrecognized error signature leaves the SYSTEM_ERROR observation unprefixed', () => {
+  it('unrecognized error signature leaves the SYSTEM_ERROR observation unprefixed', async () => {
     const wm = makeWorldModel()
     const ms = new MemoryState()
     const es = new EvidenceStore()
     const tg = new TaskGraph({ tasks: [makeTask()] })
     const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
 
-    execute({}, () => { throw new Error('something bespoke went sideways') }, ctx)
+    await execute({}, () => { throw new Error('something bespoke went sideways') }, ctx)
 
     const sysErr = es.observations.find(e => e.evidence_type === 'SYSTEM_ERROR')
     expect(sysErr).toBeDefined()
     expect(sysErr!.obs).toBe('Tool execution failed: something bespoke went sideways')
   })
 
-  it('environment_change_log.record(result) called for every execution regardless of outcome', () => {
+  it('environment_change_log.record(result) called for every execution regardless of outcome', async () => {
     const wmSuccess = makeWorldModel()
     const msSuccess = new MemoryState()
     const esSuccess = new EvidenceStore()
     const tg1 = new TaskGraph({ tasks: [makeTask()] })
     const ctxSuccess = { worldModel: wmSuccess, evidenceStore: esSuccess, taskGraph: tg1, currentTask: makeTask(), memoryState: msSuccess }
-    execute({}, () => 'success', ctxSuccess)
+    await execute({}, () => 'success', ctxSuccess)
     expect(wmSuccess.environment_change_log).toHaveLength(1)
 
     const wmFail = makeWorldModel()
@@ -487,11 +487,11 @@ describe('execute', () => {
     const esFail = new EvidenceStore()
     const tg2 = new TaskGraph({ tasks: [makeTask()] })
     const ctxFail = { worldModel: wmFail, evidenceStore: esFail, taskGraph: tg2, currentTask: makeTask(), memoryState: msFail }
-    execute({}, () => { throw new Error('boom') }, ctxFail)
+    await execute({}, () => { throw new Error('boom') }, ctxFail)
     expect(wmFail.environment_change_log).toHaveLength(1)
   })
 
-  it('planToolWorkflow() triggers dep graph refresh when unverified_edge_ratio exceeded', () => {
+  it('planToolWorkflow() triggers dep graph refresh when unverified_edge_ratio exceeded', async () => {
     const wm = makeWorldModel()
     const ms = new MemoryState()
     const es = new EvidenceStore()
@@ -502,7 +502,7 @@ describe('execute', () => {
       worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(),
       memoryState: ms, beliefDepGraph, planToolWorkflow: planCalled,
     }
-    execute({}, () => 'ok', ctx)
+    await execute({}, () => 'ok', ctx)
     expect(planCalled).toHaveBeenCalledOnce()
 
     // Below threshold → not called
@@ -514,8 +514,49 @@ describe('execute', () => {
       beliefDepGraph: new BeliefDepGraph({ unverified_edge_ratio: 0.3 }),
       planToolWorkflow: planNotCalled,
     }
-    execute({}, () => 'ok', ctx2)
+    await execute({}, () => 'ok', ctx2)
     expect(planNotCalled).not.toHaveBeenCalled()
+  })
+
+  // Phase D2: toolFn may now return a Promise — driveMainLoop always awaits execute()'s result.
+  it('awaits an async toolFn and resolves its returned ContinuableExecutionOutcome', async () => {
+    const wm = makeWorldModel()
+    const ms = new MemoryState()
+    const es = new EvidenceStore()
+    const tg = new TaskGraph({ tasks: [makeTask()] })
+    const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: makeTask(), memoryState: ms }
+
+    const result = await execute({}, async () => {
+      await Promise.resolve()
+      return { __harnessExecutionStatus: 'continue' as const, output: 'partial' }
+    }, ctx)
+
+    expect(result.status).toBe('continue')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('partial')
+  })
+
+  // Phase D2: a toolFn signaling a non-execution-failure pause (e.g. a harness-driven caller
+  // needing a human approval decision) rethrows unexamined — no SYSTEM_ERROR evidence, no
+  // task-FAILED transition — the same as EscalationHalt already propagates untouched.
+  it('rethrows a HarnessPauseSignal without recording a failure', async () => {
+    const wm = makeWorldModel()
+    const ms = new MemoryState()
+    const es = new EvidenceStore()
+    const tg = new TaskGraph({ tasks: [makeTask()] })
+    const task = makeTask()
+    const ctx = { worldModel: wm, evidenceStore: es, taskGraph: tg, currentTask: task, memoryState: ms }
+
+    const pause: HarnessPauseSignal & { reason: string } = { __harnessPause: true, reason: 'needs_approval' }
+    expect(isHarnessPauseSignal(pause)).toBe(true)
+
+    await expect(execute({}, () => { throw pause }, ctx)).rejects.toBe(pause)
+    expect(es.observations.find(e => e.evidence_type === 'SYSTEM_ERROR')).toBeUndefined()
+    expect(task.status).not.toBe('FAILED')
+    // environment_change_log is documented as "always recorded, regardless of outcome" —
+    // that must hold for a pause rethrow too, not just complete/fail (the bug this closes:
+    // the rethrow used to happen before this push was ever reached).
+    expect(wm.environment_change_log).toHaveLength(1)
   })
 })
 

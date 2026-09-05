@@ -95,6 +95,22 @@ class VerificationResult:
     layer_results: list[LayerResult] = field(default_factory=list)
     has_critical_failure: bool = False
     adversarial_passed: bool | None = None
+    # Phase C2 (docs/adr/004-shared-semantic-core.md, INV-12) — additive: which
+    # epistemic tiers (LAYER_TIER: mechanical | environmental | model) contributed
+    # a FAIL. Empty iff not has_critical_failure. has_critical_failure itself stays
+    # any(FAIL) — this field only exposes the provenance of the criticality so a
+    # downstream consumer can distinguish a mechanical FAIL (exit code / failed test)
+    # from a model-tier judgment. Because it is a set, N agreeing model-tier layers
+    # collapse to a single "model" entry — correlated model opinions count once.
+    critical_failure_tiers: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        if self.has_critical_failure != bool(self.critical_failure_tiers):
+            raise ValueError(
+                f"VerificationResult.has_critical_failure ({self.has_critical_failure}) is inconsistent with "
+                f"critical_failure_tiers ({self.critical_failure_tiers!r}) — critical_failure_tiers must be "
+                f"empty iff has_critical_failure is False (see its own field comment above)."
+            )
 
 
 def _tool_available(tool_name: str, tool_manifest: Any) -> bool:
@@ -467,6 +483,9 @@ def verify(
     layer_results.append(verify_output_contract_partial(result, output_contract, tool_manifest))
 
     has_critical_failure = any(lr.status == "FAIL" for lr in layer_results)
+    critical_failure_tiers = {
+        LAYER_TIER.get(lr.layer, "mechanical") for lr in layer_results if lr.status == "FAIL"
+    }
 
     adversarial_passed: bool | None = None
     if task_risk == "HIGH":
@@ -476,4 +495,5 @@ def verify(
         layer_results=layer_results,
         has_critical_failure=has_critical_failure,
         adversarial_passed=adversarial_passed,
+        critical_failure_tiers=critical_failure_tiers,
     )

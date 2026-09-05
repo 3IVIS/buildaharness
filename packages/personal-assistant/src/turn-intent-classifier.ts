@@ -21,6 +21,12 @@ export interface TurnIntentContext {
 export interface TurnIntentClassification {
   riskLevel: RiskLevel
   riskReason: string
+  /** Computed here from riskLevel/isBulkReminderRequest for trace/display purposes and any
+   *  caller that only wants the raw classifier verdict. Phase D3: no gating call site reads this
+   *  field directly anymore — turn-interpreter.ts's approval gate and assistant.ts's
+   *  execution-mode classification both recompute the decision from riskLevel/isBulkReminderRequest
+   *  via turn-policy.ts's evaluateTurnPolicy() instead, so a future bug here can't silently change
+   *  what those care about (INV-14). */
   requiresApproval: boolean
   /** Only meaningful when riskLevel === 'LOW' — same precondition classifyTriviality had. */
   isTrivial: boolean

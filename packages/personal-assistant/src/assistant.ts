@@ -12,6 +12,7 @@ import {
 } from '@buildaharness/runtime'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
+import { evaluateTurnPolicy } from './turn-policy.js'
 import type { FileToolsContext } from './file-tools.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import type { WebToolsContext } from './web-tools.js'
@@ -527,11 +528,14 @@ export class PersonalAssistant {
     // conservative: see turn-intent-classifier.ts's isTrivial contract for what disqualifies a
     // turn from this path.
     this.onTrace?.({ kind: 'triviality_classified', isTrivial: classification.isTrivial })
+    // Phase D3: recomputed via turn-policy.ts rather than read directly off
+    // classification.requiresApproval — see turn-interpreter.ts's identical call for why.
+    const turnPolicyDecision = evaluateTurnPolicy({ riskHint: classification.riskLevel, isBulkReminderRequest: classification.isBulkReminderRequest })
     classifyAndTraceExecutionMode(this.onTrace, {
       isPlanCancelBypass: false,
       isBatchResearch: batchBudgetTrace !== undefined,
       isTrivial: classification.isTrivial,
-      requiresApproval: classification.requiresApproval,
+      requiresApproval: turnPolicyDecision.decision === 'REQUIRE_APPROVAL',
     })
     if (classification.isTrivial) {
       return this.responseService.buildTrivialResult({ sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal })

@@ -35,12 +35,13 @@ export type ExecutionMode = 'FAST' | 'TOOL' | 'PLAN' | 'CONSEQUENTIAL' | 'RESEAR
  *                    reply — today's real guarantee level, still post-hoc bookkeeping rather than
  *                    an in-loop control plane (see ToolPolicy for where deterministic, harness-
  *                    state-informed gating is actually enforced).
- *  - CONSEQUENTIAL: classification.requiresApproval was set, or the turn's tool calls include a
- *                    write_file/run_shell_command (always staged, independent of risk
- *                    classification — see ToolPolicy). Never executes without an explicit
- *                    approve-by-ID round trip; the harness run (when one applies) still runs on
- *                    top for bookkeeping, but ToolPolicy — not classification.riskLevel — is the
- *                    actual authoritative decision for whether this turn's action proceeds.
+ *  - CONSEQUENTIAL: turn-policy.ts's evaluateTurnPolicy() returned REQUIRE_APPROVAL, or the
+ *                    turn's tool calls include a write_file/run_shell_command (always staged,
+ *                    independent of risk classification — see ToolPolicy). Never executes without
+ *                    an explicit approve-by-ID round trip; the harness run (when one applies)
+ *                    still runs on top for bookkeeping, but TurnPolicy/ToolPolicy — not
+ *                    classification.riskLevel/requiresApproval directly — are the actual
+ *                    authoritative decision for whether this turn's action proceeds (Phase D3).
  */
 export const EXECUTION_MODE_GUARANTEES: Record<ExecutionMode, string> = {
   FAST: 'no HarnessRuntime run this turn — no verification, control state, or reviewer pass',
@@ -61,9 +62,11 @@ export interface ExecutionModeInput {
   /** turn-intent-classifier.ts's own isTrivial verdict — only meaningful once classification has
    * actually run (never true when isPlanCancelBypass/isBatchResearch already short-circuited). */
   isTrivial: boolean
-  /** turn-intent-classifier.ts's own requiresApproval verdict, OR a write_file/run_shell_command
-   * tool call was proposed this turn (file-tools.ts's unconditional per-call staging gate) — see
-   * ToolPolicy for the deterministic version of this same decision. */
+  /** turn-policy.ts's evaluateTurnPolicy() decision (REQUIRE_APPROVAL), recomputed from
+   * turn-intent-classifier.ts's riskLevel/isBulkReminderRequest signals rather than read directly
+   * off its requiresApproval boolean — OR a write_file/run_shell_command tool call was proposed
+   * this turn (file-tools.ts's unconditional per-call staging gate). See ToolPolicy for the
+   * per-tool-call analog of this same deterministic-gate shape. */
   requiresApproval: boolean
 }
 

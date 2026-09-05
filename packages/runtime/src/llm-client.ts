@@ -35,12 +35,30 @@ export interface ChatOptions {
    * when each backend can/can't supply this.
    */
   onUsage?: (usage: TokenUsage) => void
+  /**
+   * Phase D0 (harness_consolidation_and_control_plane_plan.html): called BEFORE a backend's own
+   * internal agentic loop actually executes a read-only tool call, when that backend can
+   * intercept the call synchronously ahead of execution (see ClaudeCliLLMClient, which blocks
+   * its MCP server on this over a loopback socket). This is the propose→gate half of
+   * propose→gate→execute — unlike onToolStep (a same-shape but strictly informational,
+   * after-the-fact notification), returning `{ decision: 'deny' }` here actually prevents the
+   * call from running and the backend must surface the denial to the model as the tool's result.
+   * A backend that already surfaces every tool call to the caller directly (one call per tool
+   * round trip, e.g. the plain Anthropic API client) never calls this — the caller's own loop
+   * gates the call itself before dispatching it. Absent for a caller that doesn't wire it in:
+   * every proposal is allowed, i.e. today's behavior, unchanged.
+   */
+  onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>
 }
 
 export interface ToolStepEvent {
   tool: string
   input: Record<string, unknown>
 }
+
+/** See ChatOptions.onToolProposal. `reason` is required on `deny` — a caller surfacing this to
+ * the model (or to a human) always needs to say why, never a bare rejection. */
+export type ToolProposalDecision = { decision: 'allow' } | { decision: 'deny'; reason: string }
 
 export interface ToolCallResult {
   id: string

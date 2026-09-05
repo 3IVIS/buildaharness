@@ -19,7 +19,8 @@ import {
   type ConstraintPropagationContext,
 } from './check-caller-updates.js'
 import { updateTaskGraph, GraphCycleError } from './update-task-graph.js'
-import { selectTask, reconcileParallelBranches } from './select-task.js'
+import { selectTask } from './select-task.js'
+import { reconcileParallelBranches } from './parallel-merge.js'
 import { estimateRisk, type RiskableAction } from './estimate-risk.js'
 import { estimateVOI } from './estimate-voi.js'
 
