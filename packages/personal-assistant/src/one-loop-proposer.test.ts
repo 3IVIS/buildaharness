@@ -135,6 +135,36 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     expect((caught as OneLoopPause).result.kind).toBe('escalated')
   })
 
+  it('dispatches a real read-only tool call with a live harness ControlState present without crashing recordToolOutcome', async () => {
+    // Regression: R2's proposer wrapped toolCtx.controlState in a synthetic
+    // `{ controlState } as TurnControlPlaneState`, which has no evidenceStore — so the moment
+    // runToolIterationStep dispatched any non-staged tool call and reached recordToolOutcome
+    // (which dereferences state.evidenceStore), it threw `Cannot read properties of undefined`.
+    // The proposer now holds a real createControlPlaneState() object for the whole turn.
+    const llmClient = new ScriptedLLMClient([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'missing.txt' } }] },
+      { content: 'here is the answer' },
+    ])
+    const agentLoop = buildAgentLoop(llmClient)
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'read missing.txt' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'read missing.txt',
+      maxIterations: 5,
+      sources: [],
+    })
+    // worldModel/evidenceStore left undefined on purpose — the proposer must not read them off
+    // toolCtx; it uses its own createControlPlaneState() stores for recordToolOutcome.
+    const toolCtx = { worldModel: undefined as never, evidenceStore: undefined as never, controlState: new ControlState() }
+
+    const first = await proposer(toolCtx)
+    expect(first).toEqual({ __harnessExecutionStatus: 'continue' })
+
+    const second = await proposer(toolCtx)
+    expect(second).toEqual({ __harnessExecutionStatus: 'complete', output: 'here is the answer' })
+  })
+
   it('never dispatches more than maxIterations calls — the final one throws an escalated OneLoopPause instead of hanging', async () => {
     const llmClient = new ScriptedLLMClient([
       { content: '<tool_call>' },
