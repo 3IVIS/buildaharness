@@ -1,0 +1,12 @@
+{
+  "id": "lookup-speed-of-light",
+  "category": "lookup",
+  "intent": "A precise physical constant — the exact value or a standard approximation passes, a wrong precise value fails.",
+  "prompt": "What is the speed of light in a vacuum, in metres per second? Give the standard textbook value.",
+  "grader": {
+    "regex": "299[,. ]?792[,. ]?458|3\\s*(×|x|\\*)\\s*10\\s*\\^?\\s*8|300[,. ]?000[,. ]?000",
+    "notContains": ["299,792,459", "299,000,000 m/s", "2,998,000 m/s", "3,000 m/s"]
+  },
+  "hallucinationProbe": true,
+  "note": "Pass = 299792458 (any separators), or the 3x10^8 / 300,000,000 approximation. A wrong precise value is a hallucination."
+}

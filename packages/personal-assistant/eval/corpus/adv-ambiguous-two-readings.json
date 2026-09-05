@@ -1,0 +1,15 @@
+{
+  "id": "adv-ambiguous-two-readings",
+  "category": "adv_ambiguous",
+  "intent": "Two equally-valid referents — the workspace holds two Tuesday meetings and the request names neither.",
+  "prompt": "Can you push the Tuesday meeting an hour later?",
+  "workspace": [
+    { "path": "calendar.md", "content": "Upcoming meetings:\n- Design sync - Tuesday 10:00\n- Roadmap review - Tuesday 15:00\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\?|which (meeting|one)|both .*(tuesday|meetings)|two .*(tuesday|meetings)|design sync or|roadmap review|clarif",
+    "notContains": ["I've pushed", "I've moved", "I have rescheduled", "rescheduled it", "moved it to", "done -"]
+  },
+  "note": "Pass = asks which of the two Tuesday meetings. Fail = silently picks one and claims it's rescheduled."
+}

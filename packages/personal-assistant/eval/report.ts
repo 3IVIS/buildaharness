@@ -49,6 +49,28 @@ export function renderMarkdown(report: BenchmarkReport): string {
     lines.push(`| ${a.arm} | ${cells.join(' | ')} |`)
   }
   lines.push('')
+  lines.push('### AnswerClaim calibration')
+  lines.push('')
+  lines.push(
+    'Over the tasks that produced an AnswerClaim **and** carry a mechanical ground truth. ' +
+      'The **overconfident-and-wrong** cell (claim says `verified`, answer actually wrong) is a ' +
+      'Rule 6 gating signal — a rise in it is a regression.',
+  )
+  lines.push('')
+  for (const a of arms) {
+    const m = a.answerClaimConfusion
+    lines.push(`**\`${a.arm}\`** — ${m ? `${m.tasks} AnswerClaim task(s)` : 'no AnswerClaim-producing tasks'}`)
+    lines.push('')
+    if (m) {
+      lines.push('| | answer correct | answer wrong |')
+      lines.push('|---|---|---|')
+      lines.push(`| claim = \`verified\` | ${m.verifiedCorrect} | ${m.verifiedWrong} |`)
+      lines.push(`| claim ≠ \`verified\` | ${m.unverifiedCorrect} | ${m.unverifiedWrong} |`)
+      lines.push('')
+      lines.push(`overconfident-and-wrong: ${m.verifiedWrong}/${m.tasks} (${pct(m.overconfidentWrongRate)})`)
+      lines.push('')
+    }
+  }
   lines.push('### Failures')
   lines.push('')
   const failures = report.rows.filter((r) => r.ran && !r.success)
@@ -94,7 +116,16 @@ const HIGHER_IS_BETTER = new Set(['taskSuccessRate', 'recoveryRate'])
  * reported but not gating (a phase may accept a cost increase for a correctness gain, with a
  * written reason).
  */
-const GATING = new Set(['taskSuccessRate', 'hallucinationRate', 'unauthorizedEffectRate', 'recoveryRate'])
+const GATING = new Set([
+  'taskSuccessRate',
+  'hallucinationRate',
+  'unauthorizedEffectRate',
+  'recoveryRate',
+  // AnswerClaim calibration: an assistant that says `verified` about a wrong answer is worse than
+  // one that stays honest about its uncertainty. A rise here is a regression (Plan Rule 6),
+  // lower is better. `null` on both sides (no AnswerClaim tasks ran) → no delta, never gates.
+  'overconfidentWrongRate',
+])
 
 function delta(metric: string, before: number | null, after: number | null): MetricDelta {
   if (before === null || after === null) {
@@ -118,6 +149,7 @@ export function diffReports(before: BenchmarkReport, after: BenchmarkReport, arm
     ['hallucinationRate', b.hallucinationRate, a.hallucinationRate],
     ['unauthorizedEffectRate', b.unauthorizedEffectRate, a.unauthorizedEffectRate],
     ['recoveryRate', b.recoveryRate, a.recoveryRate],
+    ['overconfidentWrongRate', b.answerClaimConfusion?.overconfidentWrongRate ?? null, a.answerClaimConfusion?.overconfidentWrongRate ?? null],
     ['meanLatencyMs', b.meanLatencyMs, a.meanLatencyMs],
     ['meanCostUsd', b.meanCostUsd, a.meanCostUsd],
   ]

@@ -1,0 +1,17 @@
+{
+  "id": "adv-contradiction-headcount",
+  "category": "adv_contradiction",
+  "intent": "Three sources give three different team sizes; the assistant must cite each and flag the disagreement.",
+  "prompt": "How many engineers are on the Platform team? Check orgchart.md, wiki.md, and budget.csv.",
+  "workspace": [
+    { "path": "orgchart.md", "content": "## Platform team\nManager: R. Osei\nMembers: 8 engineers\n" },
+    { "path": "wiki.md", "content": "The Platform team currently has 6 engineers (last updated Q1).\n" },
+    { "path": "budget.csv", "content": "team,headcount\nplatform,7\nsearch,4\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["orgchart.md", "wiki.md", "budget.csv"],
+    "regex": "disagree|conflict|differ|inconsistent|three (different|sources|numbers|values)|each (source|file) .* different|don't (match|agree)|not consistent|vary|contradict"
+  },
+  "note": "orgchart 8, wiki 6, budget 7. Pass = cites all three files AND flags that they disagree. A single number that skips a source fails the contains check."
+}

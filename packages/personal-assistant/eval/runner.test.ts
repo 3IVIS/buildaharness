@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
-import { runBenchmark } from './runner.js'
+import { runBenchmark, type BenchmarkReport } from './runner.js'
 import { diffReports, renderMarkdown, renderDiff } from './report.js'
 import type { Arm, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
@@ -92,6 +92,50 @@ describe('runBenchmark', () => {
     expect(report.perArm.baseline.taskSuccessRate).toBe(0)
   })
 
+  it('builds the AnswerClaim confusion matrix over claim-producing tasks with a mechanical ground truth', async () => {
+    const tasks: TaskSpec[] = [
+      // claim says verified, mechanical check will FAIL → overconfident-and-wrong
+      parseTaskSpec({ id: 'ac1', category: 'adv_contradiction', intent: 'i', prompt: 'p', grader: { contains: ['right'], answerClaimStatus: 'verified' } }, 't'),
+      // claim says verified, mechanical check will PASS → verified & correct
+      parseTaskSpec({ id: 'ac2', category: 'adv_contradiction', intent: 'i', prompt: 'p', grader: { contains: ['right'], answerClaimStatus: 'verified' } }, 't'),
+      // claim says contradicted, mechanical check will FAIL → unverified & wrong
+      parseTaskSpec({ id: 'ac3', category: 'adv_contradiction', intent: 'i', prompt: 'p', grader: { contains: ['right'], answerClaimStatus: 'verified' } }, 't'),
+      // no claim produced → excluded from the matrix entirely
+      parseTaskSpec({ id: 'ac4', category: 'compute', intent: 'i', prompt: 'p', grader: { contains: ['right'] } }, 't'),
+    ]
+    const arm: Arm = {
+      name: 'baseline',
+      label: 'x',
+      async run(task) {
+        const base: ArmTurnOutput = { reply: '', status: 'ok', workspaceAfter: {}, stagedMutation: false, latencyMs: 1 }
+        const script: Record<string, Partial<ArmTurnOutput>> = {
+          ac1: { reply: 'this is wrong', answerClaimStatus: 'verified' },
+          ac2: { reply: 'this is right', answerClaimStatus: 'verified' },
+          ac3: { reply: 'this is wrong', answerClaimStatus: 'contradicted' },
+          ac4: { reply: 'this is right' },
+        }
+        return { ...base, ...script[task.id] }
+      },
+    }
+    const report = await runBenchmark({ tasks, arms: [arm], makeLlm: noLlm })
+    const m = report.perArm.baseline.answerClaimConfusion
+    expect(m).not.toBeNull()
+    expect(m).toEqual({
+      tasks: 3,
+      verifiedCorrect: 1,
+      verifiedWrong: 1,
+      unverifiedCorrect: 0,
+      unverifiedWrong: 1,
+      overconfidentWrongRate: 1 / 3,
+    })
+  })
+
+  it('leaves answerClaimConfusion null when no task produced a claim status', async () => {
+    const arm = scriptedArm('baseline', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
+    const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm })
+    expect(report.perArm.baseline.answerClaimConfusion).toBeNull()
+  })
+
   it('renderMarkdown produces a stable table', async () => {
     const arm = scriptedArm('baseline', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
     const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm })
@@ -103,7 +147,7 @@ describe('runBenchmark', () => {
 })
 
 describe('diffReports (Rule 6)', () => {
-  const mk = (successRate: number, halluc: number, unauth: number) => ({
+  const mk = (successRate: number, halluc: number, unauth: number): BenchmarkReport => ({
     generatedAt: 'x',
     corpusSize: 3,
     judgeEnabled: false,
@@ -122,6 +166,7 @@ describe('diffReports (Rule 6)', () => {
         meanCostUsd: 0.001,
         totalTokens: 30,
         byCategory: {},
+        answerClaimConfusion: null,
       },
     },
   })
@@ -141,6 +186,40 @@ describe('diffReports (Rule 6)', () => {
     const d = diffReports(mk(0.9, 0, 0), mk(0.9, 0, 0.1), 'flagOn')
     expect(d.regressed).toBe(true)
     expect(d.regressions).toContain('unauthorizedEffectRate')
+  })
+
+  const confusion = (verifiedWrong: number, tasks: number) => ({
+    tasks,
+    verifiedCorrect: tasks - verifiedWrong,
+    verifiedWrong,
+    unverifiedCorrect: 0,
+    unverifiedWrong: 0,
+    overconfidentWrongRate: tasks === 0 ? 0 : verifiedWrong / tasks,
+  })
+
+  it('regresses when overconfident-and-wrong rises', () => {
+    const before = mk(0.9, 0, 0)
+    const after = mk(0.9, 0, 0)
+    before.perArm.flagOn.answerClaimConfusion = confusion(0, 4)
+    after.perArm.flagOn.answerClaimConfusion = confusion(2, 4)
+    const d = diffReports(before, after, 'flagOn')
+    expect(d.regressed).toBe(true)
+    expect(d.regressions).toContain('overconfidentWrongRate')
+  })
+
+  it('does not regress when overconfident-and-wrong falls', () => {
+    const before = mk(0.9, 0, 0)
+    const after = mk(0.9, 0, 0)
+    before.perArm.flagOn.answerClaimConfusion = confusion(3, 4)
+    after.perArm.flagOn.answerClaimConfusion = confusion(1, 4)
+    expect(diffReports(before, after, 'flagOn').regressed).toBe(false)
+  })
+
+  it('does not gate overconfident-and-wrong when either side ran no AnswerClaim tasks', () => {
+    const before = mk(0.9, 0, 0)
+    const after = mk(0.9, 0, 0)
+    after.perArm.flagOn.answerClaimConfusion = confusion(2, 2)
+    expect(diffReports(before, after, 'flagOn').regressed).toBe(false)
   })
 
   it('does not gate on latency alone', () => {

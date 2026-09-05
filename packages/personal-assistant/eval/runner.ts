@@ -6,7 +6,7 @@
  * drives it with the real `baselineArm` against a real model.
  */
 import type { TaskSpec, TaskCategory } from './corpus/schema.js'
-import { gradeTask, type ArmTurnOutput, type GradedTask, type JudgeModel } from './graders.js'
+import { gradeTask, type ArmTurnOutput, type GradedTask, type JudgeModel, type AnswerClaimCalibration } from './graders.js'
 import type { Arm, ArmName, MakeLlm } from './arms.js'
 
 export interface BenchmarkRow {
@@ -24,6 +24,29 @@ export interface BenchmarkRow {
   failedChecks: string[]
   /** First ~500 chars of the reply — for triaging a grader mismatch. Machine report only. */
   replyPreview: string
+  /** AnswerClaim calibration for this task; `null` unless it produced a claim status + had a mechanical check. */
+  answerClaimCalibration: AnswerClaimCalibration | null
+}
+
+/**
+ * AnswerClaim confusion matrix for one arm, over the tasks that produced an `answerClaimStatus`
+ * AND carried a mechanical ground truth. The `verifiedWrong` cell — claim said `verified` while
+ * the answer was actually wrong — is the dangerous quadrant (overconfident-and-wrong) and a Rule 6
+ * gating signal: a rise in `overconfidentWrongRate` is a regression.
+ */
+export interface AnswerClaimConfusion {
+  /** Tasks counted (produced a claim status + had a mechanical check). */
+  tasks: number
+  /** claim = `verified`, answer actually correct. */
+  verifiedCorrect: number
+  /** claim = `verified`, answer actually wrong — overconfident-and-wrong. */
+  verifiedWrong: number
+  /** claim ≠ `verified`, answer actually correct (under-confident, but safe). */
+  unverifiedCorrect: number
+  /** claim ≠ `verified`, answer actually wrong (wrong, but honestly flagged). */
+  unverifiedWrong: number
+  /** `verifiedWrong / tasks` — the gating signal. */
+  overconfidentWrongRate: number
 }
 
 export interface CategoryStat {
@@ -45,6 +68,8 @@ export interface ArmAggregate {
   meanCostUsd: number | null
   totalTokens: number
   byCategory: Partial<Record<TaskCategory, CategoryStat>>
+  /** AnswerClaim confusion matrix; `null` if the arm ran no AnswerClaim-producing tasks with a mechanical ground truth. */
+  answerClaimConfusion: AnswerClaimConfusion | null
 }
 
 export interface BenchmarkReport {
@@ -85,6 +110,7 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
       totalTokens: null,
       failedChecks: [],
       replyPreview: '',
+      answerClaimCalibration: null,
     }
   }
   const totalTokens =
@@ -105,6 +131,7 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
     totalTokens,
     failedChecks: graded.checks.filter((c) => c.verdict === 'fail').map((c) => c.name),
     replyPreview: out.reply.slice(0, 500),
+    answerClaimCalibration: graded.answerClaimCalibration,
   }
 }
 
@@ -121,6 +148,22 @@ function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
     if (r.success) s.passed++
   }
 
+  const calib = ran
+    .map((r) => r.answerClaimCalibration)
+    .filter((c): c is NonNullable<typeof c> => c !== null)
+  const verifiedWrong = calib.filter((c) => c.claimVerified && !c.answerCorrect).length
+  const answerClaimConfusion: AnswerClaimConfusion | null =
+    calib.length === 0
+      ? null
+      : {
+          tasks: calib.length,
+          verifiedCorrect: calib.filter((c) => c.claimVerified && c.answerCorrect).length,
+          verifiedWrong,
+          unverifiedCorrect: calib.filter((c) => !c.claimVerified && c.answerCorrect).length,
+          unverifiedWrong: calib.filter((c) => !c.claimVerified && !c.answerCorrect).length,
+          overconfidentWrongRate: rate(verifiedWrong, calib.length),
+        }
+
   return {
     arm: arm.name,
     label: arm.label,
@@ -136,6 +179,7 @@ function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
       withCost.length === 0 ? null : withCost.reduce((a, r) => a + (r.costUsd as number), 0) / withCost.length,
     totalTokens: ran.reduce((a, r) => a + (r.totalTokens ?? 0), 0),
     byCategory,
+    answerClaimConfusion,
   }
 }
 

@@ -1,0 +1,15 @@
+{
+  "id": "file-read-count-imports",
+  "category": "file_read",
+  "intent": "Count distinct imported modules in a source file — a duplicated import makes the naive line count wrong.",
+  "prompt": "How many distinct modules does main.py import? Reply with just the number.",
+  "workspace": [
+    { "path": "main.py", "content": "import os\nimport sys\nimport json\nimport os\nimport collections\n\n\ndef main():\n    return collections.defaultdict(list)\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\b4\\b",
+    "notContains": ["5 modules", "5 distinct", "3 modules", "3 distinct", "is 5", "is 3"]
+  },
+  "note": "Distinct modules: os, sys, json, collections = 4. There are 5 import lines because 'import os' appears twice."
+}

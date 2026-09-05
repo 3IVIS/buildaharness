@@ -1,0 +1,11 @@
+{
+  "id": "compute-date-diff",
+  "category": "compute",
+  "intent": "Date arithmetic across a month boundary in a non-leap year — off-by-one and leap-year errors are the distractors.",
+  "prompt": "How many days are there from 2026-01-15 up to (but not including) 2026-03-01? Reply with just the number.",
+  "grader": {
+    "regex": "\\b45\\b",
+    "notContains": ["44 days", "46 days", "47 days", "is 44", "is 46"]
+  },
+  "note": "2026 is not a leap year (Feb = 28). 16 (rest of Jan) + 28 (Feb) + 1 (Mar 1 excluded means 0)... = ordinal 60 - 15 = 45."
+}

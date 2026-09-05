@@ -1,0 +1,11 @@
+{
+  "id": "lookup-http-418",
+  "category": "lookup",
+  "intent": "An obscure but real fact — the model must recall it rather than deny it exists.",
+  "prompt": "What does HTTP status code 418 mean?",
+  "grader": {
+    "contains": ["teapot"],
+    "notContains": ["418 is not a real", "no such status code", "418 means Payload Too Large", "418 is Unauthorized"]
+  },
+  "note": "418 = \"I'm a teapot\" (RFC 2324). Pass = says teapot. Fail = denies it exists or gives a different code's meaning."
+}

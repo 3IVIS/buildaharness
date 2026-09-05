@@ -18,8 +18,14 @@
  *   npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,lookup-capital
  *   npx tsx scripts/run-harness-benchmark.ts --arms=baseline
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
+ *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
  *
- * The `bare` and `langgraph` arms are not implemented yet — see eval/README.md.
+ * The LLM-as-judge (`eval/judge.ts`, a tool-free `ClaudeCliLLMClient`) is **on by default** for a
+ * real run — a `grader.judge` rubric that would otherwise score `skipped` gets classified YES/NO.
+ * Pass `--no-judge` to turn it off. The machinery `eval/*.test.ts` never invoke this script and
+ * stay judge-less (their `judge` checks keep scoring `skipped`).
+ *
+ * The `langgraph` arm is not implemented yet — see eval/README.md.
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -29,6 +35,7 @@ import { loadCorpus } from '../eval/corpus/index.js'
 import { IMPLEMENTED_ARMS, type Arm } from '../eval/arms.js'
 import { runBenchmark, type BenchmarkReport } from '../eval/runner.js'
 import { renderMarkdown, diffReports, renderDiff } from '../eval/report.js'
+import { ClaudeCliJudge } from '../eval/judge.js'
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const REPO_ROOT = resolve(PKG_ROOT, '..', '..')
@@ -54,11 +61,19 @@ async function main(): Promise<void> {
   let arms: Arm[] = IMPLEMENTED_ARMS
   if (armFilter) arms = arms.filter((a) => armFilter.includes(a.name))
 
-  console.log(`Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli...\n`)
+  // LLM-as-judge: on by default for a real run, `--no-judge` opts out. Tool-free ClaudeCliLLMClient
+  // (no API key). A judge error / unparseable verdict resolves to `false` inside judge(), never a throw.
+  const judge = process.argv.includes('--no-judge') ? undefined : new ClaudeCliJudge()
+
+  console.log(
+    `Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli` +
+      ` (judge: ${judge ? 'enabled' : 'disabled'})...\n`,
+  )
 
   const report = await runBenchmark({
     tasks,
     arms,
+    judge,
     // The claude-cli backend resolves tool calls out of process via its own MCP server, which
     // needs the workspace path up front — so build one client per task, wiring the file/shell MCP
     // tools only when the task declares them.

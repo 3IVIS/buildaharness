@@ -3,12 +3,25 @@ name: Offline eval harness
 # Run on every push to main and nightly at 03:00 UTC.
 # The nightly run uses EVAL_USE_REAL_LLM=true to measure actual quality scores.
 # Push runs use mocked LLM (no API key needed) to verify the pipeline is intact.
+#
+# Jobs:
+#   eval-spec-validation             — spec + MAF compile gate (always, no LLM)
+#   eval-rag / eval-moderation / eval-debate
+#                                    — DeepEval/Ragas quality metrics; real-LLM nightly (OPENAI_API_KEY)
+#   eval-harness-benchmark           — the personal-assistant comparative harness benchmark
+#                                      (Plan Phase B). Push: keyless tsc + baseline.json parse.
+#                                      Nightly: real-LLM run of the baseline/flagOn/bare arms via
+#                                      the `claude` CLI (ANTHROPIC_API_KEY), Rule 6 gate + artifact.
+#   eval-harness-benchmark-langgraph — the `langgraph` arm of that benchmark, run from adapter/eval/
+#                                      (Python). Push: keyless structural test. Nightly: real-LLM
+#                                      run of the curated task subset (OPENAI_API_KEY) + artifact.
 on:
   push:
     branches: [main]
     paths:
       - "adapter/**"
       - "flows/**"
+      - "packages/personal-assistant/**"
       - ".github/workflows/eval.yml"
   schedule:
     - cron: "0 3 * * *"   # nightly at 03:00 UTC
@@ -162,3 +175,102 @@ jobs:
           name: eval-debate-${{ github.run_id }}
           path: adapter/.deepeval/
           retention-days: 30
+
+  # ── Comparative harness benchmark (Plan Phase B) ─────────────────────────────
+  # packages/personal-assistant/eval/ — arm-vs-arm task benchmark.
+  # Push: LLM-free sanity only (the eval/*.test.ts machinery is covered by the CI
+  #   frontend job's `npm test`; here we add a personal-assistant typecheck the CI
+  #   job does not run, plus a parse check on the committed Rule 6 baseline).
+  # Schedule / workflow_dispatch: real run of the implemented arms (baseline,
+  #   flagOn, bare) against the `claude` CLI, gated on ANTHROPIC_API_KEY exactly
+  #   like the jobs above gate on OPENAI_API_KEY. Absent secret → skip, exit 0.
+  eval-harness-benchmark:
+    name: Harness comparative benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Push — LLM-free sanity (typecheck + baseline.json parses)
+        if: github.event_name == 'push'
+        run: |
+          npm run typecheck:personal-assistant
+          node -e "const r=JSON.parse(require('fs').readFileSync('packages/personal-assistant/eval/reports/baseline.json','utf8')); if(!r.perArm||!r.rows) throw new Error('baseline.json missing perArm/rows'); console.log('baseline.json parses — corpusSize', r.corpusSize)"
+      - name: Nightly — real-LLM comparative benchmark (Rule 6 gate)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [[ -z "$ANTHROPIC_API_KEY" ]]; then
+            echo "::notice::ANTHROPIC_API_KEY not set — skipping the real-LLM harness benchmark (nightly not failed)."
+            exit 0
+          fi
+          cd packages/personal-assistant
+          npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/baseline.json
+      - name: Upload harness benchmark report
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-harness-benchmark-${{ github.run_id }}
+          path: |
+            packages/personal-assistant/eval/reports/*.json
+            docs/harness_comparative_benchmark.md
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ── The `langgraph` arm of the comparative harness benchmark ────────────────
+  # adapter/eval/harness_bench_langgraph.py — a minimal hand-built LangGraph ReAct
+  # agent over the same shared corpus (a curated 10-task subset). Sibling of
+  # eval-harness-benchmark because it is Python (adapter deps), not Node, and
+  # routes through the OPENAI_API_KEY / LiteLLM path the other adapter evals use.
+  # Push: keyless structural + grader-parity test. Schedule / dispatch: real run
+  # when OPENAI_API_KEY is present (same guard as eval-rag). Absent → skip, exit 0.
+  eval-harness-benchmark-langgraph:
+    name: Harness benchmark — langgraph arm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            adapter/requirements.txt
+            adapter/requirements-eval.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-eval.txt
+      - name: Set eval environment
+        run: |
+          echo "TESTING=true" >> $GITHUB_ENV
+          echo "DATABASE_URL=sqlite+aiosqlite:///:memory:" >> $GITHUB_ENV
+          echo "JWT_SECRET=ci-eval-secret-not-for-production" >> $GITHUB_ENV
+          OPENAI_KEY="${{ secrets.OPENAI_API_KEY }}"
+          if [[ ("${{ github.event_name }}" == "schedule" || "${{ inputs.use_real_llm }}" == "true") && -n "$OPENAI_KEY" ]]; then
+            echo "EVAL_USE_REAL_LLM=true" >> $GITHUB_ENV
+            echo "OPENAI_API_KEY=$OPENAI_KEY" >> $GITHUB_ENV
+          fi
+      - name: Structural + grader-parity test (keyless)
+        run: pytest eval/test_harness_bench_langgraph.py -v --tb=short
+      - name: Nightly — run the langgraph arm over the curated subset
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "${EVAL_USE_REAL_LLM:-}" != "true" ]]; then
+            echo "::notice::OPENAI_API_KEY not set — skipping the langgraph-arm real-LLM run (nightly not failed)."
+            exit 0
+          fi
+          python3.12 eval/harness_bench_langgraph.py --out eval/reports/langgraph-report.json
+      - name: Upload langgraph-arm report
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-harness-benchmark-langgraph-${{ github.run_id }}
+          path: adapter/eval/reports/langgraph-*.json
+          retention-days: 30
+          if-no-files-found: ignore

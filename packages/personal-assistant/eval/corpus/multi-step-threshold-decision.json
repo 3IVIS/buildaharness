@@ -1,0 +1,16 @@
+{
+  "id": "multi-step-threshold-decision",
+  "category": "multi_step",
+  "intent": "Read metrics, compute a rate, compare against a stated threshold, answer the yes/no it implies.",
+  "prompt": "Our SLO requires the error rate to stay below 1%. Look at metrics.json and tell me whether we are currently in breach. Show the percentage.",
+  "workspace": [
+    { "path": "metrics.json", "content": "{ \"window\": \"1h\", \"requests\": 10000, \"errors\": 87 }\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["0.87"],
+    "regex": "not (in )?breach|within (the )?slo|below (the )?(1%|threshold|slo)|no breach|compliant|under (the )?threshold|we are (ok|fine|good)",
+    "notContains": ["in breach", "we are breaching", "slo is violated", "exceeds 1%", "above the threshold"]
+  },
+  "note": "87 / 10000 = 0.87%, which is below 1% -> not in breach. Requires both the number and the correct verdict."
+}
