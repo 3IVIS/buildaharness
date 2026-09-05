@@ -263,11 +263,11 @@ def run_task(task: TaskSpec, model_name: str) -> ArmTurnOutput:
 def run_benchmark(task_ids: tuple[str, ...] | None = None, model_name: str | None = None) -> dict[str, Any]:
     """Run the LangGraph arm over the curated subset (or ``task_ids``) and return a
     report dict in the ``eval/reports/*.json`` shape. Makes real LLM calls."""
-    model_name = model_name or os.getenv("EVAL_MODEL", "gpt-4o-mini")
+    resolved_model: str = model_name or os.environ.get("EVAL_MODEL", "gpt-4o-mini")
     tasks = load_corpus(task_ids or SUBSET_IDS)
     rows: list[dict[str, Any]] = []
     for task in tasks:
-        out = run_task(task, model_name)
+        out = run_task(task, resolved_model)
         graded = grade_task(task, out)
         rows.append(build_row(task, out, graded))
         verdict = "ERROR" if out.status == "error" else ("PASS" if graded.success else "FAIL")

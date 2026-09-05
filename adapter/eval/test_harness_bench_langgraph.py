@@ -11,6 +11,8 @@ checks the report shape.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from eval.conftest import needs_real_llm
@@ -126,8 +128,8 @@ def test_workspace_is_a_real_tempdir_and_path_escape_is_blocked(tmp_path):
 # ── Grader parity with graders.ts ────────────────────────────────────────────
 
 
-def _task(**kw) -> TaskSpec:
-    base = dict(
+def _task(**kw: Any) -> TaskSpec:
+    base: dict[str, Any] = dict(
         id="t",
         category="lookup",
         intent="i",
