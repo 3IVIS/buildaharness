@@ -1,0 +1,14 @@
+{
+  "generation_id": 1,
+  "permission": "ALLOW",
+  "execution_mode": "CAUTIOUS",
+  "escalation": "NONE",
+  "risk_estimate": 0,
+  "confidence_estimate": 0.72,
+  "escalation_reason": null,
+  "block_mask": [],
+  "notes": [
+    "Coverage gap in symptom_coverage (0.250): exploration actions allowed",
+    "Coverage gap in explanation_coverage (0.350): exploration actions allowed"
+  ]
+}

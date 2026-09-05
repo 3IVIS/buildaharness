@@ -1,0 +1,31 @@
+{
+  "id": "boundary-verification-strength-caution",
+  "description": "EXACT 0.4 boundary for verification_strength (non-coverage). Not < CRITICAL_THRESHOLD (no block) and not < CAUTION_THRESHOLD (compute_elevation_factor skips it, no tier-3) -> permission=ALLOW, execution_mode=NORMAL, no notes, empty block_mask.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1.0,
+      "consistency": 1.0,
+      "support": 1.0
+    },
+    "coverage_health": {
+      "symptom_coverage": 1.0,
+      "explanation_coverage": 1.0
+    },
+    "verification_health": {
+      "strength": 0.4,
+      "feasibility": 1.0
+    },
+    "execution_health": {
+      "progress_rate": 1.0,
+      "failure_recurrence": 0.0,
+      "oscillation_score": 0.0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

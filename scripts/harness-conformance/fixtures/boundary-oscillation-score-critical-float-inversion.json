@@ -1,0 +1,31 @@
+{
+  "id": "boundary-oscillation-score-critical-float-inversion",
+  "description": "FLOAT-INVERSION BOUNDARY: execution_health.oscillation_score raw=0.8 inverts to 1.0-0.8=0.19999999999999996 in IEEE-754 on BOTH runtimes \u2014 just below CRITICAL_THRESHOLD (0.2), not exactly on it. So tier 2 DOES block this dim (strict `<` is satisfied by the rounding error). permission=DENY, execution_mode=RECOVERY, one block_mask entry for oscillation_score, no deadlock. Pins that the 1.0-raw inversion is bit-identical across TS/Python.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1.0,
+      "consistency": 1.0,
+      "support": 1.0
+    },
+    "coverage_health": {
+      "symptom_coverage": 1.0,
+      "explanation_coverage": 1.0
+    },
+    "verification_health": {
+      "strength": 1.0,
+      "feasibility": 1.0
+    },
+    "execution_health": {
+      "progress_rate": 1.0,
+      "failure_recurrence": 0.0,
+      "oscillation_score": 0.8
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

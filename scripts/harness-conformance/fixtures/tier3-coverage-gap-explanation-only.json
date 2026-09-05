@@ -1,0 +1,31 @@
+{
+  "id": "tier3-coverage-gap-explanation-only",
+  "description": "explanation_coverage resolves to 0.3 \u2014 in [CRITICAL_THRESHOLD, CAUTION_THRESHOLD). symptom_coverage stays healthy. Expect permission=ALLOW, execution_mode=CAUTIOUS, and exactly one 'Coverage gap in explanation_coverage (0.300)' note (the symptom_only and both-dims cases already have fixtures).",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1.0,
+      "consistency": 1.0,
+      "support": 1.0
+    },
+    "coverage_health": {
+      "symptom_coverage": 1.0,
+      "explanation_coverage": 0.3
+    },
+    "verification_health": {
+      "strength": 1.0,
+      "feasibility": 1.0
+    },
+    "execution_health": {
+      "progress_rate": 1.0,
+      "failure_recurrence": 0.0,
+      "oscillation_score": 0.0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 1,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

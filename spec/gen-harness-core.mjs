@@ -58,6 +58,7 @@ const {
   risk_dimensions: riskDimensions,
   layer_tier: layerTier,
   dep_class_gap_note_prefix: depClassGapNotePrefix,
+  model_provenance_note_prefix: modelProvenanceNotePrefix,
   recovery_classification_table: recoveryClassificationTable,
 } = stripReadme(core)
 
@@ -131,6 +132,8 @@ function renderPy() {
   lines.push('')
   lines.push(`DEP_CLASS_GAP_NOTE_PREFIX: str = ${pyStr(depClassGapNotePrefix)}`)
   lines.push('')
+  lines.push(`MODEL_PROVENANCE_NOTE_PREFIX: str = ${pyStr(modelProvenanceNotePrefix)}`)
+  lines.push('')
   lines.push('RECOVERY_CLASSIFICATION_TABLE: dict[str, dict[str, str]] = {')
   for (const [k, v] of Object.entries(recoveryClassificationTable)) {
     lines.push(`    ${pyStr(k)}: {"policy": ${pyStr(v.policy)}, "action": ${pyStr(v.action)}},`)
@@ -180,6 +183,8 @@ function renderTs() {
   lines.push('}')
   lines.push('')
   lines.push(`export const DEP_CLASS_GAP_NOTE_PREFIX = ${tsStr(depClassGapNotePrefix)}`)
+  lines.push('')
+  lines.push(`export const MODEL_PROVENANCE_NOTE_PREFIX = ${tsStr(modelProvenanceNotePrefix)}`)
   lines.push('')
   lines.push('export interface RecoveryClassification {')
   lines.push('  policy: string')

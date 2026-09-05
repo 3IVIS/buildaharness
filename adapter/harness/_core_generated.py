@@ -72,6 +72,8 @@ LAYER_TIER: dict[str, str] = {
 
 DEP_CLASS_GAP_NOTE_PREFIX: str = "dep_class_gap: "
 
+MODEL_PROVENANCE_NOTE_PREFIX: str = "provenance: uncalibrated model-derived value drove block on "
+
 RECOVERY_CLASSIFICATION_TABLE: dict[str, dict[str, str]] = {
     "timeout": {"policy": "retry_with_backoff", "action": "execution_retry"},
     "transient_tool_error": {"policy": "retry_with_backoff", "action": "execution_retry"},

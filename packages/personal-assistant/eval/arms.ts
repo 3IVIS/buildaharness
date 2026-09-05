@@ -10,8 +10,8 @@
  * Implemented:
  *   - `baseline` / `flagOn` — `PersonalAssistant` (harness runs post-hoc; identical until a phase
  *     ships a flag, at which point `flagOn` sets it).
+ *   - `bare` — a minimal ReAct loop, no harness, no staging (see bare-arm.ts).
  * Declared, not built (Plan Phase B follow-on — see eval/README.md):
- *   - `bare`      — a minimal ReAct loop, no harness.
  *   - `langgraph` — the equivalent FlowSpec compiled to LangGraph (Python; separate runner).
  */
 import type { ILLMClient } from '@buildaharness/runtime'
@@ -20,6 +20,9 @@ import { PersonalAssistant } from '../src/assistant.js'
 import type { TaskSpec } from './corpus/schema.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
+import { bareArm } from './bare-arm.js'
+
+export { bareArm }
 
 export type ArmName = 'baseline' | 'bare' | 'langgraph' | 'flagOn'
 
@@ -103,14 +106,6 @@ export const flagOnArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled'),
 }
 
-export const bareArm: Arm = {
-  name: 'bare',
-  label: 'Minimal ReAct loop, no harness (not implemented — Plan Phase B follow-on)',
-  run: async () => {
-    throw new Error('bare arm not implemented — Plan Phase B follow-on')
-  },
-}
-
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -119,5 +114,5 @@ export const langgraphArm: Arm = {
   },
 }
 
-export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm]
+export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm]
 export const ALL_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, langgraphArm]

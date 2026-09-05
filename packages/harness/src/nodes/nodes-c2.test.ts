@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { classifyRecovery } from '../recovery-policy.js'
-import { RECOVERY_CLASSIFICATION_TABLE } from '../_core-generated.js'
+import { RECOVERY_CLASSIFICATION_TABLE, MODEL_PROVENANCE_NOTE_PREFIX } from '../_core-generated.js'
 import { verify } from './verify.js'
 import { WorldModel, type Belief } from '../state/world-model.js'
+import { Diagnostics } from '../state/diagnostics.js'
+import { FailureDiagnostics } from '../state/failure-diagnostics.js'
+import { resolveControlState } from './resolve-control-state.js'
 
 // Phase C2 (plans/harness_consolidation_and_control_plane_plan.html;
 // docs/adr/004-shared-semantic-core.md) — additive shared-core fields, mirrors
@@ -70,6 +73,53 @@ describe('C2 — VerificationResult.critical_failure_tiers (INV-12)', () => {
     // de-duplicated + sorted
     expect([...both.critical_failure_tiers].sort()).toEqual(both.critical_failure_tiers)
     expect(new Set(both.critical_failure_tiers).size).toBe(both.critical_failure_tiers.length)
+  })
+})
+
+describe('C2 — Diagnostics.provenance (INV-11)', () => {
+  const sub10 = [
+    'belief_freshness', 'belief_consistency', 'belief_support',
+    'symptom_coverage', 'explanation_coverage',
+    'verification_strength', 'verification_feasibility',
+    'progress_rate', 'failure_recurrence', 'oscillation_score',
+  ]
+
+  it('INV-11: every sub-dimension has a provenance entry after resolveControlState', () => {
+    const d = new Diagnostics()
+    expect(d.provenance).toEqual({})
+    resolveControlState(d, new WorldModel(), new FailureDiagnostics())
+    for (const name of sub10) {
+      expect(d.provenance[name]).toBeDefined()
+      expect(d.provenance[name].source).toBe('deterministic')
+    }
+  })
+
+  it('an explicit provenance entry is not overwritten by the fill', () => {
+    const d = new Diagnostics()
+    d.provenance.belief_support = { source: 'model', calibrated: true, evidence_ids: ['e1'] }
+    resolveControlState(d, new WorldModel(), new FailureDiagnostics())
+    expect(d.provenance.belief_support).toEqual({ source: 'model', calibrated: true, evidence_ids: ['e1'] })
+  })
+
+  it('an uncalibrated model-derived value that drives a Tier-2 block is annotated in notes[]', () => {
+    const d = new Diagnostics({ belief_health: { freshness: 1, consistency: 1, support: 0.05 } })
+    d.provenance.belief_support = { source: 'model', calibrated: false, evidence_ids: [] }
+    const cs = resolveControlState(d, new WorldModel(), new FailureDiagnostics())
+    expect(cs.permission).toBe('DENY')
+    expect(cs.notes).toContain(`${MODEL_PROVENANCE_NOTE_PREFIX}belief_support`)
+  })
+
+  it('a calibrated model block, or a deterministic block, is NOT annotated', () => {
+    for (const p of [
+      { source: 'model' as const, calibrated: true, evidence_ids: [] },
+      { source: 'deterministic' as const, calibrated: false, evidence_ids: [] },
+    ]) {
+      const d = new Diagnostics({ belief_health: { freshness: 1, consistency: 1, support: 0.05 } })
+      d.provenance.belief_support = p
+      const cs = resolveControlState(d, new WorldModel(), new FailureDiagnostics())
+      expect(cs.permission).toBe('DENY')
+      expect(cs.notes.some(n => n.startsWith(MODEL_PROVENANCE_NOTE_PREFIX))).toBe(false)
+    }
   })
 })
 

@@ -1,0 +1,31 @@
+{
+  "id": "tier2-no-deadlock-recovery-chain-len2",
+  "description": "belief_consistency and verification_strength both < CRITICAL_THRESHOLD -> two block_mask entries. build_recovery_action_graph: belief_consistency's recovery (consistency_repair) requires verification_strength (blocked) -> edge belief_consistency->verification_strength; verification_strength's recovery (verification_pass) requires dep_graph_quality, which is NOT a sub-dimension and thus never blocked -> no outgoing edge. The chain is length-2 and open, so detect_deadlock is False -> escalation stays NONE (permission=DENY, execution_mode=RECOVERY, escalation_reason=null). Companion to tier2-block-multi-no-deadlock: a real recovery-dependency EDGE between two blocked sub-dims still forms no cycle.",
+  "diagnostics": {
+    "belief_health": {
+      "freshness": 1.0,
+      "consistency": 0.1,
+      "support": 1.0
+    },
+    "coverage_health": {
+      "symptom_coverage": 1.0,
+      "explanation_coverage": 1.0
+    },
+    "verification_health": {
+      "strength": 0.1,
+      "feasibility": 1.0
+    },
+    "execution_health": {
+      "progress_rate": 1.0,
+      "failure_recurrence": 0.0,
+      "oscillation_score": 0.0
+    },
+    "dep_class_gap_annotation": null
+  },
+  "world_model": {
+    "generation_id": 2,
+    "contradictions": []
+  },
+  "ts_matched_pattern": null,
+  "py_matched_pattern": null
+}

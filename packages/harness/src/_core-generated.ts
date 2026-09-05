@@ -56,6 +56,8 @@ export const LAYER_TIER: Record<string, LayerTier> = {
 
 export const DEP_CLASS_GAP_NOTE_PREFIX = "dep_class_gap: "
 
+export const MODEL_PROVENANCE_NOTE_PREFIX = "provenance: uncalibrated model-derived value drove block on "
+
 export interface RecoveryClassification {
   policy: string
   action: string
