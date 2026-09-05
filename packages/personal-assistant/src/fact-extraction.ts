@@ -16,11 +16,11 @@ const factPatterns = getFactMarkerPatterns()
  * trail) — defined now so a future producer has a typed slot to land in rather than overloading
  * MODEL_INFERRED for something with a different trust profile.
  *
- * Storage-taxonomy note (Phase 5b): `UserFact` is this codebase's Knowledge tier ("what we
- * believe") — `text`/`durable` is the belief itself; `FactSource` is its Evidence tier ("why we
- * believe it"). See packages/personal-assistant/README.md's "Memory, Knowledge, and the other
- * four" section for the full six-tier map (Memory/Knowledge/Evidence/Preference/State/Experience)
- * this fits into, and assistant.ts's DURABLE_FACTS_KEY doc comment for where Knowledge is stored.
+ * Storage-taxonomy note (Phase 5b, superseded by Phase E's typed `MemoryTier` below): `UserFact`
+ * is this codebase's Knowledge-shaped data ("what we believe") — `text`/`durable` is the belief
+ * itself; `FactSource` is its provenance ("why we believe it"). See
+ * packages/personal-assistant/README.md's "Memory tiers" section for the full tier map this fits
+ * into, and memory-service.ts's DURABLE_FACTS_KEY doc comment for where promoted facts are stored.
  */
 export type FactSource = 'user_asserted' | 'model_inferred' | 'observed' | 'externally_verified'
 
