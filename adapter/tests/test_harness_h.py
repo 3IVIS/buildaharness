@@ -23,6 +23,16 @@ from harness.execution import execute
 from harness.policy import select_best_action
 from harness.task_graph import Task, TaskGraph, TaskOutcome, apply_task_outcome
 
+
+def _get(tg: TaskGraph, task_id: str) -> Task:
+    """tg.get_task() is typed Task | None; every call site here knows the task
+    exists (it just constructed the graph), so assert that instead of letting
+    mypy flag a union-attr error at every .status/.completed_evidence access."""
+    task = tg.get_task(task_id)
+    assert task is not None
+    return task
+
+
 HARNESS_DIR = Path(__file__).parent.parent / "harness"
 
 # Files allowed to call TaskGraph.update_task_status() directly — the primitive's own
@@ -48,9 +58,9 @@ def test_inv17_no_direct_update_task_status_outside_task_graph() -> None:
 def test_apply_task_outcome_transitions_status() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
     apply_task_outcome(tg, "a", TaskOutcome(status="ACTIVE"))
-    assert tg.get_task("a").status == "ACTIVE"
+    assert _get(tg, "a").status == "ACTIVE"
     apply_task_outcome(tg, "a", TaskOutcome(status="VERIFYING"))
-    assert tg.get_task("a").status == "VERIFYING"
+    assert _get(tg, "a").status == "VERIFYING"
 
 
 def test_apply_task_outcome_invalid_transition_raises() -> None:
@@ -62,7 +72,7 @@ def test_apply_task_outcome_invalid_transition_raises() -> None:
 def test_apply_task_outcome_stamps_completed_evidence_on_complete() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="VERIFYING")])
     apply_task_outcome(tg, "a", TaskOutcome(status="COMPLETE", evidence_ids=["belief-1", "belief-2"]))
-    task = tg.get_task("a")
+    task = _get(tg, "a")
     assert task.status == "COMPLETE"
     assert task.completed_evidence == ["belief-1", "belief-2"]
 
@@ -70,13 +80,13 @@ def test_apply_task_outcome_stamps_completed_evidence_on_complete() -> None:
 def test_apply_task_outcome_does_not_stamp_evidence_on_non_complete() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
     apply_task_outcome(tg, "a", TaskOutcome(status="ACTIVE", evidence_ids=["belief-1"]))
-    assert tg.get_task("a").completed_evidence == []
+    assert _get(tg, "a").completed_evidence == []
 
 
 def test_apply_task_outcome_block_reason_propagates() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
     apply_task_outcome(tg, "a", TaskOutcome(status="BLOCKED", block_reason="waiting on human"))
-    task = tg.get_task("a")
+    task = _get(tg, "a")
     assert task.status == "BLOCKED"
     assert task.block_reason == "waiting on human"
 
@@ -118,7 +128,7 @@ def test_execute_success_lifecycle_via_apply_task_outcome() -> None:
         evidence_store=None,
     )
     assert result.success is True
-    assert tg.get_task("t1").status == "VERIFYING"
+    assert _get(tg, "t1").status == "VERIFYING"
 
 
 def test_execute_failure_lifecycle_via_apply_task_outcome() -> None:
@@ -137,4 +147,4 @@ def test_execute_failure_lifecycle_via_apply_task_outcome() -> None:
         evidence_store=None,
     )
     assert result.success is False
-    assert tg.get_task("t1").status == "FAILED"
+    assert _get(tg, "t1").status == "FAILED"

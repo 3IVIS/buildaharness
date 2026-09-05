@@ -116,6 +116,7 @@ def _make_in_memory_store() -> ExperienceStore:
 
 
 def _record_attempts(store: ExperienceStore, strategy_type: str, failure_class: str, outcomes: list[bool]) -> None:
+    assert store.db_session_factory is not None
     with store.db_session_factory() as session:
         for success in outcomes:
             upsert_strategy_weight(strategy_type, failure_class, success, session)
