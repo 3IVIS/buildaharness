@@ -8,8 +8,8 @@ Create Date: 2026-08-10
 Adds `promoted boolean NOT NULL DEFAULT false` to both experience-store tables. Before
 this, update_experience_store() wrote directly into the same rows warm_start() read on
 the very next run — "immediate learning," not "immutable trace -> offline learning ->
-candidate policy -> evaluation -> promotion -> future runs" (docs/adr/002-harness-
-semantic-contract.md's guarantee #8). Every write now lands as an unpromoted candidate;
+candidate policy -> evaluation -> promotion -> future runs" (ADR-002, the Harness
+Semantic Contract, guarantee #8). Every write now lands as an unpromoted candidate;
 only an explicit, separate promote_experience_entries()/promote_strategy_weights() call
 (never invoked automatically by update_experience_store or the main loop) makes a
 candidate visible to query_by_type()/get_strategy_weights(), and so to warm_start().

@@ -10,7 +10,7 @@ Promotion boundary (Phase 2 of plans/harness_and_assistant_architecture_remediat
 plan.html): before this, update_experience_store() wrote directly into the same rows
 warm_start() read on the very next run — a completed run's own outcome could influence
 that same run's later reads, and definitely influenced every subsequent run immediately.
-docs/adr/002-harness-semantic-contract.md's guarantee #8 ("learning cannot alter
+ADR-002's (the Harness Semantic Contract) guarantee #8 ("learning cannot alter
 correctness within a run") had no enforcement point. Now every write (append(),
 upsert_strategy_weight()) always lands with promoted=False, and every read
 (query_by_type(), get_strategy_weights(), and so warm_start()) only ever sees

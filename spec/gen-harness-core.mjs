@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase C1 (plans/harness_consolidation_and_control_plane_plan.html; docs/adr/004-shared-semantic-core.md).
+ * Phase C1 (harness consolidation plan; ADR-004, shared semantic core).
  *
  * Generates the harness's pure-data decision constants into BOTH runtimes from
  * one canonical source, spec/harness-core.json:
@@ -65,7 +65,7 @@ const {
 const GEN_HEADER_LINES = [
   'DO NOT EDIT — generated from spec/harness-core.json by spec/gen-harness-core.mjs.',
   'Run `node spec/gen-harness-core.mjs` after editing the source. CI fails if this file is stale.',
-  'See docs/adr/004-shared-semantic-core.md (Phase C1).',
+  'See ADR-004 (shared semantic core, Phase C1).',
 ]
 
 // ── Python ───────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import {
 // CRITICAL_THRESHOLD, CAUTION_THRESHOLD, RECOVERY_ACTION_DEPENDENCIES,
 // DIMENSION_RECOVERY, CONFIDENCE_DIMENSIONS, RISK_DIMENSIONS and
 // DEP_CLASS_GAP_NOTE_PREFIX are generated from spec/harness-core.json into
-// _core-generated.ts (Phase C1 — docs/adr/004-shared-semantic-core.md), the single
+// _core-generated.ts (Phase C1 — ADR-004, shared semantic core), the single
 // source of truth shared with adapter/harness/control_state.py. The resolver
 // ALGORITHM below stays hand-mirrored with control_state.py, guarded by
 // scripts/harness-conformance/compare.mjs.
@@ -84,7 +84,7 @@ function ensureProvenance(diagnostics: Diagnostics, subDims: Array<[string, numb
 }
 
 /**
- * INV-11 annotation (criticism001 #3, docs/adr/004): when a Tier-1/2 block is driven by a
+ * INV-11 annotation (criticism001 #3, ADR-004): when a Tier-1/2 block is driven by a
  * sub-dimension whose value is an uncalibrated model estimate, say so in notes[]. Annotation
  * only — the resolver does NOT dampen the block (that behaviour change is left behind the
  * Phase C flag per ADR-004). Mirrors control_state.py's _attach_provenance_notes() exactly.

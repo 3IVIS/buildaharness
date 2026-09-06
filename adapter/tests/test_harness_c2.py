@@ -1,6 +1,6 @@
 """
-Phase C2 (plans/harness_consolidation_and_control_plane_plan.html;
-docs/adr/004-shared-semantic-core.md) — additive fields on the shared semantic core.
+Phase C2 (harness consolidation plan; ADR-004, shared semantic core) — additive
+fields on the shared semantic core.
 
 Covers:
   - the Failure -> Classification -> Recovery Policy table (criticism002 #7):

@@ -7,9 +7,8 @@ import { Diagnostics } from '../state/diagnostics.js'
 import { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { resolveControlState } from './resolve-control-state.js'
 
-// Phase C2 (plans/harness_consolidation_and_control_plane_plan.html;
-// docs/adr/004-shared-semantic-core.md) — additive shared-core fields, mirrors
-// adapter/tests/test_harness_c2.py.
+// Phase C2 (harness consolidation plan; ADR-004, shared semantic core) —
+// additive shared-core fields, mirrors adapter/tests/test_harness_c2.py.
 
 describe('C2 — recovery classification -> policy table (criticism002 #7)', () => {
   it('a known failure class short-circuits to its policy + action', () => {

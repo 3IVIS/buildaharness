@@ -6,7 +6,7 @@ import { WorldModel } from '../state/world-model.js'
 import { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { resolveControlState } from './resolve-control-state.js'
 
-// INV-13 (docs/adr/004-shared-semantic-core.md): "the ~40 shared fixtures produce
+// INV-13 (ADR-004, shared semantic core): "the ~40 shared fixtures produce
 // byte-identical ControlState output on both runtimes, asserted in both the pytest and
 // vitest suites (not only in compare.mjs), so a one-side drift fails a unit run too."
 //

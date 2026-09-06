@@ -1,7 +1,7 @@
 /*
  * DO NOT EDIT — generated from spec/harness-core.json by spec/gen-harness-core.mjs.
  * Run `node spec/gen-harness-core.mjs` after editing the source. CI fails if this file is stale.
- * See docs/adr/004-shared-semantic-core.md (Phase C1).
+ * See ADR-004 (shared semantic core, Phase C1).
  */
 
 export const CRITICAL_THRESHOLD = 0.2

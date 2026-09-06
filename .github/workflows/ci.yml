@@ -40,7 +40,7 @@ jobs:
       - name: Check lexical patterns sync
         run: node scripts/check-lexical-patterns-sync.mjs
 
-      # Phase C1 (docs/adr/004-shared-semantic-core.md): the harness decision
+      # Phase C1 (ADR-004, shared semantic core): the harness decision
       # constants (thresholds, recovery-action maps, dimension pools, LAYER_TIER,
       # dep_class_gap note prefix) are generated from spec/harness-core.json into
       # adapter/harness/_core_generated.py and packages/harness/src/_core-generated.ts.

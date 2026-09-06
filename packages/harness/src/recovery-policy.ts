@@ -2,7 +2,7 @@ import { RECOVERY_CLASSIFICATION_TABLE } from './_core-generated.js'
 
 // Failure → Classification → Recovery Policy → Selected Action (criticism002 #7).
 //
-// Phase C2 (docs/adr/004-shared-semantic-core.md) lands this table as DATA + TYPES
+// Phase C2 (ADR-004, shared semantic core) lands this table as DATA + TYPES
 // only. RECOVERY_CLASSIFICATION_TABLE is generated from spec/harness-core.json into
 // _core-generated.ts, shared byte-for-byte with adapter/harness/recovery.py's
 // RECOVERY_CLASSIFICATION_TABLE. classifyRecovery() is a pure lookup: a CLASSIFIED

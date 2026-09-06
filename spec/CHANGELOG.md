@@ -38,7 +38,7 @@ Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to c
 
 Codegen semantics formalised for four fields that were previously open RFC questions.
 All items implemented as of project v0.8.0.
-See [`docs/adr/001-codegen-field-semantics.md`](../docs/adr/001-codegen-field-semantics.md) for full rationale.
+See ADR-001 (codegen field semantics) for full rationale.
 
 - **`output_key`** — Direct state-dict write: node function returns `{output_key: result}`. If absent on `llm_call` or `hitl_breakpoint`, returns `{}`. Canvas warns when `llm_call` has neither `output_key` nor `structured_output`.
 - **`query_expr` / `key_expr` / `value_expr`** — Bare JSONPath selectors (`$.state.key`), not mustache templates. Adapters implement a shared `resolve_expr(expr, state)` helper.

@@ -1,6 +1,6 @@
 """INV-13 — the shared resolver conformance fixtures as a hard in-suite gate.
 
-docs/adr/004-shared-semantic-core.md, INV-13: "the ~40 shared fixtures produce
+ADR-004 (shared semantic core), INV-13: "the ~40 shared fixtures produce
 byte-identical ControlState output on both runtimes, asserted in both the pytest and
 vitest suites (not only in compare.mjs), so a one-side drift fails a unit run too."
 
