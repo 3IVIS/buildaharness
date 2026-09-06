@@ -16,7 +16,12 @@ import {
   type ToolExecutorContext,
   type InvestigationRequestData,
   type InvestigationFinding,
+  type TrajectoryDigestData,
+  type SupervisorDirective,
+  type UserQuestionData,
+  supervisorEnabled,
 } from '@buildaharness/harness'
+import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { extractFactsFromTurn, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
@@ -206,6 +211,25 @@ export class HarnessBridge {
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.
         runInvestigation,
+        // Trajectory Supervisor decider (S5) — the single stall-edge LLM call. Flag-gated on
+        // HARNESS_TRAJECTORY_SUPERVISOR (default OFF); when off, the harness never consults it
+        // and the whole supervisor path stays inert (INV-22). The harness itself only calls this
+        // inside its own cannotMakeProgress() branch. Twin of planner_api.py's _run_planner gate.
+        supervisorDecider: supervisorEnabled()
+          ? (digest: TrajectoryDigestData) => decideSupervisorDirective(digest, this.llmClient, this.model(), onUsage)
+          : undefined,
+        onSupervisorDirective: (directive: SupervisorDirective) => {
+          this.onTrace?.({ kind: 'layer_activity', layer: 'supervisor', fired: directive.action !== 'CONTINUE', reason: `${directive.action}: ${directive.rationale}`.slice(0, 200) })
+        },
+        // Trajectory Supervisor ASK_USER host (S3) — its presence is what lets an ASK_USER
+        // directive surface as a structured supervisor_question escalation instead of degrading
+        // to a plain one. The escalation itself is carried out of run() as an EscalationHalt and
+        // surfaced to the user by the sequencer; this hook is observability only.
+        askUser: supervisorEnabled()
+          ? (q: UserQuestionData) => {
+              this.onTrace?.({ kind: 'layer_activity', layer: 'supervisor', fired: true, reason: `ASK_USER: ${q.question}`.slice(0, 200) })
+            }
+          : undefined,
         // Layered on top of the harness's own always-on lexical/negation-pair check — one call
         // per belief-set growth (never per-pair, never a full re-scan), and skipped entirely
         // when every newly-added belief looks like a structured/technical claim the lexical

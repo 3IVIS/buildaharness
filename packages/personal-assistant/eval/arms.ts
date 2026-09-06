@@ -45,8 +45,9 @@ async function runAssistant(
 
   // The trajectory supervisor (plans/harness_trajectory_supervisor_plan.html) is gated on this
   // env flag in both twins. Arms run sequentially (runner.ts), so a set/restore around the turn
-  // is safe. NOTE: until the S5 follow-up wires `supervisorDecider` into harness-bridge.ts, this
-  // flag has no observable effect from the PA path — `supervisorOn` is currently ≡ `flagOn`.
+  // is safe. harness-bridge.ts reads supervisorEnabled() (→ this env var) to decide whether to
+  // pass a supervisorDecider / askUser host into the harness run, so `supervisorOn` genuinely
+  // diverges from `flagOn` as of S5 — the differential is the stall-edge supervisor call.
   const priorFlag = process.env.HARNESS_TRAJECTORY_SUPERVISOR
   if (supervisor) process.env.HARNESS_TRAJECTORY_SUPERVISOR = 'enabled'
   try {
@@ -133,9 +134,10 @@ export const supervisorOnArm: Arm = {
   name: 'supervisorOn',
   label:
     'PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled — the S7 supervisor-vs-no-supervisor differential arm',
-  // Not in IMPLEMENTED_ARMS yet: the S5 follow-up (wire `supervisorDecider` into harness-bridge.ts)
-  // must land before this arm diverges from `flagOn`. Select it explicitly with
-  // `--arms=baseline,supervisorOn` once that wiring exists. See plan S5 "Still TODO" + S7.
+  // Same one-loop config as `flagOn`; the only difference is the trajectory supervisor being
+  // consulted on the cannotMakeProgress() stall edge. The Rule 6 comparison for the flag
+  // default-on flip is `flagOn` vs `supervisorOn` (isolates the supervisor), run over the S7
+  // `--slice=` corpus multi-seed — see eval/README.md.
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', true),
 }
 
@@ -147,5 +149,5 @@ export const langgraphArm: Arm = {
   },
 }
 
-export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm]
+export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, supervisorOnArm]
 export const ALL_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, supervisorOnArm, langgraphArm]

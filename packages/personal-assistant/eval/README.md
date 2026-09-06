@@ -141,15 +141,16 @@ Run the slice:
 
 ```
 npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup,supervisor_clarification,supervisor_adversarial_digest
-npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_clarification --arms=baseline,supervisorOn --gate=eval/reports/<before>.json --gate-arm=supervisorOn
+npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup,supervisor_clarification,supervisor_adversarial_digest --arms=flagOn,supervisorOn --gate=eval/reports/<before>.json --gate-arm=supervisorOn
 ```
 
-**`supervisorOn` arm** — `PersonalAssistant` with `HARNESS_TRAJECTORY_SUPERVISOR=enabled`. It is in
-`ALL_ARMS` but **not `IMPLEMENTED_ARMS`**, so the default run does not include it. Reason: the S5
-follow-up (wire `supervisorDecider` into `harness-bridge.ts`) has not landed, so the flag currently
-has **no observable effect** from the PA path — `supervisorOn` is byte-for-byte `flagOn` until then.
-Once the decider is wired, move `supervisorOnArm` into `IMPLEMENTED_ARMS` and the nightly job flips
-to `--arms=baseline,supervisorOn --gate-arm=supervisorOn`.
+**`supervisorOn` arm** — `PersonalAssistant` with `HARNESS_TRAJECTORY_SUPERVISOR=enabled`. As of S5
+`harness-bridge.ts` reads `supervisorEnabled()` and, when set, passes a real `supervisorDecider`
+(`src/supervisor-decider.ts` — one LLM call on the stall digest) + `askUser` host into the harness
+run, so this arm genuinely diverges from `flagOn`: the only difference is the trajectory supervisor
+being consulted on the `cannotMakeProgress()` stall edge. It is now in `IMPLEMENTED_ARMS`. The Rule 6
+comparison for the default-on flip is **`flagOn` vs `supervisorOn`** (isolates the supervisor; both
+run one-loop), not `baseline` vs `supervisorOn`.
 
 **Rule 6 for the flag default-on** (`HARNESS_TRAJECTORY_SUPERVISOR`, currently OFF): the
 `supervisorOn` arm must beat `baseline` on the recovery + adversarial + supervisor slices with **no
