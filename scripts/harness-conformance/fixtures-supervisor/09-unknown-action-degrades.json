@@ -1,0 +1,1 @@
+{ "id": "09-unknown-action-degrades", "description": "an out-of-enum action degrades to CONTINUE, rationale preserved", "directive_in": { "action": "SELF_DESTRUCT", "rationale": "malformed model output" } }

@@ -1,0 +1,1 @@
+{ "id": "02-redirect-with-hint", "description": "REDIRECT_STRATEGY keeps its hint", "directive_in": { "action": "REDIRECT_STRATEGY", "rationale": "pivot to tracing", "strategy_hint": "TRACE_EXEC" } }

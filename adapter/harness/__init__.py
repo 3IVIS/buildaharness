@@ -265,6 +265,15 @@ from .risk import (
 )
 from .staleness import assert_generation_fresh, increment_generation_id, is_stale, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
+from .supervisor import (
+    SUPERVISOR_ACTIONS,
+    InvestigationRequest,
+    SupervisorAction,
+    SupervisorDirective,
+    UserQuestion,
+    decide_supervisor_directive,
+    supervisor_enabled,
+)
 from .task_graph import (
     ConflictProbabilityCache,
     Task,
@@ -292,6 +301,10 @@ from .tool_reliability import (
     ToolEnvelope,
     apply_tool_reliability_envelope,
     get_envelope,
+)
+from .trajectory_digest import (
+    TrajectoryDigest,
+    build_digest,
 )
 from .verification import (
     LayerResult,
@@ -324,6 +337,7 @@ __all__ = [
     "DEFAULT_STRATEGY_ORDER",
     "HARNESS_NODE_COMPILERS",
     "STRATEGY_ORDER",
+    "SUPERVISOR_ACTIONS",
     "TOOL_RELIABILITY_ENVELOPES",
     "AdequacyResult",
     "AdversarialPrior",
@@ -369,6 +383,7 @@ __all__ = [
     "HarnessTraceContext",
     "Hypothesis",
     "HypothesisSet",
+    "InvestigationRequest",
     "LayerResult",
     "MatchResult",
     "MechanicalCheckResult",
@@ -405,6 +420,8 @@ __all__ = [
     "StrategyWeightKey",
     "StrategyWeightSample",
     "Structure",
+    "SupervisorAction",
+    "SupervisorDirective",
     "SurfaceBlocker",
     "Task",
     "TaskGraph",
@@ -414,7 +431,9 @@ __all__ = [
     "ToolAvailabilityManifest",
     "ToolEntry",
     "ToolEnvelope",
+    "TrajectoryDigest",
     "UpdateChannel",
+    "UserQuestion",
     "VOIResult",
     "VerificationHealth",
     "VerificationLayer",
@@ -440,6 +459,7 @@ __all__ = [
     "assign_system_breaking_severity",
     "await_clarification",
     "build_default_library",
+    "build_digest",
     "build_manifest",
     "build_strategy_ordering",
     "cannot_make_progress",
@@ -484,6 +504,7 @@ __all__ = [
     "compute_initial_conflict_probabilities",
     "contract_shadow_check",
     "counterfactual_reasoning",
+    "decide_supervisor_directive",
     "decomposition_gate",
     "detect_abstraction_contradictions",
     "detect_contradictions",
@@ -551,6 +572,7 @@ __all__ = [
     "softmax_strategy_policy",
     "staleness_check",
     "staleness_sweep",
+    "supervisor_enabled",
     "switch_strategy",
     "symptom_inference",
     "update_diagnostics",

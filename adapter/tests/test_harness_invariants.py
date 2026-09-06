@@ -20,6 +20,12 @@ Invariants:
   INV-10  experience_store is no-op when absent — structurally identical output
   INV-11  Diagnostic provenance — no sub-dimension reaches the resolver un-provenanced;
           the uncalibrated-model-block annotation is advisory (Phase C2; ADR-004)
+  INV-20  Trajectory Supervisor directive is one-shot — applied at the stall edge once,
+          never re-applied on a later iteration (plans/harness_trajectory_supervisor_plan.html)
+  INV-21  The supervisor never influences resolve_control_state() or adds/edits beliefs,
+          observations, or contradictions — only strategy_state / task_graph / budget
+  INV-22  The supervisor directive is consulted only inside the cannot_make_progress()
+          branch — a non-stalled iteration ignores it entirely
 
 Run with: pytest adapter/tests/test_harness_invariants.py -v
 """
@@ -644,3 +650,81 @@ def test_inv_task_graph_to_dict_unchanged():
 
     after = json.dumps(tg.to_dict(), sort_keys=True)
     assert baseline == after, "INV: to_plan()/to_plan_task() must not mutate task_graph state"
+
+
+# ── INV-20 / INV-21 / INV-22 — Trajectory Supervisor (S1) ────────────────────
+
+
+def _stalled_strategy_state() -> StrategyState:
+    # Proxy 1 (completion velocity): no advance across STALL_WINDOW steps.
+    return StrategyState(completion_history=[0, 0, 0, 0, 0, 0])
+
+
+def _run_stall_iteration(directive, *, strategy_state=None, supervisor_on=True, monkeypatch=None):
+    if monkeypatch is not None:
+        if supervisor_on:
+            monkeypatch.setenv("HARNESS_TRAJECTORY_SUPERVISOR", "1")
+        else:
+            monkeypatch.delenv("HARNESS_TRAJECTORY_SUPERVISOR", raising=False)
+    wm = _make_world_model()
+    ss = strategy_state or _stalled_strategy_state()
+    return (
+        run_one_iteration(
+            world_model=wm,
+            diagnostics=_make_diagnostics(),
+            hypothesis_set=HypothesisSet(active=[], eliminated=[]),
+            task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="ACTIVE", abstraction_level=0)]),
+            failure_diagnostics=FailureDiagnostics(),
+            memory_state=MemoryState(),
+            strategy_state=ss,
+            step_count=0,
+            supervisor_directive=directive,
+        ),
+        ss,
+        wm,
+    )
+
+
+def test_inv_20_supervisor_directive_is_one_shot(monkeypatch):
+    """INV-20: a REDIRECT applied at the stall edge is not re-applied next iteration."""
+    from harness.recovery import STRATEGY_ORDER
+    from harness.supervisor import SupervisorDirective
+
+    ss = _stalled_strategy_state()
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="BROADER_SEARCH")
+    r1, ss, _wm = _run_stall_iteration(d, strategy_state=ss, monkeypatch=monkeypatch)
+    ss = r1["strategy_state"]
+    assert ss.current_strategy == "BROADER_SEARCH"
+
+    # Next stalled iteration, no directive → plain ladder advance, not a re-redirect.
+    r2, _ss2, _wm2 = _run_stall_iteration(None, strategy_state=ss)
+    nxt = STRATEGY_ORDER[STRATEGY_ORDER.index("BROADER_SEARCH") + 1]
+    assert r2["strategy_state"].current_strategy == nxt
+
+
+def test_inv_21_supervisor_does_not_touch_resolver_or_world_model(monkeypatch):
+    """INV-21: with vs without a directive, the resolved control state and the belief/
+    observation/contradiction sets are identical."""
+    from harness.supervisor import SupervisorDirective
+
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="REIMPLEMENT")
+    r_with, _ss1, wm_with = _run_stall_iteration(d, monkeypatch=monkeypatch)
+    r_without, _ss2, wm_without = _run_stall_iteration(None, supervisor_on=False, monkeypatch=monkeypatch)
+
+    assert r_with["control_state_a"].to_dict() == r_without["control_state_a"].to_dict()
+    assert r_with["control_state_b"].to_dict() == r_without["control_state_b"].to_dict()
+    assert [(b.id, b.statement) for b in wm_with.beliefs] == [(b.id, b.statement) for b in wm_without.beliefs]
+    assert [o.id for o in wm_with.observations] == [o.id for o in wm_without.observations]
+    assert [c.id for c in wm_with.contradictions] == [c.id for c in wm_without.contradictions]
+
+
+def test_inv_22_supervisor_ignored_when_not_stalled(monkeypatch):
+    """INV-22: a directive passed on a non-stalled iteration changes nothing."""
+    from harness.supervisor import SupervisorDirective
+
+    ss = StrategyState(completion_history=[1, 2, 3])  # healthy
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="REIMPLEMENT")
+    r, _out_ss, _wm = _run_stall_iteration(d, strategy_state=ss, monkeypatch=monkeypatch)
+    assert r["strategy_state"].current_strategy == "DIRECT_EDIT"
+    assert r["strategy_state"].switch_count == 0
+    assert not any("supervisor" in t for t in r["strategy_state"].switch_triggers)

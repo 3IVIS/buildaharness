@@ -1,0 +1,1 @@
+{ "id": "04-reframe", "description": "REFRAME_PLAN keeps its note", "directive_in": { "action": "REFRAME_PLAN", "rationale": "wrong decomposition", "plan_note": "split the auth task from the storage task" } }

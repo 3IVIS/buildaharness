@@ -1,0 +1,1 @@
+{ "id": "05-gather-evidence", "description": "GATHER_EVIDENCE keeps a well-formed investigation; budget/tools clamped", "directive_in": { "action": "GATHER_EVIDENCE", "rationale": "need the port number", "investigation": { "question": "which port does the adapter bind?", "suggested_tools": ["read_file","web_search","read_file","a","b","c","d","e","f","g"], "budget": 999 } } }

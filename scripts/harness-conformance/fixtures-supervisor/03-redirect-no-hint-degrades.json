@@ -1,0 +1,1 @@
+{ "id": "03-redirect-no-hint-degrades", "description": "REDIRECT_STRATEGY without a hint degrades to CONTINUE identically", "directive_in": { "action": "REDIRECT_STRATEGY", "rationale": "pivot" } }

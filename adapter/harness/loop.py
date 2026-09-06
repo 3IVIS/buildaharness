@@ -53,10 +53,16 @@ from .gates import action_gate, decomposition_gate, post_exec_gate
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .policy import select_best_action
 from .progress import cannot_make_progress
-from .recovery import RecoveryBudget, StrategyState, switch_strategy
+from .recovery import STRATEGY_ORDER, RecoveryBudget, StrategyState, switch_strategy
 from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
+from .supervisor import SupervisorDirective, supervisor_enabled
 from .verification import verify
+
+
+def _supervisor_reason(tag: str, rationale: str) -> str:
+    """Compact switch_triggers entry recording a supervisor intervention."""
+    return f"supervisor:{tag} {rationale}".strip()[:200]
 
 
 def initialize_harness(
@@ -216,6 +222,7 @@ def run_one_iteration(
     target_path: str | None = None,
     workspace_root: str | None = None,
     recovery_budget: RecoveryBudget | None = None,
+    supervisor_directive: SupervisorDirective | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -340,13 +347,52 @@ def run_one_iteration(
                     "step_count": step_count,
                 }
 
+            # Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html, S1) —
+            # a directive decided by the async driver on THIS stall edge is applied here,
+            # before the deterministic ladder. INV-22: only ever consulted inside this
+            # cannot_make_progress() branch. INV-21: touches only strategy_state / task_graph /
+            # recovery_budget / generation_id — never control_state, diagnostics, beliefs, or
+            # hypotheses. flag-gated; an absent directive, CONTINUE, or a not-yet-wired action
+            # (GATHER_EVIDENCE / ASK_USER / ABORT — S3–S6) all fall through to the unchanged
+            # switch_strategy path below.
+            directive = supervisor_directive if supervisor_enabled() else None
             reason = getattr(strategy_state, "stall_reason", "stall_detected")
-            strategy_state = switch_strategy(strategy_state, reason)
-            if recovery_budget is not None:
-                recovery_budget = recovery_budget.consume(plan_revisions=1)
+            supervisor_reframed = False
 
+            if (
+                directive is not None
+                and directive.action == "REFRAME_PLAN"
+                and directive.plan_note
+                and caller_state is not None
+            ):
+                task_graph = apply_replan(
+                    "GLOBAL", None, None, task_graph, world_model, caller_state, plan_note=directive.plan_note
+                )
+                increment_generation_id(world_model)
+                strategy_state.switch_triggers.append(_supervisor_reason("REFRAME_PLAN", directive.rationale))
+                if recovery_budget is not None:
+                    recovery_budget = recovery_budget.consume(plan_revisions=1)
+                supervisor_reframed = True
+            else:
+                order: list[str] | None = None
+                if (
+                    directive is not None
+                    and directive.action == "REDIRECT_STRATEGY"
+                    and directive.strategy_hint in STRATEGY_ORDER
+                ):
+                    order = [strategy_state.current_strategy, directive.strategy_hint]  # type: ignore[list-item]
+                    reason = _supervisor_reason("REDIRECT_STRATEGY", directive.rationale)
+                elif directive is not None and directive.action not in ("CONTINUE", "REDIRECT_STRATEGY"):
+                    # GATHER_EVIDENCE / ASK_USER / ABORT / (REFRAME without caller_state) → S3–S6.
+                    reason = _supervisor_reason(f"{directive.action}->CONTINUE", directive.rationale)
+                strategy_state = switch_strategy(strategy_state, reason, order=order)
+                if recovery_budget is not None:
+                    recovery_budget = recovery_budget.consume(plan_revisions=1)
+
+            if supervisor_reframed:
+                pass  # GLOBAL reframe already rebuilt the task graph — skip the ladder + LOCAL replan
             # P7.3 — escalate when strategy reaches ESCALATE
-            if strategy_state.current_strategy == "ESCALATE":
+            elif strategy_state.current_strategy == "ESCALATE":
                 if harness_run_state is not None:
                     ctrl_stub = ControlState()
                     blocker = _build_surface_blocker("cannot_make_progress", ctrl_stub, task_graph)
@@ -359,8 +405,9 @@ def run_one_iteration(
                             "step_count": step_count,
                         }
 
-            # P6.4 — replan on stall (treat as local scope with no specific contradiction)
-            if caller_state is not None:
+            # P6.4 — replan on stall (treat as local scope with no specific contradiction).
+            # Skipped when the supervisor already did a GLOBAL REFRAME_PLAN this iteration.
+            if caller_state is not None and not supervisor_reframed:
                 contradiction = type("_C", (), {"scope": "local"})()
                 current_task = None
                 try:

@@ -1,0 +1,1 @@
+{ "id": "10-mismatched-payload-stripped", "description": "ABORT carrying an investigation payload must drop it identically", "directive_in": { "action": "ABORT", "rationale": "unrecoverable", "investigation": { "question": "irrelevant" }, "question": { "question": "irrelevant" } } }

@@ -1,0 +1,1 @@
+{ "id": "06-gather-evidence-empty-degrades", "description": "GATHER_EVIDENCE with a blank question degrades to CONTINUE identically", "directive_in": { "action": "GATHER_EVIDENCE", "rationale": "need something", "investigation": { "question": "   " } } }

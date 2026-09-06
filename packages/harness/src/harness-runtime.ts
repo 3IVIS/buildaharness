@@ -19,6 +19,8 @@ import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
 import { rollbackAndReplan, cannotMakeProgress } from './nodes/rollback-replan.js'
+import { SupervisorDirective, resolveSupervisorDirective, type SupervisorDirectiveData } from './supervisor.js'
+import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
@@ -183,6 +185,18 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * covers. See Phase 2/Decision 3b of plans/lexical_functions_hardening_plan.html.
    */
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  /**
+   * Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html, S2) — an optional
+   * async hook consulted ONLY when the run stalls (cannotMakeProgress() is true at the point a
+   * failed task would be rolled back). Given the bounded stall digest, return one directive
+   * (or null / anything malformed → treated as CONTINUE). The harness has no LLM of its own —
+   * this stays a caller-supplied hook, like contradictionChecker / semanticFailureMatcher.
+   * Absent → no supervisor (the default; equivalent to the flag being OFF).
+   */
+  supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
+  /** Fired once, right after supervisorDecider resolves, with the coerced directive that will
+   * be applied. Observability only — like onGateDecision. A throwing handler is swallowed. */
+  onSupervisorDirective?: (directive: SupervisorDirective) => void
 }
 
 export interface HarnessRunResult {
@@ -266,6 +280,8 @@ interface LoopContext {
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
+  onSupervisorDirective?: (directive: SupervisorDirective) => void
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
@@ -328,6 +344,8 @@ function buildInitialContext(
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    supervisorDecider: options.supervisorDecider,
+    onSupervisorDirective: options.onSupervisorDirective,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
     pendingReviewerVerdict: undefined,
@@ -395,6 +413,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    supervisorDecider: options.supervisorDecider,
+    onSupervisorDirective: options.onSupervisorDirective,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
     pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
@@ -1088,6 +1108,23 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // before — a caller can restore real state (e.g. a memoryState.rollback_points snapshot)
       // when a task actually fails, rather than this being dead plumbing.
       const rollbackFn = ctx.rollbackExecutors?.[currentTask.id] ?? ctx.rollbackExecutors?.['default']
+
+      // Trajectory Supervisor (S2) — consult the async decider ONLY on a genuine stall,
+      // exactly like loop.py's S1 wiring. cannotMakeProgress() here also primes
+      // strategyState.stall_reason for the digest (rollbackAndReplan re-checks it anyway).
+      let supervisorDirective: SupervisorDirective | null = null
+      if (ctx.supervisorDecider && cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)) {
+        // cannotMakeProgress() above also primes strategyState.stall_reason for the digest.
+        const digest = buildDigest(ctx.strategyState, ctx.failureDiagnostics, ctx.taskGraph, ctx.worldModel, {
+          successCriteria: ctx.successCriteria,
+        })
+        supervisorDirective = await resolveSupervisorDirective(
+          ctx.supervisorDecider,
+          digest.toJSON(),
+          ctx.onSupervisorDirective,
+        )
+      }
+
       const rollbackResult = rollbackAndReplan(
         currentTask,
         ctx.strategyState,
@@ -1097,6 +1134,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.callerState,
         ctx.experienceStore.available ? ctx.experienceStore : null,
         rollbackFn,
+        supervisorDirective,
       )
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
     }
