@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { DEFAULT_CONFIG } from './config.js'
+import { DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 import {
   isConfigKey,
   envOverridesFromProcessEnv,
@@ -65,11 +66,11 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_SESSION_CALL_LIMIT: '50' })).toEqual({ sessionCallLimit: 50 })
   })
 
-  it('resolves ASSISTANT_ONE_LOOP into oneLoopMode, defaulting a typo to "disabled"', () => {
+  it('resolves ASSISTANT_ONE_LOOP into oneLoopMode, defaulting a typo to the current default', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'enabled' })).toEqual({ oneLoopMode: 'enabled' })
     expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'disabled' })).toEqual({ oneLoopMode: 'disabled' })
-    expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'on' })).toEqual({ oneLoopMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_ONE_LOOP: 'on' })).toEqual({ oneLoopMode: DEFAULT_ONE_LOOP_MODE })
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })

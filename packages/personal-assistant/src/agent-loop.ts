@@ -12,7 +12,7 @@ import type { DebugLogEntry } from './debug-log.js'
 import type { TraceEvent } from './trace-events.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import { evaluateToolPolicy } from './tool-policy.js'
-import { createTurnControlPlaneState, recordToolOutcome, type TurnControlPlaneState } from './tool-control-plane.js'
+import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import {
   FILE_TOOLS,
@@ -289,10 +289,15 @@ export class AgentLoop {
       }
       iteration++
 
-      // Pin the harness's own live per-iteration ControlState on as the gate floor for this
-      // iteration (see doc comment); recordToolOutcome re-resolves it from the turn-local stores
-      // after each dispatched call, which only escalates further.
-      if (toolCtx.controlState) controlPlaneState.controlState = toolCtx.controlState
+      // Fold the harness's own live per-iteration ControlState in as a gate floor for this
+      // iteration (see doc comment), taking whichever of it and the turn-local accumulated state
+      // (which recordToolOutcome re-resolves from this turn's prior tool-call outcomes) is more
+      // restrictive — an overwrite here would let a fresh harness ALLOW silently erase a DENY
+      // this turn's own repeated tool failures already earned (Phase 4c's same-turn
+      // failure-pattern gate).
+      if (toolCtx.controlState) {
+        controlPlaneState.controlState = moreRestrictiveControlState(controlPlaneState.controlState, toolCtx.controlState)
+      }
 
       const step = await this.runToolIterationStep(
         input.messages, input.tools, input.sessionId, input.userMessage, input.sources, dispatchedAnyToolCall,

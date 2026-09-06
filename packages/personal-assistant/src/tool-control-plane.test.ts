@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest } from './tool-control-plane.js'
+import { ControlState } from '@buildaharness/harness'
+import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest, moreRestrictiveControlState } from './tool-control-plane.js'
 
 describe('toolAvailabilityManifest', () => {
   it('marks every named tool available', () => {
@@ -99,5 +100,41 @@ describe('recordToolOutcome', () => {
     recordToolOutcome(state, { toolName: 'not_in_manifest', ok: false, summary: 'unexpected tool' })
     expect(state.evidenceStore.observations).toHaveLength(0)
     expect(state.failureDiagnostics.failure_history).toHaveLength(1)
+  })
+})
+
+describe('moreRestrictiveControlState', () => {
+  const allow = () => new ControlState()
+  const cautious = () => new ControlState({ execution_mode: 'CAUTIOUS' })
+  const humanRequired = () => new ControlState({ escalation: 'HUMAN_REQUIRED' })
+  const deny = () => new ControlState({ permission: 'DENY', execution_mode: 'RECOVERY' })
+
+  it('keeps a DENY over any lesser state, in either argument position', () => {
+    expect(moreRestrictiveControlState(deny(), allow()).permission).toBe('DENY')
+    expect(moreRestrictiveControlState(allow(), deny()).permission).toBe('DENY')
+    expect(moreRestrictiveControlState(deny(), humanRequired()).permission).toBe('DENY')
+  })
+
+  it('a HUMAN_REQUIRED escalation outranks a plain CAUTIOUS or ALLOW', () => {
+    expect(moreRestrictiveControlState(cautious(), humanRequired()).escalation).toBe('HUMAN_REQUIRED')
+    expect(moreRestrictiveControlState(humanRequired(), allow()).escalation).toBe('HUMAN_REQUIRED')
+  })
+
+  it('CAUTIOUS outranks ALLOW', () => {
+    expect(moreRestrictiveControlState(allow(), cautious()).execution_mode).toBe('CAUTIOUS')
+  })
+
+  it('a tie returns the first argument (the turn-local accumulated state the one-loop proposer passes first)', () => {
+    const a = deny()
+    expect(moreRestrictiveControlState(a, deny())).toBe(a)
+  })
+
+  it('regression: a fresh harness ALLOW must not erase a turn-local DENY earned from repeated failures', () => {
+    // The exact shape AgentLoop.createHarnessProposer folds each iteration: the turn-local
+    // ControlState (after 8+ same-turn tool failures -> DENY) vs the harness's own per-iteration
+    // ControlState (which never saw those failures as its own evidence -> ALLOW).
+    const turnLocalAfterFailures = deny()
+    const freshHarnessState = allow()
+    expect(moreRestrictiveControlState(turnLocalAfterFailures, freshHarnessState).permission).toBe('DENY')
   })
 })
