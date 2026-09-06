@@ -18,6 +18,7 @@ import { StrategyState, DEFAULT_STRATEGY_ORDER } from './state/strategy-state.js
 import { FailureDiagnostics, type FailureRecord } from './state/failure-diagnostics.js'
 import { TaskGraph, type Task } from './state/task-graph.js'
 import { WorldModel, type Contradiction } from './state/world-model.js'
+import { resolveControlState } from './nodes/resolve-control-state.js'
 
 const failure = (failure_class: string, step: number): FailureRecord => ({
   id: `f${step}`,
@@ -284,11 +285,27 @@ describe('coerceForWiredActions (S2)', () => {
     expect(coerceForWiredActions(SupervisorDirective.cont('ok')).action).toBe('CONTINUE')
   })
 
-  it.each(['GATHER_EVIDENCE', 'ASK_USER', 'ABORT'] as const)('degrades %s to CONTINUE, keeping the rationale', action => {
+  // GATHER_EVIDENCE became wired in S5, ABORT in S6 — both handled by driveMainLoop
+  // (investigation / EscalationHalt) after resolveSupervisorDirective(), not coerced here.
+  it.each(['ASK_USER'] as const)('degrades %s to CONTINUE, keeping the rationale', action => {
     const d = coerceForWiredActions(new SupervisorDirective({ action, rationale: 'the reason' }))
     expect(d.action).toBe('CONTINUE')
     expect(d.rationale).toContain('the reason')
     expect(d.rationale).toContain(action)
+  })
+
+  it('passes GATHER_EVIDENCE through unchanged (S5 — wired downstream)', () => {
+    const d = new SupervisorDirective({
+      action: 'GATHER_EVIDENCE',
+      rationale: 'need a fact',
+      investigation: new InvestigationRequest({ question: 'which port?', suggested_tools: ['retrieve'], budget: 2 }),
+    })
+    expect(coerceForWiredActions(d)).toBe(d)
+  })
+
+  it('passes ABORT through unchanged (S6 — driveMainLoop throws EscalationHalt)', () => {
+    const d = new SupervisorDirective({ action: 'ABORT', rationale: 'unrecoverable' })
+    expect(coerceForWiredActions(d)).toBe(d)
   })
 })
 
@@ -321,8 +338,16 @@ describe('resolveSupervisorDirective (S2)', () => {
   })
 
   it('an unwired action from the decider is coerced to CONTINUE', async () => {
-    const d = await resolveSupervisorDirective(async () => ({ action: 'ABORT', rationale: 'stop' }), digest)
+    const d = await resolveSupervisorDirective(
+      async () => ({ action: 'ASK_USER', rationale: 'stop', question: { question: 'which env?', options: [] } }),
+      digest,
+    )
     expect(d.action).toBe('CONTINUE')
+  })
+
+  it('a wired ABORT from the decider passes through (driveMainLoop escalates on it — S6)', async () => {
+    const d = await resolveSupervisorDirective(async () => ({ action: 'ABORT', rationale: 'stop' }), digest)
+    expect(d.action).toBe('ABORT')
   })
 
   it('a throwing onDirective handler is swallowed — the directive still returns', async () => {
@@ -334,5 +359,16 @@ describe('resolveSupervisorDirective (S2)', () => {
       },
     )
     expect(d.action).toBe('CONTINUE')
+  })
+})
+
+// ── S6 — Q3 resolved (a): the supervisor never influences resolveControlState() ──
+
+describe('Q3 (a) — supervisor stays out of the control-state resolver', () => {
+  it('resolveControlState takes no supervisor / directive parameter', () => {
+    const src = resolveControlState.toString()
+    const paramList = src.slice(src.indexOf('('), src.indexOf(')') + 1).toLowerCase()
+    expect(paramList).not.toContain('supervisor')
+    expect(paramList).not.toContain('directive')
   })
 })

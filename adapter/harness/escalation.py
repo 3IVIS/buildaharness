@@ -25,6 +25,7 @@ EscalationReason = Literal[
     "budget_exhausted",
     "review_failure",
     "action_requires_compressed_state",
+    "supervisor_question",
 ]
 
 
@@ -41,22 +42,36 @@ class SurfaceBlocker:
     missing_info: list[str]
     current_task_summary: str
     escalated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    # Trajectory Supervisor ASK_USER (S3) — a structured question surfaced to the human,
+    # mirroring this harness's own AskUserQuestion shape. Both default None; when unset
+    # they are omitted from to_dict() entirely, so a plain escalation's payload stays
+    # byte-identical to pre-S3.
+    question: str | None = None
+    options: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "reason": self.reason,
             "missing_info": list(self.missing_info),
             "current_task_summary": self.current_task_summary,
             "escalated_at": self.escalated_at.isoformat(),
         }
+        if self.question is not None:
+            d["question"] = self.question
+        if self.options is not None:
+            d["options"] = list(self.options)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SurfaceBlocker:
+        opts = d.get("options")
         return cls(
             reason=d["reason"],
             missing_info=d.get("missing_info", []),
             current_task_summary=d.get("current_task_summary", ""),
             escalated_at=datetime.fromisoformat(d["escalated_at"]) if d.get("escalated_at") else datetime.now(UTC),
+            question=d.get("question"),
+            options=list(opts) if opts is not None else None,
         )
 
 

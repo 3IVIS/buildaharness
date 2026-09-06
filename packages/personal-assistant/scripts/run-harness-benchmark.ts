@@ -17,7 +17,9 @@
  *   cd packages/personal-assistant && npx tsx scripts/run-harness-benchmark.ts
  *   npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,lookup-capital
  *   npx tsx scripts/run-harness-benchmark.ts --arms=baseline
+ *   npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup   # the S7 trajectory-supervisor slice
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
+ *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
  *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
  *
  * The LLM-as-judge (`eval/judge.ts`, a tool-free `ClaudeCliLLMClient`) is **on by default** for a
@@ -32,7 +34,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
 import { loadCorpus } from '../eval/corpus/index.js'
-import { IMPLEMENTED_ARMS, type Arm } from '../eval/arms.js'
+import { IMPLEMENTED_ARMS, ALL_ARMS, type Arm } from '../eval/arms.js'
 import { runBenchmark, type BenchmarkReport } from '../eval/runner.js'
 import { renderMarkdown, diffReports, renderDiff } from '../eval/report.js'
 import { ClaudeCliJudge } from '../eval/judge.js'
@@ -49,17 +51,22 @@ function arg(name: string): string | undefined {
 async function main(): Promise<void> {
   const taskFilter = arg('tasks')?.split(',').map((s) => s.trim())
   const armFilter = arg('arms')?.split(',').map((s) => s.trim())
+  const sliceFilter = arg('slice')?.split(',').map((s) => s.trim())
   const gatePath = arg('gate')
 
   let tasks = loadCorpus()
   if (taskFilter) tasks = tasks.filter((t) => taskFilter.includes(t.id))
+  // --slice=supervisor_pivot,... — the trajectory-supervisor S7 slice (see eval/corpus/schema.ts).
+  if (sliceFilter) tasks = tasks.filter((t) => t.slice !== undefined && sliceFilter.includes(t.slice))
   if (tasks.length === 0) {
     console.error('no tasks matched')
     process.exit(2)
   }
 
+  // --arms selects from the full set (including declared-not-default arms like `supervisorOn`);
+  // the default run is IMPLEMENTED_ARMS only.
   let arms: Arm[] = IMPLEMENTED_ARMS
-  if (armFilter) arms = arms.filter((a) => armFilter.includes(a.name))
+  if (armFilter) arms = ALL_ARMS.filter((a) => armFilter.includes(a.name))
 
   // LLM-as-judge: on by default for a real run, `--no-judge` opts out. Tool-free ClaudeCliLLMClient
   // (no API key). A judge error / unparseable verdict resolves to `false` inside judge(), never a throw.
@@ -109,7 +116,7 @@ async function main(): Promise<void> {
   if (gatePath) {
     const beforePath = resolve(PKG_ROOT, gatePath)
     const before = JSON.parse(readFileSync(beforePath, 'utf8')) as BenchmarkReport
-    const diff = diffReports(before, report, 'flagOn')
+    const diff = diffReports(before, report, arg('gate-arm') ?? 'flagOn')
     console.log(`\n${renderDiff(diff)}\n`)
     if (diff.regressed) {
       console.error('Rule 6: flag may NOT default on — gating regression above.')

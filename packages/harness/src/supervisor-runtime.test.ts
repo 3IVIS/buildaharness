@@ -41,6 +41,7 @@ describe('driveMainLoop — trajectory supervisor wiring', () => {
 
   it('a supplied decider + a throwing onSupervisorDirective never surface as an unexpected error', async () => {
     let sawUnexpected: unknown = null
+    let halt: EscalationHalt | null = null
     try {
       await new HarnessRuntime().run('failing objective', ['done'], {
         initialTasks: [makeTask('t1'), makeTask('t2'), makeTask('t3')],
@@ -52,8 +53,15 @@ describe('driveMainLoop — trajectory supervisor wiring', () => {
         },
       })
     } catch (e) {
-      if (!(e instanceof EscalationHalt)) sawUnexpected = e
+      if (e instanceof EscalationHalt) halt = e
+      else sawUnexpected = e
     }
     expect(sawUnexpected).toBeNull()
+    // If the run stalled and the ABORT fired, it must halt as a cannot_make_progress
+    // escalation carrying the supervisor's rationale — never a raw crash (S6).
+    if (halt && halt.blocker.current_task_summary.includes('supervisor ABORT')) {
+      expect(halt.blocker.reason).toBe('cannot_make_progress')
+      expect(halt.blocker.current_task_summary).toContain('give up')
+    }
   })
 })

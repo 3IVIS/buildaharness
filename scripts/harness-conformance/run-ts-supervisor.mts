@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { SupervisorDirective, TrajectoryDigest } from '../../packages/harness/src/index.js'
+import { SupervisorDirective, TrajectoryDigest, validateInvestigationTools } from '../../packages/harness/src/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -24,6 +24,10 @@ if ('directive_in' in fixture) {
 }
 if ('digest_in' in fixture) {
   out.digest = TrajectoryDigest.fromJSON(fixture.digest_in).toJSON()
+}
+if ('tools_in' in fixture) {
+  const { allowed, rejected } = validateInvestigationTools(fixture.tools_in)
+  out.tools = { allowed, rejected }
 }
 
 console.log(JSON.stringify(out))

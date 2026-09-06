@@ -203,12 +203,18 @@ export class SupervisorDirective {
 
 import type { TrajectoryDigestData } from './trajectory-digest.js'
 
-const S2_UNWIRED_ACTIONS = new Set<SupervisorAction>(['GATHER_EVIDENCE', 'ASK_USER', 'ABORT'])
+// GATHER_EVIDENCE became a wired action in S5 — it is handled by driveMainLoop's
+// runSupervisorInvestigation() *after* resolveSupervisorDirective() returns, not
+// coerced away here. ABORT became wired in S6 — driveMainLoop throws an
+// EscalationHalt for it, also after resolveSupervisorDirective() returns. Only
+// ASK_USER remains unwired (until S3's host wiring).
+const UNWIRED_ACTIONS = new Set<SupervisorAction>(['ASK_USER'])
 
-/** REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE are wired in S2; everything else
- *  degrades to CONTINUE (carrying the original rationale) until S3–S6. */
+/** REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE (S2), GATHER_EVIDENCE (S5) and
+ *  ABORT (S6) are wired; only ASK_USER still degrades to CONTINUE (carrying the
+ *  original rationale) until S3's host wiring lands. */
 export function coerceForWiredActions(directive: SupervisorDirective): SupervisorDirective {
-  if (S2_UNWIRED_ACTIONS.has(directive.action)) {
+  if (UNWIRED_ACTIONS.has(directive.action)) {
     return SupervisorDirective.cont(`[not wired: ${directive.action}] ${directive.rationale}`)
   }
   return directive

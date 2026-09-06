@@ -26,6 +26,11 @@ Invariants:
           observations, or contradictions — only strategy_state / task_graph / budget
   INV-22  The supervisor directive is consulted only inside the cannot_make_progress()
           branch — a non-stalled iteration ignores it entirely
+  INV-23  Investigation sub-agents (GATHER_EVIDENCE, S4) have no write / shell / email
+          tools — suggested_tools is filtered to the read-only allowlist before dispatch
+  INV-24  Investigation depth is capped at 1 — an investigation cannot spawn an investigation
+  INV-25  Every investigation runs under its own bounded call budget; exhaustion returns
+          partial findings and never hangs (per-call bounded timeout)
 
 Run with: pytest adapter/tests/test_harness_invariants.py -v
 """
@@ -728,3 +733,68 @@ def test_inv_22_supervisor_ignored_when_not_stalled(monkeypatch):
     assert r["strategy_state"].current_strategy == "DIRECT_EDIT"
     assert r["strategy_state"].switch_count == 0
     assert not any("supervisor" in t for t in r["strategy_state"].switch_triggers)
+
+
+# ── INV-23 / INV-24 / INV-25 — Trajectory Supervisor investigation sub-agent (S4) ──
+
+
+def test_inv_23_investigation_has_no_write_shell_email_tools():
+    """INV-23: write / shell / email / unknown fn_refs are filtered out before any
+    dispatch, and run_investigation never calls tool_runner with a rejected name."""
+    from harness.investigation import (
+        InvestigationOutcome,
+        run_investigation,
+        validate_investigation_tools,
+    )
+    from harness.supervisor import InvestigationRequest
+
+    forbidden = ["write_file", "run_shell_command", "send_email", "totally_unknown_tool"]
+    allowed, rejected = validate_investigation_tools([*forbidden, "retrieve"])
+    assert allowed == ["retrieve"]
+    assert set(rejected) == set(forbidden)
+
+    dispatched: list[str] = []
+
+    def runner(tool: str, _q: str) -> str:
+        dispatched.append(tool)
+        return "finding"
+
+    req = InvestigationRequest(question="which port?", suggested_tools=[*forbidden, "retrieve"], budget=5)
+    outcome = run_investigation(req, tool_runner=runner)
+    assert isinstance(outcome, InvestigationOutcome)
+    assert dispatched == ["retrieve"]  # no forbidden tool ever dispatched
+    assert set(outcome.rejected_tools) == set(forbidden)
+
+
+def test_inv_24_investigation_depth_capped_at_one():
+    """INV-24: run_investigation at depth >= 1 raises — an investigation cannot spawn one."""
+    from harness.investigation import InvestigationDepthExceeded, run_investigation
+    from harness.supervisor import InvestigationRequest
+
+    req = InvestigationRequest(question="q", suggested_tools=["retrieve"], budget=2)
+    with pytest.raises(InvestigationDepthExceeded):
+        run_investigation(req, tool_runner=lambda _t, _q: "x", depth=1)
+
+
+def test_inv_25_investigation_budget_bounded_and_never_hangs():
+    """INV-25: a hanging tool is cut off by the per-call timeout, and a budget smaller
+    than the tool list returns partial findings with exhausted=True — no hang."""
+    import time
+
+    from harness.investigation import run_investigation
+    from harness.supervisor import InvestigationRequest
+
+    def slow_runner(tool: str, _q: str) -> str:
+        if tool == "web_search":
+            time.sleep(30)  # would hang without the bounded timeout
+        return f"{tool}-result"
+
+    req = InvestigationRequest(question="q", suggested_tools=["retrieve", "web_search", "read_file"], budget=2)
+    started = time.monotonic()
+    outcome = run_investigation(req, tool_runner=slow_runner, per_call_timeout=0.2)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 10  # the 30s sleep was cut off
+    assert outcome.exhausted is True  # budget 2 < 3 suggested tools
+    assert outcome.calls_made == 2
+    assert [f.tool for f in outcome.findings] == ["retrieve"]  # web_search timed out, read_file not reached

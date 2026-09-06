@@ -17,6 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "adapter"))
 
+from harness.investigation import validate_investigation_tools  # noqa: E402
 from harness.supervisor import SupervisorDirective  # noqa: E402
 from harness.trajectory_digest import TrajectoryDigest  # noqa: E402
 
@@ -34,6 +35,9 @@ def main() -> None:
         out["directive"] = SupervisorDirective.from_dict(fixture["directive_in"]).to_dict()
     if "digest_in" in fixture:
         out["digest"] = TrajectoryDigest.from_dict(fixture["digest_in"]).to_dict()
+    if "tools_in" in fixture:
+        allowed, rejected = validate_investigation_tools(fixture["tools_in"])
+        out["tools"] = {"allowed": allowed, "rejected": rejected}
 
     print(json.dumps(out))
 

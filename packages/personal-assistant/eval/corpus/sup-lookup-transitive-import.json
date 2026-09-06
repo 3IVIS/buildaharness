@@ -1,0 +1,36 @@
+{
+  "id": "sup-lookup-transitive-import",
+  "category": "multi_step",
+  "slice": "supervisor_lookup",
+  "intent": "The third-party dependency is three import hops away.",
+  "prompt": "What third-party package does module a.py ultimately import?",
+  "workspace": [
+    {
+      "path": "a.py",
+      "content": "import b\n\ndef run():\n    return b.go()\n"
+    },
+    {
+      "path": "b.py",
+      "content": "import c\n\ndef go():\n    return c.fetch()\n"
+    },
+    {
+      "path": "c.py",
+      "content": "import requests\n\ndef fetch():\n    return requests.get('https://example.com')\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "requests"
+    ],
+    "notContains": [
+      "none",
+      "no third-party",
+      "only local modules",
+      "a.py has no external"
+    ]
+  },
+  "note": "Pass = follows a -> b -> c and reports requests.",
+  "tools": {
+    "file": true
+  }
+}

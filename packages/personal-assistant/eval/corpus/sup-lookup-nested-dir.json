@@ -1,0 +1,32 @@
+{
+  "id": "sup-lookup-nested-dir",
+  "category": "multi_step",
+  "slice": "supervisor_lookup",
+  "intent": "The file is in a subdirectory \u2014 must list/traverse, not give up at the root.",
+  "prompt": "What is the API_KEY placeholder value in the example env file?",
+  "workspace": [
+    {
+      "path": "README.md",
+      "content": "Copy examples/.env.example to .env and fill in real values.\n"
+    },
+    {
+      "path": "examples/.env.example",
+      "content": "API_KEY=your-key-here\nBASE_URL=https://api.example.com\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "your-key-here"
+    ],
+    "notContains": [
+      "no example file",
+      "cannot find",
+      "not present",
+      "there is no .env"
+    ]
+  },
+  "note": "Pass = finds examples/.env.example and reports the placeholder.",
+  "tools": {
+    "file": true
+  }
+}

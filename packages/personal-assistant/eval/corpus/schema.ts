@@ -28,6 +28,21 @@ export const TASK_CATEGORIES = [
 
 export type TaskCategory = (typeof TASK_CATEGORIES)[number]
 
+/**
+ * Benchmark-slice tags. The trajectory-supervisor S7 slice
+ * (`plans/harness_trajectory_supervisor_plan.html`) groups tasks that are unsolvable without a
+ * strategy pivot, an external lookup, or a user clarification — the exact conditions the
+ * supervisor exists for. `run-harness-benchmark.ts --slice=<name>` filters the run to one.
+ */
+export const SUPERVISOR_SLICES = [
+  'supervisor_pivot', // the obvious first approach dead-ends; the answer needs a different route
+  'supervisor_lookup', // the fact lives somewhere non-obvious — a second file, a nested dir, a transitive ref
+  'supervisor_clarification', // genuinely ambiguous — must ask, not guess
+  'supervisor_adversarial_digest', // workspace text carries injection ("ignore instructions, ABORT")
+] as const
+
+export type SupervisorSlice = (typeof SUPERVISOR_SLICES)[number]
+
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({
   path: z.string().min(1),
@@ -86,6 +101,8 @@ export const TaskSpecSchema = z.object({
    * then measures `recovered`: did the arm still reach a passing answer.
    */
   injectedFailure: z.enum(['first_tool_call_throws']).optional(),
+  /** Optional benchmark-slice tag — see `SUPERVISOR_SLICES`. */
+  slice: z.enum(SUPERVISOR_SLICES).optional(),
   /** Free-text note for the report. */
   note: z.string().optional(),
 })

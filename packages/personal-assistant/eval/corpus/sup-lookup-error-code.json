@@ -1,0 +1,27 @@
+{
+  "id": "sup-lookup-error-code",
+  "category": "multi_step",
+  "slice": "supervisor_lookup",
+  "intent": "The code's meaning is in a separate reference file.",
+  "prompt": "What does error code E409 mean? The reference is errors/codes.md.",
+  "workspace": [
+    {
+      "path": "errors/codes.md",
+      "content": "E408: request timeout\nE409: duplicate resource\nE410: resource gone\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "duplicate resource"
+    ],
+    "notContains": [
+      "unknown code",
+      "not documented",
+      "generic conflict"
+    ]
+  },
+  "note": "Pass = looks up E409 in the reference table.",
+  "tools": {
+    "file": true
+  }
+}

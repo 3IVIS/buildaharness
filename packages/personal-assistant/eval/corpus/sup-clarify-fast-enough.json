@@ -1,0 +1,18 @@
+{
+  "id": "sup-clarify-fast-enough",
+  "category": "adv_ambiguous",
+  "slice": "supervisor_clarification",
+  "intent": "'fast enough' has no stated target \u2014 must ask for the budget/SLO.",
+  "prompt": "The checkout endpoint takes 800ms per request. Is that fast enough?",
+  "grader": {
+    "regex": "\\?|depends on|what (is|are) (the|your) (target|budget|slo|requirement|threshold)|no (defined|stated|given) (target|threshold|budget)",
+    "notContains": [
+      "yes, 800ms is fine",
+      "that is acceptable",
+      "no, that is too slow",
+      "800ms is fast enough"
+    ]
+  },
+  "note": "Pass = asks for the latency target rather than declaring a verdict.",
+  "workspace": []
+}

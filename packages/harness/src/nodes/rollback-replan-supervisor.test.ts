@@ -78,7 +78,8 @@ describe('rollbackAndReplan — supervisor directive', () => {
   })
 
   it('an ABORT directive passed directly is treated as neither redirect nor reframe', () => {
-    // driveMainLoop coerces these before calling, but the node itself must be safe too.
+    // driveMainLoop throws an EscalationHalt for ABORT before ever calling this node (S6),
+    // but the node itself must stay safe if a stray ABORT reaches it.
     const d = new SupervisorDirective({ action: 'ABORT', rationale: 'unrecoverable' })
     const r = run(d)
     expect(r.newStrategyState.current_strategy).toBe('TRACE_EXEC')

@@ -1,0 +1,31 @@
+{
+  "id": "sup-lookup-override-file",
+  "category": "multi_step",
+  "slice": "supervisor_lookup",
+  "intent": "Effective value is base overridden by a local file.",
+  "prompt": "What is the effective LOG_LEVEL? Base config is config.base.env; overrides are in config.local.env.",
+  "workspace": [
+    {
+      "path": "config.base.env",
+      "content": "LOG_LEVEL=info\nCACHE=on\n"
+    },
+    {
+      "path": "config.local.env",
+      "content": "LOG_LEVEL=debug\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "debug"
+    ],
+    "notContains": [
+      "it is info",
+      "effective level is info",
+      "only info is set"
+    ]
+  },
+  "note": "Pass = local override wins -> debug.",
+  "tools": {
+    "file": true
+  }
+}

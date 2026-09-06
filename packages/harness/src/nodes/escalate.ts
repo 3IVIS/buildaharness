@@ -12,12 +12,17 @@ export type EscalationReason =
   | 'budget_exhausted'
   | 'review_failure'
   | 'action_requires_compressed_state'
+  | 'supervisor_question'
 
 export interface SurfaceBlocker {
   reason: EscalationReason
   missing_info: string[]
   current_task_summary: string
   escalated_at: string
+  // Trajectory Supervisor ASK_USER (S3) — structured question + optional choices.
+  // Omitted entirely (not null) on a plain escalation, matching the Python twin.
+  question?: string
+  options?: string[]
 }
 
 export class EscalationHalt extends Error {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { loadCorpus } from './corpus/index.js'
-import { TASK_CATEGORIES } from './corpus/schema.js'
+import { TASK_CATEGORIES, SUPERVISOR_SLICES } from './corpus/schema.js'
 
 describe('benchmark corpus', () => {
   const tasks = loadCorpus()
@@ -36,6 +36,25 @@ describe('benchmark corpus', () => {
       for (const p of t.grader.filesUnchanged ?? []) {
         expect(declared.has(p), `${t.id}: grader.filesUnchanged names "${p}" not in workspace`).toBe(true)
       }
+    }
+  })
+
+  it('trajectory-supervisor S7 slice — every sub-slice has at least 6 tasks, adversarial-digest probes effects', () => {
+    const bySlice = new Map<string, typeof tasks>()
+    for (const t of tasks) {
+      if (!t.slice) continue
+      expect(SUPERVISOR_SLICES).toContain(t.slice)
+      const arr = bySlice.get(t.slice) ?? []
+      arr.push(t)
+      bySlice.set(t.slice, arr)
+    }
+    // pivot / lookup / clarification: minimum 6 each (plan S7 scope). adversarial-digest: the S1 cases.
+    for (const s of ['supervisor_pivot', 'supervisor_lookup', 'supervisor_clarification'] as const) {
+      expect(bySlice.get(s)?.length ?? 0, `slice ${s} should have >= 6 tasks`).toBeGreaterThanOrEqual(6)
+    }
+    expect(bySlice.get('supervisor_adversarial_digest')?.length ?? 0).toBeGreaterThanOrEqual(1)
+    for (const t of bySlice.get('supervisor_adversarial_digest') ?? []) {
+      expect(t.unauthorizedEffectProbe, `${t.id} (adversarial digest) should probe unauthorized effects`).toBe(true)
     }
   })
 

@@ -19,7 +19,13 @@ import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
 import { rollbackAndReplan, cannotMakeProgress } from './nodes/rollback-replan.js'
-import { SupervisorDirective, resolveSupervisorDirective, type SupervisorDirectiveData } from './supervisor.js'
+import {
+  SupervisorDirective,
+  resolveSupervisorDirective,
+  type SupervisorDirectiveData,
+  type InvestigationRequestData,
+} from './supervisor.js'
+import { resolveGatherEvidence, type InvestigationFinding } from './investigation.js'
 import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
@@ -197,6 +203,15 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   /** Fired once, right after supervisorDecider resolves, with the coerced directive that will
    * be applied. Observability only — like onGateDecision. A throwing handler is swallowed. */
   onSupervisorDirective?: (directive: SupervisorDirective) => void
+  /**
+   * Trajectory Supervisor GATHER_EVIDENCE (S5) — a host-provided bounded read-only investigation.
+   * Called at most INVESTIGATION_CAP_K times per run, only when the supervisor returns a
+   * GATHER_EVIDENCE directive at a stall edge. The host runs its own read-only tool loop (its own
+   * Budget, routed through the same tool-policy gate — no write/shell/email tools) and returns the
+   * findings; the harness merges them into the WorldModel with provenance + a generation bump.
+   * Absent → GATHER_EVIDENCE degrades to CONTINUE. A throw / reject degrades to CONTINUE too.
+   */
+  runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
 }
 
 export interface HarnessRunResult {
@@ -282,6 +297,7 @@ interface LoopContext {
   semanticCriterionCoverage?: SemanticCriterionCoverage
   supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
   onSupervisorDirective?: (directive: SupervisorDirective) => void
+  runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
@@ -346,6 +362,7 @@ function buildInitialContext(
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
+    runInvestigation: options.runInvestigation,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
     pendingReviewerVerdict: undefined,
@@ -415,6 +432,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
+    runInvestigation: options.runInvestigation,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
     pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
@@ -1123,6 +1141,30 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           digest.toJSON(),
           ctx.onSupervisorDirective,
         )
+        // GATHER_EVIDENCE (S5) — run the investigation now (findings merged into the
+        // WorldModel), then let the directive fall through as CONTINUE so the ladder
+        // proceeds over the new evidence. rollbackAndReplan only acts on
+        // REDIRECT_STRATEGY / REFRAME_PLAN, so a coerced CONTINUE is inert to it.
+        if (supervisorDirective.action === 'GATHER_EVIDENCE') {
+          supervisorDirective = await resolveGatherEvidence(ctx.worldModel, supervisorDirective, ctx.runInvestigation)
+        }
+        // ABORT (S6) — the supervisor judges the run unrecoverable after redirection is
+        // exhausted. Escalate immediately with a cannot_make_progress blocker carrying the
+        // rationale; no rollback / replan this iteration. Q3 resolved (a): the supervisor
+        // never touches resolveControlState() — this is a strategy / escalation move only,
+        // exactly like loop.py's S6 wiring.
+        if (supervisorDirective.action === 'ABORT') {
+          ctx.strategyState.switch_triggers.push(
+            `supervisor:ABORT ${supervisorDirective.rationale}`.trim().slice(0, 200),
+          )
+          throw new EscalationHalt({
+            reason: 'cannot_make_progress',
+            missing_info: ['clarification on how to proceed', 'revised success criteria'],
+            current_task_summary:
+              `${currentTask.description} | supervisor ABORT: ${supervisorDirective.rationale}`.trim().slice(0, 500),
+            escalated_at: new Date().toISOString(),
+          })
+        }
       }
 
       const rollbackResult = rollbackAndReplan(

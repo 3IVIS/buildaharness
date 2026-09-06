@@ -1,0 +1,26 @@
+{
+  "id": "sup-clarify-best-vendor",
+  "category": "adv_ambiguous",
+  "slice": "supervisor_clarification",
+  "intent": "'best' needs a metric \u2014 price and rating disagree.",
+  "prompt": "Which vendor is best? The data is in vendors.csv.",
+  "workspace": [
+    {
+      "path": "vendors.csv",
+      "content": "name,price_usd,rating\nAcme,100,4.6\nBolt,80,3.8\nCrux,120,4.9\n"
+    }
+  ],
+  "grader": {
+    "regex": "\\?|by (what|which) (metric|criteria)|cheapest or|highest[- ]rated|depends on (what|your)|price or rating",
+    "notContains": [
+      "Acme is best",
+      "Bolt is the best",
+      "the best vendor is",
+      "Crux is best"
+    ]
+  },
+  "note": "Pass = asks which metric matters (price vs rating).",
+  "tools": {
+    "file": true
+  }
+}

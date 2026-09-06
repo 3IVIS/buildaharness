@@ -50,6 +50,7 @@ from .diagnostics import Diagnostics
 from .escalation import EscalationReason
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, decomposition_gate, post_exec_gate
+from .investigation import count_investigations
 from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
 from .policy import select_best_action
 from .progress import cannot_make_progress
@@ -58,6 +59,10 @@ from .replanning import ReplanScope, apply_replan, assess_replan_scope
 from .staleness import increment_generation_id
 from .supervisor import SupervisorDirective, supervisor_enabled
 from .verification import verify
+
+# Per-run cap K on supervisor investigations (Q4, S4). Beyond it, GATHER_EVIDENCE
+# degrades — to ASK_USER once that is wired (S3), to CONTINUE today.
+_SUPERVISOR_INVESTIGATION_CAP = 3
 
 
 def _supervisor_reason(tag: str, rationale: str) -> str:
@@ -353,11 +358,67 @@ def run_one_iteration(
             # cannot_make_progress() branch. INV-21: touches only strategy_state / task_graph /
             # recovery_budget / generation_id — never control_state, diagnostics, beliefs, or
             # hypotheses. flag-gated; an absent directive, CONTINUE, or a not-yet-wired action
-            # (GATHER_EVIDENCE / ASK_USER / ABORT — S3–S6) all fall through to the unchanged
-            # switch_strategy path below.
+            # (ASK_USER — S3) all fall through to the unchanged switch_strategy path below.
             directive = supervisor_directive if supervisor_enabled() else None
             reason = getattr(strategy_state, "stall_reason", "stall_detected")
             supervisor_reframed = False
+
+            # ABORT (S6) — the supervisor judges the run unrecoverable after redirection is
+            # exhausted. Escalate immediately with a cannot_make_progress blocker carrying the
+            # supervisor's rationale in current_task_summary; no ladder / replan this iteration.
+            # Q3 resolved (a): the supervisor stays entirely out of resolve_control_state() —
+            # this is a strategy / escalation move, never a control-state write (INV-06 / INV-21).
+            if directive is not None and directive.action == "ABORT":
+                strategy_state.switch_triggers.append(_supervisor_reason("ABORT", directive.rationale))
+                ctrl_stub = ControlState()
+                blocker = _build_surface_blocker("cannot_make_progress", ctrl_stub, task_graph)
+                blocker.current_task_summary = (
+                    f"{blocker.current_task_summary} | supervisor ABORT: {directive.rationale}"
+                ).strip()[:500]
+                if harness_run_state is not None:
+                    try:
+                        escalate(blocker, harness_run_state, run_id)
+                    except EscalationHalt as exc:
+                        return {
+                            "escalated": True,
+                            "escalation": exc.blocker.to_dict(),
+                            "step_count": step_count,
+                        }
+                return {
+                    "escalated": True,
+                    "escalation": blocker.to_dict(),
+                    "step_count": step_count,
+                }
+
+            # GATHER_EVIDENCE (S4): surface a bounded read-only investigation request to
+            # the async driver and pause this iteration. The loop returns
+            # {"investigation_requested": …} (same shape family as the {"escalated": True}
+            # early returns); the driver runs the read-only tool loop and re-enters with the
+            # findings merged into world_model. Guards:
+            #   * per-run cap K (Q4) — beyond it the directive falls through to the
+            #     CONTINUE-coercion path below (degrade-to-ASK_USER once S3 wires ASK_USER);
+            #   * max-concurrent = 1 — a second GATHER_EVIDENCE while one is still pending
+            #     (only observable on a state-carrying driver) also falls through.
+            _inv_already_pending = (
+                harness_run_state is not None and getattr(harness_run_state, "pending_investigation", None) is not None
+            )
+            if (
+                directive is not None
+                and directive.action == "GATHER_EVIDENCE"
+                and directive.investigation is not None
+                and not _inv_already_pending
+                and count_investigations(world_model) < _SUPERVISOR_INVESTIGATION_CAP
+            ):
+                if harness_run_state is not None:
+                    harness_run_state.pending_investigation = directive.investigation
+                strategy_state.switch_triggers.append(_supervisor_reason("GATHER_EVIDENCE", directive.rationale))
+                if recovery_budget is not None:
+                    recovery_budget = recovery_budget.consume(plan_revisions=1)
+                return {
+                    "investigation_requested": directive.investigation.to_dict(),
+                    "step_count": step_count,
+                    "recovery_budget": recovery_budget,
+                }
 
             if (
                 directive is not None
@@ -383,7 +444,7 @@ def run_one_iteration(
                     order = [strategy_state.current_strategy, directive.strategy_hint]  # type: ignore[list-item]
                     reason = _supervisor_reason("REDIRECT_STRATEGY", directive.rationale)
                 elif directive is not None and directive.action not in ("CONTINUE", "REDIRECT_STRATEGY"):
-                    # GATHER_EVIDENCE / ASK_USER / ABORT / (REFRAME without caller_state) → S3–S6.
+                    # ASK_USER / GATHER_EVIDENCE-past-cap / (REFRAME without caller_state) → coerce.
                     reason = _supervisor_reason(f"{directive.action}->CONTINUE", directive.rationale)
                 strategy_state = switch_strategy(strategy_state, reason, order=order)
                 if recovery_budget is not None:

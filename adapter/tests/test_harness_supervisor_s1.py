@@ -2,7 +2,7 @@
 S1 of plans/harness_trajectory_supervisor_plan.html — the supervisor directive is
 decided by the async driver on the cannot_make_progress() edge and applied inside
 run_one_iteration()'s stall branch (REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE;
-GATHER_EVIDENCE / ASK_USER / ABORT coerced to CONTINUE until S3–S6).
+ASK_USER coerced to CONTINUE until S3 — GATHER_EVIDENCE wired in S4, ABORT in S6).
 
 Covers INV-20 (one-shot), INV-21 (no resolver/belief mutation), INV-22 (stall-edge
 only), the decide() fail-safe matrix, budget honesty, and the flag-OFF no-op path.
@@ -126,14 +126,13 @@ def test_continue_uses_normal_ladder(monkeypatch):
     assert ss.current_strategy == "TRACE_EXEC"
 
 
-@pytest.mark.parametrize("action", ["GATHER_EVIDENCE", "ASK_USER", "ABORT"])
+# GATHER_EVIDENCE moved out of this list in S4, ABORT in S6 — both are now built
+# actions (see test_harness_supervisor_s4.py / test_harness_supervisor_s6.py).
+# Only ASK_USER still coerces to CONTINUE until S3's host wiring lands.
+@pytest.mark.parametrize("action", ["ASK_USER"])
 def test_unbuilt_actions_coerce_to_continue(monkeypatch, action):
     kwargs = {"rationale": "later"}
-    if action == "GATHER_EVIDENCE":
-        from harness.supervisor import InvestigationRequest
-
-        kwargs["investigation"] = InvestigationRequest(question="which port?")
-    elif action == "ASK_USER":
+    if action == "ASK_USER":
         from harness.supervisor import UserQuestion
 
         kwargs["question"] = UserQuestion(question="which env?")
@@ -307,4 +306,4 @@ async def test_decide_fail_safe_on_bad_body(mock_litellm, body):
 async def test_decide_passes_through_a_valid_abort(mock_litellm):
     mock_litellm.acompletion.return_value = _resp('{"action": "ABORT", "rationale": "unrecoverable"}')
     d = await decide_supervisor_directive(_digest())
-    assert d.action == "ABORT"  # loop.py coerces it — decide() itself is faithful
+    assert d.action == "ABORT"  # loop.py escalates on it (S6) — decide() itself is faithful

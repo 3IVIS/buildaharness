@@ -1,4 +1,11 @@
-import { Budget, type ToolExecutorContext, type HarnessPauseSignal } from '@buildaharness/harness'
+import {
+  Budget,
+  validateInvestigationTools,
+  type ToolExecutorContext,
+  type HarnessPauseSignal,
+  type InvestigationRequestData,
+  type InvestigationFinding,
+} from '@buildaharness/harness'
 import type {
   MemoryAdapter,
   ILLMClient,
@@ -10,7 +17,7 @@ import type {
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
 import type { TraceEvent } from './trace-events.js'
-import type { TurnIntentClassification } from './turn-intent-classifier.js'
+import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifier.js'
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
@@ -1167,6 +1174,64 @@ export class AgentLoop {
       return executeReminderTool(this.reminderStore, name, input, userMessage)
     }
     throw new Error(`Unknown tool: ${name}`)
+  }
+
+  /**
+   * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
+   * plans/harness_trajectory_supervisor_plan.html). A bounded, strictly read-only tool
+   * loop the harness calls (via HarnessRunOptions.runInvestigation) when the supervisor
+   * decides the run is stuck for lack of a fact.
+   *
+   * - Read-only only: suggested_tools is filtered through validateInvestigationTools()
+   *   (INV-23) and then further to the subset this loop knows how to invoke from just a
+   *   question string. write_file / run_shell_command / send_email are never in the
+   *   allowlist and executeToolCall() has no branch for them here — no __staged_action
+   *   path is reachable.
+   * - Its own Budget (INV-25), independent of the turn's batch ceiling: maxCalls =
+   *   min(req.budget, allowed tools). Exhaustion returns whatever was found.
+   * - Every call is gated by the same evaluateToolPolicy() the manual dispatch loop uses;
+   *   a DENY / REQUIRE_APPROVAL skips that tool (an investigation never prompts).
+   * - Faults are isolated: a throwing / empty tool call is skipped, never propagated.
+   */
+  async runSupervisorInvestigation(
+    req: InvestigationRequestData,
+    opts: { riskHint: RiskLevel; controlState?: Parameters<typeof evaluateToolPolicy>[0]['controlState'] } = {
+      riskHint: 'LOW',
+    },
+  ): Promise<InvestigationFinding[]> {
+    const { allowed } = validateInvestigationTools(req.suggested_tools)
+    const question = String(req.question ?? '').trim()
+    if (!question) return []
+
+    // Map an allowlisted read-only tool to the concrete call this loop can build from a
+    // bare question. Tools that need an argument we can't derive (a path, a URL) are not
+    // runnable here and are skipped — the investigation degrades to "found nothing".
+    const runnable: Array<{ tool: string; input: Record<string, unknown> }> = []
+    for (const tool of allowed) {
+      if (tool === 'web_search' && this.webTools) runnable.push({ tool: 'web_search', input: { query: question } })
+      else if (tool === 'list_reminders') runnable.push({ tool: 'list_reminders', input: {} })
+    }
+    if (runnable.length === 0) return []
+
+    // Budget is immutable — consume() returns a new instance (see state/budget.ts).
+    let budget = new Budget({ maxCalls: Math.max(0, Math.min(req.budget ?? 5, runnable.length)) })
+    const findings: InvestigationFinding[] = []
+    for (const { tool, input } of runnable) {
+      if (budget.isExhausted()) break
+      const policy = evaluateToolPolicy({ toolName: tool, riskHint: opts.riskHint, controlState: opts.controlState })
+      if (policy.decision !== 'ALLOW') {
+        this.onTrace?.({ kind: 'layer_activity', layer: 'recovery', fired: false, reason: `investigation: ${tool} skipped — ${policy.reason}` })
+        continue
+      }
+      budget = budget.consume({ calls: 1 })
+      try {
+        const text = (await this.executeToolCall(tool, input, question)).trim()
+        if (text) findings.push({ content: text.slice(0, 800), tool, reliability: 'MEDIUM' })
+      } catch (err) {
+        this.onTrace?.({ kind: 'layer_activity', layer: 'recovery', fired: false, reason: `investigation: ${tool} errored — ${err instanceof Error ? err.message : String(err)}` })
+      }
+    }
+    return findings
   }
 }
 
