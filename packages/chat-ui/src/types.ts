@@ -16,6 +16,8 @@ export type ChatEntry =
       planStatus?: AssistantTurnResult['planStatus']
       /** Epistemic-honesty signal — see AssistantTurnResult.answerClaim's doc comment. Absent on the triviality fast path, same convention as trace/sources. */
       answerClaim?: AnswerClaim
+      /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (plans/chat_ui_browser_e2e_plan.html phase B1), rendered as a hidden data-testid element. */
+      proposerKind?: AssistantTurnResult['proposerKind']
     }
   | {
       id: string

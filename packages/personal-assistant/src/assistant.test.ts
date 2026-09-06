@@ -2236,14 +2236,16 @@ describe('PersonalAssistant onTrace', () => {
 
     await assistant.turn('What timezone is Tokyo in?', { sessionId: 'trace-trivial' })
 
-    // execution_mode_classified (Phase 4) is unconditionally traced every turn.
+    // execution_mode_classified (Phase 4) is unconditionally traced every turn; proposer_selected
+    // (chat_ui_browser_e2e_plan.html B1) is emitted once per non-bypass turn, right after risk.
     expect(events.map(e => e.kind)).toEqual([
-      'turn_start', 'risk_classified', 'triviality_classified', 'execution_mode_classified', 'turn_end',
+      'turn_start', 'risk_classified', 'proposer_selected', 'triviality_classified', 'execution_mode_classified', 'turn_end',
     ])
     expect(events[0]).toMatchObject({ kind: 'turn_start', sessionId: 'trace-trivial' })
-    expect(events[2]).toMatchObject({ kind: 'triviality_classified', isTrivial: true })
-    expect(events[3]).toMatchObject({ kind: 'execution_mode_classified', mode: 'FAST' })
-    expect(events[4]).toMatchObject({ kind: 'turn_end', status: 'ok' })
+    expect(events[2]).toMatchObject({ kind: 'proposer_selected', proposerKind: 'posthoc' })
+    expect(events[3]).toMatchObject({ kind: 'triviality_classified', isTrivial: true })
+    expect(events[4]).toMatchObject({ kind: 'execution_mode_classified', mode: 'FAST' })
+    expect(events[5]).toMatchObject({ kind: 'turn_end', status: 'ok' })
   })
 
   it('emits at least one harness_node event for a non-trivial turn that runs the full harness', async () => {

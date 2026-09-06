@@ -1,0 +1,100 @@
+name: Browser E2E (chat-ui)
+
+# Real-browser end-to-end lane for plans/chat_ui_browser_e2e_plan.html phase B4.
+#
+# Runs the Playwright suite in packages/chat-ui/e2e (B2 harness + B3 flag OFF/ON
+# parity matrix) against a real Vite production-shape build served by `vite preview`
+# with VITE_E2E=1 — the surface jsdom cannot exercise (bundle, import.meta.env
+# substitution, CSP, real DOM/event loop). Chromium only: Playwright ships and
+# manages its own binary, works headless with no $DISPLAY on Linux.
+#
+# NOT a required check yet. Per the plan (R5 precedent — measure before you enforce),
+# this stays advisory until it has been green on the nightly schedule for at least a
+# week / 3+ consecutive runs. Do not add it to branch protection before then; promoting
+# it early risks a flaky-gate stall. Branch protection is a repo setting, not something
+# this file controls, so "non-blocking" here means "not registered as required".
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/chat-ui/**'
+      - 'packages/personal-assistant/**'
+      - 'packages/harness/**'
+      - 'packages/runtime/**'
+      - '.github/workflows/browser-e2e.yml'
+  schedule:
+    - cron: '0 4 * * *'   # nightly at 04:00 UTC (an hour after eval.yml's 03:00)
+  workflow_dispatch:
+
+concurrency:
+  group: browser-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium:
+    name: chat-ui Playwright (Chromium, flag OFF/ON matrix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps (root + workspaces)
+        run: npm ci
+
+      # chat-ui imports @buildaharness/{harness,runtime,personal-assistant} by
+      # workspace link with no source-path aliasing — their dist/ must exist before
+      # the e2e build bundles them (personal-assistant's build also pulls harness,
+      # but build them explicitly and in order to be safe).
+      - name: Build workspace deps
+        run: |
+          npm run build:harness
+          npm run build:runtime
+          npm run build:personal-assistant
+
+      # Cache the Playwright browser binaries, keyed by the resolved @playwright/test
+      # version so a bump busts the cache automatically.
+      - name: Resolve Playwright version
+        id: pw
+        working-directory: packages/chat-ui
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium (with deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        working-directory: packages/chat-ui
+        run: npx playwright install --with-deps chromium
+
+      # OS-level deps only — the cached binary skips the download but still needs
+      # the shared libraries on a fresh runner image.
+      - name: Install Chromium OS deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        working-directory: packages/chat-ui
+        run: npx playwright install-deps chromium
+
+      - name: Run Playwright e2e
+        working-directory: packages/chat-ui
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report + traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            packages/chat-ui/playwright-report/
+            packages/chat-ui/test-results/
+          retention-days: 14
+          if-no-files-found: ignore

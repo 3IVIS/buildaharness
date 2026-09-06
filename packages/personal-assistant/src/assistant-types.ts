@@ -26,10 +26,29 @@ export interface AssistantTrace {
   batchBudget?: BatchBudgetTrace
 }
 
+/**
+ * Which code path actually produced this turn's reply — a test/telemetry affordance for
+ * plans/chat_ui_browser_e2e_plan.html phase B1 (the browser-e2e lane that unblocks the
+ * ASSISTANT_ONE_LOOP default-flip, R5 of the D2 one-loop rewire). The reply text itself is
+ * identical across all three by design (INV-19); this field is how a test asserts "the flag
+ * changed which path ran" without diffing internal traces.
+ *
+ * - 'posthoc'       — flag OFF (or a trivial / no-tool turn): AgentLoop.runToolLoop finished a
+ *                     draftReply before HarnessBridge constructed HarnessRuntime; the harness run
+ *                     is post-hoc bookkeeping over an already-produced reply.
+ * - 'flat-oneloop'  — flag ON, non-batch: the flat tool loop ran inside the harness's own
+ *                     driveMainLoop via AgentLoop.createOneLoopProposer.
+ * - 'batch-oneloop' — flag ON, batch-research: AgentLoop.createBatchOneLoopProposer drove the
+ *                     probe→calibrate→confirm→resolve→synthesize sequence under driveMainLoop.
+ */
+export type ProposerKind = 'posthoc' | 'flat-oneloop' | 'batch-oneloop'
+
 export interface AssistantTurnResult {
   status: 'ok' | 'needs_approval' | 'escalated'
   reply: string | null
   reason?: string
+  /** See ProposerKind. Always set (defaults to 'posthoc'), on every status. */
+  proposerKind?: ProposerKind
   riskLevel?: TurnIntentClassification['riskLevel']
   controlState?: { riskState: RiskState; escalationReason: string | null }
   stepsUsed?: number

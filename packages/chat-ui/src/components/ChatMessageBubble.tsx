@@ -31,8 +31,18 @@ interface Props {
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
   answerClaim?: AnswerClaim
+  /**
+   * Which proposer drove this turn (see AssistantTurnResult.proposerKind). Rendered only as a
+   * hidden `data-testid="proposer-kind"` element, and only in a dev/E2E build — a test affordance
+   * for plans/chat_ui_browser_e2e_plan.html phase B1's flag-OFF-vs-ON parity assertions, never a
+   * user-facing or documented public surface.
+   */
+  proposerKind?: AssistantTurnResult['proposerKind']
   onRetry?: () => void
 }
+
+/** True in `vite dev`, an explicit `VITE_E2E=1` preview build, or under the test runner — never a production bundle. */
+const SHOW_E2E_AFFORDANCES = import.meta.env.DEV || import.meta.env.MODE === 'test' || import.meta.env.VITE_E2E === '1'
 
 // Same icon convention plan-store.ts's STATUS_ICON / cli.ts's PLAN_TASK_STATUS_ICON already
 // use — kept in sync by hand rather than importing a string-keyed const across the package
@@ -98,7 +108,7 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, proposerKind, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -113,6 +123,9 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
 
   return (
     <div className={`bubble bubble--${role}`}>
+      {SHOW_E2E_AFFORDANCES && proposerKind && (
+        <span data-testid="proposer-kind" hidden>{proposerKind}</span>
+      )}
       <button type="button" className="bubble__copy" onClick={handleCopy} aria-label="Copy message">
         {copied ? 'Copied' : 'Copy'}
       </button>

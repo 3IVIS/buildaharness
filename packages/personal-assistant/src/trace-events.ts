@@ -1,6 +1,7 @@
 import type { RiskLevel } from './turn-intent-classifier.js'
 import type { ExecutionMode } from './execution-mode.js'
 import type { ToolPolicyDecision } from './tool-policy.js'
+import type { ProposerKind } from './assistant-types.js'
 
 /**
  * Structured turn telemetry — deliberately name/status-only, never full message
@@ -45,3 +46,10 @@ export type TraceEvent =
    * tool-policy.ts).
    */
   | { kind: 'tool_policy_decision'; tool: string; decision: ToolPolicyDecision; reason: string }
+  /**
+   * Which proposer drove this turn — 'posthoc' (flag OFF, or a trivial / no-tool turn),
+   * 'flat-oneloop', or 'batch-oneloop' (both flag ON). Emitted once per turn from runTurn, right
+   * after `useOneLoop` is resolved. See AssistantTurnResult.proposerKind and
+   * plans/chat_ui_browser_e2e_plan.html phase B1 for why this exists.
+   */
+  | { kind: 'proposer_selected'; proposerKind: ProposerKind }
