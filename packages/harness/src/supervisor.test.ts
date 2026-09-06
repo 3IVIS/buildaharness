@@ -285,13 +285,18 @@ describe('coerceForWiredActions (S2)', () => {
     expect(coerceForWiredActions(SupervisorDirective.cont('ok')).action).toBe('CONTINUE')
   })
 
-  // GATHER_EVIDENCE became wired in S5, ABORT in S6 — both handled by driveMainLoop
-  // (investigation / EscalationHalt) after resolveSupervisorDirective(), not coerced here.
-  it.each(['ASK_USER'] as const)('degrades %s to CONTINUE, keeping the rationale', action => {
-    const d = coerceForWiredActions(new SupervisorDirective({ action, rationale: 'the reason' }))
-    expect(d.action).toBe('CONTINUE')
-    expect(d.rationale).toContain('the reason')
-    expect(d.rationale).toContain(action)
+  // Every action is wired as of S3 — GATHER_EVIDENCE (S5) and ABORT/ASK_USER (S6/S3) are
+  // all handled by driveMainLoop (investigation / EscalationHalt) after
+  // resolveSupervisorDirective() returns, so coerceForWiredActions never rewrites them.
+  it('passes ASK_USER through unchanged (S3 — driveMainLoop throws EscalationHalt)', () => {
+    const d = new SupervisorDirective({
+      action: 'ASK_USER',
+      rationale: 'the reason',
+      question: new UserQuestion({ question: 'which env?', options: ['staging', 'production'] }),
+    })
+    expect(coerceForWiredActions(d)).toBe(d)
+    expect(d.action).toBe('ASK_USER')
+    expect(d.question?.question).toBe('which env?')
   })
 
   it('passes GATHER_EVIDENCE through unchanged (S5 — wired downstream)', () => {
@@ -337,12 +342,14 @@ describe('resolveSupervisorDirective (S2)', () => {
     ).toBe('CONTINUE')
   })
 
-  it('an unwired action from the decider is coerced to CONTINUE', async () => {
+  it('a wired ASK_USER from the decider passes through with its question intact (S3)', async () => {
     const d = await resolveSupervisorDirective(
-      async () => ({ action: 'ASK_USER', rationale: 'stop', question: { question: 'which env?', options: [] } }),
+      async () => ({ action: 'ASK_USER', rationale: 'stop', question: { question: 'which env?', options: ['a', 'b'] } }),
       digest,
     )
-    expect(d.action).toBe('CONTINUE')
+    expect(d.action).toBe('ASK_USER')
+    expect(d.question?.question).toBe('which env?')
+    expect(d.question?.options).toEqual(['a', 'b'])
   })
 
   it('a wired ABORT from the decider passes through (driveMainLoop escalates on it — S6)', async () => {

@@ -24,7 +24,13 @@ import {
   resolveSupervisorDirective,
   type SupervisorDirectiveData,
   type InvestigationRequestData,
+  type UserQuestionData,
 } from './supervisor.js'
+
+/** Per-run cap M on supervisor ASK_USER escalations (S3) — twin of loop.py's
+ *  _SUPERVISOR_ASK_USER_CAP. The M+1th ASK_USER in one run degrades to a plain
+ *  cannot_make_progress escalation (no structured question). */
+const SUPERVISOR_ASK_USER_CAP_M = 2
 import { resolveGatherEvidence, type InvestigationFinding } from './investigation.js'
 import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
@@ -212,6 +218,16 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * Absent → GATHER_EVIDENCE degrades to CONTINUE. A throw / reject degrades to CONTINUE too.
    */
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
+  /**
+   * Trajectory Supervisor ASK_USER (S3) — present iff the host can surface a structured
+   * question to the user and resume the run with an answer. When set, an ASK_USER directive
+   * at a stall edge throws a `supervisor_question` EscalationHalt (question + options on the
+   * blocker) and this hook is called once with the question (observability — a throw is
+   * swallowed). Absent → ASK_USER degrades to a plain `cannot_make_progress` escalation.
+   * Per-run cap SUPERVISOR_ASK_USER_CAP_M; beyond it ASK_USER also degrades to the plain
+   * escalation. The resumed run records the answer as a `user_clarification` observation.
+   */
+  askUser?: (question: UserQuestionData) => void
 }
 
 export interface HarnessRunResult {
@@ -298,6 +314,10 @@ interface LoopContext {
   supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
   onSupervisorDirective?: (directive: SupervisorDirective) => void
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
+  askUser?: (question: UserQuestionData) => void
+  /** Per-run count of supervisor ASK_USER escalations (S3) — persisted across resume via
+   *  HarnessRunProgressData.supervisorAskUserCount. */
+  supervisorAskUserCount: number
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
@@ -363,6 +383,8 @@ function buildInitialContext(
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
+    askUser: options.askUser,
+    supervisorAskUserCount: 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
     pendingReviewerVerdict: undefined,
@@ -433,6 +455,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
+    askUser: options.askUser,
+    supervisorAskUserCount: checkpoint.progress.supervisorAskUserCount ?? 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
     pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
@@ -472,6 +496,7 @@ function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
     propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
     pendingProposal: ctx.pendingProposal ?? null,
     pendingReviewerVerdict: ctx.pendingReviewerVerdict ?? null,
+    supervisorAskUserCount: ctx.supervisorAskUserCount,
   }
 
   return { runId: ctx.runId, runState, runConfig, progress, schemaVersion: CHECKPOINT_SCHEMA_VERSION }
@@ -1162,6 +1187,45 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             missing_info: ['clarification on how to proceed', 'revised success criteria'],
             current_task_summary:
               `${currentTask.description} | supervisor ABORT: ${supervisorDirective.rationale}`.trim().slice(0, 500),
+            escalated_at: new Date().toISOString(),
+          })
+        }
+        // ASK_USER (S3) — the supervisor needs a human decision. With a host askUser
+        // capability and within the per-run cap, throw a structured `supervisor_question`
+        // EscalationHalt (question + options on the blocker); the host surfaces it and
+        // resumes with an answer (→ a user_clarification observation). Without the
+        // capability, or past the cap, degrade to a plain cannot_make_progress escalation.
+        // Escalation only — never a resolveControlState() write, exactly like ABORT.
+        if (supervisorDirective.action === 'ASK_USER' && supervisorDirective.question) {
+          const q = supervisorDirective.question
+          const withinCap = !!ctx.askUser && ctx.supervisorAskUserCount < SUPERVISOR_ASK_USER_CAP_M
+          ctx.strategyState.switch_triggers.push(
+            `supervisor:ASK_USER${withinCap ? '' : '->escalate'} ${supervisorDirective.rationale}`.trim().slice(0, 200),
+          )
+          if (withinCap) {
+            ctx.supervisorAskUserCount += 1
+            try {
+              ctx.askUser!(q.toJSON())
+            } catch {
+              /* an observability handler must never break the run */
+            }
+            throw new EscalationHalt({
+              reason: 'supervisor_question',
+              missing_info: ['answer to the supervisor question'],
+              current_task_summary:
+                `${currentTask.description} | supervisor question: ${q.question}`.trim().slice(0, 500),
+              escalated_at: new Date().toISOString(),
+              question: q.question,
+              options: q.options.length ? [...q.options] : undefined,
+            })
+          }
+          throw new EscalationHalt({
+            reason: 'cannot_make_progress',
+            missing_info: ['clarification on how to proceed', 'revised success criteria'],
+            current_task_summary:
+              `${currentTask.description} | supervisor ASK_USER (no host): ${supervisorDirective.rationale}`
+                .trim()
+                .slice(0, 500),
             escalated_at: new Date().toISOString(),
           })
         }

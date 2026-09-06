@@ -203,16 +203,16 @@ export class SupervisorDirective {
 
 import type { TrajectoryDigestData } from './trajectory-digest.js'
 
-// GATHER_EVIDENCE became a wired action in S5 — it is handled by driveMainLoop's
-// runSupervisorInvestigation() *after* resolveSupervisorDirective() returns, not
-// coerced away here. ABORT became wired in S6 — driveMainLoop throws an
-// EscalationHalt for it, also after resolveSupervisorDirective() returns. Only
-// ASK_USER remains unwired (until S3's host wiring).
-const UNWIRED_ACTIONS = new Set<SupervisorAction>(['ASK_USER'])
+// All six directive actions are now wired, so this is an identity pass-through:
+// REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE (S2); GATHER_EVIDENCE (S5, handled by
+// driveMainLoop's resolveGatherEvidence() after resolveSupervisorDirective() returns);
+// ABORT (S6) and ASK_USER (S3), for both of which driveMainLoop throws an
+// EscalationHalt after resolveSupervisorDirective() returns. Kept as a named function
+// so the call sites and their tests stay stable if a future action lands unwired.
+const UNWIRED_ACTIONS = new Set<SupervisorAction>([])
 
-/** REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE (S2), GATHER_EVIDENCE (S5) and
- *  ABORT (S6) are wired; only ASK_USER still degrades to CONTINUE (carrying the
- *  original rationale) until S3's host wiring lands. */
+/** Historically coerced not-yet-wired actions to CONTINUE. Every action is wired as of
+ *  S3, so this now returns the directive unchanged. */
 export function coerceForWiredActions(directive: SupervisorDirective): SupervisorDirective {
   if (UNWIRED_ACTIONS.has(directive.action)) {
     return SupervisorDirective.cont(`[not wired: ${directive.action}] ${directive.rationale}`)

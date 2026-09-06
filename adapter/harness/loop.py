@@ -61,8 +61,13 @@ from .supervisor import SupervisorDirective, supervisor_enabled
 from .verification import verify
 
 # Per-run cap K on supervisor investigations (Q4, S4). Beyond it, GATHER_EVIDENCE
-# degrades — to ASK_USER once that is wired (S3), to CONTINUE today.
+# degrades to CONTINUE (the deterministic ladder) via the coercion path below.
 _SUPERVISOR_INVESTIGATION_CAP = 3
+
+# Per-run cap M on supervisor ASK_USER escalations (S3). The M+1th ASK_USER in one
+# run degrades to a plain cannot_make_progress escalation (no structured question),
+# so a model that keeps choosing ASK_USER cannot pin the run open indefinitely.
+_SUPERVISOR_ASK_USER_CAP = 2
 
 
 def _supervisor_reason(tag: str, rationale: str) -> str:
@@ -357,8 +362,9 @@ def run_one_iteration(
             # before the deterministic ladder. INV-22: only ever consulted inside this
             # cannot_make_progress() branch. INV-21: touches only strategy_state / task_graph /
             # recovery_budget / generation_id — never control_state, diagnostics, beliefs, or
-            # hypotheses. flag-gated; an absent directive, CONTINUE, or a not-yet-wired action
-            # (ASK_USER — S3) all fall through to the unchanged switch_strategy path below.
+            # hypotheses. flag-gated; an absent directive or CONTINUE falls through to the
+            # unchanged switch_strategy path below. REDIRECT_STRATEGY / REFRAME_PLAN / ABORT
+            # (S1/S6), GATHER_EVIDENCE (S4) and ASK_USER (S3) are handled explicitly below.
             directive = supervisor_directive if supervisor_enabled() else None
             reason = getattr(strategy_state, "stall_reason", "stall_detected")
             supervisor_reframed = False
@@ -388,6 +394,51 @@ def run_one_iteration(
                     "escalated": True,
                     "escalation": blocker.to_dict(),
                     "step_count": step_count,
+                }
+
+            # ASK_USER (S3) — the supervisor needs a human decision to proceed. Escalate
+            # with a structured supervisor_question SurfaceBlocker carrying the question +
+            # options; the host surfaces it and resumes with an answer, which becomes a
+            # HIGH-provenance user_clarification Observation in check_external_updates().
+            # Per-run cap M: the M+1th ASK_USER degrades to a plain cannot_make_progress
+            # escalation (no structured question). INV-21: escalation only, never a
+            # control_state write. A malformed directive (question is None) falls through
+            # to the CONTINUE-coercion path below.
+            if directive is not None and directive.action == "ASK_USER" and directive.question is not None:
+                _ask_count = (
+                    getattr(harness_run_state, "supervisor_ask_user_count", 0) if harness_run_state is not None else 0
+                )
+                within_cap = _ask_count < _SUPERVISOR_ASK_USER_CAP
+                strategy_state.switch_triggers.append(
+                    _supervisor_reason("ASK_USER" if within_cap else "ASK_USER->escalate(cap)", directive.rationale)
+                )
+                ctrl_stub = ControlState()
+                blocker = _build_surface_blocker(
+                    "supervisor_question" if within_cap else "cannot_make_progress", ctrl_stub, task_graph
+                )
+                if within_cap:
+                    blocker.missing_info = ["answer to the supervisor's question"]
+                    blocker.question = directive.question.question
+                    blocker.options = list(directive.question.options) or None
+                    if harness_run_state is not None:
+                        harness_run_state.supervisor_ask_user_count = _ask_count + 1
+                if recovery_budget is not None:
+                    recovery_budget = recovery_budget.consume(plan_revisions=1)
+                if harness_run_state is not None:
+                    try:
+                        escalate(blocker, harness_run_state, run_id)
+                    except EscalationHalt as exc:
+                        return {
+                            "escalated": True,
+                            "escalation": exc.blocker.to_dict(),
+                            "step_count": step_count,
+                            "recovery_budget": recovery_budget,
+                        }
+                return {
+                    "escalated": True,
+                    "escalation": blocker.to_dict(),
+                    "step_count": step_count,
+                    "recovery_budget": recovery_budget,
                 }
 
             # GATHER_EVIDENCE (S4): surface a bounded read-only investigation request to
@@ -444,7 +495,8 @@ def run_one_iteration(
                     order = [strategy_state.current_strategy, directive.strategy_hint]  # type: ignore[list-item]
                     reason = _supervisor_reason("REDIRECT_STRATEGY", directive.rationale)
                 elif directive is not None and directive.action not in ("CONTINUE", "REDIRECT_STRATEGY"):
-                    # ASK_USER / GATHER_EVIDENCE-past-cap / (REFRAME without caller_state) → coerce.
+                    # GATHER_EVIDENCE-past-cap / ASK_USER-without-question / (REFRAME without
+                    # caller_state) → coerce to the deterministic ladder.
                     reason = _supervisor_reason(f"{directive.action}->CONTINUE", directive.rationale)
                 strategy_state = switch_strategy(strategy_state, reason, order=order)
                 if recovery_budget is not None:

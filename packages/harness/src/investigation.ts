@@ -219,7 +219,7 @@ export function countInvestigations(worldModel: WorldModel): number {
 }
 
 /** Per-run cap K on supervisor investigations (Q4). Beyond it, GATHER_EVIDENCE
- *  degrades — to ASK_USER once wired, to CONTINUE today. Same value as loop.py's
+ *  degrades to CONTINUE (the deterministic ladder). Same value as loop.py's
  *  _SUPERVISOR_INVESTIGATION_CAP. */
 export const INVESTIGATION_CAP_K = 3
 

@@ -126,20 +126,26 @@ def test_continue_uses_normal_ladder(monkeypatch):
     assert ss.current_strategy == "TRACE_EXEC"
 
 
-# GATHER_EVIDENCE moved out of this list in S4, ABORT in S6 — both are now built
-# actions (see test_harness_supervisor_s4.py / test_harness_supervisor_s6.py).
-# Only ASK_USER still coerces to CONTINUE until S3's host wiring lands.
-@pytest.mark.parametrize("action", ["ASK_USER"])
-def test_unbuilt_actions_coerce_to_continue(monkeypatch, action):
-    kwargs = {"rationale": "later"}
-    if action == "ASK_USER":
-        from harness.supervisor import UserQuestion
-
-        kwargs["question"] = UserQuestion(question="which env?")
-    d = SupervisorDirective(action=action, **kwargs)
-    _r, ss, _tg, _wm = _run(d, monkeypatch=monkeypatch)
+# Every supervisor action is now a built action: GATHER_EVIDENCE (S4), ABORT (S6),
+# ASK_USER (S3). A well-formed ASK_USER escalates rather than coercing to the ladder
+# (see test_harness_supervisor_s3.py for the full contract); a malformed one — no
+# question payload — still falls through safely to the deterministic ladder.
+def test_malformed_ask_user_without_question_coerces_to_ladder(monkeypatch):
+    d = SupervisorDirective(action="ASK_USER", rationale="later", question=None)
+    r, ss, _tg, _wm = _run(d, monkeypatch=monkeypatch)
+    assert r.get("escalated") is not True
     assert ss.current_strategy == "TRACE_EXEC"
-    assert any(f"{action}->CONTINUE" in t for t in ss.switch_triggers)
+    assert any("ASK_USER->CONTINUE" in t for t in ss.switch_triggers)
+
+
+def test_wellformed_ask_user_escalates_not_coerces(monkeypatch):
+    from harness.supervisor import UserQuestion
+
+    d = SupervisorDirective(action="ASK_USER", rationale="need input", question=UserQuestion(question="which env?"))
+    r, ss, _tg, _wm = _run(d, monkeypatch=monkeypatch)
+    assert r.get("escalated") is True
+    assert r["escalation"]["reason"] == "supervisor_question"
+    assert ss.current_strategy == "DIRECT_EDIT"  # ladder not advanced
 
 
 # ── REFRAME_PLAN ───────────────────────────────────────────────────────────

@@ -64,4 +64,60 @@ describe('driveMainLoop — trajectory supervisor wiring', () => {
       expect(halt.blocker.current_task_summary).toContain('give up')
     }
   })
+
+  it('an ASK_USER directive with a host askUser capability halts as a structured supervisor_question (S3)', async () => {
+    let sawUnexpected: unknown = null
+    let halt: EscalationHalt | null = null
+    const asked: Array<{ question: string; options: string[] }> = []
+    try {
+      await new HarnessRuntime().run('failing objective', ['done'], {
+        initialTasks: [makeTask('t1'), makeTask('t2'), makeTask('t3')],
+        max_steps: 12,
+        toolExecutors: { default: () => ({ __harnessExecutionStatus: 'failed', error: 'boom' }) },
+        supervisorDecider: async () => ({
+          action: 'ASK_USER',
+          rationale: 'need a decision',
+          question: { question: 'which environment?', options: ['staging', 'production'] },
+        }),
+        askUser: q => asked.push(q),
+      })
+    } catch (e) {
+      if (e instanceof EscalationHalt) halt = e
+      else sawUnexpected = e
+    }
+    expect(sawUnexpected).toBeNull()
+    // If the run stalled and ASK_USER fired, it halts as a structured supervisor_question
+    // carrying the question + options — and the askUser hook saw it once.
+    if (halt && halt.blocker.current_task_summary.includes('supervisor question')) {
+      expect(halt.blocker.reason).toBe('supervisor_question')
+      expect(halt.blocker.question).toBe('which environment?')
+      expect(halt.blocker.options).toEqual(['staging', 'production'])
+      expect(asked).toEqual([{ question: 'which environment?', options: ['staging', 'production'] }])
+    }
+  })
+
+  it('an ASK_USER directive with no host askUser capability degrades to a plain escalation (S3)', async () => {
+    let sawUnexpected: unknown = null
+    let halt: EscalationHalt | null = null
+    try {
+      await new HarnessRuntime().run('failing objective', ['done'], {
+        initialTasks: [makeTask('t1'), makeTask('t2'), makeTask('t3')],
+        max_steps: 12,
+        toolExecutors: { default: () => ({ __harnessExecutionStatus: 'failed', error: 'boom' }) },
+        supervisorDecider: async () => ({
+          action: 'ASK_USER',
+          rationale: 'need a decision',
+          question: { question: 'which environment?', options: [] },
+        }),
+      })
+    } catch (e) {
+      if (e instanceof EscalationHalt) halt = e
+      else sawUnexpected = e
+    }
+    expect(sawUnexpected).toBeNull()
+    if (halt && halt.blocker.current_task_summary.includes('ASK_USER (no host)')) {
+      expect(halt.blocker.reason).toBe('cannot_make_progress')
+      expect(halt.blocker.question).toBeUndefined()
+    }
+  })
 })

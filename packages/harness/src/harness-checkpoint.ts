@@ -47,6 +47,9 @@ export interface HarnessRunProgressData {
   pendingProposal?: PendingProposalData | null
   /** Phase I / INV-18. Optional for the same reason as pendingProposal — a pre-Phase-I checkpoint deserializes as "nothing pending". */
   pendingReviewerVerdict?: ReviewerVerdict | null
+  /** Trajectory Supervisor ASK_USER (S3) — per-run count of ASK_USER escalations, so the
+   *  per-run cap survives a pause/resume. Optional: a pre-S3 checkpoint deserializes as 0. */
+  supervisorAskUserCount?: number
 }
 
 /**

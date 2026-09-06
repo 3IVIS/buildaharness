@@ -95,6 +95,9 @@ class HarnessRunState:
     # pending_investigation carries a GATHER_EVIDENCE request out to the async driver (S4).
     pending_supervisor_directive: Any | None = None  # SupervisorDirective | None
     pending_investigation: Any | None = None  # InvestigationRequest | None
+    # Per-run count of supervisor ASK_USER escalations (S3). Monotonic within a run;
+    # the M+1th ASK_USER degrades to a plain escalation (loop._SUPERVISOR_ASK_USER_CAP).
+    supervisor_ask_user_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         # Persist a presence marker rather than the store contents — actual
@@ -127,6 +130,7 @@ class HarnessRunState:
             "pending_investigation": (
                 self.pending_investigation.to_dict() if self.pending_investigation is not None else None
             ),
+            "supervisor_ask_user_count": self.supervisor_ask_user_count,
         }
 
     @classmethod
@@ -159,6 +163,7 @@ class HarnessRunState:
             pending_reviewer_verdict=_deserialise_reviewer_verdict(d.get("pending_reviewer_verdict")),
             pending_supervisor_directive=_deserialise_supervisor_directive(d.get("pending_supervisor_directive")),
             pending_investigation=_deserialise_investigation(d.get("pending_investigation")),
+            supervisor_ask_user_count=int(d.get("supervisor_ask_user_count", 0) or 0),
         )
 
 
