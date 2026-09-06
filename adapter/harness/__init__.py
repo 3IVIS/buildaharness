@@ -144,6 +144,17 @@ from .hypothesis import (
     generate_hypotheses,
     symptom_inference,
 )
+from .investigation import (
+    INVESTIGATION_FORBIDDEN_TOOLS,
+    INVESTIGATION_READ_ONLY_TOOLS,
+    InvestigationDepthExceeded,
+    InvestigationFinding,
+    InvestigationOutcome,
+    count_investigations,
+    merge_investigation_findings,
+    run_investigation,
+    validate_investigation_tools,
+)
 
 # Phase 11
 from .langfuse_tracing import (
@@ -265,6 +276,15 @@ from .risk import (
 )
 from .staleness import assert_generation_fresh, increment_generation_id, is_stale, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
+from .supervisor import (
+    SUPERVISOR_ACTIONS,
+    InvestigationRequest,
+    SupervisorAction,
+    SupervisorDirective,
+    UserQuestion,
+    decide_supervisor_directive,
+    supervisor_enabled,
+)
 from .task_graph import (
     ConflictProbabilityCache,
     Task,
@@ -292,6 +312,10 @@ from .tool_reliability import (
     ToolEnvelope,
     apply_tool_reliability_envelope,
     get_envelope,
+)
+from .trajectory_digest import (
+    TrajectoryDigest,
+    build_digest,
 )
 from .verification import (
     LayerResult,
@@ -323,7 +347,10 @@ __all__ = [
     "DEFAULT_REGISTRY",
     "DEFAULT_STRATEGY_ORDER",
     "HARNESS_NODE_COMPILERS",
+    "INVESTIGATION_FORBIDDEN_TOOLS",
+    "INVESTIGATION_READ_ONLY_TOOLS",
     "STRATEGY_ORDER",
+    "SUPERVISOR_ACTIONS",
     "TOOL_RELIABILITY_ENVELOPES",
     "AdequacyResult",
     "AdversarialPrior",
@@ -369,6 +396,10 @@ __all__ = [
     "HarnessTraceContext",
     "Hypothesis",
     "HypothesisSet",
+    "InvestigationDepthExceeded",
+    "InvestigationFinding",
+    "InvestigationOutcome",
+    "InvestigationRequest",
     "LayerResult",
     "MatchResult",
     "MechanicalCheckResult",
@@ -405,6 +436,8 @@ __all__ = [
     "StrategyWeightKey",
     "StrategyWeightSample",
     "Structure",
+    "SupervisorAction",
+    "SupervisorDirective",
     "SurfaceBlocker",
     "Task",
     "TaskGraph",
@@ -414,7 +447,9 @@ __all__ = [
     "ToolAvailabilityManifest",
     "ToolEntry",
     "ToolEnvelope",
+    "TrajectoryDigest",
     "UpdateChannel",
+    "UserQuestion",
     "VOIResult",
     "VerificationHealth",
     "VerificationLayer",
@@ -440,6 +475,7 @@ __all__ = [
     "assign_system_breaking_severity",
     "await_clarification",
     "build_default_library",
+    "build_digest",
     "build_manifest",
     "build_strategy_ordering",
     "cannot_make_progress",
@@ -483,7 +519,9 @@ __all__ = [
     "compute_file_centrality",
     "compute_initial_conflict_probabilities",
     "contract_shadow_check",
+    "count_investigations",
     "counterfactual_reasoning",
+    "decide_supervisor_directive",
     "decomposition_gate",
     "detect_abstraction_contradictions",
     "detect_contradictions",
@@ -519,6 +557,7 @@ __all__ = [
     "load_structural_decompositions",
     "load_tool_workflow_seeds",
     "load_verification_plan_seeds",
+    "merge_investigation_findings",
     "merge_world_models",
     "new_execution_version",
     "new_plan_version",
@@ -539,6 +578,7 @@ __all__ = [
     "review_proposed_change",
     "reviewer_pass",
     "risk_summary",
+    "run_investigation",
     "run_mechanical_check",
     "run_offline_eval_pipeline",
     "run_one_iteration",
@@ -551,6 +591,7 @@ __all__ = [
     "softmax_strategy_policy",
     "staleness_check",
     "staleness_sweep",
+    "supervisor_enabled",
     "switch_strategy",
     "symptom_inference",
     "update_diagnostics",
@@ -560,6 +601,7 @@ __all__ = [
     "update_success_criteria",
     "update_verification_strength",
     "upsert_strategy_weight",
+    "validate_investigation_tools",
     "validate_output_contract",
     "validate_task_graph",
     "verification_adequacy_critic",

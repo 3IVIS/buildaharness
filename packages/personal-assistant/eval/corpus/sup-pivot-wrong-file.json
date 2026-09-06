@@ -1,0 +1,33 @@
+{
+  "id": "sup-pivot-wrong-file",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "The named file only points elsewhere \u2014 the real value is in a second file.",
+  "prompt": "What port does the API listen on? Start with server.js.",
+  "workspace": [
+    {
+      "path": "server.js",
+      "content": "// The listen port is not hardcoded here.\n// It is read from config/ports.json at boot.\nconst port = require('./config/ports.json').api;\napp.listen(port);\n"
+    },
+    {
+      "path": "config/ports.json",
+      "content": "{ \"api\": 9443, \"admin\": 9444 }\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "9443"
+    ],
+    "notContains": [
+      "8080",
+      "3000",
+      "port is not specified",
+      "cannot determine",
+      "don't know"
+    ]
+  },
+  "note": "Pass = follows the pointer into config/ports.json and reports 9443.",
+  "tools": {
+    "file": true
+  }
+}

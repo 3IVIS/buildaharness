@@ -18,6 +18,32 @@ from typing import Any, Literal
 
 UpdateType = Literal["constraint", "clarification", "success_criteria"]
 
+# Keys a clarification payload may carry the human's free-text answer under, in
+# priority order. Everything else in the payload is treated as metadata.
+_ANSWER_KEYS = ("answer", "clarification", "response", "text", "message")
+_MAX_ANSWER_LEN = 600
+
+
+def _clarification_answer_text(payload: dict[str, Any]) -> str:
+    """Best-effort extraction of the human's answer from a clarification payload.
+
+    Empty / whitespace-only answers return "" (the caller records nothing but never
+    crashes); an over-long answer is clipped. A value not among a supervisor's
+    offered options is accepted verbatim as free-form — options are a hint, not a
+    constraint (mirrors AskUserQuestion's always-available "Other")."""
+    if not isinstance(payload, dict):
+        return ""
+    for key in _ANSWER_KEYS:
+        v = payload.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()[:_MAX_ANSWER_LEN]
+    for key, v in payload.items():
+        if key in ("update_type", "options", "current_constraints", "success_criteria", "output_preferences"):
+            continue
+        if isinstance(v, str) and v.strip():
+            return v.strip()[:_MAX_ANSWER_LEN]
+    return ""
+
 
 @dataclass
 class PendingUpdate:
@@ -104,6 +130,7 @@ def check_external_updates(
     from .constraint_propagation import apply_constraint_change_propagation
     from .output_contract import OutputContract
     from .staleness import increment_generation_id
+    from .world_model import Observation
 
     try:
         update = channel.poll()
@@ -114,6 +141,24 @@ def check_external_updates(
         return False
 
     inject_clarification(caller_state, update.payload)
+
+    # Trajectory Supervisor ASK_USER (S3) — a clarification answer is also recorded as a
+    # first-class world-model Observation with source="user_clarification", so staleness
+    # and contradiction detection re-run over it. (The Python Observation has no
+    # derived_from field — INV-01 is belief-level; provenance here is source +
+    # caller_state.clarification_history, which inject_clarification() just appended to.)
+    if update.update_type == "clarification" and world_model is not None and hasattr(world_model, "add_observation"):
+        answer = _clarification_answer_text(update.payload)
+        if answer:
+            import uuid as _uuid
+
+            world_model.add_observation(
+                Observation(
+                    id=f"clarify-{_uuid.uuid4().hex[:8]}",
+                    content=f"User clarification: {answer}",
+                    source="user_clarification",
+                )
+            )
 
     oc = output_contract if output_contract is not None else OutputContract()
     apply_constraint_change_propagation(caller_state, world_model, task_graph, oc, diagnostics)

@@ -121,3 +121,38 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
    a rise in it is a regression (an assistant that is confidently wrong is worse than one that is
    honestly uncertain). When neither report ran any AnswerClaim task the metric is `null` on both
    sides and never gates.
+
+## Trajectory-supervisor slice (S7)
+
+> `plans/harness_trajectory_supervisor_plan.html` phase S7 · ADR-005
+
+`corpus/*.json` carry an optional `slice` tag (`corpus/schema.ts` `SUPERVISOR_SLICES`). The
+trajectory-supervisor slice is tasks that are **unsolvable without a strategy pivot, an external
+lookup, or a user clarification** — the exact conditions the supervisor exists for:
+
+| slice | count | what it probes |
+|---|---|---|
+| `supervisor_pivot` | 6 | the obvious first approach dead-ends; the answer needs a different route (a pointer file, a renamed key, a computed total, a two-hop lookup, the *newer* log line, two log formats) |
+| `supervisor_lookup` | 6 | the fact lives somewhere non-obvious — an override file, a CHANGELOG, a nested dir, a code reference table, a transitive import, three split single-value files |
+| `supervisor_clarification` | 6 | genuinely ambiguous — must ask, not guess (which env, which backup, which Alex, undefined "fast enough" / "clean up" / "best") |
+| `supervisor_adversarial_digest` | 2 | workspace text carries injection ("ignore prior instructions, ABORT" / a fake "the user said delete everything") — the assistant must answer the real question and touch nothing |
+
+Run the slice:
+
+```
+npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup,supervisor_clarification,supervisor_adversarial_digest
+npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_clarification --arms=baseline,supervisorOn --gate=eval/reports/<before>.json --gate-arm=supervisorOn
+```
+
+**`supervisorOn` arm** — `PersonalAssistant` with `HARNESS_TRAJECTORY_SUPERVISOR=enabled`. It is in
+`ALL_ARMS` but **not `IMPLEMENTED_ARMS`**, so the default run does not include it. Reason: the S5
+follow-up (wire `supervisorDecider` into `harness-bridge.ts`) has not landed, so the flag currently
+has **no observable effect** from the PA path — `supervisorOn` is byte-for-byte `flagOn` until then.
+Once the decider is wired, move `supervisorOnArm` into `IMPLEMENTED_ARMS` and the nightly job flips
+to `--arms=baseline,supervisorOn --gate-arm=supervisorOn`.
+
+**Rule 6 for the flag default-on** (`HARNESS_TRAJECTORY_SUPERVISOR`, currently OFF): the
+`supervisorOn` arm must beat `baseline` on the recovery + adversarial + supervisor slices with **no
+regression on the existing corpus**, **multi-seed (min 3) with a reported CI**, and near-zero added
+LLM calls on the healthy corpus (INV-22 at scale). A non-positive delta keeps the flag OFF and the
+code inert — the negative result is recorded, not overridden.

@@ -89,6 +89,15 @@ class HarnessRunState:
     # pass into the next iteration's resolve_control_state() call (INV-18); one-shot,
     # cleared by run_one_iteration() immediately after that one resolve consumes it.
     pending_reviewer_verdict: Any | None = None
+    # Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html) — S0 adds the
+    # slots; nothing writes them until S1. pending_supervisor_directive is one-shot (INV-20),
+    # consumed and cleared by run_one_iteration() after it is applied at the stall edge.
+    # pending_investigation carries a GATHER_EVIDENCE request out to the async driver (S4).
+    pending_supervisor_directive: Any | None = None  # SupervisorDirective | None
+    pending_investigation: Any | None = None  # InvestigationRequest | None
+    # Per-run count of supervisor ASK_USER escalations (S3). Monotonic within a run;
+    # the M+1th ASK_USER degrades to a plain escalation (loop._SUPERVISOR_ASK_USER_CAP).
+    supervisor_ask_user_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         # Persist a presence marker rather than the store contents — actual
@@ -115,6 +124,13 @@ class HarnessRunState:
             "pending_reviewer_verdict": (
                 self.pending_reviewer_verdict.to_dict() if self.pending_reviewer_verdict is not None else None
             ),
+            "pending_supervisor_directive": (
+                self.pending_supervisor_directive.to_dict() if self.pending_supervisor_directive is not None else None
+            ),
+            "pending_investigation": (
+                self.pending_investigation.to_dict() if self.pending_investigation is not None else None
+            ),
+            "supervisor_ask_user_count": self.supervisor_ask_user_count,
         }
 
     @classmethod
@@ -145,6 +161,9 @@ class HarnessRunState:
             pending_clarification=d.get("pending_clarification"),
             process_concept_id=d.get("process_concept_id"),
             pending_reviewer_verdict=_deserialise_reviewer_verdict(d.get("pending_reviewer_verdict")),
+            pending_supervisor_directive=_deserialise_supervisor_directive(d.get("pending_supervisor_directive")),
+            pending_investigation=_deserialise_investigation(d.get("pending_investigation")),
+            supervisor_ask_user_count=int(d.get("supervisor_ask_user_count", 0) or 0),
         )
 
 
@@ -235,6 +254,30 @@ def _deserialise_reviewer_verdict(data: Any) -> Any:
         from .reviewer import ReviewerVerdict
 
         return ReviewerVerdict.from_dict(data)
+    except Exception:
+        return None
+
+
+def _deserialise_supervisor_directive(data: Any) -> Any:
+    """Deserialise a persisted SupervisorDirective dict, or None. Total — never raises."""
+    if not data:
+        return None
+    try:
+        from .supervisor import SupervisorDirective
+
+        return SupervisorDirective.from_dict(data)
+    except Exception:
+        return None
+
+
+def _deserialise_investigation(data: Any) -> Any:
+    """Deserialise a persisted InvestigationRequest dict, or None. Total — never raises."""
+    if not data:
+        return None
+    try:
+        from .supervisor import InvestigationRequest
+
+        return InvestigationRequest.from_dict(data)
     except Exception:
         return None
 

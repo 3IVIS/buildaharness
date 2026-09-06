@@ -1,0 +1,1 @@
+{ "id": "08-ask-user-no-question-degrades", "description": "ASK_USER with options but no question degrades to CONTINUE identically", "directive_in": { "action": "ASK_USER", "rationale": "hmm", "question": { "options": ["a","b"] } } }

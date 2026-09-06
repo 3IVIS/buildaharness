@@ -50,9 +50,16 @@ def diagnose_and_replan(
     return task_graph
 
 
-def rebuild_task_graph(world_model: Any, caller_state: Any) -> TaskGraph:
-    """GLOBAL replan: fresh TaskGraph from success_criteria + world_model beliefs."""
-    success_criteria: list[str] = getattr(caller_state, "success_criteria", [])
+def rebuild_task_graph(world_model: Any, caller_state: Any, plan_note: str | None = None) -> TaskGraph:
+    """GLOBAL replan: fresh TaskGraph from success_criteria + world_model beliefs.
+
+    ``plan_note`` (Trajectory Supervisor REFRAME_PLAN, S1) is an extra reframing
+    constraint appended to the success criteria before decomposition. None for every
+    existing caller — no behaviour change.
+    """
+    success_criteria: list[str] = list(getattr(caller_state, "success_criteria", []))
+    if plan_note:
+        success_criteria = [*success_criteria, f"Reframe: {plan_note}"]
     beliefs: list[Any] = getattr(world_model, "beliefs", [])
 
     new_tasks: list[Task] = []
@@ -90,12 +97,22 @@ def apply_replan(
     task_graph: TaskGraph,
     world_model: Any,
     caller_state: Any,
+    plan_note: str | None = None,
 ) -> TaskGraph:
-    """Route to local or global replan. GLOBAL always validates before returning."""
+    """Route to local or global replan. GLOBAL always validates before returning.
+
+    ``plan_note`` is only meaningful for a GLOBAL replan (Supervisor REFRAME_PLAN, S1).
+    """
     if scope == "LOCAL":
         return diagnose_and_replan(current_task, task_graph, world_model)
 
-    new_graph = rebuild_task_graph(world_model, caller_state)
+    # Pass plan_note only when set, so a monkeypatched/legacy rebuild_task_graph stub
+    # (no plan_note param) keeps working for every existing GLOBAL-replan caller.
+    new_graph = (
+        rebuild_task_graph(world_model, caller_state, plan_note=plan_note)
+        if plan_note
+        else rebuild_task_graph(world_model, caller_state)
+    )
     errors = validate_task_graph(new_graph)
     if errors:
         raise ValueError(f"Rebuilt task graph is invalid: {errors}")

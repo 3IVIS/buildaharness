@@ -1,0 +1,1 @@
+{ "id": "14-redirect-hint-freeform", "description": "from_dict keeps a REDIRECT hint that is not a real strategy name (the loop, not from_dict, rejects it) — both twins must keep it identically", "directive_in": { "action": "REDIRECT_STRATEGY", "rationale": "go wide", "strategy_hint": "SOMETHING_MADE_UP" } }

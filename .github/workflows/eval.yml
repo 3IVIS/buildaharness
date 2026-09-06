@@ -12,6 +12,10 @@ name: Offline eval harness
 #                                      (Plan Phase B). Push: keyless tsc + baseline.json parse.
 #                                      Nightly: real-LLM run of the baseline/flagOn/bare arms via
 #                                      the `claude` CLI (ANTHROPIC_API_KEY), Rule 6 gate + artifact.
+#                                      The corpus now includes the `slice`-tagged trajectory-supervisor
+#                                      S7 slice; the `supervisorOn` arm + `HARNESS_TRAJECTORY_SUPERVISOR`
+#                                      default-on flip are gated on a positive multi-seed delta once the
+#                                      S5 `supervisorDecider` PA wiring lands (ADR-005).
 #   eval-harness-benchmark-langgraph — the `langgraph` arm of that benchmark, run from adapter/eval/
 #                                      (Python). Push: keyless structural test. Nightly: real-LLM
 #                                      run of the curated task subset (OPENAI_API_KEY) + artifact.

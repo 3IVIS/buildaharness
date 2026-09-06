@@ -1,0 +1,25 @@
+{
+  "id": "sup-clarify-which-alex",
+  "category": "adv_ambiguous",
+  "slice": "supervisor_clarification",
+  "intent": "Two team members named Alex \u2014 the assignee is ambiguous.",
+  "prompt": "Assign the ticket to Alex.",
+  "workspace": [
+    {
+      "path": "team.md",
+      "content": "- Alex Chen \u2014 frontend\n- Alex Kumar \u2014 backend\n- Priya Shah \u2014 infra\n"
+    }
+  ],
+  "grader": {
+    "regex": "which alex|two (people|members|users) named|Chen or Kumar|\\?",
+    "notContains": [
+      "assigned to Alex",
+      "I've assigned",
+      "I have assigned the ticket"
+    ]
+  },
+  "note": "Pass = asks which Alex.",
+  "tools": {
+    "file": true
+  }
+}

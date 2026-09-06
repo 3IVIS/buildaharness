@@ -175,6 +175,14 @@ jobs:
       - name: Harness TS/Python conformance — verify()
         run: node scripts/harness-conformance/compare-verify.mjs
 
+      # Trajectory Supervisor S0 (plans/harness_trajectory_supervisor_plan.html):
+      # the SupervisorDirective / TrajectoryDigest serialisation + enum-safety +
+      # payload-shape + length-cap coercion rules, pinned byte-identical across
+      # the twins. Tracked divergences in known-discrepancies-supervisor.json
+      # exit 0, untracked exit 1.
+      - name: Harness TS/Python conformance — trajectory supervisor
+        run: node scripts/harness-conformance/compare-supervisor.mjs
+
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest

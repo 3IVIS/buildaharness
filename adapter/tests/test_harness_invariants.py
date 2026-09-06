@@ -20,6 +20,17 @@ Invariants:
   INV-10  experience_store is no-op when absent — structurally identical output
   INV-11  Diagnostic provenance — no sub-dimension reaches the resolver un-provenanced;
           the uncalibrated-model-block annotation is advisory (Phase C2; ADR-004)
+  INV-20  Trajectory Supervisor directive is one-shot — applied at the stall edge once,
+          never re-applied on a later iteration (plans/harness_trajectory_supervisor_plan.html)
+  INV-21  The supervisor never influences resolve_control_state() or adds/edits beliefs,
+          observations, or contradictions — only strategy_state / task_graph / budget
+  INV-22  The supervisor directive is consulted only inside the cannot_make_progress()
+          branch — a non-stalled iteration ignores it entirely
+  INV-23  Investigation sub-agents (GATHER_EVIDENCE, S4) have no write / shell / email
+          tools — suggested_tools is filtered to the read-only allowlist before dispatch
+  INV-24  Investigation depth is capped at 1 — an investigation cannot spawn an investigation
+  INV-25  Every investigation runs under its own bounded call budget; exhaustion returns
+          partial findings and never hangs (per-call bounded timeout)
 
 Run with: pytest adapter/tests/test_harness_invariants.py -v
 """
@@ -644,3 +655,146 @@ def test_inv_task_graph_to_dict_unchanged():
 
     after = json.dumps(tg.to_dict(), sort_keys=True)
     assert baseline == after, "INV: to_plan()/to_plan_task() must not mutate task_graph state"
+
+
+# ── INV-20 / INV-21 / INV-22 — Trajectory Supervisor (S1) ────────────────────
+
+
+def _stalled_strategy_state() -> StrategyState:
+    # Proxy 1 (completion velocity): no advance across STALL_WINDOW steps.
+    return StrategyState(completion_history=[0, 0, 0, 0, 0, 0])
+
+
+def _run_stall_iteration(directive, *, strategy_state=None, supervisor_on=True, monkeypatch=None):
+    if monkeypatch is not None:
+        if supervisor_on:
+            monkeypatch.setenv("HARNESS_TRAJECTORY_SUPERVISOR", "1")
+        else:
+            monkeypatch.delenv("HARNESS_TRAJECTORY_SUPERVISOR", raising=False)
+    wm = _make_world_model()
+    ss = strategy_state or _stalled_strategy_state()
+    return (
+        run_one_iteration(
+            world_model=wm,
+            diagnostics=_make_diagnostics(),
+            hypothesis_set=HypothesisSet(active=[], eliminated=[]),
+            task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="ACTIVE", abstraction_level=0)]),
+            failure_diagnostics=FailureDiagnostics(),
+            memory_state=MemoryState(),
+            strategy_state=ss,
+            step_count=0,
+            supervisor_directive=directive,
+        ),
+        ss,
+        wm,
+    )
+
+
+def test_inv_20_supervisor_directive_is_one_shot(monkeypatch):
+    """INV-20: a REDIRECT applied at the stall edge is not re-applied next iteration."""
+    from harness.recovery import STRATEGY_ORDER
+    from harness.supervisor import SupervisorDirective
+
+    ss = _stalled_strategy_state()
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="BROADER_SEARCH")
+    r1, ss, _wm = _run_stall_iteration(d, strategy_state=ss, monkeypatch=monkeypatch)
+    ss = r1["strategy_state"]
+    assert ss.current_strategy == "BROADER_SEARCH"
+
+    # Next stalled iteration, no directive → plain ladder advance, not a re-redirect.
+    r2, _ss2, _wm2 = _run_stall_iteration(None, strategy_state=ss)
+    nxt = STRATEGY_ORDER[STRATEGY_ORDER.index("BROADER_SEARCH") + 1]
+    assert r2["strategy_state"].current_strategy == nxt
+
+
+def test_inv_21_supervisor_does_not_touch_resolver_or_world_model(monkeypatch):
+    """INV-21: with vs without a directive, the resolved control state and the belief/
+    observation/contradiction sets are identical."""
+    from harness.supervisor import SupervisorDirective
+
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="REIMPLEMENT")
+    r_with, _ss1, wm_with = _run_stall_iteration(d, monkeypatch=monkeypatch)
+    r_without, _ss2, wm_without = _run_stall_iteration(None, supervisor_on=False, monkeypatch=monkeypatch)
+
+    assert r_with["control_state_a"].to_dict() == r_without["control_state_a"].to_dict()
+    assert r_with["control_state_b"].to_dict() == r_without["control_state_b"].to_dict()
+    assert [(b.id, b.statement) for b in wm_with.beliefs] == [(b.id, b.statement) for b in wm_without.beliefs]
+    assert [o.id for o in wm_with.observations] == [o.id for o in wm_without.observations]
+    assert [c.id for c in wm_with.contradictions] == [c.id for c in wm_without.contradictions]
+
+
+def test_inv_22_supervisor_ignored_when_not_stalled(monkeypatch):
+    """INV-22: a directive passed on a non-stalled iteration changes nothing."""
+    from harness.supervisor import SupervisorDirective
+
+    ss = StrategyState(completion_history=[1, 2, 3])  # healthy
+    d = SupervisorDirective(action="REDIRECT_STRATEGY", rationale="x", strategy_hint="REIMPLEMENT")
+    r, _out_ss, _wm = _run_stall_iteration(d, strategy_state=ss, monkeypatch=monkeypatch)
+    assert r["strategy_state"].current_strategy == "DIRECT_EDIT"
+    assert r["strategy_state"].switch_count == 0
+    assert not any("supervisor" in t for t in r["strategy_state"].switch_triggers)
+
+
+# ── INV-23 / INV-24 / INV-25 — Trajectory Supervisor investigation sub-agent (S4) ──
+
+
+def test_inv_23_investigation_has_no_write_shell_email_tools():
+    """INV-23: write / shell / email / unknown fn_refs are filtered out before any
+    dispatch, and run_investigation never calls tool_runner with a rejected name."""
+    from harness.investigation import (
+        InvestigationOutcome,
+        run_investigation,
+        validate_investigation_tools,
+    )
+    from harness.supervisor import InvestigationRequest
+
+    forbidden = ["write_file", "run_shell_command", "send_email", "totally_unknown_tool"]
+    allowed, rejected = validate_investigation_tools([*forbidden, "retrieve"])
+    assert allowed == ["retrieve"]
+    assert set(rejected) == set(forbidden)
+
+    dispatched: list[str] = []
+
+    def runner(tool: str, _q: str) -> str:
+        dispatched.append(tool)
+        return "finding"
+
+    req = InvestigationRequest(question="which port?", suggested_tools=[*forbidden, "retrieve"], budget=5)
+    outcome = run_investigation(req, tool_runner=runner)
+    assert isinstance(outcome, InvestigationOutcome)
+    assert dispatched == ["retrieve"]  # no forbidden tool ever dispatched
+    assert set(outcome.rejected_tools) == set(forbidden)
+
+
+def test_inv_24_investigation_depth_capped_at_one():
+    """INV-24: run_investigation at depth >= 1 raises — an investigation cannot spawn one."""
+    from harness.investigation import InvestigationDepthExceeded, run_investigation
+    from harness.supervisor import InvestigationRequest
+
+    req = InvestigationRequest(question="q", suggested_tools=["retrieve"], budget=2)
+    with pytest.raises(InvestigationDepthExceeded):
+        run_investigation(req, tool_runner=lambda _t, _q: "x", depth=1)
+
+
+def test_inv_25_investigation_budget_bounded_and_never_hangs():
+    """INV-25: a hanging tool is cut off by the per-call timeout, and a budget smaller
+    than the tool list returns partial findings with exhausted=True — no hang."""
+    import time
+
+    from harness.investigation import run_investigation
+    from harness.supervisor import InvestigationRequest
+
+    def slow_runner(tool: str, _q: str) -> str:
+        if tool == "web_search":
+            time.sleep(30)  # would hang without the bounded timeout
+        return f"{tool}-result"
+
+    req = InvestigationRequest(question="q", suggested_tools=["retrieve", "web_search", "read_file"], budget=2)
+    started = time.monotonic()
+    outcome = run_investigation(req, tool_runner=slow_runner, per_call_timeout=0.2)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 10  # the 30s sleep was cut off
+    assert outcome.exhausted is True  # budget 2 < 3 suggested tools
+    assert outcome.calls_made == 2
+    assert [f.tool for f in outcome.findings] == ["retrieve"]  # web_search timed out, read_file not reached

@@ -19,6 +19,20 @@ import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
 import { rollbackAndReplan, cannotMakeProgress } from './nodes/rollback-replan.js'
+import {
+  SupervisorDirective,
+  resolveSupervisorDirective,
+  type SupervisorDirectiveData,
+  type InvestigationRequestData,
+  type UserQuestionData,
+} from './supervisor.js'
+
+/** Per-run cap M on supervisor ASK_USER escalations (S3) — twin of loop.py's
+ *  _SUPERVISOR_ASK_USER_CAP. The M+1th ASK_USER in one run degrades to a plain
+ *  cannot_make_progress escalation (no structured question). */
+const SUPERVISOR_ASK_USER_CAP_M = 2
+import { resolveGatherEvidence, type InvestigationFinding } from './investigation.js'
+import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
@@ -183,6 +197,37 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * covers. See Phase 2/Decision 3b of plans/lexical_functions_hardening_plan.html.
    */
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  /**
+   * Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html, S2) — an optional
+   * async hook consulted ONLY when the run stalls (cannotMakeProgress() is true at the point a
+   * failed task would be rolled back). Given the bounded stall digest, return one directive
+   * (or null / anything malformed → treated as CONTINUE). The harness has no LLM of its own —
+   * this stays a caller-supplied hook, like contradictionChecker / semanticFailureMatcher.
+   * Absent → no supervisor (the default; equivalent to the flag being OFF).
+   */
+  supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
+  /** Fired once, right after supervisorDecider resolves, with the coerced directive that will
+   * be applied. Observability only — like onGateDecision. A throwing handler is swallowed. */
+  onSupervisorDirective?: (directive: SupervisorDirective) => void
+  /**
+   * Trajectory Supervisor GATHER_EVIDENCE (S5) — a host-provided bounded read-only investigation.
+   * Called at most INVESTIGATION_CAP_K times per run, only when the supervisor returns a
+   * GATHER_EVIDENCE directive at a stall edge. The host runs its own read-only tool loop (its own
+   * Budget, routed through the same tool-policy gate — no write/shell/email tools) and returns the
+   * findings; the harness merges them into the WorldModel with provenance + a generation bump.
+   * Absent → GATHER_EVIDENCE degrades to CONTINUE. A throw / reject degrades to CONTINUE too.
+   */
+  runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
+  /**
+   * Trajectory Supervisor ASK_USER (S3) — present iff the host can surface a structured
+   * question to the user and resume the run with an answer. When set, an ASK_USER directive
+   * at a stall edge throws a `supervisor_question` EscalationHalt (question + options on the
+   * blocker) and this hook is called once with the question (observability — a throw is
+   * swallowed). Absent → ASK_USER degrades to a plain `cannot_make_progress` escalation.
+   * Per-run cap SUPERVISOR_ASK_USER_CAP_M; beyond it ASK_USER also degrades to the plain
+   * escalation. The resumed run records the answer as a `user_clarification` observation.
+   */
+  askUser?: (question: UserQuestionData) => void
 }
 
 export interface HarnessRunResult {
@@ -266,6 +311,13 @@ interface LoopContext {
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
+  onSupervisorDirective?: (directive: SupervisorDirective) => void
+  runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
+  askUser?: (question: UserQuestionData) => void
+  /** Per-run count of supervisor ASK_USER escalations (S3) — persisted across resume via
+   *  HarnessRunProgressData.supervisorAskUserCount. */
+  supervisorAskUserCount: number
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
@@ -328,6 +380,11 @@ function buildInitialContext(
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    supervisorDecider: options.supervisorDecider,
+    onSupervisorDirective: options.onSupervisorDirective,
+    runInvestigation: options.runInvestigation,
+    askUser: options.askUser,
+    supervisorAskUserCount: 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
     pendingReviewerVerdict: undefined,
@@ -395,6 +452,11 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    supervisorDecider: options.supervisorDecider,
+    onSupervisorDirective: options.onSupervisorDirective,
+    runInvestigation: options.runInvestigation,
+    askUser: options.askUser,
+    supervisorAskUserCount: checkpoint.progress.supervisorAskUserCount ?? 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
     pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
@@ -434,6 +496,7 @@ function toCheckpoint(ctx: LoopContext): HarnessCheckpoint {
     propagationQueue: { reopenedTaskIds: [...ctx.propagationQueue.reopenedTaskIds] },
     pendingProposal: ctx.pendingProposal ?? null,
     pendingReviewerVerdict: ctx.pendingReviewerVerdict ?? null,
+    supervisorAskUserCount: ctx.supervisorAskUserCount,
   }
 
   return { runId: ctx.runId, runState, runConfig, progress, schemaVersion: CHECKPOINT_SCHEMA_VERSION }
@@ -1088,6 +1151,86 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // before — a caller can restore real state (e.g. a memoryState.rollback_points snapshot)
       // when a task actually fails, rather than this being dead plumbing.
       const rollbackFn = ctx.rollbackExecutors?.[currentTask.id] ?? ctx.rollbackExecutors?.['default']
+
+      // Trajectory Supervisor (S2) — consult the async decider ONLY on a genuine stall,
+      // exactly like loop.py's S1 wiring. cannotMakeProgress() here also primes
+      // strategyState.stall_reason for the digest (rollbackAndReplan re-checks it anyway).
+      let supervisorDirective: SupervisorDirective | null = null
+      if (ctx.supervisorDecider && cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)) {
+        // cannotMakeProgress() above also primes strategyState.stall_reason for the digest.
+        const digest = buildDigest(ctx.strategyState, ctx.failureDiagnostics, ctx.taskGraph, ctx.worldModel, {
+          successCriteria: ctx.successCriteria,
+        })
+        supervisorDirective = await resolveSupervisorDirective(
+          ctx.supervisorDecider,
+          digest.toJSON(),
+          ctx.onSupervisorDirective,
+        )
+        // GATHER_EVIDENCE (S5) — run the investigation now (findings merged into the
+        // WorldModel), then let the directive fall through as CONTINUE so the ladder
+        // proceeds over the new evidence. rollbackAndReplan only acts on
+        // REDIRECT_STRATEGY / REFRAME_PLAN, so a coerced CONTINUE is inert to it.
+        if (supervisorDirective.action === 'GATHER_EVIDENCE') {
+          supervisorDirective = await resolveGatherEvidence(ctx.worldModel, supervisorDirective, ctx.runInvestigation)
+        }
+        // ABORT (S6) — the supervisor judges the run unrecoverable after redirection is
+        // exhausted. Escalate immediately with a cannot_make_progress blocker carrying the
+        // rationale; no rollback / replan this iteration. Q3 resolved (a): the supervisor
+        // never touches resolveControlState() — this is a strategy / escalation move only,
+        // exactly like loop.py's S6 wiring.
+        if (supervisorDirective.action === 'ABORT') {
+          ctx.strategyState.switch_triggers.push(
+            `supervisor:ABORT ${supervisorDirective.rationale}`.trim().slice(0, 200),
+          )
+          throw new EscalationHalt({
+            reason: 'cannot_make_progress',
+            missing_info: ['clarification on how to proceed', 'revised success criteria'],
+            current_task_summary:
+              `${currentTask.description} | supervisor ABORT: ${supervisorDirective.rationale}`.trim().slice(0, 500),
+            escalated_at: new Date().toISOString(),
+          })
+        }
+        // ASK_USER (S3) — the supervisor needs a human decision. With a host askUser
+        // capability and within the per-run cap, throw a structured `supervisor_question`
+        // EscalationHalt (question + options on the blocker); the host surfaces it and
+        // resumes with an answer (→ a user_clarification observation). Without the
+        // capability, or past the cap, degrade to a plain cannot_make_progress escalation.
+        // Escalation only — never a resolveControlState() write, exactly like ABORT.
+        if (supervisorDirective.action === 'ASK_USER' && supervisorDirective.question) {
+          const q = supervisorDirective.question
+          const withinCap = !!ctx.askUser && ctx.supervisorAskUserCount < SUPERVISOR_ASK_USER_CAP_M
+          ctx.strategyState.switch_triggers.push(
+            `supervisor:ASK_USER${withinCap ? '' : '->escalate'} ${supervisorDirective.rationale}`.trim().slice(0, 200),
+          )
+          if (withinCap) {
+            ctx.supervisorAskUserCount += 1
+            try {
+              ctx.askUser!(q.toJSON())
+            } catch {
+              /* an observability handler must never break the run */
+            }
+            throw new EscalationHalt({
+              reason: 'supervisor_question',
+              missing_info: ['answer to the supervisor question'],
+              current_task_summary:
+                `${currentTask.description} | supervisor question: ${q.question}`.trim().slice(0, 500),
+              escalated_at: new Date().toISOString(),
+              question: q.question,
+              options: q.options.length ? [...q.options] : undefined,
+            })
+          }
+          throw new EscalationHalt({
+            reason: 'cannot_make_progress',
+            missing_info: ['clarification on how to proceed', 'revised success criteria'],
+            current_task_summary:
+              `${currentTask.description} | supervisor ASK_USER (no host): ${supervisorDirective.rationale}`
+                .trim()
+                .slice(0, 500),
+            escalated_at: new Date().toISOString(),
+          })
+        }
+      }
+
       const rollbackResult = rollbackAndReplan(
         currentTask,
         ctx.strategyState,
@@ -1097,6 +1240,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.callerState,
         ctx.experienceStore.available ? ctx.experienceStore : null,
         rollbackFn,
+        supervisorDirective,
       )
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
     }

@@ -24,7 +24,7 @@ import { bareArm } from './bare-arm.js'
 
 export { bareArm }
 
-export type ArmName = 'baseline' | 'bare' | 'langgraph' | 'flagOn'
+export type ArmName = 'baseline' | 'bare' | 'langgraph' | 'flagOn' | 'supervisorOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -39,8 +39,31 @@ async function runAssistant(
   task: TaskSpec,
   makeLlm: MakeLlm,
   oneLoopMode: 'enabled' | 'disabled',
+  supervisor = false,
 ): Promise<ArmTurnOutput | null> {
   if (task.tools.web) return null // web arm not wired — see eval/README.md
+
+  // The trajectory supervisor (plans/harness_trajectory_supervisor_plan.html) is gated on this
+  // env flag in both twins. Arms run sequentially (runner.ts), so a set/restore around the turn
+  // is safe. NOTE: until the S5 follow-up wires `supervisorDecider` into harness-bridge.ts, this
+  // flag has no observable effect from the PA path — `supervisorOn` is currently ≡ `flagOn`.
+  const priorFlag = process.env.HARNESS_TRAJECTORY_SUPERVISOR
+  if (supervisor) process.env.HARNESS_TRAJECTORY_SUPERVISOR = 'enabled'
+  try {
+    return await runAssistantInner(task, makeLlm, oneLoopMode)
+  } finally {
+    if (supervisor) {
+      if (priorFlag === undefined) delete process.env.HARNESS_TRAJECTORY_SUPERVISOR
+      else process.env.HARNESS_TRAJECTORY_SUPERVISOR = priorFlag
+    }
+  }
+}
+
+async function runAssistantInner(
+  task: TaskSpec,
+  makeLlm: MakeLlm,
+  oneLoopMode: 'enabled' | 'disabled',
+): Promise<ArmTurnOutput | null> {
 
   const ws = makeWorkspace(task)
   const declaredPaths = task.workspace.map((f) => f.path)
@@ -106,6 +129,16 @@ export const flagOnArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled'),
 }
 
+export const supervisorOnArm: Arm = {
+  name: 'supervisorOn',
+  label:
+    'PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled — the S7 supervisor-vs-no-supervisor differential arm',
+  // Not in IMPLEMENTED_ARMS yet: the S5 follow-up (wire `supervisorDecider` into harness-bridge.ts)
+  // must land before this arm diverges from `flagOn`. Select it explicitly with
+  // `--arms=baseline,supervisorOn` once that wiring exists. See plan S5 "Still TODO" + S7.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', true),
+}
+
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -115,4 +148,4 @@ export const langgraphArm: Arm = {
 }
 
 export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm]
-export const ALL_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, langgraphArm]
+export const ALL_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, supervisorOnArm, langgraphArm]

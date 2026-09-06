@@ -1,0 +1,27 @@
+{
+  "id": "sup-pivot-two-formats",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "The log format changes midway; both shapes must be counted.",
+  "prompt": "How many error lines are in app.log?",
+  "workspace": [
+    {
+      "path": "app.log",
+      "content": "[INFO] boot ok\n[ERROR] db timeout\nlevel=error msg=\"retry failed\"\n[WARN] slow query\n[ERROR] cache miss storm\nlevel=error msg=\"giving up\"\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "4"
+    ],
+    "notContains": [
+      "2 error",
+      "two error",
+      "only the [ERROR]"
+    ]
+  },
+  "note": "Pass = counts both [ERROR] (2) and level=error (2) = 4.",
+  "tools": {
+    "file": true
+  }
+}

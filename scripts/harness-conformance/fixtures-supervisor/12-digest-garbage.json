@@ -1,0 +1,1 @@
+{ "id": "12-digest-garbage", "description": "TrajectoryDigest.from_dict is total on garbage", "digest_in": { "steps_taken": "not-an-int", "goal": null, "failure_classes": ["bad", {"class": "real", "count": "3"}], "strategies_tried": [null, {"strategy": "DIRECT_EDIT", "outcome": "x"}] } }

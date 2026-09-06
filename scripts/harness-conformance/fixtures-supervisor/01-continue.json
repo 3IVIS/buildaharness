@@ -1,0 +1,1 @@
+{ "id": "01-continue", "description": "plain CONTINUE round-trips unchanged", "directive_in": { "action": "CONTINUE", "rationale": "nothing actionable" } }

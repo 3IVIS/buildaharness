@@ -1,0 +1,28 @@
+{
+  "id": "sup-pivot-computed-total",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "No total line exists \u2014 the answer must be computed from the line items.",
+  "prompt": "What is the total of all line items in invoice.txt?",
+  "workspace": [
+    {
+      "path": "invoice.txt",
+      "content": "Widget    40\nGadget    35\nShipping  25\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "100"
+    ],
+    "notContains": [
+      "no total",
+      "not listed",
+      "cannot determine",
+      "there is no total"
+    ]
+  },
+  "note": "Pass = sums 40+35+25 = 100 rather than reporting 'no total line'.",
+  "tools": {
+    "file": true
+  }
+}

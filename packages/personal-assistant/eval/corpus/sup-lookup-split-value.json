@@ -1,0 +1,37 @@
+{
+  "id": "sup-lookup-split-value",
+  "category": "multi_step",
+  "slice": "supervisor_lookup",
+  "intent": "The answer is assembled from three separate single-value files.",
+  "prompt": "What is the full database URL in host:port/name form? host is in db.host, port in db.port, name in db.name.",
+  "workspace": [
+    {
+      "path": "db.host",
+      "content": "db.internal\n"
+    },
+    {
+      "path": "db.port",
+      "content": "5432\n"
+    },
+    {
+      "path": "db.name",
+      "content": "orders\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "db.internal",
+      "5432",
+      "orders"
+    ],
+    "notContains": [
+      "incomplete",
+      "cannot construct",
+      "missing the"
+    ]
+  },
+  "note": "Pass = reads all three files and assembles db.internal:5432/orders.",
+  "tools": {
+    "file": true
+  }
+}

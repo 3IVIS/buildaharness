@@ -5,6 +5,7 @@ import { TaskGraph } from '../state/task-graph.js'
 import type { Task } from '../state/task-graph.js'
 import type { WorldModel } from '../state/world-model.js'
 import type { CallerState } from '../state/caller-state.js'
+import type { SupervisorDirective } from '../supervisor.js'
 
 export type ReplanScope = 'LOCAL' | 'GLOBAL'
 
@@ -143,8 +144,10 @@ function validateTaskGraph(taskGraph: TaskGraph): string[] {
   return errors
 }
 
-function rebuildTaskGraph(worldModel: WorldModel, callerState: CallerState): TaskGraph {
-  const successCriteria = callerState.success_criteria ?? []
+function rebuildTaskGraph(worldModel: WorldModel, callerState: CallerState, planNote?: string | null): TaskGraph {
+  const successCriteria = [...(callerState.success_criteria ?? [])]
+  // Trajectory Supervisor REFRAME_PLAN (S2) — an extra reframing constraint.
+  if (planNote) successCriteria.push(`Reframe: ${planNote}`)
   const newTasks = successCriteria.map((criterion: string, i: number) => ({
     id: `rebuilt-task-${i}-${Math.random().toString(36).slice(2, 6)}`,
     description: String(criterion),
@@ -179,6 +182,7 @@ export function rollbackAndReplan(
   callerState: CallerState,
   experienceStore: ExperienceStore | null,
   rollbackFn?: () => void,
+  supervisorDirective?: SupervisorDirective | null,
 ): RollbackReplanResult {
   // Rollback
   rollbackFn?.()
@@ -195,7 +199,19 @@ export function rollbackAndReplan(
   const noProgress = cannotMakeProgress(strategyState, failureDiagnostics)
   const failureClass = failureDiagnostics.matched_pattern?.failure_class ?? ''
 
-  // Determine next strategy
+  // ── Trajectory Supervisor (S2) — a directive threaded in from driveMainLoop after
+  // the async supervisorDecider ran on this stall. Only REDIRECT_STRATEGY / REFRAME_PLAN
+  // are acted on; CONTINUE and any not-yet-wired action fall through to the plain ladder.
+  const isReframe =
+    supervisorDirective?.action === 'REFRAME_PLAN' && !!supervisorDirective.plan_note
+  const redirectHint =
+    !isReframe &&
+    supervisorDirective?.action === 'REDIRECT_STRATEGY' &&
+    supervisorDirective.strategy_hint &&
+    (DEFAULT_STRATEGY_ORDER as readonly string[]).includes(supervisorDirective.strategy_hint)
+      ? (supervisorDirective.strategy_hint as StrategyType)
+      : null
+
   let ordering: StrategyType[]
   if (experienceStore !== null && experienceStore.available) {
     ordering = buildStrategyOrdering(failureClass, experienceStore, strategyState.current_strategy)
@@ -203,22 +219,46 @@ export function rollbackAndReplan(
     ordering = [...DEFAULT_STRATEGY_ORDER]
   }
 
-  const nextStrategy = getNextStrategy(strategyState.current_strategy, ordering)
-  const newStrategyState = new StrategyState({
-    ...strategyState.toJSON(),
-    current_strategy: nextStrategy,
-    switch_count: strategyState.switch_count + 1,
-    switch_triggers: [...strategyState.switch_triggers, `task_failed: ${currentTask.id}`],
-    stall_reason: strategyState.stall_reason,
-    completion_history: [...strategyState.completion_history],
-    risk_state_history: [...strategyState.risk_state_history],
-  })
+  const supTrigger = (tag: string): string =>
+    `supervisor:${tag} ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200)
+
+  let newStrategyState: StrategyState
+  if (isReframe) {
+    // REFRAME does not advance the strategy ladder (parity with loop.py's S1 behaviour).
+    newStrategyState = new StrategyState({
+      ...strategyState.toJSON(),
+      switch_triggers: [...strategyState.switch_triggers, supTrigger('REFRAME_PLAN')],
+      completion_history: [...strategyState.completion_history],
+      risk_state_history: [...strategyState.risk_state_history],
+    })
+  } else {
+    const nextStrategy = redirectHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    newStrategyState = new StrategyState({
+      ...strategyState.toJSON(),
+      current_strategy: nextStrategy,
+      switch_count: strategyState.switch_count + 1,
+      switch_triggers: [
+        ...strategyState.switch_triggers,
+        redirectHint ? supTrigger('REDIRECT_STRATEGY') : `task_failed: ${currentTask.id}`,
+      ],
+      stall_reason: strategyState.stall_reason,
+      completion_history: [...strategyState.completion_history],
+      risk_state_history: [...strategyState.risk_state_history],
+    })
+  }
 
   // Determine replan scope and replan
   let newTaskGraph: TaskGraph
   let replanScope: ReplanScope | null = null
 
-  if (noProgress) {
+  if (isReframe) {
+    replanScope = 'GLOBAL'
+    newTaskGraph = rebuildTaskGraph(worldModel, callerState, supervisorDirective!.plan_note)
+    const errors = validateTaskGraph(newTaskGraph)
+    if (errors.length > 0) {
+      throw new Error(`Rebuilt task graph is invalid: ${errors.join('; ')}`)
+    }
+  } else if (noProgress) {
     replanScope = 'GLOBAL'
     newTaskGraph = rebuildTaskGraph(worldModel, callerState)
     const errors = validateTaskGraph(newTaskGraph)

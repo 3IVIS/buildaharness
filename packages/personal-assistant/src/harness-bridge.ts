@@ -14,6 +14,8 @@ import {
   type VerificationResult,
   type HarnessRunResult,
   type ToolExecutorContext,
+  type InvestigationRequestData,
+  type InvestigationFinding,
 } from '@buildaharness/harness'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
@@ -57,6 +59,15 @@ export interface HarnessRunParams {
    * flag is on is R3's scope.
    */
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
+  /**
+   * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
+   * plans/harness_trajectory_supervisor_plan.html) — AgentLoop.runSupervisorInvestigation bound
+   * to this turn's read-only tools + risk hint. Passed straight through to
+   * HarnessRunOptions.runInvestigation. `undefined` (every caller until a supervisorDecider is
+   * also wired) → GATHER_EVIDENCE degrades to CONTINUE inside the harness, so this is inert by
+   * default exactly like onSupervisorDirective.
+   */
+  runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
 }
 
 /**
@@ -86,7 +97,7 @@ export class HarnessBridge {
   ) {}
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer } = params
+    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -191,6 +202,10 @@ export class HarnessBridge {
         onVerification: (result: VerificationResult) => {
           lastVerification = result
         },
+        // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
+        // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
+        // harness degrades GATHER_EVIDENCE to CONTINUE.
+        runInvestigation,
         // Layered on top of the harness's own always-on lexical/negation-pair check — one call
         // per belief-set growth (never per-pair, never a full re-scan), and skipped entirely
         // when every newly-added belief looks like a structured/technical claim the lexical

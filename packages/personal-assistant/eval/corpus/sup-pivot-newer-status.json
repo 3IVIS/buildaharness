@@ -1,0 +1,26 @@
+{
+  "id": "sup-pivot-newer-status",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "The log has two entries for the same item; the later one wins.",
+  "prompt": "Is migration 0007 applied? Check migrations.log.",
+  "workspace": [
+    {
+      "path": "migrations.log",
+      "content": "2026-01-02T09:00Z  0007  PENDING\n2026-01-05T14:00Z  0007  APPLIED\n2026-01-06T10:00Z  0008  PENDING\n"
+    }
+  ],
+  "grader": {
+    "regex": "applied|yes, it (is|has been)",
+    "notContains": [
+      "still pending",
+      "not yet applied",
+      "it is pending",
+      "0007 is pending"
+    ]
+  },
+  "note": "Pass = reads the latest 0007 line (APPLIED), not the first.",
+  "tools": {
+    "file": true
+  }
+}

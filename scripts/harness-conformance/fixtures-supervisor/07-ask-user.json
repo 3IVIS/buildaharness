@@ -1,0 +1,1 @@
+{ "id": "07-ask-user", "description": "ASK_USER keeps its structured question + options", "directive_in": { "action": "ASK_USER", "rationale": "ambiguous target env", "question": { "question": "which environment should this run against?", "options": ["staging","production"] } } }

@@ -1,0 +1,32 @@
+{
+  "id": "sup-pivot-indirect-owner",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "Ownership is two hops: service -> team -> person.",
+  "prompt": "Who owns the billing-service? Check services.md and teams.md.",
+  "workspace": [
+    {
+      "path": "services.md",
+      "content": "| service | team |\n|---|---|\n| billing-service | payments |\n| auth-service | identity |\n"
+    },
+    {
+      "path": "teams.md",
+      "content": "payments: Dana Ruiz\nidentity: Sam Okafor\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Dana Ruiz"
+    ],
+    "notContains": [
+      "unknown",
+      "not specified",
+      "no owner listed",
+      "payments team owns it"
+    ]
+  },
+  "note": "Pass = resolves billing-service -> payments -> Dana Ruiz.",
+  "tools": {
+    "file": true
+  }
+}

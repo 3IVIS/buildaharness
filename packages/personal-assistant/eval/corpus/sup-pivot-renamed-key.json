@@ -1,0 +1,30 @@
+{
+  "id": "sup-pivot-renamed-key",
+  "category": "multi_step",
+  "slice": "supervisor_pivot",
+  "intent": "The requested key was renamed; a comment maps old->new. Must pivot to the new name.",
+  "prompt": "What is the value of MAX_RETRIES in settings.ini?",
+  "workspace": [
+    {
+      "path": "settings.ini",
+      "content": "# MAX_RETRIES was renamed to RETRY_LIMIT in v2 (2026-01)\nRETRY_LIMIT=7\nTIMEOUT_MS=30000\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "7"
+    ],
+    "regex": "renamed|now called|RETRY_LIMIT",
+    "notContains": [
+      "MAX_RETRIES=",
+      "is 3",
+      "is 5",
+      "not present",
+      "no such key"
+    ]
+  },
+  "note": "Pass = recognizes the rename and reports RETRY_LIMIT=7.",
+  "tools": {
+    "file": true
+  }
+}
