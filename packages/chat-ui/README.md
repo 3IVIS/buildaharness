@@ -172,3 +172,38 @@ npm run build --workspace=packages/chat-ui
 npm test --workspace=packages/chat-ui
 npm run typecheck --workspace=packages/chat-ui
 ```
+
+## Browser end-to-end tests (Playwright)
+
+`npm test` here is jsdom-only, and `App.test.tsx` module-mocks `PersonalAssistant`
+entirely — so it never exercises the real `PersonalAssistant.create()` path through
+a real bundle. The `e2e/` suite closes that gap: it drives the actual Vite
+production-shape build (`VITE_E2E=1`, served by `vite preview`) in headless
+Chromium, with a scripted `ILLMClient` and an in-memory `FsBackend` injected
+through the B1 test seam (`src/e2e/e2e-runtime.ts`, `src/assistant-test-hooks.ts` —
+both compiled out of any non-E2E build, since `import.meta.env.VITE_E2E` folds to
+`false`). `e2e/parity.spec.ts` is the flag OFF-vs-ON parity matrix (benign turn,
+gated read-only tool call, staged `write_file` approve, staged `write_file` deny,
+failing tool call, escalation) run under both `oneLoopMode` states against a
+**single** build — B1 made `oneLoopMode` a runtime value, so `e2e/fixtures.ts`
+sets it per test via `addInitScript`.
+
+**On a dev machine or in CI:**
+
+```bash
+npm run test:e2e --workspace=packages/chat-ui   # playwright test — needs Chromium
+```
+
+Playwright manages its own browser binary; first run needs
+`npx playwright install --with-deps chromium`. The `webServer` block in
+`playwright.config.ts` does the `build:e2e` + `preview:e2e` itself, so there is no
+separate build step. CI runs this via `.github/workflows/browser-e2e.yml`
+(phase B4) on PRs touching `packages/chat-ui|personal-assistant|harness|runtime`
+plus a nightly cron.
+
+**This dev container cannot run `test:e2e`.** Per the repo `CLAUDE.md`: `$DISPLAY`
+is empty, there is no `Xvfb`/`xvfb-run`, system Firefox is a broken snap and there
+is no Chromium/Chrome. The only assistant-behaviour checks runnable in-sandbox are
+the B1 seam's jsdom tests — `src/App.e2e-seam.test.tsx` and
+`src/assistant-test-hooks.test.ts` — which verify the injection seam itself but not
+a real browser. See `plans/chat_ui_browser_e2e_plan.html` for the full rationale.

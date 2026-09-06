@@ -47,6 +47,7 @@ import { SearchPanel } from './components/SearchPanel'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
+import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
 import { checkProxyReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
@@ -148,6 +149,10 @@ async function createConfigStore(): Promise<ConfigStore> {
  * webview alike, so this is the one part of client selection that needs no isDesktop branch.
  */
 function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: { isDesktop: boolean; workspaceRoot: string }): ILLMClient {
+  // Test-only injection seam (plans/chat_ui_browser_e2e_plan.html phase B1) — returns null in any
+  // production build, so this is byte-identical to the switch below there.
+  const testLlmClient = getAssistantTestHooks()?.makeLlmClient
+  if (testLlmClient) return testLlmClient(config)
   switch (config.llmBackend) {
     case 'claude-cli':
       if (isDesktop) return new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell })
@@ -231,12 +236,16 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
 
 async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
   if (isTauri()) return createTauriBackedAssistant(config)
+  // Test-only (phase B1): an injected in-memory FsBackend so the tool loop actually runs in a
+  // plain-browser E2E turn. `getAssistantTestHooks()` is null in any production build.
+  const testFsBackend = getAssistantTestHooks()?.makeFsBackend
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
     model: config.model,
     // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
     // still worth honoring dangerouslySkipPermissions for consistency with the desktop build,
     // since it also affects the message-level risk gate, independent of file/shell tools.
+    fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
     webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
     // R5 of plans/harness_d2_one_loop_rewire_plan.html — same AssistantConfig seam as the desktop
@@ -492,6 +501,7 @@ export function App(): React.JSX.Element {
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
             planStatus: result.planStatus,
             answerClaim: result.answerClaim,
+            proposerKind: result.proposerKind,
           },
         ])
         setActivePlanStatus(result.planStatus)
@@ -659,6 +669,7 @@ export function App(): React.JSX.Element {
                   toolSteps={entry.toolSteps}
                   planStatus={entry.planStatus}
                   answerClaim={entry.answerClaim}
+                  proposerKind={entry.proposerKind}
                 />
               )
             case 'error':

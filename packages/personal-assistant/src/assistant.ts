@@ -35,7 +35,7 @@ import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { ResponseService } from './response-service.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
-import type { AssistantTrace, AssistantTurnResult, AssistantProgress } from './assistant-types.js'
+import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
 
 // Re-exported for full backward compatibility — every one of these used to be defined directly
 // in this file; they now live in the module that owns their logic (see each module's own doc
@@ -47,7 +47,7 @@ export type { BatchBudgetState } from './agent-loop.js'
 export { trimmedAverage, nextItemBudget } from './agent-loop.js'
 export type { AssistantSource } from './assistant-source.js'
 export type { DebugLogEntry } from './debug-log.js'
-export type { AssistantTrace, AssistantTurnResult, AssistantProgress } from './assistant-types.js'
+export type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
 
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
@@ -202,6 +202,14 @@ export class PersonalAssistant {
   private readonly toolLoopWillRun: boolean
   /** R3 of plans/harness_d2_one_loop_rewire_plan.html — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
+  /**
+   * Scratch slot for which proposer drove the most recent runTurn — read by `turn()` to stamp
+   * AssistantTurnResult.proposerKind, and emitted as a 'proposer_selected' trace event from
+   * runTurn itself. A single mutable field is safe because `turn()` is awaited end to end (turns
+   * never overlap within one instance). See AssistantTurnResult.proposerKind and
+   * plans/chat_ui_browser_e2e_plan.html phase B1.
+   */
+  private lastProposerKind: ProposerKind = 'posthoc'
 
   private readonly memoryService: MemoryService
   private readonly session: AssistantSession
@@ -303,6 +311,9 @@ export class PersonalAssistant {
    */
   async turn(userMessage: string, options: TurnOptions = {}): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
+    // Reset per turn — runTurn flips it to 'flat-oneloop'/'batch-oneloop' only on the flag-ON
+    // paths that actually defer the tool loop into a harness-driven proposer.
+    this.lastProposerKind = 'posthoc'
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
 
@@ -317,12 +328,16 @@ export class PersonalAssistant {
       const check = await this.session.checkSpendCapForTurn(sessionId)
       if (!check.allowed) {
         this.onTrace?.({ kind: 'turn_end', sessionId, status: 'escalated' })
-        return { status: 'escalated', reply: null, reason: check.reason }
+        return { status: 'escalated', reply: null, reason: check.reason, proposerKind: 'posthoc' }
       }
     }
 
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
+      // Every return path leaves proposerKind unset — stamp the one runTurn resolved (defaults
+      // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
+      // never reaches here.
+      result.proposerKind = this.lastProposerKind
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
       this.onDebugLog?.({
@@ -510,6 +525,7 @@ export class PersonalAssistant {
       const useOneLoop = this.oneLoopMode === 'enabled' && !classification.isTrivial
 
       if (useOneLoop && batch) {
+        this.lastProposerKind = 'batch-oneloop'
         const built = this.agentLoop.createBatchOneLoopProposer(
           batch.items, sessionId, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage,
         )
@@ -518,6 +534,7 @@ export class PersonalAssistant {
         oneLoopBatchBudget = built.getBatchBudget
         draftReply = ''
       } else if (useOneLoop) {
+        this.lastProposerKind = 'flat-oneloop'
         const built = this.agentLoop.createOneLoopProposer(
           sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
         )
@@ -564,6 +581,7 @@ export class PersonalAssistant {
     // entirely — no verification/reviewer pass/checkpoint for this turn. Deliberately
     // conservative: see turn-intent-classifier.ts's isTrivial contract for what disqualifies a
     // turn from this path.
+    this.onTrace?.({ kind: 'proposer_selected', proposerKind: this.lastProposerKind })
     this.onTrace?.({ kind: 'triviality_classified', isTrivial: classification.isTrivial })
     // Phase D3: recomputed via turn-policy.ts rather than read directly off
     // classification.requiresApproval — see turn-interpreter.ts's identical call for why.

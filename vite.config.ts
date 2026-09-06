@@ -32,6 +32,10 @@ export default defineConfig({
       '**/.{idea,git,cache,output,temp}/**',
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
       'templates/**',
+      // packages/chat-ui/e2e/ holds Playwright specs (`*.spec.ts`) — `@playwright/test` is not a
+      // Vitest runner, so the blanket root run must skip them just as chat-ui's own vitest.config.ts
+      // does. They run via `npm run test:e2e` / phase B4's CI job. See plans/chat_ui_browser_e2e_plan.html B2.
+      'packages/*/e2e/**',
     ],
   },
 })

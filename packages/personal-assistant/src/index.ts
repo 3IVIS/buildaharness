@@ -1,5 +1,5 @@
 export { PersonalAssistant } from './assistant.js'
-export type { AssistantTurnResult, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
+export type { AssistantTurnResult, ProposerKind, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
 export type { AnswerClaim, AnswerClaimSourceType, AnswerClaimVerificationStatus } from './answer-claim.js'
 export { classifyRisk } from './risk-classifier.js'
 export type { RiskClassification } from './risk-classifier.js'
@@ -77,6 +77,9 @@ export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, C
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
 export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 export type { OneLoopMode } from './one-loop-flag.js'
+// Deterministic, network-free ILLMClient for tests and demos — see plans/chat_ui_browser_e2e_plan.html phase B1.
+export { createScriptedLLMClient } from './scripted-llm-client.js'
+export type { ScriptedLLMClientScript } from './scripted-llm-client.js'
 // Pure, browser-safe formatters — deliberately NOT cli-config.ts/cli-session.ts's env-var-specific
 // exports (formatHelp, formatStatus, CLI_COMMANDS_HELP), which are CLI-syntax-specific
 // (e.g. "/model [name]") and have no GUI equivalent. These are plain data-in/text-out
