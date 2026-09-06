@@ -2840,6 +2840,103 @@ describe('PersonalAssistant batch research — harness-driven (flag ON)', () => 
   })
 })
 
+// R3 of plans/harness_d2_one_loop_rewire_plan.html — the flat (non-batch) one-loop path, driven
+// end-to-end through PersonalAssistant.turn() with ASSISTANT_ONE_LOOP enabled. R2's
+// one-loop-proposer.test.ts / harness-bridge-one-loop.test.ts cover createHarnessProposer and the
+// HarnessRuntime wiring in isolation, and the batch describe block above covers the batch proposer
+// at the turn() level — but R3's own implementation note flagged that the flat path had no
+// turn()-level coverage ("no new dedicated flag-ON integration tests ... that drive a full
+// PersonalAssistant.turn() call end-to-end"). These three close that gap, one per wiring decision
+// R3 made: buildSuccessResult reading result.finalResult, buildPausedResult's reportedReply
+// fallback, and the OneLoopPause -> buildToolLoopPauseResult catch.
+describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => {
+  const ROOT = '/workspace'
+
+  it("a completed turn's reply is the harness-driven proposer's own final answer (result.finalResult), never a precomputed draftReply", async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'the secret ingredient is basil')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'The secret ingredient is basil.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    // "summarize" keeps this off the trivial fast path (which would skip the harness run entirely,
+    // and with it the one-loop proposer), so useOneLoop actually engages.
+    const result = await assistant.turn('Read notes.txt and summarize the secret ingredient for me.')
+
+    expect(result.status).toBe('ok')
+    expect(result.proposerKind).toBe('flat-oneloop')
+    // assistant.ts sets draftReply to '' on the flag-ON flat path — this text can only have come
+    // from the proposer's 'complete' iteration -> ctx.finalResult -> buildSuccessResult.
+    expect(result.reply).toBe('The secret ingredient is basil.')
+    expect(result.sources).toEqual([{ tool: 'read_file', path: 'notes.txt' }])
+  })
+
+  it('a write_file call still stages for approval, surfaced via the OneLoopPause -> buildToolLoopPauseResult catch, and resolves by ID', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'draft summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+
+    expect(staged.status).toBe('needs_approval')
+    expect(staged.riskLevel).toBe('HIGH')
+    expect(staged.pendingActionKind).toBe('write')
+    expect(staged.pendingActionId).toBeTruthy()
+    // Approval-by-ID invariant (D4 protected invariant): nothing hits disk while staged.
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+
+    const applied = await assistant.turn('Write a summary to summary.md', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(applied.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('draft summary')
+  })
+
+  it("a plan-pacing pause surfaces the just-completed task's real output via reportedReply, not an empty prefix", async () => {
+    // project_planning's scope_definition step is curated MEDIUM, so Phase 4 pacing pauses right
+    // after it — before task 2 runs. On the flag-ON path draftReply is '', so the paused reply's
+    // answer text can only come from checkpoint.progress.finalResult via response-service.ts's
+    // reportedReply (option (b) of R3's buildPausedResult design point). Without that read the
+    // reply would be the bare pacing note.
+    const decomposedTasksFixture = Array.from({ length: 4 }, (_, i) => ({
+      id: `step-${i + 1}`, description: `Step ${i + 1}`, depends_on: i > 0 ? [`step-${i}`] : [],
+    }))
+    const planTasks = [
+      { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [] },
+      { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'] },
+      { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'] },
+      { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'] },
+      { id: 'schedule', description: 'Schedule the redesign kickoff meeting', depends_on: ['resource_planning', 'risk_assessment'] },
+      { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'] },
+    ]
+    const planningMessage =
+      'Plan and launch the Q3 onboarding redesign project, then build the rollout schedule and deliver the milestone roadmap.'
+    const llm = scriptedResponses(
+      [{ content: JSON.stringify({ tasks: planTasks }) }, { content: 'Scope defined: three onboarding surfaces in play.' }],
+      undefined,
+      undefined,
+      (userMessage) =>
+        userMessage.includes(planningMessage)
+          ? { decomposedTasks: decomposedTasksFixture, matchedPlanTemplate: 'project_planning' }
+          : undefined,
+    )
+    const backend = makeFakeBackend()
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const result = await assistant.turn(planningMessage, { sessionId: 'one-loop-pacing' })
+
+    expect(result.status).toBe('ok')
+    expect(result.proposerKind).toBe('flat-oneloop')
+    expect(result.planStatus?.completionPct).toBeCloseTo(100 / 6, 1) // only scope_definition done
+    // Both halves present: the completed task's real answer AND the pacing note.
+    expect(result.reply).toContain('Scope defined: three onboarding surfaces in play.')
+    expect(result.reply).toContain('Break down the redesign work')
+    expect(result.pausedNote).toContain('Break down the redesign work')
+  })
+})
+
 // T2: per-message search index, written alongside the transcript — see
 // plans/personal_assistant_memory_transparency_search_plan.html.
 describe('PersonalAssistant message index (T2)', () => {
