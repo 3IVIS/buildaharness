@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Golden generator / checker for the INV-13 in-suite conformance gate
-// (docs/adr/004-shared-semantic-core.md).
+// (ADR-004, shared semantic core).
 //
 //   node scripts/harness-conformance/gen-goldens.mjs            # --check (default)
 //   node scripts/harness-conformance/gen-goldens.mjs --write    # (re)write goldens/<id>.json

@@ -20,7 +20,7 @@ runs, regardless of caller.
 Every invocation is attributed to a provenance.py ExecutionVersion, and a repeated call
 sharing the same effect_id is recognized as a retry of the same externally-visible side
 effect rather than executed twice — the idempotent-attribution guarantee from
-docs/adr/002-harness-semantic-contract.md's guarantee #7.
+ADR-002 (the Harness Semantic Contract), guarantee #7.
 
 Security-sensitive — see this file's own test suite
 (adapter/tests/test_harness_execution_boundary.py) for the adversarial cases this is

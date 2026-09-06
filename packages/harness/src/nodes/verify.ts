@@ -27,7 +27,7 @@ export interface VerificationResult {
   layer_results: LayerResult[]
   has_critical_failure: boolean
   adversarial_passed: boolean | null
-  // Phase C2 (docs/adr/004-shared-semantic-core.md, INV-12) — additive: which
+  // Phase C2 (ADR-004, shared semantic core; INV-12) — additive: which
   // epistemic tiers (mechanical | environmental | model) contributed a FAIL, as a
   // sorted, de-duplicated list. Empty iff !has_critical_failure. has_critical_failure
   // stays layer_results.some(FAIL) — this only exposes the provenance of the
@@ -53,7 +53,7 @@ function assertCriticalFailureTiersConsistent(r: Pick<VerificationResult, 'has_c
 }
 
 // LayerTier / LAYER_TIER are generated from spec/harness-core.json into
-// _core-generated.ts (Phase C1 — docs/adr/004-shared-semantic-core.md), the
+// _core-generated.ts (Phase C1 — ADR-004, shared semantic core), the
 // single source of truth shared with adapter/harness/verification.py.
 // Re-exported so existing importers keep resolving them from this module.
 //

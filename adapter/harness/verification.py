@@ -72,7 +72,7 @@ _LAYER_TO_TOOL: dict[str, str] = {
 LayerTier = Literal["mechanical", "environmental", "model"]
 
 # LAYER_TIER is generated from spec/harness-core.json into ._core_generated
-# (Phase C1 — docs/adr/004-shared-semantic-core.md), the single source of truth
+# (Phase C1 — ADR-004, shared semantic core), the single source of truth
 # shared with packages/harness/src/verify.ts via _core-generated.ts.
 #
 # Mechanical: exit code / schema / deterministic state inspection — no judgment involved.
@@ -95,7 +95,7 @@ class VerificationResult:
     layer_results: list[LayerResult] = field(default_factory=list)
     has_critical_failure: bool = False
     adversarial_passed: bool | None = None
-    # Phase C2 (docs/adr/004-shared-semantic-core.md, INV-12) — additive: which
+    # Phase C2 (ADR-004, shared semantic core; INV-12) — additive: which
     # epistemic tiers (LAYER_TIER: mechanical | environmental | model) contributed
     # a FAIL. Empty iff not has_critical_failure. has_critical_failure itself stays
     # any(FAIL) — this field only exposes the provenance of the criticality so a

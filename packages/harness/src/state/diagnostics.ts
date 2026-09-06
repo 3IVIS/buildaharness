@@ -27,7 +27,7 @@ export const ExecutionHealthSchema = z.object({
 export type ExecutionHealth = z.infer<typeof ExecutionHealthSchema>
 
 // Provenance of a diagnostic sub-dimension value (INV-11 — criticism001 #3;
-// docs/adr/004-shared-semantic-core.md). Mirrors adapter/harness/diagnostics.py's
+// ADR-004, shared semantic core). Mirrors adapter/harness/diagnostics.py's
 // DimensionProvenance.
 //   deterministic — computed from world-model / evidence counts (all ten today)
 //   model         — an LLM-derived estimate

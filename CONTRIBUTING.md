@@ -27,11 +27,11 @@ are not.
 
 ## Architecture Decision Records
 
-Significant design decisions are in `docs/adr/`. Open a new `[adr]` issue with new evidence to challenge an accepted record — don't re-litigate in the original thread.
+Significant design decisions are recorded as ADRs and referenced throughout the code and docs by their `ADR-NNN` identifier. The records themselves are maintained outside this repo; the parts that are a contract for contributors are reproduced here (see **ADR-001 field contracts** under *Adding an adapter* below) and in `spec/CHANGELOG.md`. Open a new `[adr]` issue with new evidence to challenge an accepted decision — don't re-litigate in the original thread.
 
 | ADR | Title | Status |
 |---|---|---|
-| [ADR-001](docs/adr/001-codegen-field-semantics.md) | Codegen semantics: `output_key`, `*_expr`, `context_from`, `memory_write.tier` | Accepted |
+| ADR-001 | Codegen semantics: `output_key`, `*_expr`, `context_from`, `memory_write.tier` | Accepted |
 
 ---
 

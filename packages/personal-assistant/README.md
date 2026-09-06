@@ -10,7 +10,7 @@ The harness here is a governance and reliability control plane, not just a
 bundle of reasoning layers: the agent (the tool-calling loop in
 `agent-loop.ts`) proposes what to do, and a mix of harness- and
 policy-governed gates decide what's actually allowed to happen — see
-`docs/adr/003-harness-consolidation.md` for the 5-primitive model this
+ADR-003 (harness consolidation) for the 5-primitive model this
 assistant's design is one instance of. **That governance is currently split
 across two mechanisms, not unified into one** (ADR-003 finding F-6): a live,
 per-tool-call gate runs *inside* `AgentLoop.runToolIterations` as each tool

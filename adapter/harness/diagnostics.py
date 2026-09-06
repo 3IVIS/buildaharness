@@ -16,7 +16,7 @@ from typing import Any, Literal
 DimensionType = Literal["ratio", "composite", "entropy", "match_confidence"]
 
 # Provenance of a diagnostic sub-dimension value (INV-11 — criticism001 #3;
-# docs/adr/004-shared-semantic-core.md). Mirrors packages/harness/src/state/diagnostics.ts.
+# ADR-004, shared semantic core). Mirrors packages/harness/src/state/diagnostics.ts.
 #   deterministic — computed from world-model / evidence counts (all ten today)
 #   model         — an LLM-derived estimate
 #   heuristic     — a hand-tuned rule of thumb

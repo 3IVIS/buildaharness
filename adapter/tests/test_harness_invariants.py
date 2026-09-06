@@ -19,7 +19,7 @@ Invariants:
   INV-09  Adversarial prior discarded after reviewer_pass — no live references
   INV-10  experience_store is no-op when absent — structurally identical output
   INV-11  Diagnostic provenance — no sub-dimension reaches the resolver un-provenanced;
-          the uncalibrated-model-block annotation is advisory (Phase C2; docs/adr/004)
+          the uncalibrated-model-block annotation is advisory (Phase C2; ADR-004)
 
 Run with: pytest adapter/tests/test_harness_invariants.py -v
 """
@@ -515,7 +515,7 @@ def test_inv_10_run_one_iteration_identical_without_experience_store():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# INV-11 — Diagnostic provenance (Phase C2; criticism001 #3; docs/adr/004)
+# INV-11 — Diagnostic provenance (Phase C2; criticism001 #3; ADR-004)
 # ══════════════════════════════════════════════════════════════════════════════
 
 

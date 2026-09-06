@@ -5,7 +5,7 @@ Hypothesis, Contradiction, Diagnostics, Control State, Planning, Execution,
 Verification, Recovery, Reviewer Pass — a governance and reliability control
 plane around an autonomous agent: the agent proposes, the harness decides
 what's allowed to happen next, evidence decides whether the result is
-accepted (see `docs/adr/003-harness-consolidation.md` for the 5-primitive
+accepted (see ADR-003, harness consolidation, for the 5-primitive
 model every layer here implements). Its pure-data constants (thresholds, the
 recovery-dependency table, `LAYER_TIER`) are generated from one shared source
 with the Python harness (`adapter/harness/`) rather than hand-copied
@@ -178,7 +178,7 @@ hand-mirrored, not generated — a 27-fixture conformance run
 byte-identical, so generating the algorithm too would solve a problem that
 doesn't exist. That fixture suite is the actual equivalence contract, run
 against both interpreters on every PR; it replaced an earlier
-field-by-field sync-checking script. See `docs/adr/004-shared-semantic-core.md`.
+field-by-field sync-checking script. See ADR-004 (shared semantic core).
 
 **Verification's validator-list model.** `verify.ts` (mirroring Python's
 `verification.py`) is a typed list of validators, each classified into one of
