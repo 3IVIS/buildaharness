@@ -1,0 +1,35 @@
+{
+  "id": "syntax-fail-null-result",
+  "description": "linter available + result is null -> syntax FAIL (mechanical). Detail text differs across runtimes ('Result is None' vs 'Result is null') but status is identical, which is what the contract compares.",
+  "result": null,
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

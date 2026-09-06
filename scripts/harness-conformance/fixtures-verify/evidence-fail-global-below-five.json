@@ -1,0 +1,40 @@
+{
+  "id": "evidence-fail-global-below-five",
+  "description": "Global scope needs >= 5 HIGH/MEDIUM items; only 3 present -> FAIL.",
+  "result": {
+    "answer": "ok"
+  },
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "global",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

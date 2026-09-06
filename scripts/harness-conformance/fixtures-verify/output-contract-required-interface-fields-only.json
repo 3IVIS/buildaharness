@@ -1,0 +1,40 @@
+{
+  "id": "output-contract-required-interface-fields-only",
+  "description": "KNOWN DIVERGENCE (mirror of the above). Contract sets required_interface_fields=['id'] with an empty result. Python -> FAIL (missing interface field); TS ignores that field and checks only required_sections (empty) -> PASS. Tracked.",
+  "result": {},
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": {
+    "required_sections": [],
+    "required_interface_fields": [
+      "id"
+    ]
+  },
+  "hypothesis_set": null
+}

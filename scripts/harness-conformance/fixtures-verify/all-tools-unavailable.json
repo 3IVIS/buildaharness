@@ -1,0 +1,37 @@
+{
+  "id": "all-tools-unavailable",
+  "description": "No tool available for any layer -> every layer SKIPPED on both runtimes, no critical failure. Pins the tool-gating branch (Python _tool_available(None)=False vs TS isToolAvailable \u2014 here the manifest is present but every entry is available:false, so both agree).",
+  "result": {
+    "answer": "ok"
+  },
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": false,
+    "pytest": false,
+    "integration_runner": false,
+    "consistency_checker": false,
+    "requirements_checker": false,
+    "assumption_checker": false,
+    "goal_checker": false,
+    "evidence_checker": false,
+    "contract_checker": false
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

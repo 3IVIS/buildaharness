@@ -1,0 +1,37 @@
+{
+  "id": "all-clean-local",
+  "description": "Every tool available, valid result, 2 local evidence items, no contradictions, no contract. consistency + evidence_sufficiency + output_contract_partial PASS; the five judgment-tier layers honestly SKIPPED; no critical failure.",
+  "result": {
+    "answer": "ok"
+  },
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

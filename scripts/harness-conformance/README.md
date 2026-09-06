@@ -8,11 +8,22 @@ convention and (via `spec/harness-core.json`, Phase C1) a generated set of
 decision constants — but no shared algorithm and, until now, no shared
 test suite.
 
-This pass covers one representative node — `resolveControlState()` /
-`resolve_control_state()`, the five-tier control-state resolver — rather
-than attempting to conformance-test all ~30 harness node files in one go.
-Extending this pattern (new fixtures + a `run-ts.mts`/`run_py.py` pair) to
-another node is the natural way to grow coverage incrementally.
+Two nodes are covered so far:
+
+- **`resolveControlState()` / `resolve_control_state()`** — the five-tier
+  control-state resolver. Fixtures in `fixtures/`, runner pair
+  `run-ts.mts` / `run_py.py`, diff via `compare.mjs`. Byte-identical
+  `ControlState` output on both runtimes.
+- **`verify()` / `verify.ts`** — the nine-layer verification-layer runner.
+  Fixtures in `fixtures-verify/`, runner pair
+  `run-ts-verify.mts` / `run_py_verify.py`, diff via `compare-verify.mjs`.
+  See "VERIFY-EQUIVALENCE CONTRACT" below — a deliberately narrower
+  contract (layer *status*, not `detail` prose) that has surfaced two
+  tracked divergences.
+
+Extending this pattern (new fixtures + a `run-ts*`/`run_py*` pair) to
+another of the ~30 harness node files is the natural way to grow coverage
+incrementally.
 
 ## The named equivalence contract
 
@@ -211,3 +222,114 @@ into both runtimes), and Python's `_attach_annotation` uses the same
 truthy check as `resolve-control-state.ts`. `known-discrepancies.json` is
 now empty; `dep-class-gap-notes-format.json` /
 `dep-class-gap-empty-string.json` stay as `PASS` regression fixtures.
+
+---
+
+## VERIFY-EQUIVALENCE CONTRACT
+
+The `fixtures-verify/*.json` set *is* the equivalence contract for the
+nine-layer verification-layer runner. `verify()`
+(`adapter/harness/verification.py`) and `verify()`
+(`packages/harness/src/nodes/verify.ts`) are hand-mirrored
+reimplementations of the same layer sequence + aggregation.
+
+**This contract is deliberately narrower than the resolver's.** It
+compares a *status projection* of `VerificationResult`:
+
+- each of the 9 layers' `status` (`PASS` / `FAIL` / `SKIPPED`),
+- `has_critical_failure` (still `any(FAIL)` on both sides),
+- `critical_failure_tiers` (the sorted set of `LAYER_TIER`s that
+  contributed a FAIL — INV-12),
+- `adversarial_passed` (`true` / `false` / `null`).
+
+It does **not** compare each `LayerResult.detail`. That string is
+per-implementation human-facing prose — each `verify_*` function's own
+docstring owns its wording, and the TS side legitimately says things the
+Python side can't (e.g. "no execution boundary in packages/harness"
+vs. Python's "no target_path provided"). The plan's scope for this pair
+(`plans/harness_consolidation_and_control_plane_plan.html`, Phase C2) is
+"fixtures covering each layer's PASS / FAIL / SKIPPED and
+`has_critical_failure` aggregation" — status, not prose.
+
+Same three rules as the resolver contract otherwise: a `verify()`
+algorithm change on either side that ships without fixtures proving the
+other side's status projection still matches must not merge; new
+behaviour needs a new fixture pinning it on both runtimes; a genuine
+intentional divergence goes in `known-discrepancies-verify.json` with a
+reason (a human owns resolving it).
+
+### Enforcement
+
+- `compare-verify.mjs` — cross-language diff, the source of truth. Wired
+  into CI (`.github/workflows/ci.yml`, "Harness TS/Python conformance").
+- No golden/INV-13-style in-suite gate for `verify()` yet — the resolver
+  has one (`test_harness_conformance_gate.py` / `conformance-gate.test.ts`)
+  because its output is byte-identical; `verify()`'s two tracked
+  divergences mean a single golden set isn't valid for both sides today.
+  Adding one is natural follow-up once the divergences below are resolved.
+
+### Coverage
+
+**25 fixtures (2026-09-06).** `all-clean-local` (baseline) +
+`all-tools-unavailable` (every layer's tool gate), then per layer:
+
+- **syntax** — FAIL on null result; SKIPPED when the linter tool is
+  unavailable (gate checked before the null check).
+- **unit / integration / goal_correctness** — the always-SKIPPED
+  judgment-tier layers, covered by the two baseline fixtures.
+- **consistency** — FAIL on an unresolved HIGH contradiction; FAIL on
+  SYSTEM_BREAKING; PASS with only LOW+MEDIUM contradictions; SKIPPED with
+  no world model.
+- **requirements / assumptions** — FAIL when criteria/assumptions are
+  stated but no result was produced; SKIPPED when a result exists
+  (semantic satisfaction is model-tier).
+- **evidence_sufficiency** — FAIL on null store; FAIL local `< 2` items;
+  FAIL global `< 5` HIGH/MEDIUM; PASS global with exactly 5 qualifying;
+  FAIL global where 6 LOW items yield 0 qualifying.
+- **output_contract_partial** — PASS with an empty contract; the two
+  tracked divergences below.
+- **adversarial pass** — `true` at HIGH risk with no hypotheses; `true`
+  with a clean result under an active hypothesis; `false` when the result
+  carries an `adversarial_failure` flag; `null` at LOW risk even with an
+  active hypothesis.
+- **aggregation** — `aggregation-multi-tier-failures-collapse`: five
+  simultaneous FAILs across mechanical + environmental tiers →
+  `critical_failure_tiers == ['environmental','mechanical']` (N same-tier
+  FAILs count once — INV-12).
+
+Result: **23 PASS, 2 tracked discrepancies, 0 untracked.**
+
+### What this pass found
+
+**`output_contract_partial` checks different contract fields on each
+runtime.** `fixtures-verify/output-contract-required-sections-only` and
+`…-required-interface-fields-only` pin it:
+
+- TS `verify_output_contract_partial` → `contractShadowCheck`
+  (`packages/harness/src/nodes/policy-gates.ts`) inspects
+  `outputContract.required_sections`.
+- Python `verify_output_contract_partial` → `contract_shadow_check`
+  (`adapter/harness/output_contract.py`) inspects
+  `required_interface_fields` + `interface_constraints`, and never looks
+  at `required_sections`.
+
+Root cause: the **TS `OutputContract` class only carries
+`required_sections`**; the Python `OutputContract` carries
+`required_sections` *and* `required_interface_fields` *and*
+`interface_constraints` (Python also has a standalone
+`check_required_sections()` that `verify()` does not call). So a contract
+that specifies only sections FAILs on TS / PASSes on Python, and one that
+specifies only interface fields does the reverse.
+
+Reconciling this is a **maintainer decision** — enrich the TS
+`OutputContract` + `contractShadowCheck` to match Python, or make
+`required_sections` canonical and change Python — and it has a knock-on
+effect on `postExecGate` / `post_exec_gate`, which also call
+`contractShadowCheck`. Tracked in `known-discrepancies-verify.json`; not
+a regression.
+
+### Usage
+
+```bash
+node scripts/harness-conformance/compare-verify.mjs   # cross-language diff (CI gate)
+```

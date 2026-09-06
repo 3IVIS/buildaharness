@@ -1,0 +1,49 @@
+{
+  "id": "evidence-fail-global-low-reliability-excluded",
+  "description": "Global scope with 6 LOW-reliability items -> 0 qualifying -> FAIL. Pins that LOW reliability does not count toward the global threshold.",
+  "result": {
+    "answer": "ok"
+  },
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "global",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "LOW"
+      },
+      {
+        "reliability": "LOW"
+      },
+      {
+        "reliability": "LOW"
+      },
+      {
+        "reliability": "LOW"
+      },
+      {
+        "reliability": "LOW"
+      },
+      {
+        "reliability": "LOW"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

@@ -166,6 +166,15 @@ jobs:
       - name: Harness TS/Python conformance
         run: node scripts/harness-conformance/compare.mjs
 
+      # ADR-004 Phase C2 residual: the verify() conformance pair — same
+      # cross-language check for the nine-layer verification-layer runner.
+      # Narrower contract (layer status, not detail prose); tracked
+      # divergences in known-discrepancies-verify.json exit 0, untracked
+      # exit 1. See scripts/harness-conformance/README.md's
+      # VERIFY-EQUIVALENCE CONTRACT.
+      - name: Harness TS/Python conformance — verify()
+        run: node scripts/harness-conformance/compare-verify.mjs
+
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest

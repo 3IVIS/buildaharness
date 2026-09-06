@@ -1,0 +1,37 @@
+{
+  "id": "requirements-fail-criteria-but-no-result",
+  "description": "Success criteria specified but result is null -> requirements FAIL (environmental). linter disabled so syntax does not also FAIL, isolating this layer.",
+  "result": null,
+  "success_criteria": [
+    "the answer must cite a source"
+  ],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": false,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}
