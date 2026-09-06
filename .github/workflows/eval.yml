@@ -195,6 +195,14 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # packages/personal-assistant imports @buildaharness/harness and
+      # @buildaharness/runtime by their built dist/ — tsc and the tsx benchmark
+      # run both resolve them from there, so build them first. Same prerequisite
+      # as ci.yml's "@buildaharness/personal-assistant" job.
+      - name: Build workspace deps (harness, runtime)
+        run: |
+          npm run build:harness
+          npm run build:runtime
       - name: Push — LLM-free sanity (typecheck + baseline.json parses)
         if: github.event_name == 'push'
         run: |
