@@ -1,0 +1,5 @@
+{
+  "id": "17-investigation-tools-all-rejected",
+  "description": "validateInvestigationTools (S5) — a list with no read-only members yields an empty allow list",
+  "tools_in": ["write_file", "run_shell_command", "deploy", "apply_patch"]
+}

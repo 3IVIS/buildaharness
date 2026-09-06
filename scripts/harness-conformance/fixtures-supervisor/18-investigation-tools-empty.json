@@ -1,0 +1,5 @@
+{
+  "id": "18-investigation-tools-empty",
+  "description": "validateInvestigationTools (S5) — empty input is inert, not an error",
+  "tools_in": []
+}

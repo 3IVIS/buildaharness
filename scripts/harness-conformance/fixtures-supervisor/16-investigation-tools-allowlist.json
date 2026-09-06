@@ -1,0 +1,5 @@
+{
+  "id": "16-investigation-tools-allowlist",
+  "description": "validateInvestigationTools (S5, INV-23) — read-only tools kept in order, write/shell/email/unknown rejected",
+  "tools_in": ["retrieve", "write_file", "web_search", "run_shell_command", "send_email", "read_file", "made_up_tool", "  ", ""]
+}
