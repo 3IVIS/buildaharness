@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { envOverridesFromImportMetaEnv, ENV_VAR_FOR_CONFIG_KEY } from './browser-config'
+import { DEFAULT_ONE_LOOP_MODE } from '@buildaharness/personal-assistant'
 
 /** A minimal ImportMetaEnv stand-in — the real one has an index signature, so this is enough. */
 function env(overrides: Record<string, string>): ImportMetaEnv {
@@ -40,9 +41,9 @@ describe('envOverridesFromImportMetaEnv', () => {
     expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_ONE_LOOP: '' }))).not.toHaveProperty('oneLoopMode')
   })
 
-  it('a typo\'d VITE_ASSISTANT_ONE_LOOP warns and falls back to "disabled"', () => {
+  it('a typo\'d VITE_ASSISTANT_ONE_LOOP warns and falls back to the default', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_ONE_LOOP: 'on' }))).toEqual({ oneLoopMode: 'disabled' })
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_ONE_LOOP: 'on' }))).toEqual({ oneLoopMode: DEFAULT_ONE_LOOP_MODE })
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain('VITE_ASSISTANT_ONE_LOOP')
     warn.mockRestore()

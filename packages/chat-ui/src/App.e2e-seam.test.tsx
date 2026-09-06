@@ -74,7 +74,7 @@ describe('App — B1 LLM injection seam', () => {
   })
 
   it('flag OFF → proposerKind "posthoc"', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ llmBackend: 'proxy' }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ llmBackend: 'proxy', oneLoopMode: 'disabled' }))
     installSeam()
     const { kind, reply } = await sendAndReadReply('read note.txt for me')
     expect(kind).toBe('posthoc')
@@ -82,7 +82,7 @@ describe('App — B1 LLM injection seam', () => {
   })
 
   it('persisted oneLoopMode "enabled" → proposerKind "flat-oneloop", identical reply text', async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ llmBackend: 'proxy' }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ llmBackend: 'proxy', oneLoopMode: 'disabled' }))
     installSeam()
     const off = await sendAndReadReply('read note.txt for me')
 

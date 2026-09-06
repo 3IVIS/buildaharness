@@ -8,11 +8,16 @@ name: Browser E2E (chat-ui)
 # substitution, CSP, real DOM/event loop). Chromium only: Playwright ships and
 # manages its own binary, works headless with no $DISPLAY on Linux.
 #
-# NOT a required check yet. Per the plan (R5 precedent — measure before you enforce),
-# this stays advisory until it has been green on the nightly schedule for at least a
-# week / 3+ consecutive runs. Do not add it to branch protection before then; promoting
-# it early risks a flaky-gate stall. Branch protection is a repo setting, not something
-# this file controls, so "non-blocking" here means "not registered as required".
+# NOT a required check. Runs on PRs that touch the surfaces below, plus on demand
+# (workflow_dispatch). Branch protection is a repo setting, not something this file
+# controls, so "non-blocking" here means "not registered as required".
+#
+# The nightly `schedule:` trigger was removed 2026-09-06 (maintainer decision): the
+# ASSISTANT_ONE_LOOP default-flip was gated on a "3 consecutive green nightlies"
+# streak; instead the evidence was gathered directly — the flag OFF/ON parity matrix
+# was run repeatedly under real headless Chromium (3/3 green, no flakiness) alongside
+# the already-clean Rule 2/Rule 6 differential and CLI live-verification — and the
+# flip shipped on that. The per-PR run below stays the ongoing regression signal.
 
 on:
   pull_request:
@@ -23,8 +28,6 @@ on:
       - 'packages/harness/**'
       - 'packages/runtime/**'
       - '.github/workflows/browser-e2e.yml'
-  schedule:
-    - cron: '0 4 * * *'   # nightly at 04:00 UTC (an hour after eval.yml's 03:00)
   workflow_dispatch:
 
 concurrency:

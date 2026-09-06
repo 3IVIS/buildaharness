@@ -1,0 +1,37 @@
+{
+  "id": "assumptions-fail-stated-but-no-result",
+  "description": "Assumptions stated but result is null -> assumptions FAIL (environmental). linter disabled to isolate.",
+  "result": null,
+  "success_criteria": [],
+  "assumptions": [
+    "the source database is reachable"
+  ],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": false,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

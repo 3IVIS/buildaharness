@@ -207,6 +207,53 @@ describe('Phase D1 — onGateDecision', () => {
       expect(typeof event.haltedRun).toBe('boolean')
     }
   })
+
+  // The test above tolerates zero firings (its comment says so). This one forces a real BLOCK
+  // end-to-end through the public HarnessRuntime.run() surface with nothing about the control
+  // state stubbed — the follow-up the Phase D1 implementation note in
+  // plans/harness_consolidation_and_control_plane_plan.html asked for ("a stronger test that
+  // actually drives a real BLOCK end-to-end is a good follow-up").
+  it('fires with a real BLOCK when a SYSTEM_BREAKING contradiction denies the gate — no resolver stubbing', async () => {
+    const rt = new HarnessRuntime()
+    const events: GateDecisionEvent[] = []
+    let checkerCalls = 0
+
+    // t1 executes and its two extracted facts become two INFERENCE beliefs. On the next
+    // iteration (t2) the contradiction checker runs — it has >=2 new beliefs — and reports the
+    // pair as irreconcilable. recordExternalContradiction pushes a SYSTEM_BREAKING contradiction,
+    // which is Tier 1 of resolveControlState: permission -> DENY, so actionGate returns BLOCK for
+    // t2. The block is a genuine consequence of state the run itself produced, not an injected
+    // ControlState.
+    await rt.run('reconcile the two ledgers', ['done'], {
+      initialTasks: [makeTask('t1'), makeTask('t2', { depends_on: ['t1'] })],
+      max_steps: 8,
+      toolExecutors: { default: () => ({ completed: true }) },
+      factExtractor: () => [
+        { statement: 'The Q3 balance is $10,000', isNew: true },
+        { statement: 'The Q3 balance is $40,000', isNew: true },
+      ],
+      contradictionChecker: async (newBeliefs) => {
+        checkerCalls++
+        if (newBeliefs.length < 2) return []
+        return [{
+          beliefIds: [newBeliefs[0].id, newBeliefs[1].id],
+          description: 'The two stated Q3 balances cannot both be true',
+          severity: 'SYSTEM_BREAKING',
+        }]
+      },
+      onGateDecision: (event) => events.push(event),
+    }).catch(() => {
+      // A denied gate that also cannot make progress ends the run with EscalationHalt — the
+      // event still fired before the throw, which is exactly what this test asserts.
+    })
+
+    expect(checkerCalls).toBeGreaterThan(0)
+    const block = events.find((e) => e.result === 'BLOCK')
+    expect(block, 'onGateDecision should have fired with a real BLOCK').toBeDefined()
+    expect(block!.taskId).toBe('t2')
+    expect(block!.reason).toBe('SYSTEM_BREAKING_CONTRADICTION')
+    expect(typeof block!.haltedRun).toBe('boolean')
+  })
 })
 
 describe('Phase D1 — INV-15: no execute without a gate decision in the same run', () => {

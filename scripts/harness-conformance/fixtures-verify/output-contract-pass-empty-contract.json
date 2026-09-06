@@ -1,0 +1,41 @@
+{
+  "id": "output-contract-pass-empty-contract",
+  "description": "A contract object with no required_sections and no required_interface_fields -> output_contract_partial PASS on both sides (nothing to violate).",
+  "result": {
+    "answer": "ok"
+  },
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": {
+    "required_sections": [],
+    "required_interface_fields": [],
+    "interface_constraints": {}
+  },
+  "hypothesis_set": null
+}

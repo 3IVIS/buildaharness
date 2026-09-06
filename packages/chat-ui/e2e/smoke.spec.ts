@@ -11,6 +11,7 @@ import { test, expect } from './fixtures'
 
 test('load app, send a message, get a scripted reply — no tools, no approval card', async ({ chat }) => {
   const page = await chat({
+    oneLoopMode: 'disabled', // explicit — the default is now 'enabled' (R5 flip); this spec pins the posthoc path
     script: { responses: ['Hello from the scripted client.'], streamChunks: ['Hello from the scripted client.'] },
   })
 

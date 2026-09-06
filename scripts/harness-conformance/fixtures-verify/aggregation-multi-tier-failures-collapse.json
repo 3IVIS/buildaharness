@@ -1,0 +1,34 @@
+{
+  "id": "aggregation-multi-tier-failures-collapse",
+  "description": "Five layers FAIL at once: syntax (null result, mechanical), consistency (HIGH contradiction, mechanical), requirements (criteria + null result, environmental), assumptions (stated + null result, environmental), evidence_sufficiency (null store, environmental). has_critical_failure true; critical_failure_tiers collapses to the sorted set ['environmental','mechanical'] \u2014 N same-tier FAILs count once.",
+  "result": null,
+  "success_criteria": [
+    "cite a source"
+  ],
+  "assumptions": [
+    "db reachable"
+  ],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": null,
+  "world_model": {
+    "contradictions": [
+      {
+        "severity": "HIGH"
+      }
+    ]
+  },
+  "output_contract": null,
+  "hypothesis_set": null
+}

@@ -80,6 +80,29 @@ export interface ToolOutcome {
 }
 
 /**
+ * How much a ControlState restricts tool use, ranked by exactly what tool-policy.ts's
+ * evaluateToolPolicy() gates on: a DENY permission is the hardest stop, then a
+ * HUMAN_REQUIRED / SYSTEM_BREAKING escalation, then a non-NORMAL execution_mode, then nothing.
+ */
+function controlStateGateSeverity(cs: ControlState): number {
+  if (cs.permission === 'DENY') return 3
+  if (cs.escalation === 'HUMAN_REQUIRED' || cs.escalation === 'SYSTEM_BREAKING') return 2
+  if (cs.execution_mode === 'CAUTIOUS' || cs.execution_mode === 'RECOVERY') return 1
+  return 0
+}
+
+/**
+ * The more tool-restrictive of two ControlStates (ties → `a`). A harness-driven proposer must
+ * honor BOTH the harness's own per-iteration ControlState AND the turn-local one accumulated
+ * from this turn's prior tool-call outcomes (via recordToolOutcome) — neither may silently
+ * downgrade the other. Overwriting one with the other (which the one-loop proposer used to do)
+ * loses whichever restriction the discarded side carried; this keeps the stricter one.
+ */
+export function moreRestrictiveControlState(a: ControlState, b: ControlState): ControlState {
+  return controlStateGateSeverity(b) > controlStateGateSeverity(a) ? b : a
+}
+
+/**
  * Feeds one tool call's outcome through the partial pipeline described in this file's own
  * top-of-file doc comment, mutates `state` in place, and returns the freshly-resolved
  * ControlState (also left on `state.controlState` for convenience).

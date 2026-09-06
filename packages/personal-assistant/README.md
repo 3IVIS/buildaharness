@@ -11,17 +11,18 @@ bundle of reasoning layers: the agent (the tool-calling loop in
 `agent-loop.ts`) proposes what to do, and a mix of harness- and
 policy-governed gates decide what's actually allowed to happen — see
 ADR-003 (harness consolidation) for the 5-primitive model this
-assistant's design is one instance of. **That governance is currently split
-across two mechanisms, not unified into one** (ADR-003 finding F-6): a live,
-per-tool-call gate runs *inside* `AgentLoop.runToolIterations` as each tool
-call happens (below), while the full `HarnessRuntime` — World Model, Evidence,
-Hypothesis, Control State, Planning, Execution, Verification, Recovery,
-Memory, Learning, Reviewer Pass — runs once per turn *after* that loop has
-already produced a reply, as bookkeeping over the finished result rather than
-a second round of calls. Collapsing those into one loop, where the harness
-itself drives tool calls one at a time, is a deliberate, separately-tracked
-rewire (`plans/harness_d2_one_loop_rewire_plan.html`) — not yet the default
-behavior described below.
+assistant's design is one instance of. **As of 2026-09-06 the tool loop
+runs inside the harness by default** (`ASSISTANT_ONE_LOOP`, default
+`enabled` — `plans/harness_d2_one_loop_rewire_plan.html`): `HarnessRuntime`'s
+own `driveMainLoop` calls `AgentLoop`'s tool-calling machinery one iteration
+at a time, and the per-tool-call gate composes the harness's own live
+`ControlState` with the turn-local one accumulated from this turn's prior
+tool outcomes (whichever is more restrictive wins). Setting
+`ASSISTANT_ONE_LOOP=disabled` (or `/config set oneLoopMode disabled`) falls
+back to the pre-rewire path — the tool loop runs to completion first and the
+full `HarnessRuntime` then runs once per turn as bookkeeping over the
+finished reply — kept for one rollout window as an escape hatch before the
+flag is removed (ADR-003 finding F-6).
 
 Where a heavy autonomous agent decomposes an objective into a multi-task plan,
 this assistant treats every chat message as **one objective, one task**. That

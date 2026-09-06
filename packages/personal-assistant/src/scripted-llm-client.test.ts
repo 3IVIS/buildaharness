@@ -64,6 +64,7 @@ describe('AssistantTurnResult.proposerKind', () => {
     const assistant = new PersonalAssistant({
       llmClient: createScriptedLLMClient(script()),
       fileTools: { backend: makeFakeBackend(), workspaceRoot: '/ws' },
+      oneLoopMode: 'disabled', // explicit — the default is now 'enabled' (R5 flip, 2026-09-06)
       onTrace: (e) => events.push(e),
     })
 
@@ -78,6 +79,7 @@ describe('AssistantTurnResult.proposerKind', () => {
     const off = new PersonalAssistant({
       llmClient: createScriptedLLMClient(script()),
       fileTools: { backend: makeFakeBackend(), workspaceRoot: '/ws' },
+      oneLoopMode: 'disabled',
     })
     const on = new PersonalAssistant({
       llmClient: createScriptedLLMClient(script()),

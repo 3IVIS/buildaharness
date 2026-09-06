@@ -1,0 +1,40 @@
+{
+  "id": "output-contract-required-sections-only",
+  "description": "KNOWN DIVERGENCE. Contract sets required_sections=['summary'] with an empty result. TS verify_output_contract_partial (contractShadowCheck) checks required_sections -> FAIL; Python contract_shadow_check checks required_interface_fields / interface_constraints and ignores required_sections -> PASS. Tracked in known-discrepancies-verify.json.",
+  "result": {},
+  "success_criteria": [],
+  "assumptions": [],
+  "task_risk": "LOW",
+  "scope": "local",
+  "tools": {
+    "linter": true,
+    "pytest": true,
+    "integration_runner": true,
+    "consistency_checker": true,
+    "requirements_checker": true,
+    "assumption_checker": true,
+    "goal_checker": true,
+    "evidence_checker": true,
+    "contract_checker": true
+  },
+  "evidence_store": {
+    "entries": [
+      {
+        "reliability": "HIGH"
+      },
+      {
+        "reliability": "MEDIUM"
+      }
+    ]
+  },
+  "world_model": {
+    "contradictions": []
+  },
+  "output_contract": {
+    "required_sections": [
+      "summary"
+    ],
+    "required_interface_fields": []
+  },
+  "hypothesis_set": null
+}

@@ -7,22 +7,25 @@
  *
  * Backs plans/harness_d2_one_loop_rewire_plan.html's R2 phase: the harness-driven proposer that
  * lets HarnessRuntime's driveMainLoop actually call AgentLoop's tool-calling machinery once per
- * main-loop iteration, instead of receiving an already-finished draftReply after the fact. Unlike
- * ASSISTANT_CONTROL_PLANE, this flag is NOT a rollout-proves-a-no-op flag from day one — R2 lands
- * it default OFF, and R3/R4 build the rest of the wiring behind it before R5 flips the default and
- * removes it, mirroring ASSISTANT_CONTROL_PLANE's own shape without resurrecting its file.
+ * main-loop iteration, instead of receiving an already-finished draftReply after the fact. R2
+ * landed it default OFF; R3/R4 built the rest of the wiring behind it; R5 gathered the rollout
+ * evidence (Rule 2/Rule 6 differential clean, CLI live-verification both states, the chat-ui
+ * flag OFF/ON parity matrix green under real headless Chromium) and flipped the default to
+ * 'enabled' on 2026-09-06. The flag itself is kept for one more window as an escape hatch before
+ * being removed (R5's final step), mirroring ASSISTANT_CONTROL_PLANE's own shape.
  *
- * 'enabled': HarnessBridge.run() swaps in a real harness-driven proposer (built from
- * AgentLoop.createHarnessProposer) as the 'default' toolExecutor, when the caller supplies one.
- * 'disabled' (the default, for the whole R2-R4 rollout window): today's behavior, byte-for-byte —
- * toolExecutors.default always resolves to `() => draftReply`. An unrecognized value is ignored
- * (falls back to the default) with a startup warning, same typo-tolerance-with-a-warning
- * convention resolveControlPlaneMode/resolveNonInteractiveApprovalMode used, since a
- * silently-misread flag here is safety-relevant.
+ * 'enabled' (the default): HarnessBridge.run() swaps in a real harness-driven proposer (built
+ * from AgentLoop.createHarnessProposer) as the 'default' toolExecutor, when the caller supplies
+ * one — the harness's driveMainLoop drives the real tool calls one iteration at a time.
+ * 'disabled': the pre-rewire behavior — toolExecutors.default always resolves to
+ * `() => draftReply` (the tool loop runs to completion first, the harness sees the finished
+ * reply). An unrecognized value is ignored (falls back to the default) with a startup warning,
+ * same typo-tolerance-with-a-warning convention resolveControlPlaneMode/
+ * resolveNonInteractiveApprovalMode used, since a silently-misread flag here is safety-relevant.
  */
 export type OneLoopMode = 'enabled' | 'disabled'
 
-export const DEFAULT_ONE_LOOP_MODE: OneLoopMode = 'disabled'
+export const DEFAULT_ONE_LOOP_MODE: OneLoopMode = 'enabled'
 
 /**
  * Value-level resolver, shared by every surface: `resolveOneLoopMode` (CLI, reads
