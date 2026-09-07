@@ -223,6 +223,12 @@ export function countInvestigations(worldModel: WorldModel): number {
  *  _SUPERVISOR_INVESTIGATION_CAP. */
 export const INVESTIGATION_CAP_K = 3
 
+/** Rationale prefix on the coerced CONTINUE returned once a GATHER_EVIDENCE
+ *  investigation has actually run (S5). driveMainLoop keys the lever-1 leaf re-queue
+ *  (S8) off this — a re-queue only makes sense when new evidence was gathered, not when
+ *  GATHER_EVIDENCE degraded for a missing host / cap / failure. */
+export const INVESTIGATION_DONE_PREFIX = '[investigation done]'
+
 /** A host-provided bounded read-only investigation: request → findings. The host
  *  runs its own tool loop (own Budget, tool-policy gate). Absent → GATHER_EVIDENCE
  *  degrades to CONTINUE. */
@@ -259,5 +265,5 @@ export async function resolveGatherEvidence(
     return SupervisorDirective.cont(`[investigation failed] ${directive.rationale}`)
   }
   if (findings.length > 0) mergeInvestigationFindings(worldModel, findings, { question: req.question })
-  return SupervisorDirective.cont(`[investigation done] ${directive.rationale}`)
+  return SupervisorDirective.cont(`${INVESTIGATION_DONE_PREFIX} ${directive.rationale}`)
 }

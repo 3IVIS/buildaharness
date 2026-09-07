@@ -100,6 +100,86 @@ describe('driveMainLoop — S7 seeded-stall supervisor consult', () => {
     expect(outcome.status).toBe('complete')
   })
 
+  it('lever 1 (S8): a REDIRECT_STRATEGY directive re-queues the failed leaf and the run recovers', async () => {
+    // Before S8 only REFRAME_PLAN could recover a one-node stall — REDIRECT_STRATEGY went
+    // through the LOCAL replan path, which re-queues only *dependents*, so nothing landed
+    // PENDING and the executor was called exactly once. Now the failed leaf itself is
+    // re-queued so the redirected strategy gets an attempt.
+    const decider = vi.fn(async () => ({
+      action: 'REDIRECT_STRATEGY' as const,
+      rationale: 'the current strategy keeps timing out',
+      strategy_hint: 'REIMPLEMENT',
+    }))
+    const exec = seedThenFail(1, 3)
+    const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {
+      initialTasks: [makeTask('respond')],
+      max_steps: 12,
+      toolExecutors: { default: exec },
+      supervisorDecider: decider,
+    })
+    expect(decider).toHaveBeenCalled()
+    expect(exec.state.calls).toBeGreaterThan(1)
+    expect(outcome.status).toBe('complete')
+  })
+
+  it('lever 1 (S8): a completed GATHER_EVIDENCE investigation re-queues the failed leaf', async () => {
+    const decider = vi.fn(async () => ({
+      action: 'GATHER_EVIDENCE' as const,
+      rationale: 'need to check where the value actually lives',
+      investigation: { question: 'where is the override defined?', suggested_tools: ['read_file'], budget: 2 },
+    }))
+    const exec = seedThenFail(1, 3)
+    const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {
+      initialTasks: [makeTask('respond')],
+      max_steps: 12,
+      toolExecutors: { default: exec },
+      supervisorDecider: decider,
+      runInvestigation: async () => [{ content: 'override is in config.local.env', tool: 'read_file', reliability: 'MEDIUM' as const }],
+    })
+    expect(decider).toHaveBeenCalled()
+    expect(exec.state.calls).toBeGreaterThan(1)
+    expect(outcome.status).toBe('complete')
+  })
+
+  it('lever 1 (S8): a REDIRECT that never stops failing still terminates (bounded)', async () => {
+    // The re-queue must not create an unbounded retry loop — switch_count -> strategyLooping
+    // and the recovery budget still force a terminal state.
+    const decider = vi.fn(async () => ({
+      action: 'REDIRECT_STRATEGY' as const,
+      rationale: 'try again',
+      strategy_hint: 'REIMPLEMENT',
+    }))
+    const alwaysFail = (): unknown => ({ __harnessExecutionStatus: 'failed', error: 'injected: never recovers' })
+    const seedFirst = (() => {
+      let first = true
+      return (toolCtx: ToolExecutorContext): unknown => {
+        if (first) {
+          first = false
+          for (let k = 0; k < 3; k++) {
+            toolCtx.failureDiagnostics?.failure_history.push({
+              id: `inj-${k}`, timestamp: new Date().toISOString(),
+              failure_class: 'injected_persistent_tool_failure', description: 'x', context: {},
+            })
+          }
+          if (toolCtx.failureDiagnostics) {
+            toolCtx.failureDiagnostics.matched_pattern = {
+              failure_class: 'injected_persistent_tool_failure', confidence: 1, matched_pattern: 'injected',
+            }
+          }
+        }
+        return alwaysFail()
+      }
+    })()
+    let terminated = false
+    await new HarnessRuntime().run('objective', ['produce the answer'], {
+      initialTasks: [makeTask('respond')],
+      max_steps: 25,
+      toolExecutors: { default: seedFirst },
+      supervisorDecider: decider,
+    }).then(() => { terminated = true }).catch(() => { terminated = true })
+    expect(terminated).toBe(true)
+  })
+
   it('is never consulted on a healthy single-task run (INV-22)', async () => {
     const decider = vi.fn(async () => ({ action: 'CONTINUE' as const, rationale: 'n/a' }))
     const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {

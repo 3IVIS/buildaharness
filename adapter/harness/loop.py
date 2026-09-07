@@ -55,7 +55,7 @@ from .memory import MemoryState, apply_retention_policy, check_max_steps, compre
 from .policy import select_best_action
 from .progress import cannot_make_progress
 from .recovery import STRATEGY_ORDER, RecoveryBudget, StrategyState, switch_strategy
-from .replanning import ReplanScope, apply_replan, assess_replan_scope
+from .replanning import ReplanScope, apply_replan, assess_replan_scope, requeue_failed_leaves
 from .staleness import increment_generation_id
 from .supervisor import SupervisorDirective, supervisor_enabled
 from .verification import verify
@@ -532,6 +532,23 @@ def run_one_iteration(
                 if current_task is not None:
                     scope: ReplanScope = assess_replan_scope(contradiction, task_graph)
                     task_graph = apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state)
+                    increment_generation_id(world_model)
+
+                # Trajectory Supervisor lever 1 (S8) — a REDIRECT_STRATEGY directive means
+                # "retry this task under a different strategy". The LOCAL replan above only
+                # re-queues dependents of the failed task, so on a one-node turn graph nothing
+                # lands PENDING and the redirect is never applied. When that leaves the graph
+                # with nothing runnable, re-queue the FAILED leaf(s) so the redirected strategy
+                # actually gets an attempt. Bounded by recovery_budget + switch_count (INV-21:
+                # task_graph only, never control_state). GATHER_EVIDENCE's own re-queue happens
+                # on the driver's investigation re-entry (planner_api.py), not here.
+                if (
+                    directive is not None
+                    and directive.action == "REDIRECT_STRATEGY"
+                    and not any(t.status == "PENDING" for t in task_graph.tasks)
+                    and requeue_failed_leaves(task_graph)
+                ):
+                    strategy_state.switch_triggers.append(_supervisor_reason("requeue_leaf", directive.rationale))
                     increment_generation_id(world_model)
 
     # ── Sub-step A ────────────────────────────────────────────────────────────

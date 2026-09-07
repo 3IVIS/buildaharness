@@ -50,6 +50,34 @@ def diagnose_and_replan(
     return task_graph
 
 
+def requeue_failed_leaves(task_graph: TaskGraph) -> bool:
+    """Flip FAILED leaf tasks (no non-FAILED task depends on them) back to PENDING.
+
+    Trajectory Supervisor lever 1 (S8). A REDIRECT_STRATEGY directive, or a completed
+    GATHER_EVIDENCE investigation, is a "retry this task differently" signal — but the
+    LOCAL replan path (``diagnose_and_replan``) only re-queues *dependents* of the failed
+    task. On a one-node turn graph (every single-turn personal-assistant run) nothing
+    lands PENDING, so the redirected strategy / freshly gathered evidence is never
+    applied and the run stalls out. Re-queueing the failed leaf itself closes that loop.
+
+    Bounded by the caller: ``recovery_budget`` plan-revision consumption on every stall
+    edge, ``switch_count`` -> ``strategy_looping`` after MAX_SWITCHES, and the per-run
+    investigation cap K. Returns True iff at least one task was re-queued.
+    """
+    ids_with_live_dependents: set[str] = {
+        dep for t in task_graph.tasks if t.status != "FAILED" for dep in getattr(t, "depends_on", [])
+    }
+    changed = False
+    for t in task_graph.tasks:
+        if t.status == "FAILED" and t.id not in ids_with_live_dependents:
+            t.status = "PENDING"
+            t.block_reason = None
+            changed = True
+    if changed:
+        task_graph.changed = True
+    return changed
+
+
 def rebuild_task_graph(world_model: Any, caller_state: Any, plan_note: str | None = None) -> TaskGraph:
     """GLOBAL replan: fresh TaskGraph from success_criteria + world_model beliefs.
 
