@@ -1,5 +1,5 @@
 {
-  "id": "sup-pivot-newer-status",
+  "id": "sup-pivot-newer-status-stall",
   "category": "multi_step",
   "slice": "supervisor_pivot",
   "intent": "The log has two entries for the same item; the later one wins.",
@@ -20,8 +20,10 @@
       "0007 remains pending"
     ]
   },
-  "note": "Pass = reads the latest 0007 line (APPLIED), not the first.",
+  "note": "Pass = reads the latest 0007 line (APPLIED), not the first. [S7 stall variant: injects a persistent tool failure so the harness reaches cannotMakeProgress() and the Trajectory Supervisor is consulted; measures recovery.]",
   "tools": {
     "file": true
-  }
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
 }

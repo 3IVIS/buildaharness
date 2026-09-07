@@ -165,6 +165,8 @@ describe('diffReports (Rule 6)', () => {
         meanLatencyMs: 100,
         meanCostUsd: 0.001,
         totalTokens: 30,
+        supervisorConsultsMean: 0,
+        supervisorConsultsTotal: 0,
         byCategory: {},
         answerClaimConfusion: null,
       },

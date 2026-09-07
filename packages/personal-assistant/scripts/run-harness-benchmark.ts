@@ -21,6 +21,10 @@
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
  *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
  *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
+ *   npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot --seeds=3
+ *       # S7 Rule 6: N independent repeats of the whole matrix (claude-cli has no seed param),
+ *       # writes <stamp>.seedK.json per run + <stamp>.multiseed.json with per-metric
+ *       # mean/stddev/CI95 and, for exactly two arms, a diffSeeds verdict (positive/neutral/regressed).
  *
  * The LLM-as-judge (`eval/judge.ts`, a tool-free `ClaudeCliLLMClient`) is **on by default** for a
  * real run — a `grader.judge` rubric that would otherwise score `skipped` gets classified YES/NO.
@@ -36,7 +40,7 @@ import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
 import { loadCorpus } from '../eval/corpus/index.js'
 import { IMPLEMENTED_ARMS, ALL_ARMS, type Arm } from '../eval/arms.js'
 import { runBenchmark, type BenchmarkReport } from '../eval/runner.js'
-import { renderMarkdown, diffReports, renderDiff } from '../eval/report.js'
+import { renderMarkdown, diffReports, renderDiff, aggregateSeeds, diffSeeds, renderSeedDiff } from '../eval/report.js'
 import { ClaudeCliJudge } from '../eval/judge.js'
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -72,30 +76,63 @@ async function main(): Promise<void> {
   // (no API key). A judge error / unparseable verdict resolves to `false` inside judge(), never a throw.
   const judge = process.argv.includes('--no-judge') ? undefined : new ClaudeCliJudge()
 
+  // --seeds=N — the S7 decision is LLM-driven, so a single pass is not evidence. claude-cli
+  // has no seed parameter; "seed" here means an independent repeated run of the whole matrix.
+  const seeds = Math.max(1, Number.parseInt(arg('seeds') ?? '1', 10) || 1)
+
   console.log(
     `Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli` +
-      ` (judge: ${judge ? 'enabled' : 'disabled'})...\n`,
+      ` (judge: ${judge ? 'enabled' : 'disabled'}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
   )
 
-  const report = await runBenchmark({
-    tasks,
-    arms,
-    judge,
-    // The claude-cli backend resolves tool calls out of process via its own MCP server, which
-    // needs the workspace path up front — so build one client per task, wiring the file/shell MCP
-    // tools only when the task declares them.
-    makeLlm: ({ workspaceRoot, task }) =>
-      new ClaudeCliLLMClient({
-        fileTools: task.tools.file ? { workspaceRoot } : undefined,
-        shellTools: task.tools.shell ? { workspaceRoot } : undefined,
-      }),
-    onProgress: ({ arm, taskId, success, skipped }) => {
-      console.log(`  ${skipped ? 'SKIP' : success ? 'PASS' : 'FAIL'}  ${arm} · ${taskId}`)
-    },
-  })
+  mkdirSync(REPORTS_DIR, { recursive: true })
+
+  const runOnce = () =>
+    runBenchmark({
+      tasks,
+      arms,
+      judge,
+      // The claude-cli backend resolves tool calls out of process via its own MCP server, which
+      // needs the workspace path up front — so build one client per task, wiring the file/shell MCP
+      // tools only when the task declares them.
+      makeLlm: ({ workspaceRoot, task }) =>
+        new ClaudeCliLLMClient({
+          fileTools: task.tools.file ? { workspaceRoot } : undefined,
+          shellTools: task.tools.shell ? { workspaceRoot } : undefined,
+        }),
+      onProgress: ({ arm, taskId, success, skipped }) => {
+        console.log(`  ${skipped ? 'SKIP' : success ? 'PASS' : 'FAIL'}  ${arm} · ${taskId}`)
+      },
+    })
+
+  const seedReports: BenchmarkReport[] = []
+  for (let s = 0; s < seeds; s++) {
+    if (seeds > 1) console.log(`\n── seed ${s + 1}/${seeds} ──`)
+    const r = await runOnce()
+    seedReports.push(r)
+    if (seeds > 1) {
+      writeFileSync(join(REPORTS_DIR, `${r.generatedAt.replace(/[:.]/g, '-')}.seed${s + 1}.json`), JSON.stringify(r, null, 2))
+    }
+  }
+  const report = seedReports[seedReports.length - 1]
+
+  // ── multi-seed summary + Rule 6 delta between the two arms ─────────────────
+  if (seeds > 1) {
+    const armNames = arms.map((a) => a.name)
+    const perArmSeedAgg = Object.fromEntries(armNames.map((n) => [n, aggregateSeeds(seedReports, n)]))
+    const stamp = report.generatedAt.replace(/[:.]/g, '-')
+    let seedDiffMd = ''
+    if (armNames.length === 2) {
+      const seedDiff = diffSeeds(perArmSeedAgg[armNames[0]], perArmSeedAgg[armNames[1]])
+      seedDiffMd = renderSeedDiff(seedDiff)
+      console.log(`\n${seedDiffMd}\n`)
+    }
+    const multiPath = join(REPORTS_DIR, `${stamp}.multiseed.json`)
+    writeFileSync(multiPath, JSON.stringify({ seeds, arms: armNames, perArm: perArmSeedAgg, seedReports: seedReports.map((r) => r.generatedAt) }, null, 2))
+    console.log(`multi-seed summary → ${multiPath}`)
+  }
 
   // ── write the machine report ──────────────────────────────────────────────
-  mkdirSync(REPORTS_DIR, { recursive: true })
   const stamp = report.generatedAt.replace(/[:.]/g, '-')
   const jsonPath = join(REPORTS_DIR, `${stamp}.json`)
   writeFileSync(jsonPath, JSON.stringify(report, null, 2))

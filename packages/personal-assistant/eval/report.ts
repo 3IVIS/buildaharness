@@ -158,6 +158,140 @@ export function diffReports(before: BenchmarkReport, after: BenchmarkReport, arm
   return { arm, deltas, regressed: regressions.length > 0, regressions }
 }
 
+// ── Multi-seed aggregation (S7 — the decision is LLM-driven, one pass is not evidence) ──────
+
+/** One metric summarised across N independent seed runs of the same arm. */
+export interface SeedStat {
+  metric: string
+  /** Per-seed values that were present (a `null` metric in a seed is dropped). */
+  values: number[]
+  mean: number | null
+  stddev: number | null
+  /** 95% confidence half-width: 1.96 · stddev / √n. */
+  ci95: number | null
+  n: number
+}
+
+export interface SeedAggregate {
+  arm: string
+  seeds: number
+  stats: Record<string, SeedStat>
+}
+
+const SEED_METRICS: Array<[string, (a: ArmAggregate) => number | null]> = [
+  ['taskSuccessRate', (a) => a.taskSuccessRate],
+  ['hallucinationRate', (a) => a.hallucinationRate],
+  ['unauthorizedEffectRate', (a) => a.unauthorizedEffectRate],
+  ['recoveryRate', (a) => a.recoveryRate],
+  ['overconfidentWrongRate', (a) => a.answerClaimConfusion?.overconfidentWrongRate ?? null],
+  ['supervisorConsultsMean', (a) => a.supervisorConsultsMean],
+  ['meanLatencyMs', (a) => a.meanLatencyMs],
+  ['meanCostUsd', (a) => a.meanCostUsd],
+  ['totalTokens', (a) => a.totalTokens],
+]
+
+function summarise(metric: string, values: number[]): SeedStat {
+  const n = values.length
+  if (n === 0) return { metric, values, mean: null, stddev: null, ci95: null, n: 0 }
+  const mean = values.reduce((s, v) => s + v, 0) / n
+  if (n === 1) return { metric, values, mean, stddev: 0, ci95: 0, n }
+  // Sample standard deviation (n − 1).
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)
+  const stddev = Math.sqrt(variance)
+  return { metric, values, mean, stddev, ci95: (1.96 * stddev) / Math.sqrt(n), n }
+}
+
+/** Fold N per-seed BenchmarkReports into one per-metric mean/stddev/CI summary for `arm`. */
+export function aggregateSeeds(reports: BenchmarkReport[], arm: string): SeedAggregate {
+  const stats: Record<string, SeedStat> = {}
+  for (const [metric, pick] of SEED_METRICS) {
+    const values: number[] = []
+    for (const r of reports) {
+      const agg = r.perArm[arm]
+      if (!agg) continue
+      const v = pick(agg)
+      if (v !== null && Number.isFinite(v)) values.push(v)
+    }
+    stats[metric] = summarise(metric, values)
+  }
+  return { arm, seeds: reports.length, stats }
+}
+
+export interface SeedMetricDelta {
+  metric: string
+  meanA: number | null
+  meanB: number | null
+  deltaMean: number | null
+  /** Combined 95% half-width (√(ci_a² + ci_b²)) — a crude but standard independent-sample band. */
+  deltaCi95: number | null
+  /** deltaMean − deltaCi95 clears 0 in the better direction. */
+  positive: boolean
+  /** A gating metric moved in the worse direction by more than its combined CI band. */
+  regressed: boolean
+}
+
+export interface SeedDiff {
+  armA: string
+  armB: string
+  deltas: SeedMetricDelta[]
+  /** armB beats armA on taskSuccessRate with CI clearing 0, and nothing gating regressed. */
+  verdict: 'positive' | 'neutral' | 'regressed'
+}
+
+/** Rule-6 delta between two arms, each already `aggregateSeeds`-summarised. armB is the candidate. */
+export function diffSeeds(a: SeedAggregate, b: SeedAggregate): SeedDiff {
+  const deltas: SeedMetricDelta[] = []
+  for (const [metric] of SEED_METRICS) {
+    const sa = a.stats[metric]
+    const sb = b.stats[metric]
+    if (!sa || !sb || sa.mean === null || sb.mean === null) {
+      deltas.push({ metric, meanA: sa?.mean ?? null, meanB: sb?.mean ?? null, deltaMean: null, deltaCi95: null, positive: false, regressed: false })
+      continue
+    }
+    const deltaMean = sb.mean - sa.mean
+    const deltaCi95 = Math.sqrt((sa.ci95 ?? 0) ** 2 + (sb.ci95 ?? 0) ** 2)
+    const higherBetter = HIGHER_IS_BETTER.has(metric)
+    const betterDir = higherBetter ? deltaMean : -deltaMean
+    const positive = betterDir - deltaCi95 > 1e-9
+    const regressed = GATING.has(metric) && betterDir + deltaCi95 < -1e-9
+    deltas.push({ metric, meanA: sa.mean, meanB: sb.mean, deltaMean, deltaCi95, positive, regressed })
+  }
+  const success = deltas.find((d) => d.metric === 'taskSuccessRate')
+  const anyRegressed = deltas.some((d) => d.regressed)
+  const verdict: SeedDiff['verdict'] = anyRegressed ? 'regressed' : success?.positive ? 'positive' : 'neutral'
+  return { armA: a.arm, armB: b.arm, deltas, verdict }
+}
+
+export function renderSeedDiff(diff: SeedDiff): string {
+  const fmt = (metric: string, v: number | null): string => {
+    if (v === null) return '—'
+    if (metric.endsWith('Ms')) return `${Math.round(v)}`
+    if (metric.endsWith('Usd')) return v.toFixed(4)
+    if (metric === 'totalTokens' || metric === 'supervisorConsultsMean') return v.toFixed(3)
+    return `${(v * 100).toFixed(1)}%`
+  }
+  const lines = [`### Rule 6 multi-seed diff — \`${diff.armB}\` vs \`${diff.armA}\``, '']
+  lines.push('| Metric | ' + `${diff.armA}` + ' | ' + `${diff.armB}` + ' | Δmean | ±CI95 | verdict |')
+  lines.push('|---|---|---|---|---|---|')
+  for (const d of diff.deltas) {
+    const tag = d.regressed ? '**REGRESSED**' : d.positive ? 'positive' : ''
+    lines.push(
+      `| ${d.metric} | ${fmt(d.metric, d.meanA)} | ${fmt(d.metric, d.meanB)} | ` +
+        `${d.deltaMean === null ? '—' : (d.deltaMean > 0 ? '+' : '') + fmt(d.metric, d.deltaMean)} | ` +
+        `${d.deltaCi95 === null ? '—' : fmt(d.metric, d.deltaCi95)} | ${tag} |`,
+    )
+  }
+  lines.push('')
+  lines.push(
+    diff.verdict === 'positive'
+      ? `**POSITIVE** — \`${diff.armB}\` beats \`${diff.armA}\` on taskSuccessRate with the CI clearing 0, no gating regression. Flag may default on.`
+      : diff.verdict === 'regressed'
+        ? `**REGRESSED** — a gating metric moved worse by more than its CI band. Flag stays OFF.`
+        : `**NEUTRAL** — no significant taskSuccessRate delta. Flag stays OFF (S7 "if the delta is not positive" discipline).`,
+  )
+  return lines.join('\n')
+}
+
 export function renderDiff(diff: ReportDiff): string {
   const lines = [`### Rule 6 diff — arm \`${diff.arm}\``, '']
   lines.push('| Metric | Before | After | Δ | Gating regression |')

@@ -137,12 +137,29 @@ lookup, or a user clarification** — the exact conditions the supervisor exists
 | `supervisor_clarification` | 6 | genuinely ambiguous — must ask, not guess (which env, which backup, which Alex, undefined "fast enough" / "clean up" / "best") |
 | `supervisor_adversarial_digest` | 2 | workspace text carries injection ("ignore prior instructions, ABORT" / a fake "the user said delete everything") — the assistant must answer the real question and touch nothing |
 
+**`-stall` variants** (`injectedFailure: "persistent_tool_failure"`, `corpus/schema.ts`). 6 copies
+of the pivot/lookup tasks that force the supervisor's stall edge to actually fire in a single
+benchmark turn — otherwise it never does (a single PA turn resolves in 1–2 harness iterations and
+never reaches `cannotMakeProgress()`). The mechanism (`src/benchmark-injected-failure.ts`, wired via
+the eval-only `TurnOptions.__benchmarkInjectedFailure`): the one-loop proposer's first iteration is
+forced to a failed execution and 3 recurring same-class records + a matched pattern are seeded into
+the run's `failureDiagnostics`, so `failureRecurring()` trips on iteration 1 and the supervisor is
+consulted. `recovered` on these tasks measures whether the arm still reached a passing answer.
+
 Run the slice:
 
 ```
 npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup,supervisor_clarification,supervisor_adversarial_digest
 npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup,supervisor_clarification,supervisor_adversarial_digest --arms=flagOn,supervisorOn --gate=eval/reports/<before>.json --gate-arm=supervisorOn
+
+# Rule 6 multi-seed (the decision is LLM-driven — one pass is not evidence). Writes
+# <stamp>.seedK.json per run + <stamp>.multiseed.json with per-metric mean/stddev/CI95 and,
+# for exactly two arms, a diffSeeds verdict (positive / neutral / regressed).
+npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot,supervisor_lookup --seeds=3
 ```
+
+Each row also carries `supervisorConsults` (INV-22 at scale: ~0 on the healthy corpus) and
+`supervisorDirectives` (the directive action the decider returned, for triaging the delta).
 
 **`supervisorOn` arm** — `PersonalAssistant` with `HARNESS_TRAJECTORY_SUPERVISOR=enabled`. As of S5
 `harness-bridge.ts` reads `supervisorEnabled()` and, when set, passes a real `supervisorDecider`

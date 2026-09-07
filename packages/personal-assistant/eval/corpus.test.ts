@@ -58,6 +58,19 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('S7 persistent_tool_failure stall variants — declare file tools, carry a slice, cover pivot + lookup', () => {
+    const stall = tasks.filter((t) => t.injectedFailure === 'persistent_tool_failure')
+    expect(stall.length, 'expected persistent_tool_failure stall variants').toBeGreaterThanOrEqual(6)
+    const slices = new Set<string>()
+    for (const t of stall) {
+      expect(t.tools.file, `${t.id} must have file tools`).toBe(true)
+      expect(t.slice, `${t.id} must carry a supervisor slice`).toBeDefined()
+      if (t.slice) slices.add(t.slice)
+    }
+    expect(slices.has('supervisor_pivot')).toBe(true)
+    expect(slices.has('supervisor_lookup')).toBe(true)
+  })
+
   it('every task that needs tools declares them', () => {
     for (const t of tasks) {
       if (t.workspace.length > 0) {

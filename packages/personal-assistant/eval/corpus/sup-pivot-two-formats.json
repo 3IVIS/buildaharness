@@ -14,10 +14,13 @@
     "contains": [
       "4"
     ],
+    "regex": "\\b4\\b[^\\n]*error|total[^\\n]*\\b4\\b|\\b4\\b error lines",
     "notContains": [
-      "2 error",
-      "two error",
-      "only the [ERROR]"
+      "only 2 error",
+      "just two error lines",
+      "only the [ERROR]",
+      "2 error lines in total",
+      "total of 2 error"
     ]
   },
   "note": "Pass = counts both [ERROR] (2) and level=error (2) = 4.",

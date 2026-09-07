@@ -1242,6 +1242,13 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         rollbackFn,
         supervisorDirective,
       )
+      // Adopt the recovery ladder's output — parity with loop.py (strategy_state /
+      // task_graph reassigned after switch_strategy / apply_replan, loop.py:480-534).
+      // Without this the strategy switch and a GLOBAL rebuild were computed and thrown
+      // away: switch_count never advanced and cannotMakeProgress()'s strategy_loop /
+      // stalled-completion edges could never trip in this loop.
+      ctx.strategyState = rollbackResult.newStrategyState
+      if (rollbackResult.replanScope === 'GLOBAL') ctx.taskGraph = rollbackResult.newTaskGraph
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
     }
 

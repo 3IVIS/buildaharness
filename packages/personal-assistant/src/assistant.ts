@@ -1,4 +1,4 @@
-import { EscalationHalt, InMemoryExperienceStore, type ExperienceStore, type CheckpointStore, type ToolExecutorContext } from '@buildaharness/harness'
+import { EscalationHalt, InMemoryExperienceStore, supervisorEnabled, type ExperienceStore, type CheckpointStore, type ToolExecutorContext } from '@buildaharness/harness'
 import {
   InMemoryAdapter,
   IndexedDBAdapter,
@@ -31,6 +31,7 @@ import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
+import { wrapProposerWithInjectedFailure } from './benchmark-injected-failure.js'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { ResponseService } from './response-service.js'
 import type { AssistantSource } from './assistant-source.js'
@@ -78,6 +79,15 @@ export interface TurnOptions {
    * ClaudeCliLLMClient).
    */
   onToolStep?: (step: AssistantToolStep) => void
+  /**
+   * **Eval harness only** (`packages/personal-assistant/eval/`). Wraps the one-loop
+   * proposer so its first `failIterations` harness iterations report a failed execution
+   * and `seedFailures` recurring same-class records are seeded into the run's
+   * `failureDiagnostics` — enough to trip `cannotMakeProgress()` on iteration 1 and
+   * exercise the Trajectory Supervisor's stall edge inside a single benchmark turn. Never
+   * set by a real caller; ignored unless the one-loop proposer path is active.
+   */
+  __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number }
 }
 
 export interface PersonalAssistantOptions {
@@ -604,6 +614,12 @@ export class PersonalAssistant {
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planClassifiedTrace.isCandidate, matchedTemplate: planClassifiedTrace.matchedTemplate })
     }
 
+    // Eval harness only — see benchmark-injected-failure.ts. Wraps the one-loop proposer to
+    // force a stall so the Trajectory Supervisor's stall edge is exercised in one turn.
+    if (options.__benchmarkInjectedFailure && oneLoopProposer) {
+      oneLoopProposer = wrapProposerWithInjectedFailure(oneLoopProposer, options.__benchmarkInjectedFailure)
+    }
+
     try {
       const outcome = await this.harnessBridge.run({
         sessionId,
@@ -617,6 +633,12 @@ export class PersonalAssistant {
         onProgress: options.onProgress,
         onUsage: accumulateUsage,
         oneLoopProposer,
+        // Trajectory Supervisor GATHER_EVIDENCE host (S5). Bound to this turn's read-only
+        // tools + risk hint; inert unless supervisorEnabled() also wires a supervisorDecider
+        // (harness-bridge.ts), and then only reached on a real stall edge.
+        runInvestigation: supervisorEnabled()
+          ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
+          : undefined,
       })
 
       // R3: oneLoopSources is only set on the flag-ON path above, and only gets pushed to once
