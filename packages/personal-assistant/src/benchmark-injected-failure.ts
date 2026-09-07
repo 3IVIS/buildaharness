@@ -26,6 +26,15 @@ export interface InjectedFailureOptions {
   failIterations: number
   /** Recurring same-class `failure_history` records seeded on the first call. */
   seedFailures: number
+  /**
+   * How many times the *real* proposer may run after the failure phase (default 2).
+   * The first real call is the derailed attempt; a supervisor recovery (a re-queued
+   * leaf after GATHER_EVIDENCE / REDIRECT_STRATEGY, S8) gets a second, fresh call so
+   * newly gathered evidence in the WorldModel can actually change the answer. Beyond
+   * this the last real result is replayed so a thrashing run still converges without
+   * unbounded backend cost.
+   */
+  maxRealCalls?: number
 }
 
 const INJECTED_FAILURE_CLASS = 'injected_persistent_tool_failure'
@@ -37,9 +46,10 @@ export function wrapProposerWithInjectedFailure(
   realProposer: Proposer,
   opts: InjectedFailureOptions,
 ): (toolCtx: ToolExecutorContext) => Promise<unknown> {
+  const maxRealCalls = Math.max(1, opts.maxRealCalls ?? 2)
   let calls = 0
-  let realResult: unknown
-  let realResultCached = false
+  let realCallsMade = 0
+  let lastRealResult: unknown
 
   return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
     calls += 1
@@ -78,14 +88,14 @@ export function wrapProposerWithInjectedFailure(
       return { __harnessExecutionStatus: 'failed', error: INJECTED_ERROR }
     }
 
-    if (!realResultCached) {
-      realResult = await realProposer(toolCtx)
-      realResultCached = true
-      return realResult
+    if (realCallsMade < maxRealCalls) {
+      realCallsMade += 1
+      lastRealResult = await realProposer(toolCtx)
+      return lastRealResult
     }
-    // Rebuilt-task iterations: replay the one real answer as a completed execution so the
-    // run converges without paying for another backend call.
-    return { __harnessExecutionStatus: 'complete', output: extractOutput(realResult) }
+    // Past the real-call cap: replay the last real answer as a completed execution so a
+    // thrashing run still converges without unbounded backend cost.
+    return { __harnessExecutionStatus: 'complete', output: extractOutput(lastRealResult) }
   }
 }
 

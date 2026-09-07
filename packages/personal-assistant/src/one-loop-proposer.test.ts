@@ -26,7 +26,10 @@ class ScriptedLLMClient implements ILLMClient {
     return ''
   }
 
-  async callChatStructured(_messages: ChatMessage[], _tools?: ToolDefinition[], _options: ChatOptions = {}): Promise<LLMStructuredResponse> {
+  readonly seenMessages: ChatMessage[][] = []
+
+  async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options: ChatOptions = {}): Promise<LLMStructuredResponse> {
+    this.seenMessages.push(messages.map((m) => ({ ...m })))
     if (this.i >= this.responses.length) throw new Error('ScriptedLLMClient: no more scripted responses')
     return this.responses[this.i++]
   }
@@ -163,6 +166,57 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
 
     const second = await proposer(toolCtx)
     expect(second).toEqual({ __harnessExecutionStatus: 'complete', output: 'here is the answer' })
+  })
+
+  it('splices fresh supervisor_investigation observations into the message context (S8 GATHER_EVIDENCE)', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'the answer is debug' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'what is the effective LOG_LEVEL?' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'what is the effective LOG_LEVEL?',
+      maxIterations: 5,
+      sources: [],
+    })
+    const worldModel = {
+      observations: [
+        { id: 'obs-1', source: 'supervisor_investigation', content: 'config.local.env:\nLOG_LEVEL=debug', recorded_at: 'now' },
+        { id: 'obs-2', source: 'execution_engine', content: 'unrelated', recorded_at: 'now' },
+      ],
+    }
+
+    await proposer({ worldModel: worldModel as never, evidenceStore: undefined as never })
+
+    const spliced = llmClient.seenMessages[0].find((m) => m.content.includes('investigation findings'))
+    expect(spliced).toBeDefined()
+    expect(spliced!.role).toBe('user')
+    expect(spliced!.content).toContain('LOG_LEVEL=debug')
+    expect(spliced!.content).not.toContain('unrelated')
+  })
+
+  it('only splices each investigation observation once, across iterations', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: '<tool_call>' }, { content: 'done' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'q' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'q',
+      maxIterations: 5,
+      sources: [],
+    })
+    const worldModel = { observations: [{ id: 'obs-1', source: 'supervisor_investigation', content: 'finding', recorded_at: 'now' }] }
+    const toolCtx = { worldModel: worldModel as never, evidenceStore: undefined as never }
+
+    await proposer(toolCtx)
+    await proposer(toolCtx)
+
+    // The message array is cumulative across iterations — assert the second call did not
+    // splice the same finding a second time (its snapshot still carries exactly one).
+    const lastSnapshot = llmClient.seenMessages[llmClient.seenMessages.length - 1]
+    const splicedInLast = lastSnapshot.filter((m) => m.content.includes('investigation findings')).length
+    expect(splicedInLast).toBe(1)
   })
 
   it('never dispatches more than maxIterations calls — the final one throws an escalated OneLoopPause instead of hanging', async () => {
