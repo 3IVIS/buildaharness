@@ -31,7 +31,7 @@ import {
  *  _SUPERVISOR_ASK_USER_CAP. The M+1th ASK_USER in one run degrades to a plain
  *  cannot_make_progress escalation (no structured question). */
 const SUPERVISOR_ASK_USER_CAP_M = 2
-import { resolveGatherEvidence, type InvestigationFinding } from './investigation.js'
+import { resolveGatherEvidence, INVESTIGATION_DONE_PREFIX, type InvestigationFinding } from './investigation.js'
 import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
 import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
@@ -1156,6 +1156,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // exactly like loop.py's S1 wiring. cannotMakeProgress() here also primes
       // strategyState.stall_reason for the digest (rollbackAndReplan re-checks it anyway).
       let supervisorDirective: SupervisorDirective | null = null
+      let supervisorOriginalAction: SupervisorDirective['action'] | null = null
       if (ctx.supervisorDecider && cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)) {
         // cannotMakeProgress() above also primes strategyState.stall_reason for the digest.
         const digest = buildDigest(ctx.strategyState, ctx.failureDiagnostics, ctx.taskGraph, ctx.worldModel, {
@@ -1166,6 +1167,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           digest.toJSON(),
           ctx.onSupervisorDirective,
         )
+        supervisorOriginalAction = supervisorDirective.action
         // GATHER_EVIDENCE (S5) — run the investigation now (findings merged into the
         // WorldModel), then let the directive fall through as CONTINUE so the ladder
         // proceeds over the new evidence. rollbackAndReplan only acts on
@@ -1231,6 +1233,15 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         }
       }
 
+      // Trajectory Supervisor lever 1 (S8) — a REDIRECT_STRATEGY directive, or a
+      // GATHER_EVIDENCE that actually ran its investigation, is a "retry this task
+      // differently" signal. Tell rollbackAndReplan to re-queue the failed leaf if the
+      // LOCAL replan would otherwise leave a one-node turn graph with nothing PENDING.
+      const requeueLeafOnLocal =
+        supervisorOriginalAction === 'REDIRECT_STRATEGY' ||
+        (supervisorOriginalAction === 'GATHER_EVIDENCE' &&
+          supervisorDirective?.rationale?.startsWith(INVESTIGATION_DONE_PREFIX) === true)
+
       const rollbackResult = rollbackAndReplan(
         currentTask,
         ctx.strategyState,
@@ -1241,7 +1252,15 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.experienceStore.available ? ctx.experienceStore : null,
         rollbackFn,
         supervisorDirective,
+        requeueLeafOnLocal,
       )
+      // Adopt the recovery ladder's output — parity with loop.py (strategy_state /
+      // task_graph reassigned after switch_strategy / apply_replan, loop.py:480-534).
+      // Without this the strategy switch and a GLOBAL rebuild were computed and thrown
+      // away: switch_count never advanced and cannotMakeProgress()'s strategy_loop /
+      // stalled-completion edges could never trip in this loop.
+      ctx.strategyState = rollbackResult.newStrategyState
+      if (rollbackResult.replanScope === 'GLOBAL') ctx.taskGraph = rollbackResult.newTaskGraph
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
     }
 

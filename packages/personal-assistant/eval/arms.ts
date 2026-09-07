@@ -78,6 +78,11 @@ async function runAssistantInner(
   }
 
   const ctx = buildToolContexts(task, ws, backend)
+
+  // INV-22 / S7 signal: count Trajectory Supervisor consults this turn (one
+  // layer_activity:'supervisor' event per stall-edge consult — harness-bridge.ts).
+  let supervisorConsults = 0
+  const supervisorDirectives: string[] = []
   const assistant = new PersonalAssistant({
     llmClient: makeLlm({ workspaceRoot: ws.root, task }),
     memory: new InMemoryAdapter({ scope: 'thread', namespace: `eval-mem-${task.id}` }),
@@ -85,14 +90,34 @@ async function runAssistantInner(
     fileTools: ctx.fileTools,
     shellTools: ctx.shellTools,
     oneLoopMode,
+    onTrace: (e) => {
+      if (e.kind === 'layer_activity' && e.layer === 'supervisor') {
+        supervisorConsults += 1
+        supervisorDirectives.push((e.reason ?? '').split(':')[0].trim())
+      }
+    },
   })
+
+  // S7 stall induction — see benchmark-injected-failure.ts. Only meaningful on the
+  // one-loop proposer path (oneLoopMode === 'enabled').
+  const turnOptions: Parameters<typeof assistant.turn>[1] = { sessionId: `eval-${task.id}` }
+  if (task.injectedFailure === 'persistent_tool_failure') {
+    turnOptions.__benchmarkInjectedFailure = {
+      failIterations: task.injectedFailureCount ?? 1,
+      seedFailures: 3,
+    }
+  }
 
   const started = Date.now()
   try {
-    const result = await assistant.turn(task.prompt, { sessionId: `eval-${task.id}` })
+    const result = await assistant.turn(task.prompt, turnOptions)
     const out: ArmTurnOutput = {
-      reply: result.reply ?? '',
+      // An escalated turn has `reply: null` and puts its clarifying question / blocker
+      // detail in `reason` — surface that as the gradable text so a clarification-slice
+      // grader's question regex matches a structured escalation the same as an in-band ask.
+      reply: result.reply ?? result.reason ?? '',
       status: result.status,
+      escalationReason: result.status === 'escalated' ? result.reason : undefined,
       answerClaimStatus: result.answerClaim?.verification_status,
       workspaceAfter: ws.snapshot(declaredPaths),
       stagedMutation: result.status === 'needs_approval' || result.pendingActionId !== undefined,
@@ -100,7 +125,9 @@ async function runAssistantInner(
       outputTokens: result.usage?.outputTokens,
       costUsd: result.usage?.costUsd,
       latencyMs: Date.now() - started,
-      injectedFailureFired: firedProbe?.(),
+      injectedFailureFired: firedProbe ? firedProbe() : task.injectedFailure === 'persistent_tool_failure' ? true : undefined,
+      supervisorConsults,
+      supervisorDirectives: supervisorDirectives.length > 0 ? supervisorDirectives : undefined,
     }
     return out
   } catch (err) {
@@ -112,6 +139,7 @@ async function runAssistantInner(
       latencyMs: Date.now() - started,
       errorMessage: err instanceof Error ? err.message : String(err),
       injectedFailureFired: firedProbe?.(),
+      supervisorConsults,
     }
   } finally {
     ws.cleanup()

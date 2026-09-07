@@ -216,7 +216,15 @@ export class ResponseService {
   }): Promise<AssistantTurnResult> {
     const { sessionId, transcriptKey, userMessage, err, classification } = params
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
-    const reason = err.blocker.missing_info.join('; ') || err.blocker.reason
+    // A Trajectory Supervisor ASK_USER (S3) carries a structured question (+ optional
+    // choices) — surface that verbatim rather than the generic missing_info join, so the
+    // caller shows the actual question. Falls back to missing_info / the bare reason.
+    const q = err.blocker.question
+    const reason = q
+      ? err.blocker.options?.length
+        ? `${q} (${err.blocker.options.join(' / ')})`
+        : q
+      : err.blocker.missing_info.join('; ') || err.blocker.reason
     this.onTrace?.({ kind: 'escalation', reason })
     // stepsUsed is always 0 here: the only place the pre-split code ever assigned a nonzero
     // stepsUsed before this catch ran is the harness success path, which is now fully inside

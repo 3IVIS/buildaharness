@@ -133,6 +133,30 @@ function diagnoseAndReplan(currentTask: Task, taskGraph: TaskGraph): TaskGraph {
   return taskGraph
 }
 
+/** Flip FAILED leaf tasks (no non-FAILED task depends on them) back to PENDING.
+ *  Trajectory Supervisor lever 1 (S8) — twin of replanning.py's requeue_failed_leaves.
+ *  A REDIRECT_STRATEGY directive or a completed GATHER_EVIDENCE investigation is a
+ *  "retry this task differently" signal, but diagnoseAndReplan (LOCAL) only re-queues
+ *  *dependents* of the failed task — on a one-node turn graph nothing lands PENDING and
+ *  the redirect / new evidence is never applied. Re-queueing the failed leaf itself
+ *  closes that loop. Bounded by the caller (recovery budget, switch_count, cap K).
+ *  Returns true iff at least one task was re-queued. */
+export function requeueFailedLeaves(taskGraph: TaskGraph): boolean {
+  const idsWithLiveDependents = new Set<string>()
+  for (const t of taskGraph.tasks) {
+    if (t.status !== 'FAILED') for (const dep of t.depends_on) idsWithLiveDependents.add(dep)
+  }
+  let changed = false
+  for (const t of taskGraph.tasks) {
+    if (t.status === 'FAILED' && !idsWithLiveDependents.has(t.id)) {
+      t.status = 'PENDING'
+      changed = true
+    }
+  }
+  if (changed) taskGraph.changed = true
+  return changed
+}
+
 function validateTaskGraph(taskGraph: TaskGraph): string[] {
   const errors: string[] = []
   const ids = new Set(taskGraph.tasks.map(t => t.id))
@@ -183,6 +207,7 @@ export function rollbackAndReplan(
   experienceStore: ExperienceStore | null,
   rollbackFn?: () => void,
   supervisorDirective?: SupervisorDirective | null,
+  requeueLeafOnLocal = false,
 ): RollbackReplanResult {
   // Rollback
   rollbackFn?.()
@@ -268,6 +293,17 @@ export function rollbackAndReplan(
   } else {
     replanScope = 'LOCAL'
     newTaskGraph = diagnoseAndReplan(currentTask, taskGraph)
+    // Trajectory Supervisor lever 1 (S8) — the supervisor asked to retry this task
+    // (REDIRECT_STRATEGY, or a completed GATHER_EVIDENCE investigation). diagnoseAndReplan
+    // only re-queued dependents, so if that left nothing runnable (one-node turn graph),
+    // re-queue the failed leaf so the redirect / new evidence actually gets an attempt.
+    if (requeueLeafOnLocal && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
+      if (requeueFailedLeaves(newTaskGraph)) {
+        newStrategyState.switch_triggers.push(
+          `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),
+        )
+      }
+    }
   }
 
   return {

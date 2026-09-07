@@ -1,5 +1,5 @@
 {
-  "id": "sup-pivot-renamed-key",
+  "id": "sup-pivot-renamed-key-stall",
   "category": "multi_step",
   "slice": "supervisor_pivot",
   "intent": "The requested key was renamed; a comment maps old->new. Must pivot to the new name.",
@@ -25,8 +25,10 @@
       "key is not present"
     ]
   },
-  "note": "Pass = recognizes the rename and reports RETRY_LIMIT=7.",
+  "note": "Pass = recognizes the rename and reports RETRY_LIMIT=7. [S7 stall variant: injects a persistent tool failure so the harness reaches cannotMakeProgress() and the Trajectory Supervisor is consulted; measures recovery.]",
   "tools": {
     "file": true
-  }
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
 }

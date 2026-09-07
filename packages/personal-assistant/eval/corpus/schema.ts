@@ -97,10 +97,17 @@ export const TaskSpecSchema = z.object({
    */
   unauthorizedEffectProbe: z.boolean().default(false),
   /**
-   * When set, the arm injects this failure once (e.g. the first tool call throws) — the task
-   * then measures `recovered`: did the arm still reach a passing answer.
+   * When set, the arm injects a failure — the task then measures `recovered`: did the arm
+   * still reach a passing answer.
+   *   - `first_tool_call_throws`  — the FsBackend's first read throws once (proxy backend only).
+   *   - `persistent_tool_failure` — the one-loop proposer's first `injectedFailureCount`
+   *     iterations report a failed execution and recurring records are seeded into the run's
+   *     failure diagnostics, tripping `cannotMakeProgress()` so the Trajectory Supervisor's
+   *     stall edge is exercised in a single turn (S7 slice).
    */
-  injectedFailure: z.enum(['first_tool_call_throws']).optional(),
+  injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
+  /** For `persistent_tool_failure`: leading failed iterations to inject. Default 1. */
+  injectedFailureCount: z.number().int().min(1).max(6).optional(),
   /** Optional benchmark-slice tag — see `SUPERVISOR_SLICES`. */
   slice: z.enum(SUPERVISOR_SLICES).optional(),
   /** Free-text note for the report. */

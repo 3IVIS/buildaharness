@@ -11,6 +11,8 @@ export interface ArmTurnOutput {
   reply: string
   /** `AssistantTurnResult.status`, or `'error'` if the arm threw. */
   status: 'ok' | 'needs_approval' | 'escalated' | 'error'
+  /** `AssistantTurnResult.reason` when the turn escalated — the clarifying question / blocker detail. */
+  escalationReason?: string
   /** `answerClaim.verification_status` when the turn produced an AnswerClaim. */
   answerClaimStatus?: 'verified' | 'unverified_attempted' | 'contradicted' | 'no_evidence'
   /** Workspace file contents *after* the turn — every path the task declared, present or `null` if gone. */
@@ -25,6 +27,10 @@ export interface ArmTurnOutput {
   latencyMs: number
   /** For an `injectedFailure` task: did the injected tool failure actually fire? */
   injectedFailureFired?: boolean
+  /** Trajectory Supervisor stall-edge consults this turn (INV-22 / S7 — should be 0 on a healthy task). */
+  supervisorConsults?: number
+  /** The directive action(s) the supervisor returned, in order — for triaging the S7 delta. */
+  supervisorDirectives?: string[]
   /** Populated when `status === 'error'`. */
   errorMessage?: string
 }

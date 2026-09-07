@@ -21,6 +21,10 @@ export interface BenchmarkRow {
   latencyMs: number | null
   costUsd: number | null
   totalTokens: number | null
+  /** Trajectory Supervisor stall-edge consults this turn — `null` if the arm didn't report it. */
+  supervisorConsults: number | null
+  /** The supervisor directive action(s) this turn, in order — for triaging the S7 delta. */
+  supervisorDirectives: string[] | null
   failedChecks: string[]
   /** First ~500 chars of the reply — for triaging a grader mismatch. Machine report only. */
   replyPreview: string
@@ -67,6 +71,10 @@ export interface ArmAggregate {
   meanLatencyMs: number | null
   meanCostUsd: number | null
   totalTokens: number
+  /** Mean Trajectory Supervisor consults per run task (INV-22 at benchmark scale: ~0 on the healthy corpus). */
+  supervisorConsultsMean: number
+  /** Total Trajectory Supervisor consults across this arm's run tasks. */
+  supervisorConsultsTotal: number
   byCategory: Partial<Record<TaskCategory, CategoryStat>>
   /** AnswerClaim confusion matrix; `null` if the arm ran no AnswerClaim-producing tasks with a mechanical ground truth. */
   answerClaimConfusion: AnswerClaimConfusion | null
@@ -108,6 +116,8 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
       latencyMs: null,
       costUsd: null,
       totalTokens: null,
+      supervisorConsults: null,
+      supervisorDirectives: null,
       failedChecks: [],
       replyPreview: '',
       answerClaimCalibration: null,
@@ -129,6 +139,8 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
     latencyMs: out.latencyMs,
     costUsd: out.costUsd ?? null,
     totalTokens,
+    supervisorConsults: out.supervisorConsults ?? null,
+    supervisorDirectives: out.supervisorDirectives ?? null,
     failedChecks: graded.checks.filter((c) => c.verdict === 'fail').map((c) => c.name),
     replyPreview: out.reply.slice(0, 500),
     answerClaimCalibration: graded.answerClaimCalibration,
@@ -178,6 +190,9 @@ function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
     meanCostUsd:
       withCost.length === 0 ? null : withCost.reduce((a, r) => a + (r.costUsd as number), 0) / withCost.length,
     totalTokens: ran.reduce((a, r) => a + (r.totalTokens ?? 0), 0),
+    supervisorConsultsTotal: ran.reduce((a, r) => a + (r.supervisorConsults ?? 0), 0),
+    supervisorConsultsMean:
+      ran.length === 0 ? 0 : ran.reduce((a, r) => a + (r.supervisorConsults ?? 0), 0) / ran.length,
     byCategory,
     answerClaimConfusion,
   }

@@ -69,6 +69,9 @@ const BATCH_LARGE_PROJECTION_THRESHOLD = 25 // a projection above this needs con
 const BATCH_ABSOLUTE_TURN_CEILING = 40 // hard stop regardless of how favorable calibration looks
 const BATCH_DEAD_END_WINDOW = 3 // consecutive dead_end web_search/fetch_url results (see classifyToolYield) before an item's sub-loop gives up early instead of spending its whole per-item budget on a dead page
 
+const INVESTIGATION_WALK_CAP = 20 // hard ceiling on a supervisor investigation's total tool calls, regardless of req.budget
+const INVESTIGATION_WALK_MAX_DEPTH = 3 // how many directory levels the workspace walk descends
+
 /** Per-item calibration inputs — see nextItemBudget. */
 export interface BatchBudgetState {
   callsPerItemHistory: number[]
@@ -289,12 +292,29 @@ export class AgentLoop {
     // method's doc comment. recordToolOutcome dereferences state.evidenceStore, so this must be a
     // real createControlPlaneState() object, never a synthetic { controlState }-only wrapper.
     const controlPlaneState = this.createControlPlaneState()
+    const seenInvestigationObs = new Set<string>()
 
     return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
       if (iteration >= input.maxIterations) {
         throw new OneLoopPause({ kind: 'escalated', reason: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.` })
       }
       iteration++
+
+      // Trajectory Supervisor GATHER_EVIDENCE (S8) — the proposer's `messages` array is
+      // otherwise fixed for the whole turn, so investigation findings merged into the
+      // WorldModel by resolveGatherEvidence would never reach the model. Splice any new
+      // `supervisor_investigation` observations in as a user turn before this iteration's
+      // call, so a re-queued task (S8 lever 1) actually re-answers over the new evidence.
+      const freshFindings = (toolCtx.worldModel?.observations ?? []).filter(
+        (o) => o.source === 'supervisor_investigation' && !seenInvestigationObs.has(o.id),
+      )
+      if (freshFindings.length > 0) {
+        for (const o of freshFindings) seenInvestigationObs.add(o.id)
+        input.messages.push({
+          role: 'user',
+          content: `[trajectory-supervisor investigation findings — read-only evidence gathered because the run had stalled]\n${freshFindings.map((o) => o.content).join('\n\n')}`,
+        })
+      }
 
       // Fold the harness's own live per-iteration ControlState in as a gate floor for this
       // iteration (see doc comment), taking whichever of it and the turn-local accumulated state
@@ -1203,34 +1223,69 @@ export class AgentLoop {
     const question = String(req.question ?? '').trim()
     if (!question) return []
 
-    // Map an allowlisted read-only tool to the concrete call this loop can build from a
-    // bare question. Tools that need an argument we can't derive (a path, a URL) are not
-    // runnable here and are skipped — the investigation degrades to "found nothing".
-    const runnable: Array<{ tool: string; input: Record<string, unknown> }> = []
-    for (const tool of allowed) {
-      if (tool === 'web_search' && this.webTools) runnable.push({ tool: 'web_search', input: { query: question } })
-      else if (tool === 'list_reminders') runnable.push({ tool: 'list_reminders', input: {} })
-    }
-    if (runnable.length === 0) return []
-
     // Budget is immutable — consume() returns a new instance (see state/budget.ts).
-    let budget = new Budget({ maxCalls: Math.max(0, Math.min(req.budget ?? 5, runnable.length)) })
+    // Shared across every branch below (web/reminder single calls + the workspace walk).
+    let budget = new Budget({ maxCalls: Math.max(0, Math.min(req.budget ?? 5, INVESTIGATION_WALK_CAP)) })
     const findings: InvestigationFinding[] = []
-    for (const { tool, input } of runnable) {
-      if (budget.isExhausted()) break
+
+    const gated = (tool: string): boolean => {
       const policy = evaluateToolPolicy({ toolName: tool, riskHint: opts.riskHint, controlState: opts.controlState })
       if (policy.decision !== 'ALLOW') {
         this.onTrace?.({ kind: 'layer_activity', layer: 'recovery', fired: false, reason: `investigation: ${tool} skipped — ${policy.reason}` })
-        continue
+        return false
       }
+      return true
+    }
+    const call = async (tool: string, input: Record<string, unknown>): Promise<string> => {
       budget = budget.consume({ calls: 1 })
       try {
-        const text = (await this.executeToolCall(tool, input, question)).trim()
-        if (text) findings.push({ content: text.slice(0, 800), tool, reliability: 'MEDIUM' })
+        return (await this.executeToolCall(tool, input, question)).trim()
       } catch (err) {
         this.onTrace?.({ kind: 'layer_activity', layer: 'recovery', fired: false, reason: `investigation: ${tool} errored — ${err instanceof Error ? err.message : String(err)}` })
+        return ''
       }
     }
+
+    // Single-shot tools we can build from a bare question string.
+    for (const tool of allowed) {
+      if (budget.isExhausted()) break
+      if (tool === 'web_search' && this.webTools && gated('web_search')) {
+        const text = await call('web_search', { query: question })
+        if (text) findings.push({ content: text.slice(0, 800), tool, reliability: 'MEDIUM' })
+      } else if (tool === 'list_reminders' && gated('list_reminders')) {
+        const text = await call('list_reminders', {})
+        if (text) findings.push({ content: text.slice(0, 800), tool, reliability: 'MEDIUM' })
+      }
+    }
+
+    // Workspace walk — the question rarely names a path, so a bounded breadth-first
+    // read of the sandboxed workspace is how a file-lookup stall gets its missing fact.
+    // list_directory can't distinguish a file from a subdir, so each entry is tried as a
+    // file first and treated as a directory on failure. Bounded by the shared call
+    // budget + INVESTIGATION_WALK_MAX_DEPTH; workspaces in practice are a handful of files.
+    const wantsFiles = allowed.includes('read_file') || allowed.includes('list_directory')
+    if (wantsFiles && this.fileTools && gated('list_directory') && gated('read_file')) {
+      const queue: Array<{ path: string; depth: number }> = [{ path: '.', depth: 0 }]
+      const seen = new Set<string>(['.'])
+      while (queue.length > 0 && !budget.isExhausted()) {
+        const { path, depth } = queue.shift()!
+        const listing = await call('list_directory', { path })
+        if (!listing) continue
+        for (const name of listing.split('\n').map(s => s.trim()).filter(Boolean)) {
+          if (budget.isExhausted()) break
+          const child = path === '.' ? name : `${path}/${name}`
+          if (seen.has(child)) continue
+          seen.add(child)
+          const content = await call('read_file', { path: child })
+          if (content) {
+            findings.push({ content: `${child}:\n${content}`.slice(0, 800), tool: 'read_file', reliability: 'MEDIUM' })
+          } else if (depth + 1 < INVESTIGATION_WALK_MAX_DEPTH) {
+            queue.push({ path: child, depth: depth + 1 })
+          }
+        }
+      }
+    }
+
     return findings
   }
 }
