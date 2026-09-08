@@ -1,0 +1,100 @@
+{
+  "feature": "trajectory-supervisor",
+  "title": "Trajectory Supervisor",
+  "hypothesis": "The trajectory supervisor's one LLM call on the cannotMakeProgress() stall edge redirects enough stalled runs into recovery to justify its extra cost, latency and tokens.",
+  "control": "flagOn",
+  "candidate": "supervisorOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+22% $/turn, +40% latency). Neutral with real cost — it does not earn its keep.",
+  "modelId": "claude-haiku-4-5-20251001",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-08T23:03:29.406Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.648148148148148,
+      "candidate": 0.6666666666666666,
+      "deltaMean": 0.0185185185185186,
+      "deltaCi95": 0.03629629629629624,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 0.05555555555555555,
+      "candidate": 0,
+      "deltaMean": -0.05555555555555555,
+      "deltaCi95": 0.1088888888888889,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.04044117647058824,
+      "candidate": 0,
+      "deltaMean": -0.04044117647058824,
+      "deltaCi95": 0.0396869054142675,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0.3333333333333333,
+      "deltaMean": 0.3333333333333333,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 9674,
+      "candidate": 13576.666666666666,
+      "deltaMean": 3902.666666666666,
+      "deltaCi95": 427.3374375257932,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.010472674074074075,
+      "candidate": 0.01273768148148148,
+      "deltaMean": 0.002265007407407406,
+      "deltaCi95": 0.002286294394050651,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 8675.666666666666,
+      "candidate": 13798,
+      "deltaMean": 5122.333333333334,
+      "deltaCi95": 596.2206313475276,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.216277847604807,
+  "latencyDeltaPct": 0.40341809661635997,
+  "tokenDeltaPct": 0.5904253275444732,
+  "injectionSignals": null
+}

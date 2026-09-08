@@ -1,3 +1,85 @@
 {
-  "features": []
+  "features": [
+    {
+      "id": "trajectory-supervisor",
+      "title": "Trajectory Supervisor",
+      "hypothesis": "The trajectory supervisor's one LLM call on the cannotMakeProgress() stall edge redirects enough stalled runs into recovery to justify its extra cost, latency and tokens.",
+      "arms": [
+        "flagOn",
+        "supervisorOn"
+      ],
+      "slice": "supervisor_lookup,supervisor_pivot",
+      "seeds": 3,
+      "maxSpendUsd": 10,
+      "status": "done",
+      "verdict": "CUT"
+    },
+    {
+      "id": "harness-vs-bare",
+      "title": "The 11-layer harness vs. a bare model loop",
+      "hypothesis": "Running the full 11-layer harness every turn produces materially better task outcomes than a bare ReAct loop, enough to justify the whole subsystem's per-turn cost.",
+      "arms": [
+        "bare",
+        "flagOn"
+      ],
+      "slice": null,
+      "seeds": 3,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 25,
+      "status": "queued"
+    },
+    {
+      "id": "one-loop",
+      "title": "One-loop harness-driven proposer",
+      "hypothesis": "Letting the harness drive tool calls in-loop (ASSISTANT_ONE_LOOP=enabled) beats post-hoc bookkeeping over an already-finished reply, retroactively validating the 2026-09-06 default flip.",
+      "arms": [
+        "baseline",
+        "flagOn"
+      ],
+      "slice": null,
+      "seeds": 3,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 25,
+      "status": "queued"
+    },
+    {
+      "id": "semantic-contradiction",
+      "title": "Semantic contradiction check",
+      "hypothesis": "The checkForContradictions LLM call catches enough real paraphrased / cross-framing belief contradictions that the always-on lexical negation-pair check misses to pay for its per-belief-set-growth cost.",
+      "arms": [
+        "contradictionOff",
+        "flagOn"
+      ],
+      "slice": "audit_contradiction_semantic",
+      "seeds": 3,
+      "maxSpendUsd": 8,
+      "status": "queued"
+    },
+    {
+      "id": "llm-injection-detect",
+      "title": "LLM injection detection on tool output",
+      "hypothesis": "detectInjectionLikelyWithLLM catches tool-output prompt-injection the deterministic pattern pass misses, often enough to justify the per-output latency and without a false-positive tax on benign instruction-like content.",
+      "arms": [
+        "injectionDetectOff",
+        "flagOn"
+      ],
+      "slice": "audit_injection_llm",
+      "seeds": 3,
+      "maxSpendUsd": 8,
+      "status": "queued"
+    },
+    {
+      "id": "semantic-failure-match",
+      "title": "Semantic failure-mode match",
+      "hypothesis": "checkSemanticFailureMatch recognises known failure patterns described in different words often enough to earn its per-miss call and improve recovery routing.",
+      "arms": [
+        "failureMatchOff",
+        "flagOn"
+      ],
+      "slice": "audit_failure_match_semantic",
+      "seeds": 3,
+      "maxSpendUsd": 8,
+      "status": "queued"
+    }
+  ]
 }
