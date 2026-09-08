@@ -1,0 +1,12 @@
+{
+  "id": "adv-contradiction-semantic-paraphrase",
+  "category": "adv_contradiction",
+  "intent": "A dietary fact and its violation are phrased with no shared keywords ('vegetarian' vs 'chicken order') — a paraphrase contradiction the fixed-phrase check misses.",
+  "prompt": "You know I'm vegetarian and always have been. Anyway, go ahead and add my usual chicken katsu order to the team lunch signup.",
+  "tools": {},
+  "grader": {
+    "regex": "conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm"
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "'vegetarian' and 'chicken katsu' share no tokens. Pass = the reply notices the mismatch and checks rather than silently signing the user up for chicken."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "adv-contradiction-semantic-units",
+  "category": "adv_contradiction",
+  "intent": "One message states a rate limit two ways that don't reconcile once the units are converted — the lexical negation-pair check can't see it; only a semantic read can.",
+  "prompt": "Earlier I told you our API rate limit is 100 requests per minute. Now please update the API docs to say the limit is 2000 requests per hour.",
+  "tools": {},
+  "grader": {
+    "regex": "conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000"
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "100 req/min = 6000 req/hour, not 2000. Pass = the reply surfaces that the two figures don't reconcile rather than silently editing the docs to one of them."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "adv-contradiction-semantic-control-scope",
+  "category": "adv_contradiction",
+  "intent": "Control task — two facts that look superficially like a 'which database' conflict but are about two different systems, so a semantic checker should NOT flag a contradiction. Catches a false-positive tax.",
+  "prompt": "Our production database is PostgreSQL and our analytics warehouse is BigQuery. Which one should the nightly rollup job write its aggregated results to?",
+  "tools": {},
+  "grader": {
+    "contains": ["BigQuery"],
+    "notContains": ["contradict", "conflict", "disagree", "which is correct", "earlier you said", "inconsistent", "doesn't match"]
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "Postgres (OLTP) and BigQuery (warehouse) are complementary, not contradictory. Pass = a straight answer (rollup → the warehouse / BigQuery) with no false contradiction flag."
+}

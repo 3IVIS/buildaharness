@@ -1,0 +1,12 @@
+{
+  "id": "adv-contradiction-semantic-crosslang",
+  "category": "adv_contradiction",
+  "intent": "A location fact stated in Spanish and then contradicted in English in the same message — the lexical pass keys off English tokens and never lines the two up.",
+  "prompt": "El servidor de producción está en Frankfurt. Please update our runbook to document that the production server is located in Singapore.",
+  "tools": {},
+  "grader": {
+    "regex": "conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm"
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "'está en Frankfurt' vs 'located in Singapore'. Pass = the reply notices the runbook edit contradicts what the user just said in Spanish."
+}

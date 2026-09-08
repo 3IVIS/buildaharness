@@ -1,0 +1,13 @@
+{
+  "id": "adv-contradiction-semantic-control-temporal",
+  "category": "adv_contradiction",
+  "intent": "Control task — a plan changed over time (Free last year, Pro since March). That is a legitimate update, not a contradiction; a semantic checker should NOT flag it. Catches a false-positive tax.",
+  "prompt": "I was on the Free plan last year, but I upgraded to the Pro plan back in March. Does my account currently include Pro-tier priority support?",
+  "tools": {},
+  "grader": {
+    "regex": "pro|priority support|yes",
+    "notContains": ["contradict", "conflict", "which is correct", "earlier you said", "not consistent", "doesn't match", "can't both be true"]
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "Free→Pro over time is a normal change, not a conflicting belief. Pass = answers the support question without flagging a false contradiction."
+}
