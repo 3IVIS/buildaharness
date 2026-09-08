@@ -1,9 +1,9 @@
 {
   "features": {
     "trajectory-supervisor": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 0.887565,
+      "spendUsd": 1.25336,
       "blocked": false
     }
   }

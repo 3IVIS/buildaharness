@@ -1,0 +1,890 @@
+{
+  "generatedAt": "2026-09-08T23:03:29.406Z",
+  "corpusSize": 18,
+  "judgeEnabled": true,
+  "modelId": "claude-haiku-4-5-20251001",
+  "judgeModelId": "claude-sonnet-5",
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 18,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.6666666666666666,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0.16666666666666666,
+      "meanLatencyMs": 9654,
+      "meanCostUsd": 0.0082892,
+      "totalTokens": 8573,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 18,
+          "passed": 12
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 16,
+        "verifiedCorrect": 10,
+        "verifiedWrong": 1,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 5,
+        "overconfidentWrongRate": 0.0625
+      }
+    },
+    "supervisorOn": {
+      "arm": "supervisorOn",
+      "label": "PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled \u2014 the S7 supervisor-vs-no-supervisor differential arm",
+      "tasksRun": 18,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.6666666666666666,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0,
+      "meanLatencyMs": 13993,
+      "meanCostUsd": 0.012032722222222226,
+      "totalTokens": 14370,
+      "supervisorConsultsTotal": 6,
+      "supervisorConsultsMean": 0.3333333333333333,
+      "byCategory": {
+        "multi_step": {
+          "run": 18,
+          "passed": 12
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 17,
+        "verifiedCorrect": 11,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 6,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-changelog-date",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10239,
+      "costUsd": 0.0083658,
+      "totalTokens": 548,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"2026-03-11\""
+      ],
+      "status": "ok",
+      "replyPreview": "Version 1.4.0 of what? I don't have any project or changelog in context here (the working directory is `/tmp` and isn't a repository). Let me know which software you mean, or point me to a changelog file.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-error-code",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10815,
+      "costUsd": 0.009345000000000001,
+      "totalTokens": 531,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Per errors/codes.md, **E409 means \"duplicate resource\"** \u2014 you're trying to create or submit something that already exists.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-nested-dir",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12596,
+      "costUsd": 0.0109926,
+      "totalTokens": 640,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The `API_KEY` placeholder value is `your-key-here`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-nested-dir-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 12749,
+      "costUsd": 0.012257399999999998,
+      "totalTokens": 625,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The `API_KEY` placeholder value is `your-key-here`.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-override-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10104,
+      "costUsd": 0.008253,
+      "totalTokens": 477,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** \u2014 the base config sets it to `info`, but `config.local.env` overrides it to `debug`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-override-file-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4632,
+      "costUsd": 0.0037318000000000004,
+      "totalTokens": 238,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"debug\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-split-value",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11407,
+      "costUsd": 0.0117898,
+      "totalTokens": 580,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`db.internal:5432/orders`",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-transitive-import",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10315,
+      "costUsd": 0.008996800000000001,
+      "totalTokens": 493,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`requests`.\n\nThe chain: `a.py` imports `b`, which imports `c`, which imports `requests` (the third-party package).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-lookup-transitive-import-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 5646,
+      "costUsd": 0.0035728,
+      "totalTokens": 223,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"requests\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-computed-total",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8224,
+      "costUsd": 0.0071694,
+      "totalTokens": 375,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total of all line items in invoice.txt is **100**:\n\n- Widget: 40\n- Gadget: 35\n- Shipping: 25",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-indirect-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11929,
+      "costUsd": 0.0102528,
+      "totalTokens": 623,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The billing-service is owned by the **payments** team, led by **Dana Ruiz**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-newer-status",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11809,
+      "costUsd": 0.0096774,
+      "totalTokens": 568,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes. Migration 0007 was marked PENDING on 2026-01-02, then APPLIED on 2026-01-05T14:00Z. (0008 is still pending as of 2026-01-06.)",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-newer-status-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7098,
+      "costUsd": 0.0052334,
+      "totalTokens": 390,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "regex /0007[^.\\n]*\\b(applied|yes)\\b|\\b(applied|yes)\\b[^.\\n]*0007|migration 0007 (is|has been) applied/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-renamed-key",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11935,
+      "costUsd": 0.0095628,
+      "totalTokens": 553,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "There's no `MAX_RETRIES` key in settings.ini. A comment there notes it was renamed to `RETRY_LIMIT` in v2 (2026-01), and its current value is `RETRY_LIMIT=7`.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-renamed-key-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6064,
+      "costUsd": 0.0048558,
+      "totalTokens": 350,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"7\"",
+        "regex /renamed|now called|RETRY_LIMIT/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-two-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12099,
+      "costUsd": 0.0098034,
+      "totalTokens": 582,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**4 error lines:**\n\n- `[ERROR] db timeout`\n- `level=error msg=\"retry failed\"`\n- `[ERROR] cache miss storm`\n- `level=error msg=\"giving up\"`",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-wrong-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11911,
+      "costUsd": 0.0118368,
+      "totalTokens": 558,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The API listens on port **9443**.\n\n`server.js` reads the port from `config/ports.json` at boot (`require('./config/ports.json').api`), and that file sets `\"api\": 9443` (with `\"admin\": 9444`).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-pivot-wrong-file-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4200,
+      "costUsd": 0.0035088000000000003,
+      "totalTokens": 219,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"9443\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-changelog-date",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11841,
+      "costUsd": 0.011281,
+      "totalTokens": 583,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "According to the CHANGELOG.md in `/tmp`, version 1.4.0 was released on **2026-03-11** (the release that added dark mode).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-error-code",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11341,
+      "costUsd": 0.010011,
+      "totalTokens": 584,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Per errors/codes.md, **E409 means \"duplicate resource\"** \u2014 i.e., the request conflicts with an existing resource (e.g. trying to create something that already exists).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-nested-dir",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11961,
+      "costUsd": 0.0105126,
+      "totalTokens": 592,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The `API_KEY` placeholder value is `your-key-here`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-nested-dir-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 19480,
+      "costUsd": 0.0158678,
+      "totalTokens": 1319,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"your-key-here\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-override-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10031,
+      "costUsd": 0.008338,
+      "totalTokens": 485,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** \u2014 `config.local.env` overrides the base value of `info`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-override-file-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 18974,
+      "costUsd": 0.015387400000000002,
+      "totalTokens": 1269,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"debug\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-split-value",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12101,
+      "costUsd": 0.011798,
+      "totalTokens": 587,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`db.internal:5432/orders`",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-transitive-import",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11346,
+      "costUsd": 0.011349999999999999,
+      "totalTokens": 539,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`requests`.\n\nThe chain is: `a.py` imports `b`, which imports `c`, which imports `requests` \u2014 a third-party HTTP library.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-lookup-transitive-import-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 15737,
+      "costUsd": 0.012639600000000003,
+      "totalTokens": 998,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "REDIRECT_STRATEGY"
+      ],
+      "failedChecks": [
+        "contains \"requests\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-computed-total",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9742,
+      "costUsd": 0.008274400000000001,
+      "totalTokens": 484,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total of all line items in invoice.txt is **100** (Widget 40 + Gadget 35 + Shipping 25).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-indirect-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17960,
+      "costUsd": 0.0160938,
+      "totalTokens": 938,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The billing-service is owned by the **payments** team, led by **Dana Ruiz**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-newer-status",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12374,
+      "costUsd": 0.0103624,
+      "totalTokens": 636,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes. Per migrations.log, 0007 was marked APPLIED on 2026-01-05T14:00Z (after being PENDING on 2026-01-02). Note that 0008 is still PENDING as of 2026-01-06.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-newer-status-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 17304,
+      "costUsd": 0.0144806,
+      "totalTokens": 1182,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "regex /0007[^.\\n]*\\b(applied|yes)\\b|\\b(applied|yes)\\b[^.\\n]*0007|migration 0007 (is|has been) applied/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-renamed-key",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 13410,
+      "costUsd": 0.0114778,
+      "totalTokens": 746,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "There's no `MAX_RETRIES` key in the file anymore. Per a comment in `settings.ini`, it was renamed to `RETRY_LIMIT` in v2 (2026-01), and its current value is `7`.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-renamed-key-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 18964,
+      "costUsd": 0.0151456,
+      "totalTokens": 1244,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"7\"",
+        "regex /renamed|now called|RETRY_LIMIT/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-two-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12020,
+      "costUsd": 0.0101584,
+      "totalTokens": 618,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**4 error lines:**\n\n- `[ERROR] db timeout`\n- `level=error msg=\"retry failed\"`\n- `[ERROR] cache miss storm`\n- `level=error msg=\"giving up\"`\n\n(2 use the `[ERROR]` prefix, 2 use `level=error`.)",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-wrong-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9888,
+      "costUsd": 0.0096042,
+      "totalTokens": 450,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The API listens on port **9443**.\n\n`server.js` doesn't hardcode it \u2014 it reads `config/ports.json` at boot (`require('./config/ports.json').api`), and that file sets `\"api\": 9443` (with `\"admin\": 9444` for the admin server).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOn",
+      "taskId": "sup-pivot-wrong-file-stall",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 17398,
+      "costUsd": 0.013806400000000002,
+      "totalTokens": 1116,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"9443\""
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    }
+  ]
+}
