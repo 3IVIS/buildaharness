@@ -1,0 +1,26 @@
+{
+  "id": "audit-failure-match-timeout-nested",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall phrased as 'the read hung and never returned' — same timeout failure class, different words; the target fact is one directory deeper.",
+  "prompt": "What port does the health check listen on, per ops/health/check.yaml?",
+  "workspace": [
+    {
+      "path": "README.md",
+      "content": "Health-check config lives under ops/health/.\n"
+    },
+    {
+      "path": "ops/health/check.yaml",
+      "content": "path: /healthz\nport: 8642\ninterval_s: 10\n"
+    }
+  ],
+  "grader": {
+    "contains": ["8642"],
+    "regex": "8642|check\\.yaml",
+    "notContains": ["no health check", "cannot find", "not present"]
+  },
+  "note": "Pass = traverses to ops/health/check.yaml after recovering from the paraphrased timeout stall and reports port 8642.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

@@ -1,0 +1,22 @@
+{
+  "id": "audit-failure-match-resource-missing-manifest",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall reads as 'the thing it asked for isn't there' — a paraphrase of a curated 'resource not found' failure entry the exact-match floor misses.",
+  "prompt": "What is the entrypoint listed in build/manifest.json?",
+  "workspace": [
+    {
+      "path": "build/manifest.json",
+      "content": "{\n  \"name\": \"widget\",\n  \"entrypoint\": \"dist/widget.mjs\",\n  \"version\": \"3.2.0\"\n}\n"
+    }
+  ],
+  "grader": {
+    "contains": ["dist/widget.mjs"],
+    "regex": "dist/widget\\.mjs|entrypoint",
+    "notContains": ["no manifest", "cannot find", "not present", "does not exist"]
+  },
+  "note": "Pass = recovers from the injected resource-missing-class stall and reports the entrypoint dist/widget.mjs.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

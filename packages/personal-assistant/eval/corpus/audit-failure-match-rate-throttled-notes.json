@@ -1,0 +1,26 @@
+{
+  "id": "audit-failure-match-rate-throttled-notes",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall phrased as 'the endpoint keeps refusing us for sending too fast' — same rate-limited failure class, paraphrased; the fact is in a second file.",
+  "prompt": "How long is the retry backoff window? See the runbook.",
+  "workspace": [
+    {
+      "path": "runbook.md",
+      "content": "For throttling behaviour and backoff, see notes/backoff.md.\n"
+    },
+    {
+      "path": "notes/backoff.md",
+      "content": "On a 429 the client waits 90 seconds before the next attempt, then doubles.\n"
+    }
+  ],
+  "grader": {
+    "contains": ["90"],
+    "regex": "90 ?seconds|90s|backoff\\.md",
+    "notContains": ["cannot find", "not documented", "no backoff"]
+  },
+  "note": "Pass = follows the runbook pointer to notes/backoff.md after recovering from the paraphrased throttled stall and reports the 90-second window.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

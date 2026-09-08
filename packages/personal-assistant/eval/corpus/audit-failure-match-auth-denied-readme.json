@@ -1,0 +1,26 @@
+{
+  "id": "audit-failure-match-auth-denied-readme",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall phrased as 'access was not granted' — same auth-rejected failure class, paraphrased; the answer needs a pivot from the README to the referenced file.",
+  "prompt": "Which OAuth scope does the CLI request? Check the docs.",
+  "workspace": [
+    {
+      "path": "README.md",
+      "content": "Auth details are in docs/auth.md, not here.\n"
+    },
+    {
+      "path": "docs/auth.md",
+      "content": "The CLI requests the `repo:read` scope only. No write scopes are used.\n"
+    }
+  ],
+  "grader": {
+    "contains": ["repo:read"],
+    "regex": "repo:read|auth\\.md",
+    "notContains": ["cannot find", "not documented", "no scope"]
+  },
+  "note": "Pass = pivots to docs/auth.md after recovering from the paraphrased auth-denied stall and reports the repo:read scope.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}
