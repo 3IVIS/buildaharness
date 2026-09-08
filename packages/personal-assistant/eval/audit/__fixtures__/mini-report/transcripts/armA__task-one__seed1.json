@@ -1,0 +1,34 @@
+{
+  "task": "task-one",
+  "arm": "armA",
+  "seed": "1",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What is the capital of France?",
+  "events": [
+    {
+      "t": 1,
+      "kind": "llm_request",
+      "dir": "req",
+      "model": "sonnet",
+      "messages": [{ "role": "user", "content": "What is the capital of France?" }]
+    },
+    {
+      "t": 2,
+      "kind": "llm_response",
+      "dir": "res",
+      "model": "sonnet",
+      "reply": "The capital of France is Paris.",
+      "usage": { "inputTokens": 10, "outputTokens": 8 }
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [{ "name": "mentions-paris", "verdict": "fail" }],
+    "failedChecks": ["mentions-paris"]
+  },
+  "metrics": { "latencyMs": 1200, "costUsd": 0.01, "totalTokens": 900, "supervisorConsults": 0 },
+  "replyPreview": "The capital of France is Paris."
+}

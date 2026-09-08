@@ -1,0 +1,22 @@
+{
+  "feature": "mini",
+  "title": "Mini fixture feature",
+  "hypothesis": "A tiny synthetic feature used only to exercise gen-transcript-pages.mjs.",
+  "control": "armA",
+  "candidate": "armB",
+  "seeds": 1,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No task-success delta and no material cost difference on this fixture slice.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-08T00:00:00.000Z",
+  "metrics": [
+    { "metric": "taskSuccessRate", "control": 0.5, "candidate": 1.0, "deltaMean": 0.5, "deltaCi95": 0.0, "positive": true, "regressed": false },
+    { "metric": "meanCostUsd", "control": 0.01, "candidate": 0.012, "deltaMean": 0.002, "deltaCi95": 0.0, "positive": false, "regressed": false },
+    { "metric": "meanLatencyMs", "control": 1200, "candidate": 1400, "deltaMean": 200, "deltaCi95": 0.0, "positive": false, "regressed": false },
+    { "metric": "totalTokens", "control": 900, "candidate": 1100, "deltaMean": 200, "deltaCi95": 0.0, "positive": false, "regressed": false }
+  ],
+  "costDeltaPct": 0.2,
+  "latencyDeltaPct": 0.1667,
+  "tokenDeltaPct": 0.2222
+}
