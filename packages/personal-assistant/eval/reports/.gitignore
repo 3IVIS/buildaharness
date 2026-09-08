@@ -2,3 +2,8 @@
 # A committed `baseline.json` (the "before" side of the Rule 6 gate) is the exception.
 *.json
 !baseline.json
+
+# Feature Value Audit matrix — seed reports + transcripts under audit/<feature>/ ARE the
+# published evidence trail (plans/feature_audit_automation_plan.html), not throwaway local runs.
+!audit/
+!audit/**
