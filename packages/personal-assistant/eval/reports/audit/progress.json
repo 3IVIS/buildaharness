@@ -23,6 +23,12 @@
       "finalized": true,
       "spendUsd": 1.871263,
       "blocked": false
+    },
+    "llm-injection-detect": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.276073,
+      "blocked": false
     }
   }
 }
