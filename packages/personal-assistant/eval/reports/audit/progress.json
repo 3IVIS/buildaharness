@@ -5,6 +5,12 @@
       "finalized": true,
       "spendUsd": 1.25336,
       "blocked": false
+    },
+    "harness-vs-bare": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 3.19851,
+      "blocked": false
     }
   }
 }
