@@ -94,6 +94,18 @@ function fmtPct(x) {
   return `${x > 0 ? '+' : ''}${(x * 100).toFixed(0)}%`
 }
 
+/** Percent change from a to b, e.g. pctDelta(0.01, 0.013) → "+30%". `—` if a is 0/absent. */
+function pctDelta(a, b) {
+  if (!a || a === 0 || a === null || a === undefined) return '—'
+  const p = ((b - a) / a) * 100
+  return `${p > 0 ? '+' : ''}${p.toFixed(0)}%`
+}
+
+function mean(arr, f) {
+  const xs = arr.map(f).filter((v) => typeof v === 'number' && !Number.isNaN(v))
+  return xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0
+}
+
 const VERDICT_CLASS = { KEEP: 'keep', CUT: 'cut', INCONCLUSIVE: 'inconclusive' }
 
 function parseArgs(argv) {
@@ -514,29 +526,65 @@ function renderIndex(report, runs, fullPages, css) {
     .join('')
 
   const tasks = [...new Set(runs.map((r) => r.task))].sort()
+  const anySupervisor = runs.some((r) => (r.data.metrics?.supervisorConsults ?? 0) > 0)
 
-  // Mechanical per-(task,seed) behaviour diff: did the candidate behave differently from the control?
-  const behaviourByKey = new Map()
-  for (const task of tasks) {
-    for (const seed of [...new Set(runs.filter((r) => r.task === task).map((r) => r.seed))]) {
-      const ctrl = runs.find((r) => r.task === task && r.seed === seed && r.arm === report.control)
-      const cand = runs.find((r) => r.task === task && r.seed === seed && r.arm === report.candidate)
-      if (ctrl && cand) behaviourByKey.set(`${task}|${seed}`, diffRuns(ctrl, cand).behaviourChanged)
-    }
-  }
-  const behaviourCell = (r) => {
-    const v = behaviourByKey.get(`${r.task}|${r.seed}`)
-    if (v === undefined) return '—'
-    return v ? '<span class="bhv changed">changed</span>' : '<span class="bhv same">no change</span>'
-  }
+  // One row per task: control vs candidate rolled up across every seed, with a per-seed strip.
+  const taskRows = tasks
+    .map((task) => {
+      const ctrlRuns = runs.filter((r) => r.task === task && r.arm === report.control)
+      const candRuns = runs.filter((r) => r.task === task && r.arm === report.candidate)
+      const seeds = [...new Set(runs.filter((r) => r.task === task).map((r) => r.seed))].sort()
 
-  const runRows = runs
-    .map((r) => {
-      const g = r.data.grade ?? {}
-      const m = r.data.metrics ?? {}
-      const hasPage = runGetsPage(r, fullPages)
-      const runCell = hasPage ? `<a href="${runPageName(r)}">${esc(r.arm)} / seed ${esc(r.seed)}</a>` : `${esc(r.arm)} / seed ${esc(r.seed)}`
-      return `<tr><td>${runCell}</td><td>${esc(r.task)}</td><td>${behaviourCell(r)}</td><td>${g.success ? 'yes' : 'no'}</td><td>${g.recovered === null || g.recovered === undefined ? '—' : g.recovered ? 'yes' : 'no'}</td><td class="num">${m.supervisorConsults ?? '—'}</td><td class="num">${fmtNum('costUsd', m.costUsd)}</td><td class="num">${fmtNum('latencyMs', m.latencyMs)}</td><td class="num">${fmtNum('totalTokens', m.totalTokens)}</td><td><a href="${comparePageName(r.task)}">compare</a></td></tr>`
+      const pairs = seeds.map((seed) => {
+        const c = ctrlRuns.find((r) => r.seed === seed)
+        const d = candRuns.find((r) => r.seed === seed)
+        return { seed, c, d, diff: c && d ? diffRuns(c, d) : null }
+      })
+      const paired = pairs.filter((p) => p.diff)
+      const changedN = paired.filter((p) => p.diff.behaviourChanged).length
+      const bhv =
+        paired.length === 0
+          ? '—'
+          : changedN === 0
+            ? '<span class="bhv same">no change</span>'
+            : changedN === paired.length
+              ? '<span class="bhv changed">changed</span>'
+              : `<span class="bhv changed">changed ${changedN}/${paired.length}</span>`
+
+      const cPass = ctrlRuns.filter((r) => r.data.grade?.success).length
+      const dPass = candRuns.filter((r) => r.data.grade?.success).length
+      const nFixed = paired.filter((p) => p.diff.grade === 'fixed').length
+      const nRegressed = paired.filter((p) => p.diff.grade === 'regressed').length
+      const gradeShift = nRegressed
+        ? ` <span class="shift regressed">regressed${nRegressed > 1 ? ` &times;${nRegressed}` : ''}</span>`
+        : nFixed
+          ? ` <span class="shift">fixed${nFixed > 1 ? ` &times;${nFixed}` : ''}</span>`
+          : ''
+
+      const dCost = pctDelta(mean(ctrlRuns, (r) => r.data.metrics?.costUsd), mean(candRuns, (r) => r.data.metrics?.costUsd))
+      const dLat = pctDelta(mean(ctrlRuns, (r) => r.data.metrics?.latencyMs), mean(candRuns, (r) => r.data.metrics?.latencyMs))
+      const dTok = pctDelta(mean(ctrlRuns, (r) => r.data.metrics?.totalTokens), mean(candRuns, (r) => r.data.metrics?.totalTokens))
+      const supTotal = candRuns.reduce((s, r) => s + (r.data.metrics?.supervisorConsults ?? 0), 0)
+
+      const seedStripCell = pairs
+        .map((p) => {
+          const cs = p.c ? (p.c.data.grade?.success ? '&check;' : '&cross;') : '·'
+          const ds = p.d ? (p.d.data.grade?.success ? '&check;' : '&cross;') : '·'
+          const href = p.d && runGetsPage(p.d, fullPages) ? runPageName(p.d) : comparePageName(task)
+          const klass = p.diff?.behaviourChanged ? 'seed-diff' : 'seed-same'
+          return `<a href="${href}" class="${klass}" title="seed ${esc(p.seed)}: control ${p.c?.data.grade?.success ? 'pass' : 'fail'} &rarr; candidate ${p.d?.data.grade?.success ? 'pass' : 'fail'}">s${esc(p.seed)} ${cs}&rarr;${ds}</a>`
+        })
+        .join(' ')
+
+      return `<tr>
+<td><a href="${comparePageName(task)}">${esc(task)}</a></td>
+<td>${bhv}</td>
+<td class="num">${cPass}/${ctrlRuns.length}</td>
+<td class="num">${dPass}/${candRuns.length}${gradeShift}</td>
+${anySupervisor ? `<td class="num">${supTotal}</td>` : ''}
+<td class="num">${dCost}</td><td class="num">${dLat}</td><td class="num">${dTok}</td>
+<td class="seed-strip-cell">${seedStripCell}</td>
+</tr>`
     })
     .join('')
 
@@ -552,10 +600,10 @@ ${modelLine(report)}
 <table class="cmp-table"><thead><tr><th>Metric</th><th>${esc(report.control)}</th><th>${esc(report.candidate)}</th><th>&Delta;mean</th><th>&plusmn;CI95</th></tr></thead><tbody>${metricRows}</tbody></table>
 <p>Cost ${fmtPct(report.costDeltaPct)} &middot; latency ${fmtPct(report.latencyDeltaPct)} &middot; tokens ${fmtPct(report.tokenDeltaPct)} (candidate vs control).</p>
 
-<h2>Runs (${runs.length})</h2>
-<div class="filter-box"><input id="f" type="text" placeholder="filter by task / arm…" oninput="filterRows()"></div>
-<table class="cmp-table" id="runs"><thead><tr><th>Run</th><th>Task</th><th>Behaviour</th><th>Success</th><th>Recovered</th><th>Sup.</th><th>Cost</th><th>Latency</th><th>Tokens</th><th></th></tr></thead><tbody>${runRows}</tbody></table>
-<p>${tasks.length} task${tasks.length === 1 ? '' : 's'}. <em>Behaviour</em> = did the candidate reply / tool calls / harness layers differ from the control on that seed. Each row's <em>compare</em> link puts both arms side by side.</p>
+<h2>Runs <span class="sub">&mdash; ${tasks.length} task${tasks.length === 1 ? '' : 's'} &times; ${report.seeds} seed${report.seeds === 1 ? '' : 's'}, ${runs.length} runs, one row per task</span></h2>
+<div class="filter-box"><input id="f" type="text" placeholder="filter by task…" oninput="filterRows()"></div>
+<table class="cmp-table" id="runs"><thead><tr><th>Task</th><th>Behaviour</th><th>${esc(report.control)}<br><span class="th-sub">pass</span></th><th>${esc(report.candidate)}<br><span class="th-sub">pass</span></th>${anySupervisor ? '<th>Sup.</th>' : ''}<th>&Delta; cost</th><th>&Delta; lat</th><th>&Delta; tok</th><th>Seeds <span class="th-sub">ctrl&rarr;cand</span></th></tr></thead><tbody>${taskRows}</tbody></table>
+<p><em>Behaviour</em> = did the candidate's reply / tool calls / harness layers differ from the control, across seeds. <em>Pass</em> columns count graded successes; <span class="shift">fixed</span> / <span class="shift regressed">regressed</span> flags a seed where the candidate changed the outcome. Each <em>Seeds</em> chip links to that seed's run (control&nbsp;&rarr;&nbsp;candidate outcome); the task name opens the side-by-side compare.</p>
 <script>
 function filterRows(){var q=document.getElementById('f').value.toLowerCase();var rows=document.querySelectorAll('#runs tbody tr');for(var i=0;i<rows.length;i++){rows[i].style.display=rows[i].textContent.toLowerCase().indexOf(q)>-1?'':'none';}}
 </script>`

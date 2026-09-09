@@ -63,6 +63,15 @@ strong{color:var(--ink);font-weight:600;}
 .cmp-table tr.regressed td{background:color-mix(in oklch,var(--red) 7%,transparent);}
 .cmp-table tr.positive td{background:color-mix(in oklch,var(--green) 7%,transparent);}
 .grade-line{font-size:13px;margin:8px 0 0;}
+.cmp-table th .th-sub{font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink-3);font-size:9px;}
+
+/* index Runs table — one row per task, per-seed strip */
+.seed-strip-cell{font-family:"IBM Plex Mono",monospace;font-size:11px;white-space:nowrap;}
+.seed-strip-cell a{display:inline-block;padding:1px 6px;margin:1px 2px 1px 0;border-radius:4px;border:1px solid var(--line);color:var(--ink-2);}
+.seed-strip-cell a.seed-diff{border-color:color-mix(in oklch,var(--accent) 45%,var(--line));background:color-mix(in oklch,var(--accent) 9%,transparent);color:var(--accent-ink);}
+.seed-strip-cell a.seed-same{opacity:.75;}
+.shift{font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--green);}
+.shift.regressed{color:var(--red);}
 
 .filter-box{margin:0 0 14px;}
 .filter-box input{font-family:"IBM Plex Mono",monospace;font-size:12px;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);width:320px;max-width:100%;}
