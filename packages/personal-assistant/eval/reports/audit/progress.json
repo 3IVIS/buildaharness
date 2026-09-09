@@ -8,7 +8,7 @@
     },
     "harness-vs-bare": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 9.774703,
       "blocked": false
     }

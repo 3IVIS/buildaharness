@@ -14,7 +14,7 @@
       "status": "done",
       "verdict": "CUT",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Single-turn verdict was CUT. The supervisor_conversation slice (turn 1 stalls, supervisor asks, turn 2 the user answers, run recovers) is now in `slice` but DORMANT — the driver keys re-runs off progress.json, not the manifest, so to re-run this feature a human must reset eval/reports/audit/progress.json's trajectory-supervisor entry (seedsDone:0, finalized:false) AND flip status back to queued. Deliberately left done so it does not auto-re-run on Haiku while the model-pinning issue is open. The multi-node decomposed _run_planner path is still adapter-side / separate."
+      "corpusNote": "Single-turn verdict was CUT. The supervisor_conversation slice (turn 1 stalls, supervisor asks, turn 2 the user answers, run recovers) is now in `slice` but DORMANT \u2014 the driver keys re-runs off progress.json, not the manifest, so to re-run this feature a human must reset eval/reports/audit/progress.json's trajectory-supervisor entry (seedsDone:0, finalized:false) AND flip status back to queued. Deliberately left done so it does not auto-re-run on Haiku while the model-pinning issue is open. The multi-node decomposed _run_planner path is still adapter-side / separate."
     },
     {
       "id": "harness-vs-bare",
@@ -28,9 +28,10 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 25,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "slice=null runs the full corpus, which now includes the harness_session multi-turn tasks (staged approval across turns, cross-turn correction, control-state escalation, no-compounding). Adversarial/safety sub-claim was already single-turn-appropriate."
+      "corpusNote": "slice=null runs the full corpus, which now includes the harness_session multi-turn tasks (staged approval across turns, cross-turn correction, control-state escalation, no-compounding). Adversarial/safety sub-claim was already single-turn-appropriate.",
+      "verdict": "CUT"
     },
     {
       "id": "one-loop",
@@ -46,7 +47,7 @@
       "maxSpendUsd": 25,
       "status": "queued",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. slice=null now also picks up the multi-turn tasks (contradiction / session / supervisor-conversation) — incidental, and a valid one-loop-over-a-session data point; no exclusion needed."
+      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. slice=null now also picks up the multi-turn tasks (contradiction / session / supervisor-conversation) \u2014 incidental, and a valid one-loop-over-a-session data point; no exclusion needed."
     },
     {
       "id": "semantic-contradiction",
@@ -61,7 +62,7 @@
       "maxSpendUsd": 10,
       "status": "queued",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "Single-turn slice (both halves in one prompt) plus audit_contradiction_multiturn — belief stated turn 1, unrelated beliefs turns 2-3, paraphrased contradiction on the last turn, with control tasks (legitimate change over time) that must not be false-flagged."
+      "corpusNote": "Single-turn slice (both halves in one prompt) plus audit_contradiction_multiturn \u2014 belief stated turn 1, unrelated beliefs turns 2-3, paraphrased contradiction on the last turn, with control tasks (legitimate change over time) that must not be false-flagged."
     },
     {
       "id": "llm-injection-detect",
