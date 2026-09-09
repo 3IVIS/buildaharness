@@ -1,0 +1,71 @@
+{
+  "task": "sup-lookup-transitive-import-stall",
+  "arm": "bare",
+  "seed": "2",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What third-party package does module a.py ultimately import?",
+  "events": [
+    {
+      "t": 1788923823639,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What third-party package does module a.py ultimately import?"
+        }
+      ]
+    },
+    {
+      "t": 1788923829631,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "`a.py` imports `b`, which imports `c`, which imports `requests` — so the third-party package it ultimately imports is **`requests`**.",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 301,
+        "costUsd": 0.0051313999999999995
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": true,
+    "checks": [
+      {
+        "name": "contains \"requests\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"none\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"no third-party\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"only local modules\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"a.py has no external\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 5992,
+    "costUsd": 0.0051313999999999995,
+    "totalTokens": 307,
+    "supervisorConsults": null
+  },
+  "replyPreview": "`a.py` imports `b`, which imports `c`, which imports `requests` — so the third-party package it ultimately imports is **`requests`**."
+}
