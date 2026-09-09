@@ -45,9 +45,10 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 25,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. slice=null now also picks up the multi-turn tasks (contradiction / session / supervisor-conversation) \u2014 incidental, and a valid one-loop-over-a-session data point; no exclusion needed."
+      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. slice=null now also picks up the multi-turn tasks (contradiction / session / supervisor-conversation) \u2014 incidental, and a valid one-loop-over-a-session data point; no exclusion needed.",
+      "verdict": "CUT"
     },
     {
       "id": "semantic-contradiction",

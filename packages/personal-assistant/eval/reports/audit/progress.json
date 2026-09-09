@@ -14,7 +14,7 @@
     },
     "one-loop": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 7.927027,
       "blocked": false
     }
