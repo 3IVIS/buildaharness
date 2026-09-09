@@ -20,7 +20,7 @@
     },
     "semantic-contradiction": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 1.871263,
       "blocked": false
     }

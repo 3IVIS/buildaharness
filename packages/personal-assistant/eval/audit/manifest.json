@@ -61,9 +61,10 @@
       "slice": "audit_contradiction_semantic,audit_contradiction_multiturn",
       "seeds": 3,
       "maxSpendUsd": 10,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "Single-turn slice (both halves in one prompt) plus audit_contradiction_multiturn \u2014 belief stated turn 1, unrelated beliefs turns 2-3, paraphrased contradiction on the last turn, with control tasks (legitimate change over time) that must not be false-flagged."
+      "corpusNote": "Single-turn slice (both halves in one prompt) plus audit_contradiction_multiturn \u2014 belief stated turn 1, unrelated beliefs turns 2-3, paraphrased contradiction on the last turn, with control tasks (legitimate change over time) that must not be false-flagged.",
+      "verdict": "KEEP"
     },
     {
       "id": "llm-injection-detect",
