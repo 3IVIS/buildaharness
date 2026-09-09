@@ -25,9 +25,9 @@ import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { extractFactsFromTurn, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
-import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
+import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
-import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
+import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { FACT_CAP } from './memory-service.js'
@@ -236,19 +236,24 @@ export class HarnessBridge {
         // check already covers. Filtered against AssistantSession's notifiedContradictions so an
         // unresolved conflict already surfaced once this session doesn't get independently
         // rediscovered and re-notified by every later turn's fresh, from-scratch WorldModel.
-        contradictionChecker: async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
-          const results = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
-          const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
-          const seen = await this.assistantSession.getNotifiedContradictions(sessionId)
-          const filtered: typeof results = []
-          for (const c of results) {
-            const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
-            if (seen.has(signature)) continue
-            await this.assistantSession.recordNotifiedContradiction(sessionId, seen, signature)
-            filtered.push(c)
-          }
-          return filtered
-        },
+        // AUDIT_SEMANTIC_CONTRADICTION (feature-value audit, Phase A4) gates the whole hook: OFF
+        // → no host contradictionChecker is wired at all, so the harness runs its always-on
+        // lexical / negation-pair check only. Default ON — unchanged shipped behaviour.
+        contradictionChecker: semanticContradictionEnabled()
+          ? async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
+              const results = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
+              const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
+              const seen = await this.assistantSession.getNotifiedContradictions(sessionId)
+              const filtered: typeof results = []
+              for (const c of results) {
+                const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
+                if (seen.has(signature)) continue
+                await this.assistantSession.recordNotifiedContradiction(sessionId, seen, signature)
+                filtered.push(c)
+              }
+              return filtered
+            }
+          : undefined,
         // Layered on top of review-proposed-change.ts's lexical isNegation check — same "skip
         // when it reads like a coding fact" gate contradictionChecker uses, since that's the
         // domain the fixed-phrase check already covers reasonably well.
@@ -257,8 +262,13 @@ export class HarnessBridge {
         // Layered on top of FailureModeLibrary's own exact-string-overlap match() — see
         // failure-mode-matcher.ts's doc comment for why exact equality against a curated symptom
         // list almost never happens for free-text observations in practice.
-        semanticFailureMatcher: (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
-          checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage),
+        // AUDIT_SEMANTIC_FAILURE_MATCH (feature-value audit, Phase A6) gates the whole hook: OFF →
+        // no host semanticFailureMatcher is wired at all, so the harness runs its exact-match
+        // FailureModeLibrary.match() only. Default ON — unchanged shipped behaviour.
+        semanticFailureMatcher: semanticFailureMatchEnabled()
+          ? (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
+              checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage)
+          : undefined,
         // Layered on top of reviewerPass's implementerLens's own `.includes()` substring check —
         // called only for a success criterion that substring check found no coverage for. See
         // semantic-criterion-coverage.ts's doc comment.

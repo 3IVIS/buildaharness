@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { runBenchmark, type BenchmarkReport } from './runner.js'
 import { diffReports, renderMarkdown, renderDiff } from './report.js'
@@ -134,6 +137,41 @@ describe('runBenchmark', () => {
     const arm = scriptedArm('baseline', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
     const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm })
     expect(report.perArm.baseline.answerClaimConfusion).toBeNull()
+  })
+
+  it('writes one transcript file per ran row when transcriptDir is set, with the resolved modelId', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bah-eval-transcripts-'))
+    const arm = scriptedArm('flagOn', {
+      c1: {
+        reply: 'the answer is 42',
+        transcript: [
+          { t: 1, kind: 'llm_request', dir: 'req', messages: [{ role: 'user', content: 'p' }] },
+          { t: 2, kind: 'llm_response', dir: 'res', reply: 'the answer is 42' },
+        ],
+      },
+      m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' }, transcript: [{ t: 1, kind: 'trace', detail: { kind: 'turn_start' } }] },
+      // r1 → null (skipped): no file expected
+    })
+
+    const report = await runBenchmark({
+      tasks: TASKS,
+      arms: [arm],
+      makeLlm: noLlm,
+      transcriptDir: dir,
+      seedTag: 2,
+      modelId: 'claude-sonnet-5',
+      judgeModelId: null,
+    })
+
+    expect(report.modelId).toBe('claude-sonnet-5')
+    const files = readdirSync(dir).sort()
+    expect(files).toEqual(['flagOn__c1__seed2.json', 'flagOn__m1__seed2.json'])
+
+    const c1 = JSON.parse(readFileSync(join(dir, 'flagOn__c1__seed2.json'), 'utf8'))
+    expect(c1).toMatchObject({ task: 'c1', arm: 'flagOn', seed: 2, modelId: 'claude-sonnet-5', prompt: 'p' })
+    expect(c1.events).toHaveLength(2)
+    expect(c1.grade.success).toBe(true)
+    expect(c1.metrics).toHaveProperty('latencyMs')
   })
 
   it('renderMarkdown produces a stable table', async () => {

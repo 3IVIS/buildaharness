@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import type { FailureModeEntry } from '@buildaharness/harness'
-import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
+import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
   calls = 0
@@ -85,5 +85,46 @@ describe('checkSemanticFailureMatch', () => {
     const llm = new ThrowingLLMClient()
     const result = await checkSemanticFailureMatch(['the request took too long'], library, llm)
     expect(result).toBeNull()
+  })
+})
+
+describe('semanticFailureMatchEnabled (AUDIT_SEMANTIC_FAILURE_MATCH gate — Phase A6)', () => {
+  it('defaults ON when the flag is unset or empty', () => {
+    expect(semanticFailureMatchEnabled({})).toBe(true)
+    expect(semanticFailureMatchEnabled({ AUDIT_SEMANTIC_FAILURE_MATCH: '' })).toBe(true)
+    expect(semanticFailureMatchEnabled({ AUDIT_SEMANTIC_FAILURE_MATCH: '  ' })).toBe(true)
+  })
+
+  it('stays ON for truthy values', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'anything-else']) {
+      expect(semanticFailureMatchEnabled({ AUDIT_SEMANTIC_FAILURE_MATCH: v }), v).toBe(true)
+    }
+  })
+
+  it('turns OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', 'DISABLED', ' Off ']) {
+      expect(semanticFailureMatchEnabled({ AUDIT_SEMANTIC_FAILURE_MATCH: v }), v).toBe(false)
+    }
+  })
+
+  it('when OFF, the failureMatchOff arm skips the checkSemanticFailureMatch LLM call entirely', async () => {
+    // harness-bridge.ts gates the whole `semanticFailureMatcher` host hook on this helper, so an
+    // OFF value means the LLM call site is never wired and only FailureModeLibrary.match()'s
+    // exact-string-overlap check runs. Proven here at the unit boundary: the helper is the single
+    // decision point.
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({ matched: true, failure_class: 'timeout', matched_pattern: 'fm1', confidence: 0.8 }),
+    )
+    const symptoms = ['the request took too long and timed out eventually']
+
+    if (semanticFailureMatchEnabled({ AUDIT_SEMANTIC_FAILURE_MATCH: '0' })) {
+      await checkSemanticFailureMatch(symptoms, library, llm)
+    }
+    expect(llm.calls).toBe(0)
+
+    if (semanticFailureMatchEnabled({})) {
+      await checkSemanticFailureMatch(symptoms, library, llm)
+    }
+    expect(llm.calls).toBe(1)
   })
 })

@@ -242,6 +242,21 @@ function stripBeliefIds(description: string, knownIds: string[]): string {
   return sanitized.replace(/\s{2,}/g, ' ').trim()
 }
 
+/**
+ * `AUDIT_SEMANTIC_CONTRADICTION` gate — feature-value audit (Phase A4 of
+ * plans/feature_audit_automation_plan.html). Default **ON**: the semantic contradiction-checker
+ * LLM call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a
+ * falsy value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM call entirely and fall
+ * back to the harness's always-on lexical / negation-pair check only. Read at exactly one call
+ * site — `harness-bridge.ts`, where the `contradictionChecker` host hook is wired.
+ */
+export function semanticContradictionEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_SEMANTIC_CONTRADICTION ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
 export async function checkForContradictions(
   newBeliefs: BeliefCandidate[],
   existingBeliefs: BeliefCandidate[],

@@ -72,6 +72,13 @@ export interface ClaudeCliLLMClientOptions {
    * email-smtp.ts). Kept separate from fileTools so email can be enabled without file access.
    */
   actionTools?: { workspaceRoot: string }
+  /**
+   * Default model passed as `--model` to every `claude -p` call when the per-call
+   * `ChatOptions.model` doesn't already set one. The benchmark (Plan A1) uses this to pin every
+   * audit run to a stated model instead of silently inheriting the CLI default. `undefined` keeps
+   * the pre-A1 behaviour (no `--model` flag → CLI default).
+   */
+  model?: string
 }
 
 /**
@@ -260,6 +267,13 @@ export class ClaudeCliLLMClient implements ILLMClient {
   private readonly shellTools?: { workspaceRoot: string }
   private readonly webTools?: { searchBackend?: 'ddg' | 'brave'; braveApiKey?: string }
   private readonly actionTools?: { workspaceRoot: string }
+  private readonly model?: string
+  /**
+   * The concrete model id the last `claude -p` call actually reported running against (read from
+   * the response's own `model` field, not the CLI alias). `undefined` until a call resolves one.
+   * Plan A1 records this into the benchmark report so a published table can name the model.
+   */
+  resolvedModelId?: string
 
   constructor(options: ClaudeCliLLMClientOptions = {}) {
     this.claudePath = options.claudePath ?? process.env.CLAUDE_PATH ?? 'claude'
@@ -268,6 +282,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     this.shellTools = options.shellTools
     this.webTools = options.webTools
     this.actionTools = options.actionTools
+    this.model = options.model
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -285,9 +300,11 @@ export class ClaudeCliLLMClient implements ILLMClient {
       '--mcp-config', EMPTY_MCP_CONFIG,
       '--strict-mcp-config', // ignore any ambient project/user MCP config — see EMPTY_MCP_CONFIG's doc comment
     ]
-    if (options.model) args.push('--model', options.model)
+    const model = options.model ?? this.model
+    if (model) args.push('--model', model)
     args.push(prompt)
-    const { reply, usage } = await invokeClaude(this.claudePath, args)
+    const { reply, usage, model: resolved } = await invokeClaude(this.claudePath, args)
+    if (resolved) this.resolvedModelId = resolved
     if (usage) options.onUsage?.(usage)
     return reply
   }
@@ -387,11 +404,13 @@ export class ClaudeCliLLMClient implements ILLMClient {
         '--strict-mcp-config', // ignore any ambient project .mcp.json — the tool surface must be exactly this plan's tools
         '--dangerously-skip-permissions', // headless -p mode has no way to answer an interactive tool-permission prompt
       ]
-      if (options.model) args.push('--model', options.model)
+      const model = options.model ?? this.model
+      if (model) args.push('--model', model)
       args.push(prompt)
 
       const callStartedAt = Date.now()
-      const { reply, usage } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+      const { reply, usage, model: resolved } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+      if (resolved) this.resolvedModelId = resolved
       if (usage) options.onUsage?.(usage)
       const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)
 

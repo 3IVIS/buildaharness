@@ -78,6 +78,8 @@ export interface ParsedClaudeCliOutput {
   reply: string
   /** Real usage/cost from Claude's own accounting — absent when stdout wasn't valid JSON (e.g. a plain-text error). See ClaudeCliLLMClient's doc comment for the Pro/Max-subscription caveat on costUsd. */
   usage?: TokenUsage
+  /** The concrete model id the CLI reported running against (`model` field of the result event), not the `--model` alias. Absent when the CLI didn't report one. */
+  model?: string
 }
 
 /**
@@ -112,9 +114,19 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
       result?: string
       content?: string
       total_cost_usd?: number
+      model?: string
+      modelUsage?: Record<string, unknown>
       usage?: { input_tokens?: number; output_tokens?: number }
     }
     const reply = data.result ?? data.content ?? stdout.trim()
+    // `--output-format json`'s result object reports `model` directly on newer CLIs; older ones
+    // only key it under `modelUsage`. Fall back to the first `modelUsage` key when `model` is absent.
+    const model =
+      typeof data.model === 'string'
+        ? data.model
+        : data.modelUsage && typeof data.modelUsage === 'object'
+          ? Object.keys(data.modelUsage)[0]
+          : undefined
     const usage =
       typeof data.usage?.input_tokens === 'number' && typeof data.usage.output_tokens === 'number'
         ? {
@@ -123,7 +135,7 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
             ...(typeof data.total_cost_usd === 'number' ? { costUsd: data.total_cost_usd } : {}),
           }
         : undefined
-    return { reply, usage }
+    return { reply, usage, model }
   } catch {
     return { reply: stdout.trim() }
   }

@@ -4,6 +4,7 @@
  * supplied to `gradeTask`).
  */
 import type { TaskSpec } from './corpus/schema.js'
+import type { TranscriptEvent } from './transcript-capture.js'
 
 /** Everything an arm reports back about one task attempt. */
 export interface ArmTurnOutput {
@@ -33,6 +34,12 @@ export interface ArmTurnOutput {
   supervisorDirectives?: string[]
   /** Populated when `status === 'error'`. */
   errorMessage?: string
+  /**
+   * Full ordered conversation capture for this attempt — LLM I/O + trace + debug, time-merged
+   * and secret-scrubbed (transcript-capture.ts). Present only when the arm was asked to record;
+   * the runner writes it to disk only when a `transcriptDir` run-option is set.
+   */
+  transcript?: TranscriptEvent[]
 }
 
 export interface CheckResult {

@@ -21,6 +21,8 @@
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
  *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
  *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
+ *   npx tsx scripts/run-harness-benchmark.ts --model=sonnet --judge-model=sonnet # Plan A1: pin the model (default sonnet), recorded as report.modelId / report.judgeModelId
+ *   npx tsx scripts/run-harness-benchmark.ts --transcripts=<dir> --seed-tag=1    # Plan A1: write <arm>__<task>__seed<n>.json full-conversation captures
  *   npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot --seeds=3
  *       # S7 Rule 6: N independent repeats of the whole matrix (claude-cli has no seed param),
  *       # writes <stamp>.seedK.json per run + <stamp>.multiseed.json with per-metric
@@ -52,11 +54,25 @@ function arg(name: string): string | undefined {
   return process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=')
 }
 
+/** Alias → concrete id, matching CLAUDE.md's documented model ids. Passthrough for a full id. */
+const MODEL_IDS: Record<string, string> = {
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  haiku: 'claude-haiku-4-5-20251001',
+  fable: 'claude-fable-5-1',
+}
+const canonicalModelId = (alias: string): string => MODEL_IDS[alias] ?? alias
+
 async function main(): Promise<void> {
   const taskFilter = arg('tasks')?.split(',').map((s) => s.trim())
   const armFilter = arg('arms')?.split(',').map((s) => s.trim())
   const sliceFilter = arg('slice')?.split(',').map((s) => s.trim())
   const gatePath = arg('gate')
+  // Plan A1 — pin the model, on the record. Default sonnet for both the arms and the judge.
+  const modelAlias = arg('model') ?? 'sonnet'
+  const judgeModelAlias = arg('judge-model') ?? 'sonnet'
+  const transcriptDir = arg('transcripts')
+  const seedTagArg = arg('seed-tag')
 
   let tasks = loadCorpus()
   if (taskFilter) tasks = tasks.filter((t) => taskFilter.includes(t.id))
@@ -74,7 +90,8 @@ async function main(): Promise<void> {
 
   // LLM-as-judge: on by default for a real run, `--no-judge` opts out. Tool-free ClaudeCliLLMClient
   // (no API key). A judge error / unparseable verdict resolves to `false` inside judge(), never a throw.
-  const judge = process.argv.includes('--no-judge') ? undefined : new ClaudeCliJudge()
+  const judgeClient = new ClaudeCliLLMClient({ model: judgeModelAlias })
+  const judge = process.argv.includes('--no-judge') ? undefined : new ClaudeCliJudge(judgeClient)
 
   // --seeds=N — the S7 decision is LLM-driven, so a single pass is not evidence. claude-cli
   // has no seed parameter; "seed" here means an independent repeated run of the whole matrix.
@@ -82,24 +99,35 @@ async function main(): Promise<void> {
 
   console.log(
     `Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli` +
-      ` (judge: ${judge ? 'enabled' : 'disabled'}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
+      ` (model: ${modelAlias}, judge: ${judge ? judgeModelAlias : 'disabled'}` +
+      `${transcriptDir ? `, transcripts → ${transcriptDir}` : ''}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
   )
 
   mkdirSync(REPORTS_DIR, { recursive: true })
 
-  const runOnce = () =>
+  // The most recently built per-task client — used after a run to read back the resolved model id.
+  let lastArmClient: ClaudeCliLLMClient | undefined
+
+  const runOnce = (seedTag: string | number) =>
     runBenchmark({
       tasks,
       arms,
       judge,
+      transcriptDir,
+      seedTag,
+      modelId: canonicalModelId(modelAlias),
+      judgeModelId: judge ? canonicalModelId(judgeModelAlias) : null,
       // The claude-cli backend resolves tool calls out of process via its own MCP server, which
       // needs the workspace path up front — so build one client per task, wiring the file/shell MCP
-      // tools only when the task declares them.
-      makeLlm: ({ workspaceRoot, task }) =>
-        new ClaudeCliLLMClient({
+      // tools only when the task declares them. Every client is pinned to `--model` (Plan A1).
+      makeLlm: ({ workspaceRoot, task }) => {
+        lastArmClient = new ClaudeCliLLMClient({
+          model: modelAlias,
           fileTools: task.tools.file ? { workspaceRoot } : undefined,
           shellTools: task.tools.shell ? { workspaceRoot } : undefined,
-        }),
+        })
+        return lastArmClient
+      },
       onProgress: ({ arm, taskId, success, skipped }) => {
         console.log(`  ${skipped ? 'SKIP' : success ? 'PASS' : 'FAIL'}  ${arm} · ${taskId}`)
       },
@@ -108,7 +136,11 @@ async function main(): Promise<void> {
   const seedReports: BenchmarkReport[] = []
   for (let s = 0; s < seeds; s++) {
     if (seeds > 1) console.log(`\n── seed ${s + 1}/${seeds} ──`)
-    const r = await runOnce()
+    const seedTag = seedTagArg ?? (seeds > 1 ? s + 1 : 1)
+    const r = await runOnce(seedTag)
+    // Prefer the model id the CLI actually reported; fall back to the canonical alias mapping.
+    r.modelId = lastArmClient?.resolvedModelId ?? canonicalModelId(modelAlias)
+    r.judgeModelId = judge ? (judgeClient.resolvedModelId ?? canonicalModelId(judgeModelAlias)) : null
     seedReports.push(r)
     if (seeds > 1) {
       writeFileSync(join(REPORTS_DIR, `${r.generatedAt.replace(/[:.]/g, '-')}.seed${s + 1}.json`), JSON.stringify(r, null, 2))

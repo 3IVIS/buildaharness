@@ -21,10 +21,19 @@ import type { TaskSpec } from './corpus/schema.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
 import { bareArm } from './bare-arm.js'
+import { wrapRecordingClient, mergeTranscriptEvents, scrubSecrets, type TranscriptEvent } from './transcript-capture.js'
 
 export { bareArm }
 
-export type ArmName = 'baseline' | 'bare' | 'langgraph' | 'flagOn' | 'supervisorOn'
+export type ArmName =
+  | 'baseline'
+  | 'bare'
+  | 'langgraph'
+  | 'flagOn'
+  | 'supervisorOn'
+  | 'contradictionOff'
+  | 'injectionDetectOff'
+  | 'failureMatchOff'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -35,27 +44,43 @@ export interface Arm {
   run(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null>
 }
 
+interface RunArmOpts {
+  /** Sets HARNESS_TRAJECTORY_SUPERVISOR=enabled around the turn — the `supervisorOn` arm. */
+  supervisor?: boolean
+  /**
+   * Extra env vars set (and restored) around the turn — a Batch B audit arm toggles exactly one
+   * feature flag this way. E.g. `{ AUDIT_SEMANTIC_CONTRADICTION: '0' }` for `contradictionOff`.
+   */
+  env?: Record<string, string>
+}
+
 async function runAssistant(
   task: TaskSpec,
   makeLlm: MakeLlm,
   oneLoopMode: 'enabled' | 'disabled',
-  supervisor = false,
+  opts: RunArmOpts = {},
 ): Promise<ArmTurnOutput | null> {
   if (task.tools.web) return null // web arm not wired — see eval/README.md
 
-  // The trajectory supervisor (plans/harness_trajectory_supervisor_plan.html) is gated on this
-  // env flag in both twins. Arms run sequentially (runner.ts), so a set/restore around the turn
-  // is safe. harness-bridge.ts reads supervisorEnabled() (→ this env var) to decide whether to
-  // pass a supervisorDecider / askUser host into the harness run, so `supervisorOn` genuinely
-  // diverges from `flagOn` as of S5 — the differential is the stall-edge supervisor call.
-  const priorFlag = process.env.HARNESS_TRAJECTORY_SUPERVISOR
-  if (supervisor) process.env.HARNESS_TRAJECTORY_SUPERVISOR = 'enabled'
+  // Feature flags are gated on env vars, read in both twins (the trajectory supervisor —
+  // plans/harness_trajectory_supervisor_plan.html — and the Batch B audit arms —
+  // plans/feature_audit_automation_plan.html). Arms run sequentially (runner.ts), so a
+  // set/restore around the turn is safe. harness-bridge.ts reads these flags to decide which
+  // host hooks to wire, so e.g. `supervisorOn` / `contradictionOff` genuinely diverge from
+  // `flagOn` — the differential is one feature.
+  const overrides: Record<string, string> = { ...opts.env }
+  if (opts.supervisor) overrides.HARNESS_TRAJECTORY_SUPERVISOR = 'enabled'
+  const prior: Record<string, string | undefined> = {}
+  for (const key of Object.keys(overrides)) {
+    prior[key] = process.env[key]
+    process.env[key] = overrides[key]
+  }
   try {
     return await runAssistantInner(task, makeLlm, oneLoopMode)
   } finally {
-    if (supervisor) {
-      if (priorFlag === undefined) delete process.env.HARNESS_TRAJECTORY_SUPERVISOR
-      else process.env.HARNESS_TRAJECTORY_SUPERVISOR = priorFlag
+    for (const key of Object.keys(overrides)) {
+      if (prior[key] === undefined) delete process.env[key]
+      else process.env[key] = prior[key]
     }
   }
 }
@@ -83,20 +108,31 @@ async function runAssistantInner(
   // layer_activity:'supervisor' event per stall-edge consult — harness-bridge.ts).
   let supervisorConsults = 0
   const supervisorDirectives: string[] = []
+
+  // Plan A1 — full-conversation capture. The recording client records every LLM request/response;
+  // onTrace + onDebugLog carry the trace + real tool content; all three are time-merged below.
+  const recording = wrapRecordingClient(makeLlm({ workspaceRoot: ws.root, task }))
+  const sideEvents: TranscriptEvent[] = []
+
   const assistant = new PersonalAssistant({
-    llmClient: makeLlm({ workspaceRoot: ws.root, task }),
+    llmClient: recording.client,
     memory: new InMemoryAdapter({ scope: 'thread', namespace: `eval-mem-${task.id}` }),
     checkpointStore: new InMemoryAdapter({ scope: 'thread', namespace: `eval-ckpt-${task.id}` }),
     fileTools: ctx.fileTools,
     shellTools: ctx.shellTools,
     oneLoopMode,
     onTrace: (e) => {
+      sideEvents.push({ t: Date.now(), kind: 'trace', detail: e })
       if (e.kind === 'layer_activity' && e.layer === 'supervisor') {
         supervisorConsults += 1
         supervisorDirectives.push((e.reason ?? '').split(':')[0].trim())
       }
     },
+    onDebugLog: (entry) => {
+      sideEvents.push({ t: Date.now(), kind: 'debug', tool: entry.kind, result: scrubSecrets(entry.content) })
+    },
   })
+  const drainTranscript = (): TranscriptEvent[] => mergeTranscriptEvents(recording.drain(), sideEvents)
 
   // S7 stall induction — see benchmark-injected-failure.ts. Only meaningful on the
   // one-loop proposer path (oneLoopMode === 'enabled').
@@ -128,6 +164,7 @@ async function runAssistantInner(
       injectedFailureFired: firedProbe ? firedProbe() : task.injectedFailure === 'persistent_tool_failure' ? true : undefined,
       supervisorConsults,
       supervisorDirectives: supervisorDirectives.length > 0 ? supervisorDirectives : undefined,
+      transcript: drainTranscript(),
     }
     return out
   } catch (err) {
@@ -140,6 +177,7 @@ async function runAssistantInner(
       errorMessage: err instanceof Error ? err.message : String(err),
       injectedFailureFired: firedProbe?.(),
       supervisorConsults,
+      transcript: drainTranscript(),
     }
   } finally {
     ws.cleanup()
@@ -166,7 +204,41 @@ export const supervisorOnArm: Arm = {
   // consulted on the cannotMakeProgress() stall edge. The Rule 6 comparison for the flag
   // default-on flip is `flagOn` vs `supervisorOn` (isolates the supervisor), run over the S7
   // `--slice=` corpus multi-seed — see eval/README.md.
-  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', true),
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { supervisor: true }),
+}
+
+export const contradictionOffArm: Arm = {
+  name: 'contradictionOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_CONTRADICTION=0 — the semantic contradiction-checker LLM call disabled, lexical pass only',
+  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A4). Same one-loop
+  // config as `flagOn`; the only difference is harness-bridge.ts wiring no host
+  // `contradictionChecker` hook, so the harness's always-on lexical / negation-pair check runs
+  // alone. Baseline for this feature is `flagOn`; slice `audit_contradiction_semantic`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_CONTRADICTION: '0' } }),
+}
+
+export const injectionDetectOffArm: Arm = {
+  name: 'injectionDetectOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_LLM_INJECTION_DETECT=0 — the per-tool-output LLM injection-detection call disabled, deterministic regex/pattern pass only',
+  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A5). Same one-loop config
+  // as `flagOn`; the only difference is trust-tagging.ts's detectInjectionLikelyWithLLM short-circuiting
+  // after the regex pass instead of escalating to the LLM classifier on every fetched page / shell
+  // output. Baseline for this feature is `flagOn`; slice `audit_injection_llm`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_LLM_INJECTION_DETECT: '0' } }),
+}
+
+export const failureMatchOffArm: Arm = {
+  name: 'failureMatchOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 — the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only',
+  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A6). Same one-loop config
+  // as `flagOn`; the only difference is harness-bridge.ts wiring no host `semanticFailureMatcher`
+  // hook, so the harness classifies a failure only when an observed symptom string overlaps a
+  // curated one byte-for-byte. Baseline for this feature is `flagOn`; slice
+  // `audit_failure_match_semantic`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_FAILURE_MATCH: '0' } }),
 }
 
 export const langgraphArm: Arm = {
@@ -177,5 +249,22 @@ export const langgraphArm: Arm = {
   },
 }
 
-export const IMPLEMENTED_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, supervisorOnArm]
-export const ALL_ARMS: Arm[] = [baselineArm, flagOnArm, bareArm, supervisorOnArm, langgraphArm]
+export const IMPLEMENTED_ARMS: Arm[] = [
+  baselineArm,
+  flagOnArm,
+  bareArm,
+  supervisorOnArm,
+  contradictionOffArm,
+  injectionDetectOffArm,
+  failureMatchOffArm,
+]
+export const ALL_ARMS: Arm[] = [
+  baselineArm,
+  flagOnArm,
+  bareArm,
+  supervisorOnArm,
+  contradictionOffArm,
+  injectionDetectOffArm,
+  failureMatchOffArm,
+  langgraphArm,
+]

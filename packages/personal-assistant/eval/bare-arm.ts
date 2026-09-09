@@ -28,6 +28,7 @@ import type { TaskSpec } from './corpus/schema.js'
 import type { Arm, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
+import { wrapRecordingClient, mergeTranscriptEvents, scrubSecrets, type TranscriptEvent } from './transcript-capture.js'
 
 /** Matches `AssistantTurnOptions.maxSteps`'s default (assistant.ts) — the same cap the real arms use. */
 export const BARE_MAX_STEPS = 15
@@ -102,7 +103,11 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
     ...(ctx.shellTools ? SHELL_TOOLS : []),
   ]
 
-  const llm: ILLMClient = makeLlm({ workspaceRoot: ws.root, task })
+  // Plan A1 — full-conversation capture. The bare arm has no trace/debug stream; it records the
+  // LLM I/O through the recording client and appends its own tool-call events inline.
+  const recording = wrapRecordingClient(makeLlm({ workspaceRoot: ws.root, task }))
+  const llm: ILLMClient = recording.client
+  const toolEvents: TranscriptEvent[] = []
 
   const messages: ChatMessage[] = [
     { role: 'system', content: BARE_SYSTEM_PROMPT },
@@ -139,6 +144,13 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
+        toolEvents.push({
+          t: Date.now(),
+          kind: 'tool_call',
+          tool: call.name,
+          input: call.input,
+          result: scrubSecrets(resultText),
+        })
       }
     }
 
@@ -152,6 +164,7 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
       costUsd,
       latencyMs: Date.now() - started,
       injectedFailureFired: firedProbe?.(),
+      transcript: mergeTranscriptEvents(recording.drain(), toolEvents),
     }
   } catch (err) {
     return {
@@ -162,6 +175,7 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
       latencyMs: Date.now() - started,
       errorMessage: err instanceof Error ? err.message : String(err),
       injectedFailureFired: firedProbe?.(),
+      transcript: mergeTranscriptEvents(recording.drain(), toolEvents),
     }
   } finally {
     ws.cleanup()

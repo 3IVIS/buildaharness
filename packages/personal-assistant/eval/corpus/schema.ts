@@ -43,6 +43,35 @@ export const SUPERVISOR_SLICES = [
 
 export type SupervisorSlice = (typeof SUPERVISOR_SLICES)[number]
 
+/**
+ * Feature-value audit slices (`plans/feature_audit_automation_plan.html`). Kept a closed enum,
+ * validated in `corpus.test.ts`, exactly like `SUPERVISOR_SLICES`. Each groups the "here or
+ * nowhere" stress tasks for one Batch B feature the audit is testing the value of.
+ */
+export const AUDIT_SLICES = [
+  // Belief pairs that contradict by *meaning* — paraphrase, unit change, indirect reference,
+  // mild cross-language — which the always-on lexical negation-pair check provably can't catch.
+  // Only the `checkForContradictions` semantic LLM call (arm `flagOn` vs `contradictionOff`) can.
+  'audit_contradiction_semantic',
+  // Tool-output prompt-injection payloads phrased to slip past the deterministic regex/pattern
+  // pass (`detectInjectionLikely`) — only the `detectInjectionLikelyWithLLM` escalation (arm
+  // `flagOn` vs `injectionDetectOff`) can catch them — paired with benign instruction-like files
+  // where an injection flag would be a false positive.
+  'audit_injection_llm',
+  // Injected persistent-tool-failure symptoms phrased as a *paraphrase* of a curated
+  // FailureModeLibrary entry (timeout / auth rejected / rate limited / resource missing) rather
+  // than a verbatim match — so `FailureModeLibrary.match()`'s exact-string-overlap floor misses
+  // and only the `checkSemanticFailureMatch` LLM call (arm `flagOn` vs `failureMatchOff`) can
+  // classify the failure class and route recovery.
+  'audit_failure_match_semantic',
+] as const
+
+export type AuditSlice = (typeof AUDIT_SLICES)[number]
+
+/** Every valid `slice` value — the supervisor S7 slices plus the feature-value-audit slices. */
+export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES] as const
+export type BenchmarkSlice = SupervisorSlice | AuditSlice
+
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({
   path: z.string().min(1),
@@ -108,8 +137,8 @@ export const TaskSpecSchema = z.object({
   injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
   /** For `persistent_tool_failure`: leading failed iterations to inject. Default 1. */
   injectedFailureCount: z.number().int().min(1).max(6).optional(),
-  /** Optional benchmark-slice tag — see `SUPERVISOR_SLICES`. */
-  slice: z.enum(SUPERVISOR_SLICES).optional(),
+  /** Optional benchmark-slice tag — see `SUPERVISOR_SLICES` / `AUDIT_SLICES`. */
+  slice: z.enum(BENCHMARK_SLICES).optional(),
   /** Free-text note for the report. */
   note: z.string().optional(),
 })

@@ -15,11 +15,25 @@ audit/
   types.ts        AuditManifest / AuditProgress zod schema + AuditCell
   select.ts       nextCell(manifest, progress) → the one unit of work for this wakeup
   aggregate.ts    auditVerdict(seedReports, control, candidate) → KEEP / CUT / INCONCLUSIVE + rationale
+  cli.ts          (A3) the TS entrypoint the Python driver shells to: `next-cell`, `build-multiseed`
   manifest.json   the queue — one entry per feature (empty until plan phase A7 seeds it)
   *.test.ts       pure-function tests, run in `npm test`
-  gen-audit-entry.mjs        (A2) seed reports → benchmark-md section + registry row
-  gen-transcript-pages.mjs   (A2) enriched report → static HTML into the pages repo
+  gen-audit-entry.mjs        (A3) <feature>.multiseed.json → benchmark-md section + registry entry (marker-delimited, idempotent)
+  gen-transcript-pages.mjs   (A2) <feature>.multiseed.json + transcript files → static HTML
+  _transcript.css            design tokens copied from the pages repo, inlined by the generator
+  __fixtures__/mini-report/  1-feature/2-arm/2-task/1-seed fixture for gen-transcript-pages.test.mjs
 ```
+
+`<feature>.multiseed.json` is `aggregate.ts`'s `AuditMultiSeedReport` — the serialised verdict +
+per-metric control-vs-candidate table + the pinned model ids. A3's finalize step writes it via
+`buildMultiSeedReport()`; the page generator reads it.
+
+`gen-transcript-pages.mjs --feature=<id> --report=<multiseed.json> --transcripts=<dir>
+--pages-root=<path> [--full-pages=all|adv,injected]` emits, under
+`<pages-root>/harness-evaluation/<feature>/`: `index.html` (hypothesis + verdict + N-seed table +
+a filterable run table), `<arm>-<task>-seed<n>.html` per run, and `compare-<task>.html` per task.
+`--full-pages=adv,injected` restricts the per-run pages to adversarial (`adv-` prefix) / injected-
+failure runs; the rest stay in the index table only.
 
 Seed reports and transcripts land under `../reports/audit/<feature>/` and are **git-tracked** (an
 exception to `../reports/.gitignore`) — they are the published evidence trail, not throwaway local

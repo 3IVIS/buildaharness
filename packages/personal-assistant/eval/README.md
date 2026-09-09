@@ -169,6 +169,15 @@ being consulted on the `cannotMakeProgress()` stall edge. It is now in `IMPLEMEN
 comparison for the default-on flip is **`flagOn` vs `supervisorOn`** (isolates the supervisor; both
 run one-loop), not `baseline` vs `supervisorOn`.
 
+**`contradictionOff` arm** (feature-value audit, Batch B — `plans/feature_audit_automation_plan.html`
+A4) — `PersonalAssistant` (`flagOn` one-loop config) with `AUDIT_SEMANTIC_CONTRADICTION=0`. That env
+var gates the whole `contradictionChecker` host hook in `harness-bridge.ts`: OFF → no hook is wired,
+so the harness runs its always-on lexical / negation-pair contradiction check alone (the semantic
+`checkForContradictions` LLM call — one per belief-set growth — never happens). Baseline for this
+feature is `flagOn` (feature present); slice `audit_contradiction_semantic` (paraphrase / unit /
+indirect / cross-language belief contradictions the lexical pair-match provably can't catch, plus 2
+apparent-but-not-real control tasks that catch a false-positive tax). Now in `IMPLEMENTED_ARMS`.
+
 **Rule 6 for the flag default-on** (`HARNESS_TRAJECTORY_SUPERVISOR`, currently OFF): the
 `supervisorOn` arm must beat `baseline` on the recovery + adversarial + supervisor slices with **no
 regression on the existing corpus**, **multi-seed (min 3) with a reported CI**, and near-zero added

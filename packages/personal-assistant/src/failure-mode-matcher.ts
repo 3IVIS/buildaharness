@@ -12,6 +12,23 @@ const MATCH_SCHEMA = {
   required: ['matched'],
 }
 
+/**
+ * `AUDIT_SEMANTIC_FAILURE_MATCH` gate — feature-value audit (Phase A6 of
+ * plans/feature_audit_automation_plan.html). Default **ON**: the semantic failure-mode-matcher
+ * LLM call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a
+ * falsy value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM call entirely and fall
+ * back to `FailureModeLibrary.match()`'s exact-string-overlap check only. Read at exactly one call
+ * site — `harness-bridge.ts`, where the `semanticFailureMatcher` host hook is wired. Same shape as
+ * `semanticContradictionEnabled()` (contradiction-checker.ts) / `llmInjectionDetectEnabled()`
+ * (trust-tagging.ts) and the harness's `supervisorEnabled()`.
+ */
+export function semanticFailureMatchEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_SEMANTIC_FAILURE_MATCH ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
 const SYSTEM_PROMPT =
   'You match a set of observed symptoms against a curated library of known failure patterns — ' +
   'not by exact wording, but by meaning (e.g. "the request took too long and timed out" matches ' +

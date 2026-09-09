@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { auditVerdict } from './aggregate.js'
-import type { BenchmarkReport, ArmAggregate } from '../runner.js'
+import { auditVerdict, injectionAuditSignals, buildMultiSeedReport } from './aggregate.js'
+import type { BenchmarkReport, ArmAggregate, BenchmarkRow } from '../runner.js'
+import type { TaskCategory } from '../corpus/schema.js'
 
 function arm(partial: Partial<ArmAggregate> & { arm: string }): ArmAggregate {
   return {
@@ -80,5 +81,70 @@ describe('auditVerdict', () => {
     const r = auditVerdict(reports, 'bare', 'flagOn', 'demo')
     expect(r.verdict).toBe('INCONCLUSIVE')
     expect(r.rationale).toMatch(/underpowered/i)
+  })
+})
+
+function row(partial: Partial<BenchmarkRow> & { arm: string; taskId: string }): BenchmarkRow {
+  return {
+    category: 'adv_injection' as TaskCategory,
+    ran: true,
+    success: true,
+    hallucination: false,
+    unauthorizedEffect: false,
+    recovered: null,
+    latencyMs: 1000,
+    costUsd: 0.01,
+    totalTokens: 1000,
+    supervisorConsults: null,
+    supervisorDirectives: null,
+    failedChecks: [],
+    replyPreview: '',
+    answerClaimCalibration: null,
+    ...partial,
+  } as BenchmarkRow
+}
+
+function reportWithRows(rows: BenchmarkRow[]): BenchmarkReport {
+  return { generatedAt: 'FIXED', corpusSize: rows.length, judgeEnabled: true, perArm: {}, rows }
+}
+
+describe('injectionAuditSignals (Phase A5)', () => {
+  it('splits payload vs benign by task id and computes catch / false-positive / latency', () => {
+    const rows = [
+      row({ arm: 'flagOn', taskId: 'adv-injection-llm-housekeeping', category: 'adv_injection', success: true, latencyMs: 2000 }),
+      row({ arm: 'flagOn', taskId: 'adv-injection-llm-persona-swap', category: 'adv_injection', success: false, latencyMs: 4000 }),
+      row({ arm: 'flagOn', taskId: 'adv-injection-benign-deploy-runbook', category: 'file_read', success: true, latencyMs: 1000 }),
+      row({ arm: 'flagOn', taskId: 'adv-injection-benign-onboarding', category: 'file_read', success: false, latencyMs: 1000 }),
+      // other-arm rows are ignored
+      row({ arm: 'injectionDetectOff', taskId: 'adv-injection-llm-housekeeping', success: false, latencyMs: 999 }),
+    ]
+    const s = injectionAuditSignals([reportWithRows(rows)], 'flagOn')
+    expect(s.candidate).toBe('flagOn')
+    expect(s.payloadTasks).toBe(2)
+    expect(s.catchRate).toBe(0.5)
+    expect(s.benignTasks).toBe(2)
+    expect(s.falsePositiveRate).toBe(0.5)
+    expect(s.meanLatencyMs).toBe(2000) // (2000+4000+1000+1000)/4
+  })
+
+  it('nulls each metric when its denominator is empty', () => {
+    const s = injectionAuditSignals([reportWithRows([])], 'flagOn')
+    expect(s.catchRate).toBeNull()
+    expect(s.falsePositiveRate).toBeNull()
+    expect(s.meanLatencyMs).toBeNull()
+  })
+
+  it('buildMultiSeedReport only attaches injectionSignals for the llm-injection-detect feature', () => {
+    const seedReports = seeds(3, { taskSuccessRate: 0.7 }, { taskSuccessRate: 0.7 })
+    const other = buildMultiSeedReport(seedReports, { id: 'demo', title: 't', hypothesis: 'h' }, 'bare', 'flagOn')
+    expect(other.injectionSignals).toBeNull()
+    const inj = buildMultiSeedReport(
+      seedReports,
+      { id: 'llm-injection-detect', title: 't', hypothesis: 'h' },
+      'injectionDetectOff',
+      'flagOn',
+    )
+    expect(inj.injectionSignals).not.toBeNull()
+    expect(inj.injectionSignals?.candidate).toBe('flagOn')
   })
 })
