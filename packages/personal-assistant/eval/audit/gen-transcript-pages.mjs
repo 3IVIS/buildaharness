@@ -143,46 +143,305 @@ function comparePageName(task) {
   return `compare-${task}.html`
 }
 
-// ── event rendering (run page + compare page) ──────────────────────────────────────────────────
+// ── arm + model naming ─────────────────────────────────────────────────────────────────────────
+// Human labels for the arm names that appear in the multiseed report (the report carries only the
+// bare `control` / `candidate` arm names). Values condensed from eval/arms.ts's `Arm.label`.
+// Keep in sync by hand — the same "hand-copied constant" pattern as SECRET_PATTERNS / ANALYTICS_HEAD.
+const ARM_LABELS = {
+  bare: 'Bare model loop — no harness',
+  baseline: 'PersonalAssistant as shipped — harness runs post-hoc over the reply',
+  flagOn: 'PersonalAssistant with the one-loop harness-driven proposer',
+  supervisorOn: 'PersonalAssistant + trajectory supervisor on the stall edge',
+  contradictionOff: 'PersonalAssistant with the semantic contradiction check disabled (lexical pass only)',
+  injectionDetectOff: 'PersonalAssistant with LLM injection-detection on tool output disabled (regex pass only)',
+  failureMatchOff: 'PersonalAssistant with the semantic failure-mode matcher disabled (exact-string match only)',
+}
+export function armLabel(name) {
+  return ARM_LABELS[name] || name
+}
+
+// The single behavioural difference between a `control|candidate` pair, keyed by that pair.
+const ARM_ONELINER = {
+  'flagOn|supervisorOn': 'the candidate consults the trajectory supervisor on the cannot-make-progress stall edge — one extra LLM call',
+  'bare|flagOn': 'the candidate wraps the same model in the full 11-layer harness',
+  'baseline|flagOn': 'the candidate lets the harness drive tool calls in-loop instead of reviewing an already-finished reply',
+  'flagOn|contradictionOff': 'the candidate disables the semantic contradiction backstop (lexical negation-pair check only)',
+  'flagOn|injectionDetectOff': 'the candidate disables the LLM injection check on tool output (deterministic pattern pass only)',
+  'flagOn|failureMatchOff': 'the candidate disables the semantic failure-mode matcher (exact-string overlap only)',
+}
+function armOneliner(control, candidate) {
+  return (
+    ARM_ONELINER[`${control}|${candidate}`] ||
+    `control <code>${esc(control)}</code> vs candidate <code>${esc(candidate)}</code>`
+  )
+}
+
+const FRIENDLY_MODEL = {
+  'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
+  'claude-sonnet-5': 'Claude Sonnet 5',
+  'claude-opus-5': 'Claude Opus 5',
+}
+function friendlyModel(id) {
+  return FRIENDLY_MODEL[id] || id || 'unknown'
+}
+
+// Canonical harness-layer order for the trace table (matches CLAUDE.md's layer list).
+const LAYER_ORDER = [
+  'world_model', 'evidence_reasoning', 'hypothesis', 'contradiction', 'diagnostics', 'control_state',
+  'planning', 'execution', 'verification', 'recovery', 'reviewer_pass', 'supervisor',
+]
+
+// ── event helpers ─────────────────────────────────────────────────────────────────────────────
 function jsonBlock(obj) {
   return `<pre>${esc(scrubSecrets(JSON.stringify(obj, null, 2)))}</pre>`
 }
 
-function renderEvent(ev) {
-  const k = ev.kind
-  let label = k
-  let body = ''
-  if (k === 'llm_request') {
-    label = `llm_request${ev.model ? ` (${esc(ev.model)})` : ''}`
-    const msgs = (ev.messages ?? [])
-      .map((m) => `<pre><strong>${esc(m.role)}</strong>\n${esc(scrubSecrets(m.content ?? ''))}</pre>`)
-      .join('')
-    body = msgs || '<p>(no messages)</p>'
-  } else if (k === 'llm_response') {
-    label = `llm_response${ev.model ? ` (${esc(ev.model)})` : ''}`
-    body = ev.reply ? `<pre>${esc(scrubSecrets(ev.reply))}</pre>` : '<p>(no text)</p>'
-    if (ev.toolCalls && ev.toolCalls.length) body += jsonBlock(ev.toolCalls)
-    if (ev.usage) body += jsonBlock(ev.usage)
-  } else if (k === 'tool_call') {
-    label = `tool_call: ${esc(ev.tool ?? ev.toolCalls?.[0]?.name ?? '?')}`
-    if (ev.input) body += jsonBlock(ev.input)
-    if (ev.toolCalls) body += jsonBlock(ev.toolCalls)
-    if (ev.result !== undefined) body += `<pre>${esc(scrubSecrets(ev.result))}</pre>`
-  } else if (k === 'debug') {
-    label = `debug${ev.tool ? `: ${esc(ev.tool)}` : ''}`
-    body = ev.result !== undefined ? `<pre>${esc(scrubSecrets(ev.result))}</pre>` : jsonBlock(ev.detail ?? {})
-  } else if (k === 'trace') {
-    label = 'trace'
-    body = jsonBlock(ev.detail ?? {})
-  } else {
-    body = jsonBlock(ev)
-  }
-  return `<details class="evt"><summary><span class="tag">${esc(label)}</span></summary><div class="body">${body}</div></details>`
+function clampText(s, max) {
+  s = String(s ?? '')
+  return s.length > max ? `${s.slice(0, max)}\n…(truncated, ${s.length - max} more chars)` : s
 }
 
-function renderConversation(events) {
-  if (!events || !events.length) return '<p>(no transcript events recorded)</p>'
-  return events.map(renderEvent).join('\n')
+/** A tool call's most telling argument (path / query / url), else '' . */
+function toolArg(input) {
+  if (!input || typeof input !== 'object') return ''
+  return input.path || input.file || input.filename || input.query || input.url || input.q || ''
+}
+
+/** Strip the CLI reply prefix `[ok] (LOW) ` that debug/assistant_reply carries. */
+function stripReplyPrefix(s) {
+  return String(s ?? '').replace(/^\[[a-z_]+\]\s*(\([A-Z]+\)\s*)?/i, '')
+}
+
+/** llm_responses that are machinery, not prose: the risk/intent classifier and supervisor directives. */
+function controlJsonKind(text) {
+  if (!/^\s*\{/.test(text ?? '')) return null
+  if (/"riskLevel"|"isTrivial"|"decomposedTasks"|"matchedPlanTemplate"/.test(text)) return 'classifier'
+  if (/"action"\s*:/.test(text) && /"rationale"|"investigation"|"strategy_hint"|"plan_note"/.test(text)) return 'directive'
+  return null
+}
+
+function firstUserMessage(events) {
+  for (const e of events ?? []) {
+    if (e.kind === 'debug' && e.tool === 'user_message' && e.result) return e.result
+    if (e.kind === 'llm_request' && Array.isArray(e.messages)) {
+      const u = e.messages.find((m) => m.role === 'user')
+      if (u) return u.content
+    }
+  }
+  return ''
+}
+
+function assistantReply(events) {
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.kind === 'debug' && e.tool === 'assistant_reply' && e.result) return e.result
+  }
+  return ''
+}
+
+function normReply(s) {
+  return stripReplyPrefix(String(s ?? '')).replace(/\s+/g, ' ').trim()
+}
+
+function toolSeq(run) {
+  return (run.data.events ?? [])
+    .filter((e) => e.kind === 'tool_call')
+    .map((e) => `${e.tool ?? '?'}(${toolArg(e.input)})`)
+}
+
+function firedLayers(run) {
+  return [
+    ...new Set(
+      (run.data.events ?? [])
+        .filter((e) => e.kind === 'trace' && e.detail?.kind === 'layer_activity' && e.detail.fired)
+        .map((e) => e.detail.layer),
+    ),
+  ].sort()
+}
+
+/** Mechanical control-vs-candidate behaviour diff for one task (uses the first shown seed of each arm). */
+function diffRuns(ctrl, cand) {
+  const rc = normReply(ctrl.data.replyPreview || assistantReply(ctrl.data.events))
+  const rd = normReply(cand.data.replyPreview || assistantReply(cand.data.events))
+  const tc = toolSeq(ctrl)
+  const td = toolSeq(cand)
+  const lc = firedLayers(ctrl)
+  const ld = firedLayers(cand)
+  const layersOnlyCand = ld.filter((l) => !lc.includes(l))
+  const layersOnlyCtrl = lc.filter((l) => !ld.includes(l))
+  const gc = ctrl.data.grade ?? {}
+  const gd = cand.data.grade ?? {}
+  let grade = 'same'
+  if (gc.success && !gd.success) grade = 'regressed'
+  else if (!gc.success && gd.success) grade = 'fixed'
+  const supC = ctrl.data.metrics?.supervisorConsults ?? 0
+  const supD = cand.data.metrics?.supervisorConsults ?? 0
+  const toolsIdentical = JSON.stringify(tc) === JSON.stringify(td)
+  const replyIdentical = rc === rd
+  return {
+    replyIdentical,
+    toolsIdentical,
+    toolsCtrl: tc,
+    toolsCand: td,
+    layersOnlyCand,
+    layersOnlyCtrl,
+    grade,
+    gradeCtrl: gc,
+    gradeCand: gd,
+    supC,
+    supD,
+    behaviourChanged:
+      !replyIdentical || !toolsIdentical || layersOnlyCand.length > 0 || layersOnlyCtrl.length > 0 || supC !== supD,
+  }
+}
+
+// ── curated conversation (run page + compare facets) ───────────────────────────────────────────
+function renderConversation(events, prompt, replyPreview) {
+  events = events ?? []
+  const parts = []
+
+  const p = prompt || firstUserMessage(events)
+  if (p) parts.push(`<div class="turn user"><span class="who">user</span><pre>${esc(scrubSecrets(p))}</pre></div>`)
+
+  const chips = []
+  for (const e of events) {
+    if (e.kind !== 'trace') continue
+    const d = e.detail ?? {}
+    if (d.kind === 'risk_classified' && d.riskLevel) chips.push(`risk ${esc(d.riskLevel)}`)
+    else if (d.kind === 'execution_mode_classified' && d.mode) chips.push(`mode ${esc(d.mode)}`)
+    else if (d.kind === 'proposer_selected' && d.proposerKind) chips.push(`proposer ${esc(d.proposerKind)}`)
+    else if (d.kind === 'triviality_classified') chips.push(d.isTrivial ? 'trivial' : 'non-trivial')
+  }
+  if (chips.length) parts.push(`<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>`)
+
+  const modelTexts = []
+  for (const e of events) {
+    if (e.kind === 'tool_call') {
+      const arg = toolArg(e.input)
+      const res = e.result === undefined ? '' : clampText(scrubSecrets(String(e.result)), 1600)
+      parts.push(
+        `<div class="turn tool"><span class="who">tool</span>` +
+          `<div class="tool-head"><code>${esc(e.tool ?? '?')}</code>${arg ? ` <span class="tool-arg">${esc(String(arg))}</span>` : ''}</div>` +
+          `${res ? `<pre>${esc(res)}</pre>` : ''}</div>`,
+      )
+    } else if (e.kind === 'llm_response' && e.reply) {
+      const kind = controlJsonKind(e.reply)
+      if (kind === 'directive') {
+        parts.push(`<div class="turn directive"><span class="who">harness directive</span><pre>${esc(scrubSecrets(e.reply))}</pre></div>`)
+      } else if (!kind) {
+        modelTexts.push(e.reply)
+      }
+      // classifier JSON: dropped (its content is already in the turn-setup chips)
+    }
+  }
+
+  const finalText = stripReplyPrefix(replyPreview || modelTexts[modelTexts.length - 1] || assistantReply(events))
+  for (const t of modelTexts.slice(0, -1)) {
+    parts.push(`<div class="turn model"><span class="who">model</span><pre>${esc(scrubSecrets(t))}</pre></div>`)
+  }
+  if (finalText) {
+    parts.push(`<div class="turn model final"><span class="who">final reply</span><pre>${esc(scrubSecrets(finalText))}</pre></div>`)
+  } else {
+    parts.push(`<p class="muted">No natural-language reply — the run ended on a harness directive or an unrecovered stall. See the full harness trace below.</p>`)
+  }
+
+  return parts.length ? parts.join('\n') : '<p>(no transcript events recorded)</p>'
+}
+
+// ── aggregated harness trace (grouped, readable) ───────────────────────────────────────────────
+const KNOWN_TRACE_KINDS = new Set([
+  'layer_activity', 'tool_policy_decision', 'harness_node', 'plan_updated', 'plan_classified',
+  'risk_classified', 'execution_mode_classified', 'proposer_selected', 'triviality_classified',
+  'turn_start', 'turn_end',
+])
+
+function renderTrace(events) {
+  const traces = (events ?? []).filter((e) => e.kind === 'trace').map((e) => e.detail ?? {})
+  if (!traces.length) return ''
+
+  const layerMap = new Map()
+  for (const d of traces) {
+    if (d.kind !== 'layer_activity') continue
+    const key = `${d.layer}|${d.fired}|${d.reason}`
+    const cur = layerMap.get(key) || { layer: d.layer, fired: !!d.fired, reason: d.reason || '', n: 0 }
+    cur.n += 1
+    layerMap.set(key, cur)
+  }
+  const layerRows = [...layerMap.values()]
+    .sort((a, b) => {
+      const ai = LAYER_ORDER.indexOf(a.layer)
+      const bi = LAYER_ORDER.indexOf(b.layer)
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.layer.localeCompare(b.layer)
+    })
+    .map(
+      (r) =>
+        `<tr class="${r.fired ? 'fired' : 'skip'}"><td><span class="dot ${r.fired ? 'on' : 'off'}"></span>${esc(r.layer)}</td>` +
+        `<td>${r.fired ? 'acted' : '—'}${r.n > 1 ? ` <span class="x">×${r.n}</span>` : ''}</td><td>${esc(r.reason)}</td></tr>`,
+    )
+    .join('')
+
+  const policyRows = traces
+    .filter((d) => d.kind === 'tool_policy_decision')
+    .map(
+      (d) =>
+        `<tr class="${d.decision === 'ALLOW' ? 'skip' : 'fired'}"><td><code>${esc(d.tool ?? '?')}</code></td>` +
+        `<td>${esc(d.decision ?? '')}</td><td>${esc(d.reason ?? '')}</td></tr>`,
+    )
+    .join('')
+
+  const nodes = traces
+    .filter((d) => d.kind === 'harness_node')
+    .map((d) => `${esc(d.node)}${d.stepsUsed ? ` <span class="x">(${d.stepsUsed})</span>` : ''}`)
+
+  const cls = {}
+  for (const d of traces) {
+    if (d.kind === 'risk_classified' && d.riskLevel) cls.risk = d.riskLevel
+    if (d.kind === 'execution_mode_classified' && d.mode) cls.mode = d.mode
+    if (d.kind === 'proposer_selected' && d.proposerKind) cls.proposer = d.proposerKind
+    if (d.kind === 'plan_classified') cls.plan = d.matchedTemplate || (d.isCandidate ? 'candidate' : 'none')
+  }
+
+  const planUpdates = traces.filter((d) => d.kind === 'plan_updated')
+  const unknown = traces.filter((d) => !KNOWN_TRACE_KINDS.has(d.kind))
+
+  const s = []
+  s.push(
+    `<p class="trace-legend">The harness runs on every turn. Below is what it did this run — the layers it ` +
+      `consulted and why each did or didn't act, the tool-use decisions it made, and the nodes it walked. ` +
+      `Both arms run the same machinery unless the feature under test changes it.</p>`,
+  )
+  if (Object.keys(cls).length) {
+    s.push(
+      `<div class="chips">${Object.entries(cls)
+        .map(([k, v]) => `<span class="chip">${esc(k)} ${esc(String(v))}</span>`)
+        .join('')}</div>`,
+    )
+  }
+  if (layerRows) {
+    s.push(
+      `<h4>Harness layers</h4><table class="trace-table"><thead><tr><th>Layer</th><th>Acted?</th><th>Why</th></tr></thead><tbody>${layerRows}</tbody></table>`,
+    )
+  }
+  if (policyRows) {
+    s.push(
+      `<h4>Tool-policy decisions</h4><table class="trace-table"><thead><tr><th>Tool</th><th>Decision</th><th>Why</th></tr></thead><tbody>${policyRows}</tbody></table>`,
+    )
+  }
+  if (nodes.length) s.push(`<h4>Node path</h4><p class="node-path">${nodes.join(' <span class="arr">&rarr;</span> ')}</p>`)
+  if (planUpdates.length) {
+    s.push(`<h4>Plan updates</h4><ul class="plain">${planUpdates.map((d) => `<li>${esc(JSON.stringify(d))}</li>`).join('')}</ul>`)
+  }
+  if (unknown.length) {
+    s.push(`<h4>Other trace events</h4>${unknown.map((d) => jsonBlock(d)).join('')}`)
+  }
+  return s.join('\n')
+}
+
+/** Wrap renderTrace output in one collapsed disclosure. `''` if there is no trace. */
+function traceDetails(events, summaryLabel) {
+  const inner = renderTrace(events)
+  if (!inner) return ''
+  return `<details class="trace"><summary>${esc(summaryLabel)}</summary><div class="trace-body">${inner}</div></details>`
 }
 
 function renderGrade(grade) {
@@ -190,15 +449,20 @@ function renderGrade(grade) {
   const rows = (grade.checks ?? [])
     .map((c) => `<tr><td>${esc(c.name)}</td><td><span class="verdict ${c.verdict === 'pass' ? 'pass' : 'fail'}">${esc(c.verdict)}</span></td></tr>`)
     .join('')
-  return `<h3>Grader checks</h3>
-<table class="cmp-table"><thead><tr><th>Check</th><th>Verdict</th></tr></thead><tbody>${rows || '<tr><td colspan="2">(none)</td></tr>'}</tbody></table>
-<p><strong>success</strong> ${grade.success ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>hallucination</strong> ${grade.hallucination ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>unauthorized effect</strong> ${grade.unauthorizedEffect ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>recovered</strong> ${grade.recovered === null || grade.recovered === undefined ? 'n/a' : grade.recovered ? 'yes' : 'no'}</p>`
+  return `<table class="cmp-table"><thead><tr><th>Check</th><th>Verdict</th></tr></thead><tbody>${rows || '<tr><td colspan="2">(none)</td></tr>'}</tbody></table>
+<p class="grade-line"><strong>success</strong> ${grade.success ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>hallucination</strong> ${grade.hallucination ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>unauthorized effect</strong> ${grade.unauthorizedEffect ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>recovered</strong> ${grade.recovered === null || grade.recovered === undefined ? 'n/a' : grade.recovered ? 'yes' : 'no'}</p>`
 }
 
-function renderMetrics(m) {
-  if (!m) return ''
-  return `<h3>Metrics</h3>
-<table class="cmp-table"><tbody>
+/** One-line metrics summary: `$0.0131 · 9.9 s · 445 tokens · 0 supervisor consults`. */
+function metricsLine(m) {
+  if (!m) return '—'
+  const secs = m.latencyMs === null || m.latencyMs === undefined ? '—' : `${(m.latencyMs / 1000).toFixed(1)} s`
+  return `${fmtNum('costUsd', m.costUsd)} &middot; ${secs} &middot; ${fmtNum('totalTokens', m.totalTokens)} tokens &middot; ${m.supervisorConsults ?? 0} supervisor consult${(m.supervisorConsults ?? 0) === 1 ? '' : 's'}`
+}
+
+function renderMetricsTable(m) {
+  if (!m) return '<p>—</p>'
+  return `<table class="cmp-table"><tbody>
 <tr><td>latency</td><td class="num">${fmtNum('latencyMs', m.latencyMs)}</td></tr>
 <tr><td>cost</td><td class="num">${fmtNum('costUsd', m.costUsd)}</td></tr>
 <tr><td>tokens</td><td class="num">${fmtNum('totalTokens', m.totalTokens)}</td></tr>
@@ -233,9 +497,9 @@ ${bodyHtml}
 }
 
 function modelLine(report) {
-  const m = report.modelId || 'unknown'
-  const j = report.judgeModelId ? `, judge ${report.judgeModelId}` : ''
-  return `<p class="model-line">Model: Claude Sonnet (<code>${esc(m)}</code>)${j ? esc(j) : ''} &middot; ${report.seeds} seed${report.seeds === 1 ? '' : 's'}</p>`
+  const id = report.modelId || 'unknown'
+  const j = report.judgeModelId ? `, judge <code>${esc(report.judgeModelId)}</code>` : ''
+  return `<p class="model-line">Model: ${esc(friendlyModel(report.modelId))} (<code>${esc(id)}</code>)${j} &middot; ${report.seeds} seed${report.seeds === 1 ? '' : 's'} &middot; <span class="model-note">the arm-under-test model the CLI actually served, from the run report</span></p>`
 }
 
 // ── index.html ────────────────────────────────────────────────────────────────────────────────
@@ -250,13 +514,29 @@ function renderIndex(report, runs, fullPages, css) {
     .join('')
 
   const tasks = [...new Set(runs.map((r) => r.task))].sort()
+
+  // Mechanical per-(task,seed) behaviour diff: did the candidate behave differently from the control?
+  const behaviourByKey = new Map()
+  for (const task of tasks) {
+    for (const seed of [...new Set(runs.filter((r) => r.task === task).map((r) => r.seed))]) {
+      const ctrl = runs.find((r) => r.task === task && r.seed === seed && r.arm === report.control)
+      const cand = runs.find((r) => r.task === task && r.seed === seed && r.arm === report.candidate)
+      if (ctrl && cand) behaviourByKey.set(`${task}|${seed}`, diffRuns(ctrl, cand).behaviourChanged)
+    }
+  }
+  const behaviourCell = (r) => {
+    const v = behaviourByKey.get(`${r.task}|${r.seed}`)
+    if (v === undefined) return '—'
+    return v ? '<span class="bhv changed">changed</span>' : '<span class="bhv same">no change</span>'
+  }
+
   const runRows = runs
     .map((r) => {
       const g = r.data.grade ?? {}
       const m = r.data.metrics ?? {}
       const hasPage = runGetsPage(r, fullPages)
       const runCell = hasPage ? `<a href="${runPageName(r)}">${esc(r.arm)} / seed ${esc(r.seed)}</a>` : `${esc(r.arm)} / seed ${esc(r.seed)}`
-      return `<tr><td>${runCell}</td><td>${esc(r.task)}</td><td>${g.success ? 'yes' : 'no'}</td><td>${g.recovered === null || g.recovered === undefined ? '—' : g.recovered ? 'yes' : 'no'}</td><td class="num">${m.supervisorConsults ?? '—'}</td><td class="num">${fmtNum('costUsd', m.costUsd)}</td><td class="num">${fmtNum('latencyMs', m.latencyMs)}</td><td class="num">${fmtNum('totalTokens', m.totalTokens)}</td><td><a href="${comparePageName(r.task)}">compare</a></td></tr>`
+      return `<tr><td>${runCell}</td><td>${esc(r.task)}</td><td>${behaviourCell(r)}</td><td>${g.success ? 'yes' : 'no'}</td><td>${g.recovered === null || g.recovered === undefined ? '—' : g.recovered ? 'yes' : 'no'}</td><td class="num">${m.supervisorConsults ?? '—'}</td><td class="num">${fmtNum('costUsd', m.costUsd)}</td><td class="num">${fmtNum('latencyMs', m.latencyMs)}</td><td class="num">${fmtNum('totalTokens', m.totalTokens)}</td><td><a href="${comparePageName(r.task)}">compare</a></td></tr>`
     })
     .join('')
 
@@ -274,8 +554,8 @@ ${modelLine(report)}
 
 <h2>Runs (${runs.length})</h2>
 <div class="filter-box"><input id="f" type="text" placeholder="filter by task / arm…" oninput="filterRows()"></div>
-<table class="cmp-table" id="runs"><thead><tr><th>Run</th><th>Task</th><th>Success</th><th>Recovered</th><th>Sup.</th><th>Cost</th><th>Latency</th><th>Tokens</th><th></th></tr></thead><tbody>${runRows}</tbody></table>
-<p>${tasks.length} task${tasks.length === 1 ? '' : 's'}. Each row's <em>compare</em> link puts both arms side by side.</p>
+<table class="cmp-table" id="runs"><thead><tr><th>Run</th><th>Task</th><th>Behaviour</th><th>Success</th><th>Recovered</th><th>Sup.</th><th>Cost</th><th>Latency</th><th>Tokens</th><th></th></tr></thead><tbody>${runRows}</tbody></table>
+<p>${tasks.length} task${tasks.length === 1 ? '' : 's'}. <em>Behaviour</em> = did the candidate reply / tool calls / harness layers differ from the control on that seed. Each row's <em>compare</em> link puts both arms side by side.</p>
 <script>
 function filterRows(){var q=document.getElementById('f').value.toLowerCase();var rows=document.querySelectorAll('#runs tbody tr');for(var i=0;i<rows.length;i++){rows[i].style.display=rows[i].textContent.toLowerCase().indexOf(q)>-1?'':'none';}}
 </script>`
@@ -286,48 +566,174 @@ function filterRows(){var q=document.getElementById('f').value.toLowerCase();var
 // ── run page ─────────────────────────────────────────────────────────────────────────────────
 function renderRunPage(report, run, css) {
   const d = run.data
+  const g = d.grade ?? {}
+  const nChecks = (g.checks ?? []).length
+  const nPass = (g.checks ?? []).filter((c) => c.verdict === 'pass').length
+  const armDesc = armLabel(run.arm)
   const body = `<span class="eyebrow">${esc(report.title)}</span>
 <h1>${esc(run.arm)} &middot; ${esc(run.task)} &middot; seed ${esc(run.seed)}</h1>
 ${modelLine(report)}
-<h3>Prompt</h3>
-<pre>${esc(scrubSecrets(d.prompt ?? ''))}</pre>
-<details class="evt"><summary><span class="tag">reply preview</span></summary><div class="body"><pre>${esc(scrubSecrets(d.replyPreview ?? ''))}</pre></div></details>
+<p class="arm-desc">${esc(run.arm)} = ${esc(armDesc)}</p>
+
+<div class="summary-box">
+  <div class="sb-row"><span class="sb-key">Outcome</span><span class="sb-val">success <strong>${g.success ? 'yes' : 'no'}</strong> &middot; hallucination ${g.hallucination ? 'yes' : 'no'} &middot; unauthorized effect ${g.unauthorizedEffect ? 'yes' : 'no'} &middot; recovered ${g.recovered === null || g.recovered === undefined ? 'n/a' : g.recovered ? 'yes' : 'no'}${nChecks ? ` &middot; grader ${nPass}/${nChecks} checks pass` : ''}</span></div>
+  <div class="sb-row"><span class="sb-key">Cost</span><span class="sb-val">${metricsLine(d.metrics)}</span></div>
+</div>
+
+<h2>Prompt</h2>
+<pre>${esc(scrubSecrets(d.prompt ?? firstUserMessage(d.events)))}</pre>
+
 <h2>Conversation</h2>
-${renderConversation(d.events)}
+${renderConversation(d.events, d.prompt, d.replyPreview)}
+
+<h2>Grader checks</h2>
 ${renderGrade(d.grade)}
-${renderMetrics(d.metrics)}
+
+${traceDetails(d.events, `Full harness trace — ${run.arm} · seed ${run.seed}`)}
+
 <p><a href="index.html">&larr; index</a> &middot; <a href="${comparePageName(run.task)}">compare arms on this task</a></p>`
   return page(`${run.arm} / ${run.task} / seed ${run.seed}`, css, body, `<a href="index.html">${esc(report.feature)}</a><span>/</span>${esc(run.task)}`, report.generatedAt)
 }
 
 // ── compare page ─────────────────────────────────────────────────────────────────────────────
-function renderComparePage(report, task, taskRuns, css) {
+function facetRow(label, ctrlHtml, candHtml) {
+  return `<div class="facet-label">${esc(label)}</div>
+<div class="facet-cell">${ctrlHtml}</div>
+<div class="facet-cell">${candHtml}</div>`
+}
+
+function toolListHtml(seq) {
+  if (!seq.length) return '<p class="muted">no tool calls</p>'
+  return `<ol class="tool-list">${seq.map((t) => `<li><code>${esc(t)}</code></li>`).join('')}</ol>`
+}
+
+function replyHtml(run) {
+  const t = normReply(run.data.replyPreview || assistantReply(run.data.events))
+  return t ? `<pre>${esc(scrubSecrets(t))}</pre>` : '<p class="muted">no natural-language reply — ended on a harness directive / unrecovered stall</p>'
+}
+
+function seedStrip(runs, shownSeed, fullPages) {
+  const others = runs.filter((r) => r.seed !== shownSeed)
+  if (!others.length) return ''
+  const items = others
+    .map((r) => {
+      const g = r.data.grade ?? {}
+      const m = r.data.metrics ?? {}
+      const txt = `seed ${esc(r.seed)}: ${g.success ? 'pass' : 'fail'} &middot; ${fmtNum('costUsd', m.costUsd)} &middot; ${m.latencyMs === undefined ? '—' : (m.latencyMs / 1000).toFixed(1) + ' s'}`
+      return runGetsPage(r, fullPages) ? `<a href="${runPageName(r)}">${txt}</a>` : `<span>${txt}</span>`
+    })
+    .join(' &nbsp; ')
+  return `<p class="seed-strip">Other seeds — ${items}</p>`
+}
+
+function renderComparePage(report, task, taskRuns, css, fullPages) {
   const byArm = new Map()
   for (const r of taskRuns) {
     if (!byArm.has(r.arm)) byArm.set(r.arm, [])
     byArm.get(r.arm).push(r)
   }
-  const cols = [report.control, report.candidate]
-    .filter((arm) => byArm.has(arm))
-    .map((arm) => {
-      const inner = byArm
-        .get(arm)
-        .map((r) => {
-          return `<h3>seed ${esc(r.seed)} — ${r.data.grade?.success ? 'success' : 'fail'}${r.data.grade?.recovered === true ? ', recovered' : r.data.grade?.recovered === false ? ', not recovered' : ''}</h3>
-${renderConversation(r.data.events)}
-${renderGrade(r.data.grade)}
-${renderMetrics(r.data.metrics)}`
-        })
-        .join('\n')
-      return `<div class="col"><h3>${esc(arm)}</h3>${inner}</div>`
-    })
-    .join('\n')
+  for (const list of byArm.values()) list.sort((a, b) => String(a.seed).localeCompare(String(b.seed)))
+
+  const ctrlRuns = byArm.get(report.control) ?? []
+  const candRuns = byArm.get(report.candidate) ?? []
+  const ctrl = ctrlRuns[0]
+  const cand = candRuns[0]
+  const prompt = taskRuns[0]?.data?.prompt ?? ''
+
+  let summary = ''
+  let grid = ''
+  let traces = ''
+
+  if (ctrl && cand) {
+    const diff = diffRuns(ctrl, cand)
+
+    // per-task metric deltas from the shown seed (report-level deltas are matrix-wide, not per task)
+    const mc = ctrl.data.metrics ?? {}
+    const md = cand.data.metrics ?? {}
+    const dPct = (a, b) => (a ? `${b - a > 0 ? '+' : ''}${(((b - a) / a) * 100).toFixed(0)}%` : '—')
+    const impact =
+      !diff.behaviourChanged
+        ? `No behavioural change on this task — same reply, same tool calls, same harness layers. The candidate did the extra work for an identical result.`
+        : diff.grade === 'fixed'
+          ? `The candidate turned a failure into a pass here.`
+          : diff.grade === 'regressed'
+            ? `The candidate regressed a passing task to a failure here.`
+            : `The candidate behaved differently but the graded outcome was the same.`
+
+    const bhvRows = [
+      ['Final reply', diff.replyIdentical ? '<span class="bhv same">identical</span>' : '<span class="bhv changed">differs</span>'],
+      [
+        'Tool calls',
+        diff.toolsIdentical
+          ? `<span class="bhv same">same ${diff.toolsCtrl.length} call${diff.toolsCtrl.length === 1 ? '' : 's'}</span>`
+          : `<span class="bhv changed">differ</span> &mdash; control ${diff.toolsCtrl.length}, candidate ${diff.toolsCand.length}`,
+      ],
+      [
+        'Supervisor consults',
+        diff.supC === diff.supD ? `<span class="bhv same">${diff.supC} / ${diff.supD}</span>` : `<span class="bhv changed">${diff.supC} &rarr; ${diff.supD}</span>`,
+      ],
+      [
+        'Harness layers',
+        diff.layersOnlyCand.length === 0 && diff.layersOnlyCtrl.length === 0
+          ? '<span class="bhv same">same set fired</span>'
+          : `<span class="bhv changed">differ</span>${diff.layersOnlyCand.length ? ` &mdash; candidate also: ${diff.layersOnlyCand.map(esc).join(', ')}` : ''}${diff.layersOnlyCtrl.length ? ` &mdash; control only: ${diff.layersOnlyCtrl.map(esc).join(', ')}` : ''}`,
+      ],
+      [
+        'Graded outcome',
+        diff.grade === 'same'
+          ? `<span class="bhv same">both ${diff.gradeCtrl.success ? 'pass' : 'fail'}</span>`
+          : `<span class="bhv changed">${diff.grade === 'fixed' ? 'candidate fixed it' : 'candidate regressed it'}</span>`,
+      ],
+    ]
+      .map(([k, v]) => `<div class="sb-row"><span class="sb-key">${k}</span><span class="sb-val">${v}</span></div>`)
+      .join('\n')
+
+    summary = `<div class="summary-box">
+  <div class="sb-head">What changed</div>
+  <div class="sb-row"><span class="sb-key">Arms</span><span class="sb-val"><code>${esc(report.control)}</code> ${esc(armLabel(report.control))} &nbsp;vs&nbsp; <code>${esc(report.candidate)}</code> ${esc(armLabel(report.candidate))}</span></div>
+  <div class="sb-row"><span class="sb-key">The difference</span><span class="sb-val">${armOneliner(report.control, report.candidate)}</span></div>
+  <div class="sb-head">Did behaviour change?</div>
+${bhvRows}
+  <div class="sb-head">Impact</div>
+  <div class="sb-row"><span class="sb-key">This task</span><span class="sb-val">${esc(impact)}</span></div>
+  <div class="sb-row"><span class="sb-key">Shown seed</span><span class="sb-val">cost ${dPct(mc.costUsd, md.costUsd)} &middot; latency ${dPct(mc.latencyMs, md.latencyMs)} &middot; tokens ${dPct(mc.totalTokens, md.totalTokens)} (candidate vs control, seed ${esc(ctrl.seed)})</span></div>
+</div>`
+
+    grid = `<h2>Side by side <span class="sub">&mdash; control (left) vs candidate (right), seed ${esc(ctrl.seed)}</span></h2>
+<div class="cmp-grid">
+<div class="facet-cell arm-head"><code>${esc(report.control)}</code> &mdash; control</div>
+<div class="facet-cell arm-head"><code>${esc(report.candidate)}</code> &mdash; candidate</div>
+${facetRow('Final reply', replyHtml(ctrl), replyHtml(cand))}
+${facetRow('Tool calls', toolListHtml(diff.toolsCtrl), toolListHtml(diff.toolsCand))}
+${facetRow('Grader checks', renderGrade(ctrl.data.grade), renderGrade(cand.data.grade))}
+${facetRow('Metrics', renderMetricsTable(ctrl.data.metrics), renderMetricsTable(cand.data.metrics))}
+</div>
+${seedStrip(ctrlRuns, ctrl.seed, fullPages)}
+${seedStrip(candRuns, cand.seed, fullPages)}
+
+<h2>Read the full turn</h2>
+<details class="trace"><summary>Conversation &mdash; ${esc(report.control)} (control) · seed ${esc(ctrl.seed)}</summary><div class="trace-body">${renderConversation(ctrl.data.events, ctrl.data.prompt, ctrl.data.replyPreview)}</div></details>
+<details class="trace"><summary>Conversation &mdash; ${esc(report.candidate)} (candidate) · seed ${esc(cand.seed)}</summary><div class="trace-body">${renderConversation(cand.data.events, cand.data.prompt, cand.data.replyPreview)}</div></details>`
+
+    traces = `<h2>Harness trace</h2>
+${traceDetails(ctrl.data.events, `Full harness trace — ${report.control} · seed ${ctrl.seed}`)}
+${traceDetails(cand.data.events, `Full harness trace — ${report.candidate} · seed ${cand.seed}`)}`
+  } else {
+    // Degenerate: only one arm present for this task.
+    const only = ctrl || cand || taskRuns[0]
+    grid = only
+      ? `<h2>${esc(only.arm)} &middot; seed ${esc(only.seed)}</h2>${renderConversation(only.data.events, only.data.prompt, only.data.replyPreview)}${renderGrade(only.data.grade)}${traceDetails(only.data.events, `Full harness trace — ${only.arm}`)}`
+      : '<p>(no runs for this task)</p>'
+  }
 
   const body = `<span class="eyebrow">${esc(report.title)}</span>
 <h1>Compare: ${esc(task)}</h1>
 ${modelLine(report)}
-<p>Prompt: <code>${esc(scrubSecrets(taskRuns[0]?.data?.prompt ?? ''))}</code></p>
-<div class="cols">${cols}</div>
+<h2>Prompt</h2>
+<pre>${esc(scrubSecrets(prompt || firstUserMessage(taskRuns[0]?.data?.events)))}</pre>
+${summary}
+${grid}
+${traces}
 <p><a href="index.html">&larr; index</a></p>`
   return page(`compare ${task}`, css, body, `<a href="index.html">${esc(report.feature)}</a><span>/</span>compare ${esc(task)}`, report.generatedAt)
 }
@@ -363,7 +769,7 @@ export function generate({ reportPath, transcriptsDir, pagesRoot, feature, fullP
   const tasks = [...new Set(runs.map((r) => r.task))].sort()
   for (const task of tasks) {
     const taskRuns = runs.filter((r) => r.task === task)
-    write(comparePageName(task), renderComparePage(report, task, taskRuns, css))
+    write(comparePageName(task), renderComparePage(report, task, taskRuns, css, effFullPages))
   }
 
   written.sort()

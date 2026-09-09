@@ -53,11 +53,44 @@ describe('gen-transcript-pages — full pages (default)', () => {
     for (const l of links) expect(existsSync(join(out.outDir, l)), `missing ${l}`).toBe(true)
   })
 
-  it('carries the Model line on every page', () => {
+  it('carries the Model line — friendly name + the id the report actually recorded, never a hardcoded family', () => {
     for (const f of out.written) {
       const html = readFileSync(join(out.outDir, f), 'utf8')
-      expect(html, f).toContain('Model: Claude Sonnet (<code>claude-sonnet-5</code>)')
+      expect(html, f).toContain('Model: Claude Sonnet 5 (<code>claude-sonnet-5</code>)')
+      // regression guard: the old generator printed "Claude Sonnet" regardless of modelId
+      expect(html, f).not.toMatch(/Model: Claude Sonnet \(<code>claude-haiku/)
     }
+  })
+
+  it('compare page leads with the what-changed / behaviour / impact summary', () => {
+    const cmp = readFileSync(join(out.outDir, 'compare-task-one.html'), 'utf8')
+    expect(cmp).toContain('class="summary-box"')
+    expect(cmp).toContain('What changed')
+    expect(cmp).toContain('Did behaviour change?')
+    expect(cmp).toContain('Impact')
+    // armB adds a tool call armA doesn't → behaviour differs
+    expect(cmp).toMatch(/Tool calls[\s\S]{0,120}differ/)
+  })
+
+  it('compare page aligns the arms in a row-wise grid, not free-flowing columns', () => {
+    const cmp = readFileSync(join(out.outDir, 'compare-task-one.html'), 'utf8')
+    expect(cmp).toContain('class="cmp-grid"')
+    expect(cmp).toContain('class="facet-label"')
+    expect(cmp).not.toContain('class="col"')
+  })
+
+  it('demotes the raw event trace into one collapsed disclosure per arm', () => {
+    const run = readFileSync(join(out.outDir, 'armA-adv-task-two-seed1.html'), 'utf8')
+    // the curated conversation is inline; the trace (if any) is behind <details class="trace">
+    expect(run).toContain('<h2>Conversation</h2>')
+    const cmp = readFileSync(join(out.outDir, 'compare-adv-task-two.html'), 'utf8')
+    expect(cmp).toContain('<details class="trace">')
+  })
+
+  it('index carries a Behaviour column driven by the mechanical diff', () => {
+    const idx = readFileSync(join(out.outDir, 'index.html'), 'utf8')
+    expect(idx).toContain('<th>Behaviour</th>')
+    expect(idx).toMatch(/class="bhv (changed|same)"/)
   })
 
   it('shows the feature verdict and hypothesis on the index', () => {

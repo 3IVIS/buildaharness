@@ -12,15 +12,21 @@
       "model": "sonnet",
       "messages": [{ "role": "user", "content": "What is the capital of France?" }]
     },
+    { "t": 2, "kind": "trace", "detail": { "kind": "risk_classified", "riskLevel": "LOW", "requiresApproval": false } },
+    { "t": 3, "kind": "trace", "detail": { "kind": "execution_mode_classified", "mode": "TOOL" } },
+    { "t": 4, "kind": "trace", "detail": { "kind": "tool_policy_decision", "tool": "read_file", "decision": "ALLOW", "reason": "harness control state permits (execution_mode=NORMAL)" } },
     {
-      "t": 2,
+      "t": 5,
       "kind": "tool_call",
       "tool": "read_file",
       "input": { "path": "facts/geo.txt" },
       "result": "Paris is the capital of France."
     },
+    { "t": 6, "kind": "trace", "detail": { "kind": "layer_activity", "layer": "evidence_reasoning", "fired": true, "reason": "one observation recorded from a file read" } },
+    { "t": 7, "kind": "trace", "detail": { "kind": "layer_activity", "layer": "verification", "fired": true, "reason": "all applicable layers passed" } },
+    { "t": 8, "kind": "trace", "detail": { "kind": "harness_node", "node": "output_validation", "stepsUsed": 2 } },
     {
-      "t": 3,
+      "t": 9,
       "kind": "llm_response",
       "dir": "res",
       "model": "sonnet",
