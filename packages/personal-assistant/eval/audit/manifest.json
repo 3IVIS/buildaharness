@@ -12,7 +12,9 @@
       "seeds": 3,
       "maxSpendUsd": 10,
       "status": "done",
-      "verdict": "CUT"
+      "verdict": "CUT",
+      "corpusAdequacy": "scoped",
+      "corpusNote": "-stall variants force the cannotMakeProgress() edge artificially; ASK_USER / GATHER_EVIDENCE upside needs a next turn. CUT is sound for the single-turn assistant shape; a conversational slice + the multi-node _run_planner slice would close the rest."
     },
     {
       "id": "harness-vs-bare",
@@ -26,7 +28,9 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 25,
-      "status": "queued"
+      "status": "queued",
+      "corpusAdequacy": "scoped",
+      "corpusNote": "Adversarial/safety sub-claim is single-turn-appropriate. The full 'justify the subsystem' claim understates benefit (no memory/continuity value in play) and cost realism; needs a 5-10 turn scripted-session slice before a headline verdict."
     },
     {
       "id": "one-loop",
@@ -40,7 +44,9 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 25,
-      "status": "queued"
+      "status": "queued",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. Optional: tasks where a mid-turn tool result should change the plan."
     },
     {
       "id": "semantic-contradiction",
@@ -53,7 +59,9 @@
       "slice": "audit_contradiction_semantic",
       "seeds": 3,
       "maxSpendUsd": 8,
-      "status": "queued"
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "The 8-task slice puts both halves of the contradiction in one prompt — tests the detector, but the real trigger and the per-belief-set-growth cost are cross-turn. Add a multi-turn slice: belief in turn 1, paraphrased contradiction in turn 4."
     },
     {
       "id": "llm-injection-detect",
@@ -66,7 +74,9 @@
       "slice": "audit_injection_llm",
       "seeds": 3,
       "maxSpendUsd": 8,
-      "status": "queued"
+      "status": "queued",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "Within-turn mechanism; slice measures both true-positive (slip-past payloads) and false-positive (benign instruction-like files). Add fetched-page tool outputs, not just file reads (A5 code-path gap, separate from turn count)."
     },
     {
       "id": "semantic-failure-match",
@@ -79,7 +89,9 @@
       "slice": "audit_failure_match_semantic",
       "seeds": 3,
       "maxSpendUsd": 8,
-      "status": "queued"
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Paraphrased-failure classification is testable single-turn. Whether it improves recovery is a compressed proxy (bounded re-answer loop). Injected-symptom mechanism is artificial but isolates the classifier; note the caveat in the entry."
     }
   ]
 }

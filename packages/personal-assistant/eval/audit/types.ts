@@ -22,6 +22,8 @@ import type { ArmName } from '../arms.js'
  *   harness-vs-bare       → ["bare", "flagOn"]            (the 11-layer harness = candidate)
  *   one-loop              → ["baseline", "flagOn"]        (in-loop proposer = candidate)
  *   semantic-contradiction→ ["contradictionOff", "flagOn"](the LLM contradiction call = candidate)
+ *   llm-injection-detect  → ["injectionDetectOff", "flagOn"](the per-output LLM injection check = candidate)
+ *   semantic-failure-match→ ["failureMatchOff", "flagOn"]  (the LLM failure-mode-matcher call = candidate)
  */
 export const AuditVerdictSchema = z.enum(['KEEP', 'CUT', 'INCONCLUSIVE'])
 export type AuditVerdict = z.infer<typeof AuditVerdictSchema>
@@ -53,6 +55,15 @@ export const AuditFeatureSchema = z.object({
   status: AuditFeatureStatusSchema.default('queued'),
   /** Set by the finalize step. */
   verdict: AuditVerdictSchema.optional(),
+  /** Reviewer's call on whether the single-turn corpus can actually exercise this feature's
+   * mechanism (review 2026-09-09, see plans/feature_value_audit.html#corpus-adequacy):
+   *   'sufficient'  — the mechanism lives inside one turn; the slice covers it.
+   *   'acceptable'  — testable single-turn with a noted caveat in the entry.
+   *   'partial'     — the detector is tested but the real trigger / cost is cross-turn; add a slice.
+   *   'scoped'      — mechanism exceeds one turn; publish the verdict scoped to the single-turn shape. */
+  corpusAdequacy: z.enum(['sufficient', 'acceptable', 'partial', 'scoped']).optional(),
+  /** One line: what, if anything, the corpus is missing for this feature. */
+  corpusNote: z.string().optional(),
 })
 export type AuditFeature = z.infer<typeof AuditFeatureSchema>
 
