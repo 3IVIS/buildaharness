@@ -17,6 +17,12 @@
       "finalized": true,
       "spendUsd": 7.927027,
       "blocked": false
+    },
+    "semantic-contradiction": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.691002,
+      "blocked": false
     }
   }
 }
