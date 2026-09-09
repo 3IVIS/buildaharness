@@ -11,6 +11,12 @@
       "finalized": true,
       "spendUsd": 9.774703,
       "blocked": false
+    },
+    "one-loop": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 3.360883,
+      "blocked": false
     }
   }
 }
