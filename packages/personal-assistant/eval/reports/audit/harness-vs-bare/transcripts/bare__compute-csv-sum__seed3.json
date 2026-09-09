@@ -1,0 +1,71 @@
+{
+  "task": "compute-csv-sum",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What is the total of the amount column across every row in sales.csv? Reply with just the number.",
+  "events": [
+    {
+      "t": 1788939394419,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What is the total of the amount column across every row in sales.csv? Reply with just the number."
+        }
+      ]
+    },
+    {
+      "t": 1788939399394,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "456.00",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 164,
+        "costUsd": 0.006725
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": true,
+    "checks": [
+      {
+        "name": "not contains \"455.99\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"457.00\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"410.49\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"336.00\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /\\b456(\\.0+)?\\b/i",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 4975,
+    "costUsd": 0.006725,
+    "totalTokens": 170,
+    "supervisorConsults": null
+  },
+  "replyPreview": "456.00"
+}
