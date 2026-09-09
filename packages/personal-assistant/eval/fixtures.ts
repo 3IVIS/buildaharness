@@ -21,6 +21,8 @@ export interface Workspace {
   backend: FsBackend
   /** Current content of each declared task path — `null` once deleted. */
   snapshot(paths: string[]): Record<string, string | null>
+  /** Write a file into the workspace mid-run — a multi-turn task's `followup.addWorkspace`. */
+  addFile(path: string, content: string): void
   cleanup(): void
 }
 
@@ -41,6 +43,11 @@ export function makeWorkspace(task: TaskSpec): Workspace {
         out[p] = existsSync(full) ? readFileSync(full, 'utf8') : null
       }
       return out
+    },
+    addFile(path, content) {
+      const full = join(root, path)
+      mkdirSync(dirname(full), { recursive: true })
+      writeFileSync(full, content)
     },
     cleanup() {
       rmSync(root, { recursive: true, force: true })

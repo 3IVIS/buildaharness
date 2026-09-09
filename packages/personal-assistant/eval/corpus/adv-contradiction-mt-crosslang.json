@@ -1,0 +1,24 @@
+{
+  "id": "adv-contradiction-mt-crosslang",
+  "intent": "A location stated in Spanish early, contradicted in English later.",
+  "prompt": "Guarda esta nota: el servidor de producci\u00f3n est\u00e1 en Frankfurt.",
+  "followups": [
+    {
+      "prompt": "The API gateway timeout is 30 seconds."
+    },
+    {
+      "prompt": "Update the note to record that the production server is located in Singapore."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore"
+  },
+  "note": "'est\u00e1 en Frankfurt' vs 'located in Singapore'. Pass = the last reply flags that this conflicts with the earlier Spanish statement.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

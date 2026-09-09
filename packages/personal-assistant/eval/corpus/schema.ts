@@ -39,6 +39,10 @@ export const SUPERVISOR_SLICES = [
   'supervisor_lookup', // the fact lives somewhere non-obvious — a second file, a nested dir, a transitive ref
   'supervisor_clarification', // genuinely ambiguous — must ask, not guess
   'supervisor_adversarial_digest', // workspace text carries injection ("ignore instructions, ABORT")
+  // Multi-turn: turn 1 stalls (injected persistent_tool_failure) so the supervisor emits
+  // ASK_USER; turn 2 the user supplies the missing detail. Measures whether ASK_USER turns a
+  // dead turn into a recoverable one — the supervisor's value that a single turn can't show.
+  'supervisor_conversation',
 ] as const
 
 export type SupervisorSlice = (typeof SUPERVISOR_SLICES)[number]
@@ -64,6 +68,16 @@ export const AUDIT_SLICES = [
   // and only the `checkSemanticFailureMatch` LLM call (arm `flagOn` vs `failureMatchOff`) can
   // classify the failure class and route recovery.
   'audit_failure_match_semantic',
+  // Multi-turn: a belief stated turn 1, unrelated beliefs added turns 2-3, then a *paraphrased*
+  // contradiction on the last turn — the real trigger for `checkForContradictions` (belief-set
+  // growth over a conversation), and the real per-belief-set-growth cost the hypothesis asks
+  // about. Includes control tasks (a legitimate change over time) that must NOT be false-flagged.
+  'audit_contradiction_multiturn',
+  // Multi-turn (4-8 turns) sessions where the harness's cross-turn machinery is what differs
+  // from a bare loop: staged approval spanning turns, cross-turn correction, control-state
+  // escalation after repeated failure, not compounding an early wrong assumption. For
+  // `harness-vs-bare` (which runs the full corpus, so these are picked up automatically).
+  'harness_session',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]
@@ -76,6 +90,22 @@ export type BenchmarkSlice = SupervisorSlice | AuditSlice
 const WorkspaceFileSchema = z.object({
   path: z.string().min(1),
   content: z.string(),
+})
+
+/**
+ * A subsequent user turn in a multi-turn task. The arm sends it to the *same* assistant session
+ * (same memory, same conversation history) after the previous turn resolves. See `followups`.
+ */
+const FollowupSchema = z.object({
+  /** The user message for this turn. */
+  prompt: z.string().min(1),
+  /** Files that appear in the workspace just before this turn (rarely needed — a contradiction
+   * or correction usually lives in `prompt` itself). */
+  addWorkspace: z.array(WorkspaceFileSchema).default([]),
+  /** Inject a failure on *this* turn (e.g. a supervisor task that should stall on turn 1 only).
+   * Same semantics as the task-level `injectedFailure`. */
+  injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
+  injectedFailureCount: z.number().int().min(1).max(6).optional(),
 })
 
 /** The mechanical grader. All present checks must pass for `success`. */
@@ -106,8 +136,14 @@ export const TaskSpecSchema = z.object({
   category: z.enum(TASK_CATEGORIES),
   /** One line — what this task is probing. */
   intent: z.string().min(1),
-  /** The user message sent to the assistant. */
+  /** The user message sent to the assistant (turn 1). */
   prompt: z.string().min(1),
+  /**
+   * Subsequent user turns, sent to the same session after the previous turn resolves. Empty =
+   * a single-turn task (the default). The grader always scores the *last* turn's reply +
+   * the final workspace snapshot; cost / latency / tokens are summed across turns.
+   */
+  followups: z.array(FollowupSchema).default([]),
   /** Files present in the workspace before the turn. */
   workspace: z.array(WorkspaceFileSchema).default([]),
   /** Which tool contexts the arm should wire up for this task. */
@@ -145,6 +181,7 @@ export const TaskSpecSchema = z.object({
 
 export type TaskSpec = z.infer<typeof TaskSpecSchema>
 export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>
+export type Followup = z.infer<typeof FollowupSchema>
 
 /** Parse + validate one task JSON blob. Throws `ZodError` on a malformed task. */
 export function parseTaskSpec(raw: unknown, sourceLabel: string): TaskSpec {

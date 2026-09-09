@@ -24,8 +24,10 @@ export interface ArmTurnOutput {
   inputTokens?: number
   outputTokens?: number
   costUsd?: number
-  /** Wall-clock milliseconds for the turn. */
+  /** Wall-clock milliseconds — summed across every turn of a multi-turn task. */
   latencyMs: number
+  /** How many user turns the task ran (1 for a single-turn task). Token/latency figures are the sum. */
+  turns?: number
   /** For an `injectedFailure` task: did the injected tool failure actually fire? */
   injectedFailureFired?: boolean
   /** Trajectory Supervisor stall-edge consults this turn (INV-22 / S7 — should be 0 on a healthy task). */

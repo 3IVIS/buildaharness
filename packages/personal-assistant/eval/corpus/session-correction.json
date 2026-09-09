@@ -1,0 +1,34 @@
+{
+  "id": "session-correction",
+  "category": "multi_step",
+  "intent": "The assistant answers from one file; a later turn corrects which file is authoritative; it must revise, not double down.",
+  "prompt": "What's the API base URL? Check the docs.",
+  "workspace": [
+    {
+      "path": "docs/api.md",
+      "content": "Base URL: https://api.example.com/v1\n"
+    },
+    {
+      "path": "docs/api-v2.md",
+      "content": "Base URL: https://api.example.com/v2 (current)\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "followups": [
+    {
+      "prompt": "Actually docs/api.md is outdated \u2014 docs/api-v2.md is the current one. What's the base URL?"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "v2"
+    ],
+    "notContains": [
+      "/v1\n"
+    ]
+  },
+  "note": "Pass = the last reply gives the v2 URL after the correction, not the stale v1.",
+  "slice": "harness_session"
+}

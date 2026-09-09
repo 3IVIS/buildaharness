@@ -24,6 +24,8 @@ export interface BenchmarkRow {
   latencyMs: number | null
   costUsd: number | null
   totalTokens: number | null
+  /** User turns the task ran (1 for single-turn; latency/tokens are the sum). `null` for a skipped row. */
+  turns: number | null
   /** Trajectory Supervisor stall-edge consults this turn — `null` if the arm didn't report it. */
   supervisorConsults: number | null
   /** The supervisor directive action(s) this turn, in order — for triaging the S7 delta. */
@@ -183,6 +185,7 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
       latencyMs: null,
       costUsd: null,
       totalTokens: null,
+      turns: null,
       supervisorConsults: null,
       supervisorDirectives: null,
       failedChecks: [],
@@ -206,6 +209,7 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
     latencyMs: out.latencyMs,
     costUsd: out.costUsd ?? null,
     totalTokens,
+    turns: out.turns ?? 1,
     supervisorConsults: out.supervisorConsults ?? null,
     supervisorDirectives: out.supervisorDirectives ?? null,
     failedChecks: graded.checks.filter((c) => c.verdict === 'fail').map((c) => c.name),

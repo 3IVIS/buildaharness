@@ -115,6 +115,7 @@ strong{color:var(--ink);font-weight:600;}
 .turn .tool-head .tool-arg{color:var(--ink-3);}
 .turn .tool-head + pre{border-top:1px solid var(--line);}
 
+.turn-divider{font-family:"IBM Plex Mono",monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);margin:16px 0 8px;padding-top:8px;border-top:1px dashed var(--line);}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;}
 .chip{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-2);background:var(--bg-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px;}
 

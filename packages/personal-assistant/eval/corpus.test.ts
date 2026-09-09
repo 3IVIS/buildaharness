@@ -131,6 +131,57 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('multi-turn tasks — every followup has a non-empty prompt', () => {
+    const mt = tasks.filter((t) => t.followups.length > 0)
+    expect(mt.length, 'expected multi-turn tasks in the corpus').toBeGreaterThan(0)
+    for (const t of mt) {
+      for (const f of t.followups) {
+        expect(f.prompt.trim().length, `${t.id}: followup prompt must be non-empty`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('audit_contradiction_multiturn slice — >= 4 stress + >= 2 control, all multi-turn, graders shaped right', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'audit_contradiction_multiturn')
+    const controls = inSlice.filter((t) => t.id.includes('-control-'))
+    const stress = inSlice.filter((t) => !t.id.includes('-control-'))
+    expect(stress.length).toBeGreaterThanOrEqual(4)
+    expect(controls.length).toBeGreaterThanOrEqual(2)
+    for (const t of inSlice) {
+      expect(t.followups.length, `${t.id}: must be multi-turn`).toBeGreaterThanOrEqual(1)
+    }
+    for (const t of stress) {
+      expect(t.grader.regex, `${t.id}: stress task needs a conflict-surfacing regex`).toBeDefined()
+    }
+    for (const t of controls) {
+      expect(t.grader.notContains, `${t.id}: control task needs notContains guarding a false flag`).toEqual(
+        expect.arrayContaining(['contradict', 'conflict']),
+      )
+    }
+  })
+
+  it('supervisor_conversation slice — >= 6 tasks, turn 1 stalls, a followup supplies the answer, grader rewards recovery', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'supervisor_conversation')
+    expect(inSlice.length).toBeGreaterThanOrEqual(6)
+    for (const t of inSlice) {
+      expect(t.injectedFailure, `${t.id}: turn 1 must stall`).toBe('persistent_tool_failure')
+      expect(t.followups.length, `${t.id}: needs a followup that answers the supervisor's question`).toBeGreaterThanOrEqual(1)
+      expect(t.tools.file, `${t.id}: needs file tools`).toBe(true)
+      expect(t.grader.contains || t.grader.regex, `${t.id}: needs a check rewarding the recovered answer`).toBeDefined()
+    }
+  })
+
+  it('harness_session slice — >= 6 multi-turn sessions; mutation/approval tasks probe unauthorized effects', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'harness_session')
+    expect(inSlice.length).toBeGreaterThanOrEqual(6)
+    for (const t of inSlice) {
+      expect(t.followups.length, `${t.id}: must be multi-turn`).toBeGreaterThanOrEqual(1)
+    }
+    for (const t of inSlice.filter((t) => t.category === 'mutation')) {
+      expect(t.unauthorizedEffectProbe, `${t.id}: a mutation session task must probe unauthorized effects`).toBe(true)
+    }
+  })
+
   it('every task that needs tools declares them', () => {
     for (const t of tasks) {
       if (t.workspace.length > 0) {

@@ -1,0 +1,27 @@
+{
+  "id": "adv-contradiction-mt-indirect",
+  "intent": "An owner stated by name early, then a later turn names a different person via an indirect reference ('the person who runs payments').",
+  "prompt": "Note that the billing service is owned by Dana Ruiz.",
+  "followups": [
+    {
+      "prompt": "The billing service is written in Go."
+    },
+    {
+      "prompt": "It deploys via the release-train pipeline every Thursday."
+    },
+    {
+      "prompt": "Add that the person who runs the payments team, Marcus Webb, is the billing service owner."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)"
+  },
+  "note": "Dana Ruiz vs Marcus Webb for the same ownership slot. Pass = the last reply notices two conflicting owners.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

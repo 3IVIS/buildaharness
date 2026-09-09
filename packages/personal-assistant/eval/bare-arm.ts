@@ -85,7 +85,10 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
   if (task.tools.web) return null // web arm not wired — same as runAssistant, see eval/README.md
 
   const ws = makeWorkspace(task)
-  const declaredPaths = task.workspace.map((f) => f.path)
+  const declaredPaths = [
+    ...task.workspace.map((f) => f.path),
+    ...task.followups.flatMap((fu) => fu.addWorkspace.map((f) => f.path)),
+  ]
 
   let backend = ws.backend
   let firedProbe: (() => boolean) | undefined
@@ -123,34 +126,47 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
     if (u.costUsd !== undefined) costUsd = (costUsd ?? 0) + u.costUsd
   }
 
+  // Turn 1 = task.prompt (already in `messages`); then each followup, appended to the same
+  // `messages[]` history — the bare loop's only "memory" is this raw transcript.
+  const userTurns = [task.prompt, ...task.followups.map((f) => f.prompt)]
+
   const started = Date.now()
   try {
     let reply = ''
-    for (let step = 0; step < BARE_MAX_STEPS; step++) {
-      const response = await llm.callChatStructured(messages, tools, { onUsage })
-      reply = response.content ?? ''
+    for (let turnIdx = 0; turnIdx < userTurns.length; turnIdx++) {
+      if (turnIdx > 0) {
+        const fu = task.followups[turnIdx - 1]
+        for (const f of fu.addWorkspace) ws.addFile(f.path, f.content)
+        messages.push({ role: 'assistant', content: reply })
+        messages.push({ role: 'user', content: fu.prompt })
+        toolEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'turn_boundary', turn: turnIdx + 1, prompt: fu.prompt } })
+      }
+      for (let step = 0; step < BARE_MAX_STEPS; step++) {
+        const response = await llm.callChatStructured(messages, tools, { onUsage })
+        reply = response.content ?? ''
 
-      if (!response.toolCalls || response.toolCalls.length === 0) break
+        if (!response.toolCalls || response.toolCalls.length === 0) break
 
-      messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
-      for (const call of response.toolCalls) {
-        let resultText: string
-        try {
-          resultText = await executeBareToolCall(backend, ws.root, call.name, call.input)
-        } catch (err) {
-          // Reported to the model as a tool result, not thrown — matches the assistant's own
-          // tool-error handling, so an injected transient failure is a thing the model can retry
-          // past rather than a hard stop.
-          resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
+        messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
+        for (const call of response.toolCalls) {
+          let resultText: string
+          try {
+            resultText = await executeBareToolCall(backend, ws.root, call.name, call.input)
+          } catch (err) {
+            // Reported to the model as a tool result, not thrown — matches the assistant's own
+            // tool-error handling, so an injected transient failure is a thing the model can retry
+            // past rather than a hard stop.
+            resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
+          }
+          messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
+          toolEvents.push({
+            t: Date.now(),
+            kind: 'tool_call',
+            tool: call.name,
+            input: call.input,
+            result: scrubSecrets(resultText),
+          })
         }
-        messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
-        toolEvents.push({
-          t: Date.now(),
-          kind: 'tool_call',
-          tool: call.name,
-          input: call.input,
-          result: scrubSecrets(resultText),
-        })
       }
     }
 
@@ -163,6 +179,7 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
       outputTokens,
       costUsd,
       latencyMs: Date.now() - started,
+      turns: userTurns.length,
       injectedFailureFired: firedProbe?.(),
       transcript: mergeTranscriptEvents(recording.drain(), toolEvents),
     }

@@ -308,27 +308,41 @@ function diffRuns(ctrl, cand) {
 }
 
 // ── curated conversation (run page + compare facets) ───────────────────────────────────────────
+// One ordered walk of the events — user turns (turn 1 + every followup), turn-setup chips,
+// tool calls, model text, harness directives — so a multi-turn task reads as a conversation.
 function renderConversation(events, prompt, replyPreview) {
   events = events ?? []
   const parts = []
+  const userTurn = (t) => parts.push(`<div class="turn user"><span class="who">user</span><pre>${esc(scrubSecrets(t))}</pre></div>`)
+  const modelTurn = (t) => parts.push(`<div class="turn model"><span class="who">model</span><pre>${esc(scrubSecrets(t))}</pre></div>`)
 
-  const p = prompt || firstUserMessage(events)
-  if (p) parts.push(`<div class="turn user"><span class="who">user</span><pre>${esc(scrubSecrets(p))}</pre></div>`)
+  // If the transcript carries no user_message events at all, fall back to the passed prompt.
+  const hasUserMsgEvents = events.some((e) => e.kind === 'debug' && e.tool === 'user_message')
+  if (!hasUserMsgEvents && prompt) userTurn(prompt)
 
-  const chips = []
-  for (const e of events) {
-    if (e.kind !== 'trace') continue
-    const d = e.detail ?? {}
-    if (d.kind === 'risk_classified' && d.riskLevel) chips.push(`risk ${esc(d.riskLevel)}`)
-    else if (d.kind === 'execution_mode_classified' && d.mode) chips.push(`mode ${esc(d.mode)}`)
-    else if (d.kind === 'proposer_selected' && d.proposerKind) chips.push(`proposer ${esc(d.proposerKind)}`)
-    else if (d.kind === 'triviality_classified') chips.push(d.isTrivial ? 'trivial' : 'non-trivial')
+  let heldModel = null // last non-final model text, emitted when the next one arrives
+  let pendingChips = []
+  const flushChips = () => {
+    if (pendingChips.length) parts.push(`<div class="chips">${pendingChips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>`)
+    pendingChips = []
   }
-  if (chips.length) parts.push(`<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join('')}</div>`)
 
-  const modelTexts = []
   for (const e of events) {
-    if (e.kind === 'tool_call') {
+    if (e.kind === 'debug' && e.tool === 'user_message') {
+      if (heldModel) { modelTurn(heldModel); heldModel = null }
+      flushChips()
+      userTurn(e.result ?? '')
+    } else if (e.kind === 'trace') {
+      const d = e.detail ?? {}
+      if (d.kind === 'turn_boundary') {
+        if (heldModel) { modelTurn(heldModel); heldModel = null }
+        parts.push(`<div class="turn-divider">turn ${esc(String(d.turn ?? ''))}</div>`)
+      } else if (d.kind === 'risk_classified' && d.riskLevel) pendingChips.push(`risk ${esc(d.riskLevel)}`)
+      else if (d.kind === 'execution_mode_classified' && d.mode) pendingChips.push(`mode ${esc(d.mode)}`)
+      else if (d.kind === 'proposer_selected' && d.proposerKind) pendingChips.push(`proposer ${esc(d.proposerKind)}`)
+      else if (d.kind === 'triviality_classified') pendingChips.push(d.isTrivial ? 'trivial' : 'non-trivial')
+    } else if (e.kind === 'tool_call') {
+      flushChips()
       const arg = toolArg(e.input)
       const res = e.result === undefined ? '' : clampText(scrubSecrets(String(e.result)), 1600)
       parts.push(
@@ -337,20 +351,22 @@ function renderConversation(events, prompt, replyPreview) {
           `${res ? `<pre>${esc(res)}</pre>` : ''}</div>`,
       )
     } else if (e.kind === 'llm_response' && e.reply) {
+      flushChips()
       const kind = controlJsonKind(e.reply)
       if (kind === 'directive') {
+        if (heldModel) { modelTurn(heldModel); heldModel = null }
         parts.push(`<div class="turn directive"><span class="who">harness directive</span><pre>${esc(scrubSecrets(e.reply))}</pre></div>`)
       } else if (!kind) {
-        modelTexts.push(e.reply)
+        if (heldModel) modelTurn(heldModel)
+        heldModel = e.reply
       }
-      // classifier JSON: dropped (its content is already in the turn-setup chips)
+      // classifier JSON: dropped (its content is in the turn-setup chips)
     }
   }
+  flushChips()
 
-  const finalText = stripReplyPrefix(replyPreview || modelTexts[modelTexts.length - 1] || assistantReply(events))
-  for (const t of modelTexts.slice(0, -1)) {
-    parts.push(`<div class="turn model"><span class="who">model</span><pre>${esc(scrubSecrets(t))}</pre></div>`)
-  }
+  const finalText = stripReplyPrefix(replyPreview || heldModel || assistantReply(events))
+  if (heldModel && normReply(heldModel) !== normReply(finalText)) modelTurn(heldModel)
   if (finalText) {
     parts.push(`<div class="turn model final"><span class="who">final reply</span><pre>${esc(scrubSecrets(finalText))}</pre></div>`)
   } else {

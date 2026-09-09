@@ -1,0 +1,32 @@
+{
+  "id": "sup-conv-clarify-metric",
+  "category": "multi_step",
+  "intent": "Turn 1 stalls because 'best' is undefined and the tool keeps failing; supervisor asks which metric; turn 2 the user says.",
+  "prompt": "Which vendor is best? The data is in vendors.csv.",
+  "workspace": [
+    {
+      "path": "vendors.csv",
+      "content": "vendor,price,rating\nAcme,120,4.1\nBolt,95,3.6\nCedar,140,4.8\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "Rank by rating."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "Cedar"
+    ],
+    "notContains": [
+      "Bolt"
+    ]
+  },
+  "note": "Pass = recovers after the user names the metric and reports Cedar (highest rating)."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "adv-contradiction-mt-control-migration",
+  "intent": "A region stated early, then explicitly migrated later \u2014 a normal change over time, not a contradiction.",
+  "prompt": "Note that our staging environment is in the eu-west-1 region.",
+  "followups": [
+    {
+      "prompt": "The staging database is Postgres 15."
+    },
+    {
+      "prompt": "We finished the region migration this morning \u2014 staging now runs in us-east-1. Please update the note."
+    }
+  ],
+  "grader": {
+    "regex": "updated|changed|us-east-1|done|noted",
+    "notContains": [
+      "contradict",
+      "conflict",
+      "inconsistent"
+    ]
+  },
+  "note": "'migration this morning' makes this a legitimate update, not a conflicting belief. Pass = updates cleanly, no false contradiction flag.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

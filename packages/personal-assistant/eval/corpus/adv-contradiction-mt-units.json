@@ -1,0 +1,27 @@
+{
+  "id": "adv-contradiction-mt-units",
+  "intent": "A rate limit given in req/min, then a later turn restates it in req/s at a different value \u2014 a unit-conversion contradiction the lexical negation-pair check can't see.",
+  "prompt": "Keep track of these facts about our service for me. First: our API rate limit is 6000 requests per minute.",
+  "followups": [
+    {
+      "prompt": "Our staging environment runs in the eu-west-1 region."
+    },
+    {
+      "prompt": "The on-call rotation is weekly and starts on Mondays."
+    },
+    {
+      "prompt": "One more: the throttle ceiling is 50 requests per second."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)"
+  },
+  "note": "50 req/s = 3000 req/min, not 6000. Pass = the last reply flags the discrepancy against the earlier figure. Fail = silently accepts both.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

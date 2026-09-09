@@ -92,7 +92,10 @@ async function runAssistantInner(
 ): Promise<ArmTurnOutput | null> {
 
   const ws = makeWorkspace(task)
-  const declaredPaths = task.workspace.map((f) => f.path)
+  const declaredPaths = [
+    ...task.workspace.map((f) => f.path),
+    ...task.followups.flatMap((fu) => fu.addWorkspace.map((f) => f.path)),
+  ]
 
   let backend = ws.backend
   let firedProbe: (() => boolean) | undefined
@@ -136,17 +139,47 @@ async function runAssistantInner(
 
   // S7 stall induction — see benchmark-injected-failure.ts. Only meaningful on the
   // one-loop proposer path (oneLoopMode === 'enabled').
-  const turnOptions: Parameters<typeof assistant.turn>[1] = { sessionId: `eval-${task.id}` }
-  if (task.injectedFailure === 'persistent_tool_failure') {
-    turnOptions.__benchmarkInjectedFailure = {
-      failIterations: task.injectedFailureCount ?? 1,
-      seedFailures: 3,
+  const sessionId = `eval-${task.id}`
+  const injectedFor = (
+    inj: TaskSpec['injectedFailure'],
+    count: number | undefined,
+  ): Parameters<typeof assistant.turn>[1] => {
+    const o: Parameters<typeof assistant.turn>[1] = { sessionId }
+    if (inj === 'persistent_tool_failure') {
+      o.__benchmarkInjectedFailure = { failIterations: count ?? 1, seedFailures: 3 }
     }
+    return o
   }
+
+  // Turn 1 = the task prompt; then each followup, sent to the same session.
+  const turns = [
+    { prompt: task.prompt, addWorkspace: [], injectedFailure: task.injectedFailure, injectedFailureCount: task.injectedFailureCount },
+    ...task.followups,
+  ]
+  let anyPersistentFailure = task.injectedFailure === 'persistent_tool_failure'
+  const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+  let sawUsage = false
 
   const started = Date.now()
   try {
-    const result = await assistant.turn(task.prompt, turnOptions)
+    let result: Awaited<ReturnType<typeof assistant.turn>> | undefined
+    for (let i = 0; i < turns.length; i++) {
+      const t = turns[i]
+      if (i > 0) {
+        for (const f of t.addWorkspace) ws.addFile(f.path, f.content)
+        sideEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'turn_boundary', turn: i + 1, prompt: t.prompt } })
+      }
+      if (t.injectedFailure === 'persistent_tool_failure') anyPersistentFailure = true
+      result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount))
+      if (result.usage) {
+        sawUsage = true
+        usage.inputTokens += result.usage.inputTokens ?? 0
+        usage.outputTokens += result.usage.outputTokens ?? 0
+        usage.costUsd += result.usage.costUsd ?? 0
+      }
+    }
+    if (!result) throw new Error('no turns executed')
+
     const out: ArmTurnOutput = {
       // An escalated turn has `reply: null` and puts its clarifying question / blocker
       // detail in `reason` — surface that as the gradable text so a clarification-slice
@@ -157,11 +190,12 @@ async function runAssistantInner(
       answerClaimStatus: result.answerClaim?.verification_status,
       workspaceAfter: ws.snapshot(declaredPaths),
       stagedMutation: result.status === 'needs_approval' || result.pendingActionId !== undefined,
-      inputTokens: result.usage?.inputTokens,
-      outputTokens: result.usage?.outputTokens,
-      costUsd: result.usage?.costUsd,
+      inputTokens: sawUsage ? usage.inputTokens : undefined,
+      outputTokens: sawUsage ? usage.outputTokens : undefined,
+      costUsd: sawUsage ? usage.costUsd : undefined,
       latencyMs: Date.now() - started,
-      injectedFailureFired: firedProbe ? firedProbe() : task.injectedFailure === 'persistent_tool_failure' ? true : undefined,
+      turns: turns.length,
+      injectedFailureFired: firedProbe ? firedProbe() : anyPersistentFailure ? true : undefined,
       supervisorConsults,
       supervisorDirectives: supervisorDirectives.length > 0 ? supervisorDirectives : undefined,
       transcript: drainTranscript(),
@@ -174,6 +208,7 @@ async function runAssistantInner(
       workspaceAfter: ws.snapshot(declaredPaths),
       stagedMutation: false,
       latencyMs: Date.now() - started,
+      turns: turns.length,
       errorMessage: err instanceof Error ? err.message : String(err),
       injectedFailureFired: firedProbe?.(),
       supervisorConsults,

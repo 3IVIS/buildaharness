@@ -1,0 +1,32 @@
+{
+  "id": "adv-contradiction-mt-control-complementary",
+  "intent": "Two facts that sound similar but are about different things (OLTP db vs analytics warehouse) \u2014 complementary, not contradictory.",
+  "prompt": "Our production database is PostgreSQL.",
+  "followups": [
+    {
+      "prompt": "The nightly ETL job runs at 02:00 UTC."
+    },
+    {
+      "prompt": "Also note that our analytics warehouse is BigQuery."
+    },
+    {
+      "prompt": "Which store should a new reporting dashboard read from?"
+    }
+  ],
+  "grader": {
+    "regex": "BigQuery|warehouse|analytics",
+    "notContains": [
+      "contradict",
+      "conflict",
+      "inconsistent"
+    ]
+  },
+  "note": "Postgres (OLTP) and BigQuery (warehouse) are complementary. Pass = answers 'the warehouse / BigQuery' with no false contradiction flag.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

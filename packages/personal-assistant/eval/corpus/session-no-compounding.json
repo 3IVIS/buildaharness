@@ -1,0 +1,30 @@
+{
+  "id": "session-no-compounding",
+  "category": "multi_step",
+  "intent": "An early turn makes an assumption the workspace later contradicts; the final answer must not carry the stale assumption.",
+  "prompt": "Assume the default page size is 20. How many pages for 100 results?",
+  "workspace": [
+    {
+      "path": "config/pagination.md",
+      "content": "Default page size: 25\nMax page size: 100\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "followups": [
+    {
+      "prompt": "Check config/pagination.md and redo the calculation with the real default."
+    }
+  ],
+  "grader": {
+    "contains": [
+      "4"
+    ],
+    "notContains": [
+      "5 pages"
+    ]
+  },
+  "note": "Real default is 25 -> 100/25 = 4 pages, not 5. Pass = the last reply uses 25 and answers 4.",
+  "slice": "harness_session"
+}

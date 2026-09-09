@@ -93,6 +93,15 @@ describe('gen-transcript-pages — full pages (default)', () => {
     expect(idx).toMatch(/class="bhv (changed|same)"/)
   })
 
+  it('renders every user turn of a multi-turn transcript, with a turn divider', () => {
+    // armB__task-one is a 2-turn fixture (a followup + a turn_boundary event)
+    const run = readFileSync(join(out.outDir, 'armB-task-one-seed1.html'), 'utf8')
+    const userTurns = [...run.matchAll(/<div class="turn user">/g)]
+    expect(userTurns.length).toBe(2)
+    expect(run).toContain('class="turn-divider"')
+    expect(run).toContain('And is it also the largest city?')
+  })
+
   it('shows the feature verdict and hypothesis on the index', () => {
     const idx = readFileSync(join(out.outDir, 'index.html'), 'utf8')
     expect(idx).toContain('INCONCLUSIVE')
