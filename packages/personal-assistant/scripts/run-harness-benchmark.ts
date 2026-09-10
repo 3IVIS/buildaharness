@@ -152,6 +152,19 @@ async function main(): Promise<void> {
     // Prefer the model id the CLI actually reported; fall back to the canonical alias mapping.
     r.modelId = lastArmClient?.resolvedModelId ?? canonicalModelId(modelAlias)
     r.judgeModelId = judge ? (judgeClient.resolvedModelId ?? canonicalModelId(judgeModelAlias)) : null
+
+    // F6 — a run whose resolved model isn't the one asked for is not the run the report claims.
+    // Abort rather than publish a mislabelled number. `--allow-model-mismatch` overrides (e.g. a
+    // CLI whose modelUsage shape this doesn't recognise).
+    const wantId = canonicalModelId(modelAlias)
+    const gotId = lastArmClient?.resolvedModelId
+    if (gotId && gotId !== wantId && !gotId.startsWith(modelAlias) && !process.argv.includes('--allow-model-mismatch')) {
+      console.error(
+        `model mismatch: asked for --model=${modelAlias} (${wantId}) but the arm resolved to "${gotId}". ` +
+          `Aborting — pass --allow-model-mismatch to override.`,
+      )
+      process.exit(3)
+    }
     seedReports.push(r)
     if (seeds > 1) {
       writeFileSync(join(REPORTS_DIR, `${r.generatedAt.replace(/[:.]/g, '-')}.seed${s + 1}.json`), JSON.stringify(r, null, 2))

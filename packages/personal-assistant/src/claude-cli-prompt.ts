@@ -108,6 +108,28 @@ export function stripJsonCodeFence(content: string): string {
   return match ? match[1] : trimmed
 }
 
+/**
+ * The `claude` CLI (2.1.x) reports no top-level `model` on a `--output-format json`/`stream-json`
+ * result — only a `modelUsage` map, and it routinely has **two** entries: the model that actually
+ * ran the turn (per `--model`) plus a small internal Haiku call the CLI makes for its own
+ * bookkeeping. `Object.keys(modelUsage)[0]` was picking that auxiliary Haiku, which is why every
+ * audit report on disk says `claude-haiku-4-5-20251001` even though `--model=sonnet` was honoured.
+ *
+ * The primary turn always carries the full prompt + cached context, so it has by far the most
+ * input tokens — pick the entry with the largest `input + cacheRead + cacheCreation`.
+ */
+export function primaryModelFromUsage(modelUsage: Record<string, unknown> | undefined): string | undefined {
+  if (!modelUsage || typeof modelUsage !== 'object') return undefined
+  const keys = Object.keys(modelUsage)
+  if (keys.length <= 1) return keys[0]
+  const weight = (v: unknown): number => {
+    const u = (v ?? {}) as Record<string, unknown>
+    const n = (x: unknown): number => (typeof x === 'number' ? x : 0)
+    return n(u.inputTokens) + n(u.cacheReadInputTokens) + n(u.cacheCreationInputTokens)
+  }
+  return [...keys].sort((a, b) => weight(modelUsage[b]) - weight(modelUsage[a]))[0]
+}
+
 export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
   try {
     const data = JSON.parse(stdout.trim()) as {
@@ -119,14 +141,11 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
       usage?: { input_tokens?: number; output_tokens?: number }
     }
     const reply = data.result ?? data.content ?? stdout.trim()
-    // `--output-format json`'s result object reports `model` directly on newer CLIs; older ones
-    // only key it under `modelUsage`. Fall back to the first `modelUsage` key when `model` is absent.
+    // `--output-format json`'s result object reports `model` directly on some CLIs; 2.1.x only
+    // keys it under `modelUsage` (and often with a spurious auxiliary Haiku entry — see
+    // primaryModelFromUsage).
     const model =
-      typeof data.model === 'string'
-        ? data.model
-        : data.modelUsage && typeof data.modelUsage === 'object'
-          ? Object.keys(data.modelUsage)[0]
-          : undefined
+      typeof data.model === 'string' ? data.model : primaryModelFromUsage(data.modelUsage)
     const usage =
       typeof data.usage?.input_tokens === 'number' && typeof data.usage.output_tokens === 'number'
         ? {
