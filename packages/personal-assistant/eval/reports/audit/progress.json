@@ -32,7 +32,7 @@
     },
     "semantic-failure-match": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.333979,
       "blocked": false
     }

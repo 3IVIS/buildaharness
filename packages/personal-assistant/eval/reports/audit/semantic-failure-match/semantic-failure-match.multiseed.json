@@ -1,0 +1,100 @@
+{
+  "feature": "semantic-failure-match",
+  "title": "Semantic failure-mode match",
+  "hypothesis": "checkSemanticFailureMatch recognises known failure patterns described in different words often enough to earn its per-miss call and improve recovery routing.",
+  "control": "failureMatchOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+48% $/turn, +15% latency). Neutral with real cost — it does not earn its keep.",
+  "modelId": "claude-haiku-4-5-20251001",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-10T03:22:20.708Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.25,
+      "candidate": 0.375,
+      "deltaMean": 0.125,
+      "deltaCi95": 0.2829016319029166,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 0.25,
+      "candidate": 0.375,
+      "deltaMean": 0.125,
+      "deltaCi95": 0.2829016319029166,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 6977,
+      "candidate": 8039.666666666667,
+      "deltaMean": 1062.666666666667,
+      "deltaCi95": 655.8256196412106,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.005606625,
+      "candidate": 0.008309166666666666,
+      "deltaMean": 0.0027025416666666665,
+      "deltaCi95": 0.0026578216167154837,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 2991.6666666666665,
+      "candidate": 3308.6666666666665,
+      "deltaMean": 317,
+      "deltaCi95": 260.7479443617704,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.48202647165927215,
+  "latencyDeltaPct": 0.15230997085662418,
+  "tokenDeltaPct": 0.10596100278551533,
+  "injectionSignals": null
+}
