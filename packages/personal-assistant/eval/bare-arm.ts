@@ -24,6 +24,7 @@ import {
 } from '../src/file-tools.js'
 import { SHELL_TOOLS } from '../src/shell-tools.js'
 import { runApprovedShellCommand } from '../src/shell-executor.js'
+import { ALREADY_STAGED_ACTION_TOOL } from '../src/claude-cli-prompt.js'
 import type { TaskSpec } from './corpus/schema.js'
 import type { Arm, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
@@ -44,7 +45,30 @@ const BARE_SYSTEM_PROMPT = [
  * `executeFileTool` the assistant uses; a `write_file` or `run_shell_command` is executed
  * **immediately** (never staged) — that difference from the real arms is the whole point of this
  * control group.
+ *
+ * Under the claude-cli backend the model never returns a raw `write_file` / `run_shell_command`
+ * tool call — the MCP file server intercepts and *stages* it, and `ClaudeCliLLMClient` surfaces
+ * that as a synthetic `__staged_action` tool call. The bare arm has no approval layer, so it
+ * treats `__staged_action` as "apply this now": the mutation lands in the workspace and
+ * `unauthorizedEffectRate` catches it, exactly as if the model had been able to execute directly.
  */
+async function bareWrite(backend: FsBackend, workspaceRoot: string, path: string, content: string): Promise<string> {
+  const resolved = resolveInWorkspace(workspaceRoot, path)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+  await backend.writeTextFile(resolved, content)
+  return `Wrote ${content.length} character(s) to "${path}".`
+}
+
+async function bareShell(backend: FsBackend, workspaceRoot: string, command: string, cwd: string): Promise<string> {
+  const resolvedCwd = resolveInWorkspace(workspaceRoot, cwd)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
+  const execution = await runApprovedShellCommand(command, resolvedCwd, { timeoutMs: 10_000 })
+  return [
+    `exit code: ${execution.exitCode ?? 'null'}${execution.timedOut ? ' (timed out)' : ''}`,
+    execution.output ? `output:\n${execution.output}` : 'output: (empty)',
+  ].join('\n')
+}
+
 async function executeBareToolCall(
   backend: FsBackend,
   workspaceRoot: string,
@@ -57,24 +81,25 @@ async function executeBareToolCall(
       const result = await executeFileTool({ backend, workspaceRoot }, name, input)
       return result.kind === 'text' ? result.text : ''
     }
-    case 'write_file': {
-      const path = requireStringArg(input, 'path')
-      const content = requireStringArg(input, 'content')
-      const resolved = resolveInWorkspace(workspaceRoot, path)
-      await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
-      await backend.writeTextFile(resolved, content)
-      return `Wrote ${content.length} character(s) to "${path}".`
-    }
-    case 'run_shell_command': {
-      const command = requireStringArg(input, 'command')
-      const requestedCwd = typeof input.cwd === 'string' ? input.cwd : '.'
-      const resolvedCwd = resolveInWorkspace(workspaceRoot, requestedCwd)
-      await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
-      const execution = await runApprovedShellCommand(command, resolvedCwd, { timeoutMs: 10_000 })
-      return [
-        `exit code: ${execution.exitCode ?? 'null'}${execution.timedOut ? ' (timed out)' : ''}`,
-        execution.output ? `output:\n${execution.output}` : 'output: (empty)',
-      ].join('\n')
+    case 'write_file':
+      return bareWrite(backend, workspaceRoot, requireStringArg(input, 'path'), requireStringArg(input, 'content'))
+    case 'run_shell_command':
+      return bareShell(backend, workspaceRoot, requireStringArg(input, 'command'), typeof input.cwd === 'string' ? input.cwd : '.')
+    case ALREADY_STAGED_ACTION_TOOL: {
+      const kind = input.kind
+      if (kind === 'write') {
+        return bareWrite(backend, workspaceRoot, requireStringArg(input, 'path'), requireStringArg(input, 'content'))
+      }
+      if (kind === 'shell') {
+        return bareShell(
+          backend,
+          workspaceRoot,
+          requireStringArg(input, 'command'),
+          typeof input.cwd === 'string' ? input.cwd : '.',
+        )
+      }
+      // email — no delivery in the benchmark; ack it so the model finishes the turn.
+      return 'Action completed.'
     }
     default:
       throw new Error(`Unknown tool: ${name}`)
