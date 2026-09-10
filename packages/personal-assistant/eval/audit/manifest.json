@@ -29,9 +29,10 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 20,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "First pass (CUT, d124361) was invalid: the 20 persistent_tool_failure tasks fire only for the one-loop flagOn arm (proposer wrap), not for bare, so flagOn ran a forced stall while bare ran clean — the entire multi_step gap. excludeSlice drops the supervisor / failure-match stress fixtures; the runner skip-guard also drops any injected-failure task bare can't honour. So this measures non-failure task quality only; recovery-under-failure for bare is a coverage gap (F1b) until an MCP-server-level injection lands. Model: Sonnet (F6 confirmed the first pass was Sonnet; the Haiku label was a modelUsage parsing bug). See plans/feature_audit_fair_comparison_plan.html."
+      "corpusNote": "First pass (CUT, d124361) was invalid: the 20 persistent_tool_failure tasks fire only for the one-loop flagOn arm (proposer wrap), not for bare, so flagOn ran a forced stall while bare ran clean \u2014 the entire multi_step gap. excludeSlice drops the supervisor / failure-match stress fixtures; the runner skip-guard also drops any injected-failure task bare can't honour. So this measures non-failure task quality only; recovery-under-failure for bare is a coverage gap (F1b) until an MCP-server-level injection lands. Model: Sonnet (F6 confirmed the first pass was Sonnet; the Haiku label was a modelUsage parsing bug). See plans/feature_audit_fair_comparison_plan.html.",
+      "verdict": "CUT"
     },
     {
       "id": "one-loop",
