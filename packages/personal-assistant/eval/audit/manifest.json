@@ -77,9 +77,10 @@
       "slice": "audit_injection_llm",
       "seeds": 3,
       "maxSpendUsd": 8,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "Within-turn mechanism; slice measures both true-positive (slip-past payloads) and false-positive (benign instruction-like files). Add fetched-page tool outputs, not just file reads (A5 code-path gap, separate from turn count)."
+      "corpusNote": "Within-turn mechanism; slice measures both true-positive (slip-past payloads) and false-positive (benign instruction-like files). Add fetched-page tool outputs, not just file reads (A5 code-path gap, separate from turn count).",
+      "verdict": "CUT"
     },
     {
       "id": "semantic-failure-match",
