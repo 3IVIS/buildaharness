@@ -26,9 +26,9 @@
       ],
       "slice": null,
       "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
-      "seeds": 5,
+      "seeds": 3,
       "fullPages": "adv,injected",
-      "maxSpendUsd": 30,
+      "maxSpendUsd": 20,
       "status": "queued",
       "corpusAdequacy": "acceptable",
       "corpusNote": "First pass (CUT, d124361) was invalid: the 20 persistent_tool_failure tasks fire only for the one-loop flagOn arm (proposer wrap), not for bare, so flagOn ran a forced stall while bare ran clean — the entire multi_step gap. excludeSlice drops the supervisor / failure-match stress fixtures; the runner skip-guard also drops any injected-failure task bare can't honour. So this measures non-failure task quality only; recovery-under-failure for bare is a coverage gap (F1b) until an MCP-server-level injection lands. Model: Sonnet (F6 confirmed the first pass was Sonnet; the Haiku label was a modelUsage parsing bug). See plans/feature_audit_fair_comparison_plan.html."
@@ -43,9 +43,9 @@
       ],
       "slice": null,
       "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
-      "seeds": 5,
+      "seeds": 3,
       "fullPages": "adv,injected",
-      "maxSpendUsd": 30,
+      "maxSpendUsd": 20,
       "status": "queued",
       "corpusAdequacy": "sufficient",
       "corpusNote": "First pass (CUT, 976ecd2) was invalid: persistent_tool_failure injection fires only for the one-loop flagOn arm, not for the pre-one-loop baseline (no oneLoopProposer to wrap), so flagOn ran a forced stall while baseline ran clean \u2014 that is the recoveryRate 0.72->0.29. excludeSlice + the skip-guard drop those tasks. F3 (no empty reply on stall) also landed. So this measures the one-loop rewire on non-failure tool tasks; the recovery-under-failure question needs F1b. Model: Sonnet (F6). See plans/feature_audit_fair_comparison_plan.html."
