@@ -40,6 +40,9 @@ const SECRET_PATTERNS = [
   [/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '[redacted]'],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted]'],
   [/\b(api[_-]?key|secret|password|token|authorization|bearer)(["'\s:=]{1,4})([A-Za-z0-9._-]{16,})/gi, '$1$2[redacted]'],
+  // Email addresses — synthetic corpus, so an email in a transcript is fixture data or ambient
+  // PII the model pulled from the CLI's account context. Redact before publishing.
+  [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[redacted-email]'],
 ]
 export function scrubSecrets(text) {
   let out = String(text)

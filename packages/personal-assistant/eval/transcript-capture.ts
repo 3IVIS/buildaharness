@@ -62,6 +62,10 @@ const SECRET_PATTERNS: { re: RegExp; replace: string }[] = [
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replace: '[redacted]' },
   // key=value / "token": "..." style — keep the label, drop the value.
   { re: /\b(api[_-]?key|secret|password|token|authorization|bearer)(["'\s:=]{1,4})([A-Za-z0-9._-]{16,})/gi, replace: '$1$2[redacted]' },
+  // Email addresses — the corpus is synthetic, so any email in a transcript is either fixture
+  // data (redacting it is harmless) or ambient PII the model pulled in from the CLI's own account
+  // context (e.g. "check your email (you@example.com)"). Redact before anything is published.
+  { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replace: '[redacted-email]' },
 ]
 
 export function scrubSecrets(text: string): string {
