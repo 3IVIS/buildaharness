@@ -7,7 +7,7 @@
   "seeds": 3,
   "verdict": "CUT",
   "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+21% $/turn, -2% latency). Neutral with real cost — it does not earn its keep.",
-  "modelId": "claude-haiku-4-5-20251001",
+  "modelId": "claude-sonnet-5",
   "judgeModelId": "claude-sonnet-5",
   "generatedAt": "2026-09-10T01:04:28.729Z",
   "metrics": [

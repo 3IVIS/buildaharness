@@ -2,7 +2,7 @@
   "generatedAt": "2026-09-10T00:02:14.695Z",
   "corpusSize": 10,
   "judgeEnabled": true,
-  "modelId": "claude-haiku-4-5-20251001",
+  "modelId": "claude-sonnet-5",
   "judgeModelId": "claude-sonnet-5",
   "perArm": {
     "flagOn": {

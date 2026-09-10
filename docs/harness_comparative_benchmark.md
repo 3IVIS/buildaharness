@@ -5,7 +5,7 @@
 
 - **Verdict:** CUT — No task-success delta (CI includes 0) but the candidate costs materially more (+48% $/turn, +15% latency). Neutral with real cost — it does not earn its keep.
 - **Arms:** `failureMatchOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-10
-- **Model:** claude-haiku-4-5-20251001 · judge claude-sonnet-5
+- **Model:** claude-sonnet-5 · judge claude-sonnet-5
 - **Hypothesis:** checkSemanticFailureMatch recognises known failure patterns described in different words often enough to earn its per-miss call and improve recovery routing.
 
 | metric | control | candidate | Δ mean | CI95 | verdict |

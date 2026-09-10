@@ -7,7 +7,7 @@
   "seeds": 3,
   "verdict": "KEEP",
   "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+29% $/turn).",
-  "modelId": "claude-haiku-4-5-20251001",
+  "modelId": "claude-sonnet-5",
   "judgeModelId": "claude-sonnet-5",
   "generatedAt": "2026-09-09T22:13:19.088Z",
   "metrics": [
