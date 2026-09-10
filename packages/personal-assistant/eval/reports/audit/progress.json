@@ -31,9 +31,9 @@
       "blocked": false
     },
     "semantic-failure-match": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 0.229427,
+      "spendUsd": 0.333979,
       "blocked": false
     }
   }
