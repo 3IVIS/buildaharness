@@ -1,0 +1,55 @@
+{
+  "task": "session-no-compounding",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "Assume the default page size is 20. How many pages for 100 results?",
+  "events": [
+    {
+      "t": 1789054867806,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "Assume the default page size is 20. How many pages for 100 results?"
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"4\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"5 pages\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"4\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1694,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

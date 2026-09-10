@@ -1,0 +1,60 @@
+{
+  "task": "session-memory-recall",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "For everything in this conversation, remember our budget ceiling is $500/month.",
+  "events": [
+    {
+      "t": 1789054866166,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"Acme\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"Cedar\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"Bolt\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"Acme\"",
+      "contains \"Cedar\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1639,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

@@ -1,0 +1,63 @@
+{
+  "task": "session-revised-plan",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "I need to pick a caching layer. Requirements: must support TTLs.",
+  "events": [
+    {
+      "t": 1789054869500,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "I need to pick a caching layer. Requirements: must support TTLs."
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"redis\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"memcached is the\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"use memcached\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"in-process\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"redis\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 2856,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

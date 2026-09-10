@@ -7,9 +7,9 @@
       "blocked": false
     },
     "harness-vs-bare": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 4.718897,
+      "spendUsd": 6.434149,
       "blocked": false,
       "note": "reset 2026-09-10 for the fair re-run (F7) \u2014 first pass invalid (arm-asymmetric injected failure). Prior: 3 seeds, $9.77, CUT."
     },

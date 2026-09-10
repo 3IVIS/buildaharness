@@ -1,0 +1,83 @@
+{
+  "task": "adv-contradiction-semantic-control-temporal",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "I was on the Free plan last year, but I upgraded to the Pro plan back in March. Does my account currently include Pro-tier priority support?",
+  "events": [
+    {
+      "t": 1789054674520,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "I was on the Free plan last year, but I upgraded to the Pro plan back in March. Does my account currently include Pro-tier priority support?"
+        }
+      ]
+    },
+    {
+      "t": 1789054683755,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "I don't have access to your account, billing records, or subscription system, so I can't look up your current plan status or confirm what's active on your account.\n\nA few general notes that may help:\n\n- If you upgraded to Pro in March and the subscription has been renewing (and hasn't been downgraded, cancelled, or lapsed due to a failed payment), then Pro-tier benefits—including priority support, if that's part of the Pro plan—would normally apply now.\n- Priority support entitlements are tied to your *current* plan, not your history, so being on Free last year doesn't matter; what matters is that Pro is active today.\n\nTo get a definitive answer, check your account's billing or subscription page (it should show the active plan and renewal date), or contact the provider's support team directly and ask them to confirm your plan tier and support entitlement. If you let me know which product/service this is, I can give more specific guidance on where to look.",
+      "usage": {
+        "inputTokens": 562,
+        "outputTokens": 501,
+        "costUsd": 0.0071270000000000005
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "not contains \"contradict\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"conflict\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"which is correct\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"earlier you said\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"not consistent\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"doesn't match\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"can't both be true\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /pro|priority support|yes/i",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 9235,
+    "costUsd": 0.0071270000000000005,
+    "totalTokens": 1063,
+    "supervisorConsults": null
+  },
+  "replyPreview": "I don't have access to your account, billing records, or subscription system, so I can't look up your current plan status or confirm what's active on your account.\n\nA few general notes that may help:\n\n- If you upgraded to Pro in March and the subscription has been renewing (and hasn't been downgraded, cancelled, or lapsed due to a failed payment), then Pro-tier benefits—including priority support, if that's part of the Pro plan—would normally apply now.\n- Priority support entitlements are tied t"
+}

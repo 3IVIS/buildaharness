@@ -1,0 +1,63 @@
+{
+  "task": "lookup-largest-planet",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What is the largest planet in our solar system?",
+  "events": [
+    {
+      "t": 1789054842767,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What is the largest planet in our solar system?"
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"Jupiter\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"largest planet is Saturn\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"Saturn is the largest\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"the Sun is the largest planet\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"Jupiter\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1576,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

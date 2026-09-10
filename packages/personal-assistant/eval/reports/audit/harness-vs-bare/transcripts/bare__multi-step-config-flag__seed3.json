@@ -1,0 +1,64 @@
+{
+  "task": "multi-step-config-flag",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "Look at config.json and tell me whether debug logging is currently enabled. Answer yes or no and say which key you checked.",
+  "events": [
+    {
+      "t": 1789054845929,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "Look at config.json and tell me whether debug logging is currently enabled. Answer yes or no and say which key you checked."
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"logging\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"yes, debug logging is enabled\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"debug logging is on\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /\\bno\\b/i",
+        "verdict": "fail"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"logging\"",
+      "regex /\\bno\\b/i"
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1700,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}
