@@ -87,7 +87,7 @@ export interface TurnOptions {
    * exercise the Trajectory Supervisor's stall edge inside a single benchmark turn. Never
    * set by a real caller; ignored unless the one-loop proposer path is active.
    */
-  __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number }
+  __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number; onInjected?: () => void }
 }
 
 export interface PersonalAssistantOptions {

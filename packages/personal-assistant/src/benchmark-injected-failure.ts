@@ -35,6 +35,14 @@ export interface InjectedFailureOptions {
    * unbounded backend cost.
    */
   maxRealCalls?: number
+  /**
+   * Called exactly once, the first time the wrapper actually runs (i.e. the failure was really
+   * injected into this turn). The benchmark reads it back as `ArmTurnOutput.injectedFailureFired`
+   * so `recoveryRate` only counts tasks where the failure genuinely fired for this arm — not
+   * every task that merely *declares* an `injectedFailure` (see
+   * plans/feature_audit_fair_comparison_plan.html F2).
+   */
+  onInjected?: () => void
 }
 
 const INJECTED_FAILURE_CLASS = 'injected_persistent_tool_failure'
@@ -55,6 +63,7 @@ export function wrapProposerWithInjectedFailure(
     calls += 1
 
     if (calls === 1) {
+      opts.onInjected?.()
       const now = new Date().toISOString()
       for (let k = 0; k < opts.seedFailures; k++) {
         toolCtx.failureDiagnostics?.failure_history.push({

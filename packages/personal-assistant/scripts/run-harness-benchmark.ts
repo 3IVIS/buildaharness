@@ -18,6 +18,7 @@
  *   npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,lookup-capital
  *   npx tsx scripts/run-harness-benchmark.ts --arms=baseline
  *   npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup   # the S7 trajectory-supervisor slice
+ *   npx tsx scripts/run-harness-benchmark.ts --exclude-slice=supervisor_pivot,supervisor_lookup,...  # full corpus MINUS these slices (mutually exclusive with --slice)
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
  *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
  *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
   const taskFilter = arg('tasks')?.split(',').map((s) => s.trim())
   const armFilter = arg('arms')?.split(',').map((s) => s.trim())
   const sliceFilter = arg('slice')?.split(',').map((s) => s.trim())
+  const excludeSliceFilter = arg('exclude-slice')?.split(',').map((s) => s.trim())
   const gatePath = arg('gate')
   // Plan A1 — pin the model, on the record. Default sonnet for both the arms and the judge.
   const modelAlias = arg('model') ?? 'sonnet'
@@ -74,10 +76,19 @@ async function main(): Promise<void> {
   const transcriptDir = arg('transcripts')
   const seedTagArg = arg('seed-tag')
 
+  if (sliceFilter && excludeSliceFilter) {
+    console.error('--slice and --exclude-slice are mutually exclusive')
+    process.exit(2)
+  }
+
   let tasks = loadCorpus()
   if (taskFilter) tasks = tasks.filter((t) => taskFilter.includes(t.id))
   // --slice=supervisor_pivot,... — the trajectory-supervisor S7 slice (see eval/corpus/schema.ts).
   if (sliceFilter) tasks = tasks.filter((t) => t.slice !== undefined && sliceFilter.includes(t.slice))
+  // --exclude-slice=... — the whole corpus except these slices. For harness-vs-bare / one-loop,
+  // which want the full corpus minus the supervisor-specific stress fixtures. An untagged task
+  // (t.slice === undefined) is always kept.
+  if (excludeSliceFilter) tasks = tasks.filter((t) => t.slice === undefined || !excludeSliceFilter.includes(t.slice))
   if (tasks.length === 0) {
     console.error('no tasks matched')
     process.exit(2)

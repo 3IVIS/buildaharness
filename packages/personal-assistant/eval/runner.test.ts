@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { runBenchmark, type BenchmarkReport } from './runner.js'
 import { diffReports, renderMarkdown, renderDiff } from './report.js'
-import type { Arm, MakeLlm } from './arms.js'
+import type { Arm, ArmName, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
 import { parseTaskSpec, type TaskSpec } from './corpus/schema.js'
 
@@ -30,18 +30,31 @@ const TASKS: TaskSpec[] = [
     't',
   ),
   parseTaskSpec(
-    { id: 'r1', category: 'multi_step', intent: 'i', prompt: 'p', injectedFailure: 'first_tool_call_throws', tools: { file: true }, workspace: [{ path: 's.txt', content: 'ok' }], grader: { contains: ['done'] } },
+    { id: 'r1', category: 'multi_step', intent: 'i', prompt: 'p', injectedFailure: 'persistent_tool_failure', tools: { file: true }, workspace: [{ path: 's.txt', content: 'ok' }], grader: { contains: ['done'] } },
     't',
   ),
 ]
 
-/** An arm that returns a scripted output per task id. */
-function scriptedArm(name: 'baseline' | 'flagOn', script: Record<string, Partial<ArmTurnOutput>>): Arm {
+/**
+ * An arm that returns a scripted output per task id. Named `flagOn` by default so the
+ * asymmetric-injection skip-guard (runner.ts) doesn't drop `r1` — a `bare`/`baseline` arm can't
+ * honour `persistent_tool_failure`, so a run containing one skips r1 for every arm.
+ */
+function scriptedArm(name: ArmName, script: Record<string, Partial<ArmTurnOutput>>): Arm {
   return {
     name,
     label: `scripted ${name}`,
     async run(task) {
-      const base: ArmTurnOutput = { reply: '', status: 'ok', workspaceAfter: {}, stagedMutation: false, latencyMs: 100 }
+      const base: ArmTurnOutput = {
+        reply: '',
+        status: 'ok',
+        workspaceAfter: {},
+        stagedMutation: false,
+        latencyMs: 100,
+        // A scripted arm "honours" whatever injection its task declares — the real firing
+        // happens inside the assistant, which the fake doesn't run.
+        ...(task.injectedFailure ? { injectedFailureFired: true } : {}),
+      }
       const patch = script[task.id]
       if (!patch) return null // simulates "arm cannot run this task"
       return { ...base, ...patch }
@@ -51,14 +64,14 @@ function scriptedArm(name: 'baseline' | 'flagOn', script: Record<string, Partial
 
 describe('runBenchmark', () => {
   it('grades every arm × task, aggregates rates, and never touches the LLM', async () => {
-    const good = scriptedArm('baseline', {
+    const good = scriptedArm('flagOn', {
       c1: { reply: 'the answer is 42', inputTokens: 10, outputTokens: 5, costUsd: 0.001, latencyMs: 120 },
       m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' }, latencyMs: 200 },
       r1: { reply: 'all done', latencyMs: 150 },
     })
 
     const report = await runBenchmark({ tasks: TASKS, arms: [good], makeLlm: noLlm })
-    const agg = report.perArm.baseline
+    const agg = report.perArm.flagOn
 
     expect(agg.tasksRun).toBe(3)
     expect(agg.taskSuccessRate).toBe(1)
@@ -89,10 +102,30 @@ describe('runBenchmark', () => {
   })
 
   it('survives an arm that throws — the row is an error, not a crash', async () => {
-    const thrower: Arm = { name: 'baseline', label: 'x', run: async () => { throw new Error('boom') } }
+    const thrower: Arm = { name: 'flagOn', label: 'x', run: async () => { throw new Error('boom') } }
     const report = await runBenchmark({ tasks: TASKS, arms: [thrower], makeLlm: noLlm })
-    expect(report.perArm.baseline.tasksRun).toBe(3)
-    expect(report.perArm.baseline.taskSuccessRate).toBe(0)
+    expect(report.perArm.flagOn.tasksRun).toBe(3)
+    expect(report.perArm.flagOn.taskSuccessRate).toBe(0)
+  })
+
+  it('skips an injected-failure task for the whole run when an arm cannot honour it', async () => {
+    const flag = scriptedArm('flagOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
+    const bare = scriptedArm('bare', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
+    const report = await runBenchmark({ tasks: TASKS, arms: [flag, bare], makeLlm: noLlm })
+    expect(report.skippedForAsymmetry).toEqual(['r1'])
+    // r1 skipped for BOTH arms — neither is stress-tested while the other runs clean.
+    expect(report.perArm.flagOn.tasksRun).toBe(2)
+    expect(report.perArm.bare.tasksRun).toBe(2)
+    expect(report.perArm.flagOn.recoveryRate).toBeNull()
+  })
+
+  it('keeps an injected-failure task when every arm honours it', async () => {
+    const flag = scriptedArm('flagOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
+    const sup = scriptedArm('supervisorOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
+    const report = await runBenchmark({ tasks: TASKS, arms: [flag, sup], makeLlm: noLlm })
+    expect(report.skippedForAsymmetry).toEqual([])
+    expect(report.perArm.flagOn.tasksRun).toBe(3)
+    expect(report.perArm.flagOn.recoveryRate).toBe(1)
   })
 
   it('builds the AnswerClaim confusion matrix over claim-producing tasks with a mechanical ground truth', async () => {

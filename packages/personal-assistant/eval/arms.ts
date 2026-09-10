@@ -44,6 +44,40 @@ export interface Arm {
   run(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null>
 }
 
+export type InjectedFailureKind = NonNullable<TaskSpec['injectedFailure']>
+
+/** Arms that run the R2–R4 harness-driven proposer (`oneLoopMode === 'enabled'`). */
+const ONE_LOOP_ARMS: readonly ArmName[] = [
+  'flagOn',
+  'supervisorOn',
+  'contradictionOff',
+  'injectionDetectOff',
+  'failureMatchOff',
+]
+
+/**
+ * Whether a corpus task's `injectedFailure` mechanism actually fires for `arm` under the
+ * **claude-cli backend the benchmark runs on**. Both mechanisms are simulated *above* the fs
+ * backend, so neither is a real filesystem error the model retries past:
+ *
+ *   - `persistent_tool_failure` — `wrapProposerWithInjectedFailure` (assistant.ts:619) wraps the
+ *     one-loop proposer; it is a no-op with no `oneLoopProposer`, i.e. for `bare` and for the
+ *     pre-one-loop `baseline` path.
+ *   - `first_tool_call_throws` — `withFirstReadFailure` (fixtures.ts) wraps the `FsBackend`, which
+ *     claude-cli's out-of-process MCP reads never touch. Fires for no arm here (the wrapper is
+ *     kept only for proxy-backend unit tests).
+ *
+ * A benchmark comparison is only fair if every arm in it can honour a task's injected failure —
+ * otherwise one arm is stress-tested and the other runs clean. `runBenchmark` (runner.ts) skips
+ * a task that fails this for any arm in the run and records it in `report.skippedForAsymmetry`.
+ * See plans/feature_audit_fair_comparison_plan.html (Defect 1 / F0).
+ */
+export function armHonorsInjectedFailure(arm: ArmName, kind: InjectedFailureKind): boolean {
+  if (kind === 'persistent_tool_failure') return ONE_LOOP_ARMS.includes(arm)
+  // 'first_tool_call_throws' — proxy-backend fs wrapper, inert under claude-cli for every arm.
+  return false
+}
+
 interface RunArmOpts {
   /** Sets HARNESS_TRAJECTORY_SUPERVISOR=enabled around the turn — the `supervisorOn` arm. */
   supervisor?: boolean
@@ -138,15 +172,23 @@ async function runAssistantInner(
   const drainTranscript = (): TranscriptEvent[] => mergeTranscriptEvents(recording.drain(), sideEvents)
 
   // S7 stall induction — see benchmark-injected-failure.ts. Only meaningful on the
-  // one-loop proposer path (oneLoopMode === 'enabled').
+  // one-loop proposer path (oneLoopMode === 'enabled'); the wrapper's `onInjected` callback
+  // fires only when it genuinely runs, which is the real `injectedFailureFired` signal (F2).
   const sessionId = `eval-${task.id}`
+  let persistentFailureFired = false
   const injectedFor = (
     inj: TaskSpec['injectedFailure'],
     count: number | undefined,
   ): Parameters<typeof assistant.turn>[1] => {
     const o: Parameters<typeof assistant.turn>[1] = { sessionId }
     if (inj === 'persistent_tool_failure') {
-      o.__benchmarkInjectedFailure = { failIterations: count ?? 1, seedFailures: 3 }
+      o.__benchmarkInjectedFailure = {
+        failIterations: count ?? 1,
+        seedFailures: 3,
+        onInjected: () => {
+          persistentFailureFired = true
+        },
+      }
     }
     return o
   }
@@ -156,7 +198,6 @@ async function runAssistantInner(
     { prompt: task.prompt, addWorkspace: [], injectedFailure: task.injectedFailure, injectedFailureCount: task.injectedFailureCount },
     ...task.followups,
   ]
-  let anyPersistentFailure = task.injectedFailure === 'persistent_tool_failure'
   const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 }
   let sawUsage = false
 
@@ -169,7 +210,6 @@ async function runAssistantInner(
         for (const f of t.addWorkspace) ws.addFile(f.path, f.content)
         sideEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'turn_boundary', turn: i + 1, prompt: t.prompt } })
       }
-      if (t.injectedFailure === 'persistent_tool_failure') anyPersistentFailure = true
       result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount))
       if (result.usage) {
         sawUsage = true
@@ -195,7 +235,11 @@ async function runAssistantInner(
       costUsd: sawUsage ? usage.costUsd : undefined,
       latencyMs: Date.now() - started,
       turns: turns.length,
-      injectedFailureFired: firedProbe ? firedProbe() : anyPersistentFailure ? true : undefined,
+      // F2: a real fired-signal only — `withFirstReadFailure`'s probe for `first_tool_call_throws`,
+      // the injected-failure wrapper's `onInjected` for `persistent_tool_failure`. A task that
+      // merely *declares* an injectedFailure the arm can't honour reports `undefined` here, so it
+      // never inflates `recoveryRate`.
+      injectedFailureFired: firedProbe ? firedProbe() : persistentFailureFired ? true : undefined,
       supervisorConsults,
       supervisorDirectives: supervisorDirectives.length > 0 ? supervisorDirectives : undefined,
       transcript: drainTranscript(),
@@ -210,7 +254,7 @@ async function runAssistantInner(
       latencyMs: Date.now() - started,
       turns: turns.length,
       errorMessage: err instanceof Error ? err.message : String(err),
-      injectedFailureFired: firedProbe?.(),
+      injectedFailureFired: firedProbe ? firedProbe() : persistentFailureFired ? true : undefined,
       supervisorConsults,
       transcript: drainTranscript(),
     }

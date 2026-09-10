@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TaskSpec, TaskCategory } from './corpus/schema.js'
 import { gradeTask, type ArmTurnOutput, type GradedTask, type JudgeModel, type AnswerClaimCalibration } from './graders.js'
-import type { Arm, ArmName, MakeLlm } from './arms.js'
+import { armHonorsInjectedFailure, type Arm, type ArmName, type MakeLlm } from './arms.js'
 import { scrubSecrets } from './transcript-capture.js'
 
 export interface BenchmarkRow {
@@ -100,6 +100,15 @@ export interface BenchmarkReport {
   modelId?: string | null
   /** Resolved judge model id, when a judge ran. `null` when no judge or unknown. */
   judgeModelId?: string | null
+  /**
+   * Task ids skipped for **every** arm because at least one arm in the run cannot honour their
+   * `injectedFailure` (see `armHonorsInjectedFailure`). Empty / absent on a run where every arm
+   * shares the same injection support. A non-empty list is a coverage gap, not a fairness one —
+   * the comparison stays valid, it just says nothing about recovery-under-failure for those tasks.
+   * Optional so pre-existing report fixtures / on-disk reports parse unchanged; `runBenchmark`
+   * always sets it.
+   */
+  skippedForAsymmetry?: string[]
   perArm: Record<string, ArmAggregate>
   rows: BenchmarkRow[]
 }
@@ -271,13 +280,48 @@ function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
   }
 }
 
+/**
+ * A task with an `injectedFailure` (task-level or on any followup) that at least one arm in the
+ * run cannot honour → skip it for the whole run, so no arm is stress-tested while another runs
+ * clean. Returns the set of task ids to skip.
+ */
+function asymmetricInjectedFailureTasks(tasks: TaskSpec[], arms: Arm[]): Set<string> {
+  const armNames = arms.map((a) => a.name)
+  const skip = new Set<string>()
+  for (const task of tasks) {
+    const kinds = [task.injectedFailure, ...task.followups.map((f) => f.injectedFailure)].filter(
+      (k): k is NonNullable<typeof k> => k !== undefined,
+    )
+    if (kinds.length === 0) continue
+    const everyArmHonoursEvery = kinds.every((k) => armNames.every((n) => armHonorsInjectedFailure(n, k)))
+    if (!everyArmHonoursEvery) skip.add(task.id)
+  }
+  return skip
+}
+
 export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
   const rows: BenchmarkRow[] = []
   const perArm: Record<string, ArmAggregate> = {}
 
+  const skipForAsymmetry = asymmetricInjectedFailureTasks(opts.tasks, opts.arms)
+  if (skipForAsymmetry.size > 0) {
+    console.warn(
+      `runner: skipping ${skipForAsymmetry.size} injected-failure task(s) not honoured by every arm ` +
+        `in [${opts.arms.map((a) => a.name).join(', ')}] — kept fair rather than measured asymmetrically:\n  ` +
+        [...skipForAsymmetry].join('\n  '),
+    )
+  }
+
   for (const arm of opts.arms) {
     const armRows: BenchmarkRow[] = []
     for (const task of opts.tasks) {
+      if (skipForAsymmetry.has(task.id)) {
+        const row = toRow(arm, task, null, null)
+        armRows.push(row)
+        rows.push(row)
+        opts.onProgress?.({ arm: arm.name, taskId: task.id, success: false, skipped: true })
+        continue
+      }
       let out: ArmTurnOutput | null = null
       let graded: GradedTask | null = null
       try {
@@ -311,6 +355,7 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
     judgeEnabled: opts.judge !== undefined,
     modelId: opts.modelId ?? null,
     judgeModelId: opts.judgeModelId ?? null,
+    skippedForAsymmetry: [...skipForAsymmetry],
     perArm,
     rows,
   }
