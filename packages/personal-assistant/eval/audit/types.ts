@@ -42,6 +42,11 @@ export const AuditFeatureSchema = z.object({
   arms: z.tuple([z.string(), z.string()]),
   /** Corpus `slice` tag to filter to, or `null` for the full corpus. */
   slice: z.string().nullable(),
+  /** Full corpus MINUS these slice tags — for a full-corpus feature that must not run the
+   * supervisor-specific stress fixtures (harness-vs-bare / one-loop; see
+   * plans/feature_audit_fair_comparison_plan.html F0). Passed to the benchmark as
+   * `--exclude-slice`. Mutually exclusive with a non-null `slice`. */
+  excludeSlice: z.string().optional(),
   /** Optional extra `--tasks=` filter (comma-separated ids), applied on top of `slice`. */
   corpusFilter: z.string().optional(),
   /** Independent repeats of the whole matrix. 3 is the floor — one LLM-driven pass is not evidence. */
@@ -64,6 +69,9 @@ export const AuditFeatureSchema = z.object({
   corpusAdequacy: z.enum(['sufficient', 'acceptable', 'partial', 'scoped']).optional(),
   /** One line: what, if anything, the corpus is missing for this feature. */
   corpusNote: z.string().optional(),
+}).refine((f) => !(f.slice !== null && f.excludeSlice), {
+  message: 'slice and excludeSlice are mutually exclusive — excludeSlice only applies to a full-corpus (slice: null) feature',
+  path: ['excludeSlice'],
 })
 export type AuditFeature = z.infer<typeof AuditFeatureSchema>
 
@@ -93,8 +101,8 @@ export type AuditProgress = z.infer<typeof AuditProgressSchema>
 
 /** What the driver should do this invocation. */
 export type AuditCell =
-  | { kind: 'seed'; feature: string; arms: [string, string]; slice: string | null; seed: number; totalSeeds: number }
-  | { kind: 'finalize'; feature: string; arms: [string, string]; slice: string | null; seeds: number }
+  | { kind: 'seed'; feature: string; arms: [string, string]; slice: string | null; excludeSlice?: string; seed: number; totalSeeds: number }
+  | { kind: 'finalize'; feature: string; arms: [string, string]; slice: string | null; excludeSlice?: string; seeds: number }
 
 export function parseManifest(raw: unknown): AuditManifest {
   return AuditManifestSchema.parse(raw)

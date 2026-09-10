@@ -45,4 +45,15 @@ describe('eval/audit/manifest.json', () => {
       }
     }
   })
+
+  it('every excludeSlice part is a known slice with >= 1 corpus task, and only on a full-corpus feature', () => {
+    for (const f of manifest.features) {
+      if (!f.excludeSlice) continue
+      expect(f.slice, `feature "${f.id}": excludeSlice requires slice: null`).toBeNull()
+      for (const part of f.excludeSlice.split(',').map((s) => s.trim())) {
+        expect(knownSlices, `feature "${f.id}": excludeSlice "${part}" is not a known slice`).toContain(part)
+        expect(corpus.filter((t) => t.slice === part).length).toBeGreaterThan(0)
+      }
+    }
+  })
 })

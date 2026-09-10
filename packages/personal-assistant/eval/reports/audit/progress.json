@@ -7,16 +7,18 @@
       "blocked": false
     },
     "harness-vs-bare": {
-      "seedsDone": 3,
-      "finalized": true,
-      "spendUsd": 9.774703,
-      "blocked": false
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0,
+      "blocked": false,
+      "note": "reset 2026-09-10 for the fair re-run (F7) — first pass invalid (arm-asymmetric injected failure). Prior: 3 seeds, $9.77, CUT."
     },
     "one-loop": {
-      "seedsDone": 3,
-      "finalized": true,
-      "spendUsd": 7.927027,
-      "blocked": false
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0,
+      "blocked": false,
+      "note": "reset 2026-09-10 for the fair re-run (F7) — first pass invalid (baseline never saw the injected stall). Prior: 3 seeds, $7.93, CUT."
     },
     "semantic-contradiction": {
       "seedsDone": 3,

@@ -28,6 +28,7 @@ export function nextCell(manifest: AuditManifest, progress: AuditProgress): { ce
           feature: f.id,
           arms: [f.arms[0], f.arms[1]],
           slice: f.slice,
+          ...(f.excludeSlice ? { excludeSlice: f.excludeSlice } : {}),
           seed: p.seedsDone + 1,
           totalSeeds: f.seeds,
         },
@@ -36,7 +37,14 @@ export function nextCell(manifest: AuditManifest, progress: AuditProgress): { ce
     }
     if (!p.finalized) {
       return {
-        cell: { kind: 'finalize', feature: f.id, arms: [f.arms[0], f.arms[1]], slice: f.slice, seeds: f.seeds },
+        cell: {
+          kind: 'finalize',
+          feature: f.id,
+          arms: [f.arms[0], f.arms[1]],
+          slice: f.slice,
+          ...(f.excludeSlice ? { excludeSlice: f.excludeSlice } : {}),
+          seeds: f.seeds,
+        },
         blocked: false,
       }
     }

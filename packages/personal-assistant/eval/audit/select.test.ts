@@ -78,6 +78,12 @@ describe('nextCell', () => {
     )
     expect(cell).toMatchObject({ arms: ['bare', 'flagOn'], slice: 'supervisor_pivot' })
   })
+
+  it('carries excludeSlice through on both a seed cell and a finalize cell', () => {
+    const m = manifest({ id: 'feat-a', arms: ['bare', 'flagOn'], slice: null, excludeSlice: 'supervisor_pivot,supervisor_lookup', seeds: 2 })
+    expect(nextCell(m, progress({})).cell).toMatchObject({ kind: 'seed', excludeSlice: 'supervisor_pivot,supervisor_lookup' })
+    expect(nextCell(m, progress({ 'feat-a': { seedsDone: 2 } })).cell).toMatchObject({ kind: 'finalize', excludeSlice: 'supervisor_pivot,supervisor_lookup' })
+  })
 })
 
 describe('matrixComplete', () => {

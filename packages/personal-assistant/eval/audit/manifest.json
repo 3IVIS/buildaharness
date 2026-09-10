@@ -25,13 +25,13 @@
         "flagOn"
       ],
       "slice": null,
-      "seeds": 3,
+      "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
+      "seeds": 5,
       "fullPages": "adv,injected",
-      "maxSpendUsd": 25,
-      "status": "done",
+      "maxSpendUsd": 30,
+      "status": "queued",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "slice=null runs the full corpus, which now includes the harness_session multi-turn tasks (staged approval across turns, cross-turn correction, control-state escalation, no-compounding). Adversarial/safety sub-claim was already single-turn-appropriate.",
-      "verdict": "CUT"
+      "corpusNote": "First pass (CUT, d124361) was invalid: the 20 persistent_tool_failure tasks fire only for the one-loop flagOn arm (proposer wrap), not for bare, so flagOn ran a forced stall while bare ran clean — the entire multi_step gap. excludeSlice drops the supervisor / failure-match stress fixtures; the runner skip-guard also drops any injected-failure task bare can't honour. So this measures non-failure task quality only; recovery-under-failure for bare is a coverage gap (F1b) until an MCP-server-level injection lands. Model: Sonnet (F6 confirmed the first pass was Sonnet; the Haiku label was a modelUsage parsing bug). See plans/feature_audit_fair_comparison_plan.html."
     },
     {
       "id": "one-loop",
@@ -42,13 +42,13 @@
         "flagOn"
       ],
       "slice": null,
-      "seeds": 3,
+      "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
+      "seeds": 5,
       "fullPages": "adv,injected",
-      "maxSpendUsd": 25,
-      "status": "done",
+      "maxSpendUsd": 30,
+      "status": "queued",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "The mechanism is one turn's tool loop; the full corpus's tool-heavy tasks cover it. slice=null now also picks up the multi-turn tasks (contradiction / session / supervisor-conversation) \u2014 incidental, and a valid one-loop-over-a-session data point; no exclusion needed.",
-      "verdict": "CUT"
+      "corpusNote": "First pass (CUT, 976ecd2) was invalid: persistent_tool_failure injection fires only for the one-loop flagOn arm, not for the pre-one-loop baseline (no oneLoopProposer to wrap), so flagOn ran a forced stall while baseline ran clean \u2014 that is the recoveryRate 0.72->0.29. excludeSlice + the skip-guard drop those tasks. F3 (no empty reply on stall) also landed. So this measures the one-loop rewire on non-failure tool tasks; the recovery-under-failure question needs F1b. Model: Sonnet (F6). See plans/feature_audit_fair_comparison_plan.html."
     },
     {
       "id": "semantic-contradiction",
