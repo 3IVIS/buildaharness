@@ -1,0 +1,71 @@
+{
+  "task": "lookup-speed-of-light",
+  "arm": "bare",
+  "seed": "1",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What is the speed of light in a vacuum, in metres per second? Give the standard textbook value.",
+  "events": [
+    {
+      "t": 1789035640819,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What is the speed of light in a vacuum, in metres per second? Give the standard textbook value."
+        }
+      ]
+    },
+    {
+      "t": 1789035643457,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "The speed of light in a vacuum is 299,792,458 metres per second (exactly, by definition). This is often approximated as 3.00 × 10⁸ m/s in textbooks.",
+      "usage": {
+        "inputTokens": 547,
+        "outputTokens": 62,
+        "costUsd": 0.002693
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "not contains \"299,792,459\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"299,000,000 m/s\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"2,998,000 m/s\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"3,000 m/s\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /299[,. ]?792[,. ]?458|3\\s*(×|x|\\*)\\s*10\\s*\\^?\\s*8|300[,. ]?000[,. ]?000/i",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 2638,
+    "costUsd": 0.002693,
+    "totalTokens": 609,
+    "supervisorConsults": null
+  },
+  "replyPreview": "The speed of light in a vacuum is 299,792,458 metres per second (exactly, by definition). This is often approximated as 3.00 × 10⁸ m/s in textbooks."
+}
