@@ -1,0 +1,83 @@
+{
+  "task": "adv-contradiction-semantic-control-temporal",
+  "arm": "bare",
+  "seed": "2",
+  "modelId": "claude-sonnet-5",
+  "prompt": "I was on the Free plan last year, but I upgraded to the Pro plan back in March. Does my account currently include Pro-tier priority support?",
+  "events": [
+    {
+      "t": 1789043002910,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "I was on the Free plan last year, but I upgraded to the Pro plan back in March. Does my account currently include Pro-tier priority support?"
+        }
+      ]
+    },
+    {
+      "t": 1789043011433,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "I don't have any way to look up your account or billing status, so I can't confirm what plan or support tier your account currently has.\n\nThat said, here's the general logic: Pro-tier priority support is tied to having an active Pro subscription. If you upgraded in March and the subscription has remained active (payments current, no downgrade or cancellation), then priority support would normally be included as part of that plan. The fact that you were on Free previously doesn't matter—what counts is your current active subscription.\n\nTo verify for certain, I'd recommend:\n- Checking your billing/subscription page in account settings, which should show your current plan and renewal status.\n- Looking for a \"Support\" or \"Plan features\" section that lists whether priority support is active.\n- Contacting support directly (via your account) and asking them to confirm your tier.\n\nIf you can share a screenshot or the text of your subscription page, I can help you interpret it.",
+      "usage": {
+        "inputTokens": 562,
+        "outputTokens": 438,
+        "costUsd": 0.006497
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "not contains \"contradict\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"conflict\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"which is correct\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"earlier you said\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"not consistent\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"doesn't match\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"can't both be true\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /pro|priority support|yes/i",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 8523,
+    "costUsd": 0.006497,
+    "totalTokens": 1000,
+    "supervisorConsults": null
+  },
+  "replyPreview": "I don't have any way to look up your account or billing status, so I can't confirm what plan or support tier your account currently has.\n\nThat said, here's the general logic: Pro-tier priority support is tied to having an active Pro subscription. If you upgraded in March and the subscription has remained active (payments current, no downgrade or cancellation), then priority support would normally be included as part of that plan. The fact that you were on Free previously doesn't matter—what coun"
+}

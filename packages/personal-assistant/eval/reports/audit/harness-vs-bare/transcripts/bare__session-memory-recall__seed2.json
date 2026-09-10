@@ -1,0 +1,159 @@
+{
+  "task": "session-memory-recall",
+  "arm": "bare",
+  "seed": "2",
+  "modelId": "claude-sonnet-5",
+  "prompt": "For everything in this conversation, remember our budget ceiling is $500/month.",
+  "events": [
+    {
+      "t": 1789043431572,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        }
+      ]
+    },
+    {
+      "t": 1789043434751,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "Got it — I'll keep all recommendations and plans within a $500/month budget ceiling. Let me know what you'd like to work on.",
+      "usage": {
+        "inputTokens": 2,
+        "outputTokens": 75,
+        "costUsd": 0.0039824
+      }
+    },
+    {
+      "t": 1789043434751,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it — I'll keep all recommendations and plans within a $500/month budget ceiling. Let me know what you'd like to work on."
+        },
+        {
+          "role": "user",
+          "content": "What region is Acme hosted in? (guess is fine)"
+        }
+      ]
+    },
+    {
+      "t": 1789043434751,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_boundary",
+        "turn": 2,
+        "prompt": "What region is Acme hosted in? (guess is fine)"
+      }
+    },
+    {
+      "t": 1789043442703,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "I don't have any data on Acme's hosting region — vendors.csv only lists monthly cost ($420, which fits under our $500/month ceiling), no location info. So this is a pure guess: probably US East (e.g., AWS us-east-1 / Northern Virginia), since that's the most common default region for US-based SaaS vendors. But that's just a guess with no supporting data.",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 362,
+        "costUsd": 0.0097832
+      }
+    },
+    {
+      "t": 1789043442703,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it — I'll keep all recommendations and plans within a $500/month budget ceiling. Let me know what you'd like to work on."
+        },
+        {
+          "role": "user",
+          "content": "What region is Acme hosted in? (guess is fine)"
+        },
+        {
+          "role": "assistant",
+          "content": "I don't have any data on Acme's hosting region — vendors.csv only lists monthly cost ($420, which fits under our $500/month ceiling), no location info. So this is a pure guess: probably US East (e.g., AWS us-east-1 / Northern Virginia), since that's the most common default region for US-based SaaS vendors. But that's just a guess with no supporting data."
+        },
+        {
+          "role": "user",
+          "content": "Thanks. Now — from vendors.csv, which vendors could we actually afford?"
+        }
+      ]
+    },
+    {
+      "t": 1789043442703,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_boundary",
+        "turn": 3,
+        "prompt": "Thanks. Now — from vendors.csv, which vendors could we actually afford?"
+      }
+    },
+    {
+      "t": 1789043450069,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "Within the $500/month ceiling, here's what vendors.csv shows:\n\n| Vendor | Monthly cost | Affordable? |\n|--------|-------------|-------------|\n| Acme | $420 | ✅ Yes |\n| Cedar | $480 | ✅ Yes |\n| Bolt | $610 | ❌ No — over by $110 |\n\nSo **Acme** and **Cedar** each fit under the $500/month ceiling on their own. **Bolt** does not.\n\nNote: you can only afford one of them at a time — Acme + Cedar together is $900/month, well over the ceiling.",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 397,
+        "costUsd": 0.0107282
+      }
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "contains \"Acme\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "contains \"Cedar\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"Bolt\"",
+        "verdict": "fail"
+      }
+    ],
+    "failedChecks": [
+      "not contains \"Bolt\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 18497,
+    "costUsd": 0.0244938,
+    "totalTokens": 848,
+    "supervisorConsults": null
+  },
+  "replyPreview": "Within the $500/month ceiling, here's what vendors.csv shows:\n\n| Vendor | Monthly cost | Affordable? |\n|--------|-------------|-------------|\n| Acme | $420 | ✅ Yes |\n| Cedar | $480 | ✅ Yes |\n| Bolt | $610 | ❌ No — over by $110 |\n\nSo **Acme** and **Cedar** each fit under the $500/month ceiling on their own. **Bolt** does not.\n\nNote: you can only afford one of them at a time — Acme + Cedar together is $900/month, well over the ceiling."
+}
