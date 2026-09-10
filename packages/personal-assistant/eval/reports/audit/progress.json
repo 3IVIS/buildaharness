@@ -14,9 +14,9 @@
       "note": "reset 2026-09-10 for the fair re-run (F7) \u2014 first pass invalid (arm-asymmetric injected failure). Prior: 3 seeds, $9.77, CUT."
     },
     "one-loop": {
-      "seedsDone": 0,
+      "seedsDone": 1,
       "finalized": false,
-      "spendUsd": 0,
+      "spendUsd": 2.229742,
       "blocked": false,
       "note": "reset 2026-09-10 for the fair re-run (F7) \u2014 first pass invalid (baseline never saw the injected stall). Prior: 3 seeds, $7.93, CUT."
     },
