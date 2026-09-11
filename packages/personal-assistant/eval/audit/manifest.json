@@ -47,9 +47,10 @@
       "seeds": 3,
       "fullPages": "adv,injected",
       "maxSpendUsd": 20,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "sufficient",
-      "corpusNote": "First pass (CUT, 976ecd2) was invalid: persistent_tool_failure injection fires only for the one-loop flagOn arm, not for the pre-one-loop baseline (no oneLoopProposer to wrap), so flagOn ran a forced stall while baseline ran clean \u2014 that is the recoveryRate 0.72->0.29. excludeSlice + the skip-guard drop those tasks. F3 (no empty reply on stall) also landed. So this measures the one-loop rewire on non-failure tool tasks; the recovery-under-failure question needs F1b. Model: Sonnet (F6). See plans/feature_audit_fair_comparison_plan.html."
+      "corpusNote": "First pass (CUT, 976ecd2) was invalid: persistent_tool_failure injection fires only for the one-loop flagOn arm, not for the pre-one-loop baseline (no oneLoopProposer to wrap), so flagOn ran a forced stall while baseline ran clean \u2014 that is the recoveryRate 0.72->0.29. excludeSlice + the skip-guard drop those tasks. F3 (no empty reply on stall) also landed. So this measures the one-loop rewire on non-failure tool tasks; the recovery-under-failure question needs F1b. Model: Sonnet (F6). See plans/feature_audit_fair_comparison_plan.html.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "semantic-contradiction",
