@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { auditVerdict, injectionAuditSignals, buildMultiSeedReport } from './aggregate.js'
+import { auditVerdict, injectionAuditSignals, buildMultiSeedReport, observationLabel } from './aggregate.js'
 import type { BenchmarkReport, ArmAggregate, BenchmarkRow } from '../runner.js'
 import type { TaskCategory } from '../corpus/schema.js'
 
@@ -146,5 +146,46 @@ describe('injectionAuditSignals (Phase A5)', () => {
     )
     expect(inj.injectionSignals).not.toBeNull()
     expect(inj.injectionSignals?.candidate).toBe('flagOn')
+  })
+})
+
+describe('observationLabel', () => {
+  function report(successDelta: number, costDeltaPct: number | null) {
+    return {
+      metrics: [{ metric: 'taskSuccessRate', control: 0.5, candidate: 0.5 + successDelta, deltaMean: successDelta, deltaCi95: 1, positive: false, regressed: false }],
+      costDeltaPct,
+    }
+  }
+
+  it('better results at a materially higher cost (harness-vs-bare shape)', () => {
+    expect(observationLabel(report(0.16, 0.77))).toBe('Better results, at higher cost')
+  })
+
+  it('worse results at a materially higher cost (a regression)', () => {
+    expect(observationLabel(report(-0.1, 0.3))).toBe('Worse results, at higher cost')
+  })
+
+  it('no measurable difference at a materially higher cost', () => {
+    expect(observationLabel(report(0.01, 0.2))).toBe('No measurable improvement, at extra cost')
+  })
+
+  it('no measurable difference and no material cost change', () => {
+    expect(observationLabel(report(0.01, 0.02))).toBe('No measurable difference')
+  })
+
+  it('no measurable difference but cheaper', () => {
+    expect(observationLabel(report(0.01, -0.18))).toBe('No measurable difference, but cheaper')
+  })
+
+  it('better results with no added cost', () => {
+    expect(observationLabel(report(0.08, 0.02))).toBe('Better results, no added cost')
+  })
+
+  it('better results and cheaper', () => {
+    expect(observationLabel(report(0.08, -0.2))).toBe('Better results, and cheaper')
+  })
+
+  it('treats a null cost delta as similar cost', () => {
+    expect(observationLabel(report(0.08, null))).toBe('Better results, no added cost')
   })
 })

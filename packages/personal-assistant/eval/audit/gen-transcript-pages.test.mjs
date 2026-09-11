@@ -104,7 +104,7 @@ describe('gen-transcript-pages — full pages (default)', () => {
 
   it('shows the feature verdict and hypothesis on the index', () => {
     const idx = readFileSync(join(out.outDir, 'index.html'), 'utf8')
-    expect(idx).toContain('INCONCLUSIVE')
+    expect(idx).toContain('Better results, at higher cost')
     expect(idx).toContain('exercise gen-transcript-pages.mjs')
   })
 

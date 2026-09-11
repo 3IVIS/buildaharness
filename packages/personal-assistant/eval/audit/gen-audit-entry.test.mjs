@@ -70,7 +70,7 @@ describe('gen-audit-entry', () => {
     expect(t).toContain('<!-- audit-entry:semantic-contradiction start -->')
     expect(t).toContain('<!-- audit-entry:semantic-contradiction end -->')
     expect(t).toContain('## Audit — Semantic contradiction check')
-    expect(t).toContain('**Verdict:** CUT')
+    expect(t).toContain('**Verdict:** No measurable improvement, at extra cost')
     expect(t).toContain('| taskSuccessRate | 0.6 | 0.62 |')
     expect(t).toContain('cost +40%, latency +10%, tokens +25%')
     // the pre-existing content survives
@@ -80,7 +80,9 @@ describe('gen-audit-entry', () => {
   it('adds an HTML entry before <footer> with the verdict badge and a runs link', () => {
     write(report())
     const t = html()
-    expect(t).toContain('<h2 id="audit-semantic-contradiction">Audit &mdash; Semantic contradiction check <span class="badge cut">CUT</span></h2>')
+    expect(t).toContain(
+      '<h2 id="audit-semantic-contradiction">Audit &mdash; Semantic contradiction check <span class="badge cut">No measurable improvement, at extra cost</span></h2>',
+    )
     expect(t).toContain('href="/harness-evaluation/semantic-contradiction/"')
     expect(t.indexOf('audit-entry:semantic-contradiction start')).toBeLessThan(t.indexOf('<footer>'))
   })
@@ -99,8 +101,8 @@ describe('gen-audit-entry', () => {
     write(report({ verdict: 'KEEP', rationale: 'It clears CI now.' }))
     const t = html()
     expect(t.match(/audit-entry:semantic-contradiction start/g)).toHaveLength(1)
-    expect(t).toContain('<span class="badge keep">KEEP</span>')
-    expect(t).not.toContain('badge cut">CUT')
+    expect(t).toContain('<span class="badge keep">')
+    expect(t).not.toContain('badge cut">')
   })
 
   it('a second feature is added without clobbering the first', () => {
@@ -109,7 +111,7 @@ describe('gen-audit-entry', () => {
     const t = html()
     expect(t).toContain('audit-entry:semantic-contradiction start')
     expect(t).toContain('audit-entry:llm-injection-detect start')
-    expect(t).toContain('<span class="badge med">INCONCLUSIVE</span>')
+    expect(t).toContain('<span class="badge med">No measurable improvement, at extra cost</span>')
   })
 
   it('esc escapes HTML metacharacters', () => {

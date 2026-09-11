@@ -205,3 +205,33 @@ export function buildMultiSeedReport(
     injectionSignals: feature.id === 'llm-injection-detect' ? injectionAuditSignals(seedReports, candidate) : null,
   }
 }
+
+/** How far a task-success delta must move before it reads as "better"/"worse" rather than "no measurable difference". */
+const MATERIAL_SUCCESS_DELTA = 0.05 // ±5 points
+
+/**
+ * The short, plain-language headline every verdict badge shows — replaces the bare
+ * KEEP/CUT/INCONCLUSIVE word everywhere a verdict is displayed (the badge's color still tracks
+ * `verdict` for an at-a-glance signal; this is just what it says). Describes what the run
+ * observed — direction of the task-success delta and of the cost delta — not whether either
+ * cleared its CI band. The `rationale` string next to it still carries that nuance.
+ */
+export function observationLabel(r: Pick<AuditMultiSeedReport, 'metrics' | 'costDeltaPct'>): string {
+  const success = r.metrics.find((m) => m.metric === 'taskSuccessRate')
+  const successDelta = success?.deltaMean ?? 0
+  const direction = successDelta > MATERIAL_SUCCESS_DELTA ? 'better' : successDelta < -MATERIAL_SUCCESS_DELTA ? 'worse' : 'flat'
+
+  const cost = r.costDeltaPct
+  const costDirection =
+    cost !== null && cost > MATERIAL_COST_INCREASE ? 'costlier' : cost !== null && cost < -MATERIAL_COST_INCREASE ? 'cheaper' : 'similar'
+
+  if (direction === 'flat') {
+    if (costDirection === 'costlier') return 'No measurable improvement, at extra cost'
+    if (costDirection === 'cheaper') return 'No measurable difference, but cheaper'
+    return 'No measurable difference'
+  }
+  const results = direction === 'better' ? 'Better results' : 'Worse results'
+  if (costDirection === 'costlier') return `${results}, at higher cost`
+  if (costDirection === 'cheaper') return `${results}, and cheaper`
+  return `${results}, no added cost`
+}

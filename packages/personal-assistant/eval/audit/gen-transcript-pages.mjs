@@ -111,6 +111,35 @@ function mean(arr, f) {
 
 const VERDICT_CLASS = { KEEP: 'keep', CUT: 'cut', INCONCLUSIVE: 'inconclusive' }
 
+/** How far a task-success delta must move before it reads as "better"/"worse" rather than "no measurable difference". */
+const MATERIAL_SUCCESS_DELTA = 0.05 // ±5 points
+const MATERIAL_COST_INCREASE = 0.1 // ±10% — mirrors aggregate.ts's own threshold
+
+/**
+ * The short, plain-language headline the verdict badge shows, in place of the bare
+ * KEEP/CUT/INCONCLUSIVE word. Mirrors `aggregate.ts`'s `observationLabel` — duplicated rather than
+ * imported because this script runs as a build-free `.mjs` and that file is TypeScript.
+ */
+function observationLabel(r) {
+  const success = r.metrics.find((m) => m.metric === 'taskSuccessRate')
+  const successDelta = success?.deltaMean ?? 0
+  const direction = successDelta > MATERIAL_SUCCESS_DELTA ? 'better' : successDelta < -MATERIAL_SUCCESS_DELTA ? 'worse' : 'flat'
+
+  const cost = r.costDeltaPct
+  const costDirection =
+    cost !== null && cost > MATERIAL_COST_INCREASE ? 'costlier' : cost !== null && cost < -MATERIAL_COST_INCREASE ? 'cheaper' : 'similar'
+
+  if (direction === 'flat') {
+    if (costDirection === 'costlier') return 'No measurable improvement, at extra cost'
+    if (costDirection === 'cheaper') return 'No measurable difference, but cheaper'
+    return 'No measurable difference'
+  }
+  const results = direction === 'better' ? 'Better results' : 'Worse results'
+  if (costDirection === 'costlier') return `${results}, at higher cost`
+  if (costDirection === 'cheaper') return `${results}, and cheaper`
+  return `${results}, no added cost`
+}
+
 function parseArgs(argv) {
   const args = {}
   for (const a of argv) {
@@ -609,7 +638,7 @@ ${anySupervisor ? `<td class="num">${supTotal}</td>` : ''}
 
   const body = `<span class="eyebrow">Feature Value Audit</span>
 <h1>${esc(report.title)}</h1>
-<p><span class="verdict ${vClass}">${esc(report.verdict)}</span></p>
+<p><span class="verdict ${vClass}">${esc(observationLabel(report))}</span></p>
 ${modelLine(report)}
 <p><strong>Hypothesis.</strong> ${esc(report.hypothesis)}</p>
 <div class="callout ${vClass === 'keep' ? 'keep' : vClass === 'cut' ? 'cut' : ''}"><p>${esc(report.rationale)}</p></div>

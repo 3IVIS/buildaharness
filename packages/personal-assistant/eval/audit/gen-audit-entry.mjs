@@ -32,6 +32,35 @@ export function esc(s) {
 
 const VERDICT_BADGE = { KEEP: 'keep', CUT: 'cut', INCONCLUSIVE: 'med' }
 
+/** How far a task-success delta must move before it reads as "better"/"worse" rather than "no measurable difference". */
+const MATERIAL_SUCCESS_DELTA = 0.05 // ±5 points
+const MATERIAL_COST_INCREASE = 0.1 // ±10% — mirrors aggregate.ts's own threshold
+
+/**
+ * The short, plain-language headline every verdict badge shows, in place of the bare
+ * KEEP/CUT/INCONCLUSIVE word. Mirrors `aggregate.ts`'s `observationLabel` — duplicated rather than
+ * imported because this script runs as a build-free `.mjs` and that file is TypeScript.
+ */
+function observationLabel(r) {
+  const success = r.metrics.find((m) => m.metric === 'taskSuccessRate')
+  const successDelta = success?.deltaMean ?? 0
+  const direction = successDelta > MATERIAL_SUCCESS_DELTA ? 'better' : successDelta < -MATERIAL_SUCCESS_DELTA ? 'worse' : 'flat'
+
+  const cost = r.costDeltaPct
+  const costDirection =
+    cost !== null && cost > MATERIAL_COST_INCREASE ? 'costlier' : cost !== null && cost < -MATERIAL_COST_INCREASE ? 'cheaper' : 'similar'
+
+  if (direction === 'flat') {
+    if (costDirection === 'costlier') return 'No measurable improvement, at extra cost'
+    if (costDirection === 'cheaper') return 'No measurable difference, but cheaper'
+    return 'No measurable difference'
+  }
+  const results = direction === 'better' ? 'Better results' : 'Worse results'
+  if (costDirection === 'costlier') return `${results}, at higher cost`
+  if (costDirection === 'cheaper') return `${results}, and cheaper`
+  return `${results}, no added cost`
+}
+
 function fmtPct(x) {
   if (x === null || x === undefined) return '—'
   return `${x > 0 ? '+' : ''}${(x * 100).toFixed(0)}%`
@@ -67,7 +96,7 @@ function mdSection(r) {
   return [
     `## Audit — ${r.title}`,
     '',
-    `- **Verdict:** ${r.verdict} — ${r.rationale}`,
+    `- **Verdict:** ${observationLabel(r)} — ${r.rationale}`,
     `- **Arms:** \`${r.control}\` (control) vs \`${r.candidate}\` (candidate) · ${r.seeds} seeds · ${date}`,
     `- **Model:** ${r.modelId ?? 'unknown'} · judge ${r.judgeModelId ?? 'unknown'}`,
     `- **Hypothesis:** ${r.hypothesis}`,
@@ -92,7 +121,7 @@ function htmlEntry(r) {
     )
     .join('\n')
   return [
-    `<h2 id="audit-${esc(r.feature)}">Audit &mdash; ${esc(r.title)} <span class="badge ${badge}">${esc(r.verdict)}</span></h2>`,
+    `<h2 id="audit-${esc(r.feature)}">Audit &mdash; ${esc(r.title)} <span class="badge ${badge}">${esc(observationLabel(r))}</span></h2>`,
     `<p><strong>Hypothesis.</strong> ${esc(r.hypothesis)}</p>`,
     `<p><strong>Verdict.</strong> ${esc(r.rationale)}</p>`,
     `<p>Arms <code>${esc(r.control)}</code> (control) vs <code>${esc(r.candidate)}</code> (candidate) &middot; ` +
