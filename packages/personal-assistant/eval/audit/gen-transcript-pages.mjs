@@ -1,7 +1,14 @@
-#!/usr/bin/env node
 /**
  * Feature Value Audit — transcript page generator (Plan A2,
  * plans/feature_audit_automation_plan.html).
+ *
+ * No shebang here on purpose: this file is never executed directly (not +x; every caller does
+ * `node eval/audit/gen-transcript-pages.mjs ...`), and a leading `#!` line combined with the
+ * dynamic `import()` in loadCaseStudy() below trips a parse bug in Vite/Rollup's SSR-transform
+ * AST parser (`ssrTransformScript` → `parseAstAsync`, throws "Expected ident") — plain Node,
+ * esbuild, and a full Rollup build all parse the exact same source fine; only that specific
+ * lightweight parse path chokes on shebang + dynamic-import together. Confirmed by bisection
+ * 2026-09-11. Keep this file shebang-free.
  *
  * Turns a feature's `<feature>.multiseed.json` (see aggregate.ts `AuditMultiSeedReport`) plus its
  * per-run transcript files (`<arm>__<task>__seed<n>.json`, written by runner.ts under Plan A1) into
@@ -24,9 +31,38 @@
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
+
+/**
+ * Optional hand-authored case-study prose for a feature — `case-studies/<feature>.mjs`, a plain
+ * ESM module `export default`ing `{ mechanism, hypothesis, testDesign, findings, history? }` as
+ * HTML-string fields (see case-studies/harness-vs-bare.mjs for the shape and why this exists:
+ * this generator deletes and rebuilds the whole per-feature output directory on every run, so any
+ * narrative content has to be a source-controlled *input*, not something pasted into the output).
+ * Returns null if the feature has none yet — the section is simply omitted, not an error.
+ */
+export async function loadCaseStudy(featureId) {
+  const path = join(HERE, 'case-studies', `${featureId}.mjs`)
+  if (!existsSync(path)) return null
+  const url = pathToFileURL(path).href
+  const mod = await import(url)
+  return mod.default
+}
+
+export function renderCaseStudy(caseStudy) {
+  if (!caseStudy) return ''
+  const sections = [
+    caseStudy.mechanism && `<h3>What it does</h3>${caseStudy.mechanism}`,
+    caseStudy.hypothesis && `<h3>Why we hypothesized it would help</h3>${caseStudy.hypothesis}`,
+    caseStudy.testDesign && `<h3>How it was tested</h3>${caseStudy.testDesign}`,
+    caseStudy.history,
+    caseStudy.findings && `<h3>What we found</h3>${caseStudy.findings}`,
+  ].filter(Boolean)
+  if (!sections.length) return ''
+  return `<h2>Case study</h2>${sections.join('\n')}`
+}
 
 // ── secret scrub — a copy of transcript-capture.ts's patterns (that file is TS; this is .mjs).
 // Belt-and-braces: the transcript files are already scrubbed twice upstream. Keep in sync by hand.
@@ -563,7 +599,7 @@ function modelLine(report) {
 }
 
 // ── index.html ────────────────────────────────────────────────────────────────────────────────
-function renderIndex(report, runs, fullPages, css) {
+function renderIndex(report, runs, fullPages, css, caseStudy) {
   const vClass = VERDICT_CLASS[report.verdict] ?? 'inconclusive'
 
   const metricRows = report.metrics
@@ -647,6 +683,8 @@ ${modelLine(report)}
 <p>Arms: <code>${esc(report.control)}</code> (control) vs <code>${esc(report.candidate)}</code> (candidate). Green row = candidate ahead with CI clearing 0; red = gating regression.</p>
 <table class="cmp-table"><thead><tr><th>Metric</th><th>${esc(report.control)}</th><th>${esc(report.candidate)}</th><th>&Delta;mean</th><th>&plusmn;CI95</th></tr></thead><tbody>${metricRows}</tbody></table>
 <p>Cost ${fmtPct(report.costDeltaPct)} &middot; latency ${fmtPct(report.latencyDeltaPct)} &middot; tokens ${fmtPct(report.tokenDeltaPct)} (candidate vs control).</p>
+
+${renderCaseStudy(caseStudy)}
 
 <h2>Runs <span class="sub">&mdash; ${tasks.length} task${tasks.length === 1 ? '' : 's'} &times; ${report.seeds} seed${report.seeds === 1 ? '' : 's'}, ${runs.length} runs, one row per task</span></h2>
 <div class="filter-box"><input id="f" type="text" placeholder="filter by task…" oninput="filterRows()"></div>
@@ -835,7 +873,7 @@ ${traces}
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────────────────────
-export function generate({ reportPath, transcriptsDir, pagesRoot, feature, fullPages }) {
+export async function generate({ reportPath, transcriptsDir, pagesRoot, feature, fullPages }) {
   const report = JSON.parse(readFileSync(reportPath, 'utf8'))
   const featureId = feature || report.feature
   if (!featureId) throw new Error('no feature id (pass --feature= or set it in the report)')
@@ -855,7 +893,8 @@ export function generate({ reportPath, transcriptsDir, pagesRoot, feature, fullP
     written.push(name)
   }
 
-  write('index.html', renderIndex(report, runs, effFullPages, css))
+  const caseStudy = await loadCaseStudy(featureId)
+  write('index.html', renderIndex(report, runs, effFullPages, css, caseStudy))
 
   for (const run of runs) {
     if (!runGetsPage(run, effFullPages)) continue
@@ -872,7 +911,7 @@ export function generate({ reportPath, transcriptsDir, pagesRoot, feature, fullP
   return { outDir, written }
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2))
   const reportPath = args.report && resolve(args.report)
   const transcriptsDir = args.transcripts && resolve(args.transcripts)
@@ -881,7 +920,7 @@ function main() {
     console.error('usage: gen-transcript-pages.mjs --feature=<id> --report=<multiseed.json> --transcripts=<dir> --pages-root=<path> [--full-pages=all|adv,injected]')
     process.exit(2)
   }
-  const { outDir, written } = generate({
+  const { outDir, written } = await generate({
     reportPath,
     transcriptsDir,
     pagesRoot,

@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, readdirSync, existsSync, rmSync } from 'node
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { generate, parseTranscriptFilename, runGetsPage, esc } from './gen-transcript-pages.mjs'
+import { generate, parseTranscriptFilename, runGetsPage, esc, loadCaseStudy, renderCaseStudy } from './gen-transcript-pages.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FIXTURE = join(HERE, '__fixtures__', 'mini-report')
@@ -15,16 +15,16 @@ const REPORT = join(FIXTURE, 'mini.multiseed.json')
 const TRANSCRIPTS = join(FIXTURE, 'transcripts')
 const PLANTED_SECRET = 'sk-ant-PLANTEDSECRETVALUE0123456789'
 
-function run(fullPages) {
+async function run(fullPages) {
   const root = mkdtempSync(join(tmpdir(), 'audit-pages-'))
-  const res = generate({ reportPath: REPORT, transcriptsDir: TRANSCRIPTS, pagesRoot: root, fullPages })
+  const res = await generate({ reportPath: REPORT, transcriptsDir: TRANSCRIPTS, pagesRoot: root, fullPages })
   return { root, ...res }
 }
 
 describe('gen-transcript-pages — full pages (default)', () => {
   let out
-  beforeAll(() => {
-    out = run(undefined)
+  beforeAll(async () => {
+    out = await run(undefined)
   })
 
   it('emits the expected file set', () => {
@@ -118,9 +118,9 @@ describe('gen-transcript-pages — full pages (default)', () => {
     expect(readFileSync(join(TRANSCRIPTS, 'armA__adv-task-two__seed1.json'), 'utf8')).toContain(PLANTED_SECRET)
   })
 
-  it('is deterministic — same input twice → byte-identical output', () => {
-    const a = run(undefined)
-    const b = run(undefined)
+  it('is deterministic — same input twice → byte-identical output', async () => {
+    const a = await run(undefined)
+    const b = await run(undefined)
     for (const f of a.written) {
       expect(readFileSync(join(a.outDir, f), 'utf8')).toEqual(readFileSync(join(b.outDir, f), 'utf8'))
     }
@@ -142,8 +142,8 @@ describe('gen-transcript-pages — full pages (default)', () => {
 })
 
 describe('gen-transcript-pages — full-pages=adv,injected', () => {
-  it('only gives adversarial / injected runs a dedicated page', () => {
-    const out = run('adv,injected')
+  it('only gives adversarial / injected runs a dedicated page', async () => {
+    const out = await run('adv,injected')
     expect(out.written.sort()).toEqual(
       [
         'index.html',
@@ -179,5 +179,56 @@ describe('helpers', () => {
 
   it('esc escapes HTML metacharacters', () => {
     expect(esc('<a href="x">&')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;')
+  })
+})
+
+describe('case study (Plan: move case studies onto each feature\'s own page)', () => {
+  it('loadCaseStudy returns null for a feature with no case-studies/<feature>.mjs file', async () => {
+    expect(await loadCaseStudy('mini')).toBeNull()
+    expect(await loadCaseStudy('no-such-feature-at-all')).toBeNull()
+  })
+
+  it('loadCaseStudy resolves a real feature\'s case study by dynamic import', async () => {
+    const cs = await loadCaseStudy('semantic-contradiction')
+    expect(cs.mechanism).toContain('checkForContradictions')
+    expect(cs.hypothesis).toBeTruthy()
+    expect(cs.testDesign).toBeTruthy()
+    expect(cs.findings).toBeTruthy()
+  })
+
+  it('renderCaseStudy renders null/absent as nothing', () => {
+    expect(renderCaseStudy(null)).toBe('')
+    expect(renderCaseStudy(undefined)).toBe('')
+  })
+
+  it('renderCaseStudy renders the standard sections in order, skipping absent ones', () => {
+    const html = renderCaseStudy({ mechanism: '<p>M</p>', hypothesis: '<p>H</p>', findings: '<p>F</p>' })
+    expect(html).toContain('<h2>Case study</h2>')
+    expect(html.indexOf('What it does')).toBeGreaterThan(-1)
+    expect(html.indexOf('Why we hypothesized it would help')).toBeGreaterThan(html.indexOf('What it does'))
+    expect(html.indexOf('What we found')).toBeGreaterThan(html.indexOf('Why we hypothesized it would help'))
+    expect(html).not.toContain('How it was tested')
+  })
+
+  it('renderCaseStudy splices in a raw history block between test design and findings', () => {
+    const html = renderCaseStudy({ testDesign: '<p>T</p>', history: '<h3>RUN 1</h3><p>...</p>', findings: '<p>F</p>' })
+    expect(html.indexOf('<h3>RUN 1</h3>')).toBeGreaterThan(html.indexOf('How it was tested'))
+    expect(html.indexOf('What we found')).toBeGreaterThan(html.indexOf('<h3>RUN 1</h3>'))
+  })
+
+  it('the mini fixture (no case study) renders no "Case study" section on its index page', async () => {
+    const out = await run(undefined)
+    const html = readFileSync(join(out.outDir, 'index.html'), 'utf8')
+    expect(html).not.toContain('<h2>Case study</h2>')
+    rmSync(out.root, { recursive: true, force: true })
+  })
+
+  it('every registered feature (manifest.json) has a case-studies/<feature>.mjs file', async () => {
+    const manifestPath = join(HERE, 'manifest.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    for (const f of manifest.features) {
+      const cs = await loadCaseStudy(f.id)
+      expect(cs, `${f.id} has no case-studies/${f.id}.mjs`).not.toBeNull()
+    }
   })
 })
