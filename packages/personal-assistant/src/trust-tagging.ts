@@ -56,6 +56,23 @@ function effectiveLengthForLLMCheck(text: string): number {
   return weighted
 }
 
+/**
+ * `AUDIT_LLM_INJECTION_DETECT` gate — feature-value audit (Phase A5 of
+ * plans/feature_audit_automation_plan.html). Default **ON**: the semantic injection-detection LLM
+ * call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a falsy
+ * value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM escalation entirely and fall
+ * back to the always-on deterministic regex/pattern pass only. Read at exactly one place —
+ * `detectInjectionLikelyWithLLM` below, the single helper both `agent-loop.ts` and
+ * `action-approval-service.ts` route their tool-output checks through. Same shape as
+ * `semanticContradictionEnabled()` (contradiction-checker.ts) and the harness's `supervisorEnabled()`.
+ */
+export function llmInjectionDetectEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_LLM_INJECTION_DETECT ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
 const INJECTION_SCHEMA = {
   type: 'object',
   properties: {
@@ -94,6 +111,9 @@ export async function detectInjectionLikelyWithLLM(
 ): Promise<InjectionDetection> {
   const regexResult = detectInjectionLikely(text)
   if (regexResult.flagged) return regexResult
+  // AUDIT_LLM_INJECTION_DETECT (feature-value audit, Phase A5) gates the semantic escalation only —
+  // the deterministic regex pass above always runs. OFF → pattern pass only, no LLM call.
+  if (!llmInjectionDetectEnabled()) return { flagged: false }
   if (effectiveLengthForLLMCheck(text.trim()) < MIN_LENGTH_FOR_LLM_CHECK) return { flagged: false }
 
   try {

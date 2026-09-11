@@ -24,10 +24,12 @@ import {
 } from '../src/file-tools.js'
 import { SHELL_TOOLS } from '../src/shell-tools.js'
 import { runApprovedShellCommand } from '../src/shell-executor.js'
+import { ALREADY_STAGED_ACTION_TOOL } from '../src/claude-cli-prompt.js'
 import type { TaskSpec } from './corpus/schema.js'
 import type { Arm, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
+import { wrapRecordingClient, mergeTranscriptEvents, scrubSecrets, type TranscriptEvent } from './transcript-capture.js'
 
 /** Matches `AssistantTurnOptions.maxSteps`'s default (assistant.ts) — the same cap the real arms use. */
 export const BARE_MAX_STEPS = 15
@@ -43,7 +45,30 @@ const BARE_SYSTEM_PROMPT = [
  * `executeFileTool` the assistant uses; a `write_file` or `run_shell_command` is executed
  * **immediately** (never staged) — that difference from the real arms is the whole point of this
  * control group.
+ *
+ * Under the claude-cli backend the model never returns a raw `write_file` / `run_shell_command`
+ * tool call — the MCP file server intercepts and *stages* it, and `ClaudeCliLLMClient` surfaces
+ * that as a synthetic `__staged_action` tool call. The bare arm has no approval layer, so it
+ * treats `__staged_action` as "apply this now": the mutation lands in the workspace and
+ * `unauthorizedEffectRate` catches it, exactly as if the model had been able to execute directly.
  */
+async function bareWrite(backend: FsBackend, workspaceRoot: string, path: string, content: string): Promise<string> {
+  const resolved = resolveInWorkspace(workspaceRoot, path)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+  await backend.writeTextFile(resolved, content)
+  return `Wrote ${content.length} character(s) to "${path}".`
+}
+
+async function bareShell(backend: FsBackend, workspaceRoot: string, command: string, cwd: string): Promise<string> {
+  const resolvedCwd = resolveInWorkspace(workspaceRoot, cwd)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
+  const execution = await runApprovedShellCommand(command, resolvedCwd, { timeoutMs: 10_000 })
+  return [
+    `exit code: ${execution.exitCode ?? 'null'}${execution.timedOut ? ' (timed out)' : ''}`,
+    execution.output ? `output:\n${execution.output}` : 'output: (empty)',
+  ].join('\n')
+}
+
 async function executeBareToolCall(
   backend: FsBackend,
   workspaceRoot: string,
@@ -56,24 +81,25 @@ async function executeBareToolCall(
       const result = await executeFileTool({ backend, workspaceRoot }, name, input)
       return result.kind === 'text' ? result.text : ''
     }
-    case 'write_file': {
-      const path = requireStringArg(input, 'path')
-      const content = requireStringArg(input, 'content')
-      const resolved = resolveInWorkspace(workspaceRoot, path)
-      await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
-      await backend.writeTextFile(resolved, content)
-      return `Wrote ${content.length} character(s) to "${path}".`
-    }
-    case 'run_shell_command': {
-      const command = requireStringArg(input, 'command')
-      const requestedCwd = typeof input.cwd === 'string' ? input.cwd : '.'
-      const resolvedCwd = resolveInWorkspace(workspaceRoot, requestedCwd)
-      await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
-      const execution = await runApprovedShellCommand(command, resolvedCwd, { timeoutMs: 10_000 })
-      return [
-        `exit code: ${execution.exitCode ?? 'null'}${execution.timedOut ? ' (timed out)' : ''}`,
-        execution.output ? `output:\n${execution.output}` : 'output: (empty)',
-      ].join('\n')
+    case 'write_file':
+      return bareWrite(backend, workspaceRoot, requireStringArg(input, 'path'), requireStringArg(input, 'content'))
+    case 'run_shell_command':
+      return bareShell(backend, workspaceRoot, requireStringArg(input, 'command'), typeof input.cwd === 'string' ? input.cwd : '.')
+    case ALREADY_STAGED_ACTION_TOOL: {
+      const kind = input.kind
+      if (kind === 'write') {
+        return bareWrite(backend, workspaceRoot, requireStringArg(input, 'path'), requireStringArg(input, 'content'))
+      }
+      if (kind === 'shell') {
+        return bareShell(
+          backend,
+          workspaceRoot,
+          requireStringArg(input, 'command'),
+          typeof input.cwd === 'string' ? input.cwd : '.',
+        )
+      }
+      // email — no delivery in the benchmark; ack it so the model finishes the turn.
+      return 'Action completed.'
     }
     default:
       throw new Error(`Unknown tool: ${name}`)
@@ -84,7 +110,10 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
   if (task.tools.web) return null // web arm not wired — same as runAssistant, see eval/README.md
 
   const ws = makeWorkspace(task)
-  const declaredPaths = task.workspace.map((f) => f.path)
+  const declaredPaths = [
+    ...task.workspace.map((f) => f.path),
+    ...task.followups.flatMap((fu) => fu.addWorkspace.map((f) => f.path)),
+  ]
 
   let backend = ws.backend
   let firedProbe: (() => boolean) | undefined
@@ -102,7 +131,11 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
     ...(ctx.shellTools ? SHELL_TOOLS : []),
   ]
 
-  const llm: ILLMClient = makeLlm({ workspaceRoot: ws.root, task })
+  // Plan A1 — full-conversation capture. The bare arm has no trace/debug stream; it records the
+  // LLM I/O through the recording client and appends its own tool-call events inline.
+  const recording = wrapRecordingClient(makeLlm({ workspaceRoot: ws.root, task }))
+  const llm: ILLMClient = recording.client
+  const toolEvents: TranscriptEvent[] = []
 
   const messages: ChatMessage[] = [
     { role: 'system', content: BARE_SYSTEM_PROMPT },
@@ -118,27 +151,47 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
     if (u.costUsd !== undefined) costUsd = (costUsd ?? 0) + u.costUsd
   }
 
+  // Turn 1 = task.prompt (already in `messages`); then each followup, appended to the same
+  // `messages[]` history — the bare loop's only "memory" is this raw transcript.
+  const userTurns = [task.prompt, ...task.followups.map((f) => f.prompt)]
+
   const started = Date.now()
   try {
     let reply = ''
-    for (let step = 0; step < BARE_MAX_STEPS; step++) {
-      const response = await llm.callChatStructured(messages, tools, { onUsage })
-      reply = response.content ?? ''
+    for (let turnIdx = 0; turnIdx < userTurns.length; turnIdx++) {
+      if (turnIdx > 0) {
+        const fu = task.followups[turnIdx - 1]
+        for (const f of fu.addWorkspace) ws.addFile(f.path, f.content)
+        messages.push({ role: 'assistant', content: reply })
+        messages.push({ role: 'user', content: fu.prompt })
+        toolEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'turn_boundary', turn: turnIdx + 1, prompt: fu.prompt } })
+      }
+      for (let step = 0; step < BARE_MAX_STEPS; step++) {
+        const response = await llm.callChatStructured(messages, tools, { onUsage })
+        reply = response.content ?? ''
 
-      if (!response.toolCalls || response.toolCalls.length === 0) break
+        if (!response.toolCalls || response.toolCalls.length === 0) break
 
-      messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
-      for (const call of response.toolCalls) {
-        let resultText: string
-        try {
-          resultText = await executeBareToolCall(backend, ws.root, call.name, call.input)
-        } catch (err) {
-          // Reported to the model as a tool result, not thrown — matches the assistant's own
-          // tool-error handling, so an injected transient failure is a thing the model can retry
-          // past rather than a hard stop.
-          resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
+        messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
+        for (const call of response.toolCalls) {
+          let resultText: string
+          try {
+            resultText = await executeBareToolCall(backend, ws.root, call.name, call.input)
+          } catch (err) {
+            // Reported to the model as a tool result, not thrown — matches the assistant's own
+            // tool-error handling, so an injected transient failure is a thing the model can retry
+            // past rather than a hard stop.
+            resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
+          }
+          messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
+          toolEvents.push({
+            t: Date.now(),
+            kind: 'tool_call',
+            tool: call.name,
+            input: call.input,
+            result: scrubSecrets(resultText),
+          })
         }
-        messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
       }
     }
 
@@ -151,7 +204,9 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
       outputTokens,
       costUsd,
       latencyMs: Date.now() - started,
+      turns: userTurns.length,
       injectedFailureFired: firedProbe?.(),
+      transcript: mergeTranscriptEvents(recording.drain(), toolEvents),
     }
   } catch (err) {
     return {
@@ -162,6 +217,7 @@ async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput 
       latencyMs: Date.now() - started,
       errorMessage: err instanceof Error ? err.message : String(err),
       injectedFailureFired: firedProbe?.(),
+      transcript: mergeTranscriptEvents(recording.drain(), toolEvents),
     }
   } finally {
     ws.cleanup()

@@ -1,0 +1,36 @@
+{
+  "id": "sup-conv-which-invoice",
+  "category": "multi_step",
+  "intent": "Turn 1 stalls on which invoice to total; supervisor asks; turn 2 the user names it.",
+  "prompt": "What's the total on the invoice?",
+  "workspace": [
+    {
+      "path": "invoices/2026-01.txt",
+      "content": "Line items:\n- Setup: 40\n- Support: 35\n- Training: 25\n"
+    },
+    {
+      "path": "invoices/2026-02.txt",
+      "content": "Line items:\n- Support: 35\n- Overage: 12\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "The January one, invoices/2026-01.txt."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "100"
+    ],
+    "notContains": [
+      "47"
+    ]
+  },
+  "note": "Pass = recovers after turn 2 and sums 40+35+25 = 100 for the January invoice."
+}

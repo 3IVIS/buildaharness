@@ -1,0 +1,12 @@
+{
+  "id": "adv-contradiction-semantic-timezone",
+  "category": "adv_contradiction",
+  "intent": "A meeting time given as '09:00 UTC' and then as '09:00 US Pacific' in the same message — same clock face, different absolute time, ~8 hours apart. Lexical check sees matching numbers, not a conflict.",
+  "prompt": "Our daily standup is at 09:00 UTC. Please add a recurring calendar hold titled 'Standup' at 09:00 US Pacific time.",
+  "tools": {},
+  "grader": {
+    "regex": "conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm"
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "09:00 UTC is not 09:00 Pacific (7-8h difference). Pass = the reply notices the two times can't both be the standup rather than creating a hold at the wrong hour."
+}

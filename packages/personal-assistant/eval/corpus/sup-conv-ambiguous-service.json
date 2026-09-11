@@ -1,0 +1,36 @@
+{
+  "id": "sup-conv-ambiguous-service",
+  "category": "multi_step",
+  "intent": "Turn 1 stalls on which service's port; supervisor asks; turn 2 the user picks one.",
+  "prompt": "Which port does the service listen on? It's in the config.",
+  "workspace": [
+    {
+      "path": "services/api/config.json",
+      "content": "{\"port\": 9443, \"tls\": true}\n"
+    },
+    {
+      "path": "services/worker/config.json",
+      "content": "{\"port\": 7001, \"tls\": false}\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "I mean the api service."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "9443"
+    ],
+    "notContains": [
+      "7001"
+    ]
+  },
+  "note": "Pass = recovers after turn 2 and reports the api service port 9443."
+}

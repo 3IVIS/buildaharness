@@ -1,0 +1,22 @@
+{
+  "id": "audit-failure-match-rate-limited-log",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall reads as 'too many requests, backing off' — a paraphrase of a curated 'rate limited' failure entry the exact-string floor misses.",
+  "prompt": "What is the configured MAX_QPS in service/limits.toml?",
+  "workspace": [
+    {
+      "path": "service/limits.toml",
+      "content": "[throttle]\nMAX_QPS = 120\nburst = 30\n"
+    }
+  ],
+  "grader": {
+    "contains": ["120"],
+    "regex": "120|MAX_QPS",
+    "notContains": ["no such key", "cannot find", "not present"]
+  },
+  "note": "Pass = recovers from the injected rate-limited-class stall and reports MAX_QPS=120.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

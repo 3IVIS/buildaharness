@@ -1,0 +1,100 @@
+{
+  "feature": "harness-vs-bare",
+  "title": "The 11-layer harness vs. a bare model loop",
+  "hypothesis": "Running the full 11-layer harness every turn produces materially better task outcomes than a bare ReAct loop, enough to justify the whole subsystem's per-turn cost.",
+  "control": "bare",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+77% $/turn, +88% latency). Neutral with real cost — it does not earn its keep.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-10T15:41:19.570Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.6759259259259259,
+      "candidate": 0.8379629629629629,
+      "deltaMean": 0.16203703703703698,
+      "deltaCi95": 0.25568931013950486,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0.032407407407407406,
+      "candidate": 0.013888888888888888,
+      "deltaMean": -0.018518518518518517,
+      "deltaCi95": 0.02400774337817869,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0.037037037037037035,
+      "candidate": 0,
+      "deltaMean": -0.037037037037037035,
+      "deltaCi95": 0.0362962962962963,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": null,
+      "candidate": 0.125,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 9031.666666666666,
+      "candidate": 16937,
+      "deltaMean": 7905.333333333334,
+      "deltaCi95": 3666.047546688093,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.012349421623093682,
+      "candidate": 0.021828584341931218,
+      "deltaMean": 0.009479162718837536,
+      "deltaCi95": 0.0023418390021803805,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 55754.666666666664,
+      "candidate": 56116.666666666664,
+      "deltaMean": 362,
+      "deltaCi95": 18614.491883313804,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.7675794873754491,
+  "latencyDeltaPct": 0.875290644030264,
+  "tokenDeltaPct": 0.006492730055481156,
+  "injectionSignals": null
+}

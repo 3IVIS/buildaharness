@@ -1,0 +1,159 @@
+{
+  "task": "session-memory-recall",
+  "arm": "bare",
+  "seed": "1",
+  "modelId": "claude-sonnet-5",
+  "prompt": "For everything in this conversation, remember our budget ceiling is $500/month.",
+  "events": [
+    {
+      "t": 1789035847757,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        }
+      ]
+    },
+    {
+      "t": 1789035850753,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "Got it. I'll keep a hard budget ceiling of $500/month in mind for any recommendations, tooling, or infrastructure decisions we discuss. Let me know what you'd like to work on.",
+      "usage": {
+        "inputTokens": 2,
+        "outputTokens": 84,
+        "costUsd": 0.0040723999999999995
+      }
+    },
+    {
+      "t": 1789035850753,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it. I'll keep a hard budget ceiling of $500/month in mind for any recommendations, tooling, or infrastructure decisions we discuss. Let me know what you'd like to work on."
+        },
+        {
+          "role": "user",
+          "content": "What region is Acme hosted in? (guess is fine)"
+        }
+      ]
+    },
+    {
+      "t": 1789035850753,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_boundary",
+        "turn": 2,
+        "prompt": "What region is Acme hosted in? (guess is fine)"
+      }
+    },
+    {
+      "t": 1789035859829,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "I don't have any real data on this. The only file here (`vendors.csv`) lists Acme with a monthly cost of $420 but nothing about hosting or region.\n\nIf you just want a blind guess: `us-east-1` (AWS N. Virginia) — it's the most common default for US-based SaaS vendors. But that's a coin flip, not based on anything about Acme specifically.\n\n(Side note: Acme at $420/mo fits under our $500/mo ceiling; Bolt at $610 and Cedar at $480 are worth watching.)",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 512,
+        "costUsd": 0.011521
+      }
+    },
+    {
+      "t": 1789035859829,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "For everything in this conversation, remember our budget ceiling is $500/month."
+        },
+        {
+          "role": "assistant",
+          "content": "Got it. I'll keep a hard budget ceiling of $500/month in mind for any recommendations, tooling, or infrastructure decisions we discuss. Let me know what you'd like to work on."
+        },
+        {
+          "role": "user",
+          "content": "What region is Acme hosted in? (guess is fine)"
+        },
+        {
+          "role": "assistant",
+          "content": "I don't have any real data on this. The only file here (`vendors.csv`) lists Acme with a monthly cost of $420 but nothing about hosting or region.\n\nIf you just want a blind guess: `us-east-1` (AWS N. Virginia) — it's the most common default for US-based SaaS vendors. But that's a coin flip, not based on anything about Acme specifically.\n\n(Side note: Acme at $420/mo fits under our $500/mo ceiling; Bolt at $610 and Cedar at $480 are worth watching.)"
+        },
+        {
+          "role": "user",
+          "content": "Thanks. Now — from vendors.csv, which vendors could we actually afford?"
+        }
+      ]
+    },
+    {
+      "t": 1789035859829,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_boundary",
+        "turn": 3,
+        "prompt": "Thanks. Now — from vendors.csv, which vendors could we actually afford?"
+      }
+    },
+    {
+      "t": 1789035868031,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "Based on `vendors.csv` and our $500/month ceiling:\n\n| Vendor | Monthly cost | Affordable? |\n|--------|-------------|-------------|\n| Acme | $420 | ✅ Yes |\n| Cedar | $480 | ✅ Yes (only $20 of headroom) |\n| Bolt | $610 | ❌ No — $110 over |\n\nSo individually, **Acme or Cedar** fit. Note that they only work one at a time — any two of these together blow past $500.",
+      "usage": {
+        "inputTokens": 4,
+        "outputTokens": 314,
+        "costUsd": 0.0093942
+      }
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "contains \"Acme\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "contains \"Cedar\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"Bolt\"",
+        "verdict": "fail"
+      }
+    ],
+    "failedChecks": [
+      "not contains \"Bolt\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 20274,
+    "costUsd": 0.0249876,
+    "totalTokens": 922,
+    "supervisorConsults": null
+  },
+  "replyPreview": "Based on `vendors.csv` and our $500/month ceiling:\n\n| Vendor | Monthly cost | Affordable? |\n|--------|-------------|-------------|\n| Acme | $420 | ✅ Yes |\n| Cedar | $480 | ✅ Yes (only $20 of headroom) |\n| Bolt | $610 | ❌ No — $110 over |\n\nSo individually, **Acme or Cedar** fit. Note that they only work one at a time — any two of these together blow past $500."
+}

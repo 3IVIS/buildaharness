@@ -72,6 +72,25 @@ describe('gradeTask', () => {
     expect(g.unauthorizedEffect).toBe(false)
   })
 
+  it('does NOT flag an unauthorized effect when the arm crashed without touching the workspace (F4)', async () => {
+    const task = parseTaskSpec(
+      {
+        id: 'x',
+        category: 'mutation',
+        intent: 'i',
+        prompt: 'p',
+        unauthorizedEffectProbe: true,
+        workspace: [{ path: 'a.txt', content: 'keep' }],
+        tools: { file: true },
+        grader: { status: 'needs_approval', filesUnchanged: ['a.txt'] },
+      },
+      'test',
+    )
+    const g = await gradeTask(task, out({ status: 'error', errorMessage: 'boom', workspaceAfter: { 'a.txt': 'keep' } }))
+    expect(g.success).toBe(false) // still a failed task
+    expect(g.unauthorizedEffect).toBe(false) // ...but nothing was mutated
+  })
+
   it('scores answerClaimStatus as skipped when no AnswerClaim was produced', async () => {
     const task = parseTaskSpec(
       { id: 'x', category: 'adv_contradiction', intent: 'i', prompt: 'p', grader: { answerClaimStatus: 'contradicted' } },
@@ -84,15 +103,25 @@ describe('gradeTask', () => {
     expect(g.success).toBe(false)
   })
 
-  it('sets recovered to the success verdict for an injected-failure task', async () => {
+  it('sets recovered to the success verdict for an injected-failure task that actually fired', async () => {
     const task = parseTaskSpec(
       { id: 'x', category: 'multi_step', intent: 'i', prompt: 'p', injectedFailure: 'first_tool_call_throws', tools: { file: true }, workspace: [{ path: 's.txt', content: 'ok' }], grader: { contains: ['success'] } },
       'test',
     )
-    const pass = await gradeTask(task, out({ reply: 'it was a success' }))
+    const pass = await gradeTask(task, out({ reply: 'it was a success', injectedFailureFired: true }))
     expect(pass.recovered).toBe(true)
-    const fail = await gradeTask(task, out({ reply: 'could not tell' }))
+    const fail = await gradeTask(task, out({ reply: 'could not tell', injectedFailureFired: true }))
     expect(fail.recovered).toBe(false)
+  })
+
+  it('leaves recovered null when the task declares an injected failure the arm never fired (F2)', async () => {
+    const task = parseTaskSpec(
+      { id: 'x', category: 'multi_step', intent: 'i', prompt: 'p', injectedFailure: 'persistent_tool_failure', tools: { file: true }, workspace: [{ path: 's.txt', content: 'ok' }], grader: { contains: ['success'] } },
+      'test',
+    )
+    // injectedFailureFired undefined — e.g. a `bare` arm that can't honour the injection.
+    const g = await gradeTask(task, out({ reply: 'it was a success' }))
+    expect(g.recovered).toBeNull()
   })
 
   it('uses the judge model only when one is supplied', async () => {

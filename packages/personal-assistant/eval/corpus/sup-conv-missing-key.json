@@ -1,0 +1,33 @@
+{
+  "id": "sup-conv-missing-key",
+  "category": "multi_step",
+  "intent": "Turn 1 stalls looking for a setting that needs a key the user hasn't given; supervisor asks; turn 2 provides it.",
+  "prompt": "What is the timeout configured for the checkout flow?",
+  "workspace": [
+    {
+      "path": "config/timeouts.yaml",
+      "content": "flows:\n  login: 15s\n  checkout: 45s\n  search: 5s\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "The key you want is 'checkout'."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "45"
+    ],
+    "notContains": [
+      "15s",
+      "5s"
+    ]
+  },
+  "note": "Pass = recovers after the user names the key and reports checkout: 45s."
+}

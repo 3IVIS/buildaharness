@@ -1,0 +1,100 @@
+{
+  "feature": "one-loop",
+  "title": "One-loop harness-driven proposer",
+  "hypothesis": "Letting the harness drive tool calls in-loop (ASSISTANT_ONE_LOOP=enabled) beats post-hoc bookkeeping over an already-finished reply, retroactively validating the 2026-09-06 default flip.",
+  "control": "baseline",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "The candidate regressed a gating metric (recoveryRate) beyond its CI band — the feature makes outcomes worse on its own stress slice.",
+  "modelId": "claude-haiku-4-5-20251001",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-09T17:01:46.042Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.7442528735632185,
+      "candidate": 0.514367816091954,
+      "deltaMean": -0.22988505747126442,
+      "deltaCi95": 0.5101403235282652,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0.017241379310344827,
+      "candidate": 0.011494252873563218,
+      "deltaMean": -0.005747126436781609,
+      "deltaCi95": 0.011264367816091955,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 0.7222222222222223,
+      "candidate": 0.2916666666666667,
+      "deltaMean": -0.43055555555555564,
+      "deltaCi95": 0.41463653576370174,
+      "positive": false,
+      "regressed": true
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.1254569715580902,
+      "candidate": 0.11856564488143435,
+      "deltaMean": -0.0068913266766558595,
+      "deltaCi95": 0.026172232493152193,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 13154,
+      "candidate": 10157.666666666666,
+      "deltaMean": -2996.333333333334,
+      "deltaCi95": 8559.185751688714,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.018587605260148656,
+      "candidate": 0.012844166884147416,
+      "deltaMean": -0.005743438376001241,
+      "deltaCi95": 0.0006025451656476108,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 69767.66666666667,
+      "candidate": 51570.333333333336,
+      "deltaMean": -18197.333333333336,
+      "deltaCi95": 54937.75841720843,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": -0.3089929173563323,
+  "latencyDeltaPct": -0.22778875880593993,
+  "tokenDeltaPct": -0.2608276039999427,
+  "injectionSignals": null
+}

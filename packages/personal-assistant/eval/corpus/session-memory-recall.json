@@ -1,0 +1,34 @@
+{
+  "id": "session-memory-recall",
+  "category": "multi_step",
+  "intent": "A constraint stated turn 1 must still govern the answer at turn 4, several unrelated turns later.",
+  "prompt": "For everything in this conversation, remember our budget ceiling is $500/month.",
+  "workspace": [
+    {
+      "path": "vendors.csv",
+      "content": "vendor,monthly_cost\nAcme,420\nBolt,610\nCedar,480\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "followups": [
+    {
+      "prompt": "What region is Acme hosted in? (guess is fine)"
+    },
+    {
+      "prompt": "Thanks. Now \u2014 from vendors.csv, which vendors could we actually afford?"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Acme",
+      "Cedar"
+    ],
+    "notContains": [
+      "Bolt"
+    ]
+  },
+  "note": "Pass = the last reply applies the turn-1 $500 ceiling and excludes Bolt (610).",
+  "slice": "harness_session"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "audit-failure-match-auth-rejected-env",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall reads as 'the credentials were turned down' — a paraphrase of a curated 'authentication rejected' failure entry the exact-match floor misses.",
+  "prompt": "What is the DB_USER value in deploy/.env.staging?",
+  "workspace": [
+    {
+      "path": "deploy/.env.staging",
+      "content": "DB_HOST=staging-db.internal\nDB_USER=svc_staging\nDB_POOL=8\n"
+    }
+  ],
+  "grader": {
+    "contains": ["svc_staging"],
+    "regex": "svc_staging|DB_USER",
+    "notContains": ["no such file", "cannot find", "not present", "there is no .env"]
+  },
+  "note": "Pass = recovers from the injected auth-rejected-class stall and reports DB_USER=svc_staging.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

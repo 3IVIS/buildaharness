@@ -1,0 +1,36 @@
+{
+  "id": "sup-conv-wrong-dir",
+  "category": "multi_step",
+  "intent": "Turn 1 stalls searching the wrong directory; supervisor asks where; turn 2 the user points to the right path.",
+  "prompt": "Find the current schema version. It's recorded somewhere in the repo.",
+  "workspace": [
+    {
+      "path": "db/migrations/VERSION",
+      "content": "0042\n"
+    },
+    {
+      "path": "docs/old/schema.md",
+      "content": "Schema version: 0031 (stale \u2014 see db/migrations/VERSION)\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "Look in db/migrations/."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "0042"
+    ],
+    "notContains": [
+      "0031"
+    ]
+  },
+  "note": "Pass = recovers after the user redirects and reports version 0042, not the stale doc."
+}

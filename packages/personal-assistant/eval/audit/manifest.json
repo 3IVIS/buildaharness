@@ -1,0 +1,104 @@
+{
+  "features": [
+    {
+      "id": "trajectory-supervisor",
+      "title": "Trajectory Supervisor",
+      "hypothesis": "The trajectory supervisor's one LLM call on the cannotMakeProgress() stall edge redirects enough stalled runs into recovery to justify its extra cost, latency and tokens.",
+      "arms": [
+        "flagOn",
+        "supervisorOn"
+      ],
+      "slice": "supervisor_lookup,supervisor_pivot,supervisor_conversation",
+      "seeds": 3,
+      "maxSpendUsd": 12,
+      "status": "done",
+      "verdict": "CUT",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Single-turn verdict was CUT. The supervisor_conversation slice (turn 1 stalls, supervisor asks, turn 2 the user answers, run recovers) is now in `slice` but DORMANT \u2014 the driver keys re-runs off progress.json, not the manifest, so to re-run this feature a human must reset eval/reports/audit/progress.json's trajectory-supervisor entry (seedsDone:0, finalized:false) AND flip status back to queued. Deliberately left done so it does not auto-re-run on Haiku while the model-pinning issue is open. The multi-node decomposed _run_planner path is still adapter-side / separate."
+    },
+    {
+      "id": "harness-vs-bare",
+      "title": "The 11-layer harness vs. a bare model loop",
+      "hypothesis": "Running the full 11-layer harness every turn produces materially better task outcomes than a bare ReAct loop, enough to justify the whole subsystem's per-turn cost.",
+      "arms": [
+        "bare",
+        "flagOn"
+      ],
+      "slice": null,
+      "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
+      "seeds": 3,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 20,
+      "status": "done",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "First pass (CUT, d124361) was invalid: the 20 persistent_tool_failure tasks fire only for the one-loop flagOn arm (proposer wrap), not for bare, so flagOn ran a forced stall while bare ran clean \u2014 the entire multi_step gap. excludeSlice drops the supervisor / failure-match stress fixtures; the runner skip-guard also drops any injected-failure task bare can't honour. So this measures non-failure task quality only; recovery-under-failure for bare is a coverage gap (F1b) until an MCP-server-level injection lands. Model: Sonnet (F6 confirmed the first pass was Sonnet; the Haiku label was a modelUsage parsing bug). See plans/feature_audit_fair_comparison_plan.html.",
+      "verdict": "CUT"
+    },
+    {
+      "id": "one-loop",
+      "title": "One-loop harness-driven proposer",
+      "hypothesis": "Letting the harness drive tool calls in-loop (ASSISTANT_ONE_LOOP=enabled) beats post-hoc bookkeeping over an already-finished reply, retroactively validating the 2026-09-06 default flip.",
+      "arms": [
+        "baseline",
+        "flagOn"
+      ],
+      "slice": null,
+      "excludeSlice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_clarification,supervisor_adversarial_digest,audit_failure_match_semantic",
+      "seeds": 3,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 20,
+      "status": "done",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "First pass (CUT, 976ecd2) was invalid: persistent_tool_failure injection fires only for the one-loop flagOn arm, not for the pre-one-loop baseline (no oneLoopProposer to wrap), so flagOn ran a forced stall while baseline ran clean \u2014 that is the recoveryRate 0.72->0.29. excludeSlice + the skip-guard drop those tasks. F3 (no empty reply on stall) also landed. So this measures the one-loop rewire on non-failure tool tasks; the recovery-under-failure question needs F1b. Model: Sonnet (F6). See plans/feature_audit_fair_comparison_plan.html.",
+      "verdict": "INCONCLUSIVE"
+    },
+    {
+      "id": "semantic-contradiction",
+      "title": "Semantic contradiction check",
+      "hypothesis": "The checkForContradictions LLM call catches enough real paraphrased / cross-framing belief contradictions that the always-on lexical negation-pair check misses to pay for its per-belief-set-growth cost.",
+      "arms": [
+        "contradictionOff",
+        "flagOn"
+      ],
+      "slice": "audit_contradiction_semantic,audit_contradiction_multiturn",
+      "seeds": 3,
+      "maxSpendUsd": 10,
+      "status": "done",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "Single-turn slice (both halves in one prompt) plus audit_contradiction_multiturn \u2014 belief stated turn 1, unrelated beliefs turns 2-3, paraphrased contradiction on the last turn, with control tasks (legitimate change over time) that must not be false-flagged.",
+      "verdict": "KEEP"
+    },
+    {
+      "id": "llm-injection-detect",
+      "title": "LLM injection detection on tool output",
+      "hypothesis": "detectInjectionLikelyWithLLM catches tool-output prompt-injection the deterministic pattern pass misses, often enough to justify the per-output latency and without a false-positive tax on benign instruction-like content.",
+      "arms": [
+        "injectionDetectOff",
+        "flagOn"
+      ],
+      "slice": "audit_injection_llm",
+      "seeds": 3,
+      "maxSpendUsd": 8,
+      "status": "done",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "Within-turn mechanism; slice measures both true-positive (slip-past payloads) and false-positive (benign instruction-like files). Add fetched-page tool outputs, not just file reads (A5 code-path gap, separate from turn count).",
+      "verdict": "CUT"
+    },
+    {
+      "id": "semantic-failure-match",
+      "title": "Semantic failure-mode match",
+      "hypothesis": "checkSemanticFailureMatch recognises known failure patterns described in different words often enough to earn its per-miss call and improve recovery routing.",
+      "arms": [
+        "failureMatchOff",
+        "flagOn"
+      ],
+      "slice": "audit_failure_match_semantic",
+      "seeds": 3,
+      "maxSpendUsd": 8,
+      "status": "done",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Paraphrased-failure classification is testable single-turn. Whether it improves recovery is a compressed proxy (bounded re-answer loop). Injected-symptom mechanism is artificial but isolates the classifier; note the caveat in the entry.",
+      "verdict": "CUT"
+    }
+  ]
+}

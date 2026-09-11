@@ -180,6 +180,24 @@ describe('driveMainLoop — S7 seeded-stall supervisor consult', () => {
     expect(terminated).toBe(true)
   })
 
+  it('F3: a turn that stalls with a FAILED task returns an explicit reply, never an empty one', async () => {
+    // No supervisor. A LOCAL replan of a one-node graph re-queues only dependents (none), so the
+    // FAILED leaf strands and the loop exits with nothing completed. Before F3 `finalResult` was
+    // null → the personal-assistant reply became '' (a silent no-op for the one-loop path).
+    const alwaysFail = (): unknown => ({ __harnessExecutionStatus: 'failed', error: 'the tool kept timing out' })
+    const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {
+      initialTasks: [makeTask('respond')],
+      max_steps: 12,
+      toolExecutors: { default: alwaysFail },
+    })
+    expect(outcome.status).toBe('complete')
+    if (outcome.status === 'complete') {
+      expect(typeof outcome.result.finalResult).toBe('string')
+      expect(String(outcome.result.finalResult).length).toBeGreaterThan(0)
+      expect(String(outcome.result.finalResult)).toMatch(/could ?n['’]?t complete|could not complete/i)
+    }
+  })
+
   it('is never consulted on a healthy single-task run (INV-22)', async () => {
     const decider = vi.fn(async () => ({ action: 'CONTINUE' as const, rationale: 'n/a' }))
     const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {

@@ -1,0 +1,63 @@
+{
+  "task": "lookup-capital",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What is the capital city of Australia?",
+  "events": [
+    {
+      "t": 1789054838081,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What is the capital city of Australia?"
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"Canberra\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"Sydney is the capital\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"capital is Sydney\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"capital, Sydney\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"Canberra\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1563,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence } from './claude-cli-prompt.js'
+import { buildClaudePrompt, parseClaudeCliOutput, primaryModelFromUsage, stripJsonCodeFence } from './claude-cli-prompt.js'
 import type { ChatMessage } from '@buildaharness/runtime'
 
 describe('buildClaudePrompt', () => {
@@ -76,6 +76,42 @@ describe('parseClaudeCliOutput', () => {
   it('omits costUsd when total_cost_usd is absent even though usage is present', () => {
     const parsed = parseClaudeCliOutput(JSON.stringify({ result: 'hi', usage: { input_tokens: 10, output_tokens: 5 } }))
     expect(parsed.usage).toEqual({ inputTokens: 10, outputTokens: 5 })
+  })
+
+  it('reports the primary model when modelUsage has a spurious auxiliary Haiku entry (F6)', () => {
+    // Real claude 2.1.x shape: --model=sonnet honoured, but the CLI also makes a small internal
+    // Haiku call and lists it first. The primary turn carries the full context.
+    const out = JSON.stringify({
+      result: 'OK',
+      modelUsage: {
+        'claude-haiku-4-5-20251001': { inputTokens: 897, outputTokens: 9, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        'claude-sonnet-5': { inputTokens: 2, outputTokens: 4, cacheReadInputTokens: 8140, cacheCreationInputTokens: 5174 },
+      },
+    })
+    expect(parseClaudeCliOutput(out).model).toBe('claude-sonnet-5')
+  })
+
+  it('prefers a top-level model field when the CLI provides one', () => {
+    const out = JSON.stringify({ result: 'OK', model: 'claude-opus-5', modelUsage: { 'claude-haiku-4-5': {} } })
+    expect(parseClaudeCliOutput(out).model).toBe('claude-opus-5')
+  })
+})
+
+describe('primaryModelFromUsage', () => {
+  it('returns the sole key when there is only one', () => {
+    expect(primaryModelFromUsage({ 'claude-sonnet-5': { inputTokens: 5 } })).toBe('claude-sonnet-5')
+  })
+  it('returns undefined for missing / empty usage', () => {
+    expect(primaryModelFromUsage(undefined)).toBeUndefined()
+    expect(primaryModelFromUsage({})).toBeUndefined()
+  })
+  it('picks the entry with the most input+cache tokens', () => {
+    expect(
+      primaryModelFromUsage({
+        aux: { inputTokens: 900 },
+        primary: { inputTokens: 2, cacheReadInputTokens: 9000, cacheCreationInputTokens: 100 },
+      }),
+    ).toBe('primary')
   })
 })
 

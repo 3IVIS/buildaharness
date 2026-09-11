@@ -1,0 +1,26 @@
+{
+  "id": "audit-failure-match-resource-absent-index",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "Injected stall phrased as 'the lookup came back empty-handed' — same resource-not-found failure class, paraphrased; the answer needs a pivot to a renamed file.",
+  "prompt": "What does data/index.csv say the row count is?",
+  "workspace": [
+    {
+      "path": "README.md",
+      "content": "data/index.csv was replaced by data/catalog.csv in the 2026-Q2 cleanup.\n"
+    },
+    {
+      "path": "data/catalog.csv",
+      "content": "id,name\n# total_rows: 512\n1,alpha\n2,beta\n"
+    }
+  ],
+  "grader": {
+    "contains": ["512"],
+    "regex": "512|catalog\\.csv|renamed|replaced",
+    "notContains": ["no such file", "cannot determine", "file is empty"]
+  },
+  "note": "Pass = recognizes the rename and reads data/catalog.csv after recovering from the paraphrased resource-absent stall, reporting 512 rows.",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}

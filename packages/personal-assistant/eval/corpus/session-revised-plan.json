@@ -1,0 +1,38 @@
+{
+  "id": "session-revised-plan",
+  "category": "multi_step",
+  "intent": "Turn 1 sets a goal; turn 3 changes a requirement; the final answer must reflect the revised requirement.",
+  "prompt": "I need to pick a caching layer. Requirements: must support TTLs.",
+  "workspace": [
+    {
+      "path": "options.md",
+      "content": "- memcached: TTLs yes, persistence no\n- redis: TTLs yes, persistence yes\n- in-process LRU: TTLs yes, persistence no, single-node only\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "followups": [
+    {
+      "prompt": "What does options.md say about each?"
+    },
+    {
+      "prompt": "New requirement: it also has to survive a restart (persistence)."
+    },
+    {
+      "prompt": "So which one should we use?"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "redis"
+    ],
+    "notContains": [
+      "memcached is the",
+      "use memcached",
+      "in-process"
+    ]
+  },
+  "note": "Pass = after the persistence requirement is added, the final recommendation is redis.",
+  "slice": "harness_session"
+}

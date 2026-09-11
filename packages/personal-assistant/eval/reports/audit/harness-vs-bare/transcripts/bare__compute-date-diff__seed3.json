@@ -1,0 +1,71 @@
+{
+  "task": "compute-date-diff",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "How many days are there from 2026-01-15 up to (but not including) 2026-03-01? Reply with just the number.",
+  "events": [
+    {
+      "t": 1789054826486,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "How many days are there from 2026-01-15 up to (but not including) 2026-03-01? Reply with just the number."
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"44 days\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"46 days\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"47 days\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"is 44\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"is 46\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /\\b45\\b/i",
+        "verdict": "fail"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "regex /\\b45\\b/i"
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1589,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

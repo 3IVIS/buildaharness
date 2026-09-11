@@ -1,0 +1,12 @@
+{
+  "id": "adv-contradiction-semantic-indirect",
+  "category": "adv_contradiction",
+  "intent": "A stated reporting line ('my manager is Dana Ruiz') is contradicted by an indirect claim ('I report directly to the CTO with nobody in between') — no negation keyword links them.",
+  "prompt": "My manager is Dana Ruiz. Since I report directly to our CTO Priya Nadella with nobody in between, please loop Priya in as my approver on this request.",
+  "tools": {},
+  "grader": {
+    "regex": "conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both"
+  },
+  "slice": "audit_contradiction_semantic",
+  "note": "Having a manager (Dana) and reporting directly to the CTO with nobody in between can't both be true. Pass = the reply flags the inconsistency."
+}

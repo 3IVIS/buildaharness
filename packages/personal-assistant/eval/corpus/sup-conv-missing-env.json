@@ -1,0 +1,36 @@
+{
+  "id": "sup-conv-missing-env",
+  "category": "multi_step",
+  "intent": "Turn 1 can't resolve which env file to read and stalls; the supervisor should ask; turn 2 the user names the file.",
+  "prompt": "What is the DB_USER value? Check the deploy config.",
+  "workspace": [
+    {
+      "path": "deploy/.env.staging",
+      "content": "DB_HOST=db.staging.internal\nDB_USER=svc_staging\nDB_PASS=[redacted]\n"
+    },
+    {
+      "path": "deploy/.env.prod",
+      "content": "DB_HOST=db.prod.internal\nDB_USER=svc_prod\nDB_PASS=[redacted]\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 3,
+  "followups": [
+    {
+      "prompt": "Use deploy/.env.staging."
+    }
+  ],
+  "slice": "supervisor_conversation",
+  "grader": {
+    "contains": [
+      "svc_staging"
+    ],
+    "notContains": [
+      "svc_prod"
+    ]
+  },
+  "note": "Pass = after the user disambiguates on turn 2, the run recovers and reports DB_USER=svc_staging."
+}

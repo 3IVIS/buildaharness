@@ -1,0 +1,67 @@
+{
+  "task": "compute-percentage",
+  "arm": "bare",
+  "seed": "3",
+  "modelId": "claude-sonnet-5",
+  "prompt": "A cart totals $240.00. Apply a 15% discount, then 8% sales tax on the discounted amount. What is the final total? Reply with just the dollar amount.",
+  "events": [
+    {
+      "t": 1789054829658,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "A cart totals $240.00. Apply a 15% discount, then 8% sales tax on the discounted amount. What is the final total? Reply with just the dollar amount."
+        }
+      ]
+    }
+  ],
+  "grade": {
+    "success": false,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "arm",
+        "verdict": "fail"
+      },
+      {
+        "name": "contains \"220.32\"",
+        "verdict": "fail"
+      },
+      {
+        "name": "not contains \"223.20\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"184.80\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"220.00\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"259.20\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": [
+      "arm",
+      "contains \"220.32\""
+    ]
+  },
+  "metrics": {
+    "latencyMs": 1587,
+    "costUsd": null,
+    "totalTokens": null,
+    "supervisorConsults": null
+  },
+  "replyPreview": ""
+}

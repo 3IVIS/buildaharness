@@ -1,0 +1,42 @@
+{
+  "features": {
+    "trajectory-supervisor": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 1.25336,
+      "blocked": false
+    },
+    "harness-vs-bare": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 6.434149,
+      "blocked": false,
+      "note": "reset 2026-09-10 for the fair re-run (F7) \u2014 first pass invalid (arm-asymmetric injected failure). Prior: 3 seeds, $9.77, CUT."
+    },
+    "one-loop": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 6.416051,
+      "blocked": false,
+      "note": "reset 2026-09-10 for the fair re-run (F7) \u2014 first pass invalid (baseline never saw the injected stall). Prior: 3 seeds, $7.93, CUT."
+    },
+    "semantic-contradiction": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 1.871263,
+      "blocked": false
+    },
+    "llm-injection-detect": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 0.709126,
+      "blocked": false
+    },
+    "semantic-failure-match": {
+      "seedsDone": 3,
+      "finalized": true,
+      "spendUsd": 0.333979,
+      "blocked": false
+    }
+  }
+}

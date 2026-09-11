@@ -529,6 +529,22 @@ function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired
   ctx.onLayerActivity?.({ layer, fired, reason })
 }
 
+/**
+ * F3 (plans/feature_audit_fair_comparison_plan.html) — a turn that strands (a FAILED task, nothing
+ * left runnable, nothing ever completed) must not return an empty `finalResult`: the caller
+ * (personal-assistant's response-service.ts) turns a non-string `finalResult` into the draft
+ * reply, and for the one-loop proposer path there is no draft — so `''` reaches the user as a
+ * silent no-op. This gives them an explicit, honest "couldn't complete" line instead. Only used
+ * when `ctx.finalResult` is not already a usable string.
+ */
+function stalledTurnFallbackResult(ctx: LoopContext): string {
+  const lastFailure = ctx.failureDiagnostics.failure_history.at(-1)?.description ?? ''
+  const detail = lastFailure.replace(/^Task failed:\s*/i, '').trim()
+  return detail
+    ? `I couldn't complete this — I kept running into a problem (${detail.slice(0, 200)}). You may want to retry or rephrase what you need.`
+    : `I couldn't complete this — I kept running into a problem and stopped before finishing. You may want to retry or rephrase what you need.`
+}
+
 /** True once any belief/coverage/verification sub-dimension has crossed CAUTION_THRESHOLD (0.4) — mirrors resolveControlState's own Tier 3 read of these fields. */
 function anyDiagnosticSubDimensionCautious(diagnostics: LoopContext['diagnostics']): boolean {
   const healthy = [
@@ -733,7 +749,18 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       })
     }
 
-    if (selectResult.task === null) return
+    if (selectResult.task === null) {
+      // F3 — the graph has no runnable task. If nothing ever completed and something FAILED, the
+      // turn stalled: end with an explicit could-not-complete reply rather than an empty one. A
+      // clean finish (a string `finalResult`, or a graph that simply had nothing to do) is
+      // untouched.
+      const noUsableResult = typeof ctx.finalResult !== 'string' || ctx.finalResult.trim() === ''
+      if (noUsableResult && ctx.taskGraph.tasks.some(t => t.status === 'FAILED')) {
+        ctx.finalResult = stalledTurnFallbackResult(ctx)
+        reportLayer(ctx, 'recovery', true, 'turn stalled with no answer — returning an explicit could-not-complete reply')
+      }
+      return
+    }
 
     currentTask = selectResult.task
     concurrentTask = selectResult.concurrentTask

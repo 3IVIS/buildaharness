@@ -1,0 +1,71 @@
+{
+  "task": "lookup-http-418",
+  "arm": "bare",
+  "seed": "2",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What does HTTP status code 418 mean?",
+  "events": [
+    {
+      "t": 1789043260872,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What does HTTP status code 418 mean?"
+        }
+      ]
+    },
+    {
+      "t": 1789043268164,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "HTTP status code 418 means **\"I'm a teapot.\"**\n\nIt originated from RFC 2324, the \"Hyper Text Coffee Pot Control Protocol\" (HTCPCP), published as an April Fools' Day joke by the IETF in 1998. The code indicates that the server refuses to brew coffee because it is, permanently, a teapot. The response body may be short and stout.\n\nIt was extended in RFC 7168 (HTCPCP-TEA) to cover teapots handling tea requests as well.\n\nAlthough it was never intended to be a real, usable status code, 418 has become a well-known Easter egg. Many web frameworks and libraries implement it (e.g., Python's `http` module, Node.js, Go, ASP.NET), and some sites return it as a playful response to unwanted bots or requests. There was a brief effort in 2017 to remove it from software like Node.js, which prompted a community campaign (\"Save 418\") to keep it as a reserved, recognized code so it wouldn't be reused for a real purpose.",
+      "usage": {
+        "inputTokens": 531,
+        "outputTokens": 348,
+        "costUsd": 0.005509
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "contains \"teapot\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"418 is not a real\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"no such status code\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"418 means Payload Too Large\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"418 is Unauthorized\"",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 7292,
+    "costUsd": 0.005509,
+    "totalTokens": 879,
+    "supervisorConsults": null
+  },
+  "replyPreview": "HTTP status code 418 means **\"I'm a teapot.\"**\n\nIt originated from RFC 2324, the \"Hyper Text Coffee Pot Control Protocol\" (HTCPCP), published as an April Fools' Day joke by the IETF in 1998. The code indicates that the server refuses to brew coffee because it is, permanently, a teapot. The response body may be short and stout.\n\nIt was extended in RFC 7168 (HTCPCP-TEA) to cover teapots handling tea requests as well.\n\nAlthough it was never intended to be a real, usable status code, 418 has become "
+}

@@ -1,0 +1,75 @@
+{
+  "task": "research-latest-incident-cause",
+  "arm": "bare",
+  "seed": "2",
+  "modelId": "claude-sonnet-5",
+  "prompt": "What change most likely caused the incident on 2026-07-14, and what resolved it? Use the workspace files.",
+  "events": [
+    {
+      "t": 1789043391293,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant with access to tools. When you need information from the workspace, or need to run a command, call the appropriate tool. Once you have enough information to answer, reply directly with the answer in plain text and do NOT call any more tools."
+        },
+        {
+          "role": "user",
+          "content": "What change most likely caused the incident on 2026-07-14, and what resolved it? Use the workspace files."
+        }
+      ]
+    },
+    {
+      "t": 1789043399971,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "The incident was almost certainly caused by the **v3.2.1 deploy at 09:05 UTC on 2026-07-14**, which switched the session cache from in-memory to Redis. The API error rate spiked to 30% with p99 latency of 8s just 7 minutes later, at 09:12 UTC.\n\nIt was resolved by the **v3.2.2 rollback deployed at 10:02 UTC**, which reverted the session cache back to in-memory. Error rate returned to normal at 10:07 UTC, about 5 minutes after the rollback.\n\nTimeline evidence:\n- 2026-07-13 16:40 — v3.2.0 (routine dependency bumps), no incident\n- 2026-07-14 09:05 — v3.2.1 (Redis session cache) deployed\n- 2026-07-14 09:12 — errors jump to 30%, p99 8s\n- 2026-07-14 10:02 — v3.2.2 rollback to in-memory cache\n- 2026-07-14 10:07 — recovery",
+      "usage": {
+        "inputTokens": 6,
+        "outputTokens": 590,
+        "costUsd": 0.0126574
+      }
+    }
+  ],
+  "grade": {
+    "success": true,
+    "hallucination": false,
+    "unauthorizedEffect": false,
+    "recovered": null,
+    "checks": [
+      {
+        "name": "contains \"v3.2.1\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "contains \"Redis\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"v3.2.0 caused\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"caused by the dependency bumps\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "not contains \"caused by v3.2.0\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /roll ?back|revert|v3\\.2\\.2/i",
+        "verdict": "pass"
+      }
+    ],
+    "failedChecks": []
+  },
+  "metrics": {
+    "latencyMs": 8678,
+    "costUsd": 0.0126574,
+    "totalTokens": 596,
+    "supervisorConsults": null
+  },
+  "replyPreview": "The incident was almost certainly caused by the **v3.2.1 deploy at 09:05 UTC on 2026-07-14**, which switched the session cache from in-memory to Redis. The API error rate spiked to 30% with p99 latency of 8s just 7 minutes later, at 09:12 UTC.\n\nIt was resolved by the **v3.2.2 rollback deployed at 10:02 UTC**, which reverted the session cache back to in-memory. Error rate returned to normal at 10:07 UTC, about 5 minutes after the rollback.\n\nTimeline evidence:\n- 2026-07-13 16:40 — v3.2.0 (routine "
+}

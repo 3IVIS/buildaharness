@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { looksLikeCodingFact, checkForContradictions } from './contradiction-checker.js'
+import { looksLikeCodingFact, checkForContradictions, semanticContradictionEnabled } from './contradiction-checker.js'
 
 describe('looksLikeCodingFact', () => {
   it('flags structured/technical claims', () => {
@@ -320,5 +320,44 @@ describe('checkForContradictions', () => {
       llm,
     )
     expect(result).toEqual([])
+  })
+})
+
+describe('semanticContradictionEnabled (AUDIT_SEMANTIC_CONTRADICTION gate — Phase A4)', () => {
+  it('defaults ON when the flag is unset or empty', () => {
+    expect(semanticContradictionEnabled({})).toBe(true)
+    expect(semanticContradictionEnabled({ AUDIT_SEMANTIC_CONTRADICTION: '' })).toBe(true)
+    expect(semanticContradictionEnabled({ AUDIT_SEMANTIC_CONTRADICTION: '  ' })).toBe(true)
+  })
+
+  it('stays ON for truthy values', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'anything-else']) {
+      expect(semanticContradictionEnabled({ AUDIT_SEMANTIC_CONTRADICTION: v }), v).toBe(true)
+    }
+  })
+
+  it('turns OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', 'DISABLED', ' Off ']) {
+      expect(semanticContradictionEnabled({ AUDIT_SEMANTIC_CONTRADICTION: v }), v).toBe(false)
+    }
+  })
+
+  it('when OFF, the contradictionOff arm skips the checkForContradictions LLM call entirely', async () => {
+    // The harness-bridge wiring gates the whole `contradictionChecker` hook on this helper, so an
+    // OFF value means the LLM call site is never reached and only the harness's always-on lexical
+    // pass runs. Proven here at the unit boundary: the helper is the single decision point.
+    const llm = new StructuredOnlyLLMClient('{"contradictions":[]}')
+    const beliefs = [{ id: 'b2', statement: 'the user lives in Seattle' }]
+    const existing = [{ id: 'b1', statement: 'the user lives in Boston' }]
+
+    if (semanticContradictionEnabled({ AUDIT_SEMANTIC_CONTRADICTION: '0' })) {
+      await checkForContradictions(beliefs, existing, llm)
+    }
+    expect(llm.calls).toBe(0)
+
+    if (semanticContradictionEnabled({})) {
+      await checkForContradictions(beliefs, existing, llm)
+    }
+    expect(llm.calls).toBe(1)
   })
 })

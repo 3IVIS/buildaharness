@@ -78,6 +78,8 @@ export interface ParsedClaudeCliOutput {
   reply: string
   /** Real usage/cost from Claude's own accounting — absent when stdout wasn't valid JSON (e.g. a plain-text error). See ClaudeCliLLMClient's doc comment for the Pro/Max-subscription caveat on costUsd. */
   usage?: TokenUsage
+  /** The concrete model id the CLI reported running against (`model` field of the result event), not the `--model` alias. Absent when the CLI didn't report one. */
+  model?: string
 }
 
 /**
@@ -106,15 +108,44 @@ export function stripJsonCodeFence(content: string): string {
   return match ? match[1] : trimmed
 }
 
+/**
+ * The `claude` CLI (2.1.x) reports no top-level `model` on a `--output-format json`/`stream-json`
+ * result — only a `modelUsage` map, and it routinely has **two** entries: the model that actually
+ * ran the turn (per `--model`) plus a small internal Haiku call the CLI makes for its own
+ * bookkeeping. `Object.keys(modelUsage)[0]` was picking that auxiliary Haiku, which is why every
+ * audit report on disk says `claude-haiku-4-5-20251001` even though `--model=sonnet` was honoured.
+ *
+ * The primary turn always carries the full prompt + cached context, so it has by far the most
+ * input tokens — pick the entry with the largest `input + cacheRead + cacheCreation`.
+ */
+export function primaryModelFromUsage(modelUsage: Record<string, unknown> | undefined): string | undefined {
+  if (!modelUsage || typeof modelUsage !== 'object') return undefined
+  const keys = Object.keys(modelUsage)
+  if (keys.length <= 1) return keys[0]
+  const weight = (v: unknown): number => {
+    const u = (v ?? {}) as Record<string, unknown>
+    const n = (x: unknown): number => (typeof x === 'number' ? x : 0)
+    return n(u.inputTokens) + n(u.cacheReadInputTokens) + n(u.cacheCreationInputTokens)
+  }
+  return [...keys].sort((a, b) => weight(modelUsage[b]) - weight(modelUsage[a]))[0]
+}
+
 export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
   try {
     const data = JSON.parse(stdout.trim()) as {
       result?: string
       content?: string
       total_cost_usd?: number
+      model?: string
+      modelUsage?: Record<string, unknown>
       usage?: { input_tokens?: number; output_tokens?: number }
     }
     const reply = data.result ?? data.content ?? stdout.trim()
+    // `--output-format json`'s result object reports `model` directly on some CLIs; 2.1.x only
+    // keys it under `modelUsage` (and often with a spurious auxiliary Haiku entry — see
+    // primaryModelFromUsage).
+    const model =
+      typeof data.model === 'string' ? data.model : primaryModelFromUsage(data.modelUsage)
     const usage =
       typeof data.usage?.input_tokens === 'number' && typeof data.usage.output_tokens === 'number'
         ? {
@@ -123,7 +154,7 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
             ...(typeof data.total_cost_usd === 'number' ? { costUsd: data.total_cost_usd } : {}),
           }
         : undefined
-    return { reply, usage }
+    return { reply, usage, model }
   } catch {
     return { reply: stdout.trim() }
   }

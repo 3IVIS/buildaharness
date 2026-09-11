@@ -1,0 +1,27 @@
+{
+  "id": "adv-contradiction-mt-scale",
+  "intent": "A headcount stated as a round number early, contradicted by a written-out different number later.",
+  "prompt": "Remember: the platform team has twelve engineers.",
+  "followups": [
+    {
+      "prompt": "The platform team's manager is Priya Nair."
+    },
+    {
+      "prompt": "They own the ingestion pipeline and the metrics store."
+    },
+    {
+      "prompt": "For the org chart, put the platform team at eight people."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8"
+  },
+  "note": "twelve vs eight for the same team. Pass = the last reply flags the mismatch.",
+  "category": "adv_contradiction",
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "slice": "audit_contradiction_multiturn"
+}

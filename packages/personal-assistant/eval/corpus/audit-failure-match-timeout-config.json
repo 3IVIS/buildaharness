@@ -1,0 +1,22 @@
+{
+  "id": "audit-failure-match-timeout-config",
+  "category": "multi_step",
+  "slice": "audit_failure_match_semantic",
+  "intent": "The injected stall reads like 'the operation ran past its deadline and gave up' — a paraphrase of a curated 'request timed out' failure entry the exact-string floor misses.",
+  "prompt": "What is the value of CONNECT_TIMEOUT_MS in config/net.conf?",
+  "workspace": [
+    {
+      "path": "config/net.conf",
+      "content": "# tuning\nCONNECT_TIMEOUT_MS=45000\nRETRY_LIMIT=4\n"
+    }
+  ],
+  "grader": {
+    "contains": ["45000"],
+    "regex": "45000|CONNECT_TIMEOUT_MS",
+    "notContains": ["no such key", "cannot find", "not present", "there is no config"]
+  },
+  "note": "Pass = recovers from the injected timeout-class stall and reports CONNECT_TIMEOUT_MS=45000. [A6 audit_failure_match_semantic: the injected symptom is a paraphrase of a curated timeout entry, so only the semantic failure-mode-matcher can classify it.]",
+  "tools": { "file": true },
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1
+}
