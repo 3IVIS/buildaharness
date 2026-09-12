@@ -11,7 +11,6 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ALLOWED_ORIGIN = "https://buildaharness.com"
 PORT = "3001"
-WEB_SEARCH_BACKEND = "ddg"
 
 # /web/* quota tuning (all optional — see src/rate-limit.ts's DEFAULTS for fallbacks if unset)
 # WEB_REQUESTS_PER_HOUR = "120"
@@ -27,7 +26,7 @@ WEB_SEARCH_BACKEND = "ddg"
 # ANTHROPIC_API_KEY
 # OPENAI_API_KEY
 # PROXY_SECRET
-# BRAVE_API_KEY (only needed if WEB_SEARCH_BACKEND = "brave")
+# BRAVE_API_KEY (fallback only — the browser client normally sends its own key per request)
 
 # Local dev with miniflare (wrangler dev uses miniflare under the hood).
 # Override vars for local dev by creating a .dev.vars file (gitignored):
@@ -35,7 +34,6 @@ WEB_SEARCH_BACKEND = "ddg"
 #   OPENAI_API_KEY=sk-...
 #   PROXY_SECRET=local-secret
 #   ALLOWED_ORIGIN=http://localhost:5173
-#   WEB_SEARCH_BACKEND=ddg
 #   BRAVE_API_KEY=...
 
 [dev]

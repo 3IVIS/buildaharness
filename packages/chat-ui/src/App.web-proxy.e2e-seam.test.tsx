@@ -8,9 +8,9 @@ import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
 
 /**
  * W5 of plans/browser_web_tools_via_proxy_plan.html: `webBackend: 'proxy'` routes web_search/
- * fetch_url through a configured @buildaharness/proxy instead of calling DuckDuckGo/Brave/the
- * target URL directly from the browser (which fails with CORS in a real browser — see
- * createWebTools's doc comment in App.tsx). Extends the B1 seam (App.e2e-seam.test.tsx) the same
+ * fetch_url through a configured @buildaharness/proxy instead of calling Brave/the target URL
+ * directly from the browser (which fails with CORS in a real browser — see createWebTools's doc
+ * comment in App.tsx). Extends the B1 seam (App.e2e-seam.test.tsx) the same
  * way: a real PersonalAssistant runs a real turn() against a scripted ILLMClient; here the global
  * `fetch` is also stubbed to stand in for the proxy's `/web/search` and `/web/fetch` routes.
  */
@@ -101,7 +101,15 @@ describe('App — webBackend "proxy"', () => {
   it('web_search then fetch_url both route through the proxy with the bearer token and fetch tag', async () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ llmBackend: 'proxy', oneLoopMode: 'disabled', enableWeb: true, webBackend: 'proxy', proxyUrl: PROXY_URL, authToken: AUTH_TOKEN }),
+      JSON.stringify({
+        llmBackend: 'proxy',
+        oneLoopMode: 'disabled',
+        enableWeb: true,
+        webBackend: 'proxy',
+        proxyUrl: PROXY_URL,
+        authToken: AUTH_TOKEN,
+        braveApiKey: 'test-brave-key',
+      }),
     )
     const calls = installWebProxyFetchMock()
     installSeam()
@@ -112,7 +120,7 @@ describe('App — webBackend "proxy"', () => {
 
     const searchCall = calls.find((c) => c.path === '/web/search')
     expect(searchCall?.authHeader).toBe(`Bearer ${AUTH_TOKEN}`)
-    expect(searchCall?.body).toEqual({ query: 'buildaharness', backend: 'ddg' })
+    expect(searchCall?.body).toEqual({ query: 'buildaharness', braveApiKey: 'test-brave-key' })
 
     const fetchCall = calls.find((c) => c.path === '/web/fetch')
     expect(fetchCall?.authHeader).toBe(`Bearer ${AUTH_TOKEN}`)
@@ -128,7 +136,7 @@ describe('App — webBackend "proxy"', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
     installSeam()
 
-    // The direct backend calls DuckDuckGo straight from the browser, which the stub above always
+    // The direct backend calls Brave straight from the browser, which the stub above always
     // rejects — the point here is just that it never reaches this test's proxy mock at all, so a
     // failed web_search surfaces as a tool error rather than a crash (same degradation as today).
     const reply = await sendAndReadReply('search for buildaharness and read the top result')

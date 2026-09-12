@@ -12,7 +12,6 @@ type Bindings = {
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
   PROXY_SECRET: string
-  WEB_SEARCH_BACKEND: string
   /** Fallback only, for a self-hosted operator who wants one shared key for their own deployment
    * — the browser client normally sends its own key fresh on every /web/search call instead (see
    * web-search.ts's braveApiKey request field). Not required for that per-user path. */

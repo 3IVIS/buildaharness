@@ -16,7 +16,7 @@ export { PrivateNetworkTargetError, assertPublicHttpUrl } from './web-fetch-core
 export type { DnsResolver } from './web-fetch-core.js'
 
 export interface WebToolsContext {
-  /** No default implementation — the caller supplies a real search backend (an API client, etc.), same way FileToolsContext's `backend` is injected rather than defaulted to real disk. See `duckDuckGoSearch` in web-search-provider.ts for a ready-made one. */
+  /** No default implementation — the caller supplies a real search backend (an API client, etc.), same way FileToolsContext's `backend` is injected rather than defaulted to real disk. See `braveSearch` in web-search-provider.ts for a ready-made one. */
   search(query: string): Promise<WebSearchResult[]>
   /** Overrides the HTTP client fetch_url uses — defaults to the global `fetch`. Lets tests and non-browser runtimes inject their own. */
   fetchImpl?: typeof fetch

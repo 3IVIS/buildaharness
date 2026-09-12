@@ -8,7 +8,6 @@ import {
   estimateCostUsd,
   formatTranscriptMarkdown,
   defaultExportFilename,
-  duckDuckGoSearch,
   braveSearch,
   type AssistantProgress,
   type AssistantToolStep,
@@ -136,10 +135,9 @@ function createProxyWebTools(config: AssistantConfig): { search: (query: string)
   const search = async (query: string): Promise<WebSearchResult[]> => {
     const { results } = await callProxy<{ results: (WebSearchResult & { fetchTag: string })[] }>('/web/search', {
       query,
-      backend: config.searchBackend,
       // Sent fresh on every call, never persisted proxy-side — see web-search.ts's braveApiKey
-      // request field. Only meaningful when searchBackend is 'brave'; harmless undefined otherwise.
-      braveApiKey: config.searchBackend === 'brave' ? config.braveApiKey : undefined,
+      // request field.
+      braveApiKey: config.braveApiKey,
     })
     for (const r of results) fetchTagsByUrl.set(r.url, r.fetchTag)
     return results.map(({ title, url, snippet }) => ({ title, url, snippet }))
@@ -163,15 +161,15 @@ function createProxyWebTools(config: AssistantConfig): { search: (query: string)
 /**
  * Builds the webTools context (search, fetchImpl, dns) for web_search/fetch_url.
  *
- * fetchImpl: DuckDuckGo's HTML-scraping endpoint (and Brave's/fetch_url's arbitrary target)
- * aren't CORS-enabled for arbitrary browser origins, so a plain `fetch()` from inside this
- * app fails outright with "Failed to fetch" (verified live). On desktop this is fixed by
- * routing through @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no
- * CORS involved. Scoped via capabilities/default.json's `http:default` entry to any http(s)
- * URL (originally just html.duckduckgo.com/api.search.brave.com, which left fetch_url's
- * arbitrary targets CORS-blocked on desktop — widened once fetch_url needed real page fetches
- * too); the real gate against SSRF is the DNS-checked `assertPublicHttpUrl` guard below, not
- * this scope. A plain browser tab has no equivalent escape hatch and is left on native fetch.
+ * fetchImpl: Brave's Search API (and fetch_url's arbitrary target) aren't CORS-enabled for
+ * arbitrary browser origins, so a plain `fetch()` from inside this app fails outright with
+ * "Failed to fetch" (verified live). On desktop this is fixed by routing through
+ * @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no CORS involved.
+ * Scoped via capabilities/default.json's `http:default` entry to any http(s) URL (originally
+ * just api.search.brave.com, which left fetch_url's arbitrary targets CORS-blocked on desktop
+ * — widened once fetch_url needed real page fetches too); the real gate against SSRF is the
+ * DNS-checked `assertPublicHttpUrl` guard below, not this scope. A plain browser tab has no
+ * equivalent escape hatch and is left on native fetch.
  *
  * A plain browser tab with `webBackend: 'proxy'` sidesteps the CORS problem entirely by never
  * fetching the search backend or the target URL directly — see createProxyWebTools above.
@@ -190,10 +188,7 @@ async function createWebTools(config: AssistantConfig, isDesktop: boolean): Prom
   if (!isDesktop && config.webBackend === 'proxy') return createProxyWebTools(config)
   const fetchImpl = isDesktop ? (await import('@tauri-apps/plugin-http')).fetch : undefined
   const dns = isDesktop ? (await import('./tauri-dns-resolver')).tauriDnsResolver : undefined
-  const search =
-    config.searchBackend === 'brave'
-      ? (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
-      : (query: string) => duckDuckGoSearch(query, { fetchImpl })
+  const search = (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
   return { search, fetchImpl, dns }
 }
 
@@ -264,11 +259,11 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: 
  * computed on the Rust side from this crate's compile-time location — see that command's own
  * doc comment) otherwise. shellTools follows the same enableShell gate the CLI uses
  * (cli.ts) — `run_shell_command` is only registered on the MCP server, and only wired into
- * PersonalAssistant, when the user has turned Shell on in Settings. Note: `config.enableWeb`/
- * `searchBackend` *are* wired here via `createWebTools()` above (see its doc comment for the
- * fetchImpl/dns caveats) — a plain browser tab genuinely reaches DuckDuckGo/Brave over the
- * network, it just fails there with a CORS error today (caught by assistant.ts's tool dispatch
- * and reported to the model as a tool error, not a crash); desktop works end-to-end.
+ * PersonalAssistant, when the user has turned Shell on in Settings. Note: `config.enableWeb`
+ * *is* wired here via `createWebTools()` above (see its doc comment for the fetchImpl/dns
+ * caveats) — a plain browser tab genuinely reaches Brave over the network, it just fails there
+ * with a CORS error today (caught by assistant.ts's tool dispatch and reported to the model as
+ * a tool error, not a crash); desktop works end-to-end.
  *
  * fileTools/shellTools deliberately use a *different* FsBackend (createTauriWorkspaceFsBackend)
  * than memory/experienceStore/checkpointStore do (createTauriFsBackend) — the former is

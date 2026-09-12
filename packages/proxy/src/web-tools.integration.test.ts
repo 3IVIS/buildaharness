@@ -50,11 +50,11 @@ async function fetchBody(url: string, token: string, fetchTag?: string): Promise
   })
 }
 
-async function search(token: string, query: string, backend?: string, braveApiKey?: string): Promise<Response> {
+async function search(token: string, query: string, braveApiKey?: string): Promise<Response> {
   return app.request('/web/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ query, backend, braveApiKey }),
+    body: JSON.stringify({ query, braveApiKey }),
   })
 }
 
@@ -76,7 +76,6 @@ const RATE_LIMIT_ENV_VARS = [
   'WEB_GRANT_REQUESTS_PER_HOUR',
   'WEB_GUARD_REJECT_ALERT_THRESHOLD',
   'BRAVE_API_KEY',
-  'WEB_SEARCH_BACKEND',
 ]
 
 beforeEach(() => {
@@ -214,11 +213,7 @@ describe('POST /web/fetch — SSRF guard (W2)', () => {
   })
 })
 
-describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
-  const DDG_HTML = `
-    <a class="result__a" href="https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2F">Example Title</a>
-    <a class="result__snippet">An example snippet.</a>
-  `
+describe('POST /web/search — Brave + fetchTag issuance (W1/W3)', () => {
   const BRAVE_JSON = {
     web: {
       results: [{ title: 'Brave Title', url: 'https://example.com/brave', description: 'A brave snippet.' }],
@@ -240,30 +235,12 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 400 for an invalid backend', async () => {
-    const token = await getAuthToken()
-    const res = await search(token, 'test', 'yahoo')
-    expect(res.status).toBe(400)
-  })
-
-  it('runs the DDG backend by default and returns parsed results with a fetchTag', async () => {
-    const token = await getAuthToken()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(DDG_HTML, { status: 200 })))
-
-    const res = await search(token, 'test query')
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as { results: { title: string; url: string; snippet: string; fetchTag: string }[] }
-    expect(json.results).toHaveLength(1)
-    expect(json.results[0]).toMatchObject({ title: 'Example Title', url: 'https://example.com/', snippet: 'An example snippet.' })
-    expect(json.results[0].fetchTag).toMatch(/^\d+\.[A-Za-z0-9_-]+$/)
-  })
-
-  it('runs the Brave backend when requested and a key is configured', async () => {
+  it('runs a Brave search and returns parsed results with a fetchTag', async () => {
     process.env.BRAVE_API_KEY = 'test-brave-key'
     const token = await getAuthToken()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 })))
 
-    const res = await search(token, 'test query', 'brave')
+    const res = await search(token, 'test query')
     expect(res.status).toBe(200)
     const json = (await res.json()) as { results: { title: string; url: string; snippet: string; fetchTag: string }[] }
     expect(json.results).toHaveLength(1)
@@ -272,8 +249,9 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
   })
 
   it('issues a fetchTag that /web/fetch accepts for that exact URL', async () => {
+    process.env.BRAVE_API_KEY = 'test-brave-key'
     const token = await getAuthToken()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(DDG_HTML, { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 })))
 
     const searchRes = await search(token, 'test query')
     const { results } = (await searchRes.json()) as { results: { url: string; fetchTag: string }[] }
@@ -286,9 +264,9 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     expect(fetchRes.status).toBe(200)
   })
 
-  it('returns 500 when backend=brave and no key is configured', async () => {
+  it('returns 500 when no key is configured (no env key, no caller-supplied key)', async () => {
     const token = await getAuthToken()
-    const res = await search(token, 'test query', 'brave')
+    const res = await search(token, 'test query')
     expect(res.status).toBe(500)
     const json = await res.json()
     expect(json).toEqual({ error: 'server misconfigured' })
@@ -299,7 +277,7 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const res = await search(token, 'test query', 'brave', 'user-own-brave-key')
+    const res = await search(token, 'test query', 'user-own-brave-key')
     expect(res.status).toBe(200)
     const json = (await res.json()) as { results: { title: string }[] }
     expect(json.results[0]).toMatchObject({ title: 'Brave Title' })
@@ -313,7 +291,7 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const res = await search(token, 'test query', 'brave', 'user-own-brave-key')
+    const res = await search(token, 'test query', 'user-own-brave-key')
     expect(res.status).toBe(200)
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect((requestInit.headers as Record<string, string>)['X-Subscription-Token']).toBe('user-own-brave-key')
@@ -324,11 +302,12 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     const token = await getAuthToken()
     // A fresh Response per call — a stubbed single instance's body can only be read once.
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 })))
-    expect((await search(token, 'first', 'brave', 'user-own-brave-key')).status).toBe(200)
-    expect((await search(token, 'second', 'brave', 'user-own-brave-key')).status).toBe(200)
+    expect((await search(token, 'first', 'user-own-brave-key')).status).toBe(200)
+    expect((await search(token, 'second', 'user-own-brave-key')).status).toBe(200)
   })
 
   it('returns 502 when the upstream search errors', async () => {
+    process.env.BRAVE_API_KEY = 'test-brave-key'
     const token = await getAuthToken()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 503 })))
     const res = await search(token, 'test query')
@@ -446,8 +425,8 @@ describe('/web/* quotas + observability (W4)', () => {
     process.env.BRAVE_API_KEY = 'test-brave-key'
     const token = await getAuthToken()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ web: { results: [] } }), { status: 200 })))
-    expect((await search(token, 'first', 'brave')).status).toBe(200)
-    const second = await search(token, 'second', 'brave')
+    expect((await search(token, 'first')).status).toBe(200)
+    const second = await search(token, 'second')
     expect(second.status).toBe(429)
     const json = await second.json()
     expect(json).toMatchObject({ error: 'brave search daily ceiling reached' })

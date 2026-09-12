@@ -13,8 +13,8 @@ describe('BrowserConfigStore', () => {
 
   it('save() then load() round-trips exactly', async () => {
     const store = new BrowserConfigStore()
-    await store.save({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
-    expect(await store.load()).toEqual({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
+    await store.save({ enableWeb: true, braveApiKey: 'k' })
+    expect(await store.load()).toEqual({ enableWeb: true, braveApiKey: 'k' })
   })
 
   it('save() merges onto existing persisted state instead of overwriting unrelated keys', async () => {

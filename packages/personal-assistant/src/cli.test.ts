@@ -197,16 +197,16 @@ describe('/config', () => {
     const { cli, configStore } = await setupCli()
     const lines = captureOutput()
 
-    await cli.dispatchLine('/config set enableWeb true')
-    expect(await configStore.load()).toMatchObject({ enableWeb: true })
+    await cli.dispatchLine('/config set enableShell true')
+    expect(await configStore.load()).toMatchObject({ enableShell: true })
 
     lines.length = 0
     await cli.dispatchLine('/config')
-    expect(lines.join('\n')).toMatch(/enableWeb\s+true/)
+    expect(lines.join('\n')).toMatch(/enableShell\s+true/)
   })
 
   it('env-pinned keys reject /config set and explain which env var pins them (precedence: env var > persisted > default)', async () => {
-    const { cli, configStore } = await setupCli({ envOverrides: { enableWeb: true } })
+    const { cli, configStore } = await setupCli({ envOverrides: { enableWeb: true, braveApiKey: 'test-key' } })
     const lines = captureOutput()
 
     await cli.dispatchLine('/config set enableWeb false')
@@ -235,11 +235,11 @@ describe('/config', () => {
     expect(await configStore.load()).toEqual({})
   })
 
-  it('/config set rejects a combination validateConfig() disallows (brave search backend with no braveApiKey)', async () => {
+  it('/config set rejects a combination validateConfig() disallows (enableWeb with no braveApiKey)', async () => {
     const { cli, configStore } = await setupCli()
     const lines = captureOutput()
 
-    await cli.dispatchLine('/config set searchBackend brave')
+    await cli.dispatchLine('/config set enableWeb true')
 
     expect(lines.join('\n')).toContain('braveApiKey')
     expect(await configStore.load()).toEqual({})
@@ -522,12 +522,12 @@ describe('command dispatch table', () => {
     captureOutput()
 
     await Promise.all([
-      cli.dispatchLine('/config set enableWeb true'),
+      cli.dispatchLine('/config set dangerouslySkipPermissions true'),
       cli.dispatchLine('/config set enableShell true'),
     ])
 
     // Both patches landed — a race would have let one read-modify-write clobber the other.
-    expect(await configStore.load()).toMatchObject({ enableWeb: true, enableShell: true })
+    expect(await configStore.load()).toMatchObject({ dangerouslySkipPermissions: true, enableShell: true })
   })
 })
 

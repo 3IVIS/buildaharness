@@ -380,8 +380,8 @@ describe('App', () => {
       expect(lastWebTools()).toBeUndefined()
     })
 
-    it('enableWeb true passes a webTools.search that really calls DuckDuckGo\'s endpoint via fetch (not a no-op stub)', async () => {
-      seedConfig({ enableWeb: true })
+    it('enableWeb true passes a webTools.search that really calls Brave\'s API via fetch (not a no-op stub)', async () => {
+      seedConfig({ enableWeb: true, braveApiKey: 'test-key' })
       render(<App />)
       await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
       const webTools = lastWebTools()
@@ -389,17 +389,8 @@ describe('App', () => {
 
       // fetch is stubbed (beforeEach) to reject — this proves search() genuinely reaches the
       // network layer instead of being a silently-inert stub, and that a failure (e.g. the real
-      // CORS block a plain browser tab hits against html.duckduckgo.com, per App.tsx's doc
+      // CORS block a plain browser tab hits against api.search.brave.com, per App.tsx's doc
       // comment) propagates as a rejection for assistant.ts's tool dispatch to catch, not swallow.
-      await expect(webTools!.search('test query')).rejects.toThrow()
-      expect(fetch).toHaveBeenCalledWith('https://html.duckduckgo.com/html/', expect.anything())
-    })
-
-    it('enableWeb true + searchBackend "brave" passes a webTools.search that calls Brave\'s API instead', async () => {
-      seedConfig({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'test-key' })
-      render(<App />)
-      await waitFor(() => expect(PersonalAssistant.create).toHaveBeenCalled())
-      const webTools = lastWebTools()
       await expect(webTools!.search('test query')).rejects.toThrow()
       expect(fetch).toHaveBeenCalledWith(expect.stringContaining('api.search.brave.com'), expect.anything())
     })

@@ -14,14 +14,14 @@
  * web-search-provider.ts's compiled output. It re-implements the same sandboxing
  * algorithm as file-tools.ts's resolveInWorkspace/assertRealPathInWorkspace, the
  * same untrusted-content wrapping/injection heuristic as trust-tagging.ts, the
- * same SSRF guard as web-tools.ts's assertPublicHttpUrl, and the same DuckDuckGo/
- * Brave search parsing as web-search-provider.ts — keep all of them in sync if any
+ * same SSRF guard as web-tools.ts's assertPublicHttpUrl, and the same Brave
+ * search parsing as web-search-provider.ts — keep all of them in sync if any
  * changes (the `--test` self-check below guards against them silently drifting).
  *
- * web_search is registered only when WEB_SEARCH_BACKEND is set in the env (the CLI
- * sets it whenever `enableWeb` is on for the claude-cli backend) — gated the same
- * way run_shell_command is gated behind ENABLE_SHELL_TOOLS. fetch_url is always
- * registered whenever the server runs at all.
+ * web_search is registered only when BRAVE_SEARCH_API_KEY is set in the env (the
+ * CLI sets it whenever `enableWeb` is on for the claude-cli backend) — gated the
+ * same way run_shell_command is gated behind ENABLE_SHELL_TOOLS. fetch_url is
+ * always registered whenever the server runs at all.
  *
  * Started as a subprocess by the Claude CLI via --mcp-config:
  *   {
@@ -34,8 +34,7 @@
  *           "TOOL_GATE_PORT": "54321",  // optional — see requestToolGate below; omit and every proposal is allowed
  *           "REMINDERS_FILE": "/abs/path/to/reminders.json",  // optional — omit to leave create_reminder/list_reminders unregistered
  *           "ENABLE_SHELL_TOOLS": "1",  // optional — omit to leave run_shell_command unregistered
- *           "WEB_SEARCH_BACKEND": "ddg",  // optional — "ddg" (keyless) or "brave"; omit to leave web_search unregistered
- *           "BRAVE_SEARCH_API_KEY": "..."  // required only when WEB_SEARCH_BACKEND is "brave"
+ *           "BRAVE_SEARCH_API_KEY": "..."  // optional — omit to leave web_search unregistered
  *         }
  *       }
  *     }
@@ -460,73 +459,19 @@ export async function fetchUrlSafely(url) {
   throw new Error(`Too many redirects while fetching "${url}"`)
 }
 
-// ── Web search — mirrors web-search-provider.ts's duckDuckGoSearch/braveSearch ──
+// ── Web search — mirrors web-search-provider.ts's braveSearch ──
 // Ported by hand (not imported — see the file header) and kept in sync with
-// web-search-provider.ts; the DDG-markup parser is exercised against a fixed
-// fixture in the `--test` self-check so a drift shows up in CI. The result-text
-// shape ("title\nurl\nsnippet" blocks, "No results found." when empty) matches
-// web-tools.ts's executeWebTool so this backend's web_search reads identically to
-// the proxy backend's.
+// web-search-provider.ts. The result-text shape ("title\nurl\nsnippet" blocks,
+// "No results found." when empty) matches web-tools.ts's executeWebTool so this
+// backend's web_search reads identically to the proxy backend's. Brave is the
+// only backend — a prior DuckDuckGo-HTML-scraping backend was removed:
+// DuckDuckGo's HTML endpoint resets the TLS connection outright for any
+// non-browser client, a block beneath the HTTP layer no request header or retry
+// can work around (confirmed live during
+// plans/browser_web_tools_via_proxy_plan.html's W8).
 
 const WEB_SEARCH_MAX_RESULTS = 5
 const NO_WEB_RESULTS_LITERAL = 'No results found.'
-
-function stripHtmlToText(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function decodeHtmlEntities(text) {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-}
-
-/** DDG's HTML endpoint wraps result links through /l/?uddg=<encoded-real-url> — unwrap it. */
-function unwrapDdgHref(rawHref) {
-  try {
-    const parsed = new URL(rawHref, 'https://html.duckduckgo.com')
-    const uddg = parsed.searchParams.get('uddg')
-    return uddg ? decodeURIComponent(uddg) : parsed.toString()
-  } catch {
-    return rawHref
-  }
-}
-
-const DDG_TITLE_RE = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g
-const DDG_SNIPPET_RE = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
-
-export function parseDdgResults(html, maxResults = WEB_SEARCH_MAX_RESULTS) {
-  const titles = [...html.matchAll(DDG_TITLE_RE)].map((m) => ({
-    href: m[1],
-    title: decodeHtmlEntities(stripHtmlToText(m[2])),
-  }))
-  const snippets = [...html.matchAll(DDG_SNIPPET_RE)].map((m) => decodeHtmlEntities(stripHtmlToText(m[1])))
-  const out = []
-  for (let i = 0; i < titles.length && out.length < maxResults; i++) {
-    if (!titles[i].title) continue
-    out.push({ title: titles[i].title, url: unwrapDdgHref(titles[i].href), snippet: snippets[i] ?? '' })
-  }
-  return out
-}
-
-async function duckDuckGoSearch(query, fetchImpl = fetch) {
-  const response = await fetchImpl('https://html.duckduckgo.com/html/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `q=${encodeURIComponent(query)}`,
-  })
-  if (!response.ok) throw new Error(`Web search failed with status ${response.status}`)
-  return parseDdgResults(await response.text())
-}
 
 async function braveSearch(query, apiKey, fetchImpl = fetch) {
   const url = new URL('https://api.search.brave.com/res/v1/web/search')
@@ -547,13 +492,9 @@ export function formatWebSearchResults(results) {
   return results.map((r) => `${r.title}\n${r.url}\n${r.snippet}`).join('\n\n')
 }
 
-/** Runs a web search on the configured backend and returns the result text already wrapped as untrusted external content (there is no outer loop here to tag it — same reason fetch_url is tagged in-server). */
+/** Runs a Brave web search and returns the result text already wrapped as untrusted external content (there is no outer loop here to tag it — same reason fetch_url is tagged in-server). */
 async function runWebSearch(query, fetchImpl = fetch) {
-  const backend = process.env.WEB_SEARCH_BACKEND
-  const results =
-    backend === 'brave'
-      ? await braveSearch(query, process.env.BRAVE_SEARCH_API_KEY ?? '', fetchImpl)
-      : await duckDuckGoSearch(query, fetchImpl)
+  const results = await braveSearch(query, process.env.BRAVE_SEARCH_API_KEY ?? '', fetchImpl)
   return wrapUntrusted(formatWebSearchResults(results))
 }
 
@@ -901,7 +842,7 @@ async function main() {
     },
   )
 
-  if (process.env.WEB_SEARCH_BACKEND) {
+  if (process.env.BRAVE_SEARCH_API_KEY) {
     server.registerTool(
       'web_search',
       {
@@ -1099,38 +1040,21 @@ async function selfTest() {
     }
     await assertPublicHttpUrl('https://example.com/') // a real public target — this self-test needs network access
 
-    // Web search: the DDG-markup parser against a fixed fixture (drift guard vs.
-    // web-search-provider.ts), and runWebSearch's untrusted-content wrapping with an
+    // Web search: runWebSearch's Brave parsing + untrusted-content wrapping with an
     // injected fake fetch so no real network call happens here.
-    const ddgFixture =
-      '<div class="result"><a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Fdocs">Example &amp; Docs</a>' +
-      '<a class="result__snippet">The <b>canonical</b> docs page.</a></div>'
-    const parsed = parseDdgResults(ddgFixture)
-    if (parsed.length !== 1 || parsed[0].url !== 'https://example.com/docs' || parsed[0].title !== 'Example & Docs') {
-      throw new Error('parseDdgResults did not parse the DDG fixture as expected')
-    }
     if (formatWebSearchResults([]) !== 'No results found.') {
       throw new Error('formatWebSearchResults should return the shared "No results found." literal for an empty list')
     }
-    const savedBackend = process.env.WEB_SEARCH_BACKEND
     const savedBraveKey = process.env.BRAVE_SEARCH_API_KEY
     try {
-      process.env.WEB_SEARCH_BACKEND = 'ddg'
-      delete process.env.BRAVE_SEARCH_API_KEY
-      const fakeFetch = async () => new Response(ddgFixture, { status: 200 })
-      const wrapped = await runWebSearch('anything', fakeFetch)
-      if (!wrapped.startsWith('<untrusted_external_content>\n') || !wrapped.includes('https://example.com/docs')) {
-        throw new Error('runWebSearch (ddg) did not return wrapped, parsed results')
-      }
-      process.env.WEB_SEARCH_BACKEND = 'brave'
       process.env.BRAVE_SEARCH_API_KEY = 'test-key'
       const fakeBrave = async () =>
         new Response(JSON.stringify({ web: { results: [{ title: 'B', url: 'https://b.example', description: 'd' }] } }), { status: 200 })
       const braveWrapped = await runWebSearch('anything', fakeBrave)
-      if (!braveWrapped.includes('https://b.example')) throw new Error('runWebSearch (brave) did not return parsed results')
+      if (!braveWrapped.startsWith('<untrusted_external_content>\n') || !braveWrapped.includes('https://b.example')) {
+        throw new Error('runWebSearch did not return wrapped, parsed results')
+      }
     } finally {
-      if (savedBackend === undefined) delete process.env.WEB_SEARCH_BACKEND
-      else process.env.WEB_SEARCH_BACKEND = savedBackend
       if (savedBraveKey === undefined) delete process.env.BRAVE_SEARCH_API_KEY
       else process.env.BRAVE_SEARCH_API_KEY = savedBraveKey
     }
@@ -1173,8 +1097,8 @@ async function selfTest() {
 
 // Only auto-run when invoked directly (`node file-tools-mcp-server.mjs [--test]`, and the
 // `--mcp-config` spawn in claude-cli-llm-client.ts) — not when imported as a module, so a
-// vitest can pull the pure helpers (parseDdgResults, formatWebSearchResults, wrapUntrusted,
-// …) without starting the stdio server or the self-test.
+// vitest can pull the pure helpers (formatWebSearchResults, wrapUntrusted, …) without starting
+// the stdio server or the self-test.
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (invokedDirectly) {
   if (process.argv.includes('--test')) {

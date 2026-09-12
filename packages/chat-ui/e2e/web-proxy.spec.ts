@@ -90,7 +90,7 @@ test.describe('web tools via proxy (W7)', () => {
   test('web_search then fetch_url route through the proxy and the fetched text reaches the reply', async ({ chat }) => {
     const page = await chat({
       oneLoopMode: 'disabled',
-      config: { enableWeb: true, webBackend: 'proxy', proxyUrl: stub.url, authToken: AUTH_TOKEN },
+      config: { enableWeb: true, webBackend: 'proxy', proxyUrl: stub.url, authToken: AUTH_TOKEN, braveApiKey: 'test-brave-key' },
       script: {
         responses: [
           { content: '', toolCalls: [{ id: 't1', name: 'web_search', input: { query: 'buildaharness' } }] },
@@ -107,7 +107,7 @@ test.describe('web tools via proxy (W7)', () => {
 
     const searchCall = stub.calls.find((c) => c.path === '/web/search')
     expect(searchCall?.authHeader).toBe(`Bearer ${AUTH_TOKEN}`)
-    expect(searchCall?.body).toEqual({ query: 'buildaharness', backend: 'ddg' })
+    expect(searchCall?.body).toEqual({ query: 'buildaharness', braveApiKey: 'test-brave-key' })
 
     const fetchCall = stub.calls.find((c) => c.path === '/web/fetch')
     expect(fetchCall?.authHeader).toBe(`Bearer ${AUTH_TOKEN}`)

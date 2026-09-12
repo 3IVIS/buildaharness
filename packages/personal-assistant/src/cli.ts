@@ -31,7 +31,7 @@ import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
 import { runApprovedShellCommand } from './shell-executor.js'
 import { createResendSender, type SendEmail } from './email.js'
 import { createSmtpSender } from './email-smtp.js'
-import { duckDuckGoSearch, braveSearch } from './web-search-provider.js'
+import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
@@ -102,9 +102,7 @@ function buildLlmClient(config: AssistantConfig, workspaceRoot: string, reminder
         fileTools: { workspaceRoot },
         remindersFile,
         shellTools: config.enableShell ? { workspaceRoot } : undefined,
-        webTools: config.enableWeb
-          ? { searchBackend: config.searchBackend === 'brave' ? 'brave' : 'ddg', braveApiKey: config.braveApiKey as string | undefined }
-          : undefined,
+        webTools: config.enableWeb ? { braveApiKey: config.braveApiKey as string | undefined } : undefined,
         actionTools: config.enableEmail ? { workspaceRoot } : undefined,
       })
     case 'anthropic':
@@ -137,16 +135,13 @@ interface BuildAssistantDeps {
 
 async function buildAssistant(config: AssistantConfig, { backend, dataDir, remindersFile }: BuildAssistantDeps): Promise<PersonalAssistant> {
   const workspaceRoot = config.workspaceRoot ?? process.cwd()
-  const search =
-    config.searchBackend === 'brave'
-      ? (query: string) => braveSearch(query, config.braveApiKey as string)
-      : (query: string) => duckDuckGoSearch(query)
+  const search = (query: string) => braveSearch(query, config.braveApiKey as string)
 
   // `search` above is the proxy backend's injected web_search implementation (its manual
   // tool loop calls it directly). The claude-cli backend can't take an injected function —
   // its tools run inside the `claude -p` subprocess — so buildLlmClient passes the same
-  // DDG/Brave selection through to the file-tools MCP server as env instead. Either way,
-  // `enableWeb` now wires web_search on both backends.
+  // Brave key through to the file-tools MCP server as env instead. Either way, `enableWeb`
+  // now wires web_search on both backends.
   const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
   return PersonalAssistant.create({
@@ -318,7 +313,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // No silent default: capabilities only appear in the banner when actually configured,
   // so the banner never implies something is available that isn't.
   const enabledCapabilities: string[] = []
-  if (config.enableWeb) enabledCapabilities.push(`web search/fetch (${config.searchBackend})`)
+  if (config.enableWeb) enabledCapabilities.push('web search/fetch (brave)')
   if (config.enableShell) enabledCapabilities.push(`shell commands (${config.dangerouslySkipPermissions ? 'NOT approval-gated' : 'approval-gated'})`)
   const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
   // Loud and separate from the capability list above (which is easy to skim past) —

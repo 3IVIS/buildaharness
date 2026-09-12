@@ -25,8 +25,8 @@ describe('NodeConfigStore', () => {
 
   it('save() then load() round-trips exactly, creating parent directories as needed', async () => {
     const { store } = await makeStore()
-    await store.save({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
-    expect(await store.load()).toEqual({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
+    await store.save({ enableWeb: true, braveApiKey: 'k' })
+    expect(await store.load()).toEqual({ enableWeb: true, braveApiKey: 'k' })
   })
 
   it('save() merges onto existing persisted state instead of overwriting unrelated keys', async () => {
@@ -56,9 +56,9 @@ describe('NodeConfigStore', () => {
     await Promise.all([
       store.save({ model: 'a' }),
       store.save({ enableWeb: true }),
-      store.save({ searchBackend: 'brave', braveApiKey: 'k' }),
+      store.save({ braveApiKey: 'k' }),
     ])
-    expect(await store.load()).toEqual({ model: 'a', enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
+    expect(await store.load()).toEqual({ model: 'a', enableWeb: true, braveApiKey: 'k' })
   })
 
   it('writes through a temp file that is renamed into place, leaving no temp file behind', async () => {

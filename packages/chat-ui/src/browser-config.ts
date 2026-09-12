@@ -14,6 +14,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   authToken: 'VITE_ASSISTANT_PROXY_TOKEN',
   model: 'VITE_ASSISTANT_MODEL',
   oneLoopMode: 'VITE_ASSISTANT_ONE_LOOP',
+  enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
+  webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
 }
 
 /**
@@ -31,5 +33,14 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   // CLI's ASSISTANT_ONE_LOOP. normalizeOneLoopMode warns-and-defaults on a typo, so a build that
   // sets this at all always resolves to a concrete 'enabled'/'disabled'.
   if (env.VITE_ASSISTANT_ONE_LOOP) overrides.oneLoopMode = normalizeOneLoopMode(env.VITE_ASSISTANT_ONE_LOOP, 'VITE_ASSISTANT_ONE_LOOP')
+  // W8 of plans/browser_web_tools_via_proxy_plan.html — lets a specific build (the hosted /try
+  // trial) default web tools on and routed through the proxy, without touching DEFAULT_CONFIG
+  // for every other build (dev, self-hosted, etc).
+  if (env.VITE_ASSISTANT_ENABLE_WEB) overrides.enableWeb = env.VITE_ASSISTANT_ENABLE_WEB === 'true'
+  if (env.VITE_ASSISTANT_WEB_BACKEND === 'proxy' || env.VITE_ASSISTANT_WEB_BACKEND === 'direct') {
+    overrides.webBackend = env.VITE_ASSISTANT_WEB_BACKEND
+  } else if (env.VITE_ASSISTANT_WEB_BACKEND) {
+    console.warn(`Unrecognized VITE_ASSISTANT_WEB_BACKEND "${env.VITE_ASSISTANT_WEB_BACKEND}" — ignoring, falling back to the default.`)
+  }
   return overrides
 }
