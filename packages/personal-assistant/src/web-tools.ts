@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '@buildaharness/runtime'
 import { requireStringArg } from './file-tools.js'
+import { fetchTextSafely, type DnsResolver } from './web-fetch-core.js'
 
 export interface WebSearchResult {
   title: string
@@ -7,107 +8,12 @@ export interface WebSearchResult {
   snippet: string
 }
 
-/**
- * Thrown by assertPublicHttpUrl instead of returning a falsy value, so callers
- * can't accidentally proceed past a rejected URL.
- */
-export class PrivateNetworkTargetError extends Error {
-  constructor(public readonly requestedUrl: string, public readonly detail: string) {
-    super(`Refusing to fetch "${requestedUrl}": ${detail}`)
-    this.name = 'PrivateNetworkTargetError'
-  }
-}
-
-/** Resolves a hostname to its IP addresses. Injected so assertPublicHttpUrl stays unit-testable without real DNS/network access. */
-export type DnsResolver = (hostname: string) => Promise<string[]>
-
-/**
- * node:dns/promises, loaded lazily (not a static top-level import) so this module has no
- * hard Node dependency — it's reachable from assistant.ts/index.ts, which is also bundled
- * into the browser build (chat-ui), and a static `import 'node:dns/promises'` would break
- * that build even though this path only actually runs when a caller omits `dns`.
- */
-async function defaultDnsResolver(hostname: string): Promise<string[]> {
-  const dns = await import('node:dns/promises')
-  const records = await dns.lookup(hostname, { all: true })
-  return records.map((r) => r.address)
-}
-
-function stripBrackets(hostname: string): string {
-  return hostname.replace(/^\[/, '').replace(/\]$/, '')
-}
-
-function isLiteralIpAddress(hostname: string): boolean {
-  return /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes(':')
-}
-
-function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false
-  const [a, b] = parts
-  if (a === 127) return true // loopback
-  if (a === 10) return true // RFC1918
-  if (a === 172 && b >= 16 && b <= 31) return true // RFC1918
-  if (a === 192 && b === 168) return true // RFC1918
-  if (a === 169 && b === 254) return true // link-local, includes the 169.254.169.254 cloud metadata endpoint
-  if (a === 0) return true // "this network"
-  return false
-}
-
-function isPrivateIPv6(ip: string): boolean {
-  const normalized = ip.toLowerCase()
-  if (normalized === '::1' || normalized === '::') return true
-  if (normalized.startsWith('fe80:')) return true // link-local
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // unique local, fc00::/7
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)
-  if (mapped) return isPrivateIPv4(mapped[1])
-  return false
-}
-
-function isPrivateAddress(ip: string): boolean {
-  return ip.includes(':') ? isPrivateIPv6(ip) : isPrivateIPv4(ip)
-}
-
-/**
- * Parses `url`, rejects non-http(s) schemes outright, then resolves the hostname and throws
- * PrivateNetworkTargetError if any resolved address is loopback, RFC1918 private, link-local,
- * or a well-known cloud metadata address. Must be called again on every redirect hop — a public
- * URL can 302 to a private one — which is exactly what fetch_url's manual redirect loop below does.
- */
-export async function assertPublicHttpUrl(url: string, dns: DnsResolver = defaultDnsResolver): Promise<void> {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    throw new PrivateNetworkTargetError(url, 'not a valid URL')
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new PrivateNetworkTargetError(url, `unsupported scheme "${parsed.protocol}"`)
-  }
-
-  const hostname = stripBrackets(parsed.hostname)
-
-  if (hostname === 'localhost') {
-    throw new PrivateNetworkTargetError(url, '"localhost" resolves to a loopback address')
-  }
-
-  if (isLiteralIpAddress(hostname)) {
-    if (isPrivateAddress(hostname)) {
-      throw new PrivateNetworkTargetError(url, `"${hostname}" is a private/loopback/link-local address`)
-    }
-    return
-  }
-
-  const addresses = await dns(hostname)
-  if (addresses.length === 0) {
-    throw new PrivateNetworkTargetError(url, `could not resolve "${hostname}"`)
-  }
-  for (const address of addresses) {
-    if (isPrivateAddress(address)) {
-      throw new PrivateNetworkTargetError(url, `"${hostname}" resolves to private/loopback/link-local address "${address}"`)
-    }
-  }
-}
+// The SSRF guard (PrivateNetworkTargetError, assertPublicHttpUrl, DnsResolver) and the safe-fetch
+// redirect/byte-cap/content-type loop now live in web-fetch-core.ts, shared with
+// @buildaharness/proxy's POST /web/fetch route — re-exported here so this module's public surface
+// (and every existing caller's import path) stays unchanged.
+export { PrivateNetworkTargetError, assertPublicHttpUrl } from './web-fetch-core.js'
+export type { DnsResolver } from './web-fetch-core.js'
 
 export interface WebToolsContext {
   /** No default implementation — the caller supplies a real search backend (an API client, etc.), same way FileToolsContext's `backend` is injected rather than defaulted to real disk. See `duckDuckGoSearch` in web-search-provider.ts for a ready-made one. */
@@ -146,44 +52,14 @@ export const WEB_TOOLS: ToolDefinition[] = [WEB_SEARCH_TOOL, FETCH_URL_TOOL]
 
 export type WebToolResult = { kind: 'text'; text: string }
 
-const MAX_REDIRECTS = 5
-
-// Real pages routinely run tens-to-hundreds of KB of raw HTML. On the claude-cli backend, a tool
-// result this large gets written by the `claude -p` subprocess itself to a temp file, and the model
-// falls back to proposing a `sed`/`grep` shell command to page through it — turning a read-only
-// "fetch and summarize a page" request into an unexplained shell-command approval prompt (found live:
-// fetching a real Wikipedia article did exactly this, and declining it — the only possible outcome in
-// a non-interactive/heredoc-driven turn — silently dropped the whole request with no indication a
-// fetch had even succeeded). Capping the returned text well below that threshold keeps fetch_url a
-// single-step, non-shell-gated tool call for the vast majority of real pages.
-const MAX_FETCH_CHARS = 15_000
-
-function truncateFetchedText(text: string): string {
-  if (text.length <= MAX_FETCH_CHARS) return text
-  return `${text.slice(0, MAX_FETCH_CHARS)}\n\n[... truncated at ${MAX_FETCH_CHARS} characters; the page is longer than shown here ...]`
-}
-
 /**
- * Fetches `url`, following redirects manually (not via fetch's automatic redirect-follow) so
- * every hop gets its own assertPublicHttpUrl check — a public URL that 302s to a private target
- * is rejected mid-fetch, not silently followed.
+ * Fetches `url` via the shared web-fetch-core guard/redirect/byte-cap/content-type loop.
+ * MAX_FETCH_CHARS's char-level truncation, MAX_REDIRECTS, and the SSRF re-check per hop all live
+ * there now — this is a thin adapter from WebToolsContext's `fetchImpl`/`dns` shape.
  */
 async function fetchUrlSafely(ctx: WebToolsContext, url: string): Promise<string> {
-  const fetchImpl = ctx.fetchImpl ?? fetch
-  let currentUrl = url
-  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-    await assertPublicHttpUrl(currentUrl, ctx.dns)
-    const response = await fetchImpl(currentUrl, { redirect: 'manual' })
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location) throw new Error(`Redirect response from "${currentUrl}" had no Location header`)
-      currentUrl = new URL(location, currentUrl).toString()
-      continue
-    }
-    return truncateFetchedText(await response.text())
-  }
-  throw new Error(`Too many redirects while fetching "${url}"`)
+  const result = await fetchTextSafely({ url, fetchImpl: ctx.fetchImpl, dns: ctx.dns })
+  return result.text
 }
 
 /** Executes web_search/fetch_url. Both return raw, untagged text — trust-tagging is applied by the caller (assistant.ts), not here, so this stays a plain I/O layer like executeFileTool. */

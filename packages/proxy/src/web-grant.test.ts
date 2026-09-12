@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import app from './index'
 import { verifyFetchTag } from './web-fetch-tag'
+import { resetWebRateLimitState } from './rate-limit'
 
 const TEST_SECRET = 'test-proxy-secret-12345'
 
@@ -18,11 +19,13 @@ async function getAuthToken(): Promise<string> {
 beforeEach(() => {
   process.env.PROXY_SECRET = TEST_SECRET
   process.env.ALLOWED_ORIGIN = 'http://localhost:5173'
+  resetWebRateLimitState()
 })
 
 afterEach(() => {
   delete process.env.PROXY_SECRET
   delete process.env.ALLOWED_ORIGIN
+  resetWebRateLimitState()
 })
 
 describe('POST /web/grant', () => {

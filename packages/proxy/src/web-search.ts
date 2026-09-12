@@ -1,4 +1,7 @@
 import type { Context } from 'hono'
+import { signFetchTag } from './web-fetch-tag'
+import { braveDailyCounter, DAY_MS, getWebRateLimitConfig, logWebRequest } from './rate-limit'
+import { subjectOf } from './web-quota-middleware'
 
 /**
  * Server-side web search for POST /web/search.
@@ -13,6 +16,11 @@ export interface WebSearchResult {
   title: string
   url: string
   snippet: string
+}
+
+export interface TaggedWebSearchResult extends WebSearchResult {
+  /** Signed-URL capability tag — see web-fetch-tag.ts. Only a fetch of this exact URL, presented with this tag, is accepted by /web/fetch. */
+  fetchTag: string
 }
 
 function stripHtml(html: string): string {
@@ -103,26 +111,55 @@ interface WebSearchRequestBody {
 
 export async function handleWebSearch(c: Context): Promise<Response> {
   const body = await c.req.json<WebSearchRequestBody>().catch(() => null)
+  const sub = subjectOf(c)
   if (!body || typeof body.query !== 'string' || !body.query.trim()) {
+    logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 400 })
     return c.json({ error: 'missing query field' }, 400)
   }
   if (body.backend !== undefined && body.backend !== 'ddg' && body.backend !== 'brave') {
+    logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 400 })
     return c.json({ error: 'invalid backend' }, 400)
   }
 
   const env = (c.env ?? {}) as Record<string, string | undefined>
   const backend = body.backend ?? env.WEB_SEARCH_BACKEND ?? process.env.WEB_SEARCH_BACKEND ?? 'ddg'
+  // createAuthMiddleware() already 500'd if this were missing, so it's guaranteed present here.
+  const proxySecret = (env.PROXY_SECRET ?? process.env.PROXY_SECRET) as string
+  const query = body.query
+
+  // Global daily ceiling on Brave calls (not per-sub or per-IP): protects the one shared
+  // BRAVE_API_KEY from being run up or banned by aggregate traffic, e.g. the hosted /try build
+  // where many anonymous visitors share a single token — see the plan's W4 scope + risks.
+  if (backend === 'brave') {
+    const config = getWebRateLimitConfig(env)
+    const braveResult = braveDailyCounter.consume('global', 1, config.braveDailyCeiling, DAY_MS)
+    if (!braveResult.allowed) {
+      logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 429, guardRejectReason: 'brave daily ceiling' })
+      return c.json({ error: 'brave search daily ceiling reached' }, 429, { 'Retry-After': String(braveResult.retryAfterSeconds) })
+    }
+  }
 
   try {
-    if (backend === 'brave') {
-      const apiKey = env.BRAVE_API_KEY ?? process.env.BRAVE_API_KEY
-      if (!apiKey) return c.json({ error: 'server misconfigured' }, 500)
-      const results = await braveSearch(body.query, apiKey)
-      return c.json({ results })
+    const results =
+      backend === 'brave'
+        ? await (async () => {
+            const apiKey = env.BRAVE_API_KEY ?? process.env.BRAVE_API_KEY
+            if (!apiKey) return null
+            return braveSearch(query, apiKey)
+          })()
+        : await duckDuckGoSearch(query)
+    if (results === null) {
+      logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 500 })
+      return c.json({ error: 'server misconfigured' }, 500)
     }
-    const results = await duckDuckGoSearch(body.query)
-    return c.json({ results })
+
+    const tagged: TaggedWebSearchResult[] = await Promise.all(
+      results.map(async (r) => ({ ...r, fetchTag: await signFetchTag(r.url, proxySecret) })),
+    )
+    logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 200 })
+    return c.json({ results: tagged })
   } catch {
+    logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/search', status: 502 })
     return c.json({ error: 'upstream search failed' }, 502)
   }
 }

@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import app from './index'
+import { signFetchTag } from './web-fetch-tag'
+import { resetWebRateLimitState } from './rate-limit'
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(async () => {
@@ -29,17 +31,19 @@ async function mockDns(map: Record<string, string[]>): Promise<void> {
   })
 }
 
-async function fetchBody(url: string, token: string): Promise<Response> {
+async function fetchBody(url: string, token: string, fetchTag?: string): Promise<Response> {
+  const tag = fetchTag ?? (await signFetchTag(url, TEST_SECRET))
   return app.request('/web/fetch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, fetchTag: tag }),
   })
 }
 
 beforeEach(() => {
   process.env.PROXY_SECRET = TEST_SECRET
   process.env.ALLOWED_ORIGIN = 'http://localhost:5173'
+  resetWebRateLimitState()
 })
 
 afterEach(() => {
@@ -47,6 +51,7 @@ afterEach(() => {
   delete process.env.ALLOWED_ORIGIN
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  resetWebRateLimitState()
 })
 
 describe('POST /web/fetch', () => {
@@ -63,6 +68,36 @@ describe('POST /web/fetch', () => {
     const token = await getAuthToken()
     const res = await fetchBody('', token)
     expect(res.status).toBe(400)
+  })
+
+  it('returns 403 when no fetchTag is provided', async () => {
+    const token = await getAuthToken()
+    const res = await app.request('/web/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ url: 'http://public.example/' }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 403 for a forged fetchTag', async () => {
+    const token = await getAuthToken()
+    const res = await fetchBody('http://public.example/', token, '9999999999.not-a-real-signature')
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 403 when the fetchTag was signed for a different URL', async () => {
+    const token = await getAuthToken()
+    const tagForOtherUrl = await signFetchTag('http://other.example/', TEST_SECRET)
+    const res = await fetchBody('http://public.example/', token, tagForOtherUrl)
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 403 for an expired fetchTag', async () => {
+    const token = await getAuthToken()
+    const expiredTag = await signFetchTag('http://public.example/', TEST_SECRET, -1)
+    const res = await fetchBody('http://public.example/', token, expiredTag)
+    expect(res.status).toBe(403)
   })
 
   it('returns 400 for a raw IP literal target', async () => {

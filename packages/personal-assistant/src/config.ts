@@ -29,6 +29,17 @@ export interface AssistantConfig {
   enableWeb: boolean
   searchBackend: 'ddg' | 'brave'
   braveApiKey?: string
+  /**
+   * Which HTTP path web_search/fetch_url take in a plain browser tab (desktop always ignores
+   * this and uses the Tauri path — see chat-ui's createWebTools). 'direct' (default) is today's
+   * behavior: DuckDuckGo/Brave and the target URL are called straight from the browser, which
+   * fails with a CORS error for most real targets (see createWebTools's doc comment) — kept as
+   * the default so a fresh browser install never silently starts sending traffic through a proxy
+   * that isn't configured. 'proxy' routes both tools through `${proxyUrl}/web/search`,
+   * `/web/fetch`, and `/web/grant` (see plans/browser_web_tools_via_proxy_plan.html) using the
+   * same `authToken` already wired for `/llm/chat`.
+   */
+  webBackend: 'direct' | 'proxy'
   enableShell: boolean
   shellTimeoutMs?: number
   /**
@@ -109,6 +120,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'enableWeb',
   'searchBackend',
   'braveApiKey',
+  'webBackend',
   'enableShell',
   'shellTimeoutMs',
   'shellNetworkAllowlist',
@@ -134,6 +146,7 @@ export const DEFAULT_CONFIG: AssistantConfig = {
   authToken: '',
   enableWeb: false,
   searchBackend: 'ddg',
+  webBackend: 'direct',
   enableShell: false,
   enableEmail: false,
   dangerouslySkipPermissions: false,

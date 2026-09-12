@@ -10,11 +10,23 @@ compatibility_date = "2024-01-01"
 [vars]
 ALLOWED_ORIGIN = "http://localhost:5173"
 PORT = "3001"
+WEB_SEARCH_BACKEND = "ddg"
+
+# /web/* quota tuning (all optional — see src/rate-limit.ts's DEFAULTS for fallbacks if unset)
+# WEB_REQUESTS_PER_HOUR = "120"
+# WEB_BYTES_PER_HOUR = "2000000"
+# WEB_MAX_CONCURRENT_FETCHES = "4"
+# WEB_HOST_REQUESTS_PER_HOUR = "60"
+# WEB_PER_IP_REQUESTS_PER_HOUR = "30"
+# WEB_BRAVE_DAILY_CEILING = "2000"
+# WEB_GRANT_REQUESTS_PER_HOUR = "20"
+# WEB_GUARD_REJECT_ALERT_THRESHOLD = "5"
 
 # Secrets — set via: wrangler secret put <NAME>
 # ANTHROPIC_API_KEY
 # OPENAI_API_KEY
 # PROXY_SECRET
+# BRAVE_API_KEY (only needed if WEB_SEARCH_BACKEND = "brave")
 
 # Local dev with miniflare (wrangler dev uses miniflare under the hood).
 # Override vars for local dev by creating a .dev.vars file (gitignored):
@@ -22,6 +34,8 @@ PORT = "3001"
 #   OPENAI_API_KEY=sk-...
 #   PROXY_SECRET=local-secret
 #   ALLOWED_ORIGIN=http://localhost:5173
+#   WEB_SEARCH_BACKEND=ddg
+#   BRAVE_API_KEY=...
 
 [dev]
 port = 3001

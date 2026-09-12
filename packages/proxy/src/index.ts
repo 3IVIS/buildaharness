@@ -2,12 +2,27 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createAuthMiddleware, signToken } from './auth'
 import { forwardToProvider } from './forward'
+import { handleWebSearch } from './web-search'
+import { handleWebFetch } from './web-fetch'
+import { handleWebGrant } from './web-grant'
+import { createWebQuotaMiddleware } from './web-quota-middleware'
 
 type Bindings = {
   ALLOWED_ORIGIN: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
   PROXY_SECRET: string
+  WEB_SEARCH_BACKEND: string
+  BRAVE_API_KEY: string
+  // /web/* quota tuning (all optional — see rate-limit.ts's DEFAULTS for fallbacks)
+  WEB_REQUESTS_PER_HOUR?: string
+  WEB_BYTES_PER_HOUR?: string
+  WEB_MAX_CONCURRENT_FETCHES?: string
+  WEB_HOST_REQUESTS_PER_HOUR?: string
+  WEB_PER_IP_REQUESTS_PER_HOUR?: string
+  WEB_BRAVE_DAILY_CEILING?: string
+  WEB_GRANT_REQUESTS_PER_HOUR?: string
+  WEB_GUARD_REJECT_ALERT_THRESHOLD?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -35,6 +50,18 @@ app.post('/auth/token', async (c) => {
 
 app.post('/llm/chat', createAuthMiddleware(), async (c) => {
   return forwardToProvider(c)
+})
+
+app.post('/web/search', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+  return handleWebSearch(c)
+})
+
+app.post('/web/fetch', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+  return handleWebFetch(c)
+})
+
+app.post('/web/grant', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+  return handleWebGrant(c)
 })
 
 export default app
