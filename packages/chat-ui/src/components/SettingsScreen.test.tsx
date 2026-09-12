@@ -145,6 +145,38 @@ describe('SettingsScreen', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
+  describe('Web backend selection', () => {
+    it('offers the Backend control only on the browser path', () => {
+      const { unmount } = renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true } })
+      expect(screen.getByLabelText('Web backend')).toBeInTheDocument()
+      unmount()
+
+      renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableWeb: true } })
+      expect(screen.queryByLabelText('Web backend')).not.toBeInTheDocument()
+    })
+
+    it('keeps showing the Brave API key field in proxy mode (sent fresh per request, not stored there)', async () => {
+      const user = userEvent.setup()
+      renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true, searchBackend: 'brave', braveApiKey: 'secret' } })
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Web backend'), 'proxy')
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+      expect(screen.getByText(/route through the proxy/)).toBeInTheDocument()
+      expect(screen.getByText(/never stored on the proxy/)).toBeInTheDocument()
+    })
+
+    it('shows the CORS caveat in direct mode on the browser path', () => {
+      renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true, webBackend: 'direct' } })
+      expect(screen.getByText(/CORS-enabled for arbitrary origins/)).toBeInTheDocument()
+    })
+
+    it('still shows the Brave API key field on desktop regardless of webBackend', () => {
+      renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableWeb: true, searchBackend: 'brave', webBackend: 'proxy' } })
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+    })
+  })
+
   it('an invalid combination (brave selected, no key) shows a validation error and does not call onSave', async () => {
     const user = userEvent.setup()
     const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: true } })

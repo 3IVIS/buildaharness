@@ -137,6 +137,9 @@ function createProxyWebTools(config: AssistantConfig): { search: (query: string)
     const { results } = await callProxy<{ results: (WebSearchResult & { fetchTag: string })[] }>('/web/search', {
       query,
       backend: config.searchBackend,
+      // Sent fresh on every call, never persisted proxy-side — see web-search.ts's braveApiKey
+      // request field. Only meaningful when searchBackend is 'brave'; harmless undefined otherwise.
+      braveApiKey: config.searchBackend === 'brave' ? config.braveApiKey : undefined,
     })
     for (const r of results) fetchTagsByUrl.set(r.url, r.fetchTag)
     return results.map(({ title, url, snippet }) => ({ title, url, snippet }))

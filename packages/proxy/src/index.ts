@@ -13,7 +13,10 @@ type Bindings = {
   OPENAI_API_KEY: string
   PROXY_SECRET: string
   WEB_SEARCH_BACKEND: string
-  BRAVE_API_KEY: string
+  /** Fallback only, for a self-hosted operator who wants one shared key for their own deployment
+   * — the browser client normally sends its own key fresh on every /web/search call instead (see
+   * web-search.ts's braveApiKey request field). Not required for that per-user path. */
+  BRAVE_API_KEY?: string
   // /web/* quota tuning (all optional — see rate-limit.ts's DEFAULTS for fallbacks)
   WEB_REQUESTS_PER_HOUR?: string
   WEB_BYTES_PER_HOUR?: string

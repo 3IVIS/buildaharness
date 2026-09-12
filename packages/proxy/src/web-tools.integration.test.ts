@@ -50,11 +50,11 @@ async function fetchBody(url: string, token: string, fetchTag?: string): Promise
   })
 }
 
-async function search(token: string, query: string, backend?: string): Promise<Response> {
+async function search(token: string, query: string, backend?: string, braveApiKey?: string): Promise<Response> {
   return app.request('/web/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ query, backend }),
+    body: JSON.stringify({ query, backend, braveApiKey }),
   })
 }
 
@@ -292,6 +292,40 @@ describe('POST /web/search — backends + fetchTag issuance (W1/W3)', () => {
     expect(res.status).toBe(500)
     const json = await res.json()
     expect(json).toEqual({ error: 'server misconfigured' })
+  })
+
+  it('uses a caller-supplied braveApiKey even when no BRAVE_API_KEY is configured server-side', async () => {
+    const token = await getAuthToken()
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await search(token, 'test query', 'brave', 'user-own-brave-key')
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { results: { title: string }[] }
+    expect(json.results[0]).toMatchObject({ title: 'Brave Title' })
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect((requestInit.headers as Record<string, string>)['X-Subscription-Token']).toBe('user-own-brave-key')
+  })
+
+  it('prefers a caller-supplied braveApiKey over the env-configured shared one', async () => {
+    process.env.BRAVE_API_KEY = 'shared-key'
+    const token = await getAuthToken()
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(BRAVE_JSON), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await search(token, 'test query', 'brave', 'user-own-brave-key')
+    expect(res.status).toBe(200)
+    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect((requestInit.headers as Record<string, string>)['X-Subscription-Token']).toBe('user-own-brave-key')
+  })
+
+  it('does not apply the shared global daily ceiling when the caller brings their own key', async () => {
+    process.env.WEB_BRAVE_DAILY_CEILING = '1'
+    const token = await getAuthToken()
+    // A fresh Response per call — a stubbed single instance's body can only be read once.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 })))
+    expect((await search(token, 'first', 'brave', 'user-own-brave-key')).status).toBe(200)
+    expect((await search(token, 'second', 'brave', 'user-own-brave-key')).status).toBe(200)
   })
 
   it('returns 502 when the upstream search errors', async () => {

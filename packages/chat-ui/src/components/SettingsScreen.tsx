@@ -225,6 +225,36 @@ export function SettingsScreen({
                   <option value="brave">Brave Search API</option>
                 </select>
               </FieldRow>
+              {/* webBackend is ignored on desktop (App.tsx's createWebTools always keeps the Tauri
+                  direct path there regardless of this field) — only worth surfacing in the browser
+                  build, where it actually picks which HTTP path web_search/fetch_url take. */}
+              {!isDesktop && (
+                <FieldRow label="Backend">
+                  <select
+                    aria-label="Web backend"
+                    value={form.webBackend}
+                    disabled={disabled}
+                    onChange={(e) => set('webBackend', e.target.value as AssistantConfig['webBackend'])}
+                  >
+                    <option value="direct">Direct (desktop only)</option>
+                    <option value="proxy">Via proxy (works in the browser)</option>
+                  </select>
+                </FieldRow>
+              )}
+              {!isDesktop && form.webBackend === 'direct' && (
+                <p className="settings__warning">
+                  Direct calls DuckDuckGo/Brave and fetched pages straight from this browser tab.
+                  Most of those endpoints aren't CORS-enabled for arbitrary origins, so searches
+                  and page fetches will typically fail with a fetch error. Switch to "Via proxy" to
+                  use web search/fetch reliably in a plain browser tab.
+                </p>
+              )}
+              {!isDesktop && form.webBackend === 'proxy' && (
+                <p className="settings__hint">
+                  Search and page fetches route through the proxy at {form.proxyUrl || '(no proxy URL set)'} —
+                  your Brave API key below, if set, is sent with each search request and never stored on the proxy.
+                </p>
+              )}
               {form.searchBackend === 'brave' && (
                 <FieldRow label="Brave API key">
                   <input

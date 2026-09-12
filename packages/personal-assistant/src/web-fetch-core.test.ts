@@ -88,4 +88,13 @@ describe('fetchTextSafely', () => {
       })) as unknown as typeof fetch
     await expect(fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, timeoutMs: 20 })).rejects.toThrow('Timed out fetching')
   })
+
+  it('cannot be bypassed by an unrecognized options field (e.g. a future skipLocalGuard sentinel) — the guard always runs', async () => {
+    const internalDns = fakeDns({ 'internal.example': ['10.0.0.1'] })
+    const fetchImpl = (async () => textResponse('should never be reached')) as typeof fetch
+    const optionsWithSentinel = { url: 'http://internal.example/', dns: internalDns, fetchImpl, skipLocalGuard: true } as Parameters<
+      typeof fetchTextSafely
+    >[0]
+    await expect(fetchTextSafely(optionsWithSentinel)).rejects.toThrow(PrivateNetworkTargetError)
+  })
 })

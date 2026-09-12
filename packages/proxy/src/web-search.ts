@@ -107,6 +107,11 @@ async function braveSearch(query: string, apiKey: string): Promise<WebSearchResu
 interface WebSearchRequestBody {
   query?: string
   backend?: string
+  /** Caller-supplied Brave key (chat-ui's config.braveApiKey, sent fresh on every /web/search
+   * call — see App.tsx's createProxyWebTools). Forwarded straight to Brave and never persisted
+   * or logged here. Takes priority over BRAVE_API_KEY below, which exists only for a self-hosted
+   * operator who wants one shared key for their own deployment. */
+  braveApiKey?: string
 }
 
 export async function handleWebSearch(c: Context): Promise<Response> {
@@ -127,10 +132,15 @@ export async function handleWebSearch(c: Context): Promise<Response> {
   const proxySecret = (env.PROXY_SECRET ?? process.env.PROXY_SECRET) as string
   const query = body.query
 
-  // Global daily ceiling on Brave calls (not per-sub or per-IP): protects the one shared
-  // BRAVE_API_KEY from being run up or banned by aggregate traffic, e.g. the hosted /try build
-  // where many anonymous visitors share a single token — see the plan's W4 scope + risks.
-  if (backend === 'brave') {
+  const requestBraveKey = typeof body.braveApiKey === 'string' && body.braveApiKey.trim() ? body.braveApiKey : undefined
+  const sharedBraveKey = env.BRAVE_API_KEY ?? process.env.BRAVE_API_KEY
+  const braveApiKey = requestBraveKey ?? sharedBraveKey
+
+  // Global daily ceiling on Brave calls (not per-sub or per-IP): protects the one *shared*
+  // BRAVE_API_KEY (the self-hosted-operator fallback above) from being run up or banned by
+  // aggregate traffic — see the plan's W4 scope + risks. Doesn't apply when the caller brought
+  // their own key: that key is theirs, on their own Brave account's quota, not this deployment's.
+  if (backend === 'brave' && !requestBraveKey) {
     const config = getWebRateLimitConfig(env)
     const braveResult = braveDailyCounter.consume('global', 1, config.braveDailyCeiling, DAY_MS)
     if (!braveResult.allowed) {
@@ -143,9 +153,8 @@ export async function handleWebSearch(c: Context): Promise<Response> {
     const results =
       backend === 'brave'
         ? await (async () => {
-            const apiKey = env.BRAVE_API_KEY ?? process.env.BRAVE_API_KEY
-            if (!apiKey) return null
-            return braveSearch(query, apiKey)
+            if (!braveApiKey) return null
+            return braveSearch(query, braveApiKey)
           })()
         : await duckDuckGoSearch(query)
     if (results === null) {
