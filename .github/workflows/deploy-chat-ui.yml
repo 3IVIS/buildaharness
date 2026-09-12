@@ -2,8 +2,12 @@ name: Deploy chat-ui to /try
 
 # Builds the browser build of the Aielia assistant (packages/chat-ui) and publishes
 # it to the buildaharness-pages repo under /try/, which GitHub Pages serves at
-# https://buildaharness.com/try. Bring-your-own-key only — the page keeps API keys
-# in the visitor's browser (localStorage), nothing is proxied server-side.
+# https://buildaharness.com/try. Bring-your-own-key for the LLM itself — the page keeps
+# that API key in the visitor's browser (localStorage), nothing is proxied server-side
+# for it. Web search/fetch are the exception (see the Build chat-ui step below): they
+# default to routing through @buildaharness/proxy's SSRF-guarded /web/* endpoints, since
+# a plain browser tab can't call Brave or an arbitrary URL directly (CORS) — the visitor
+# still supplies their own Brave key, sent fresh per request, never stored on the proxy.
 #
 # Needs secrets.PAGES_DEPLOY_KEY: the private half of an SSH deploy key with write
 # access on 3IVIS/buildaharness-pages (Settings → Deploy keys, "Allow write access").
@@ -51,6 +55,17 @@ jobs:
       - name: Build chat-ui
         env:
           CHAT_UI_BASE: /try/
+          # W8 of plans/browser_web_tools_via_proxy_plan.html: gives this build only a working
+          # default web_search/fetch_url path via the deployed proxy Worker — DEFAULT_CONFIG
+          # itself (every other build: dev, self-hosted, desktop) is untouched. These are
+          # defaults, not hard pins (browser-config.ts's envOverridesFromImportMetaEnv sets
+          # them as ordinary overrides, same precedence tier as VITE_ASSISTANT_PROXY_URL): a
+          # visitor can still turn web off or switch back to 'direct' in Settings. No Brave key
+          # is baked in here — each visitor supplies their own (see the proxy's braveApiKey
+          # request field), so search stays off in practice until they do.
+          VITE_ASSISTANT_PROXY_URL: https://buildaharness-proxy.buildaharness.workers.dev
+          VITE_ASSISTANT_ENABLE_WEB: 'true'
+          VITE_ASSISTANT_WEB_BACKEND: proxy
         run: npm run build --workspace=packages/chat-ui
 
       - name: Check deploy key is present
