@@ -354,22 +354,22 @@ untouched by this mechanism — they keep staging unconditionally, as below.
 ```ts
 const assistant = new PersonalAssistant({
   llmClient,
-  webTools: { search: (query) => duckDuckGoSearch(query) }, // any WebSearchResult[]-returning function
+  webTools: { search: (query) => braveSearch(query, apiKey) }, // any WebSearchResult[]-returning function
 })
 ```
 
 `WebToolsContext.search` has no built-in default (the caller supplies a real
-backend, an API client, etc.) — `web-search-provider.ts` ships two ready-made
-ones, wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set (on the
-`claude-cli` backend the same two run inside the file-tools MCP server, since
+backend, an API client, etc.) — `web-search-provider.ts` ships a ready-made
+one, wired in by the CLI when `ASSISTANT_ENABLE_WEB=1` is set (on the
+`claude-cli` backend the same one runs inside the file-tools MCP server, since
 that backend's tools can't take an injected function):
 
-- `duckDuckGoSearch` (default) — queries DuckDuckGo's HTML endpoint, no API
-  key needed (the same provider `adapter/crewai_adapter.py`'s `ddgs`-backed
-  `web_search` uses).
 - `braveSearch` — queries the [Brave Search API](https://api.search.brave.com/app/keys),
-  opt-in via `ASSISTANT_SEARCH_BACKEND=brave` plus `BRAVE_SEARCH_API_KEY`
-  (see below).
+  the only backend this app offers. Requires `BRAVE_SEARCH_API_KEY` (see
+  below). A prior keyless DuckDuckGo-HTML-scraping backend was removed:
+  DuckDuckGo's HTML endpoint resets the TLS connection outright for any
+  non-browser client — a block beneath the HTTP layer no request header or
+  retry can work around.
 
 Both `web_search` and `fetch_url` results are wrapped in
 `<untrusted_external_content>` (with a warning prefix if a regex heuristic
@@ -544,10 +544,9 @@ content preview and asks for confirmation before the turn is resumed with
 is ever written without an explicit yes. A `run_shell_command` call is shown
 the same way, printing the exact command and resolved `cwd` instead.
 
-Set `ASSISTANT_ENABLE_WEB=1` to give the model real `web_search`/`fetch_url`
-tools (no approval needed — see "Web access via tools" above; on the proxy
-backend this defaults to `duckDuckGoSearch` as the search implementation) and
-`ASSISTANT_ENABLE_SHELL=1` to give it a real, approval-gated
+Set `ASSISTANT_ENABLE_WEB=1` (plus `BRAVE_SEARCH_API_KEY`) to give the model
+real `web_search`/`fetch_url` tools (no approval needed — see "Web access via
+tools" above) and `ASSISTANT_ENABLE_SHELL=1` to give it a real, approval-gated
 `run_shell_command` tool scoped to `ASSISTANT_WORKSPACE_DIR`. Both are off by
 default; `ASSISTANT_ENABLE_SHELL` must be exactly `"1"` (a stray
 `ASSISTANT_ENABLE_SHELL=0` left in an env file does not enable it). Optional
@@ -561,8 +560,8 @@ The startup banner only mentions a capability when it's actually enabled —
 nothing implies web/shell access is available when neither env var is set.
 `ASSISTANT_ENABLE_WEB` now works on both backends: the proxy backend calls the
 injected search function directly, and the Claude CLI backend registers
-`web_search` on its file-tools MCP server (DuckDuckGo by default, Brave when
-`ASSISTANT_SEARCH_BACKEND=brave` + `BRAVE_SEARCH_API_KEY` are set).
+`web_search` on its file-tools MCP server — both need `BRAVE_SEARCH_API_KEY`
+set, since Brave Search is the only backend (see below).
 
 #### `--dangerously-skip-permissions` equivalent
 
@@ -610,26 +609,22 @@ piped-stdin case an intentional choice instead of an implicit one. An
 unrecognized value is ignored, with a startup warning, rather than silently
 picking one of the two behaviors for you.
 
-#### Using Brave Search instead of DuckDuckGo
+#### Web search needs a Brave Search API key
 
-By default, `ASSISTANT_ENABLE_WEB=1` uses the free, keyless `duckDuckGoSearch`
-provider. To use the [Brave Search API](https://api.search.brave.com/app/keys)
-instead, opt in explicitly with `ASSISTANT_SEARCH_BACKEND=brave` and supply
-`BRAVE_SEARCH_API_KEY`:
+Brave Search is the only backend `web_search` supports. Enable web tools with
+`ASSISTANT_ENABLE_WEB=1` and supply `BRAVE_SEARCH_API_KEY` (get one at
+[api.search.brave.com/app/keys](https://api.search.brave.com/app/keys)):
 
 ```bash
-ASSISTANT_ENABLE_WEB=1 ASSISTANT_SEARCH_BACKEND=brave BRAVE_SEARCH_API_KEY=your-key \
+ASSISTANT_ENABLE_WEB=1 BRAVE_SEARCH_API_KEY=your-key \
   npm run cli --workspace=packages/personal-assistant
 ```
 
-`ASSISTANT_SEARCH_BACKEND` must be exactly `"brave"` to switch providers —
-any other value (or leaving it unset) keeps the DuckDuckGo default. If
-`ASSISTANT_SEARCH_BACKEND=brave` is set without `BRAVE_SEARCH_API_KEY`, the
-CLI fails fast at startup with an error rather than silently falling back to
-DuckDuckGo, since a missing key there is almost always a misconfiguration.
-The active backend is shown in the startup banner (e.g. `web search/fetch
-(brave)`). Both `searchBackend` and `braveApiKey` can also be set from inside
-a running session with `/config set` instead of an env var — see
+If `ASSISTANT_ENABLE_WEB=1` is set without `BRAVE_SEARCH_API_KEY`, the CLI
+fails fast at startup with an error rather than silently registering a
+non-functional `web_search`. The active state is shown in the startup banner
+(`web search/fetch (brave)`). `braveApiKey` can also be set from inside a
+running session with `/config set` instead of an env var — see
 "Configuration" below.
 
 Set `ASSISTANT_LLM_BACKEND=claude-cli` to skip the proxy entirely and run turns
@@ -675,7 +670,7 @@ remembers.
 
 ## Configuration
 
-Every env var documented above (`ASSISTANT_ENABLE_WEB`, `ASSISTANT_SEARCH_BACKEND`,
+Every env var documented above (`ASSISTANT_ENABLE_WEB`,
 `BRAVE_SEARCH_API_KEY`, `ASSISTANT_ENABLE_SHELL`, `ASSISTANT_SHELL_TIMEOUT_MS`,
 `ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS`, `ASSISTANT_LLM_BACKEND`,
 `ASSISTANT_PROXY_URL`, `ASSISTANT_PROXY_TOKEN`, `ASSISTANT_API_KEY`,
@@ -692,31 +687,30 @@ you> /config
   authToken      (not set)
   apiKey         (not set)
   model          (not set)
-  enableWeb      true    (env-pinned: ASSISTANT_ENABLE_WEB)
-  searchBackend  ddg
+  enableWeb      false
   braveApiKey    (not set)
   enableShell    false
   shellTimeoutMs (not set)
   workspaceRoot  (not set)
   dangerouslySkipPermissions false
 
-you> /config set searchBackend brave
-✗ searchBackend "brave" requires braveApiKey to be set.
+you> /config set enableWeb true
+✗ enableWeb requires braveApiKey to be set (Brave Search is the only backend).
 
 you> /config set braveApiKey sk-...
 ✓ braveApiKey updated (took effect immediately, no restart needed)
 
-you> /config set searchBackend brave
-✓ searchBackend updated (took effect immediately, no restart needed)
+you> /config set enableWeb true
+✓ enableWeb updated (took effect immediately, no restart needed)
 
-you> /config reset searchBackend
-✓ Reset searchBackend to default
+you> /config reset enableWeb
+✓ Reset enableWeb to default
 ```
 
 - `/config` lists every field's current (resolved) value. A field currently
   pinned by an env var shows `(env-pinned: VAR_NAME)` and cannot be changed
   with `/config set` — unset the env var first.
-- `/config set <key> <value>` validates the change (e.g. `searchBackend brave`
+- `/config set <key> <value>` validates the change (e.g. `enableWeb true`
   is rejected without a `braveApiKey` already set) before persisting it, then
   rebuilds the running assistant so the change applies to the very next turn —
   no restart needed.

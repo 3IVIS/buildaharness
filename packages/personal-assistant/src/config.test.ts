@@ -9,9 +9,8 @@ describe('resolveConfig', () => {
   })
 
   it('persisted values win over defaults', () => {
-    const { config } = resolveConfig({ enableWeb: true, searchBackend: 'brave', braveApiKey: 'k' })
+    const { config } = resolveConfig({ enableWeb: true, braveApiKey: 'k' })
     expect(config.enableWeb).toBe(true)
-    expect(config.searchBackend).toBe('brave')
     expect(config.braveApiKey).toBe('k')
   })
 
@@ -34,20 +33,20 @@ describe('resolveConfig', () => {
 })
 
 describe('validateConfig', () => {
-  it('rejects searchBackend: brave with no braveApiKey in the patch or existing config', () => {
-    expect(() => validateConfig({ searchBackend: 'brave' }, DEFAULT_CONFIG)).toThrow(ConfigValidationError)
+  it('rejects enableWeb: true with no braveApiKey in the patch or existing config', () => {
+    expect(() => validateConfig({ enableWeb: true }, DEFAULT_CONFIG)).toThrow(ConfigValidationError)
   })
 
-  it('accepts a patch that sets braveApiKey and searchBackend together', () => {
-    expect(() => validateConfig({ searchBackend: 'brave', braveApiKey: 'k' }, DEFAULT_CONFIG)).not.toThrow()
+  it('accepts a patch that sets braveApiKey and enableWeb together', () => {
+    expect(() => validateConfig({ enableWeb: true, braveApiKey: 'k' }, DEFAULT_CONFIG)).not.toThrow()
   })
 
-  it('accepts searchBackend: brave when braveApiKey is already present on the existing config', () => {
+  it('accepts enableWeb: true when braveApiKey is already present on the existing config', () => {
     const existing = { ...DEFAULT_CONFIG, braveApiKey: 'k' }
-    expect(() => validateConfig({ searchBackend: 'brave' }, existing)).not.toThrow()
+    expect(() => validateConfig({ enableWeb: true }, existing)).not.toThrow()
   })
 
-  it('does not throw for patches unrelated to search backend', () => {
+  it('does not throw for patches unrelated to web search', () => {
     expect(() => validateConfig({ enableShell: true }, DEFAULT_CONFIG)).not.toThrow()
   })
 

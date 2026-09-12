@@ -105,11 +105,11 @@ describe('SettingsScreen', () => {
     expect(screen.queryByText(/previously saved API key has been moved into your OS keychain/)).not.toBeInTheDocument()
   })
 
-  it('Brave API key field is hidden unless searchBackend is set to brave in the form', async () => {
+  it('Brave API key field is hidden unless enableWeb is on', async () => {
     const user = userEvent.setup()
-    renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: true } })
+    renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: false } })
     expect(screen.queryByText('Brave API key')).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Search backend'), 'brave')
+    await user.click(screen.getByLabelText('Enable web search / fetch'))
     expect(screen.getByText('Brave API key')).toBeInTheDocument()
   })
 
@@ -145,10 +145,41 @@ describe('SettingsScreen', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
-  it('an invalid combination (brave selected, no key) shows a validation error and does not call onSave', async () => {
+  describe('Web backend selection', () => {
+    it('offers the Backend control only on the browser path', () => {
+      const { unmount } = renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true } })
+      expect(screen.getByLabelText('Web backend')).toBeInTheDocument()
+      unmount()
+
+      renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableWeb: true } })
+      expect(screen.queryByLabelText('Web backend')).not.toBeInTheDocument()
+    })
+
+    it('keeps showing the Brave API key field in proxy mode (sent fresh per request, not stored there)', async () => {
+      const user = userEvent.setup()
+      renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true, braveApiKey: 'secret' } })
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+
+      await user.selectOptions(screen.getByLabelText('Web backend'), 'proxy')
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+      expect(screen.getByText(/route through the proxy/)).toBeInTheDocument()
+      expect(screen.getByText(/never stored on the proxy/)).toBeInTheDocument()
+    })
+
+    it('shows the CORS caveat in direct mode on the browser path', () => {
+      renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, enableWeb: true, webBackend: 'direct' } })
+      expect(screen.getByText(/CORS-enabled for arbitrary origins/)).toBeInTheDocument()
+    })
+
+    it('still shows the Brave API key field on desktop regardless of webBackend', () => {
+      renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableWeb: true, webBackend: 'proxy' } })
+      expect(screen.getByText('Brave API key')).toBeInTheDocument()
+    })
+  })
+
+  it('an invalid combination (web search enabled, no key) shows a validation error and does not call onSave', async () => {
     const user = userEvent.setup()
     const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: true } })
-    await user.selectOptions(screen.getByLabelText('Search backend'), 'brave')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.getByText(/requires braveApiKey/)).toBeInTheDocument()
     expect(onSave).not.toHaveBeenCalled()

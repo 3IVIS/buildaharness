@@ -27,8 +27,19 @@ export interface AssistantConfig {
   apiKey?: string
   model?: string
   enableWeb: boolean
-  searchBackend: 'ddg' | 'brave'
+  /** Required whenever enableWeb is true — Brave Search is the only backend (see validateConfig). */
   braveApiKey?: string
+  /**
+   * Which HTTP path web_search/fetch_url take in a plain browser tab (desktop always ignores
+   * this and uses the Tauri path — see chat-ui's createWebTools). 'direct' (default) is today's
+   * behavior: Brave and the target URL are called straight from the browser, which fails with a
+   * CORS error for most real targets (see createWebTools's doc comment) — kept as
+   * the default so a fresh browser install never silently starts sending traffic through a proxy
+   * that isn't configured. 'proxy' routes both tools through `${proxyUrl}/web/search`,
+   * `/web/fetch`, and `/web/grant` (see plans/browser_web_tools_via_proxy_plan.html) using the
+   * same `authToken` already wired for `/llm/chat`.
+   */
+  webBackend: 'direct' | 'proxy'
   enableShell: boolean
   shellTimeoutMs?: number
   /**
@@ -107,8 +118,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'apiKey',
   'model',
   'enableWeb',
-  'searchBackend',
   'braveApiKey',
+  'webBackend',
   'enableShell',
   'shellTimeoutMs',
   'shellNetworkAllowlist',
@@ -127,13 +138,13 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'oneLoopMode',
 ]
 
-/** Matches today's actual hardcoded defaults (proxy backend, ddg search, web/shell off) — this plan changes nothing for a caller that never touches config. */
+/** Matches today's actual hardcoded defaults (proxy backend, web/shell off) — this plan changes nothing for a caller that never touches config. */
 export const DEFAULT_CONFIG: AssistantConfig = {
   llmBackend: 'proxy',
   proxyUrl: 'http://localhost:8787',
   authToken: '',
   enableWeb: false,
-  searchBackend: 'ddg',
+  webBackend: 'direct',
   enableShell: false,
   enableEmail: false,
   dangerouslySkipPermissions: false,
@@ -181,16 +192,16 @@ export class ConfigValidationError extends Error {}
 
 /**
  * Validates a prospective patch against the config it would apply to (not just the patch in
- * isolation) — e.g. `{ searchBackend: 'brave' }` is valid if `braveApiKey` is already persisted
- * from an earlier `set`, and invalid if not. Callers (CLI's /config set, chat-ui's SettingsScreen)
- * run this before persisting, so a broken combination is rejected before it's ever written.
+ * isolation) — e.g. `{ enableWeb: true }` is valid if `braveApiKey` is already persisted from an
+ * earlier `set`, and invalid if not. Callers (CLI's /config set, chat-ui's SettingsScreen) run
+ * this before persisting, so a broken combination is rejected before it's ever written.
  */
 const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
 
 export function validateConfig(patch: Partial<AssistantConfig>, existing: AssistantConfig): void {
   const merged = { ...existing, ...patch }
-  if (merged.searchBackend === 'brave' && !merged.braveApiKey) {
-    throw new ConfigValidationError('searchBackend "brave" requires braveApiKey to be set.')
+  if (merged.enableWeb && !merged.braveApiKey) {
+    throw new ConfigValidationError('enableWeb requires braveApiKey to be set (Brave Search is the only backend).')
   }
   if (DIRECT_API_BACKENDS.has(merged.llmBackend) && !merged.apiKey) {
     throw new ConfigValidationError(`llmBackend "${merged.llmBackend}" requires apiKey to be set.`)

@@ -151,8 +151,19 @@ These variables are read by the `@buildaharness/proxy` Hono app — either the C
 | `PROXY_SECRET` | Yes | Secret | Shared secret used to issue and verify short-lived JWTs. Set to a long random string. |
 | `ALLOWED_ORIGIN` | Yes | Public | URL of your frontend app (e.g. `https://app.example.com`). Wildcard (`*`) is not permitted. |
 | `PORT` | No | Public | Port the Node.js server listens on. Defaults to `3001`. Ignored by the Cloudflare Worker. |
+| `BRAVE_API_KEY` | No | Secret | Fallback Brave Search API key for a self-hosted shared deployment. Not required for normal use — the browser client sends its own key with every `POST /web/search` request instead (see that route's `braveApiKey` body field). |
+| `WEB_REQUESTS_PER_HOUR` | No | Public | Per-JWT-`sub` requests/hour ceiling shared across all of `/web/*`. Default `120`. |
+| `WEB_BYTES_PER_HOUR` | No | Public | Per-`sub` cumulative response-bytes/hour ceiling for `/web/fetch`, checked before each fetch and charged after it completes. Default `2000000` (~2MB). |
+| `WEB_MAX_CONCURRENT_FETCHES` | No | Public | Max concurrent in-flight `/web/fetch` calls per `sub`. Default `4`. |
+| `WEB_HOST_REQUESTS_PER_HOUR` | No | Public | Per-destination-host `/web/fetch` throttle (proxy-wide, not per-`sub`), so the proxy can't be used to hammer one third-party host. Default `60`. |
+| `WEB_PER_IP_REQUESTS_PER_HOUR` | No | Public | Per-client-IP requests/hour ceiling layered in front of the per-`sub` one on every `/web/*` route — matters when many anonymous users share one token (e.g. the hosted `/try` build). IP is read from `CF-Connecting-IP` / `X-Real-IP` / `X-Forwarded-For`. Default `30`. |
+| `WEB_BRAVE_DAILY_CEILING` | No | Public | Global (not per-`sub`/IP) daily ceiling on `backend=brave` calls to `POST /web/search`, protecting the one shared `BRAVE_API_KEY` from being run up or banned. Default `2000`. |
+| `WEB_GRANT_REQUESTS_PER_HOUR` | No | Public | Per-`sub` requests/hour ceiling for `POST /web/grant` specifically, tighter than `WEB_REQUESTS_PER_HOUR` — an open URL-signing oracle is worse than an open fetch, since a tag can be replayed against `/web/fetch` repeatedly while valid. Default `20`. |
+| `WEB_GUARD_REJECT_ALERT_THRESHOLD` | No | Public | Repeated-guard-rejection count (per `sub`, within an hour) that triggers a `console.warn` alert line — a cheap signal that someone is probing the SSRF guard with private-range targets. Not itself a block. Default `5`. |
 
 \* At least one of `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` must be set depending on which models your flows use.
+
+All `/web/*` calls emit a structured JSON log line (`{ ts, sub, route, host?, status, bytes?, guardRejectReason? }`) via `console.log`/`console.warn` — never the query text or request/response body. Quota state is in-memory per process/isolate (not shared across multiple Worker isolates or Node processes) — see `packages/proxy/src/rate-limit.ts`'s header comment.
 
 ### Proxy — React app (client-side)
 

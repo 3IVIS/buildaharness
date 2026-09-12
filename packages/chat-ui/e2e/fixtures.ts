@@ -32,6 +32,16 @@ export interface ChatBootstrap {
   oneLoopMode?: 'enabled' | 'disabled'
   /** Files the in-memory FsBackend is pre-populated with (keys are absolute, under `/workspace`). */
   fsSeed?: Record<string, string>
+  /**
+   * Extra fields merged into the persisted `buildaharness.personal-assistant.config`, on top of
+   * the `llmBackend: 'proxy'` default above — e.g. `{ enableWeb: true, webBackend: 'proxy',
+   * proxyUrl, authToken }` for the web-tools-via-proxy scenario (W7 of
+   * plans/browser_web_tools_via_proxy_plan.html). The LLM client itself is always the scripted one
+   * from the B1 seam regardless of `llmBackend`; `createWebTools` (App.tsx) is not seamed the same
+   * way and makes real `fetch` calls to `config.proxyUrl`, so a test that sets `webBackend: 'proxy'`
+   * needs a real HTTP server listening there.
+   */
+  config?: Record<string, unknown>
 }
 
 /** What `ChatPage.sendMessage` waits for after clicking Send. */
@@ -125,7 +135,7 @@ export class ChatPage {
   }
 }
 
-async function bootChatPage(context: BrowserContext, { script, oneLoopMode, fsSeed }: ChatBootstrap): Promise<ChatPage> {
+async function bootChatPage(context: BrowserContext, { script, oneLoopMode, fsSeed, config }: ChatBootstrap): Promise<ChatPage> {
   const page = await context.newPage()
   await page.addInitScript(
     (args: { key: string; config: Record<string, unknown>; script: E2EScript; fsSeed: Record<string, string> }) => {
@@ -138,7 +148,7 @@ async function bootChatPage(context: BrowserContext, { script, oneLoopMode, fsSe
     },
     {
       key: CONFIG_STORAGE_KEY,
-      config: { llmBackend: 'proxy', ...(oneLoopMode ? { oneLoopMode } : {}) },
+      config: { llmBackend: 'proxy', ...(oneLoopMode ? { oneLoopMode } : {}), ...config },
       script,
       fsSeed: fsSeed ?? {},
     },

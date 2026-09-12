@@ -30,6 +30,34 @@ export async function checkProxyReachable(proxyUrl: string): Promise<DoctorCheck
   }
 }
 
+/**
+ * Browser-only, `webBackend: 'proxy'` sidecar to checkProxyReachable: a real `POST
+ * <proxyUrl>/web/search` call (not just `/health`) so Settings can tell "the proxy is up" apart
+ * from "the proxy is up but /web/search 401s / the Brave key is missing / DDG scraping broke" —
+ * see plans/browser_web_tools_via_proxy_plan.html's W5 section.
+ */
+export async function checkWebSearchReachable(proxyUrl: string, authToken: string): Promise<DoctorCheck> {
+  const label = `web search via proxy (${proxyUrl}/web/search)`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), DOCTOR_CHECK_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${proxyUrl}/web/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ query: 'buildaharness doctor check' }),
+      signal: controller.signal,
+    })
+    const body = (await res.json().catch(() => undefined)) as { results?: unknown[]; error?: string } | undefined
+    if (!res.ok) return { label, ok: false, detail: body?.error ?? `HTTP ${res.status}` }
+    return Array.isArray(body?.results) ? { label, ok: true } : { label, ok: false, detail: 'unexpected response body' }
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === 'AbortError'
+    return { label, ok: false, detail: timedOut ? 'timed out' : err instanceof Error ? err.message : String(err) }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 /** Desktop-only: invokes the check_claude_available Tauri command (src-tauri/src/lib.rs), the GUI equivalent of the CLI's `claude --version` check. */
 export async function checkClaudeAvailable(): Promise<DoctorCheck> {
   const label = 'claude binary (desktop)'

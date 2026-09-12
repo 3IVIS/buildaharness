@@ -47,8 +47,9 @@ Renders each `AssistantTurnResult` status distinctly:
 
 The gear icon in the header swaps the whole screen for `SettingsScreen.tsx` —
 not a modal — covering Provider (LLM backend picker + whatever fields that
-backend needs, see below), Web Search (enable, ddg/brave, Brave API key),
-Shell (enable, timeout), and, on the Tauri desktop build only, Workspace (a
+backend needs, see below), Web Search (enable, Brave API key,
+and — browser build only — a Backend picker, see below), Shell (enable,
+timeout), and, on the Tauri desktop build only, Workspace (a
 native folder picker, via the Rust `pick_workspace_directory` command in
 `packages/desktop/src-tauri`).
 
@@ -84,15 +85,41 @@ the default that applies when none of those are set. Saving tears down and
 recreates the `PersonalAssistant` instance so a change applies to the very
 next turn, no reload needed.
 
-**Known limitation**: `enableWeb`/`searchBackend`/`braveApiKey` *are* wired
-(`App.tsx`'s `createWebTools()` — see its doc comment) — turning `enableWeb`
-on really does register working `web_search`/`fetch_url` tools, not a no-op.
-On desktop it works end-to-end (Tauri's `@tauri-apps/plugin-http` fetch
-bypasses the browser CORS restriction and a real DNS resolver backs the
-SSRF guard). In a plain browser tab, DuckDuckGo's/Brave's endpoints aren't
-CORS-enabled for arbitrary origins, so the call fails with a `fetch` error —
-that failure is caught by `assistant.ts`'s tool dispatch and reported to the
-model as an ordinary tool error, not a crash, so the turn still completes.
+`enableWeb`/`braveApiKey` *are* wired (`App.tsx`'s
+`createWebTools()` — see its doc comment) — turning `enableWeb` on really
+does register working `web_search`/`fetch_url` tools, not a no-op. On
+desktop it works end-to-end unconditionally (Tauri's
+`@tauri-apps/plugin-http` fetch bypasses the browser CORS restriction and a
+real DNS resolver backs the SSRF guard) — the Settings screen's Backend
+picker doesn't even appear there, since desktop always uses this path
+regardless of it.
+
+In a plain browser tab, a second config field, `webBackend`, picks which
+HTTP path `web_search`/`fetch_url` take (`'direct'` vs `'proxy'`, surfaced
+in Settings as "Direct (desktop only)" / "Via proxy (works in the
+browser)"):
+
+- **`'direct'`** (the default for a fresh browser install, so nothing
+  silently starts calling a proxy that isn't configured) calls Brave's
+  endpoint and the target URL straight from this tab. Most of those
+  endpoints aren't CORS-enabled for arbitrary origins, so the call fails
+  with a `fetch` error — caught by `assistant.ts`'s tool dispatch and
+  reported to the model as an ordinary tool error, not a crash, so the turn
+  still completes, but search/fetch mostly won't work. Settings shows this
+  caveat inline when `'direct'` is selected in the browser build.
+- **`'proxy'`** (see `plans/browser_web_tools_via_proxy_plan.html`) routes
+  both tools through a running `@buildaharness/proxy` instance's
+  `/web/search`, `/web/fetch`, and `/web/grant` endpoints instead of calling
+  Brave/the target URL directly — sidestepping the CORS problem
+  entirely, since the browser only ever talks to the proxy, which it
+  already trusts for `/llm/chat` (`config.proxyUrl` + the same bearer
+  `authToken`). The proxy does the real DNS-checked SSRF guarding; the
+  Brave-key field in Settings stays visible and its value is sent fresh
+  with each `/web/search` call (never stored on the proxy) alongside a
+  one-line note that search/fetch route through the configured proxy URL.
+  Point `proxyUrl` at a local `@buildaharness/proxy` (see that package's
+  README) to try this in dev.
+
 `enableShell` *is* wired on the desktop build (Tauri's
 `run_shell_command` command, gated the same way the CLI gates it) — see
 `packages/desktop/README.md`'s Shell section; it remains a no-op in a plain

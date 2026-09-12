@@ -22,7 +22,6 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   apiKey: 'ASSISTANT_API_KEY',
   model: 'ASSISTANT_MODEL',
   enableWeb: 'ASSISTANT_ENABLE_WEB',
-  searchBackend: 'ASSISTANT_SEARCH_BACKEND',
   braveApiKey: 'BRAVE_SEARCH_API_KEY',
   enableShell: 'ASSISTANT_ENABLE_SHELL',
   shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
@@ -82,7 +81,6 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_API_KEY !== undefined) overrides.apiKey = env.ASSISTANT_API_KEY
   if (env.ASSISTANT_MODEL !== undefined) overrides.model = env.ASSISTANT_MODEL
   if (env.ASSISTANT_ENABLE_WEB !== undefined) overrides.enableWeb = env.ASSISTANT_ENABLE_WEB === '1'
-  if (env.ASSISTANT_SEARCH_BACKEND !== undefined) overrides.searchBackend = env.ASSISTANT_SEARCH_BACKEND === 'brave' ? 'brave' : 'ddg'
   if (env.BRAVE_SEARCH_API_KEY !== undefined) overrides.braveApiKey = env.BRAVE_SEARCH_API_KEY
   if (env.ASSISTANT_ENABLE_SHELL !== undefined) overrides.enableShell = env.ASSISTANT_ENABLE_SHELL === '1'
   if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
@@ -146,9 +144,6 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       if (raw !== 'proxy' && raw !== 'claude-cli' && raw !== 'anthropic' && raw !== 'openai' && raw !== 'openrouter') {
         throw new ConfigValueParseError('llmBackend must be one of "proxy", "claude-cli", "anthropic", "openai", "openrouter"')
       }
-      return raw
-    case 'searchBackend':
-      if (raw !== 'ddg' && raw !== 'brave') throw new ConfigValueParseError('searchBackend must be "ddg" or "brave"')
       return raw
     case 'oneLoopMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('oneLoopMode must be "enabled" or "disabled"')

@@ -44,11 +44,6 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS: 'yes' })).toEqual({ dangerouslySkipPermissions: false })
   })
 
-  it('defaults ASSISTANT_SEARCH_BACKEND to ddg for any value other than "brave"', () => {
-    expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'bing' })).toEqual({ searchBackend: 'ddg' })
-    expect(envOverridesFromProcessEnv({ ASSISTANT_SEARCH_BACKEND: 'brave' })).toEqual({ searchBackend: 'brave' })
-  })
-
   it.each(['claude-cli', 'anthropic', 'openai', 'openrouter'] as const)('accepts ASSISTANT_LLM_BACKEND=%s', (backend) => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_LLM_BACKEND: backend })).toEqual({ llmBackend: backend })
   })
@@ -96,13 +91,11 @@ describe('parseConfigValue', () => {
     expect(() => parseConfigValue('shellTimeoutMs', '-5')).toThrow(ConfigValueParseError)
   })
 
-  it('rejects an invalid searchBackend/llmBackend', () => {
-    expect(() => parseConfigValue('searchBackend', 'bing')).toThrow(ConfigValueParseError)
+  it('rejects an invalid llmBackend', () => {
     expect(() => parseConfigValue('llmBackend', 'other')).toThrow(ConfigValueParseError)
   })
 
-  it('accepts a valid searchBackend/llmBackend', () => {
-    expect(parseConfigValue('searchBackend', 'brave')).toBe('brave')
+  it('accepts a valid llmBackend', () => {
     expect(parseConfigValue('llmBackend', 'claude-cli')).toBe('claude-cli')
   })
 

@@ -106,11 +106,11 @@ export const CLAIMS = [
   },
   {
     id: 'web_search_on_claude_cli',
-    description: 'The keyless claude-cli backend can run web_search (not just fetch_url).',
+    description: 'The claude-cli backend can run web_search (not just fetch_url), given a Brave Search API key.',
     expected: true, // F3 — flip to false only if the wiring is removed
     resolve: () =>
       fileHas('packages/personal-assistant/src/claude-cli-llm-client.ts', /this\.webTools\b/) &&
-      fileHas('packages/personal-assistant/src/file-tools-mcp-server.mjs', /\bWEB_SEARCH_BACKEND\b/),
+      fileHas('packages/personal-assistant/src/file-tools-mcp-server.mjs', /\bBRAVE_SEARCH_API_KEY\b/),
   },
   {
     id: 'send_effect_tool',
