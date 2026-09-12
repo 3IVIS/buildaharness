@@ -1,6 +1,7 @@
 name = "buildaharness-proxy"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
 
 # Uncomment and set your Worker route after deploying:
 # [[routes]]
@@ -8,7 +9,7 @@ compatibility_date = "2024-01-01"
 # zone_name = "yourdomain.com"
 
 [vars]
-ALLOWED_ORIGIN = "http://localhost:5173"
+ALLOWED_ORIGIN = "https://buildaharness.com"
 PORT = "3001"
 WEB_SEARCH_BACKEND = "ddg"
 
