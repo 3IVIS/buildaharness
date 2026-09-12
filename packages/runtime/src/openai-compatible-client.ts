@@ -21,10 +21,15 @@ export interface OpenAICompatibleLLMClientOptions {
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 export { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL } from './model-defaults'
-/** OpenRouter's recommended (not required) leaderboard-attribution headers — see https://openrouter.ai/docs. */
+/**
+ * OpenRouter's recommended (not required) leaderboard-attribution headers — see
+ * https://openrouter.ai/docs. `HTTP-Referer` is rendered as the clickable link for
+ * the app on OpenRouter's rankings, so it points at the product page rather than the
+ * raw repo; `X-Title` is the display name shown there.
+ */
 export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
-  'HTTP-Referer': 'https://github.com/3IVIS/buildaharness',
-  'X-Title': 'Build A Harness',
+  'HTTP-Referer': 'https://buildaharness.com/personal-assistant',
+  'X-Title': 'Aielia',
 }
 
 function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {

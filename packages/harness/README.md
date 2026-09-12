@@ -173,12 +173,13 @@ this package's `src/_core-generated.ts`. Neither generated file is
 hand-edited (each is stamped "DO NOT EDIT" at the top); CI fails if either is
 stale relative to the source. The `~150`-line resolver *algorithm*
 (`resolve-control-state.ts` here, `control_state.py` in Python) is still
-hand-mirrored, not generated — a 27-fixture conformance run
-(`scripts/harness-conformance/`) found the two implementations already
-byte-identical, so generating the algorithm too would solve a problem that
-doesn't exist. That fixture suite is the actual equivalence contract, run
-against both interpreters on every PR; it replaced an earlier
-field-by-field sync-checking script. See ADR-004 (shared semantic core).
+hand-mirrored, not generated — the conformance run
+(`scripts/harness-conformance/`, 53 resolver fixtures + committed goldens)
+found the two implementations already byte-identical, so generating the
+algorithm too would solve a problem that doesn't exist. That fixture suite is
+the actual equivalence contract, run against both interpreters on every PR; it
+replaced an earlier field-by-field sync-checking script. See ADR-004 (shared
+semantic core).
 
 **Verification's validator-list model.** `verify.ts` (mirroring Python's
 `verification.py`) is a typed list of validators, each classified into one of
@@ -188,7 +189,12 @@ state inspection, e.g. consistency), or `model` (an LLM judgment). A `model`
 tier result is never counted as independent confirmation of a `mechanical`
 one — `VerificationResult.critical_failure_tiers` names which tiers
 contributed a FAIL, and a structural check enforces it's non-empty if and
-only if `has_critical_failure` is true.
+only if `has_critical_failure` is true. `verify()` has its own TS/Python
+conformance pair (`compare-verify.mjs`, 25 fixtures) comparing the per-layer
+status projection; it surfaced that `output_contract_partial` inspects
+different contract fields on each runtime (TS `required_sections` vs Python
+`required_interface_fields`), now a tracked discrepancy rather than an
+invisible one.
 
 ## Package structure
 
