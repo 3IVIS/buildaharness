@@ -1690,6 +1690,13 @@ async def put_harness_state(
 
 class EscalationRespondRequest(BaseModel):
     clarification: dict = {}
+    # Q3 (plans/ask_question_and_plan_mode_plan.html) — the batched-questions counterpart
+    # to `clarification` above. Populated only when the paused run's `pending_escalation`
+    # carries a `questions` batch (Q0); mirrors AskResponse.to_dict()'s `answers` shape
+    # exactly (personal-assistant's OneShotAnswerChannel wraps the same list under
+    # `clarification_answers`, see AskClarificationService). Left unset, this endpoint's
+    # behavior is byte-identical to pre-Q3.
+    answers: list[dict] | None = None
 
 
 @router.post("/{job_id}/escalation/respond", status_code=200)
@@ -1708,7 +1715,13 @@ async def respond_to_escalation(
 
     Returns 404 if no harness state exists for the job.
     Returns 409 if the run is not currently in an escalated state.
+    Returns 422 if the paused run's escalation carries a batched `questions`
+    payload (Q0) and `answers` is missing or fails INV-27/28 validation against
+    exactly those questions — the one-round-trip resolve (INV-27) is rejected
+    outright rather than partially applied (fail-closed, per the Protected
+    Invariants section of the ask-question/plan-mode plan).
     """
+    from harness.escalation import AskResponse, validate_ask_response
     from harness.state_store import load as _harness_load
     from harness.state_store import save as _harness_save
 
@@ -1723,7 +1736,23 @@ async def respond_to_escalation(
     if not state.escalation_pending:
         raise HTTPException(status_code=409, detail="Run is not currently escalated")
 
-    payload = dict(req.clarification)
+    pending_questions = state.pending_escalation.questions if state.pending_escalation is not None else None
+
+    if pending_questions:
+        if req.answers is None:
+            raise HTTPException(
+                status_code=422,
+                detail="This escalation carries a batched question set — 'answers' is required",
+            )
+        try:
+            response = AskResponse.from_dict({"answers": req.answers})
+            validate_ask_response(pending_questions, response)
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        payload: dict = {"clarification_answers": response.to_dict()["answers"]}
+    else:
+        payload = dict(req.clarification)
+
     payload.setdefault("update_type", "clarification")
     state.pending_clarification = payload
 
