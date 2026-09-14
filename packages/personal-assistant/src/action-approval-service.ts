@@ -13,7 +13,7 @@ import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { AssistantSession } from './assistant-session.js'
 import type { AgentLoop, BatchPendingState } from './agent-loop.js'
-import { buildBatchBudgetTrace } from './agent-loop.js'
+import { buildBatchBudgetTrace, looksLikeUnparsedToolCall } from './agent-loop.js'
 import type { AssistantTrace } from './assistant-types.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import type { TraceEvent } from './trace-events.js'
@@ -196,7 +196,14 @@ export class ActionApprovalService {
           ],
           { model: this.model(), onUsage: accumulateLocalUsage },
         )
-        if (synthesized.trim()) {
+        // callChatSync has none of callChatStructured's leaked-tool-call recovery/retry
+        // machinery (openai-compatible-client.ts's parseLeakedToolCallSyntax, agent-loop.ts's
+        // own retry guard) — a model that leaks its native tool-call syntax as plain text here
+        // (observed live: deepseek/deepseek-v4-flash-0731, wanting to call a tool that doesn't
+        // exist in this no-tools synthesis call at all) would otherwise be trusted verbatim as
+        // the user-facing reply. Falls back to the raw dump already assigned above, exactly like
+        // an empty/failed synthesis already does.
+        if (synthesized.trim() && !looksLikeUnparsedToolCall(synthesized)) {
           reply = synthesized
           transcriptContent = synthesized
         }

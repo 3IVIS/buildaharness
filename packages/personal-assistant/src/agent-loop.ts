@@ -183,7 +183,12 @@ export function buildBatchBudgetTrace(
 // without needing a new case added here each time.
 const UNPARSED_TOOL_CALL_PATTERN = /<tool_call>|<\/?｜[^｜<>]{1,32}｜(?:tool_calls?|invoke|parameter)\b/i
 
-function looksLikeUnparsedToolCall(content: string): boolean {
+// Exported so any other call site that takes a model's plain-text reply at face value can
+// apply the same guard — action-approval-service.ts's post-execution synthesis call is the
+// first such case: it uses callChatSync (no tools, no callChatStructured recovery/retry
+// machinery at all), so without this it has zero protection against exactly the same leaked
+// tool-call text this guards the tool-calling loop against.
+export function looksLikeUnparsedToolCall(content: string): boolean {
   return UNPARSED_TOOL_CALL_PATTERN.test(content)
 }
 
