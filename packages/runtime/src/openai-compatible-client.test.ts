@@ -218,6 +218,44 @@ describe('OpenAICompatibleLLMClient', () => {
 
       await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).rejects.toThrow('rate limit exceeded')
     })
+
+    it('sends response_format: json_object when options.structuredOutput is set', async () => {
+      const mockFetch = mockFetchJson({ choices: [{ message: { content: '{"ok":true}' } }] })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { structuredOutput: { schema: { type: 'object' } } })
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.response_format).toEqual({ type: 'json_object' })
+    })
+
+    it('omits response_format when options.structuredOutput is not set', async () => {
+      const mockFetch = mockFetchJson({ choices: [{ message: { content: 'Hello there' } }] })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }])
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.response_format).toBeUndefined()
+    })
+
+    it('strips a markdown code fence from a structuredOutput reply', async () => {
+      mockFetchJson({ choices: [{ message: { content: '```json\n{"riskLevel":"LOW"}\n```' } }] })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+
+      const result = await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { structuredOutput: { schema: { type: 'object' } } })
+
+      expect(result.content).toBe('{"riskLevel":"LOW"}')
+    })
+
+    it('never fence-strips a plain (non-structuredOutput) reply', async () => {
+      mockFetchJson({ choices: [{ message: { content: '```json\n{"riskLevel":"LOW"}\n```' } }] })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+
+      const result = await client.callChatStructured([{ role: 'user', content: 'hi' }])
+
+      expect(result.content).toBe('```json\n{"riskLevel":"LOW"}\n```')
+    })
   })
 
   describe('OpenAI vs OpenRouter construction', () => {

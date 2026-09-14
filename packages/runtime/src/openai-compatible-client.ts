@@ -32,6 +32,19 @@ export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
   'X-Title': 'Aielia',
 }
 
+/**
+ * Mirrors personal-assistant's claude-cli-prompt.ts stripJsonCodeFence (duplicated rather than
+ * imported — runtime sits below personal-assistant in the dependency graph): some models routinely
+ * wrap a JSON reply in a ```json ... ``` fence even under response_format: json_object, which is a
+ * hint, not a hard guarantee, on several OpenRouter-routed models. Applied only to the
+ * structuredOutput path, never to a plain callChat/callChatStructured-without-schema result.
+ */
+function stripJsonCodeFence(content: string): string {
+  const trimmed = content.trim()
+  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
+  return match ? match[1] : trimmed
+}
+
 function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) return undefined
   const results: ToolCallResult[] = []
@@ -184,6 +197,15 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
     }
+    // Without this, a structuredOutput caller (e.g. turn-intent-classifier.ts) relies entirely on
+    // the system prompt's "respond with JSON only" instruction — several OpenRouter-routed models
+    // (observed live with z-ai/glm-5.2) ignore that and prose-wrap or fence the reply, which then
+    // fails JSON.parse and silently falls back to the fail-safe UNKNOWN risk classification on
+    // every turn. json_object (not json_schema) because OpenRouter fans out to many underlying
+    // models with inconsistent json_schema support — json_object is the broadly-supported subset.
+    if (options.structuredOutput) {
+      body.response_format = { type: 'json_object' }
+    }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
     if (!response.ok) {
@@ -199,6 +221,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     if (json.usage && typeof json.usage.prompt_tokens === 'number' && typeof json.usage.completion_tokens === 'number') {
       options.onUsage?.({ inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens })
     }
-    return { content: message?.content ?? '', toolCalls }
+    const content = message?.content ?? ''
+    return { content: options.structuredOutput ? stripJsonCodeFence(content) : content, toolCalls }
   }
 }
