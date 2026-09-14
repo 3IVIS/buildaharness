@@ -1655,6 +1655,56 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.reply).toContain('a.txt')
   })
 
+  it('logs a real dangerouslySkipPermissions-applied run_shell_command to onDebugLog — previously invisible: a staged write/shell action executed with no debug-log trace at all, unlike every read-only tool call', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, dangerouslySkipPermissions: true, onDebugLog })
+
+    await assistant.turn('List the files here')
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('run_shell_command') && e.content.includes('ls -la') && e.content.includes('a.txt'))).toBe(true)
+  })
+
+  it('logs an approved (non-skip-permissions) staged run_shell_command to onDebugLog the same way', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog })
+
+    const staged = await assistant.turn('List the files here')
+    onDebugLog.mockClear()
+    await assistant.turn('List the files here', { approved: true, pendingActionId: staged.pendingActionId })
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('run_shell_command') && e.content.includes('a.txt'))).toBe(true)
+  })
+
+  it('logs a declined staged run_shell_command to onDebugLog too', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog })
+
+    const staged = await assistant.turn('List the files here')
+    onDebugLog.mockClear()
+    await assistant.turn('List the files here', { approved: false, pendingActionId: staged.pendingActionId })
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('declined'))).toBe(true)
+    expect(executeCommand).not.toHaveBeenCalled()
+  })
+
   it('approving a pending shell action executes the exact staged command with zero additional structured-call LLM calls', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)

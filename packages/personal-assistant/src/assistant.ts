@@ -280,6 +280,7 @@ export class PersonalAssistant {
       this.session,
       this.agentLoop,
       this.onTrace,
+      this.onDebugLog,
     )
     this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore)
     this.harnessBridge = new HarnessBridge(
