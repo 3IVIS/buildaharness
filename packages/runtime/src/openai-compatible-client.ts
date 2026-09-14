@@ -147,9 +147,10 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     let buffer = ''
     let inputTokens: number | undefined
     let outputTokens: number | undefined
+    let cachedInputTokens: number | undefined
     const reportUsage = (): void => {
       if (inputTokens !== undefined || outputTokens !== undefined) {
-        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 })
+        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0, cachedInputTokens })
       }
     }
 
@@ -170,6 +171,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
           const parsed = JSON.parse(data)
           if (typeof parsed?.usage?.prompt_tokens === 'number') inputTokens = parsed.usage.prompt_tokens
           if (typeof parsed?.usage?.completion_tokens === 'number') outputTokens = parsed.usage.completion_tokens
+          if (typeof parsed?.usage?.prompt_tokens_details?.cached_tokens === 'number') cachedInputTokens = parsed.usage.prompt_tokens_details.cached_tokens
           const delta = parsed?.choices?.[0]?.delta?.content
           if (typeof delta === 'string') yield delta
         } catch {
@@ -214,12 +216,16 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     const json = (await response.json()) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
     }
     const message = json.choices?.[0]?.message
     const toolCalls = parseToolCalls(message?.tool_calls)
     if (json.usage && typeof json.usage.prompt_tokens === 'number' && typeof json.usage.completion_tokens === 'number') {
-      options.onUsage?.({ inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens })
+      options.onUsage?.({
+        inputTokens: json.usage.prompt_tokens,
+        outputTokens: json.usage.completion_tokens,
+        cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : undefined,
+      })
     }
     const content = message?.content ?? ''
     return { content: options.structuredOutput ? stripJsonCodeFence(content) : content, toolCalls }

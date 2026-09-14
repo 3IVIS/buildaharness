@@ -76,6 +76,11 @@ export interface TokenUsage {
   outputTokens: number
   /** Real dollar cost, when the backend can supply one (e.g. Claude CLI's --output-format json). Absent when only token counts are known — a caller wanting a dollar figure regardless must derive one from a pricing table itself. */
   costUsd?: number
+  /** How many of inputTokens were served from the provider's prompt cache — OpenAI-compatible
+   * APIs (OpenAI direct, and OpenRouter for providers that support it) report this as
+   * usage.prompt_tokens_details.cached_tokens. Absent when the backend doesn't report it at all
+   * (not necessarily 0 — see OpenAICompatibleLLMClient's doc comment on where this is parsed). */
+  cachedInputTokens?: number
 }
 
 export interface ToolDefinition {

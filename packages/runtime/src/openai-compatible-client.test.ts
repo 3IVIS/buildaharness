@@ -90,6 +90,22 @@ describe('OpenAICompatibleLLMClient', () => {
       expect(onUsage).toHaveBeenCalledWith({ inputTokens: 10, outputTokens: 3 })
     })
 
+    it('reports cachedInputTokens from the stream when prompt_tokens_details.cached_tokens is present', async () => {
+      mockFetchOk([
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":500,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":420}}}',
+        'data: [DONE]',
+      ])
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const onUsage = vi.fn()
+
+      for await (const _ of client.callChat([{ role: 'user', content: 'hi' }], { onUsage })) {
+        // drain
+      }
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 500, outputTokens: 3, cachedInputTokens: 420 })
+    })
+
     it('throws FlowExecutionError with the API error message on a non-2xx response', async () => {
       mockFetchJson({ error: { message: 'Invalid API key' } }, 401)
       const client = new OpenAICompatibleLLMClient({ apiKey: 'bad-key', baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
@@ -217,6 +233,29 @@ describe('OpenAICompatibleLLMClient', () => {
       const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
 
       await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).rejects.toThrow('rate limit exceeded')
+    })
+
+    it('reports cachedInputTokens via onUsage when the response includes prompt_tokens_details.cached_tokens', async () => {
+      mockFetchJson({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 500, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 380 } },
+      })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 500, outputTokens: 10, cachedInputTokens: 380 })
+    })
+
+    it('omits cachedInputTokens when the response has no prompt_tokens_details (provider/model doesn\'t report cache stats)', async () => {
+      mockFetchJson({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 50, completion_tokens: 10 } })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage.mock.calls[0][0].cachedInputTokens).toBeUndefined()
     })
 
     it('sends response_format: json_object when options.structuredOutput is set', async () => {
