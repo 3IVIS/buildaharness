@@ -1509,6 +1509,29 @@ describe('PersonalAssistant web + reminder tools', () => {
     expect(retryMessages.some(m => m.role === 'user' && m.content.includes('<tool_call>'))).toBe(true)
   })
 
+  it('retries instead of showing a leaked DSML-style pseudo-tool-call block for a hallucinated tool name (e.g. OpenRouter deepseek/deepseek-v4-flash-0731 calling "shell" instead of the real "run_shell_command")', async () => {
+    // openai-compatible-client.ts's parseLeakedToolCallSyntax never fabricates a call for an
+    // unregistered name, so this reaches agent-loop.ts's generic looksLikeUnparsedToolCall
+    // backstop exactly like the z-ai/glm-5.2 case above, just with a different leaked shape.
+    const llm = scriptedResponses([
+      { content: '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="shell">\n<｜DSML｜parameter name="command">git remote -v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>' },
+      { content: 'Here are the 9 commits that aren\'t on the remote yet.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn('Push all the commits not pushed to remote')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Here are the 9 commits that aren\'t on the remote yet.')
+    expect(llm.calls).toBe(3)
+    const retryMessages = (llm as unknown as { receivedMessages: ChatMessage[][] }).receivedMessages[1]
+    // The leaked content itself is pushed back as the 'assistant' turn (agent-loop.ts); the
+    // fixed nudge text that follows it (role 'user') is generic and never quotes the model's
+    // actual leaked tags, unlike the <tool_call> case above where the nudge's own hardcoded
+    // example happens to quote that literal string.
+    expect(retryMessages.some(m => m.role === 'assistant' && m.content.includes('｜DSML｜'))).toBe(true)
+  })
+
   it('escalates instead of ever surfacing raw tool-call syntax when the model keeps failing to populate tool_calls past the iteration cap', async () => {
     const malformed = { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>' }
     // One scripted response per maxSteps iteration — every one malformed, so the loop must

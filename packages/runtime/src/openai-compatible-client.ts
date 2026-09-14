@@ -63,6 +63,49 @@ function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {
 }
 
 /**
+ * Some OpenRouter-routed models (observed live with deepseek/deepseek-v4-flash-0731) don't
+ * reliably populate the standard `tool_calls` field and instead leak their own native
+ * function-calling serialization straight into `message.content` as plain text — an
+ * `<invoke name="...">`/`<parameter name="...">` block wrapped in the model's own special
+ * tokens (observed as U+FF5C fullwidth-vertical-bar-delimited tags, e.g.
+ * `<｜DSML｜tool_calls>...<｜DSML｜invoke name="shell">...`). Recovers a real ToolCallResult[]
+ * from that leaked block, but only when every invoked name matches a tool actually offered
+ * this call — a leaked block can itself hallucinate a tool name (this one called "shell",
+ * which was never registered; the real tool is "run_shell_command") and this must never
+ * fabricate a call to a name the caller didn't provide. Returns undefined when nothing
+ * recoverable is found, leaving agent-loop.ts's generic looksLikeUnparsedToolCall retry guard
+ * as the backstop for any other/unknown leaked format.
+ */
+function parseLeakedToolCallSyntax(content: string, tools?: ToolDefinition[]): ToolCallResult[] | undefined {
+  if (!tools || tools.length === 0) return undefined
+  const validNames = new Set(tools.map((t) => t.name))
+  const invokeRe = /<｜([^｜<>]{1,32})｜invoke name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜invoke>/g
+  const paramRe = /<｜([^｜<>]{1,32})｜parameter name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜parameter>/g
+  const results: ToolCallResult[] = []
+  let invokeMatch: RegExpExecArray | null
+  let index = 0
+  while ((invokeMatch = invokeRe.exec(content)) !== null) {
+    const [, , name, body] = invokeMatch
+    if (!validNames.has(name)) return undefined
+    const input: Record<string, unknown> = {}
+    paramRe.lastIndex = 0
+    let paramMatch: RegExpExecArray | null
+    while ((paramMatch = paramRe.exec(body)) !== null) {
+      input[paramMatch[2]] = paramMatch[3].trim()
+    }
+    results.push({ id: `leaked-tool-call-${index++}`, name, input })
+  }
+  return results.length > 0 ? results : undefined
+}
+
+/** Strips a recovered leaked tool-call block out of the reply text before it's stored back into
+ * conversation history — leaving it in would let the model imitate its own malformed syntax on
+ * the next turn. Only called once parseLeakedToolCallSyntax has already found something real. */
+function stripLeakedToolCallSyntax(content: string): string {
+  return content.replace(/<｜[^｜<>]{1,32}｜tool_calls>[\s\S]*?<\/｜[^｜<>]{1,32}｜tool_calls>/g, '').trim()
+}
+
+/**
  * ILLMClient for any endpoint that speaks OpenAI's Chat Completions wire format —
  * OpenAI itself and OpenRouter (an OpenAI-compatible endpoint by design) both go through
  * this one implementation, parameterized by baseUrl/defaultModel/extraHeaders rather than
@@ -219,7 +262,15 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
     }
     const message = json.choices?.[0]?.message
-    const toolCalls = parseToolCalls(message?.tool_calls)
+    let toolCalls = parseToolCalls(message?.tool_calls)
+    let content = message?.content ?? ''
+    if (!toolCalls || toolCalls.length === 0) {
+      const recovered = parseLeakedToolCallSyntax(content, tools)
+      if (recovered) {
+        toolCalls = recovered
+        content = stripLeakedToolCallSyntax(content)
+      }
+    }
     if (json.usage && typeof json.usage.prompt_tokens === 'number' && typeof json.usage.completion_tokens === 'number') {
       options.onUsage?.({
         inputTokens: json.usage.prompt_tokens,
@@ -227,7 +278,6 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
         cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : undefined,
       })
     }
-    const content = message?.content ?? ''
     return { content: options.structuredOutput ? stripJsonCodeFence(content) : content, toolCalls }
   }
 }

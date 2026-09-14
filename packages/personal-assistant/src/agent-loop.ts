@@ -171,7 +171,17 @@ export function buildBatchBudgetTrace(
 // parseToolCalls (openai-compatible-client.ts) only ever reads the structured field, so that
 // content would otherwise look like an ordinary "no more tool calls" final answer and get
 // shown to the user as raw tags instead of a real reply. Detected below and never surfaced.
-const UNPARSED_TOOL_CALL_PATTERN = /<tool_call>/i
+//
+// The second alternative is a generic backstop for any model's own special-token tool-call
+// convention that openai-compatible-client.ts's parseLeakedToolCallSyntax couldn't recover
+// (e.g. an invoked tool name that didn't match anything actually registered — observed live:
+// deepseek/deepseek-v4-flash-0731 leaking a fullwidth-vertical-bar-delimited
+// `<｜DSML｜tool_calls>`/`<｜DSML｜invoke name="shell">` block for a "shell" tool that doesn't
+// exist here, the real one being "run_shell_command"). That U+FF5C-delimited tag shape is
+// vanishingly unlikely in ordinary prose, so matching it generically — regardless of the
+// namespace token between the bars — catches other models' variants of the same failure mode
+// without needing a new case added here each time.
+const UNPARSED_TOOL_CALL_PATTERN = /<tool_call>|<\/?｜[^｜<>]{1,32}｜(?:tool_calls?|invoke|parameter)\b/i
 
 function looksLikeUnparsedToolCall(content: string): boolean {
   return UNPARSED_TOOL_CALL_PATTERN.test(content)
