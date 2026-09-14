@@ -1,0 +1,40 @@
+{
+  "id": "35-var-batch-of-two-full-match",
+  "op": "validate_ask_response",
+  "description": "a 2-question batch with mixed answer kinds, all answered \u2014 valid",
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    },
+    {
+      "id": "note",
+      "question": "Anything else?"
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "env",
+        "kind": "selected_with_edit",
+        "selectedLabels": [
+          "staging"
+        ],
+        "editText": "staging-2"
+      },
+      {
+        "questionId": "note",
+        "kind": "free_text",
+        "freeText": "no"
+      }
+    ]
+  }
+}

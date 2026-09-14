@@ -1,0 +1,26 @@
+{
+  "id": "04-vq-too-many-options",
+  "op": "validate_ask_question",
+  "description": "a 5-option question exceeds MAX_OPTIONS_PER_QUESTION and must be rejected",
+  "question": {
+    "id": "q4",
+    "question": "Pick one",
+    "options": [
+      {
+        "label": "a"
+      },
+      {
+        "label": "b"
+      },
+      {
+        "label": "c"
+      },
+      {
+        "label": "d"
+      },
+      {
+        "label": "e"
+      }
+    ]
+  }
+}

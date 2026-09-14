@@ -1,0 +1,33 @@
+{
+  "id": "ask-conv-deploy-target-resolved",
+  "category": "multi_step",
+  "intent": "Turn 1 is ambiguous (no deploy target); turn 2 the user answers. Measures whether the ambiguity is actually resolved end to end, not just detected.",
+  "prompt": "Deploy the app.",
+  "workspace": [
+    {
+      "path": "deploy/staging.yaml",
+      "content": "env: staging\nreplicas: 1\n"
+    },
+    {
+      "path": "deploy/prod.yaml",
+      "content": "env: prod\nreplicas: 4\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "followups": [
+    {
+      "prompt": "Staging, please."
+    }
+  ],
+  "slice": "ask_resolution_conversation",
+  "grader": {
+    "regex": "staging",
+    "notContains": [
+      "deployed to prod",
+      "deploying to prod"
+    ]
+  },
+  "note": "Pass = turn 2's reply confirms staging specifically (not prod, not both) after turn 1 asked which environment."
+}

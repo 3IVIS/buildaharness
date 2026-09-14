@@ -1,0 +1,30 @@
+{
+  "id": "32-var-unknown-question-id",
+  "op": "validate_ask_response",
+  "description": "an answer referencing a question id outside the batch must be rejected",
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "nope",
+        "kind": "selected",
+        "selectedLabels": [
+          "staging"
+        ]
+      }
+    ]
+  }
+}

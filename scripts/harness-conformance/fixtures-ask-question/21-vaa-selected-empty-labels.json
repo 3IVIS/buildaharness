@@ -1,0 +1,10 @@
+{
+  "id": "21-vaa-selected-empty-labels",
+  "op": "validate_ask_answer",
+  "description": "a selected answer with zero labels must be rejected",
+  "answer": {
+    "questionId": "q1",
+    "kind": "selected",
+    "selectedLabels": []
+  }
+}

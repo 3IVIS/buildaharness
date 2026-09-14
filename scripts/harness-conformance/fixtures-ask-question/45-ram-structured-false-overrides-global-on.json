@@ -1,0 +1,7 @@
+{
+  "id": "45-ram-structured-false-overrides-global-on",
+  "op": "resolve_ask_mode",
+  "description": "call-site structured=False wins even with global on",
+  "global_enabled": true,
+  "structured": false
+}

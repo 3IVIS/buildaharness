@@ -1,0 +1,13 @@
+{
+  "id": "53-bab-effective-false-no-questions-base-only",
+  "op": "build_ask_blocker",
+  "description": "effective ask mode off and zero questions -> identical plain halt",
+  "global_enabled": false,
+  "structured": true,
+  "questions": [],
+  "reason": "blocked_state",
+  "missing_info": [
+    "no candidate questions"
+  ],
+  "current_task_summary": "stuck"
+}

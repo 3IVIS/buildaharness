@@ -1,0 +1,15 @@
+{
+  "id": "81-sbr-legacy-question-options-untouched",
+  "op": "surface_blocker_roundtrip",
+  "description": "the pre-Q0 single question/options fields still round-trip when questions is absent",
+  "blocker": {
+    "reason": "supervisor_question",
+    "missing_info": [],
+    "current_task_summary": "asking",
+    "question": "Which way?",
+    "options": [
+      "left",
+      "right"
+    ]
+  }
+}

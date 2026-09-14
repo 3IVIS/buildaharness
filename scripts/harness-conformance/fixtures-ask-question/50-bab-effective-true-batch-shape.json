@@ -1,0 +1,38 @@
+{
+  "id": "50-bab-effective-true-batch-shape",
+  "op": "build_ask_blocker",
+  "description": "effective ask mode on + questions -> full Q0 batch shape on the blocker (INV-26)",
+  "global_enabled": true,
+  "structured": true,
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "question": "Confirm deploy?",
+      "options": [
+        {
+          "label": "yes"
+        },
+        {
+          "label": "no"
+        }
+      ]
+    }
+  ],
+  "reason": "cannot_make_progress",
+  "missing_info": [
+    "deploy target unclear"
+  ],
+  "current_task_summary": "preparing a deploy"
+}

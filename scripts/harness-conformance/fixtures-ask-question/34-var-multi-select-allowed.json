@@ -1,0 +1,35 @@
+{
+  "id": "34-var-multi-select-allowed",
+  "op": "validate_ask_response",
+  "description": "multiple selected labels on an allowMultiple=true question is valid",
+  "questions": [
+    {
+      "id": "features",
+      "question": "Which features?",
+      "allowMultiple": true,
+      "options": [
+        {
+          "label": "a"
+        },
+        {
+          "label": "b"
+        },
+        {
+          "label": "c"
+        }
+      ]
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "features",
+        "kind": "selected",
+        "selectedLabels": [
+          "a",
+          "b"
+        ]
+      }
+    ]
+  }
+}

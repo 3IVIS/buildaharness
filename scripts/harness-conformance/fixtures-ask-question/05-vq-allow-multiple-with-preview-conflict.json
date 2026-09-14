@@ -1,0 +1,19 @@
+{
+  "id": "05-vq-allow-multiple-with-preview-conflict",
+  "op": "validate_ask_question",
+  "description": "allowMultiple cannot be combined with an option carrying preview",
+  "question": {
+    "id": "q5",
+    "question": "Pick some",
+    "allowMultiple": true,
+    "options": [
+      {
+        "label": "a",
+        "preview": "diff a"
+      },
+      {
+        "label": "b"
+      }
+    ]
+  }
+}

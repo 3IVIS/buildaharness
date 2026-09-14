@@ -1,0 +1,23 @@
+{
+  "id": "02-vq-valid-4-options",
+  "op": "validate_ask_question",
+  "description": "a question at the max 4-option ceiling constructs cleanly",
+  "question": {
+    "id": "q2",
+    "question": "Pick one",
+    "options": [
+      {
+        "label": "a"
+      },
+      {
+        "label": "b"
+      },
+      {
+        "label": "c"
+      },
+      {
+        "label": "d"
+      }
+    ]
+  }
+}

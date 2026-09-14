@@ -1,0 +1,12 @@
+{
+  "id": "80-sbr-no-questions-byte-identical-to-pre-q0",
+  "op": "surface_blocker_roundtrip",
+  "description": "a SurfaceBlocker with no questions field round-trips exactly as a pre-Q0 blocker (INV-26)",
+  "blocker": {
+    "reason": "cannot_make_progress",
+    "missing_info": [
+      "x"
+    ],
+    "current_task_summary": "doing a thing"
+  }
+}

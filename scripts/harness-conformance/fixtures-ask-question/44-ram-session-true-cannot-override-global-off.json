@@ -1,0 +1,8 @@
+{
+  "id": "44-ram-session-true-cannot-override-global-off",
+  "op": "resolve_ask_mode",
+  "description": "INV-29: session=True cannot override a global-off",
+  "global_enabled": false,
+  "structured": true,
+  "session_ask_mode": true
+}

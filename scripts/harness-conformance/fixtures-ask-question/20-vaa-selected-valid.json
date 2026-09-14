@@ -1,0 +1,12 @@
+{
+  "id": "20-vaa-selected-valid",
+  "op": "validate_ask_answer",
+  "description": "a selected answer with one label is valid",
+  "answer": {
+    "questionId": "q1",
+    "kind": "selected",
+    "selectedLabels": [
+      "staging"
+    ]
+  }
+}

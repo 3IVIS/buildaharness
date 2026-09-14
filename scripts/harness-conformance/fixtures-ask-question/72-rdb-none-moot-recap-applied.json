@@ -1,0 +1,33 @@
+{
+  "id": "72-rdb-none-moot-recap-applied",
+  "op": "refine_deferred_batch",
+  "description": "nothing moot, but the cap is re-applied to the refined list",
+  "deferred": [
+    {
+      "id": "c5",
+      "question": "Question about c5?"
+    },
+    {
+      "id": "c6",
+      "question": "Question about c6?"
+    },
+    {
+      "id": "c7",
+      "question": "Question about c7?"
+    },
+    {
+      "id": "c8",
+      "question": "Question about c8?"
+    },
+    {
+      "id": "c9",
+      "question": "Question about c9?"
+    },
+    {
+      "id": "c10",
+      "question": "Question about c10?"
+    }
+  ],
+  "moot_ids": [],
+  "cap": 4
+}

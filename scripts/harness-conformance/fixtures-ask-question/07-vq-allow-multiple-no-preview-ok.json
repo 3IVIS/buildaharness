@@ -1,0 +1,18 @@
+{
+  "id": "07-vq-allow-multiple-no-preview-ok",
+  "op": "validate_ask_question",
+  "description": "allowMultiple with no preview on any option is fine",
+  "question": {
+    "id": "q7",
+    "question": "Pick some",
+    "allowMultiple": true,
+    "options": [
+      {
+        "label": "a"
+      },
+      {
+        "label": "b"
+      }
+    ]
+  }
+}

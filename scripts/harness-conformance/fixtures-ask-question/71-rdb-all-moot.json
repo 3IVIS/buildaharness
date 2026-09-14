@@ -1,0 +1,19 @@
+{
+  "id": "71-rdb-all-moot",
+  "op": "refine_deferred_batch",
+  "description": "every deferred question turned out moot -> empty follow-up batch",
+  "deferred": [
+    {
+      "id": "c5",
+      "question": "Question about c5?"
+    },
+    {
+      "id": "c6",
+      "question": "Question about c6?"
+    }
+  ],
+  "moot_ids": [
+    "c5",
+    "c6"
+  ]
+}

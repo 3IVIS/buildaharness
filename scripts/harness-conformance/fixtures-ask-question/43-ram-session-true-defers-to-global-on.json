@@ -1,0 +1,8 @@
+{
+  "id": "43-ram-session-true-defers-to-global-on",
+  "op": "resolve_ask_mode",
+  "description": "session=True explicitly still defers to global (stays on)",
+  "global_enabled": true,
+  "structured": true,
+  "session_ask_mode": true
+}

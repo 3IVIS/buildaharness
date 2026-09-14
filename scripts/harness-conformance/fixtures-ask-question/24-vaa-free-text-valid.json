@@ -1,0 +1,10 @@
+{
+  "id": "24-vaa-free-text-valid",
+  "op": "validate_ask_answer",
+  "description": "a non-empty free_text answer is valid",
+  "answer": {
+    "questionId": "q1",
+    "kind": "free_text",
+    "freeText": "neither, use canary"
+  }
+}

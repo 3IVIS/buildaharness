@@ -1,0 +1,38 @@
+{
+  "id": "82-sbr-with-questions-batch",
+  "op": "surface_blocker_roundtrip",
+  "description": "a SurfaceBlocker carrying a Q0 questions batch round-trips the full batch",
+  "blocker": {
+    "reason": "cannot_make_progress",
+    "missing_info": [
+      "deploy target unclear"
+    ],
+    "current_task_summary": "preparing a deploy",
+    "questions": [
+      {
+        "id": "env",
+        "question": "Which environment?",
+        "options": [
+          {
+            "label": "staging"
+          },
+          {
+            "label": "prod"
+          }
+        ]
+      },
+      {
+        "id": "confirm",
+        "question": "Confirm deploy?",
+        "options": [
+          {
+            "label": "yes"
+          },
+          {
+            "label": "no"
+          }
+        ]
+      }
+    ]
+  }
+}

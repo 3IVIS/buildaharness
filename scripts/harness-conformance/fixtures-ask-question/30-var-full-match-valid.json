@@ -1,0 +1,30 @@
+{
+  "id": "30-var-full-match-valid",
+  "op": "validate_ask_response",
+  "description": "every question answered exactly once \u2014 valid (INV-27)",
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "env",
+        "kind": "selected",
+        "selectedLabels": [
+          "staging"
+        ]
+      }
+    ]
+  }
+}

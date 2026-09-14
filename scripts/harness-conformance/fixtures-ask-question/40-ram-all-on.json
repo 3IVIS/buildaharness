@@ -1,0 +1,7 @@
+{
+  "id": "40-ram-all-on",
+  "op": "resolve_ask_mode",
+  "description": "all three tiers on -> effective True",
+  "global_enabled": true,
+  "structured": true
+}

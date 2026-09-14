@@ -1,0 +1,8 @@
+{
+  "id": "42-ram-session-off-overrides-global-on",
+  "op": "resolve_ask_mode",
+  "description": "session=False forces off even though global is on",
+  "global_enabled": true,
+  "structured": true,
+  "session_ask_mode": false
+}
