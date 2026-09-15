@@ -662,7 +662,7 @@ export function App(): React.JSX.Element {
           },
         ])
       } else {
-        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.' }])
+        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.', pendingMessage: message }])
       }
     } catch (err) {
       // classifyError maps to friendly copy for the UI, which is often too coarse to debug
@@ -930,7 +930,13 @@ export function App(): React.JSX.Element {
                 />
               )
             case 'escalation':
-              return <EscalationBanner key={entry.id} reason={entry.reason} />
+              return (
+                <EscalationBanner
+                  key={entry.id}
+                  reason={entry.reason}
+                  onRetry={() => handleRetry(entry.pendingMessage, false)}
+                />
+              )
             case 'plan_approval':
               return (
                 <PlanApprovalCard

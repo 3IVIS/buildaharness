@@ -32,6 +32,19 @@ export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
   'X-Title': 'Aielia',
 }
 
+/**
+ * Mirrors personal-assistant's claude-cli-prompt.ts stripJsonCodeFence (duplicated rather than
+ * imported — runtime sits below personal-assistant in the dependency graph): some models routinely
+ * wrap a JSON reply in a ```json ... ``` fence even under response_format: json_object, which is a
+ * hint, not a hard guarantee, on several OpenRouter-routed models. Applied only to the
+ * structuredOutput path, never to a plain callChat/callChatStructured-without-schema result.
+ */
+function stripJsonCodeFence(content: string): string {
+  const trimmed = content.trim()
+  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed)
+  return match ? match[1] : trimmed
+}
+
 function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) return undefined
   const results: ToolCallResult[] = []
@@ -47,6 +60,49 @@ function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {
     results.push({ id: tc.id ?? '', name: tc.function?.name ?? '', input })
   }
   return results
+}
+
+/**
+ * Some OpenRouter-routed models (observed live with deepseek/deepseek-v4-flash-0731) don't
+ * reliably populate the standard `tool_calls` field and instead leak their own native
+ * function-calling serialization straight into `message.content` as plain text — an
+ * `<invoke name="...">`/`<parameter name="...">` block wrapped in the model's own special
+ * tokens (observed as U+FF5C fullwidth-vertical-bar-delimited tags, e.g.
+ * `<｜DSML｜tool_calls>...<｜DSML｜invoke name="shell">...`). Recovers a real ToolCallResult[]
+ * from that leaked block, but only when every invoked name matches a tool actually offered
+ * this call — a leaked block can itself hallucinate a tool name (this one called "shell",
+ * which was never registered; the real tool is "run_shell_command") and this must never
+ * fabricate a call to a name the caller didn't provide. Returns undefined when nothing
+ * recoverable is found, leaving agent-loop.ts's generic looksLikeUnparsedToolCall retry guard
+ * as the backstop for any other/unknown leaked format.
+ */
+function parseLeakedToolCallSyntax(content: string, tools?: ToolDefinition[]): ToolCallResult[] | undefined {
+  if (!tools || tools.length === 0) return undefined
+  const validNames = new Set(tools.map((t) => t.name))
+  const invokeRe = /<｜([^｜<>]{1,32})｜invoke name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜invoke>/g
+  const paramRe = /<｜([^｜<>]{1,32})｜parameter name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜parameter>/g
+  const results: ToolCallResult[] = []
+  let invokeMatch: RegExpExecArray | null
+  let index = 0
+  while ((invokeMatch = invokeRe.exec(content)) !== null) {
+    const [, , name, body] = invokeMatch
+    if (!validNames.has(name)) return undefined
+    const input: Record<string, unknown> = {}
+    paramRe.lastIndex = 0
+    let paramMatch: RegExpExecArray | null
+    while ((paramMatch = paramRe.exec(body)) !== null) {
+      input[paramMatch[2]] = paramMatch[3].trim()
+    }
+    results.push({ id: `leaked-tool-call-${index++}`, name, input })
+  }
+  return results.length > 0 ? results : undefined
+}
+
+/** Strips a recovered leaked tool-call block out of the reply text before it's stored back into
+ * conversation history — leaving it in would let the model imitate its own malformed syntax on
+ * the next turn. Only called once parseLeakedToolCallSyntax has already found something real. */
+function stripLeakedToolCallSyntax(content: string): string {
+  return content.replace(/<｜[^｜<>]{1,32}｜tool_calls>[\s\S]*?<\/｜[^｜<>]{1,32}｜tool_calls>/g, '').trim()
 }
 
 /**
@@ -134,9 +190,10 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     let buffer = ''
     let inputTokens: number | undefined
     let outputTokens: number | undefined
+    let cachedInputTokens: number | undefined
     const reportUsage = (): void => {
       if (inputTokens !== undefined || outputTokens !== undefined) {
-        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 })
+        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0, cachedInputTokens })
       }
     }
 
@@ -157,6 +214,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
           const parsed = JSON.parse(data)
           if (typeof parsed?.usage?.prompt_tokens === 'number') inputTokens = parsed.usage.prompt_tokens
           if (typeof parsed?.usage?.completion_tokens === 'number') outputTokens = parsed.usage.completion_tokens
+          if (typeof parsed?.usage?.prompt_tokens_details?.cached_tokens === 'number') cachedInputTokens = parsed.usage.prompt_tokens_details.cached_tokens
           const delta = parsed?.choices?.[0]?.delta?.content
           if (typeof delta === 'string') yield delta
         } catch {
@@ -184,6 +242,15 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
     }
+    // Without this, a structuredOutput caller (e.g. turn-intent-classifier.ts) relies entirely on
+    // the system prompt's "respond with JSON only" instruction — several OpenRouter-routed models
+    // (observed live with z-ai/glm-5.2) ignore that and prose-wrap or fence the reply, which then
+    // fails JSON.parse and silently falls back to the fail-safe UNKNOWN risk classification on
+    // every turn. json_object (not json_schema) because OpenRouter fans out to many underlying
+    // models with inconsistent json_schema support — json_object is the broadly-supported subset.
+    if (options.structuredOutput) {
+      body.response_format = { type: 'json_object' }
+    }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
     if (!response.ok) {
@@ -192,13 +259,25 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     const json = (await response.json()) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
     }
     const message = json.choices?.[0]?.message
-    const toolCalls = parseToolCalls(message?.tool_calls)
-    if (json.usage && typeof json.usage.prompt_tokens === 'number' && typeof json.usage.completion_tokens === 'number') {
-      options.onUsage?.({ inputTokens: json.usage.prompt_tokens, outputTokens: json.usage.completion_tokens })
+    let toolCalls = parseToolCalls(message?.tool_calls)
+    let content = message?.content ?? ''
+    if (!toolCalls || toolCalls.length === 0) {
+      const recovered = parseLeakedToolCallSyntax(content, tools)
+      if (recovered) {
+        toolCalls = recovered
+        content = stripLeakedToolCallSyntax(content)
+      }
     }
-    return { content: message?.content ?? '', toolCalls }
+    if (json.usage && typeof json.usage.prompt_tokens === 'number' && typeof json.usage.completion_tokens === 'number') {
+      options.onUsage?.({
+        inputTokens: json.usage.prompt_tokens,
+        outputTokens: json.usage.completion_tokens,
+        cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : undefined,
+      })
+    }
+    return { content: options.structuredOutput ? stripJsonCodeFence(content) : content, toolCalls }
   }
 }

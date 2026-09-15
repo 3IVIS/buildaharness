@@ -13,11 +13,12 @@ import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { AssistantSession } from './assistant-session.js'
 import type { AgentLoop, BatchPendingState } from './agent-loop.js'
-import { buildBatchBudgetTrace } from './agent-loop.js'
+import { buildBatchBudgetTrace, looksLikeUnparsedToolCall } from './agent-loop.js'
 import type { AssistantTrace } from './assistant-types.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import type { TraceEvent } from './trace-events.js'
 import { SYNTHESIS_SYSTEM_PROMPT } from './system-prompt.js'
+import type { DebugLogEntry } from './debug-log.js'
 
 /** Formats a preview of staged write content, or a proposed shell command, shared by
  * loadChainedApproval below and, previously, runToolIterations — small enough to duplicate the
@@ -45,6 +46,7 @@ export class ActionApprovalService {
     private readonly session: AssistantSession,
     private readonly agentLoop: AgentLoop,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
+    private readonly onDebugLog: ((entry: DebugLogEntry) => void) | undefined,
   ) {}
 
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
@@ -82,6 +84,7 @@ export class ActionApprovalService {
         await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: `/undo-action ${record.revertedEntryId}` })
       }
       await discardPendingAction(backend, workspaceRoot, pendingActionId)
+      this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${record?.kind ?? 'staged action'}(${pendingActionId}) → declined, nothing written or run` })
       // A chained (non-first) action from a multi-action turn may be declined after an earlier
       // action in the same chain already ran (see PendingActionRecord.chainedFrom's doc comment)
       // — claiming "nothing was written or run" in that case is simply false, so scope the claim
@@ -193,7 +196,14 @@ export class ActionApprovalService {
           ],
           { model: this.model(), onUsage: accumulateLocalUsage },
         )
-        if (synthesized.trim()) {
+        // callChatSync has none of callChatStructured's leaked-tool-call recovery/retry
+        // machinery (openai-compatible-client.ts's parseLeakedToolCallSyntax, agent-loop.ts's
+        // own retry guard) — a model that leaks its native tool-call syntax as plain text here
+        // (observed live: deepseek/deepseek-v4-flash-0731, wanting to call a tool that doesn't
+        // exist in this no-tools synthesis call at all) would otherwise be trusted verbatim as
+        // the user-facing reply. Falls back to the raw dump already assigned above, exactly like
+        // an empty/failed synthesis already does.
+        if (synthesized.trim() && !looksLikeUnparsedToolCall(synthesized)) {
           reply = synthesized
           transcriptContent = synthesized
         }
@@ -202,6 +212,20 @@ export class ActionApprovalService {
         // never mean no reply at all.
       }
     }
+
+    // Unlike a live tool-loop call (agent-loop.ts's own onDebugLog next to executeToolCall), a
+    // staged write_file/run_shell_command/email/revert is the highest-consequence action category
+    // — always-staged specifically because it's consequential (see tool-policy.ts's
+    // ALWAYS_REQUIRE_APPROVAL_TOOLS) — yet this whole apply path previously had no debug-log call
+    // at all, so it never showed up in the same live log stream as every read-only tool call.
+    // Confirmed live: under dangerouslySkipPermissions, a real `git add`/commit genuinely ran here
+    // with zero trace in the log a human was watching to monitor for issues.
+    const toolCallDescription =
+      applied.kind === 'write' ? `write_file({"path":"${applied.path}"})`
+      : applied.kind === 'revert' ? `undo_action({"id":"${applied.revertedEntryId}"})`
+      : applied.kind === 'email' ? `send_email({"to":"${applied.to}","subject":"${applied.subject}"})`
+      : `run_shell_command({"command":"${applied.command}","cwd":"${applied.cwd}"})`
+    this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${toolCallDescription} →\n${reply.slice(0, 4000)}${reply.length > 4000 ? `\n… (truncated, ${reply.length} chars total)` : ''}` })
 
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent })
     if (applied.nextPendingActionId) {

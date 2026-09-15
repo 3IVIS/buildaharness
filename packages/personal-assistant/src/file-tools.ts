@@ -20,10 +20,25 @@ export class PathOutsideWorkspaceError extends Error {
   }
 }
 
+/**
+ * Splits on both `/` and `\`, and recognizes a Windows drive-letter prefix (`C:\` / `C:/`) as
+ * absolute alongside a leading `/` — a real Windows desktop deployment can hand this a
+ * backslash-style workspaceRoot/requestedPath. This isn't cosmetic: the original `/`-only split
+ * treated an entire backslash-joined string (e.g. `..\..\..\Windows\System32`) as one opaque,
+ * un-poppable segment, so a Windows-style `..` traversal was never recognized as `..` here even
+ * though the real OS-aware fs backend downstream *would* resolve it — resolveInWorkspace's
+ * startsWith(root + '/') containment check passed on a request that actually landed far outside
+ * workspaceRoot. Output is always forward-slash-joined (a bare drive-letter prefix kept as-is);
+ * every fs backend in use here (Node's, and Tauri's std::fs) accepts '/' as a separator on
+ * Windows too, so there's no need to preserve '\' past this point.
+ */
 function normalizePath(path: string): string {
-  const absolute = path.startsWith('/')
+  const driveMatch = /^([A-Za-z]:)[\\/]/.exec(path)
+  const absolute = driveMatch !== null || path.startsWith('/') || path.startsWith('\\')
+  const prefix = driveMatch ? driveMatch[1] : ''
+  const rest = driveMatch ? path.slice(driveMatch[0].length) : path
   const segments: string[] = []
-  for (const part of path.split('/')) {
+  for (const part of rest.split(/[\\/]/)) {
     if (part === '' || part === '.') continue
     if (part === '..') {
       if (segments.length > 0 && segments[segments.length - 1] !== '..') segments.pop()
@@ -33,7 +48,7 @@ function normalizePath(path: string): string {
       segments.push(part)
     }
   }
-  return (absolute ? '/' : '') + segments.join('/')
+  return prefix + (absolute ? '/' : '') + segments.join('/')
 }
 
 /**
@@ -48,7 +63,11 @@ function normalizePath(path: string): string {
  */
 export function resolveInWorkspace(workspaceRoot: string, requestedPath: string): string {
   const root = normalizePath(workspaceRoot)
-  const combined = requestedPath.startsWith('/') ? requestedPath : `${root}/${requestedPath}`
+  // A Windows-style absolute requestedPath (drive-letter or leading '\') must also be treated as
+  // absolute here, not silently nested under root as a literal segment — same reasoning as
+  // normalizePath's own absolute detection just above.
+  const requestedIsAbsolute = /^[A-Za-z]:[\\/]/.test(requestedPath) || requestedPath.startsWith('/') || requestedPath.startsWith('\\')
+  const combined = requestedIsAbsolute ? requestedPath : `${root}/${requestedPath}`
   const resolved = normalizePath(combined)
   if (resolved !== root && !resolved.startsWith(`${root}/`)) {
     throw new PathOutsideWorkspaceError(requestedPath)

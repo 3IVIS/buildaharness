@@ -96,6 +96,34 @@ describe('resolveInWorkspace', () => {
   it('allows a relative path that dips into ../ but nets back inside the root', () => {
     expect(resolveInWorkspace(ROOT, 'notes/../summary.md')).toBe('/workspace/summary.md')
   })
+
+  describe('Windows-style paths', () => {
+    const WIN_ROOT = 'C:\\Users\\dev\\project'
+
+    it('resolves a plain relative backslash path against a drive-letter root', () => {
+      expect(resolveInWorkspace(WIN_ROOT, 'notes\\summary.md')).toBe('C:/Users/dev/project/notes/summary.md')
+    })
+
+    it('resolves a drive-letter absolute path that is inside the root', () => {
+      expect(resolveInWorkspace(WIN_ROOT, 'C:\\Users\\dev\\project\\notes\\summary.md')).toBe('C:/Users/dev/project/notes/summary.md')
+    })
+
+    it('rejects backslash ../ traversal that escapes the root — the actual vulnerability: a whole backslash-joined string used to be treated as one opaque, un-poppable segment', () => {
+      expect(() => resolveInWorkspace(WIN_ROOT, '..\\..\\..\\Windows\\System32\\config\\SAM')).toThrow(PathOutsideWorkspaceError)
+    })
+
+    it('rejects a drive-letter absolute path outside the root', () => {
+      expect(() => resolveInWorkspace(WIN_ROOT, 'C:\\Windows\\System32\\config\\SAM')).toThrow(PathOutsideWorkspaceError)
+    })
+
+    it('allows a relative backslash path that dips into ..\\ but nets back inside the root', () => {
+      expect(resolveInWorkspace(WIN_ROOT, 'notes\\..\\summary.md')).toBe('C:/Users/dev/project/summary.md')
+    })
+
+    it('rejects mixed-separator ../ traversal (forward slash appended, backslash traversal inside)', () => {
+      expect(() => resolveInWorkspace(WIN_ROOT, '..\\..\\etc\\passwd')).toThrow(PathOutsideWorkspaceError)
+    })
+  })
 })
 
 describe('executeFileTool', () => {

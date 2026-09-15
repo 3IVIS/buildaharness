@@ -877,6 +877,17 @@ body {
   font-size: 12.5px;
 }
 
+.escalation-banner__retry {
+  margin-top: 10px;
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .settings {
   display: flex;
   flex-direction: column;

@@ -1510,6 +1510,29 @@ describe('PersonalAssistant web + reminder tools', () => {
     expect(retryMessages.some(m => m.role === 'user' && m.content.includes('<tool_call>'))).toBe(true)
   })
 
+  it('retries instead of showing a leaked DSML-style pseudo-tool-call block for a hallucinated tool name (e.g. OpenRouter deepseek/deepseek-v4-flash-0731 calling "shell" instead of the real "run_shell_command")', async () => {
+    // openai-compatible-client.ts's parseLeakedToolCallSyntax never fabricates a call for an
+    // unregistered name, so this reaches agent-loop.ts's generic looksLikeUnparsedToolCall
+    // backstop exactly like the z-ai/glm-5.2 case above, just with a different leaked shape.
+    const llm = scriptedResponses([
+      { content: '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="shell">\n<｜DSML｜parameter name="command">git remote -v</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>' },
+      { content: 'Here are the 9 commits that aren\'t on the remote yet.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] } })
+
+    const result = await assistant.turn('Push all the commits not pushed to remote')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('Here are the 9 commits that aren\'t on the remote yet.')
+    expect(llm.calls).toBe(3)
+    const retryMessages = (llm as unknown as { receivedMessages: ChatMessage[][] }).receivedMessages[1]
+    // The leaked content itself is pushed back as the 'assistant' turn (agent-loop.ts); the
+    // fixed nudge text that follows it (role 'user') is generic and never quotes the model's
+    // actual leaked tags, unlike the <tool_call> case above where the nudge's own hardcoded
+    // example happens to quote that literal string.
+    expect(retryMessages.some(m => m.role === 'assistant' && m.content.includes('｜DSML｜'))).toBe(true)
+  })
+
   it('escalates instead of ever surfacing raw tool-call syntax when the model keeps failing to populate tool_calls past the iteration cap', async () => {
     const malformed = { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>' }
     // One scripted response per maxSteps iteration — every one malformed, so the loop must
@@ -1656,6 +1679,56 @@ describe('PersonalAssistant shell tools', () => {
     expect(result.reply).toContain('a.txt')
   })
 
+  it('logs a real dangerouslySkipPermissions-applied run_shell_command to onDebugLog — previously invisible: a staged write/shell action executed with no debug-log trace at all, unlike every read-only tool call', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, dangerouslySkipPermissions: true, onDebugLog })
+
+    await assistant.turn('List the files here')
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('run_shell_command') && e.content.includes('ls -la') && e.content.includes('a.txt'))).toBe(true)
+  })
+
+  it('logs an approved (non-skip-permissions) staged run_shell_command to onDebugLog the same way', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog })
+
+    const staged = await assistant.turn('List the files here')
+    onDebugLog.mockClear()
+    await assistant.turn('List the files here', { approved: true, pendingActionId: staged.pendingActionId })
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('run_shell_command') && e.content.includes('a.txt'))).toBe(true)
+  })
+
+  it('logs a declined staged run_shell_command to onDebugLog too', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog })
+
+    const staged = await assistant.turn('List the files here')
+    onDebugLog.mockClear()
+    await assistant.turn('List the files here', { approved: false, pendingActionId: staged.pendingActionId })
+
+    const toolCallLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'tool_call')
+    expect(toolCallLogs.some((e) => e.content.includes('declined'))).toBe(true)
+    expect(executeCommand).not.toHaveBeenCalled()
+  })
+
   it('approving a pending shell action executes the exact staged command with zero additional structured-call LLM calls', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
@@ -1748,6 +1821,38 @@ describe('PersonalAssistant shell tools', () => {
     // not raw untrusted content) — no tag markup needed for a future turn to read it safely.
     const transcript = await assistant.getTranscript('synthesis-test')
     expect(transcript.at(-1)?.content).toBe(synthesizedAnswer)
+  })
+
+  it('falls back to the raw command dump instead of trusting a synthesis reply that leaks unparsed tool-call syntax (e.g. OpenRouter deepseek/deepseek-v4-flash-0731)', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({
+      output: 'nodes-p11.test.ts\nharness-checkpoint.ts\nharness-runtime.ts\n',
+      exitCode: 0,
+      timedOut: false,
+    })
+    const { ctx } = makeShellTools(executeCommand)
+    // callChatSync (the synthesis call) has no leaked-tool-call recovery/retry — unlike
+    // callChatStructured, a leaked reply here must fall back to the raw dump instead of ever
+    // reaching the user.
+    const leakedSynthesis = '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="exec">\n<｜DSML｜parameter name="cmd">node scripts/gen-stats.mjs</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>'
+    const llm = scriptedResponses(
+      [{ content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'grep -rl "nodeExecutionOrder" packages/harness/src' } }] }],
+      undefined,
+      leakedSynthesis,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+
+    const staged = await assistant.turn('are these wired reasonably?', { sessionId: 'synthesis-leak-test' })
+    const approved = await assistant.turn('are these wired reasonably?', {
+      sessionId: 'synthesis-leak-test',
+      approved: true,
+      pendingActionId: staged.pendingActionId,
+    })
+
+    expect(approved.status).toBe('ok')
+    expect(approved.reply).not.toContain('｜DSML｜')
+    expect(approved.reply).toContain('nodes-p11.test.ts')
+    const transcript = await assistant.getTranscript('synthesis-leak-test')
+    expect(transcript.at(-1)?.content).not.toContain('｜DSML｜')
   })
 
   it('flags shell output that looks like a prompt-injection attempt, without dropping it', async () => {

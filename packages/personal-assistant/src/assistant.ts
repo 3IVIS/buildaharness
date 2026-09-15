@@ -363,6 +363,7 @@ export class PersonalAssistant {
       this.session,
       this.agentLoop,
       this.onTrace,
+      this.onDebugLog,
     )
     this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore)
     this.harnessBridge = new HarnessBridge(
@@ -434,10 +435,16 @@ export class PersonalAssistant {
       result.proposerKind = this.lastProposerKind
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
+      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
+      // visible in the same terminal log stream as every other debug-log line — the only way to
+      // confirm, from a real live response, whether a given backend/model is actually reporting
+      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
+      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
+      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
       this.onDebugLog?.({
         kind: 'assistant_reply',
         sessionId,
-        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''} ${result.reply ?? result.reason ?? '(no reply)'}`,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? result.reason ?? '(no reply)'}`,
       })
       return result
     } catch (err) {
@@ -589,6 +596,7 @@ export class PersonalAssistant {
         inputTokens: (usageTotal?.inputTokens ?? 0) + u.inputTokens,
         outputTokens: (usageTotal?.outputTokens ?? 0) + u.outputTokens,
         costUsd: u.costUsd !== undefined ? (usageTotal?.costUsd ?? 0) + u.costUsd : usageTotal?.costUsd,
+        cachedInputTokens: u.cachedInputTokens !== undefined ? (usageTotal?.cachedInputTokens ?? 0) + u.cachedInputTokens : usageTotal?.cachedInputTokens,
       }
     }
 

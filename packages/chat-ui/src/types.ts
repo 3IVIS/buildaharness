@@ -35,7 +35,15 @@ export type ChatEntry =
       pendingActionId?: string
       pendingActionKind?: AssistantTurnResult['pendingActionKind']
     }
-  | { id: string; kind: 'escalation'; reason: string }
+  | {
+      id: string
+      kind: 'escalation'
+      reason: string
+      /** The message that led to this escalation — there's no pendingActionId to resume (see
+       * agent-loop.ts's REQUIRE_APPROVAL-with-nothing-concrete-to-stage comment), so the only
+       * way forward is resubmitting the same message as a brand new turn. */
+      pendingMessage: string
+    }
   | {
       id: string
       kind: 'clarification'
