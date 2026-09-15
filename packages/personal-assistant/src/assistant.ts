@@ -1,4 +1,13 @@
-import { EscalationHalt, InMemoryExperienceStore, supervisorEnabled, type ExperienceStore, type CheckpointStore, type ToolExecutorContext } from '@buildaharness/harness'
+import {
+  EscalationHalt,
+  InMemoryExperienceStore,
+  supervisorEnabled,
+  resolveAskMode as resolveEffectiveAskMode,
+  type ExperienceStore,
+  type CheckpointStore,
+  type ToolExecutorContext,
+  type AskResponse,
+} from '@buildaharness/harness'
 import {
   InMemoryAdapter,
   IndexedDBAdapter,
@@ -29,10 +38,17 @@ import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, 
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
+import { PlanDraftingService } from './plan-drafting-service.js'
+import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
+import { PlanSketchService } from './plan-sketch-service.js'
+import type { PlanRecord } from './plan-store.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
 import { wrapProposerWithInjectedFailure } from './benchmark-injected-failure.js'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
+import { DEFAULT_ASK_MODE, type AskMode } from './ask-mode-flag.js'
+import { DEFAULT_PLAN_MODE, type PlanRolloutMode } from './plan-mode-flag.js'
+import { AskClarificationService } from './ask-clarification-service.js'
 import { ResponseService } from './response-service.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
@@ -49,6 +65,8 @@ export { trimmedAverage, nextItemBudget } from './agent-loop.js'
 export type { AssistantSource } from './assistant-source.js'
 export type { DebugLogEntry } from './debug-log.js'
 export type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
+export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
+export type { PlanMode } from './plan-store.js'
 
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
@@ -56,6 +74,34 @@ export interface TurnOptions {
   sessionId?: string
   approved?: boolean
   pendingActionId?: string
+  /**
+   * Q2 of plans/ask_question_and_plan_mode_plan.html — resolves a staged `needs_clarification`
+   * result (see AssistantTurnResult.pendingClarificationId) with the user's answer. Mirrors
+   * `pendingActionId`/`approved`'s own "resolved by ID, never re-derived" shape:
+   * `clarificationAnswer` must answer exactly the questions that were staged, validated
+   * server-side (INV-28) regardless of what the client already checked.
+   */
+  pendingClarificationId?: string
+  clarificationAnswer?: AskResponse
+  /**
+   * P2 of plans/ask_question_and_plan_mode_plan.html — resolves a staged `needs_plan_approval`
+   * result (see AssistantTurnResult.planApprovalId) with the user's decision. Mirrors
+   * `pendingActionId`/`approved`'s "resolved by ID, never re-derived" shape: what gets
+   * approved/declined is exactly the plan that was staged, never re-drafted.
+   */
+  planApprovalId?: string
+  /** `'approve'`/`'approve_with_edits'`/`'decline'` — required to resolve `planApprovalId`; omitting it leaves the plan `awaiting_approval` (fail closed), same as an unanswered clarification. */
+  planDecision?: PlanDecision
+  /** Only meaningful with `planDecision: 'approve_with_edits'` — cancels/edits applied before the plan is activated. */
+  planEdits?: PlanApprovalEdits
+  /**
+   * Per-session override — tier 2 of Q1's three-tier INV-29 resolution. `'disabled'` forces
+   * plain free-text-fallback escalations for this turn even when the global `askMode` config is
+   * `'enabled'`. Absent/`'enabled'` defers to the global flag. Never widens the global flag: an
+   * override can only turn structured questions off relative to it, never on when the global
+   * flag is off.
+   */
+  askMode?: AskMode
   onProgress?: (progress: AssistantProgress) => void
   /**
    * Called with each token as the model's reply streams in. On the plain chat
@@ -182,6 +228,26 @@ export interface PersonalAssistantOptions {
    * call resolveOneLoopMode(process.env) and pass the result here.
    */
   oneLoopMode?: OneLoopMode
+  /**
+   * Q2 of plans/ask_question_and_plan_mode_plan.html — global-flag control point (tier 1 of
+   * INV-29) for the ask-question mechanism. Undefined (the default) falls back to
+   * `DEFAULT_ASK_MODE` ('disabled') — today's behavior, byte-for-byte: every escalation stays on
+   * the plain `escalated`/`reply: null` path. Only cli.ts/chat-ui's App.tsx (or an equivalent
+   * surface entry point) is expected to resolve this from ASSISTANT_ASK_MODE/
+   * VITE_ASSISTANT_ASK_MODE and pass it down — PersonalAssistant itself never touches
+   * process.env, mirroring oneLoopMode's own convention.
+   */
+  askMode?: AskMode
+  /**
+   * P11 of plans/ask_question_and_plan_mode_plan.html — see plan-mode-flag.ts's doc comment for
+   * the full rollout rationale. 'legacy' (the default, for the whole rollout window): P3's
+   * judgment-based auto-trigger below never fires, so `turn()` never auto-enters plan mode's
+   * exclusive drafting+approval loop — today's behavior, byte-for-byte, for every real user turn.
+   * 'gated' lets that auto-trigger run. PersonalAssistant itself never touches process.env — only
+   * cli.ts/chat-ui's App.tsx (or an equivalent surface entry point) is expected to call
+   * resolvePlanMode(process.env)/normalizePlanMode(import.meta.env...) and pass the result here.
+   */
+  planMode?: PlanRolloutMode
 }
 
 /**
@@ -212,6 +278,10 @@ export class PersonalAssistant {
   private readonly toolLoopWillRun: boolean
   /** R3 of plans/harness_d2_one_loop_rewire_plan.html — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
+  /** Q2 — global-flag tier of the ask-question mechanism's three-tier INV-29 resolution. See PersonalAssistantOptions.askMode's doc comment. */
+  private readonly askMode: AskMode
+  /** P11 — gates whether P3's auto-trigger below can ever enter plan mode for real traffic. See PersonalAssistantOptions.planMode's doc comment. */
+  private readonly planMode: PlanRolloutMode
   /**
    * Scratch slot for which proposer drove the most recent runTurn — read by `turn()` to stamp
    * AssistantTurnResult.proposerKind, and emitted as a 'proposer_selected' trace event from
@@ -226,9 +296,13 @@ export class PersonalAssistant {
   private readonly agentLoop: AgentLoop
   private readonly actionApproval: ActionApprovalService
   private readonly planService: PlanService
+  private readonly planApproval: PlanApprovalService
+  private readonly planDrafting: PlanDraftingService
+  private readonly planSketch: PlanSketchService
   private readonly turnInterpreter: TurnInterpreter
   private readonly harnessBridge: HarnessBridge
   private readonly responseService: ResponseService
+  private readonly askClarification: AskClarificationService
 
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
@@ -248,6 +322,8 @@ export class PersonalAssistant {
     const spendCap = options.spendCap
     this.toolLoopWillRun = Boolean(fileTools || this.webTools || shellTools || actionTools)
     this.oneLoopMode = options.oneLoopMode ?? DEFAULT_ONE_LOOP_MODE
+    this.askMode = options.askMode ?? DEFAULT_ASK_MODE
+    this.planMode = options.planMode ?? DEFAULT_PLAN_MODE
 
     // Threaded as a getter closure — never a captured string — into every collaborator that
     // reads the current model, so `setModel()` (the `/model` command) keeps working for all of
@@ -269,7 +345,14 @@ export class PersonalAssistant {
       this.onTrace,
       this.onDebugLog,
     )
-    this.planService = new PlanService(this.memory)
+    // Plan mode's P5 file-backed persistence reuses AssistantSession's existing
+    // write_file/run_shell_command workspace lookup rather than re-deriving fileTools/
+    // shellTools/actionTools precedence a second time here — `undefined` on a surface with no
+    // real filesystem (e.g. a browser tab), same as undoWorkspace()'s other callers.
+    this.planService = new PlanService(this.memory, this.session.undoWorkspace())
+    this.planApproval = new PlanApprovalService(this.planService, this.session, this.onTrace)
+    this.planDrafting = new PlanDraftingService(this.planService, this.session, this.llmClient, model, this.planApproval, this.onTrace, this.agentLoop, this.memory)
+    this.planSketch = new PlanSketchService(this.llmClient, model, this.onTrace, this.agentLoop)
     this.actionApproval = new ActionApprovalService(
       this.memory,
       this.llmClient,
@@ -287,6 +370,7 @@ export class PersonalAssistant {
       this.planService, this.session, this.onTrace, this.oneLoopMode,
     )
     this.responseService = new ResponseService(this.memoryService, this.session, this.planService, this.onTrace)
+    this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
     // constructor or the first turn/render. Covers every front end (CLI, chat-ui, desktop)
@@ -388,6 +472,56 @@ export class PersonalAssistant {
     return this.session.clearSession(sessionId)
   }
 
+  /**
+   * P1 of plans/ask_question_and_plan_mode_plan.html — explicit entry point into plan mode's
+   * exclusive drafting state. No production caller yet: P3 will later set this automatically from
+   * a judgment-based trigger ahead of TurnInterpreter's classification. Until then this is reached
+   * only by a caller (a future `/plan` CLI command, or a test) that wants to exercise the drafting
+   * loop directly. Once active, every `turn()` call for this session routes to
+   * `PlanDraftingService` instead of the normal pipeline until the user says an explicit
+   * cancel/abort phrase.
+   */
+  async enterPlanMode(sessionId: string): Promise<{ active: boolean; draftId: string }> {
+    return this.session.enterPlanMode(sessionId)
+  }
+
+  /**
+   * P7 of plans/ask_question_and_plan_mode_plan.html — the raw current `PlanRecord` for this
+   * session, regardless of `mode`, so a caller (chat-ui's persistent banner, the CLI's `/plan
+   * show`) can display live drafting/awaiting-approval state independent of any single turn's
+   * own result (a `needs_plan_approval` result only carries a snapshot at the moment it's
+   * staged; a plain `status: 'ok'` drafting reply doesn't carry `rationale`/`reviewNotes` at
+   * all). Returns `null` when no plan record exists for this session yet.
+   */
+  async getPlanState(sessionId: string): Promise<PlanRecord | null> {
+    return this.planService.loadPlanRecord(sessionId)
+  }
+
+  /**
+   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate: a
+   * cheaper "just go research and draft an approach" path than plan mode's durable task-graph
+   * machinery (P0-P8), explicitly invoked (a CLI `/plan sketch <request>` command, a chat-ui
+   * "Sketch a plan" action) rather than auto-triggered. Returns advice in the reply text — it
+   * never creates a `PlanRecord`, never sets `planMode.active` (`enterPlanMode` above), never
+   * stages anything for `PlanApprovalService`, and cannot execute a single task (INV-35). A real,
+   * cost-incurring LLM call, so it still goes through the same session spend-cap check/record as
+   * an ordinary `turn()` — just none of `turn()`'s classification/tool-loop/plan-mode machinery.
+   */
+  async sketchPlan(sessionId: string, request: string): Promise<AssistantTurnResult> {
+    const check = await this.session.checkSpendCapForTurn(sessionId)
+    if (!check.allowed) {
+      return { status: 'escalated', reply: null, reason: check.reason, proposerKind: 'posthoc' }
+    }
+    let usage: TokenUsage | undefined
+    const result = await this.planSketch.sketch(request, (u) => {
+      usage = u
+    })
+    result.usage = usage
+    result.proposerKind = 'posthoc'
+    await this.session.recordSpend(sessionId, usage)
+    return result
+  }
+
   /** Scoped recovery for a stuck harness checkpoint — see AssistantSession.clearCheckpoint's doc comment. */
   async clearCheckpoint(sessionId: string): Promise<{ cleared: boolean; stepsUsed?: number; currentNode?: string }> {
     return this.session.clearCheckpoint(sessionId)
@@ -466,6 +600,55 @@ export class PersonalAssistant {
       return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage)
     }
 
+    // Q2 — resolving a staged needs_clarification result is a resume, not a fresh turn: the
+    // effective askMode carried here only decides whether a *follow-up* (INV-37) escalation
+    // re-stages instead of falling back to the terminal `escalated` path — see
+    // AskClarificationService.resolvePendingClarification's own EscalationHalt catch.
+    if (options.pendingClarificationId) {
+      // P8 of plans/ask_question_and_plan_mode_plan.html — a nested ask raised mid-draft stages
+      // into PlanDraftingService's own side channel, not AskClarificationService's (there is no
+      // harness run mid-draft to resume). Both produce the same opaque `pendingClarificationId`
+      // shape, so the caller (chat-ui/CLI) never needs to know which one it's resolving — this is
+      // the one place that has to check, by peeking which store actually staged it.
+      if (await this.planDrafting.isPendingAsk(options.pendingClarificationId)) {
+        return this.planDrafting.resolvePendingAsk(sessionId, transcriptKey, options.pendingClarificationId, options.clarificationAnswer, accumulateUsage)
+      }
+      const askModeEnabledForResume = resolveEffectiveAskMode({
+        globalEnabled: this.askMode === 'enabled',
+        sessionAskMode: options.askMode === undefined ? undefined : options.askMode === 'enabled',
+      })
+      return this.askClarification.resolvePendingClarification(sessionId, transcriptKey, options.pendingClarificationId, options.clarificationAnswer, askModeEnabledForResume)
+    }
+
+    // P2 — resolving a staged needs_plan_approval result. `resolvePendingPlanApproval` mutates
+    // plan state (or leaves it untouched, fail-closed) and either returns a terminal result
+    // (stale/missing ID, no decision, or a failed edit/activation) or `{ fallThrough: true }`,
+    // meaning we keep going below with this SAME userMessage — approve/approve-with-edits lets
+    // the ordinary pipeline pick up the newly-`active` plan exactly the way a freshly
+    // template-matched plan already does today (TurnInterpreter.resolveTasks -> loadActivePlan),
+    // decline lets it fall through with no plan at all. Checked before planMode.active (below) —
+    // same position pendingActionId/pendingClarificationId already occupy.
+    if (options.planApprovalId) {
+      const outcome = await this.planApproval.resolvePendingPlanApproval(sessionId, options.planApprovalId, options.planDecision, options.planEdits)
+      if (!('fallThrough' in outcome)) return outcome
+    }
+
+    // P1 of plans/ask_question_and_plan_mode_plan.html — the exclusive plan-mode session-state
+    // switch: while active, every message (short of an explicit cancel phrase, handled inside
+    // PlanDraftingService itself) is routed here instead of TurnInterpreter's normal
+    // classify/tool-loop pipeline below, and no tool loop of any kind runs for this turn (INV-30).
+    // No production caller ever sets this today (see PersonalAssistant.enterPlanMode's doc
+    // comment) — inert by construction until P3 wires an automatic trigger.
+    const planModeState = await this.session.getPlanModeState(sessionId)
+    if (planModeState?.active) {
+      // No `seed` passed here (this is a resumed/manual drafting turn, not a fresh auto-triggered
+      // one) — draftTurn's `{ fallThrough: true }` outcome is only ever produced when a `seed` is
+      // given, so this is always a real AssistantTurnResult in practice; the `in` check just keeps
+      // the return type honest without asserting past PlanDraftOutcome's union.
+      const draftOutcome = await this.planDrafting.draftTurn(sessionId, transcriptKey, userMessage, accumulateUsage)
+      if (!('fallThrough' in draftOutcome)) return draftOutcome
+    }
+
     const transcript = await this.session.loadAndCompactTranscript(sessionId)
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
@@ -496,6 +679,56 @@ export class PersonalAssistant {
     }
 
     const { classification, planForCancelCheck } = interpretation
+
+    // P3 of plans/ask_question_and_plan_mode_plan.html — the generalized, judgment-based auto-entry
+    // into plan mode's exclusive drafting loop (P1/P2), replacing the old direct-to-active
+    // template-match path (TurnInterpreter.resolveTasks used to build and immediately activate a
+    // PlanRecord the instant a template matched, with no approval step at all). A template match
+    // still seeds the draft with that template's own skeleton (today's behavior, reused — see
+    // PlanDraftingService.draftTurn/seedFromTemplate), and a request with no template match but a
+    // genuine multi-step shape (classification.needsMultiStepPlan — includes a code-implementation
+    // request per Section 5b-6) seeds a from-scratch draft, grounded via a bounded
+    // read_file/list_directory walk. Checked here (before the tool loop / draftReply generation
+    // below ever runs) rather than inside resolveTasks, so drafting stays genuinely exclusive
+    // (INV-30) instead of running a wasted ordinary turn alongside it. Nothing runs until the user
+    // explicitly approves the finished draft (P2) — auto-entry is safe specifically because that
+    // approval gate is mandatory and never risk-tiered. `planForCancelCheck` null is required
+    // defensively even though `classification.matchedPlanTemplate`/`needsMultiStepPlan` are already
+    // gated to false whenever a plan is active (turn-intent-classifier.ts) — belt and suspenders
+    // against ever entering drafting on top of an already-running plan.
+    // P11 — 'legacy' (the default) keeps this auto-trigger off: a plan-shaped classification
+    // just falls through to resolveTasks below, which already treats matchedPlanTemplate/
+    // needsMultiStepPlan as a pure observability trace once plan mode is bypassed (see its own
+    // doc comment) rather than building/activating a PlanRecord — this is the one production
+    // call site that ever calls enterPlanMode, so gating it here makes the entire P1-P8/P10
+    // apparatus downstream stay dormant for real traffic without needing a flag check anywhere
+    // else (manual/test-only enterPlanMode calls are deliberately left ungated — see
+    // plan-mode-flag.ts's doc comment).
+    if (this.planMode === 'gated' && !planForCancelCheck && (classification.matchedPlanTemplate !== null || classification.needsMultiStepPlan)) {
+      await this.session.enterPlanMode(sessionId)
+      this.onTrace?.({ kind: 'plan_classified', isCandidate: true, matchedTemplate: classification.matchedPlanTemplate })
+      const draftOutcome = await this.planDrafting.draftTurn(sessionId, transcriptKey, userMessage, accumulateUsage, {
+        templateName: classification.matchedPlanTemplate,
+        grounded: classification.matchedPlanTemplate === null,
+      })
+      // Validation (P3): a fresh draft that fails outright (malformed/insufficient LLM output)
+      // falls back to not entering plan mode at all — draftTurn already exited plan mode and left
+      // the transcript untouched, so ordinary turn handling below picks up this same userMessage
+      // cleanly, exactly like a failed old-style buildPlanFromTemplate call used to fall through
+      // to ad hoc decomposition.
+      if (!('fallThrough' in draftOutcome)) return draftOutcome
+    }
+
+    // Q2 — the effective askMode for this turn (Q1's three-tier INV-29 resolution: global config
+    // AND session override AND per-call-site, most-restrictive-wins). Threaded into
+    // harnessBridge.run() (so the harness's own supervisor ASK_USER path batches consistently,
+    // and so its checkpoint survives a structured-question escalation) and into the
+    // EscalationHalt catch below (so it — not the harness — decides whether to promote to
+    // needs_clarification).
+    const askModeEnabled = resolveEffectiveAskMode({
+      globalEnabled: this.askMode === 'enabled',
+      sessionAskMode: options.askMode === undefined ? undefined : options.askMode === 'enabled',
+    })
 
     let draftReply: string
     let sources: AssistantSource[] | undefined
@@ -633,6 +866,7 @@ export class PersonalAssistant {
         onProgress: options.onProgress,
         onUsage: accumulateUsage,
         oneLoopProposer,
+        askModeEnabled,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Bound to this turn's read-only
         // tools + risk hint; inert unless supervisorEnabled() also wires a supervisorDecider
         // (harness-bridge.ts), and then only reached on a real stall edge.
@@ -683,6 +917,22 @@ export class PersonalAssistant {
       })
     } catch (err) {
       if (err instanceof EscalationHalt) {
+        // Q2 — a populated `blocker.questions` (Q0) with the effective askMode enabled promotes
+        // to needs_clarification instead of the terminal escalated/reply:null path; flag-off or
+        // no `questions` at all falls straight through to buildEscalatedResult, byte-identical to
+        // pre-Q2 output.
+        if (askModeEnabled && err.blocker.questions && err.blocker.questions.length > 0) {
+          return this.askClarification.stageAndRespond({
+            sessionId,
+            transcriptKey,
+            userMessage,
+            questions: err.blocker.questions,
+            classification,
+            activePlan,
+            facts,
+            draftReply,
+          })
+        }
         return this.responseService.buildEscalatedResult({ sessionId, transcriptKey, userMessage, err, classification })
       }
       // R3 of plans/harness_d2_one_loop_rewire_plan.html: the harness-driven proposer's
@@ -691,7 +941,12 @@ export class PersonalAssistant {
       // unexamined, so it propagates out of harnessBridge.run() as a thrown error rather than a
       // `{ status: 'paused' }` outcome; caught here instead.
       if (err instanceof OneLoopPause) {
-        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification)
+        // P10: activePlan/err.currentTaskId give buildToolLoopPauseResult what it needs for the
+        // INV-36 trust check — this is the only call site with a real answer for "which task was
+        // RUNNING", since it's reached only once the harness has actually started driving the
+        // plan's task graph (see that method's own doc comment on why the flag-OFF call site
+        // below can't supply either).
+        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId)
       }
       throw err
     }
@@ -710,6 +965,14 @@ export class PersonalAssistant {
     userMessage: string,
     loopResult: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
     classification: TurnIntentClassification,
+    // P10: only ever supplied by the flag-ON OneLoopPause catch below, which is the only call
+    // site with a real "which plan task was RUNNING" answer — the flag-OFF flat/batch loop calls
+    // this before any plan task has been selected at all (see runTurn's own call site), so trust
+    // mode structurally never applies there (currentTaskId stays undefined, INV-36's match always
+    // fails). activePlan defaults to undefined/null rather than being required so that call site
+    // doesn't need to thread through a value it doesn't have.
+    activePlan?: PlanRecord | null,
+    currentTaskId?: string,
   ): Promise<AssistantTurnResult> {
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     if (loopResult.kind === 'needs_approval') {
@@ -718,6 +981,20 @@ export class PersonalAssistant {
       // call with `approved: true` would — resolvePendingAction is exactly that path, just
       // invoked immediately instead of waiting for the caller to resume it.
       if (this.dangerouslySkipPermissions) {
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+      }
+      // INV-36 (plan mode's P10): the one narrow, per-plan opt-in exception to the same rule —
+      // auto-apply only a write/shell/email action proposed while executing the specific task
+      // that is this trust-approved plan's currently RUNNING one (not any task, not any plan).
+      // 'batch' pendingActionKind is excluded — it's a search-cost pacing confirmation, not an
+      // ActionApprovalService-style consequential action, and was never in scope for trust mode.
+      if (
+        loopResult.pendingActionKind !== 'batch' &&
+        activePlan?.trustApprovedSteps === true &&
+        currentTaskId !== undefined &&
+        activePlan.tasks.some((t) => t.id === currentTaskId)
+      ) {
+        this.onTrace?.({ kind: 'plan_trust_auto_applied', pendingActionKind: loopResult.pendingActionKind, taskId: currentTaskId })
         return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
       }
       return {

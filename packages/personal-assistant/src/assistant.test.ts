@@ -16,7 +16,7 @@ import { classifyRisk } from './risk-classifier.js'
 // ILLMClient below recognize that call and answer it separately from whatever else the fake is
 // scripted to simulate (a tool loop, a decomposition call, ...), instead of it silently consuming
 // a slot meant for something else.
-const TURN_INTENT_MARKER = 'seven independent judgments'
+const TURN_INTENT_MARKER = 'eight independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))
@@ -64,6 +64,7 @@ function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string,
     isBulkReminderRequest,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
   }
   return JSON.stringify({ ...base, ...override })
 }
@@ -1974,23 +1975,59 @@ describe('PersonalAssistant structured planning', () => {
 
   const planTemplateMatch = { decomposedTasks: decomposedTasksFixture(), matchedPlanTemplate: 'project_planning' }
 
-  function planBuilderResponse(): LLMStructuredResponse {
+  // P6 of plans/ask_question_and_plan_mode_plan.html adds one bounded verification LLM call
+  // (verifyPlanDraft) right before a readyForApproval draft is staged — every scripted queue
+  // below that stages a plan (planDraftResponse(true)) needs one more entry for it.
+  function verifyResponse(findings: string[] = []): LLMStructuredResponse {
+    return { content: JSON.stringify({ findings }) }
+  }
+
+  // P3 of plans/ask_question_and_plan_mode_plan.html retired the old direct
+  // matchedPlanTemplate -> buildPlanFromTemplate -> createPlanRecord(active) path in favor of
+  // routing every template match through PlanDraftingService.draftTurn's own drafting call
+  // (plan-drafting.ts's draftPlanRevision), so a scripted response standing in for that call now
+  // has to match DRAFT_SCHEMA's shape (reply/success_criteria/rationale/ready_for_approval/tasks
+  // with each task's own risk_level — the model's revision output, not a template-curated value
+  // attached separately) rather than the old bare `{ tasks }` plan-builder shape.
+  function planDraftResponse(readyForApproval: boolean): LLMStructuredResponse {
     const tasks = [
-      { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [] },
-      { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'] },
-      { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'] },
-      { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'] },
-      { id: 'schedule', description: 'Schedule the redesign kickoff meeting', depends_on: ['resource_planning', 'risk_assessment'] },
-      { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'] },
+      { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [], risk_level: 'MEDIUM' },
+      { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'], risk_level: 'MEDIUM' },
+      { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'], risk_level: 'MEDIUM' },
+      { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'], risk_level: 'HIGH' },
+      { id: 'schedule', description: 'Schedule the redesign kickoff meeting', depends_on: ['resource_planning', 'risk_assessment'], risk_level: 'MEDIUM' },
+      { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'], risk_level: 'LOW' },
     ]
-    return { content: JSON.stringify({ tasks }) }
+    return {
+      content: JSON.stringify({
+        reply: 'Here is the redesign plan.',
+        success_criteria: 'The Q3 onboarding redesign ships.',
+        rationale: 'Breaking the redesign into scoped, sequenced steps de-risks the rollout.',
+        ready_for_approval: readyForApproval,
+        tasks,
+      }),
+    }
   }
 
   it('creates a PlanRecord and reports planStatus for a planning-shaped request that decomposes into 4+ tasks', async () => {
-    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
-    const assistant = new PersonalAssistant({ llmClient: llm })
+    const llm = scriptedResponses([planDraftResponse(true), verifyResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
-    const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    // P3's mandatory auto-entry drafts and stages the plan for approval — it no longer activates
+    // immediately (that's P2's mandatory whole-plan approval gate, sequenced before this phase).
+    const staged = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    expect(staged.status).toBe('needs_plan_approval')
+    expect(llm.calls).toBe(3) // classification + drafting + verification structured calls
+
+    // Approving falls through to the ordinary pipeline, which picks up the now-active plan the
+    // same way a freshly template-matched plan always has (TurnInterpreter.resolveTasks ->
+    // loadActivePlan) — no new execution-driving code, just one more mandatory classifyTurnIntent
+    // call for this turn.
+    const result = await assistant.turn('approve it', {
+      sessionId: 'plan-session',
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve',
+    })
 
     expect(result.status).toBe('ok')
     expect(result.planStatus).toBeDefined()
@@ -1998,7 +2035,7 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.planStatus!.tasks.map((t) => t.id)).toEqual([
       'scope_definition', 'work_breakdown', 'resource_planning', 'risk_assessment', 'schedule', 'kickoff',
     ])
-    expect(llm.calls).toBe(2) // classification + plan-builder structured calls
+    expect(llm.calls).toBe(4)
   })
 
   it('does not build a plan when classification reports fewer than 4 decomposed tasks and no template match', async () => {
@@ -2008,7 +2045,7 @@ describe('PersonalAssistant structured planning', () => {
       undefined,
       overrideFor([[planningMessage, { decomposedTasks: decomposedTasksFixture(2), matchedPlanTemplate: null }]]),
     )
-    const assistant = new PersonalAssistant({ llmClient: llm })
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
 
@@ -2017,51 +2054,62 @@ describe('PersonalAssistant structured planning', () => {
     expect(llm.calls).toBe(1) // classification only — plan-builder never called
   })
 
-  it('paces a plan across turns when a step looks MEDIUM/HIGH-risk, then resumes to completion', async () => {
-    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
-    const assistant = new PersonalAssistant({ llmClient: llm })
+  it('auto-advances through every MEDIUM/HIGH-risk step of an approved plan in the same turn, without pacing pauses (P4)', async () => {
+    const llm = scriptedResponses([planDraftResponse(true), verifyResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
-    // Phase 1 of plans/lexical_functions_hardening_plan.html: each step's riskLevel now comes
-    // from project_planning.json's own curated risk_level (attached by buildPlanFromTemplate via
-    // task id, not re-derived per-step via classifyRisk on the personalized description text) —
-    // see plan-builder.ts. That template curates every step except 'kickoff' as MEDIUM/HIGH
-    // (scope_definition/work_breakdown/resource_planning/schedule: MEDIUM, risk_assessment: HIGH),
-    // more conservative than the old per-description lexical guess (which happened to read most of
-    // these personalized one-line descriptions as LOW purely because they don't contain a
-    // risk-classifier keyword). Phase 4's pacing gate pauses right after each MEDIUM/HIGH step
-    // resolves, so this plan now takes one resume turn per step rather than one big first-turn
-    // burst — a real, expected behavior change from Phase 1's fix, not a bug: the template's own
-    // curated risk levels are the more accurate signal here, and this test now proves the pacing
-    // mechanism honors them correctly across a genuinely multi-turn resume sequence.
-    const first = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
-    expect(llm.calls).toBe(2) // classification + plan-builder structured calls
-    expect(first.status).toBe('ok')
-    expect(first.planStatus?.completionPct).toBeCloseTo(100 / 6, 1) // only scope_definition (MEDIUM) done
-    expect(first.reply).toContain('Break down the redesign work')
+    // P3's mandatory auto-entry drafts and stages the plan for approval first — activation (and
+    // with it, execution) only starts once the approval turn below falls through.
+    const staged = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    expect(llm.calls).toBe(3) // classification + drafting + verification structured calls
+    expect(staged.status).toBe('needs_plan_approval')
 
-    // Every next message resumes the paused harness run (Phase 4.1 keeps the checkpoint instead
-    // of deleting it) — no fresh plan-builder call on any resume, just the one mandatory
-    // classifyTurnIntent call per turn, and completion climbs by exactly one task each time until
-    // the whole plan (6 tasks) is done.
-    let last = first
-    let resumes = 0
-    while (last.planStatus && last.planStatus.completionPct < 100 && resumes < 8) {
-      const before = last.planStatus.completionPct
-      last = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session' })
-      resumes++
-      expect(last.status).toBe('ok')
-      expect(last.planStatus?.completionPct).toBeGreaterThan(before)
-      expect(llm.calls).toBe(2 + resumes) // one additional classifyTurnIntent call per resume, nothing else
-    }
+    // P4 of plans/ask_question_and_plan_mode_plan.html: once P2's mandatory whole-plan approval
+    // gate has passed, `executingOnPlan` is true and the old per-MEDIUM/HIGH-step pacing pause
+    // (introduced by Phase 1 of lexical_functions_hardening_plan.html, the prior version of this
+    // test) is skipped entirely — an approved plan auto-advances through its whole unblocked
+    // frontier in one turn, well within PLAN_AUTO_ADVANCE_TASK_CEILING's 10-task ceiling for this
+    // 6-task plan (scope_definition/work_breakdown/resource_planning/schedule: MEDIUM,
+    // risk_assessment: HIGH, kickoff: LOW). One classifyTurnIntent call for the approval turn —
+    // no per-step resume turns, no extra plan-builder calls.
+    const result = await assistant.turn('approve it', {
+      sessionId: 'plan-session',
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve',
+    })
+    expect(llm.calls).toBe(4)
+    expect(result.status).toBe('ok')
+    expect(result.planStatus?.completionPct).toBe(100)
+    expect(result.reply).toBe('All set.')
+  })
 
-    expect(resumes).toBe(5) // one resume per remaining task (work_breakdown, resource_planning, risk_assessment, schedule, kickoff)
-    expect(last.planStatus?.completionPct).toBe(100)
-    expect(last.reply).toBe('All set.')
+  it('stops auto-advancing at PLAN_AUTO_ADVANCE_TASK_CEILING resolved tasks even when every step is LOW-risk (P4 Open Decision #2: a distinct count ceiling, not a reintroduction of the risk-based pause)', async () => {
+    const memory = new InMemoryAdapter()
+    const tasks = Array.from({ length: 12 }, (_, i) => ({
+      id: `t${i + 1}`,
+      description: `Step ${i + 1}`,
+      depends_on: i === 0 ? [] : [`t${i}`],
+      riskLevel: 'LOW' as const,
+    }))
+    const plan = createPlanRecord({ templateName: 'project_planning', successCriteria: 'All 12 steps are done.', tasks })
+    expect(plan.executingOnPlan).toBe(true)
+    await savePlan(memory, 'ceiling-session', plan)
+
+    const llm = scriptedResponses(Array.from({ length: 10 }, () => ({ content: 'ok' })))
+    const assistant = new PersonalAssistant({ llmClient: llm, memory , planMode: 'gated' })
+
+    const result = await assistant.turn('Give me an update on the plan.', { sessionId: 'ceiling-session' })
+
+    expect(result.status).toBe('ok')
+    // Exactly 10 of 12 tasks resolved (PLAN_AUTO_ADVANCE_TASK_CEILING), then paused — not 100%
+    // despite every step being LOW-risk, proving the ceiling is a separate mechanism from the
+    // risk-based pause this phase removes for an executingOnPlan plan.
+    expect(result.planStatus?.completionPct).toBeCloseTo((10 / 12) * 100, 1)
   })
 
   it('does not resume a plan from a different session', async () => {
-    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
-    const assistant = new PersonalAssistant({ llmClient: llm })
+    const llm = scriptedResponses([planDraftResponse(true), verifyResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
     await assistant.turn(planningMessage, { sessionId: 'plan-session-a' })
     const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'plan-session-b' })
@@ -2071,23 +2119,34 @@ describe('PersonalAssistant structured planning', () => {
 
   it('abandons the active plan on an explicit abandon phrase, then falls back to ordinary decomposition on the next turn', async () => {
     const llm = scriptedResponses(
-      [planBuilderResponse()],
+      [planDraftResponse(true), verifyResponse()],
       ['All set.'],
       undefined,
       overrideFor([[planningMessage, planTemplateMatch], ['Forget this plan', { isAbandonRequest: true }]]),
     )
-    const assistant = new PersonalAssistant({ llmClient: llm })
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
-    await assistant.turn(planningMessage, { sessionId: 'plan-session' })
-    expect(llm.calls).toBe(2)
+    const staged = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    expect(llm.calls).toBe(3)
+
+    // The plan must actually be active (P2's approval gate passed) before there's anything for
+    // an abandon phrase to abandon — staying `awaiting_approval` routes a plain message back to
+    // PlanDraftingService's "still awaiting approval" reply instead (see plan-approval-service.test.ts).
+    const activated = await assistant.turn('approve it', {
+      sessionId: 'plan-session',
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve',
+    })
+    expect(activated.status).toBe('ok')
+    expect(llm.calls).toBe(4)
 
     const result = await assistant.turn('Forget this plan, let\'s do something else.', { sessionId: 'plan-session' })
 
     expect(result.planStatus).toBeUndefined()
-    // No plan-builder call this turn (matchedPlanTemplate isn't part of the override for this
+    // No drafting call this turn (matchedPlanTemplate isn't part of the override for this
     // message, and no plan gets built while abandoning one) — just the one mandatory
-    // classifyTurnIntent call, on top of the first turn's 2.
-    expect(llm.calls).toBe(3)
+    // classifyTurnIntent call, on top of the prior turns' 4.
+    expect(llm.calls).toBe(5)
   })
 
   it('cancels a single plan task on a matching cancel request without needing approval, and leaves the other pending tasks untouched (conv59/conv70 h9)', async () => {
@@ -2097,7 +2156,7 @@ describe('PersonalAssistant structured planning', () => {
     // keep going" with.
     const memory = new InMemoryAdapter()
     const llm = new FakeLLMClient('should not be reached — this path is fully deterministic')
-    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const assistant = new PersonalAssistant({ llmClient: llm, memory , planMode: 'gated' })
     const sessionId = 'plan-cancel-session'
 
     const plan = createPlanRecord({
@@ -2130,7 +2189,7 @@ describe('PersonalAssistant structured planning', () => {
 
   it('falls back silently to the ad hoc decomposition graph when the plan-builder call returns malformed JSON', async () => {
     const llm = scriptedResponses([{ content: 'not valid json' }], ['Handled anyway.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
-    const assistant = new PersonalAssistant({ llmClient: llm })
+    const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
 
@@ -2142,8 +2201,11 @@ describe('PersonalAssistant structured planning', () => {
 
   it('emits plan_classified and plan_updated trace events when a plan is created', async () => {
     const events: TraceEvent[] = []
-    const llm = scriptedResponses([planBuilderResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
-    const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) })
+    // readyForApproval: false — plan_updated is only emitted from PlanDraftingService.draftTurn's
+    // still-drafting branch; a ready-for-approval revision hands off to PlanApprovalService
+    // instead, which emits its own 'escalation' trace, not 'plan_updated'.
+    const llm = scriptedResponses([planDraftResponse(false)], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    const assistant = new PersonalAssistant({ llmClient: llm, onTrace: (e) => events.push(e) , planMode: 'gated' })
 
     await assistant.turn(planningMessage, { sessionId: 'plan-session' })
 
@@ -2894,46 +2956,137 @@ describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => 
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('draft summary')
   })
 
-  it("a plan-pacing pause surfaces the just-completed task's real output via reportedReply, not an empty prefix", async () => {
-    // project_planning's scope_definition step is curated MEDIUM, so Phase 4 pacing pauses right
-    // after it — before task 2 runs. On the flag-ON path draftReply is '', so the paused reply's
-    // answer text can only come from checkpoint.progress.finalResult via response-service.ts's
-    // reportedReply (option (b) of R3's buildPausedResult design point). Without that read the
-    // reply would be the bare pacing note.
-    const decomposedTasksFixture = Array.from({ length: 4 }, (_, i) => ({
-      id: `step-${i + 1}`, description: `Step ${i + 1}`, depends_on: i > 0 ? [`step-${i}`] : [],
-    }))
-    const planTasks = [
-      { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [] },
-      { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'] },
-      { id: 'resource_planning', description: 'Plan redesign resources', depends_on: ['work_breakdown'] },
-      { id: 'risk_assessment', description: 'Assess redesign risks', depends_on: ['work_breakdown'] },
-      { id: 'schedule', description: 'Schedule the redesign kickoff meeting', depends_on: ['resource_planning', 'risk_assessment'] },
-      { id: 'kickoff', description: 'Kick off the redesign', depends_on: ['schedule'] },
-    ]
-    const planningMessage =
-      'Plan and launch the Q3 onboarding redesign project, then build the rollout schedule and deliver the milestone roadmap.'
-    const llm = scriptedResponses(
-      [{ content: JSON.stringify({ tasks: planTasks }) }, { content: 'Scope defined: three onboarding surfaces in play.' }],
-      undefined,
-      undefined,
-      (userMessage) =>
-        userMessage.includes(planningMessage)
-          ? { decomposedTasks: decomposedTasksFixture, matchedPlanTemplate: 'project_planning' }
-          : undefined,
-    )
-    const backend = makeFakeBackend()
-    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+  it("a plan-pacing pause surfaces the just-completed task's real output via reportedReply, not an empty prefix — legacy pre-P4 plan without executingOnPlan (safety net)", async () => {
+    // P4 of plans/ask_question_and_plan_mode_plan.html removes the per-MEDIUM/HIGH-risk pacing
+    // pause for an approved (`executingOnPlan: true`) plan — see "auto-advances through every
+    // MEDIUM/HIGH-risk step of an approved plan" above. The pacing pause (and this reportedReply
+    // codepath) only still fires as a safety net for a plan that reached `active` without
+    // `executingOnPlan` ever being set (there should be none post-P4, per INV-31, but a
+    // pre-P0-migration record is exactly this shape — see plan-store.ts's migratePlanRecord doc
+    // comment). Seeded directly (bypassing drafting/approval entirely) to construct that legacy
+    // shape, rather than routing through PlanDraftingService/PlanApprovalService.
+    const memory = new InMemoryAdapter()
+    const plan = {
+      ...createPlanRecord({
+        templateName: 'project_planning',
+        successCriteria: 'The Q3 onboarding redesign ships.',
+        tasks: [
+          { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [], riskLevel: 'MEDIUM' as const },
+          { id: 'work_breakdown', description: 'Break down the redesign work', depends_on: ['scope_definition'], riskLevel: 'MEDIUM' as const },
+        ],
+      }),
+      executingOnPlan: false,
+    }
+    await savePlan(memory, 'legacy-pacing-session', plan)
 
-    const result = await assistant.turn(planningMessage, { sessionId: 'one-loop-pacing' })
+    // On the flag-ON path draftReply is '', so the paused reply's answer text can only come from
+    // checkpoint.progress.finalResult via response-service.ts's reportedReply (option (b) of R3's
+    // buildPausedResult design point). Without that read the reply would be the bare pacing note.
+    const llm = scriptedResponses([{ content: 'Scope defined: three onboarding surfaces in play.' }])
+    const backend = makeFakeBackend()
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'legacy-pacing-session' })
 
     expect(result.status).toBe('ok')
     expect(result.proposerKind).toBe('flat-oneloop')
-    expect(result.planStatus?.completionPct).toBeCloseTo(100 / 6, 1) // only scope_definition done
+    expect(result.planStatus?.completionPct).toBeCloseTo(50, 1) // only scope_definition done
     // Both halves present: the completed task's real answer AND the pacing note.
     expect(result.reply).toContain('Scope defined: three onboarding surfaces in play.')
     expect(result.reply).toContain('Break down the redesign work')
     expect(result.pausedNote).toContain('Break down the redesign work')
+  })
+
+  it('an approved (`executingOnPlan: true`) plan never pauses on risk level alone, but a write/shell action nested inside an auto-advanced task still stages for approval exactly as it does today (P4 pacing-suppression vs. per-action gating independence)', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = createPlanRecord({
+      templateName: 'project_planning',
+      successCriteria: 'The Q3 onboarding redesign ships.',
+      tasks: [
+        { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [], riskLevel: 'MEDIUM' },
+        { id: 'write_summary', description: 'Write a summary of the scope to summary.md', depends_on: ['scope_definition'], riskLevel: 'HIGH' },
+      ],
+    })
+    expect(plan.executingOnPlan).toBe(true)
+    await savePlan(memory, 'auto-advance-session', plan)
+
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: 'Scope defined: three onboarding surfaces in play.' },
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'scope summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'auto-advance-session' })
+
+    // No pacing pause after the MEDIUM-risk scope_definition step — the harness moved straight on
+    // to write_summary and staged its write_file call for approval instead, exactly as an
+    // unplanned write_file call would today. This proves auto-advance (no risk-based pause) and
+    // per-action approval gating (write/shell always gated) are independent mechanisms, per this
+    // phase's Validation section and the "write/shell stay gated by default" protected invariant.
+    expect(result.status).toBe('needs_approval')
+    expect(result.pendingActionKind).toBe('write')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+  })
+
+  // P10 of plans/ask_question_and_plan_mode_plan.html: "trust this approved plan" mode (INV-36).
+  it('INV-36: trustApprovedSteps auto-applies a write_file call proposed while its matching RUNNING plan task executes', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = {
+      ...createPlanRecord({
+        templateName: 'project_planning',
+        successCriteria: 'The Q3 onboarding redesign ships.',
+        tasks: [
+          { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [], riskLevel: 'MEDIUM' },
+          { id: 'write_summary', description: 'Write a summary of the scope to summary.md', depends_on: ['scope_definition'], riskLevel: 'HIGH' },
+        ],
+      }),
+      trustApprovedSteps: true,
+    }
+    await savePlan(memory, 'trusted-session', plan)
+
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: 'Scope defined: three onboarding surfaces in play.' },
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'scope summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'trusted-session' })
+
+    // No needs_approval round trip at all — the write was auto-applied because it was proposed
+    // while write_summary (a task belonging to this trustApprovedSteps plan) was RUNNING.
+    expect(result.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('scope summary')
+  })
+
+  it('INV-36 regression: trustApprovedSteps: false on an otherwise identical plan still gates the write (trust is opt-in, never a silent default)', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = {
+      ...createPlanRecord({
+        templateName: 'project_planning',
+        successCriteria: 'The Q3 onboarding redesign ships.',
+        tasks: [
+          { id: 'scope_definition', description: 'Define the Q3 redesign scope', depends_on: [], riskLevel: 'MEDIUM' },
+          { id: 'write_summary', description: 'Write a summary of the scope to summary.md', depends_on: ['scope_definition'], riskLevel: 'HIGH' },
+        ],
+      }),
+      trustApprovedSteps: false,
+    }
+    await savePlan(memory, 'untrusted-session', plan)
+
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: 'Scope defined: three onboarding surfaces in play.' },
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'scope summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    const result = await assistant.turn('Give me an update on the redesign plan.', { sessionId: 'untrusted-session' })
+
+    expect(result.status).toBe('needs_approval')
+    expect(result.pendingActionKind).toBe('write')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 })
 

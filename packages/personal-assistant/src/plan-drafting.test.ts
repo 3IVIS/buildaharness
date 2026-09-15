@@ -63,4 +63,63 @@ describe('draftPlanRevision', () => {
     )
     expect(await draftPlanRevision(llm, 'Plan something.', [], '', '')).toBeNull()
   })
+
+  // P8 of plans/ask_question_and_plan_mode_plan.html — nested ask-question support.
+  describe('question (P8)', () => {
+    const baseFields = {
+      reply: 'Which approach should this plan use?',
+      success_criteria: 'The launch ships on time.',
+      rationale: 'Split research from execution so blockers surface early.',
+      tasks: [{ id: 't1', description: 'Research competitors', depends_on: [], risk_level: 'LOW' }],
+    }
+
+    it('parses a well-formed question and forces readyForApproval false even if the model said true', async () => {
+      const llm = new StructuredOnlyLLMClient(
+        JSON.stringify({
+          ...baseFields,
+          ready_for_approval: true,
+          question: { id: 'q1', question: 'Which framework?', options: [{ label: 'React' }, { label: 'Vue' }] },
+        }),
+      )
+      const revision = await draftPlanRevision(llm, 'Plan a product launch.', [], '', '')
+      expect(revision).not.toBeNull()
+      expect(revision!.question).toEqual({ id: 'q1', question: 'Which framework?', options: [{ label: 'React' }, { label: 'Vue' }] })
+      expect(revision!.readyForApproval).toBe(false)
+    })
+
+    it('leaves question undefined when the field is null', async () => {
+      const llm = new StructuredOnlyLLMClient(JSON.stringify({ ...baseFields, question: null }))
+      const revision = await draftPlanRevision(llm, 'Plan a product launch.', [], '', '')
+      expect(revision!.question).toBeUndefined()
+    })
+
+    it('drops an out-of-cap question (too few options) rather than failing the whole revision', async () => {
+      const llm = new StructuredOnlyLLMClient(
+        JSON.stringify({ ...baseFields, question: { id: 'q1', question: 'Which framework?', options: [{ label: 'React' }] } }),
+      )
+      const revision = await draftPlanRevision(llm, 'Plan a product launch.', [], '', '')
+      expect(revision).not.toBeNull()
+      expect(revision!.question).toBeUndefined()
+      expect(revision!.tasks.length).toBe(1)
+    })
+
+    it('drops an out-of-cap question (too many options)', async () => {
+      const llm = new StructuredOnlyLLMClient(
+        JSON.stringify({
+          ...baseFields,
+          question: { id: 'q1', question: 'Which framework?', options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }, { label: 'E' }] },
+        }),
+      )
+      const revision = await draftPlanRevision(llm, 'Plan a product launch.', [], '', '')
+      expect(revision!.question).toBeUndefined()
+    })
+
+    it('drops a malformed question shape (missing question text)', async () => {
+      const llm = new StructuredOnlyLLMClient(
+        JSON.stringify({ ...baseFields, question: { id: 'q1', options: [{ label: 'React' }, { label: 'Vue' }] } }),
+      )
+      const revision = await draftPlanRevision(llm, 'Plan a product launch.', [], '', '')
+      expect(revision!.question).toBeUndefined()
+    })
+  })
 })

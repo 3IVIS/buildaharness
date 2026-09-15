@@ -8,6 +8,7 @@ import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { UserFact } from './fact-extraction.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
+import { formatAskResponse } from './ask-response-format.js'
 
 /**
  * Everything AskClarificationService.resolvePendingClarification needs to re-drive the harness
@@ -23,25 +24,6 @@ export interface AskClarificationPendingState {
   activePlan: PlanRecord | null
   facts: UserFact[]
   draftReply: string
-}
-
-/** Renders one AskAnswer as a short human-readable line, for the transcript and for the harness's own clarification_history. */
-function formatAnswer(question: AskQuestion | undefined, answer: AskResponse['answers'][number]): string {
-  const label = question?.question ?? answer.questionId
-  switch (answer.kind) {
-    case 'selected':
-      return `${label}: ${answer.selectedLabels.join(', ')}`
-    case 'selected_with_edit':
-      return `${label}: ${answer.selectedLabels.join(', ')} (note: ${answer.editText})`
-    case 'free_text':
-      return `${label}: ${answer.freeText}`
-  }
-}
-
-/** Renders a full AskResponse as one transcript-ready message — the "clarification answer" analog of a plain user message. */
-function formatAskResponse(questions: AskQuestion[], response: AskResponse): string {
-  const byId = new Map(questions.map((q) => [q.id, q]))
-  return response.answers.map((a) => formatAnswer(byId.get(a.questionId), a)).join('\n')
 }
 
 /**
@@ -156,7 +138,7 @@ export class AskClarificationService {
     // as the turn's user message themselves; appending it here too would duplicate it.
     const answerText = formatAskResponse(staged.questions, response)
 
-    const updateChannel = new OneShotAnswerChannel({ clarification_answers: response.answers })
+    const updateChannel = new OneShotAnswerChannel({ clarification_answers: response.answers, ask_questions: staged.questions })
     try {
       const outcome = await this.harnessBridge.run({
         sessionId,

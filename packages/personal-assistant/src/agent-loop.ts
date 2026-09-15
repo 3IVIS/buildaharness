@@ -52,7 +52,19 @@ export type ToolLoopResult =
  */
 export class OneLoopPause extends Error implements HarnessPauseSignal {
   readonly __harnessPause = true as const
-  constructor(readonly result: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>) {
+  constructor(
+    readonly result: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
+    /**
+     * P10 of plans/ask_question_and_plan_mode_plan.html: the plan task (if any) that was RUNNING
+     * — i.e. whichever task `execute()` was calling this proposer for — when `result` was
+     * produced, threaded from `ToolExecutorContext.currentTaskId`. Lets the catcher
+     * (assistant.ts's `buildToolLoopPauseResult`) check INV-36's trust condition without
+     * re-deriving "which task was this" from anything else. `undefined` for the batch proposer's
+     * own confirmation-gate throw (not a write/shell/email action, so trust mode never applies to
+     * it) and for any pre-P10 construction.
+     */
+    readonly currentTaskId?: string,
+  ) {
     super(result.reason)
     this.name = 'OneLoopPause'
   }
@@ -340,7 +352,7 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'complete', output: step.result.content }
       }
 
-      throw new OneLoopPause(step.result)
+      throw new OneLoopPause(step.result, toolCtx.currentTaskId)
     }
   }
 

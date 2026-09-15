@@ -256,22 +256,53 @@ def completion_check_final(
     output_contract: OutputContract,
     caller_state: Any,
     harness_run_state: Any,
+    *,
+    session_ask_mode: bool | None = None,
 ) -> ContractCheckResult:
     """Final completion gate — authoritative contract check before harness return.
 
     Calls validate_output_contract(). If passed=False, raises EscalationHalt via
     escalate() with reason="contract_violation". The harness must not return a
     contract-failing result silently.
+
+    Q7 (plans/ask_question_and_plan_mode_plan.html): when the violations diagnose two or
+    more distinct candidate fixes (diagnose_review_failure_options — a plain deterministic
+    grouping, no LLM call), the blocker offers them as a structured question via
+    ask_question.build_ask_blocker(), gated by session_ask_mode + the global
+    HARNESS_ASK_QUESTION flag exactly like every other build_ask_blocker() caller
+    (INV-29). Fewer than two diagnosed fixes, or the flag/session off, falls back to
+    today's plain missing_info halt, unchanged.
     """
     check = validate_output_contract(result, output_contract, caller_state)
     if not check.passed:
+        from .ask_question import (
+            build_ask_blocker,
+            build_review_failure_question,
+            diagnose_review_failure_options,
+            resolve_ask_mode,
+        )
         from .escalation import SurfaceBlocker, escalate
 
-        blocker = SurfaceBlocker(
-            reason="review_failure",
-            missing_info=check.violations,
-            current_task_summary="Output contract validation failed",
-        )
+        # Flag-OFF byte-identical (Protected Invariants): this site had no question/
+        # options at all before Q7 — resolve the effective mode HERE rather than relying
+        # on build_ask_blocker's own internal degrade (which would still populate a
+        # collapsed single question/options pair even while nominally "off").
+        effective = resolve_ask_mode(session_ask_mode=session_ask_mode)
+        fix_options = diagnose_review_failure_options(check.violations) if effective else None
+        if fix_options:
+            blocker = build_ask_blocker(
+                [build_review_failure_question(fix_options)],
+                reason="review_failure",
+                missing_info=check.violations,
+                current_task_summary="Output contract validation failed",
+                session_ask_mode=session_ask_mode,
+            )
+        else:
+            blocker = SurfaceBlocker(
+                reason="review_failure",
+                missing_info=check.violations,
+                current_task_summary="Output contract validation failed",
+            )
         run_id = getattr(harness_run_state, "run_id", "") if harness_run_state else ""
         escalate(blocker, harness_run_state, run_id)
     return check

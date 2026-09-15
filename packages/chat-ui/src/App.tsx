@@ -20,6 +20,10 @@ import {
   type AssistantTurnResult,
   type DebugLogEntry,
   type TranscriptSearchHit,
+  type AskResponse,
+  type PlanRecord,
+  type PlanDecision,
+  type PlanApprovalEdits,
 } from '@buildaharness/personal-assistant'
 import {
   LLMClient,
@@ -40,7 +44,10 @@ import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { tauriExecuteShellCommand } from './tauri-shell-executor'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
+import { AskQuestionCard } from './components/AskQuestionCard'
+import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
+import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SearchPanel } from './components/SearchPanel'
 import { BrowserConfigStore } from './browser-config-store'
@@ -300,6 +307,9 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
     // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
     // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // P11 of plans/ask_question_and_plan_mode_plan.html — same seam, from VITE_ASSISTANT_PLAN_MODE
+    // via browser-config.ts, or a persisted planMode. Undefined → falls back to DEFAULT_PLAN_MODE.
+    planMode: config.planMode,
     onDebugLog: debugLog,
   })
 }
@@ -321,6 +331,9 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // R5 of plans/harness_d2_one_loop_rewire_plan.html — same AssistantConfig seam as the desktop
     // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // P11 of plans/ask_question_and_plan_mode_plan.html — same seam. Undefined → falls back to
+    // DEFAULT_PLAN_MODE.
+    planMode: config.planMode,
     onDebugLog: debugLog,
   })
 }
@@ -362,6 +375,12 @@ export function App(): React.JSX.Element {
   // planStatus (present whenever a plan drove that turn, including a Phase-4 pause), cleared
   // once a turn completes with no plan behind it (finished/abandoned).
   const [activePlanStatus, setActivePlanStatus] = useState<AssistantTurnResult['planStatus']>(undefined)
+  // P7 of plans/ask_question_and_plan_mode_plan.html — the persistent plan-mode banner/input
+  // relabeling needs to know the session's raw plan `mode` (drafting/awaiting_approval), which
+  // a turn's own `planStatus`/`planApproval` fields don't reliably distinguish (a drafting
+  // reply's `planStatus` looks the same shape as an executing plan's). Refreshed after every
+  // turn via `assistant.getPlanState()` rather than derived from the turn result alone.
+  const [planState, setPlanState] = useState<PlanRecord | null>(null)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
@@ -441,6 +460,7 @@ export function App(): React.JSX.Element {
     setHealthChecks(null)
     setTranscriptLength(0)
     setActivePlanStatus(undefined)
+    setPlanState(null)
   }
 
   /** GUI equivalent of /export — downloads the transcript as a markdown file via a throwaway Blob URL (works the same in a plain browser tab and inside the Tauri webview, so desktop doesn't need a separate native-save-dialog path). */
@@ -525,7 +545,16 @@ export function App(): React.JSX.Element {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [entries])
 
-  async function runTurn(message: string, approved: boolean, pendingActionId?: string): Promise<void> {
+  async function runTurn(
+    message: string,
+    approved: boolean,
+    pendingActionId?: string,
+    pendingClarificationId?: string,
+    clarificationAnswer?: AskResponse,
+    planApprovalId?: string,
+    planDecision?: PlanDecision,
+    planEdits?: PlanApprovalEdits,
+  ): Promise<void> {
     const assistant = assistantRef.current
     if (!assistant) {
       setEntries((prev) => [
@@ -553,6 +582,11 @@ export function App(): React.JSX.Element {
         sessionId: sessionIdRef.current,
         approved,
         pendingActionId,
+        pendingClarificationId,
+        clarificationAnswer,
+        planApprovalId,
+        planDecision,
+        planEdits,
         onProgress: setProgress,
         onToken: (token) => setStreamingText((prev) => (prev ?? '') + token),
         onToolStep: (step) => {
@@ -560,6 +594,9 @@ export function App(): React.JSX.Element {
           setLiveToolSteps((prev) => [...prev, step])
         },
       })
+      // P7: refresh the persistent plan-mode banner state after every turn (drafting/
+      // awaiting_approval/active/none) — independent of which status branch below fires.
+      void assistant.getPlanState(sessionIdRef.current).then(setPlanState)
 
       if (result.status === 'ok') {
         setEntries((prev) => [
@@ -597,6 +634,31 @@ export function App(): React.JSX.Element {
             riskLevel: result.riskLevel,
             pendingActionId: result.pendingActionId,
             pendingActionKind: result.pendingActionKind,
+          },
+        ])
+      } else if (result.status === 'needs_plan_approval' && result.planApprovalId && result.planApproval) {
+        const { planApprovalId, planApproval, riskLevel } = result
+        setEntries((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            kind: 'plan_approval',
+            pendingMessage: message,
+            planApprovalId,
+            planApproval,
+            riskLevel,
+          },
+        ])
+      } else if (shouldRenderAskQuestionCard(result)) {
+        setEntries((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            kind: 'clarification',
+            pendingMessage: message,
+            pendingClarificationId: result.pendingClarificationId,
+            questions: result.questions,
+            riskLevel: result.riskLevel,
           },
         ])
       } else {
@@ -637,6 +699,56 @@ export function App(): React.JSX.Element {
     submitMessage()
   }
 
+  /**
+   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate's
+   * chat-ui entry point: takes the composer text as the request and calls
+   * PersonalAssistant.sketchPlan directly, bypassing runTurn/assistant.turn() entirely (there is
+   * no approval/clarification/plan-approval branch to resolve — a sketch is advisory-only and
+   * never stages anything, INV-35), so the rendered assistant bubble has no approve/decline
+   * controls attached, same as any other plain `status: 'ok'` reply.
+   */
+  async function handleSketchPlan(): Promise<void> {
+    const request = input.trim()
+    if (!request || busy) return
+    const assistant = assistantRef.current
+    if (!assistant) {
+      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Assistant is still starting up — try again in a moment.', retryable: false, retryMessage: request, retryApproved: false }])
+      return
+    }
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'user', content: `Sketch a plan: ${request}` }])
+    setBusy(true)
+    setProgress(null)
+    try {
+      const result = await assistant.sketchPlan(sessionIdRef.current, request)
+      setEntries((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          kind: 'assistant',
+          content: result.reply ?? '',
+          riskLevel: result.riskLevel,
+          harnessSkipped: result.harnessSkipped,
+          proposerKind: result.proposerKind,
+        },
+      ])
+      if (result.usage) {
+        const withCost = withCostEstimate(result.usage)
+        setLastTurnUsage(withCost)
+        setSessionUsage((prev) => accumulateUsage(prev, withCost))
+      }
+    } catch (err) {
+      console.error('[plan sketch failed]', err)
+      const { message: errorMessage } = classifyError(err)
+      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: errorMessage, retryable: false, retryMessage: request, retryApproved: false }])
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
+  }
+
   /** Enter submits (matching the old single-line <input>'s behavior); Shift+Enter inserts a real newline, which a plain <input> can never hold — see the <textarea> below. */
   function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -675,6 +787,36 @@ export function App(): React.JSX.Element {
     void runTurn(message, approved, pendingActionId)
   }
 
+  /** AskQuestionCard's Submit — resumes via turn(pendingMessage, { pendingClarificationId, clarificationAnswer }), mirroring handleApprove's "resolved by ID" resume. */
+  function handleAskSubmit(entryId: string, pendingMessage: string, pendingClarificationId: string, response: AskResponse): void {
+    setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'clarification' ? { ...e, resolution: 'answered', answer: response } : e)))
+    void runTurn(pendingMessage, false, undefined, pendingClarificationId, response)
+  }
+
+  /** PlanApprovalCard's Approve — resumes via turn(pendingMessage, { planApprovalId, planDecision: 'approve' }), mirroring handleApprove's "resolved by ID" resume. */
+  function handlePlanApprove(entryId: string, pendingMessage: string, planApprovalId: string): void {
+    setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'plan_approval' ? { ...e, resolution: 'approved' } : e)))
+    void runTurn(pendingMessage, false, undefined, undefined, undefined, planApprovalId, 'approve')
+  }
+
+  /** PlanApprovalCard's "Approve & don't re-prompt..." — P10's opt-in trust mode; same resume shape as handlePlanApprove, with 'approve_trusted' instead of 'approve'. */
+  function handlePlanApproveTrusted(entryId: string, pendingMessage: string, planApprovalId: string): void {
+    setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'plan_approval' ? { ...e, resolution: 'approved_trusted' } : e)))
+    void runTurn(pendingMessage, false, undefined, undefined, undefined, planApprovalId, 'approve_trusted')
+  }
+
+  /** PlanApprovalCard's "Confirm edits & approve" — same resume shape as handlePlanApprove, plus the collected cancel/edit set. */
+  function handlePlanApproveWithEdits(entryId: string, pendingMessage: string, planApprovalId: string, edits: PlanApprovalEdits): void {
+    setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'plan_approval' ? { ...e, resolution: 'approved_with_edits' } : e)))
+    void runTurn(pendingMessage, false, undefined, undefined, undefined, planApprovalId, 'approve_with_edits', edits)
+  }
+
+  /** PlanApprovalCard's Decline — discards the staged draft; see PlanApprovalService.resolvePendingPlanApproval's 'decline' branch. */
+  function handlePlanDecline(entryId: string, pendingMessage: string, planApprovalId: string): void {
+    setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'plan_approval' ? { ...e, resolution: 'declined' } : e)))
+    void runTurn(pendingMessage, false, undefined, undefined, undefined, planApprovalId, 'decline')
+  }
+
   if (view === 'search') {
     return <SearchPanel search={handleSearchTranscript} onCancel={() => setView('chat')} />
   }
@@ -708,6 +850,15 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
           <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
+          <button
+            type="button"
+            aria-label="Sketch a plan"
+            title="One-shot, advisory plan sketch from the composer text — nothing staged, cannot execute"
+            disabled={busy || !input.trim()}
+            onClick={() => void handleSketchPlan()}
+          >
+            Sketch
+          </button>
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
       </header>
@@ -768,8 +919,30 @@ export function App(): React.JSX.Element {
                   onDeny={() => handleDeny(entry.id, entry.pendingMessage, entry.pendingActionId)}
                 />
               )
+            case 'clarification':
+              return (
+                <AskQuestionCard
+                  key={entry.id}
+                  questions={entry.questions}
+                  resolution={entry.resolution}
+                  answer={entry.answer}
+                  onSubmit={(response) => handleAskSubmit(entry.id, entry.pendingMessage, entry.pendingClarificationId, response)}
+                />
+              )
             case 'escalation':
               return <EscalationBanner key={entry.id} reason={entry.reason} />
+            case 'plan_approval':
+              return (
+                <PlanApprovalCard
+                  key={entry.id}
+                  planApproval={entry.planApproval}
+                  resolution={entry.resolution}
+                  onApprove={() => handlePlanApprove(entry.id, entry.pendingMessage, entry.planApprovalId)}
+                  onApproveTrusted={() => handlePlanApproveTrusted(entry.id, entry.pendingMessage, entry.planApprovalId)}
+                  onApproveWithEdits={(edits) => handlePlanApproveWithEdits(entry.id, entry.pendingMessage, entry.planApprovalId, edits)}
+                  onDecline={() => handlePlanDecline(entry.id, entry.pendingMessage, entry.planApprovalId)}
+                />
+              )
           }
         })}
         {busy && streamingText && <ChatMessageBubble role="assistant" content={streamingText} />}
@@ -780,7 +953,7 @@ export function App(): React.JSX.Element {
                 // Phase 3.2: a plan-driven turn shows live position instead of the generic
                 // step counter for the duration of the run — harness-internal node detail is
                 // still available via the "Why?" panel once the turn finishes.
-                ? `${progress.planPosition.templateName} — step ${progress.planPosition.stepIndex} of ${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
+                ? `${progress.planPosition.templateName ?? 'custom plan'} — step ${progress.planPosition.stepIndex} of ${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
                 : `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
               : 'thinking…'}
           </div>
@@ -798,9 +971,27 @@ export function App(): React.JSX.Element {
           had zero plan awareness before this (closes a total gap, not an enhancement). */}
       {activePlanStatus && (
         <div className="app__plan-strip">
-          Following plan: {activePlanStatus.templateName} — step{' '}
+          Following plan: {activePlanStatus.templateName ?? 'custom plan'} — step{' '}
           {activePlanStatus.tasks.filter((t) => t.status === 'COMPLETE').length + 1} of {activePlanStatus.tasks.length}{' '}
           ({activePlanStatus.completionPct.toFixed(0)}%)
+        </div>
+      )}
+      {/* P7 of plans/ask_question_and_plan_mode_plan.html — persistent banner while exclusively
+          drafting or staged for approval (P1/P2), distinct from app__plan-strip above (which only
+          ever shows an already-*active*, executing plan). The awaiting_approval step already gets
+          its own full PlanApprovalCard in the message list above, so this banner stays terse there
+          and only carries the full live-draft summary (rationale/reviewNotes) while drafting. */}
+      {planState && (planState.mode === 'drafting' || planState.mode === 'awaiting_approval') && (
+        <div className="plan-mode-banner">
+          {planState.mode === 'drafting' ? (
+            <>
+              Drafting a plan{planState.templateName ? ` — ${planState.templateName}` : ''}
+              {planState.rationale ? `: ${planState.rationale}` : ''} ({planState.tasks.length} task
+              {planState.tasks.length === 1 ? '' : 's'} so far) — refine it below, or say &quot;cancel plan&quot; to stop.
+            </>
+          ) : (
+            'Plan staged for approval — see the approval card above.'
+          )}
         </div>
       )}
       <form className="app__composer" onSubmit={handleSubmit}>
@@ -809,7 +1000,7 @@ export function App(): React.JSX.Element {
           value={input}
           onChange={handleComposerInput}
           onKeyDown={handleComposerKeyDown}
-          placeholder="Message the assistant…"
+          placeholder={planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message the assistant…'}
           rows={1}
           disabled={busy}
         />

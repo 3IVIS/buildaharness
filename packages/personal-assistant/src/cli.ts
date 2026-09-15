@@ -22,6 +22,7 @@ import {
   type TokenUsage,
   type FsBackend,
 } from '@buildaharness/runtime'
+import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import type { AssistantToolStep } from './tool-step.js'
 import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
@@ -174,6 +175,10 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
     // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // P11 of plans/ask_question_and_plan_mode_plan.html — resolved through the same shared config
+    // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
+    // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
+    planMode: config.planMode,
   })
 }
 
@@ -195,6 +200,8 @@ export interface RunCliOptions {
   assistant?: PersonalAssistant
   /** Overrides the rl.question-based approval prompt — lets tests script approve/decline answers without faking stdin/a real TTY. */
   askYesNo?: (question: string) => Promise<boolean>
+  /** Overrides the rl.question-based free-text prompt the clarification sub-loop uses for option numbers, edit notes, and "Other" free text — lets tests script a multi-step answer without faking stdin/a real TTY. */
+  askLine?: (question: string) => Promise<string>
   /** Test seam: skip the interactive first-run setup regardless of TTY state (also implied when `assistant` is passed). */
   skipFirstRunSetup?: boolean
   /** Test seam: stub `claude` binary detection for the first-run setup. */
@@ -374,11 +381,37 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       console.log('\nNo active plan for this session.\n')
       return
     }
-    console.log(`\nPlan: ${lastPlanStatus.templateName} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`)
+    console.log(`\nPlan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`)
     for (const task of lastPlanStatus.tasks) {
       console.log(`  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`)
     }
     console.log(`\nSuccess criteria: ${lastPlanStatus.successCriteria}\n`)
+  }
+
+  /**
+   * P9 of plans/ask_question_and_plan_mode_plan.html — `/plan sketch <request>` invokes the
+   * lightweight plan-sketch delegate (PersonalAssistant.sketchPlan): one bounded, advisory LLM
+   * call that prints a proposed task list directly, with no approve/decline controls (nothing was
+   * staged — INV-35) and no effect on `/plan`'s own drafting-plan display above.
+   */
+  async function handlePlanSketch(args: string[]): Promise<void> {
+    const request = args.join(' ').trim()
+    if (!request) {
+      console.log('\nUsage: /plan sketch <request>\n')
+      return
+    }
+    console.log('\nSketching a plan (read-only grounding only, nothing staged)...\n')
+    const result = await assistant.sketchPlan('cli', request)
+    console.log(`${result.reply ?? '(no reply)'}\n`)
+    if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
+  }
+
+  async function handlePlan(args: string[]): Promise<void> {
+    if (args[0] === 'sketch') {
+      await handlePlanSketch(args.slice(1))
+      return
+    }
+    printPlan()
   }
 
   function verificationHealthLabel({ strength, feasibility }: AssistantTrace['verificationHealth']): string {
@@ -715,7 +748,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // duration of the run (Phase 3.2) — the node/layer name is still shown after it, and full
     // harness-internal detail is still available via /why once the turn finishes.
     const prefix = progress.planPosition
-      ? `[${progress.planPosition.templateName} — step ${progress.planPosition.stepIndex}/${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)]`
+      ? `[${progress.planPosition.templateName ?? 'custom plan'} — step ${progress.planPosition.stepIndex}/${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)]`
       : `[step ${progress.stepsUsed}/${progress.maxSteps}]`
     const line = `${prefix}${label ? ` ${label}…` : ''}`
     process.stdout.write(`\r${line.padEnd(lastProgressLineLength)}`)
@@ -737,7 +770,190 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     lastTurnToolSteps.push(step)
   }
 
-  async function handleTurn(message: string, approved = false, pendingActionId?: string): Promise<void> {
+  /** One question's in-progress answer — the CLI's text-mode counterpart of AskQuestionCard.tsx's QuestionDraft (chat-ui's Q5 rendering). No `showEdit` flag: a note is only ever entered via the explicit `e<n>` command below, so its presence in `editText` already says whether one exists. */
+  interface ClarificationDraft {
+    selectedLabels: string[]
+    editText: string
+    freeText: string
+  }
+  function emptyClarificationDraft(): ClarificationDraft {
+    return { selectedLabels: [], editText: '', freeText: '' }
+  }
+
+  /** Recommended option(s) first, stable otherwise — mirrors AskQuestionCard.tsx's orderedOptions exactly, so the same question renders its options in the same order on both surfaces. */
+  function orderedAskOptions(question: AskQuestion): AskQuestionOption[] {
+    const options = question.options ?? []
+    return options
+      .map((option, index) => ({ option, index }))
+      .sort((a, b) => Number(b.option.recommended ?? false) - Number(a.option.recommended ?? false) || a.index - b.index)
+      .map(({ option }) => option)
+  }
+
+  /** Collapses one question's draft into the wire AskAnswer shape, or null while still unanswered (INV-28) — mirrors AskQuestionCard.tsx's draftToAnswer. */
+  function clarificationDraftToAnswer(questionId: string, draft: ClarificationDraft): AskAnswer | null {
+    if (draft.selectedLabels.length > 0) {
+      return draft.editText.trim()
+        ? { questionId, kind: 'selected_with_edit', selectedLabels: draft.selectedLabels, editText: draft.editText.trim() }
+        : { questionId, kind: 'selected', selectedLabels: draft.selectedLabels }
+    }
+    if (draft.freeText.trim()) {
+      return { questionId, kind: 'free_text', freeText: draft.freeText.trim() }
+    }
+    return null
+  }
+
+  function printClarificationQuestion(question: AskQuestion, draft: ClarificationDraft, index: number, total: number): void {
+    const options = orderedAskOptions(question)
+    const allowFreeText = question.allowFreeText !== false
+    console.log('')
+    if (question.header) console.log(`[${question.header}]`)
+    if (total > 1) console.log(`Question ${index + 1} of ${total}`)
+    console.log(question.question)
+    options.forEach((option, i) => {
+      const n = i + 1
+      const picked = draft.selectedLabels.includes(option.label) ? '✓' : ' '
+      const recommended = option.recommended ? ' (recommended)' : ''
+      console.log(`  [${picked}] ${n}) ${option.label}${recommended}`)
+      if (option.description) console.log(`        ${option.description}`)
+      if (option.preview) console.log(`        preview: ${option.preview}`)
+    })
+    if (draft.editText) console.log(`  note: ${draft.editText}`)
+    if (draft.freeText) console.log(`  other: ${draft.freeText}`)
+    const commands = [
+      options.length > 0 ? (question.allowMultiple ? '<n>/t<n> toggle option' : '<n> select option') : undefined,
+      options.length > 0 ? 'e<n> add a note to a selected option' : undefined,
+      allowFreeText ? 'o other (free text)' : undefined,
+      total > 1 ? 'b back, n next' : undefined,
+      's submit',
+    ].filter((c): c is string => c !== undefined)
+    console.log(`  (${commands.join(' | ')})`)
+  }
+
+  /**
+   * Text-mode equivalent of AskQuestionCard.tsx (Q6 of plans/ask_question_and_plan_mode_plan.html):
+   * runs a self-contained prompt loop over `result.questions`, then resumes the paused turn by
+   * calling back into handleTurn with `pendingClarificationId`/the assembled AskResponse — same
+   * "resolved by ID, never re-derived" shape as the write/shell/email pause above. Only reached
+   * once the harness has already staged the questions (AskClarificationService.stageAndRespond);
+   * this function only collects and validates the answer, it never talks to the harness directly.
+   */
+  async function handleClarification(result: AssistantTurnResult): Promise<void> {
+    const questions = result.questions ?? []
+    const pendingClarificationId = result.pendingClarificationId
+    if (questions.length === 0 || !pendingClarificationId) {
+      // Mirrors shouldRenderAskQuestionCard's guard in chat-ui — shouldn't happen in practice
+      // (AskClarificationService always sets both together), but fails safe to the plain-text
+      // escalation copy rather than entering a loop with nothing to ask.
+      lastTrace = undefined
+      lastNoTraceReason = `No harness trace — the last turn needed clarification (${result.reason ?? 'no further detail'}) but had no answerable questions.`
+      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`)
+      return
+    }
+
+    // Same "never touches stdin, always resolves the same way" shape as askYesNo's own decline
+    // branch — a piped/scripted run has no one to answer these questions, so it falls through to
+    // the plain-text escalation copy instead of blocking on a readline read of closed stdin.
+    if (nonInteractiveApprovalMode === 'decline') {
+      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}`)
+      for (const q of questions) console.log(`  - ${q.question}`)
+      console.log('')
+      lastTrace = undefined
+      lastNoTraceReason = 'No harness trace — the last turn needed clarification and was auto-declined (non-interactive mode) before the harness resumed.'
+      return
+    }
+
+    console.log(`\n[needs clarification] ${questions.length} question${questions.length === 1 ? '' : 's'} to answer.`)
+    const drafts = new Map<string, ClarificationDraft>(questions.map((q) => [q.id, emptyClarificationDraft()]))
+    let index = 0
+
+    while (true) {
+      const question = questions[index]
+      const draft = drafts.get(question.id)!
+      printClarificationQuestion(question, draft, index, questions.length)
+      const token = (await askLine('clarify> ')).trim()
+      const lower = token.toLowerCase()
+
+      if (lower === 's' || lower === 'submit') {
+        const answers = questions.map((q) => clarificationDraftToAnswer(q.id, drafts.get(q.id)!))
+        const missing = questions.filter((q, i) => answers[i] === null)
+        if (missing.length > 0) {
+          console.log(`\nStill need an answer for: ${missing.map((q) => q.question).join('; ')}\n`)
+          continue
+        }
+        const response: AskResponse = { answers: answers as AskAnswer[] }
+        await handleTurn('', false, undefined, pendingClarificationId, response)
+        return
+      }
+      if (lower === 'b' && questions.length > 1) {
+        index = Math.max(0, index - 1)
+        continue
+      }
+      if (lower === 'n' && questions.length > 1) {
+        index = Math.min(questions.length - 1, index + 1)
+        continue
+      }
+      if (lower === 'o') {
+        if (question.allowFreeText === false) {
+          console.log('\nThis question does not accept a free-text answer.\n')
+          continue
+        }
+        const text = await askLine('Other — type your own answer: ')
+        if (!text.trim()) {
+          console.log('\nEmpty answer ignored.\n')
+          continue
+        }
+        drafts.set(question.id, { selectedLabels: [], editText: '', freeText: text.trim() })
+        continue
+      }
+      const editMatch = /^e(\d+)$/i.exec(token)
+      if (editMatch) {
+        const options = orderedAskOptions(question)
+        const option = options[Number(editMatch[1]) - 1]
+        if (!option) {
+          console.log(`\nNo option ${editMatch[1]}.\n`)
+          continue
+        }
+        if (!draft.selectedLabels.includes(option.label)) {
+          console.log(`\nSelect option ${editMatch[1]} first, then add a note with e${editMatch[1]}.\n`)
+          continue
+        }
+        const note = await askLine('Note: ')
+        drafts.set(question.id, { ...draft, editText: note.trim() })
+        continue
+      }
+      const toggleMatch = /^t(\d+)$/i.exec(token) ?? /^(\d+)$/.exec(token)
+      if (toggleMatch) {
+        const options = orderedAskOptions(question)
+        const option = options[Number(toggleMatch[1]) - 1]
+        if (!option) {
+          console.log(`\nNo option ${toggleMatch[1]}.\n`)
+          continue
+        }
+        if (question.allowMultiple) {
+          const already = draft.selectedLabels.includes(option.label)
+          drafts.set(question.id, {
+            ...draft,
+            selectedLabels: already ? draft.selectedLabels.filter((l) => l !== option.label) : [...draft.selectedLabels, option.label],
+            freeText: '',
+          })
+        } else {
+          drafts.set(question.id, { ...draft, selectedLabels: [option.label], freeText: '' })
+        }
+        continue
+      }
+
+      console.log(`\nUnrecognized input "${token}".\n`)
+    }
+  }
+
+  async function handleTurn(
+    message: string,
+    approved = false,
+    pendingActionId?: string,
+    pendingClarificationId?: string,
+    clarificationAnswer?: AskResponse,
+  ): Promise<void> {
     lastTurnToolSteps = []
     // Set only once the first token of an actual streamed reply arrives — the
     // message-level approval gate and the file-tools loop both produce a full
@@ -757,6 +973,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         sessionId: 'cli',
         approved,
         pendingActionId,
+        pendingClarificationId,
+        clarificationAnswer,
         // Gated on streamedAnyTokens: onProgress keeps firing for layers (Memory,
         // Verification) that run after the LLM call, i.e. after writeToken has already put
         // the reply on the current line with no trailing newline. writeProgress's \r-based
@@ -832,6 +1050,11 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           await assistant.recordDeclinedRequest('cli', message, result.reason ?? 'This request needed approval.')
           console.log('Cancelled.\n')
         }
+        return
+      }
+
+      if (result.status === 'needs_clarification') {
+        await handleClarification(result)
         return
       }
 
@@ -932,6 +1155,27 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       } catch {
         console.log(`\n[could not read a response — treating as declined]`)
         resolve(false)
+      }
+    })
+  }
+
+  /**
+   * Free-text counterpart of askYesNo, for the clarification sub-loop's option numbers, edit
+   * notes, and "Other" free text. handleClarification's own nonInteractiveApprovalMode ===
+   * 'decline' branch returns before ever calling this, so — unlike askYesNo — there's no decline
+   * branch to mirror here; the same fail-closed "never throw past the caller" shape still applies
+   * for the read-failure case, just resolving to an empty string (an unrecognized/ignored answer,
+   * see printClarificationQuestion's callers) instead of askYesNo's "treat as declined" boolean.
+   */
+  function askLine(question: string): Promise<string> {
+    // Test-only seam — same shape as askYesNo's own.
+    if (options.askLine) return options.askLine(question)
+    return new Promise((resolve) => {
+      try {
+        rl.question(question, (answer) => resolve(answer.trim()))
+      } catch {
+        console.log(`\n[could not read a response — treating as blank]`)
+        resolve('')
       }
     })
   }
@@ -1040,7 +1284,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     '/why': () => printWhy(),
     '/layers': () => printLayers(),
     '/sources': () => printSources(),
-    '/plan': () => printPlan(),
+    '/plan': (args) => handlePlan(args),
     '/help': () => printHelp(),
     '/clear': () => handleClear(),
     '/new': () => handleClear(),

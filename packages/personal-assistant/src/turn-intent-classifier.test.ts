@@ -48,6 +48,7 @@ function response(overrides: Record<string, unknown> = {}): string {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
     statesDurableFact: null,
     ...overrides,
   })
@@ -69,6 +70,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       isBulkReminderRequest: false,
       isAbandonRequest: false,
       matchedPlanTemplate: null,
+      needsMultiStepPlan: false,
       statesDurableFact: null,
     })
     expect(llm.calls).toBe(1)
@@ -322,6 +324,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
     statesDurableFact: null,
   }
 

@@ -608,6 +608,275 @@ body {
   margin-top: 6px;
 }
 
+.ask-question-card {
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(91, 141, 238, 0.08);
+}
+
+.ask-question-card__question-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ask-question-card__chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #06111f;
+}
+
+.ask-question-card__progress {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ask-question-card__question-text {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.ask-question-card__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ask-question-card__option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+
+.ask-question-card__recommended {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ask-question-card__option-description {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ask-question-card__preview {
+  border-left: 2px solid var(--accent);
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.ask-question-card__edit {
+  margin-bottom: 8px;
+}
+
+.ask-question-card__add-note {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.ask-question-card__edit-input,
+.ask-question-card__free-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 8px;
+  margin-top: 4px;
+}
+
+.ask-question-card__nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ask-question-card__nav button {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--surface2, var(--border));
+  color: var(--text);
+}
+
+.ask-question-card__nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ask-question-card__submit {
+  margin-left: auto;
+  background: var(--accent) !important;
+  color: #06111f !important;
+}
+
+.ask-question-card--resolved .ask-question-card__header {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.ask-question-card__resolved-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ask-question-card__resolved-question {
+  color: var(--text);
+}
+
+.plan-approval-card {
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(91, 141, 238, 0.08);
+}
+
+.plan-approval-card__header {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.plan-approval-card__rationale {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+}
+
+.plan-approval-card__criteria {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.plan-approval-card__tasks {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-approval-card__task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.plan-approval-card__task--cancelled .plan-approval-card__task-description {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.plan-approval-card__task-description {
+  flex: 1;
+}
+
+.plan-approval-card__task-edit {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.plan-approval-card__risk {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.plan-approval-card__risk--high {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.plan-approval-card__risk--medium {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.plan-approval-card__review-notes {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.plan-approval-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.plan-approval-card__actions button {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--accent);
+  color: #06111f;
+}
+
+.plan-approval-card__secondary {
+  background: var(--surface2, var(--border)) !important;
+  color: var(--text) !important;
+}
+
+.plan-approval-card__decline {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.plan-approval-card__resolution {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.plan-mode-banner {
+  padding: 8px 20px;
+  border-top: 1px solid var(--accent);
+  background: rgba(91, 141, 238, 0.08);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
 .settings {
   display: flex;
   flex-direction: column;

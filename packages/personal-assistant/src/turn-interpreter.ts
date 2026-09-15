@@ -4,8 +4,6 @@ import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent
 import { evaluateTurnPolicy, evaluateAbandonPolicy } from './turn-policy.js'
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
-import { buildPlanFromTemplate } from './plan-builder.js'
-import { loadTemplate } from './plan-templates/index.js'
 import type { PlanRecord } from './plan-store.js'
 import { PlanService } from './plan-service.js'
 import { toHarnessTasks, toTaskRiskLevel, planTaskRiskLevel } from './task-mapping.js'
@@ -25,7 +23,7 @@ export type TurnInterpretation =
       kind: 'bypass'
       result: AssistantTurnResult
       transcriptAppend: { user: string; assistant: string }
-      planUpdatedTrace: { templateName: string; completionPct: number }
+      planUpdatedTrace: { templateName: string | null; completionPct: number }
     }
   | { kind: 'needs_approval'; classification: TurnIntentClassification; result: AssistantTurnResult }
   | { kind: 'proceed'; classification: TurnIntentClassification; planForCancelCheck: PlanRecord | null }
@@ -177,22 +175,19 @@ export class TurnInterpreter {
       activePlan = null
     }
 
+    // P3 of plans/ask_question_and_plan_mode_plan.html: a matched template no longer builds and
+    // activates a plan directly here — assistant.ts's auto-trigger (checked earlier in runTurn,
+    // before this method is ever called) routes a template match (or the general
+    // needsMultiStepPlan judgment) into plan mode's exclusive drafting+approval loop instead, so
+    // `classification.matchedPlanTemplate` is never non-null by the time resolveTasks runs in
+    // production. This is kept as a pure observability trace (not a plan-building side effect) for
+    // that reason — see PlanDraftingService.draftTurn for where template seeding actually happens
+    // now.
     let planClassifiedTrace: ResolvedTasks['planClassifiedTrace']
     if (activePlan) {
       initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
     } else {
       planClassifiedTrace = { isCandidate: classification.matchedPlanTemplate !== null, matchedTemplate: classification.matchedPlanTemplate }
-      if (classification.matchedPlanTemplate) {
-        const template = loadTemplate(classification.matchedPlanTemplate)
-        const plan = await buildPlanFromTemplate(this.llmClient, userMessage, template, this.model(), onUsage)
-        if (plan) {
-          activePlan = this.planService.createPlanRecord(plan)
-          await this.planService.savePlan(sessionId, activePlan)
-          initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
-        }
-        // plan is null (malformed/insufficient LLM response): fall through to whatever
-        // initialTasks decomposition already produced above, unchanged.
-      }
     }
 
     // Gated by both looksLikeCodingFact AND riskLevel !== 'LOW' — looksLikeCodingFact alone is

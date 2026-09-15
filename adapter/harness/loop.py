@@ -45,9 +45,16 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from .ask_question import build_ask_blocker, build_budget_exhausted_question, resolve_ask_mode
 from .control_state import ControlState, resolve_control_state, risk_summary
 from .diagnostics import Diagnostics
-from .escalation import EscalationReason
+from .escalation import (
+    MAX_OPTIONS_PER_QUESTION,
+    MIN_OPTIONS_PER_QUESTION,
+    AskQuestion,
+    AskQuestionOption,
+    EscalationReason,
+)
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, decomposition_gate, post_exec_gate
 from .investigation import count_investigations
@@ -159,8 +166,25 @@ def initialize_harness(
     }
 
 
-def _build_surface_blocker(reason: str, control_state: ControlState, task_graph: Any) -> Any:
-    """Build a SurfaceBlocker from current control_state context."""
+def _build_surface_blocker(
+    reason: str,
+    control_state: ControlState,
+    task_graph: Any,
+    *,
+    ask_questions: list[AskQuestion] | None = None,
+    session_ask_mode: bool | None = None,
+) -> Any:
+    """Build a SurfaceBlocker from current control_state context.
+
+    Q7 (plans/ask_question_and_plan_mode_plan.html): when `ask_questions` is provided by
+    a deterministic call site with a genuine discrete option set (currently only
+    budget_exhausted, below), the blocker is built via ask_question.build_ask_blocker()
+    instead of a plain SurfaceBlocker — degrading to the same plain missing_info shape
+    whenever the effective ask mode (session_ask_mode + the global flag) resolves off,
+    exactly like every other build_ask_blocker() caller (INV-29, byte-identical-when-off).
+    Every other reason this function is called for (cannot_make_progress,
+    blocked_state, ...) passes no `ask_questions` and is completely unaffected.
+    """
     from .escalation import SurfaceBlocker
 
     missing_info: list[str] = []
@@ -194,6 +218,20 @@ def _build_surface_blocker(reason: str, control_state: ControlState, task_graph:
     escalation_reason = getattr(control_state, "escalation_reason", None)
     if escalation_reason:
         current_task_summary = f"{current_task_summary} | reason: {escalation_reason}"
+
+    # Flag-OFF byte-identical (Protected Invariants): these Q7 sites had no question/
+    # options at all before this phase, unlike the supervisor's pre-Q1 shape — so unlike
+    # build_ask_blocker's own internal degrade (single question/options), the effective
+    # mode must be resolved HERE and a plain SurfaceBlocker returned when it's off, never
+    # a collapsed-but-still-populated question/options pair.
+    if ask_questions and resolve_ask_mode(session_ask_mode=session_ask_mode):
+        return build_ask_blocker(
+            ask_questions,
+            reason=cast(EscalationReason, reason),
+            missing_info=missing_info,
+            current_task_summary=current_task_summary,
+            session_ask_mode=session_ask_mode,
+        )
 
     return SurfaceBlocker(
         reason=cast(EscalationReason, reason),
@@ -233,6 +271,7 @@ def run_one_iteration(
     workspace_root: str | None = None,
     recovery_budget: RecoveryBudget | None = None,
     supervisor_directive: SupervisorDirective | None = None,
+    ask_mode: bool | None = None,
 ) -> dict[str, Any]:
     """Run one full loop iteration — increments generation_id exactly twice (INV-03).
 
@@ -252,6 +291,13 @@ def run_one_iteration(
     P7 hook: check_external_updates fires before all P6 hooks. Escalation
     triggers fire after resolve_control_state() in Sub-step A when
     permission==DENY, and after stall detection when strategy==ESCALATE.
+
+    ask_mode (Q1 of plans/ask_question_and_plan_mode_plan.html): the
+    per-session control point in ask_question.resolve_ask_mode's three-tier
+    override (INV-29) — `False` forces the supervisor's ASK_USER path (and any
+    other ask_question() caller reached from this iteration) to the legacy
+    single question/options shape for this run regardless of the global
+    HARNESS_ASK_QUESTION flag; `None` (the default) defers to that flag.
     """
     from .escalation import EscalationHalt, escalate
 
@@ -310,7 +356,13 @@ def run_one_iteration(
             # P7.3 — replace stub escalation with structured surface_blocker
             if harness_run_state is not None:
                 ctrl_stub = ControlState()
-                blocker = _build_surface_blocker("budget_exhausted", ctrl_stub, task_graph)
+                blocker = _build_surface_blocker(
+                    "budget_exhausted",
+                    ctrl_stub,
+                    task_graph,
+                    ask_questions=[build_budget_exhausted_question(step_count)],
+                    session_ask_mode=ask_mode,
+                )
                 try:
                     escalate(blocker, harness_run_state, run_id)
                 except EscalationHalt as exc:
@@ -339,7 +391,13 @@ def run_one_iteration(
             if recovery_budget is not None and recovery_budget.is_exhausted():
                 if harness_run_state is not None:
                     ctrl_stub = ControlState()
-                    blocker = _build_surface_blocker("budget_exhausted", ctrl_stub, task_graph)
+                    blocker = _build_surface_blocker(
+                        "budget_exhausted",
+                        ctrl_stub,
+                        task_graph,
+                        ask_questions=[build_budget_exhausted_question(step_count)],
+                        session_ask_mode=ask_mode,
+                    )
                     try:
                         escalate(blocker, harness_run_state, run_id)
                     except EscalationHalt as exc:
@@ -404,6 +462,13 @@ def run_one_iteration(
             # escalation (no structured question). INV-21: escalation only, never a
             # control_state write. A malformed directive (question is None) falls through
             # to the CONTINUE-coercion path below.
+            #
+            # Q1 of plans/ask_question_and_plan_mode_plan.html: the blocker is now built via
+            # ask_question.build_ask_blocker() — the supervisor is one caller of that shared,
+            # independently-flagged primitive, not its own inline question/options builder.
+            # With HARNESS_ASK_QUESTION at its default (DEFAULT_ASK_MODE = "disabled"),
+            # build_ask_blocker() degrades to exactly the legacy blocker.question/.options
+            # shape this branch built directly before Q1 — byte-identical output.
             if directive is not None and directive.action == "ASK_USER" and directive.question is not None:
                 _ask_count = (
                     getattr(harness_run_state, "supervisor_ask_user_count", 0) if harness_run_state is not None else 0
@@ -413,15 +478,26 @@ def run_one_iteration(
                     _supervisor_reason("ASK_USER" if within_cap else "ASK_USER->escalate(cap)", directive.rationale)
                 )
                 ctrl_stub = ControlState()
-                blocker = _build_surface_blocker(
-                    "supervisor_question" if within_cap else "cannot_make_progress", ctrl_stub, task_graph
-                )
                 if within_cap:
-                    blocker.missing_info = ["answer to the supervisor's question"]
-                    blocker.question = directive.question.question
-                    blocker.options = list(directive.question.options) or None
+                    _base_blocker = _build_surface_blocker("supervisor_question", ctrl_stub, task_graph)
+                    _base_summary = _base_blocker.current_task_summary
+                    _opts = directive.question.options
+                    _ask_options = (
+                        [AskQuestionOption(label=o) for o in _opts]
+                        if _opts and MIN_OPTIONS_PER_QUESTION <= len(_opts) <= MAX_OPTIONS_PER_QUESTION
+                        else None
+                    )
+                    blocker = build_ask_blocker(
+                        [AskQuestion(id="supervisor-ask", question=directive.question.question, options=_ask_options)],
+                        reason=cast(EscalationReason, "supervisor_question"),
+                        missing_info=["answer to the supervisor's question"],
+                        current_task_summary=_base_summary,
+                        session_ask_mode=ask_mode,
+                    )
                     if harness_run_state is not None:
                         harness_run_state.supervisor_ask_user_count = _ask_count + 1
+                else:
+                    blocker = _build_surface_blocker("cannot_make_progress", ctrl_stub, task_graph)
                 if recovery_budget is not None:
                     recovery_budget = recovery_budget.consume(plan_revisions=1)
                 if harness_run_state is not None:
@@ -701,6 +777,7 @@ def run_one_iteration(
                     output_contract=output_contract,
                     caller_state=caller_state,
                     harness_run_state=harness_run_state,
+                    session_ask_mode=ask_mode,
                 )
             except EscalationHalt as exc:
                 return {

@@ -7,6 +7,8 @@
  */
 
 import type { OneLoopMode } from './one-loop-flag.js'
+import type { AskMode } from './ask-mode-flag.js'
+import type { PlanRolloutMode } from './plan-mode-flag.js'
 
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
@@ -108,6 +110,28 @@ export interface AssistantConfig {
    * optional field here.
    */
   oneLoopMode?: OneLoopMode
+  /**
+   * Q2 of plans/ask_question_and_plan_mode_plan.html — the global-flag control point (tier 1 of
+   * INV-29's three-tier resolution) for the batched-questions ask-question mechanism. Undefined
+   * (the default, for the whole rollout window) means PersonalAssistant falls back to
+   * `DEFAULT_ASK_MODE` ('disabled') — today's behavior, byte-for-byte: a structured-question
+   * escalation stays on the plain `escalated`/`reply: null` path. Mirrors `oneLoopMode`'s exact
+   * chain: env override (`ASSISTANT_ASK_MODE`, cli-config.ts), build-time override
+   * (`VITE_ASSISTANT_ASK_MODE`, chat-ui's browser-config.ts), and a package-owned default kept
+   * out of DEFAULT_CONFIG so an unset value stays undefined.
+   */
+  askMode?: AskMode
+  /**
+   * P11 of plans/ask_question_and_plan_mode_plan.html — the rollout flag for P1-P8's plan-mode
+   * behavior change (see plan-mode-flag.ts's doc comment for the full rationale). Undefined (the
+   * default, for the whole rollout window) means PersonalAssistant falls back to
+   * `DEFAULT_PLAN_MODE` ('legacy') — P3's auto-trigger never fires, so a turn never auto-enters
+   * the exclusive drafting+approval loop. Mirrors `oneLoopMode`/`askMode`'s exact chain: env
+   * override (`ASSISTANT_PLAN_MODE`, cli-config.ts), build-time override
+   * (`VITE_ASSISTANT_PLAN_MODE`, chat-ui's browser-config.ts), and a package-owned default kept
+   * out of DEFAULT_CONFIG so an unset value stays undefined.
+   */
+  planMode?: PlanRolloutMode
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -136,6 +160,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'sessionCostLimitUsd',
   'sessionCallLimit',
   'oneLoopMode',
+  'askMode',
+  'planMode',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, web/shell off) — this plan changes nothing for a caller that never touches config. */

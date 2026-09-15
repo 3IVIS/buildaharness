@@ -1749,7 +1749,13 @@ async def respond_to_escalation(
             validate_ask_response(pending_questions, response)
         except (ValueError, KeyError, TypeError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        payload: dict = {"clarification_answers": response.to_dict()["answers"]}
+        payload: dict = {
+            "clarification_answers": response.to_dict()["answers"],
+            # Q4 — carried alongside the answers so inject_clarification() can resolve each
+            # answer's question text (describe_ask_answer()) rather than falling back to the
+            # bare question id.
+            "ask_questions": [q.to_dict() for q in pending_questions],
+        }
     else:
         payload = dict(req.clarification)
 

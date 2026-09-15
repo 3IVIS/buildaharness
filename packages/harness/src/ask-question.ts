@@ -100,3 +100,23 @@ export function buildAskBlocker(questions: AskQuestion[], opts: BuildAskBlockerO
 export function askQuestion(questions: AskQuestion[], opts: BuildAskBlockerOptions): never {
   throw new EscalationHalt(buildAskBlocker(questions, opts))
 }
+
+/**
+ * Q7 — static, templated options for a budget_exhausted halt, twin of
+ * adapter/harness/ask_question.py's build_budget_exhausted_question(). A genuinely
+ * discrete, enumerable set of resolutions exists here (per Q7's scope), so every
+ * budget_exhausted site offers this unconditionally when the effective ask mode is on —
+ * no "does a discrete option set even exist" branching, unlike review_failure (see
+ * diagnoseReviewFailureOptions() in nodes/review-proposed-change.ts). Pure, no LLM call.
+ */
+export function buildBudgetExhaustedQuestion(stepsUsed: number, extension = 10): AskQuestion {
+  return {
+    id: 'budget-exhausted-resolution',
+    question: `The step budget is exhausted (at step ${stepsUsed}). How should I proceed?`,
+    options: [
+      { label: `Continue with ${extension} more steps` },
+      { label: 'Stop and summarize progress so far' },
+      { label: 'Let me clarify the goal' },
+    ],
+  }
+}

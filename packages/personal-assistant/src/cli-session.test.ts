@@ -13,11 +13,11 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 18 commands documented for this plan', () => {
+  it('includes all 19 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
       '/memory export [file]', '/search <query>', '/model [name]', '/cost', '/doctor', '/why', '/layers',
-      '/sources', '/plan', '/config ...', '/checkpoint [clear]',
+      '/sources', '/plan', '/plan sketch <request>', '/config ...', '/checkpoint [clear]',
     ])
   })
 })

@@ -11,7 +11,7 @@ export interface ArmTurnOutput {
   /** The assistant's final reply text (empty string if none). */
   reply: string
   /** `AssistantTurnResult.status`, or `'error'` if the arm threw. */
-  status: 'ok' | 'needs_approval' | 'escalated' | 'error'
+  status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval' | 'error'
   /** `AssistantTurnResult.reason` when the turn escalated — the clarifying question / blocker detail. */
   escalationReason?: string
   /** `answerClaim.verification_status` when the turn produced an AnswerClaim. */

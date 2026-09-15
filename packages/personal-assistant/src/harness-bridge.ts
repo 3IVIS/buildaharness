@@ -3,6 +3,7 @@ import {
   saveHarnessCheckpoint,
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
+  EscalationHalt,
   type ExperienceStore,
   type Task,
   type CheckpointStore,
@@ -19,7 +20,9 @@ import {
   type TrajectoryDigestData,
   type SupervisorDirective,
   type UserQuestionData,
+  type UpdateChannel,
   supervisorEnabled,
+  Budget,
 } from '@buildaharness/harness'
 import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
@@ -38,6 +41,16 @@ import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
+
+/**
+ * P4 of plans/ask_question_and_plan_mode_plan.html (Open Decisions #2, recommended default: yes):
+ * once an approved plan's `executingOnPlan` removes the per-MEDIUM/HIGH-risk pacing pause below,
+ * auto-advance could otherwise chain arbitrarily many tasks' worth of LLM calls into one turn. This
+ * is a distinct, always-on ceiling — a hard stop on task count regardless of risk level, mirroring
+ * agent-loop.ts's BATCH_ABSOLUTE_TURN_CEILING/Budget shape — not a replacement for the risk-based
+ * check it sits alongside; the risk check is what's removed for an executing plan, this isn't.
+ */
+const PLAN_AUTO_ADVANCE_TASK_CEILING = 10
 
 export type HarnessOutcome =
   | { status: 'paused'; checkpoint: HarnessCheckpoint; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[] }
@@ -73,6 +86,24 @@ export interface HarnessRunParams {
    * default exactly like onSupervisorDirective.
    */
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
+  /**
+   * Q2 of plans/ask_question_and_plan_mode_plan.html — the already-resolved effective askMode
+   * (Q1's three-tier INV-29 resolution), threaded straight into HarnessRunOptions.askMode so the
+   * harness's own supervisor ASK_USER path (S3) batches questions consistently with
+   * AskClarificationService's own gating. Also decides whether a thrown EscalationHalt carrying
+   * a populated `blocker.questions` gets to keep its checkpoint alive (see the `finally` block
+   * below) instead of being deleted as a terminal escalation. Defaults to false — byte-identical
+   * to pre-Q2 behavior when omitted.
+   */
+  askModeEnabled?: boolean
+  /**
+   * Q2 — AskClarificationService.resolvePendingClarification's one-shot channel carrying the
+   * user's AskResponse back into the paused run's `callerState` via the harness's own
+   * checkCallerUpdates/applyConstraintChangePropagation path (nodes/check-caller-updates.ts).
+   * Passed straight through to HarnessRunOptions.updateChannel; undefined (every caller before
+   * Q2) defaults to a no-op channel inside the harness, unchanged.
+   */
+  updateChannel?: UpdateChannel
 }
 
 /**
@@ -102,7 +133,7 @@ export class HarnessBridge {
   ) {}
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation } = params
+    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -131,6 +162,10 @@ export class HarnessBridge {
           lastStatusById: new Map(initialTasks.map((t) => [t.id, t.status] as const)),
         }
       : null
+    // P4 — the auto-advance task-count ceiling (see PLAN_AUTO_ADVANCE_TASK_CEILING's doc
+    // comment), consumed once per resolved task inside shouldPause below. Immutable Budget, so
+    // this binding is reassigned rather than mutated in place.
+    let autoAdvanceBudget = new Budget({ maxCalls: PLAN_AUTO_ADVANCE_TASK_CEILING })
 
     // Every layer's fired/skipped report this turn, structured so AssistantTrace.layerActivity
     // is populated the same "absent caller, still works" way nodeExecutionOrder/
@@ -142,6 +177,12 @@ export class HarnessBridge {
     let lastVerification: VerificationResult | null = null
 
     let pausedThisTurn = false
+    // Q2 — set (in the catch below) when a thrown EscalationHalt carries a populated
+    // `blocker.questions` while askModeEnabled: the checkpoint just saved by the iteration
+    // before the escalation must survive into `needs_clarification`'s resume instead of being
+    // discarded as a terminal escalation, same as `pausedThisTurn` already protects a
+    // plan-pacing pause's checkpoint.
+    let preserveForClarification = false
 
     // The harness's WorldModel is scratch state, rebuilt empty every turn — without this, a
     // fact stated in an earlier turn is gone by the time a later turn's message might
@@ -277,21 +318,40 @@ export class HarnessBridge {
         // Stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or FAILED), before
         // the loop would go pick the next one — undefined for a non-plan turn, so shouldPause is
         // simply never checked and behavior is unchanged.
+        //
+        // P4: once the plan itself has been through P2's mandatory approval (`executingOnPlan`),
+        // that per-step risk pause is redundant and removed — an approved plan auto-advances
+        // through its whole unblocked frontier. A plan that somehow reached `active` without
+        // `executingOnPlan` ever being set true (there should be none, per INV-31, but this is a
+        // safety net for a pre-P0-migration record) keeps today's conservative risk-based pause.
+        // Auto-advance still stops at PLAN_AUTO_ADVANCE_TASK_CEILING resolved tasks regardless —
+        // a distinct, always-on ceiling, not a reintroduction of the risk check.
         shouldPause: planPacing
           ? (cp: HarnessCheckpoint) => {
               if (cp.progress.nodeExecutionOrder.at(-1) !== 'update_task_state') return false
               let pause = false
+              let resolvedThisCheck = 0
               for (const t of cp.runState.taskGraph.tasks) {
                 const prevStatus = planPacing.lastStatusById.get(t.id)
                 if (prevStatus !== t.status && (t.status === 'COMPLETE' || t.status === 'FAILED')) {
-                  const risk = planPacing.riskById.get(t.id)
-                  if (risk === 'MEDIUM' || risk === 'HIGH') pause = true
+                  resolvedThisCheck++
+                  if (!activePlan?.executingOnPlan) {
+                    const risk = planPacing.riskById.get(t.id)
+                    if (risk === 'MEDIUM' || risk === 'HIGH') pause = true
+                  }
                 }
                 planPacing.lastStatusById.set(t.id, t.status)
+              }
+              if (activePlan?.executingOnPlan) {
+                autoAdvanceBudget = autoAdvanceBudget.consume({ calls: resolvedThisCheck })
+                if (autoAdvanceBudget.isExhausted()) pause = true
               }
               return pause
             }
           : undefined,
+        // Q2 — see HarnessRunParams.askModeEnabled/updateChannel's doc comments.
+        askMode: askModeEnabled ? ('enabled' as const) : ('disabled' as const),
+        updateChannel,
         onCheckpoint: (checkpoint: Parameters<typeof saveHarnessCheckpoint>[1]) => {
           // Live, mid-run plan position — computed from the same live task-graph snapshot
           // updatePlanFromRun uses post-turn, just run once per checkpoint instead of once at
@@ -349,14 +409,25 @@ export class HarnessBridge {
       }
 
       return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn }
+    } catch (err) {
+      // Q2 — inspected only to decide checkpoint retention below, never transformed or
+      // swallowed: EscalationHalt still propagates out of run() unexamined otherwise, exactly as
+      // the class doc comment promises, so the sequencer's single try/catch
+      // (assistant.ts/ResponseService/AskClarificationService) still does the actual handling.
+      if (err instanceof EscalationHalt && askModeEnabled && err.blocker.questions && err.blocker.questions.length > 0) {
+        preserveForClarification = true
+      }
+      throw err
     } finally {
       // A completed or genuinely-escalated (terminal halt) turn has nothing left to resume, so
-      // drop the checkpoint — but an intentional plan-pacing pause must keep it, so the next
-      // turn() call's priorCheckpoint branch resumes this same run instead of starting a fresh
-      // one. EscalationHalt thrown out of runtime.run()/resume() above propagates straight
-      // through this finally (pausedThisTurn stays false, so its checkpoint is still cleaned up
-      // here) to the sequencer's own try/catch.
-      if (!pausedThisTurn) {
+      // drop the checkpoint — but an intentional plan-pacing pause, or a structured-question
+      // escalation about to become `needs_clarification`, must keep it, so a later turn() call's
+      // priorCheckpoint branch (here, via AskClarificationService.resolvePendingClarification)
+      // resumes this same run instead of starting a fresh one. Any other EscalationHalt thrown
+      // out of runtime.run()/resume() above propagates straight through this finally
+      // (pausedThisTurn/preserveForClarification both stay false, so its checkpoint is still
+      // cleaned up here) to the sequencer's own try/catch.
+      if (!pausedThisTurn && !preserveForClarification) {
         await deleteHarnessCheckpoint(this.checkpointStore, runId).catch(() => {})
         // Keeps the two in sync — an in-process failure (unlike the process-crash case
         // RESUME_ATTEMPT_CAP exists for) is cleaned up right here on its first attempt, so a

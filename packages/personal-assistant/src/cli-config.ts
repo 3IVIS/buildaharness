@@ -1,6 +1,8 @@
 import type { AssistantConfig } from './config.js'
 import { CONFIG_KEYS } from './config.js'
 import { resolveOneLoopMode } from './one-loop-flag.js'
+import { resolveAskMode } from './ask-mode-flag.js'
+import { resolvePlanMode } from './plan-mode-flag.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -39,6 +41,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
   sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
   oneLoopMode: 'ASSISTANT_ONE_LOOP',
+  askMode: 'ASSISTANT_ASK_MODE',
+  planMode: 'ASSISTANT_PLAN_MODE',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -100,6 +104,12 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   // resolveOneLoopMode already warns-and-defaults on an unrecognized value, so an explicit
   // ASSISTANT_ONE_LOOP always resolves to a concrete 'enabled'/'disabled' override here.
   if (env.ASSISTANT_ONE_LOOP !== undefined) overrides.oneLoopMode = resolveOneLoopMode(env)
+  // resolveAskMode already warns-and-defaults on an unrecognized value, so an explicit
+  // ASSISTANT_ASK_MODE always resolves to a concrete 'enabled'/'disabled' override here.
+  if (env.ASSISTANT_ASK_MODE !== undefined) overrides.askMode = resolveAskMode(env)
+  // resolvePlanMode already warns-and-defaults on an unrecognized value, so an explicit
+  // ASSISTANT_PLAN_MODE always resolves to a concrete 'gated'/'legacy' override here.
+  if (env.ASSISTANT_PLAN_MODE !== undefined) overrides.planMode = resolvePlanMode(env)
   return overrides
 }
 
@@ -147,6 +157,12 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return raw
     case 'oneLoopMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('oneLoopMode must be "enabled" or "disabled"')
+      return raw
+    case 'askMode':
+      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('askMode must be "enabled" or "disabled"')
+      return raw
+    case 'planMode':
+      if (raw !== 'gated' && raw !== 'legacy') throw new ConfigValueParseError('planMode must be "gated" or "legacy"')
       return raw
     default:
       return raw

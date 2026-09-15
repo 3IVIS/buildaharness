@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { loadCorpus } from './corpus/index.js'
-import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES } from './corpus/schema.js'
+import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES, ASK_QUESTION_SLICES } from './corpus/schema.js'
 
 describe('benchmark corpus', () => {
   const tasks = loadCorpus()
@@ -72,11 +72,24 @@ describe('benchmark corpus', () => {
     expect(slices.has('supervisor_lookup')).toBe(true)
   })
 
-  it('feature-value-audit slices — every sliced task carries a known AUDIT_SLICES tag', () => {
-    const auditSlices: readonly string[] = AUDIT_SLICES
+  it('feature-value-audit / ask-question slices — every sliced task carries a known tag', () => {
+    const knownSlices: readonly string[] = [...AUDIT_SLICES, ...ASK_QUESTION_SLICES]
     for (const t of tasks) {
       if (!t.slice || (SUPERVISOR_SLICES as readonly string[]).includes(t.slice)) continue
-      expect(auditSlices, `${t.id}: slice "${t.slice}" is not a known AUDIT_SLICES value`).toContain(t.slice)
+      expect(knownSlices, `${t.id}: slice "${t.slice}" is not a known AUDIT_SLICES/ASK_QUESTION_SLICES value`).toContain(t.slice)
+    }
+  })
+
+  it('ask-question slices (Q8) — ask_ambiguity_resolution has >= 6 tasks, ask_resolution_conversation has >= 1 multi-turn task', () => {
+    const ambiguity = tasks.filter((t) => t.slice === 'ask_ambiguity_resolution')
+    expect(ambiguity.length, 'expected >= 6 ask_ambiguity_resolution tasks').toBeGreaterThanOrEqual(6)
+    for (const t of ambiguity) {
+      expect(t.category, `${t.id}: should be category adv_ambiguous`).toBe('adv_ambiguous')
+    }
+    const conversation = tasks.filter((t) => t.slice === 'ask_resolution_conversation')
+    expect(conversation.length, 'expected >= 1 ask_resolution_conversation task').toBeGreaterThanOrEqual(1)
+    for (const t of conversation) {
+      expect(t.followups.length, `${t.id}: should have at least one follow-up turn`).toBeGreaterThanOrEqual(1)
     }
   })
 

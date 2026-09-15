@@ -14,7 +14,12 @@ import { reconcileParallelBranches } from './nodes/parallel-merge.js'
 import { applyTaskOutcome } from './nodes/apply-task-outcome.js'
 import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
-import { reviewProposedChange, applyReviewOutcome } from './nodes/review-proposed-change.js'
+import {
+  reviewProposedChange,
+  applyReviewOutcome,
+  diagnoseReviewFailureOptions,
+  buildReviewFailureQuestion,
+} from './nodes/review-proposed-change.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
@@ -33,7 +38,14 @@ import {
 const SUPERVISOR_ASK_USER_CAP_M = 2
 import { resolveGatherEvidence, INVESTIGATION_DONE_PREFIX, type InvestigationFinding } from './investigation.js'
 import { buildDigest, type TrajectoryDigestData } from './trajectory-digest.js'
-import { escalateBudgetExhausted, EscalationHalt } from './nodes/escalate.js'
+import {
+  escalateBudgetExhausted,
+  EscalationHalt,
+  MIN_OPTIONS_PER_QUESTION,
+  MAX_OPTIONS_PER_QUESTION,
+  type AskQuestion,
+} from './nodes/escalate.js'
+import { askQuestion, buildBudgetExhaustedQuestion, resolveAskMode } from './ask-question.js'
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
@@ -228,6 +240,16 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * escalation. The resumed run records the answer as a `user_clarification` observation.
    */
   askUser?: (question: UserQuestionData) => void
+  /**
+   * Q1 of plans/ask_question_and_plan_mode_plan.html — the global-flag control point for the
+   * batched-questions ask-question primitive (ask-question.ts), already resolved by the caller
+   * (e.g. personal-assistant's `askMode` AssistantConfig field, mirroring `oneLoopMode`'s exact
+   * chain: env override, VITE_ build-time override, package-owned default). Absent/'disabled'
+   * (DEFAULT_ASK_MODE, the default for the whole rollout window) means the supervisor's ASK_USER
+   * path below degrades to the pre-Q0 single question/options blocker shape, byte-identical to
+   * pre-Q1 output. `'enabled'` lets it populate the new `questions` batch instead.
+   */
+  askMode?: 'enabled' | 'disabled'
 }
 
 export interface HarnessRunResult {
@@ -315,6 +337,7 @@ interface LoopContext {
   onSupervisorDirective?: (directive: SupervisorDirective) => void
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
   askUser?: (question: UserQuestionData) => void
+  askMode?: 'enabled' | 'disabled'
   /** Per-run count of supervisor ASK_USER escalations (S3) — persisted across resume via
    *  HarnessRunProgressData.supervisorAskUserCount. */
   supervisorAskUserCount: number
@@ -384,6 +407,7 @@ function buildInitialContext(
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
     askUser: options.askUser,
+    askMode: options.askMode,
     supervisorAskUserCount: 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: undefined,
@@ -456,6 +480,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
     askUser: options.askUser,
+    askMode: options.askMode,
     supervisorAskUserCount: checkpoint.progress.supervisorAskUserCount ?? 0,
     lastFailureMatchSymptomCount: 0,
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
@@ -622,6 +647,18 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.stepsUsed++
         if (ctx.stepsUsed > ctx.maxSteps) {
           const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
+          // Flag-OFF byte-identical (Protected Invariants): resolve the effective mode
+          // HERE — this site had no question/options before Q7, so askQuestion()'s own
+          // internal degrade (still-populated collapsed question/options) isn't good
+          // enough; off must fall through to the exact pre-Q7 plain EscalationHalt.
+          if (resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })) {
+            askQuestion([buildBudgetExhaustedQuestion(ctx.stepsUsed)], {
+              reason: 'budget_exhausted',
+              missingInfo: exhaust.missing_info,
+              currentTaskSummary: `Exhausted at step ${ctx.stepsUsed} (no iteration reached completion)`,
+              globalEnabled: ctx.askMode === 'enabled',
+            })
+          }
           throw new EscalationHalt({
             reason: 'budget_exhausted',
             missing_info: exhaust.missing_info,
@@ -640,6 +677,14 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // this exposed). Without this, such a branch spins forever instead of ever escalating.
     if (ctx.stepsUsed > ctx.maxSteps) {
       const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
+      if (resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })) {
+        askQuestion([buildBudgetExhaustedQuestion(ctx.stepsUsed)], {
+          reason: 'budget_exhausted',
+          missingInfo: exhaust.missing_info,
+          currentTaskSummary: `Exhausted at step ${ctx.stepsUsed} (no iteration reached completion)`,
+          globalEnabled: ctx.askMode === 'enabled',
+        })
+      }
       throw new EscalationHalt({
         reason: 'budget_exhausted',
         missing_info: exhaust.missing_info,
@@ -821,6 +866,25 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     if (!reviewResult.passed) {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'PENDING', fromExecutionLayer: false })
       if (reviewResult.escalation_triggered) {
+        // Q7: offer the diagnosed candidate fixes as a structured question when there's
+        // more than one plausible one (see diagnoseReviewFailureOptions' twin note — in
+        // practice reviewProposedChange's short-circuit means this is almost always
+        // undefined here, and the plain halt below fires exactly as it did pre-Q7).
+        // Flag-OFF byte-identical (Protected Invariants): this site had no question/
+        // options at all before Q7, so the effective mode is resolved HERE rather than
+        // relying on askQuestion()'s own internal degrade, which would still populate a
+        // collapsed single question/options pair even while nominally "off".
+        const fixOptions = resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })
+          ? diagnoseReviewFailureOptions(reviewResult.failed_dimensions)
+          : undefined
+        if (fixOptions) {
+          askQuestion([buildReviewFailureQuestion(fixOptions)], {
+            reason: 'review_failure',
+            missingInfo: reviewResult.failed_dimensions.map(d => d.reason),
+            currentTaskSummary: currentTask.description,
+            globalEnabled: ctx.askMode === 'enabled',
+          })
+        }
         throw new EscalationHalt({
           reason: 'review_failure',
           missing_info: reviewResult.failed_dimensions.map(d => d.reason),
@@ -1225,6 +1289,13 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         // resumes with an answer (→ a user_clarification observation). Without the
         // capability, or past the cap, degrade to a plain cannot_make_progress escalation.
         // Escalation only — never a resolveControlState() write, exactly like ABORT.
+        //
+        // Q1 of plans/ask_question_and_plan_mode_plan.html: the blocker is now built via
+        // ask-question.ts's askQuestion() — the supervisor is one caller of that shared,
+        // independently-flagged primitive, not its own inline question/options builder.
+        // With ctx.askMode unset/'disabled' (DEFAULT_ASK_MODE, the default for the whole
+        // rollout window), askQuestion() degrades to exactly the legacy blocker.question/
+        // .options shape this branch built directly before Q1 — byte-identical output.
         if (supervisorDirective.action === 'ASK_USER' && supervisorDirective.question) {
           const q = supervisorDirective.question
           const withinCap = !!ctx.askUser && ctx.supervisorAskUserCount < SUPERVISOR_ASK_USER_CAP_M
@@ -1238,14 +1309,19 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             } catch {
               /* an observability handler must never break the run */
             }
-            throw new EscalationHalt({
+            // 1 or 5+ options doesn't fit Q0's 2-4-option floor/ceiling — defensively drop
+            // to a free-text-only AskQuestion rather than throwing on an LLM-authored
+            // options list that doesn't fit the cap.
+            const options =
+              q.options.length >= MIN_OPTIONS_PER_QUESTION && q.options.length <= MAX_OPTIONS_PER_QUESTION
+                ? q.options.map((label) => ({ label }))
+                : undefined
+            const askQuestionBatch: AskQuestion[] = [{ id: 'supervisor-ask', question: q.question, options }]
+            askQuestion(askQuestionBatch, {
               reason: 'supervisor_question',
-              missing_info: ['answer to the supervisor question'],
-              current_task_summary:
-                `${currentTask.description} | supervisor question: ${q.question}`.trim().slice(0, 500),
-              escalated_at: new Date().toISOString(),
-              question: q.question,
-              options: q.options.length ? [...q.options] : undefined,
+              missingInfo: ['answer to the supervisor question'],
+              currentTaskSummary: `${currentTask.description} | supervisor question: ${q.question}`.trim().slice(0, 500),
+              globalEnabled: ctx.askMode === 'enabled',
             })
           }
           throw new EscalationHalt({
@@ -1342,6 +1418,14 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     if (ctx.stepsUsed >= ctx.maxSteps) {
       const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
+      if (resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })) {
+        askQuestion([buildBudgetExhaustedQuestion(ctx.stepsUsed)], {
+          reason: 'budget_exhausted',
+          missingInfo: exhaust.missing_info,
+          currentTaskSummary: `Exhausted at step ${ctx.stepsUsed}`,
+          globalEnabled: ctx.askMode === 'enabled',
+        })
+      }
       throw new EscalationHalt({
         reason: 'budget_exhausted',
         missing_info: exhaust.missing_info,

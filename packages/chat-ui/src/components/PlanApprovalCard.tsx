@@ -5,8 +5,9 @@ type PlanApprovalSnapshot = NonNullable<AssistantTurnResult['planApproval']>
 
 interface Props {
   planApproval: PlanApprovalSnapshot
-  resolution?: 'approved' | 'approved_with_edits' | 'declined'
+  resolution?: 'approved' | 'approved_trusted' | 'approved_with_edits' | 'declined'
   onApprove: () => void
+  onApproveTrusted: () => void
   onApproveWithEdits: (edits: PlanApprovalEdits) => void
   onDecline: () => void
 }
@@ -18,13 +19,20 @@ interface Props {
  * submit" pattern: `cancelled`/`edited` here is local UI state, collapsed into a
  * `PlanApprovalEdits` only when the user actually confirms edits, never sent implicitly.
  */
-export function PlanApprovalCard({ planApproval, resolution, onApprove, onApproveWithEdits, onDecline }: Props): React.JSX.Element {
+export function PlanApprovalCard({ planApproval, resolution, onApprove, onApproveTrusted, onApproveWithEdits, onDecline }: Props): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [cancelled, setCancelled] = useState<Set<string>>(new Set())
   const [edited, setEdited] = useState<Record<string, string>>({})
 
   if (resolution) {
-    const label = resolution === 'declined' ? 'Declined.' : resolution === 'approved_with_edits' ? 'Approved with edits.' : 'Approved.'
+    const label =
+      resolution === 'declined'
+        ? 'Declined.'
+        : resolution === 'approved_with_edits'
+          ? 'Approved with edits.'
+          : resolution === 'approved_trusted'
+            ? "Approved — won't re-prompt for this plan's disclosed actions."
+            : 'Approved.'
     return (
       <div className="plan-approval-card plan-approval-card--resolved">
         <div className="plan-approval-card__header">Plan {planApproval.templateName ?? '(custom)'}</div>
@@ -101,6 +109,13 @@ export function PlanApprovalCard({ planApproval, resolution, onApprove, onApprov
           <>
             <button type="button" onClick={onApprove}>Approve</button>
             <button type="button" className="plan-approval-card__secondary" onClick={() => setEditing(true)}>Approve with edits</button>
+            {/* P10 of plans/ask_question_and_plan_mode_plan.html — deliberately worded and styled
+               as a secondary, non-default choice (never the plan's only or primary approve
+               control): opting in narrows nothing about what the plan discloses, only whether
+               each of its own already-shown actions re-prompts individually while it runs. */}
+            <button type="button" className="plan-approval-card__secondary" onClick={onApproveTrusted}>
+              Approve &amp; don&apos;t re-prompt for actions this plan already discloses
+            </button>
             <button type="button" className="plan-approval-card__decline" onClick={onDecline}>Decline</button>
           </>
         )}

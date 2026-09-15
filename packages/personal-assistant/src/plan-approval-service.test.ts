@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
+import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from './assistant.js'
+import { loadPlanRecord } from './plan-store.js'
 
-const TURN_INTENT_MARKER = 'seven independent judgments'
+const TURN_INTENT_MARKER = 'eight independent judgments'
 const DRAFTING_MARKER = 'drafting a multi-step plan'
+const VERIFY_MARKER = 'reviewing a drafted plan'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))
@@ -11,6 +14,10 @@ function isTurnIntentRequest(messages: ChatMessage[]): boolean {
 
 function isDraftingRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(DRAFTING_MARKER))
+}
+
+function isVerifyRequest(messages: ChatMessage[]): boolean {
+  return messages.some((m) => m.role === 'system' && m.content.includes(VERIFY_MARKER))
 }
 
 interface DraftTask {
@@ -63,6 +70,7 @@ class ScriptedPlanLLMClient implements ILLMClient {
           isBulkReminderRequest: false,
           isAbandonRequest: false,
           matchedPlanTemplate: null,
+          needsMultiStepPlan: false,
         }),
       }
     }
@@ -78,6 +86,9 @@ class ScriptedPlanLLMClient implements ILLMClient {
           tasks: entry.tasks,
         }),
       }
+    }
+    if (isVerifyRequest(messages)) {
+      return { content: JSON.stringify({ findings: [] }) }
     }
     throw new Error(`unexpected callChatStructured: ${JSON.stringify(messages)}`)
   }
@@ -158,6 +169,46 @@ describe('plan mode (P2) — mandatory whole-plan approval gate', () => {
     const tasks = resumed.planStatus?.tasks ?? []
     expect(tasks.find((t) => t.id === 't2')?.status).toBe('COMPLETE')
     expect(tasks.find((t) => t.id === 't3')?.description).toBe('Task three, reworded')
+  })
+
+  it('approve_trusted activates the plan exactly like approve, but additionally sets trustApprovedSteps (P10)', async () => {
+    const llm = new ScriptedPlanLLMClient([{ tasks: THREE_LOW_RISK_TASKS, readyForApproval: true }])
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 'approve-trusted-session'
+    await assistant.enterPlanMode(sessionId)
+    const staged = await assistant.turn('Approve it.', { sessionId })
+    expect(staged.status).toBe('needs_plan_approval')
+
+    const resumed = await assistant.turn('go', {
+      sessionId,
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve_trusted',
+    })
+
+    expect(resumed.status).toBe('ok')
+    expect(resumed.planStatus?.tasks.map((t) => t.id)).toEqual(['t1', 't2', 't3'])
+    // getPlanState only returns a plan whose mode is 'active' — all three LOW-risk tasks (no
+    // tools involved) finish synchronously within this one resumed turn, so by the time it
+    // returns the plan has already reached 'done' and getPlanState no longer sees it. Reload the
+    // raw record instead (loadPlanRecord, unlike loadActivePlan/getPlanState, returns regardless
+    // of mode) — the point of this assertion is trustApprovedSteps, not mode.
+    const plan = await loadPlanRecord(memory, sessionId)
+    expect(plan?.trustApprovedSteps).toBe(true)
+  })
+
+  it('plain approve never sets trustApprovedSteps — the trust exception stays opt-in, per plan (regression)', async () => {
+    const llm = new ScriptedPlanLLMClient([{ tasks: THREE_LOW_RISK_TASKS, readyForApproval: true }])
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 'plain-approve-session'
+    await assistant.enterPlanMode(sessionId)
+    const staged = await assistant.turn('Approve it.', { sessionId })
+
+    await assistant.turn('go', { sessionId, planApprovalId: staged.planApprovalId, planDecision: 'approve' })
+
+    const plan = await loadPlanRecord(memory, sessionId)
+    expect(plan?.trustApprovedSteps).toBeFalsy()
   })
 
   it('decline discards the draft, clears planMode, and lets the message fall through with no active plan', async () => {

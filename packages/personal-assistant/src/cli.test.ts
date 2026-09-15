@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { PassThrough, Writable } from 'node:stream'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
-import { HarnessRuntime, saveHarnessCheckpoint, type Task } from '@buildaharness/harness'
+import { HarnessRuntime, saveHarnessCheckpoint, type Task, type AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
 import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
@@ -21,7 +21,7 @@ import { classifyRisk } from './risk-classifier.js'
 // isTurnIntentRequest/deriveTurnIntentJSON, so the fakes below can answer that call with a
 // realistic risk/triviality classification instead of it falling back to LOW by default.
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
-  return messages.some((m) => m.role === 'system' && m.content.includes('seven independent judgments'))
+  return messages.some((m) => m.role === 'system' && m.content.includes('eight independent judgments'))
 }
 
 // Trimmed test-only stand-in for the deleted triviality-classifier.ts's classifyTriviality — see
@@ -54,6 +54,7 @@ function deriveTurnIntentJSON(messages: ChatMessage[]): string {
     isBulkReminderRequest: risk.reason.includes('reminder') && risk.requiresApproval,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
   })
 }
 
@@ -459,6 +460,174 @@ describe('approval-prompt handling', () => {
     await expect(cli.dispatchLine('/undo-action some-id')).resolves.not.toThrow()
 
     expect(lines.join('\n')).toContain('No workspace configured')
+  })
+})
+
+/**
+ * Q6 (plans/ask_question_and_plan_mode_plan.html) — the CLI's text-mode equivalent of chat-ui's
+ * AskQuestionCard. Drives a real PersonalAssistant instance whose `turn` method is spied on
+ * (rather than a scripted ILLMClient) so the needs_clarification/resolve pair is scripted exactly
+ * the same way App.test.tsx mocks PersonalAssistant.create's `turn` for the same feature — cli.ts
+ * never talks to the harness escalation machinery directly, only to the AssistantTurnResult shape
+ * it returns, so this is the right layer to fake at.
+ */
+describe('clarification-prompt handling (Q6)', () => {
+  it('single-select: picking an option by number then "s" submits, resolving via pendingClarificationId + clarificationAnswer', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    let resolvedAnswer: AskResponse | undefined
+    vi.spyOn(assistant, 'turn').mockImplementation(async (_message, options) => {
+      if (options?.pendingClarificationId === 'pc-1') {
+        resolvedAnswer = options.clarificationAnswer
+        return { status: 'ok', reply: 'Building it in Python.' }
+      }
+      return {
+        status: 'needs_clarification',
+        reply: null,
+        pendingClarificationId: 'pc-1',
+        questions: [{ id: 'lang', question: 'Which language should the new service use?', options: [{ label: 'TypeScript' }, { label: 'Python' }] }],
+      }
+    })
+    const askLineQueue = ['2', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Build me a service')
+
+    expect(resolvedAnswer).toEqual({ answers: [{ questionId: 'lang', kind: 'selected', selectedLabels: ['Python'] }] })
+    expect(lines.join('\n')).toContain('Building it in Python.')
+  })
+
+  it('multi-select: toggling two options with t<n> submits both as selectedLabels', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    let resolvedAnswer: AskResponse | undefined
+    vi.spyOn(assistant, 'turn').mockImplementation(async (_message, options) => {
+      if (options?.pendingClarificationId === 'pc-2') {
+        resolvedAnswer = options.clarificationAnswer
+        return { status: 'ok', reply: 'Noted both.' }
+      }
+      return {
+        status: 'needs_clarification',
+        reply: null,
+        pendingClarificationId: 'pc-2',
+        questions: [
+          { id: 'features', question: 'Which features should ship first?', allowMultiple: true, options: [{ label: 'Auth' }, { label: 'Billing' }, { label: 'Search' }] },
+        ],
+      }
+    })
+    const askLineQueue = ['t1', 't3', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    captureOutput()
+
+    await cli.dispatchLine('Which features should ship first?')
+
+    expect(resolvedAnswer).toEqual({ answers: [{ questionId: 'features', kind: 'selected', selectedLabels: ['Auth', 'Search'] }] })
+  })
+
+  it('"o" records a free-text answer, overriding any option selected first', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    let resolvedAnswer: AskResponse | undefined
+    vi.spyOn(assistant, 'turn').mockImplementation(async (_message, options) => {
+      if (options?.pendingClarificationId === 'pc-3') {
+        resolvedAnswer = options.clarificationAnswer
+        return { status: 'ok', reply: 'Got it.' }
+      }
+      return {
+        status: 'needs_clarification',
+        reply: null,
+        pendingClarificationId: 'pc-3',
+        questions: [{ id: 'q1', question: 'Anything else to add?', options: [{ label: 'Yes' }, { label: 'No' }] }],
+      }
+    })
+    const askLineQueue = ['1', 'o', 'Actually, something custom', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    captureOutput()
+
+    await cli.dispatchLine('Anything else?')
+
+    expect(resolvedAnswer).toEqual({ answers: [{ questionId: 'q1', kind: 'free_text', freeText: 'Actually, something custom' }] })
+  })
+
+  it('e<n> attaches a note to an already-picked option, submitting as selected_with_edit', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    let resolvedAnswer: AskResponse | undefined
+    vi.spyOn(assistant, 'turn').mockImplementation(async (_message, options) => {
+      if (options?.pendingClarificationId === 'pc-4') {
+        resolvedAnswer = options.clarificationAnswer
+        return { status: 'ok', reply: 'Noted with your note.' }
+      }
+      return {
+        status: 'needs_clarification',
+        reply: null,
+        pendingClarificationId: 'pc-4',
+        questions: [{ id: 'q1', question: 'Pick one', options: [{ label: 'A' }, { label: 'B' }] }],
+      }
+    })
+    const askLineQueue = ['1', 'e1', 'please prioritize this', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    captureOutput()
+
+    await cli.dispatchLine('Pick one')
+
+    expect(resolvedAnswer).toEqual({ answers: [{ questionId: 'q1', kind: 'selected_with_edit', selectedLabels: ['A'], editText: 'please prioritize this' }] })
+  })
+
+  it('b/n navigate a multi-question batch without losing already-drafted answers, and "s" submits all of them together', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    let resolvedAnswer: AskResponse | undefined
+    vi.spyOn(assistant, 'turn').mockImplementation(async (_message, options) => {
+      if (options?.pendingClarificationId === 'pc-5') {
+        resolvedAnswer = options.clarificationAnswer
+        return { status: 'ok', reply: 'Both answered.' }
+      }
+      return {
+        status: 'needs_clarification',
+        reply: null,
+        pendingClarificationId: 'pc-5',
+        questions: [
+          { id: 'q1', question: 'First question', options: [{ label: 'A' }, { label: 'B' }] },
+          { id: 'q2', question: 'Second question', options: [{ label: 'C' }, { label: 'D' }] },
+        ],
+      }
+    })
+    // select A on q1, move to q2, select D, go back to q1 (unchanged), forward to q2 (unchanged), submit.
+    const askLineQueue = ['1', 'n', '2', 'b', 'n', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    captureOutput()
+
+    await cli.dispatchLine('Ask me two things')
+
+    expect(resolvedAnswer).toEqual({
+      answers: [
+        { questionId: 'q1', kind: 'selected', selectedLabels: ['A'] },
+        { questionId: 'q2', kind: 'selected', selectedLabels: ['D'] },
+      ],
+    })
+  })
+
+  it('non-interactive decline mode auto-declines a needs_clarification pause without ever prompting or resolving it', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turnSpy = vi.spyOn(assistant, 'turn').mockResolvedValue({
+      status: 'needs_clarification',
+      reply: null,
+      reason: 'This request needs clarification.',
+      pendingClarificationId: 'pc-decline',
+      questions: [{ id: 'lang', question: 'Which language should the new service use?', options: [{ label: 'TypeScript' }, { label: 'Python' }] }],
+    })
+    const askLine = vi.fn()
+    const { cli } = await setupCli({ assistant, askLine, nonInteractiveApprovalMode: 'decline' })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Build me a service')
+
+    expect(askLine).not.toHaveBeenCalled()
+    expect(turnSpy).toHaveBeenCalledTimes(1)
+    expect(lines.join('\n')).toContain('auto-declining')
+    expect(lines.join('\n')).toContain('Which language should the new service use?')
   })
 })
 

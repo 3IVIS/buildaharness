@@ -331,6 +331,61 @@ consequence than a write, no "undo" via re-approval). One workspace root per
 assistant instance; no multi-root or per-request override. chat-ui doesn't have
 a write-approval UI yet — file tools are CLI/desktop-only for now.
 
+## Clarifying questions
+
+Beyond the write/shell/email approval gate above, `turn()` can also pause to ask the user a
+*structured, multi-option* clarifying question instead of guessing or halting with a bare error —
+"which deploy target?" with concrete choices, not a free-text `missing_info` escalation. This is
+off by default; see "Enabling it" below.
+
+When the harness raises an escalation whose `SurfaceBlocker` carries a populated `questions` batch
+(1–4 questions, each with 2–4 options plus an automatic free-text "Other"), and the effective ask
+mode (see below) is enabled, `turn()` returns `status: 'needs_clarification'` with a
+`pendingClarificationId` and the `questions` array, instead of the terminal `status: 'escalated'`,
+`reply: null` shape that same blocker would otherwise produce:
+
+```ts
+const staged = await assistant.turn('Deploy the app.')
+// { status: 'needs_clarification', pendingClarificationId: '...',
+//   questions: [{ id: '...', question: 'Which deploy target?', options: [...] }] }
+
+await assistant.turn('Deploy the app.', {
+  pendingClarificationId: staged.pendingClarificationId,
+  clarificationAnswer: { answers: [{ questionId: '...', kind: 'selected', selectedLabels: ['staging'] }] },
+})
+// resumes the exact same harness run from its checkpoint with the answer folded in — no
+// re-derivation, no second "what did you mean" LLM call
+// { status: 'ok', reply: 'Deployed to staging.' }
+```
+
+Like `pendingActionId`, this is checkpoint-and-resume under the hood, not a literal blocking call:
+the harness run is checkpointed at the escalation point (reusing the same crash-mid-turn machinery
+"Checkpointing and resume" above describes) and resumed by ID, never by asking the model to guess
+again. If more than 4 questions are genuinely material at once, the caller that raised the
+escalation batches the top 4 and defers the rest — a deferred question only comes back as a
+follow-up `needs_clarification` batch if it's still unresolved once the first batch's answers are
+folded in, resolved through this exact same path.
+
+Two kinds of sites can raise a `questions` batch: the Trajectory Supervisor's `ASK_USER` directive
+(see `docs/adr/005-trajectory-supervisor.md` — currently inert by default, since
+`HARNESS_TRAJECTORY_SUPERVISOR` stays off) and a handful of deterministic sites with a genuinely
+enumerable option set, e.g. a batch-research budget running out ("continue with N more steps" /
+"stop and summarize" / "let me clarify the goal"). A site with no discrete option set keeps
+today's plain `missing_info` halt unchanged — this mechanism never forces a multiple-choice
+question where the honest answer is open-ended.
+
+**Enabling it.** Off by default (`askMode: 'disabled'`, matching `DEFAULT_ASK_MODE` in
+`ask-mode-flag.ts`) — with it off, every escalation stays on today's plain `escalated`/
+`reply: null` path, byte-for-byte. Turn on with the `ASSISTANT_ASK_MODE=enabled` env var,
+`/config set askMode enabled` in the CLI, `VITE_ASSISTANT_ASK_MODE=enabled` at chat-ui's build
+time, or a per-`turn()` `{ askMode: 'enabled' }` override — following `oneLoopMode`'s exact
+env/build-time/per-call chain. The effective mode is always the most restrictive of (global
+config, per-session override, per-call-site opt-out): a narrower scope can turn structured
+questions off even when a broader one left them on, never the reverse. See
+`docs/adr/006-generic-ask-question-mechanism.md` for the full design and why the default hasn't
+flipped to `'enabled'` yet — the mechanism and its conformance suite are done, but the benchmark
+run that would justify the flip hasn't happened.
+
 ## Web access via tools
 
 `web_search`/`fetch_url` are read-only — same trust tier as `read_file`/

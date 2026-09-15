@@ -42,6 +42,17 @@ export interface TurnIntentClassification {
   /** One of listTemplateNames()'s names, or null. Only ever set when context.hasActivePlan is false. */
   matchedPlanTemplate: string | null
   /**
+   * P3 of plans/ask_question_and_plan_mode_plan.html — the generalized, domain-general
+   * counterpart to matchedPlanTemplate: true when the request warrants a durable, tracked,
+   * user-approved plan even though it doesn't match one of the 7 named template kinds (e.g. a
+   * code-implementation request spanning several files/tests). Always false when
+   * matchedPlanTemplate is already set (a template match is itself one flavor of "needs a
+   * plan" — callers should treat `matchedPlanTemplate !== null || needsMultiStepPlan` as the
+   * combined trigger) and always false when context.hasActivePlan is true, same gating
+   * matchedPlanTemplate already uses.
+   */
+  needsMultiStepPlan: boolean
+  /**
    * Set when the message states a durable/session fact about the user (name, preference,
    * health/dietary, current location/job, ...) — the LLM-backed backstop for
    * fact-extraction.ts's lexical FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS, which have no fallback of
@@ -90,6 +101,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
     statesDurableFact: null,
   }
 }
@@ -125,6 +137,7 @@ const TURN_INTENT_SCHEMA = {
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
+    needsMultiStepPlan: { type: 'boolean' },
     statesDurableFact: STATES_DURABLE_FACT_SCHEMA,
   },
   required: [
@@ -136,6 +149,7 @@ const TURN_INTENT_SCHEMA = {
     'isBulkReminderRequest',
     'isAbandonRequest',
     'matchedPlanTemplate',
+    'needsMultiStepPlan',
     'statesDurableFact',
   ],
 }
@@ -152,7 +166,7 @@ const TURN_INTENT_SCHEMA = {
  * English-only by construction; this prompt is explicitly instructed not to assume English.
  */
 const TURN_INTENT_SYSTEM_PROMPT =
-  "Classify the user's message across seven independent judgments, for a personal-assistant that " +
+  "Classify the user's message across eight independent judgments, for a personal-assistant that " +
   'can send messages, delete files, spend money, publish content, manage subscriptions/bookings, ' +
   'create reminders, and run durable multi-step plans on the user\'s behalf. The message may be in ' +
   'any language — judge the actual meaning, never assume English.\n\n' +
@@ -193,11 +207,20 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'allergic to peanuts"); `durable` is true only for identity/safety-relevant facts meant to persist ' +
   'indefinitely (name, stated preference, health/dietary) — false for something expected to change ' +
   '(current location, current job, one-off context). Otherwise return null.\n\n' +
+  '8. needsMultiStepPlan: true if the request genuinely needs a multi-step, durable plan built and ' +
+  'tracked — even though it does not match one of the 7 named kinds in judgment 6 — because its ' +
+  'natural completion criteria requires several dependent steps most people would want to see ' +
+  'broken out and approved before work starts (this includes a code-implementation request spanning ' +
+  'multiple files or steps, e.g. "add input validation to the signup form and its tests"). False for ' +
+  'anything answerable or actionable in one step, even if that step takes multiple tool calls ' +
+  'internally (e.g. reading three files to answer a question is still one step). Always false if ' +
+  'matchedPlanTemplate is non-null, and always false if told a plan is already active.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
-  'string|null, "statesDurableFact": {"text": string, "durable": boolean}|null}'
+  'string|null, "needsMultiStepPlan": boolean, "statesDurableFact": {"text": string, "durable": ' +
+  'boolean}|null}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -208,6 +231,7 @@ interface RawTurnIntent {
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
   matchedPlanTemplate?: unknown
+  needsMultiStepPlan?: unknown
   statesDurableFact?: unknown
 }
 
@@ -252,6 +276,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   if (typeof parsed.isBulkReminderRequest !== 'boolean') return null
   if (typeof parsed.isAbandonRequest !== 'boolean') return null
   if (parsed.matchedPlanTemplate !== null && typeof parsed.matchedPlanTemplate !== 'string') return null
+  if (typeof parsed.needsMultiStepPlan !== 'boolean') return null
 
   const riskReason = typeof parsed.riskReason === 'string' && parsed.riskReason.trim() ? parsed.riskReason : `LLM classified this as ${parsed.riskLevel} risk.`
   const decomposedTasksRaw = Array.isArray(parsed.decomposedTasks) ? parsed.decomposedTasks.filter(isDecomposedTaskSpec) : []
@@ -264,6 +289,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     !context.hasActivePlan && typeof parsed.matchedPlanTemplate === 'string' && listTemplateNames().includes(parsed.matchedPlanTemplate)
       ? parsed.matchedPlanTemplate
       : null
+  const needsMultiStepPlan = !context.hasActivePlan && matchedPlanTemplate === null && parsed.needsMultiStepPlan === true
 
   const rawFact = parsed.statesDurableFact
   const statesDurableFact =
@@ -285,6 +311,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isBulkReminderRequest,
     isAbandonRequest,
     matchedPlanTemplate,
+    needsMultiStepPlan,
     statesDurableFact,
   }
 }

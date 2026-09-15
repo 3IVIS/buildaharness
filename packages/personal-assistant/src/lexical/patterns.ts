@@ -17,6 +17,7 @@ import injectionPatternsData from './patterns/injection-patterns.json'
 import codingFactMarkersData from './patterns/coding-fact-markers.json'
 import enumerationMarkersData from './patterns/enumeration-markers.json'
 import taskCancelMarkersData from './patterns/task-cancel-markers.json'
+import planModeMarkersData from './patterns/plan-mode-markers.json'
 import batchListMarkersData from './patterns/batch-list-markers.json'
 import toolYieldMarkersData from './patterns/tool-yield-markers.json'
 import templateKeywordsData from './patterns/template-keywords.json'
@@ -272,6 +273,37 @@ const taskCancelPatterns = compileTaskCancelAcrossLanguages(taskCancelMarkersDat
 /** Matches plan-store.ts's TASK_CANCEL_VERBS/TASK_REFERENCE_MARKER/CANCEL_MATCH_STOPWORDS. */
 export function getTaskCancelPatterns(): TaskCancelPatterns {
   return taskCancelPatterns
+}
+
+// ─── plan-drafting-service.ts's patterns ────────────────────────────────────────────────────
+
+interface PlanModeMarkersPerLang {
+  cancelVerbs: string
+  planningReferenceMarker: string
+}
+
+interface PlanModeMarkersJson {
+  [lang: string]: PlanModeMarkersPerLang
+}
+
+export interface PlanModeCancelPatterns {
+  cancelVerbs: RegExp[]
+  planningReferenceMarker: RegExp[]
+}
+
+function compilePlanModeAcrossLanguages(data: PlanModeMarkersJson): PlanModeCancelPatterns {
+  const languages = Object.values(data)
+  return {
+    cancelVerbs: languages.map((lang) => new RegExp(lang.cancelVerbs, 'i')),
+    planningReferenceMarker: languages.map((lang) => new RegExp(lang.planningReferenceMarker, 'i')),
+  }
+}
+
+const planModeCancelPatterns = compilePlanModeAcrossLanguages(planModeMarkersData as PlanModeMarkersJson)
+
+/** Matches plan-drafting-service.ts's exit-phrase detection ("cancel plan"/"abort planning"/...) — both a cancel-shaped verb AND an explicit reference to planning/drafting must match, same both-markers-required discipline getTaskCancelPatterns uses, so an unrelated "cancel my flight" said mid-draft doesn't spuriously exit plan mode. */
+export function getPlanModeCancelPatterns(): PlanModeCancelPatterns {
+  return planModeCancelPatterns
 }
 
 // ─── batch-list-detector.ts's patterns ──────────────────────────────────────────────────────

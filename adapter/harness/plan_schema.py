@@ -42,6 +42,12 @@ class PlanSnapshot(PlanTemplate):
     exported_at: str  # UTC ISO-8601
     completion_pct: float  # 0.0 – 100.0
     task_statuses: list[TaskStatusOverride] = []
+    # Additive fields mirroring personal-assistant's PlanRecord (plans/ask_question_and_plan_mode_plan.html,
+    # phase P0) — cheap to add now, not wired into the decomposed _run_planner path yet (out of scope
+    # for this plan; see its Scope & non-goals), so task_graph_to_plan below just leaves them at defaults.
+    rationale: str = ""
+    verified: bool = False
+    review_notes: list[str] = []
 
 
 def validate_template(template: PlanTemplate) -> list[str]:

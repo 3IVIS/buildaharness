@@ -24,6 +24,16 @@ Phase 8 exports: experience store data model (P8.1), warm_start (P8.2),
                  update_experience_store (P8.3), adaptive strategy policy (P8.4).
 """
 
+from .ask_question import (
+    DEFAULT_ASK_MODE,
+    ask_mode_globally_enabled,
+    ask_question,
+    build_ask_blocker,
+    build_budget_exhausted_question,
+    build_review_failure_question,
+    diagnose_review_failure_options,
+    resolve_ask_mode,
+)
 from .belief_graph import (
     BeliefDepGraph,
     BeliefEdge,
@@ -70,7 +80,20 @@ from .diagnostics import (
     normalise_entropy,
     update_diagnostics,
 )
-from .escalation import EscalationHalt, SurfaceBlocker, await_clarification, escalate
+from .escalation import (
+    AskAnswer,
+    AskQuestion,
+    AskQuestionOption,
+    AskResponse,
+    EscalationHalt,
+    SurfaceBlocker,
+    await_clarification,
+    batch_questions,
+    escalate,
+    make_questions_batch,
+    refine_deferred_batch,
+    validate_ask_response,
+)
 from .evidence import Evidence, EvidenceStore, EvidenceType, ReliabilityClass
 from .execution import (
     ExecutionResult,
@@ -344,6 +367,7 @@ from .world_model_ops import integrate_evidence, recompute_belief_health
 
 __all__ = [
     "DEFAULT_ALLOWED_EXECUTABLES",
+    "DEFAULT_ASK_MODE",
     "DEFAULT_REGISTRY",
     "DEFAULT_STRATEGY_ORDER",
     "HARNESS_NODE_COMPILERS",
@@ -354,6 +378,10 @@ __all__ = [
     "TOOL_RELIABILITY_ENVELOPES",
     "AdequacyResult",
     "AdversarialPrior",
+    "AskAnswer",
+    "AskQuestion",
+    "AskQuestionOption",
+    "AskResponse",
     "Belief",
     "BeliefDepGraph",
     "BeliefEdge",
@@ -469,14 +497,20 @@ __all__ = [
     "apply_retention_policy",
     "apply_task_outcome",
     "apply_tool_reliability_envelope",
+    "ask_mode_globally_enabled",
+    "ask_question",
     "assert_generation_fresh",
     "assert_normalised",
     "assess_replan_scope",
     "assign_system_breaking_severity",
     "await_clarification",
+    "batch_questions",
+    "build_ask_blocker",
+    "build_budget_exhausted_question",
     "build_default_library",
     "build_digest",
     "build_manifest",
+    "build_review_failure_question",
     "build_strategy_ordering",
     "cannot_make_progress",
     "check_abstraction_alignment",
@@ -530,6 +564,7 @@ __all__ = [
     "detect_set_level_contradictions",
     "detect_temporal_contradictions",
     "diagnose_and_replan",
+    "diagnose_review_failure_options",
     "drain_propagation_queue",
     "eliminate",
     "enforce_diversity",
@@ -557,6 +592,7 @@ __all__ = [
     "load_structural_decompositions",
     "load_tool_workflow_seeds",
     "load_verification_plan_seeds",
+    "make_questions_batch",
     "merge_investigation_findings",
     "merge_world_models",
     "new_execution_version",
@@ -572,7 +608,9 @@ __all__ = [
     "recompute_belief_health",
     "reconcile_parallel_branches",
     "record_actual_overlap",
+    "refine_deferred_batch",
     "reset_constraints_changed",
+    "resolve_ask_mode",
     "resolve_control_state",
     "revalidate_task_graph",
     "review_proposed_change",
@@ -601,6 +639,7 @@ __all__ = [
     "update_success_criteria",
     "update_verification_strength",
     "upsert_strategy_weight",
+    "validate_ask_response",
     "validate_investigation_tools",
     "validate_output_contract",
     "validate_task_graph",

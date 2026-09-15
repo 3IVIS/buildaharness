@@ -4,7 +4,13 @@ import type { PlanRecord } from './plan-store.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 
-export type PlanDecision = 'approve' | 'approve_with_edits' | 'decline'
+/**
+ * `'approve_trusted'` (plan mode's P10) is structurally its own decision, not a modifier on
+ * `'approve'`/`'approve_with_edits'` — it carries no `edits` of its own and, like plain
+ * `'approve'`, activates the plan as staged, just with `PlanRecord.trustApprovedSteps` also set
+ * (see resolvePendingPlanApproval below and INV-36).
+ */
+export type PlanDecision = 'approve' | 'approve_trusted' | 'approve_with_edits' | 'decline'
 
 export interface PlanApprovalEdits {
   cancelTaskIds?: string[]
@@ -112,6 +118,12 @@ export class PlanApprovalService {
           if (!working.tasks.some((t) => t.id === edit.id)) throw new Error(`Unknown task id: ${edit.id}`)
           working = await this.planService.editPlanTask(sessionId, working, edit.id, edit.description)
         }
+      }
+      // P10: the one narrow, explicit, per-plan opt-in exception to "write/shell stay gated by
+      // default" (Protected Invariants) — see PlanRecord.trustApprovedSteps's doc comment and
+      // INV-36. Never set for plain 'approve'/'approve_with_edits'.
+      if (decision === 'approve_trusted') {
+        working = { ...working, trustApprovedSteps: true }
       }
       await this.planService.activatePlanRecord(sessionId, working)
     } catch {

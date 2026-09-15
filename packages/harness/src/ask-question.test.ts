@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAskMode, buildAskBlocker, askQuestion } from './ask-question.js'
+import { resolveAskMode, buildAskBlocker, askQuestion, buildBudgetExhaustedQuestion } from './ask-question.js'
 import { EscalationHalt, type AskQuestion } from './nodes/escalate.js'
 
 const q = (question = 'which environment?', options: string[] = ['staging', 'production']): AskQuestion[] => [
@@ -108,5 +108,23 @@ describe('askQuestion — caller-agnostic', () => {
       expect(e.blocker.questions).toBeUndefined()
       expect(e.blocker.question).toBe('deploy target?')
     }
+  })
+})
+
+// Q7 of plans/ask_question_and_plan_mode_plan.html — deterministic trigger sites.
+describe('buildBudgetExhaustedQuestion (Q7)', () => {
+  it('returns static, templated options — no LLM call', () => {
+    const question = buildBudgetExhaustedQuestion(42)
+    expect(question.id).toBe('budget-exhausted-resolution')
+    expect(question.options?.map((o) => o.label)).toEqual([
+      'Continue with 10 more steps',
+      'Stop and summarize progress so far',
+      'Let me clarify the goal',
+    ])
+  })
+
+  it('honors a custom extension count', () => {
+    const question = buildBudgetExhaustedQuestion(10, 5)
+    expect(question.options?.[0].label).toBe('Continue with 5 more steps')
   })
 })

@@ -113,6 +113,18 @@ export interface ToolExecutorContext {
   controlState?: ControlState
   diagnostics?: Diagnostics
   failureDiagnostics?: FailureDiagnostics
+  /**
+   * P10 of plans/ask_question_and_plan_mode_plan.html: the id of the task `toolFn` is being
+   * invoked for (mirrors `ExecutionContext.currentTask.id`, the one value `execute()` already
+   * had in scope but never threaded through before this phase) — lets a harness-driven proposer
+   * (personal-assistant's `OneLoopPause`) tag a pending write/shell/email approval with which
+   * plan task, if any, was RUNNING when it was proposed, for the "trust this approved plan" INV-36
+   * check. No twin: this is a TS-only field on a TS-only interface, not part of any
+   * Python/TS conformance surface. Optional (unlike the other fields `execute()` always
+   * populates) only so every existing hand-built `ToolExecutorContext` test fixture that predates
+   * this field keeps compiling unchanged — `execute()` itself always sets it.
+   */
+  currentTaskId?: string
 }
 
 const UNVERIFIED_EDGE_RATIO_THRESHOLD = 0.5
@@ -244,6 +256,7 @@ export async function execute(
       controlState: ctx.controlState,
       diagnostics: ctx.diagnostics,
       failureDiagnostics: ctx.failureDiagnostics,
+      currentTaskId: taskId,
     })
     if (isContinuableOutcome(raw)) {
       status = raw.__harnessExecutionStatus

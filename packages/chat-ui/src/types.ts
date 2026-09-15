@@ -1,4 +1,4 @@
-import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim } from '@buildaharness/personal-assistant'
+import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim, AskQuestion, AskResponse } from '@buildaharness/personal-assistant'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }
@@ -36,6 +36,33 @@ export type ChatEntry =
       pendingActionKind?: AssistantTurnResult['pendingActionKind']
     }
   | { id: string; kind: 'escalation'; reason: string }
+  | {
+      id: string
+      kind: 'clarification'
+      /** The original user message — resubmitted via `turn(pendingMessage, { pendingClarificationId, clarificationAnswer })` once the batch is answered (mirrors 'approval'.pendingMessage). */
+      pendingMessage: string
+      /** AssistantTurnResult.pendingClarificationId — identifies which staged batch `clarificationAnswer` resolves. */
+      pendingClarificationId: string
+      /** AssistantTurnResult.questions — the batch AskQuestionCard renders. */
+      questions: AskQuestion[]
+      riskLevel?: RiskLevel
+      resolution?: 'answered'
+      /** Set alongside `resolution: 'answered'` — the exact AskResponse that was submitted, so the resolved view renders what was actually sent rather than re-deriving it from since-cleared component state. */
+      answer?: AskResponse
+    }
+  | {
+      id: string
+      kind: 'plan_approval'
+      /** The original user message that triggered staging — unused for resolution (unlike 'approval'/'clarification', a plan decision never re-sends this text; kept only for symmetry/debugging). */
+      pendingMessage: string
+      /** AssistantTurnResult.planApprovalId — identifies which staged plan `planDecision`/`planEdits` resolves. */
+      planApprovalId: string
+      /** AssistantTurnResult.planApproval — the staged snapshot PlanApprovalCard renders. */
+      planApproval: NonNullable<AssistantTurnResult['planApproval']>
+      riskLevel?: RiskLevel
+      /** 'approved_trusted' — P10 of plans/ask_question_and_plan_mode_plan.html's "trust this approved plan" opt-in (PlanApprovalCard's third, non-default control). */
+      resolution?: 'approved' | 'approved_trusted' | 'approved_with_edits' | 'declined'
+    }
   | {
       id: string
       kind: 'error'
