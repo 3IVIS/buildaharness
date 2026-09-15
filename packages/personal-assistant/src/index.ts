@@ -72,11 +72,28 @@ export {
   nextPendingTask,
   formatPlanProgress,
 } from './plan-store.js'
-export type { PlanRecord, PlanTaskRecord, PlanPosition } from './plan-store.js'
+export type { PlanRecord, PlanTaskRecord, PlanPosition, PlanMode } from './plan-store.js'
+// P7 (plans/ask_question_and_plan_mode_plan.html) — chat-ui's PlanApprovalCard and the CLI's
+// `/plan approve`/`/plan edit` commands both need to construct the same decision/edits shape
+// `PersonalAssistant.turn(message, { planApprovalId, planDecision, planEdits })` and
+// PlanApprovalService.resolvePendingPlanApproval consume.
+export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
 export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 export type { OneLoopMode } from './one-loop-flag.js'
+export { resolveAskMode, normalizeAskMode, DEFAULT_ASK_MODE } from './ask-mode-flag.js'
+export type { AskMode } from './ask-mode-flag.js'
+export { resolvePlanMode, normalizePlanMode, DEFAULT_PLAN_MODE } from './plan-mode-flag.js'
+export type { PlanRolloutMode } from './plan-mode-flag.js'
+export { AskClarificationService } from './ask-clarification-service.js'
+export type { AskClarificationPendingState } from './ask-clarification-service.js'
+// Q5 (plans/ask_question_and_plan_mode_plan.html) — chat-ui renders the ask-question batch
+// carried on a needs_clarification AssistantTurnResult and must build an AskResponse to resume
+// it, so these harness-owned shapes/helpers are re-exported here the same way RiskLevel is above:
+// chat-ui depends on @buildaharness/personal-assistant only, never @buildaharness/harness directly.
+export { validateAskResponse, MAX_QUESTIONS_PER_BATCH, MIN_OPTIONS_PER_QUESTION, MAX_OPTIONS_PER_QUESTION } from '@buildaharness/harness'
+export type { AskQuestion, AskQuestionOption, AskAnswer, AskResponse } from '@buildaharness/harness'
 // Deterministic, network-free ILLMClient for tests and demos — see plans/chat_ui_browser_e2e_plan.html phase B1.
 export { createScriptedLLMClient } from './scripted-llm-client.js'
 export type { ScriptedLLMClientScript } from './scripted-llm-client.js'

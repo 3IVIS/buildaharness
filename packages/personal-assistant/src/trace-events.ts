@@ -10,11 +10,11 @@ import type { ProposerKind } from './assistant-types.js'
  */
 export type TraceEvent =
   | { kind: 'turn_start'; sessionId: string; message: string }
-  | { kind: 'turn_end'; sessionId: string; status: 'ok' | 'needs_approval' | 'escalated' }
+  | { kind: 'turn_end'; sessionId: string; status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval' }
   | { kind: 'risk_classified'; riskLevel: RiskLevel; requiresApproval: boolean }
   | { kind: 'triviality_classified'; isTrivial: boolean }
   | { kind: 'plan_classified'; isCandidate: boolean; matchedTemplate: string | null }
-  | { kind: 'plan_updated'; templateName: string; completionPct: number }
+  | { kind: 'plan_updated'; templateName: string | null; completionPct: number }
   | { kind: 'harness_node'; node: string; stepsUsed: number }
   | { kind: 'tool_call'; tool: string; ok: boolean }
   | { kind: 'escalation'; reason: string }
@@ -53,3 +53,21 @@ export type TraceEvent =
    * plans/chat_ui_browser_e2e_plan.html phase B1 for why this exists.
    */
   | { kind: 'proposer_selected'; proposerKind: ProposerKind }
+  /**
+   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate
+   * (PlanSketchService) ran. `requestPreview` is truncated to stay name/status-only per this
+   * type's own doc comment, not the full request text. Distinct from `plan_classified`/
+   * `plan_updated`, which are about the stateful drafting/approval machinery (PlanDraftingService)
+   * this delegate deliberately never touches (INV-35).
+   */
+  | { kind: 'plan_sketch'; requestPreview: string }
+  /**
+   * P10 of plans/ask_question_and_plan_mode_plan.html — a write_file/run_shell_command/send_email
+   * proposal was auto-applied instead of staged for approval because it was proposed while
+   * `taskId` (part of a plan approved with `'approve_trusted'`) was the currently RUNNING task —
+   * see PlanRecord.trustApprovedSteps and INV-36. The action itself still went through
+   * ActionApprovalService.resolvePendingAction exactly as a manually-approved one would (same
+   * transcript entry, same real-undo record) — this event is purely additional "why no approval
+   * prompt" observability, name/status-only per this type's own doc comment.
+   */
+  | { kind: 'plan_trust_auto_applied'; pendingActionKind: 'write' | 'shell' | 'email'; taskId: string }

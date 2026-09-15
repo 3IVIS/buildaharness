@@ -49,6 +49,7 @@ const baseParams = {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
     statesDurableFact: null,
   },
   initialTasks: [],

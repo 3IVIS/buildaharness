@@ -1,0 +1,38 @@
+{
+  "id": "55-bab-call-site-structured-false-wins",
+  "op": "build_ask_blocker",
+  "description": "per-call-site structured=False collapses even when the global flag is on (INV-29)",
+  "global_enabled": true,
+  "structured": false,
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "question": "Confirm deploy?",
+      "options": [
+        {
+          "label": "yes"
+        },
+        {
+          "label": "no"
+        }
+      ]
+    }
+  ],
+  "reason": "cannot_make_progress",
+  "missing_info": [
+    "deploy target unclear"
+  ],
+  "current_task_summary": "preparing a deploy"
+}

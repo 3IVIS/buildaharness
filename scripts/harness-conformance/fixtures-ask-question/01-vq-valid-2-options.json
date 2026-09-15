@@ -1,0 +1,10 @@
+{
+  "id": "01-vq-valid-2-options",
+  "description": "a question with exactly the minimum 2 options constructs cleanly",
+  "op": "validate_ask_question",
+  "question": {
+    "id": "q1",
+    "question": "Which environment?",
+    "options": [{ "label": "staging" }, { "label": "prod" }]
+  }
+}

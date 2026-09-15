@@ -1,0 +1,7 @@
+{
+  "id": "48-ram-global-off-structured-false",
+  "op": "resolve_ask_mode",
+  "description": "global off and call-site off -> False",
+  "global_enabled": false,
+  "structured": false
+}

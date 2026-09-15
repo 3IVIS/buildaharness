@@ -1,0 +1,9 @@
+{
+  "id": "06-vq-free-text-only-no-options",
+  "op": "validate_ask_question",
+  "description": "omitting options entirely (free-text-only question) is valid",
+  "question": {
+    "id": "q6",
+    "question": "What should I call this?"
+  }
+}

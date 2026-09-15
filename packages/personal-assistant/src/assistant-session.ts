@@ -28,6 +28,27 @@ import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState 
 /** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — both now import @buildaharness/runtime's ANTHROPIC_DEFAULT_MODEL rather than hand-syncing a literal. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
 const DEFAULT_MODEL_FOR_COST_ESTIMATE = ANTHROPIC_DEFAULT_MODEL
 
+/**
+ * P1 of plans/ask_question_and_plan_mode_plan.html — session/turn-routing switch, distinct from a
+ * tool-permission list. While `active`, `assistant.ts`'s turn entry point routes every incoming
+ * message for this session to `PlanDraftingService` instead of `TurnInterpreter`'s normal
+ * classify/tool-loop pipeline (see PlanDraftingService's own doc comment for the two designed
+ * exits). `draftId` is an opaque per-entry token (not a lookup key into anything today — the
+ * drafting `PlanRecord` itself still lives at plan-store.ts's single `plan:${sessionId}` slot,
+ * same as an ordinary plan) reserved for P2's approval flow to correlate "the draft that was
+ * staged" against "the draft the user is approving", the same "resolved by exactly what was
+ * staged, never re-derived" discipline ActionApprovalService/AskClarificationService already
+ * follow.
+ */
+export interface PlanModeState {
+  active: boolean
+  draftId: string
+}
+
+function planModeKey(sessionId: string): string {
+  return `plan-mode:${sessionId}`
+}
+
 // A harness checkpoint left behind by a process that died mid-run is normally resumed
 // transparently on the session's next turn. If resume() itself reliably fails for that
 // particular checkpoint — e.g. the same crash it left behind repeats on replay — retrying it
@@ -229,6 +250,29 @@ export class AssistantSession {
     } satisfies SpendState)
   }
 
+  /** Read-only — null means plan mode has never been entered (or was already exited/cancelled) for this session. */
+  async getPlanModeState(sessionId: string): Promise<PlanModeState | null> {
+    return ((await this.memory.get(planModeKey(sessionId))) as PlanModeState | undefined) ?? null
+  }
+
+  /**
+   * The one place `planMode.active` ever flips true — a fresh `draftId` per entry, even if a
+   * prior drafting session was cancelled without ever reaching approval, so a stale draftId can
+   * never be mistaken for the current one. Idempotent to call again while already active (returns
+   * a new state, same as a fresh entry) — callers that only ever call this once per drafting
+   * session (P3's future auto-trigger) never observe that.
+   */
+  async enterPlanMode(sessionId: string): Promise<PlanModeState> {
+    const state: PlanModeState = { active: true, draftId: crypto.randomUUID() }
+    await this.memory.set(planModeKey(sessionId), state)
+    return state
+  }
+
+  /** Clears `planMode.active` — the only two designed callers are an explicit cancel phrase (PlanDraftingService) and P2's future approval resolution. */
+  async exitPlanMode(sessionId: string): Promise<void> {
+    await this.memory.delete(planModeKey(sessionId))
+  }
+
   /** The session's conversation transcript, oldest first — same array `turn()` reads/appends to. Used by `/export`. */
   async getTranscript(sessionId: string): Promise<ChatMessage[]> {
     return ((await this.memory.get(`transcript:${sessionId}`)) as ChatMessage[] | undefined) ?? []
@@ -386,6 +430,7 @@ export class AssistantSession {
     await this.memory.delete(`transcript:${sessionId}`)
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
+    await this.exitPlanMode(sessionId)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
     await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)

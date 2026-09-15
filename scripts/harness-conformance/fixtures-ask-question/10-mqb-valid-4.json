@@ -1,0 +1,23 @@
+{
+  "id": "10-mqb-valid-4",
+  "op": "make_questions_batch",
+  "description": "exactly MAX_QUESTIONS_PER_BATCH questions batches cleanly",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Question 1?"
+    },
+    {
+      "id": "q2",
+      "question": "Question 2?"
+    },
+    {
+      "id": "q3",
+      "question": "Question 3?"
+    },
+    {
+      "id": "q4",
+      "question": "Question 4?"
+    }
+  ]
+}

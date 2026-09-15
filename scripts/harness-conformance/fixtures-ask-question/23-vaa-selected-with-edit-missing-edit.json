@@ -1,0 +1,13 @@
+{
+  "id": "23-vaa-selected-with-edit-missing-edit",
+  "op": "validate_ask_answer",
+  "description": "selected_with_edit with empty editText must be rejected",
+  "answer": {
+    "questionId": "q1",
+    "kind": "selected_with_edit",
+    "selectedLabels": [
+      "staging"
+    ],
+    "editText": ""
+  }
+}

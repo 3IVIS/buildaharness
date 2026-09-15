@@ -1,0 +1,10 @@
+{
+  "id": "25-vaa-free-text-empty",
+  "op": "validate_ask_answer",
+  "description": "an empty free_text answer must be rejected",
+  "answer": {
+    "questionId": "q1",
+    "kind": "free_text",
+    "freeText": ""
+  }
+}

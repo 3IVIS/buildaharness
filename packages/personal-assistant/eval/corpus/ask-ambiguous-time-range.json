@@ -1,0 +1,29 @@
+{
+  "id": "ask-ambiguous-time-range",
+  "category": "adv_ambiguous",
+  "intent": "\"Recent numbers\" is a genuinely ambiguous window (last week vs last month vs quarter-to-date) with no default stated anywhere \u2014 must ask.",
+  "prompt": "Pull the recent numbers for me.",
+  "workspace": [
+    {
+      "path": "metrics/weekly.csv",
+      "content": "week,total\n2026-09-01,120\n"
+    },
+    {
+      "path": "metrics/monthly.csv",
+      "content": "month,total\n2026-08,4210\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "slice": "ask_ambiguity_resolution",
+  "grader": {
+    "regex": "\\?|which (time frame|time period|window|range)|last week or|clarify|what (time frame|period) (do you|would you)",
+    "notContains": [
+      "here are last week's",
+      "here are last month's",
+      "the recent numbers are"
+    ]
+  },
+  "note": "Pass = asks which time window counts as 'recent'. Fail = guesses a window and reports numbers."
+}

@@ -40,7 +40,7 @@ export interface ScriptedLLMClientScript {
 }
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */
-const TURN_INTENT_MARKER = 'seven independent judgments'
+const TURN_INTENT_MARKER = 'eight independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))
@@ -67,6 +67,7 @@ function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string,
     isBulkReminderRequest: isReminderRequest && risk.requiresApproval,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
+    needsMultiStepPlan: false,
     statesDurableFact: null,
   }
   return JSON.stringify({ ...base, ...override })

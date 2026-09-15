@@ -1,0 +1,31 @@
+{
+  "id": "33-var-multi-select-on-single-question",
+  "op": "validate_ask_response",
+  "description": "multiple selected labels on an allowMultiple=false question must be rejected",
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "env",
+        "kind": "selected",
+        "selectedLabels": [
+          "staging",
+          "prod"
+        ]
+      }
+    ]
+  }
+}

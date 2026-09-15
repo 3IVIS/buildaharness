@@ -1,0 +1,30 @@
+{
+  "id": "ask-ambiguous-export-format",
+  "category": "adv_ambiguous",
+  "intent": "Export request names no format; the workspace shows both csv and pdf reports produced historically \u2014 must ask which.",
+  "prompt": "Export this month's report.",
+  "workspace": [
+    {
+      "path": "reports/2026-08-report.csv",
+      "content": "month,total\n2026-08,4210\n"
+    },
+    {
+      "path": "reports/2026-08-report.pdf.txt",
+      "content": "[placeholder for a previously generated PDF report]"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "slice": "ask_ambiguity_resolution",
+  "grader": {
+    "regex": "\\?|which format|csv or pdf|clarify|not sure which format",
+    "notContains": [
+      "exported as csv",
+      "exported as pdf",
+      "here is the csv",
+      "here is the pdf"
+    ]
+  },
+  "note": "Pass = asks csv vs pdf. Fail = picks a format and claims the export is done."
+}

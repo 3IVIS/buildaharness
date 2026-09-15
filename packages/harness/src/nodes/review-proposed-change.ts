@@ -5,6 +5,7 @@ import type { EvidenceStore } from '../state/evidence-store.js'
 import type { Task } from '../state/task-graph.js'
 import { getReviewNegationTriggers } from '../lexical/patterns.js'
 import { tokenize, containsCJK } from '../lexical/script-utils.js'
+import { MAX_OPTIONS_PER_QUESTION, type AskQuestion, type AskQuestionOption } from './escalate.js'
 
 export type ReviewDimension =
   | 'task_alignment'
@@ -221,4 +222,48 @@ export function reviewProposedChange(
   }
 
   return applyReviewOutcome(taskId, true, consecutiveFailuresMap)
+}
+
+// ── Q7 — deterministic-site question builder (plans/ask_question_and_plan_mode_plan.html) ──
+//
+// Twin note: unlike adapter/harness/review_gate.py's review_proposed_change() (which runs
+// all 5 dimensions and collects every failure), reviewProposedChange() above short-circuits
+// on the first failing dimension, so failed_dimensions is always length <= 1 per call —
+// this is a pre-existing divergence between the two languages' review-gate shape, not
+// something this phase changes. In practice that means diagnoseReviewFailureOptions()
+// below will only ever see one failed dimension from this file's own caller and correctly
+// return undefined every time — the review_failure site in harness-runtime.ts therefore
+// always falls back to today's plain missing_info halt, exactly as Q7's scope requires for
+// a site with no genuine discrete option set. The function itself stays generically correct
+// (unit-testable directly against a synthetic multi-dimension ReviewResult, per Q7's
+// Validation tab) in case a future caller ever aggregates more than one failed dimension.
+const REVIEW_DIMENSION_FIXES: Record<ReviewDimension, string> = {
+  task_alignment: 'Revise the proposed change to align with the current task description',
+  world_model_consistency: 'Resolve the conflict with existing high-confidence beliefs before proceeding',
+  output_contract_precheck: 'Adjust the proposed change to satisfy the output contract',
+  code_quality: 'Address the code-quality issue before proceeding',
+  hypothesis_compatibility: 'Reconcile the change with the active hypothesis predictions',
+}
+
+/**
+ * Deterministically categorize failed review dimensions into candidate fixes — one static,
+ * templated option per distinct failed dimension, no LLM call, nothing drafted from the
+ * dimension's own `reason` text. Returns undefined (not an empty array) when fewer than two
+ * distinct dimensions failed, or when more failed than Q0's MAX_OPTIONS_PER_QUESTION can
+ * hold (silently dropping one would be worse than falling back) — both cases leave the call
+ * site to fall back to today's plain missing_info halt, unchanged.
+ */
+export function diagnoseReviewFailureOptions(failedDimensions: DimensionResult[]): AskQuestionOption[] | undefined {
+  const distinct = Array.from(new Set(failedDimensions.map((d) => d.dimension)))
+  if (distinct.length < 2 || distinct.length > MAX_OPTIONS_PER_QUESTION) return undefined
+  return distinct.map((d) => ({ label: REVIEW_DIMENSION_FIXES[d] }))
+}
+
+/** Wrap diagnoseReviewFailureOptions()'s output into an AskQuestion. Pure. */
+export function buildReviewFailureQuestion(options: AskQuestionOption[]): AskQuestion {
+  return {
+    id: 'review-failure-resolution',
+    question: 'The proposed change failed review. Which fix should I apply?',
+    options,
+  }
 }

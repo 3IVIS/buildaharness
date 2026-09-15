@@ -82,9 +82,30 @@ export const AUDIT_SLICES = [
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]
 
-/** Every valid `slice` value — the supervisor S7 slices plus the feature-value-audit slices. */
-export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES] as const
-export type BenchmarkSlice = SupervisorSlice | AuditSlice
+/**
+ * Ask-question benchmark slices (Q8 of plans/ask_question_and_plan_mode_plan.html). Gates the
+ * default-flip of `DEFAULT_ASK_MODE`/`askMode-flag.ts`'s default: `askModeOn` (arms.ts) vs.
+ * `flagOn` baseline over these tasks measures whether a structured, resumable question
+ * (instead of the plain `escalated`/`reply: null` path) actually resolves ambiguity better,
+ * in fewer user turns, at what cost/latency overhead.
+ */
+export const ASK_QUESTION_SLICES = [
+  // Genuinely ambiguous single-turn requests where a discrete option set exists (unlike the S7
+  // supervisor_clarification slice, these don't need a stall/pivot first — the ambiguity is
+  // visible on turn 1) — the case a structured question is supposed to resolve better than a
+  // plain free-text escalation.
+  'ask_ambiguity_resolution',
+  // Multi-turn: turn 1 is ambiguous and escalates (structured or plain, depending on the arm);
+  // turn 2 resumes with the user's answer. Measures user-turns-to-resolution end to end, not
+  // just whether turn 1 correctly identifies the ambiguity.
+  'ask_resolution_conversation',
+] as const
+
+export type AskQuestionSlice = (typeof ASK_QUESTION_SLICES)[number]
+
+/** Every valid `slice` value — the supervisor S7 slices, the feature-value-audit slices, and the ask-question slices. */
+export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES] as const
+export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice
 
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({

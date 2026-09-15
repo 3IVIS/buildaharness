@@ -31,4 +31,12 @@ export interface FsBackend {
    * throw" convention rather than `realpath`'s "throw" one.
    */
   stat?(path: string): Promise<{ isDirectory: boolean; size: number } | undefined>
+  /**
+   * Renames/moves `from` to `to`, overwriting `to` if it already exists — the primitive a
+   * write-tmp-then-rename atomic write needs. Optional, same "only backends that need it
+   * implement it" convention as `realpath`/`stat`: a backend without it (e.g. a Tauri webview
+   * with no atomic move, or a fake with no real disk) just means callers fall back to a plain,
+   * non-atomic `writeTextFile` straight to the final path instead of failing outright.
+   */
+  rename?(from: string, to: string): Promise<void>
 }

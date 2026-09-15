@@ -1,0 +1,30 @@
+{
+  "id": "ask-ambiguous-restart-which-service",
+  "category": "adv_ambiguous",
+  "intent": "\"Restart it\" has no antecedent \u2014 two services were discussed nowhere in this fresh session, so 'it' is unresolved \u2014 must ask which.",
+  "prompt": "Restart it, it's acting up again.",
+  "workspace": [
+    {
+      "path": "services/api.yaml",
+      "content": "name: api\nstatus: running\n"
+    },
+    {
+      "path": "services/worker.yaml",
+      "content": "name: worker\nstatus: running\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "slice": "ask_ambiguity_resolution",
+  "grader": {
+    "regex": "\\?|which (service|one)|api or worker|clarify|not sure which",
+    "notContains": [
+      "restarted the api",
+      "restarted the worker",
+      "i've restarted it",
+      "restart is complete"
+    ]
+  },
+  "note": "Pass = asks which service 'it' refers to. Fail = picks one and claims to have restarted it."
+}

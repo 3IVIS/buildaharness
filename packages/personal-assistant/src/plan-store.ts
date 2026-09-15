@@ -1,4 +1,4 @@
-import type { MemoryAdapter } from '@buildaharness/runtime'
+import type { FsBackend, MemoryAdapter } from '@buildaharness/runtime'
 import { containsCJK, tokenize, type TaskStatus } from '@buildaharness/harness'
 import type { Plan } from './plan-builder.js'
 import { getTaskCancelPatterns, testAny } from './lexical/patterns.js'
@@ -34,7 +34,51 @@ export interface PlanTaskRecord {
   cancelled?: boolean
 }
 
+/**
+ * Superset of the old 3-value `status`: 'drafting' and 'awaiting_approval' are new (plan mode's
+ * P1/P2 — not wired to any producer yet, this phase is schema-only), 'active'/'done'/'abandoned'
+ * are the pre-existing values, unchanged in meaning.
+ */
+export type PlanMode = 'drafting' | 'awaiting_approval' | 'active' | 'done' | 'abandoned'
+
 export interface PlanRecord {
+  /** null for a fully custom-drafted plan (P3) that isn't seeded from one of the named templates. */
+  templateName: string | null
+  successCriteria: string
+  /** Why this approach, not just the success criteria — see Plan.rationale. */
+  rationale: string
+  tasks: PlanTaskRecord[]
+  mode: PlanMode
+  /** Populated by plan mode's P6 self-verification pass. */
+  reviewNotes?: string[]
+  verifiedAt?: string
+  /** Whether the harness should auto-advance through this plan's tasks without a per-step pacing pause (plan mode's P4). */
+  executingOnPlan: boolean
+  /**
+   * Plan mode's P10 "trust this approved plan" opt-in — absent/false (the default, "absent when
+   * unused" per this codebase's convention for additive fields) means every write/shell/email
+   * action this plan's execution proposes stays individually gated exactly as before this phase.
+   * `true` only once the user chose `'approve_trusted'` at the P2 approval screen (never the
+   * default choice there — see PlanApprovalService) — while true, an action proposed during
+   * execution of whichever task is this plan's currently RUNNING one is auto-applied instead of
+   * staged (INV-36; see assistant.ts's buildToolLoopPauseResult). Per-plan, not global or
+   * per-session: a fresh plan, or this same plan reloaded after `abandonPlan`, starts back at
+   * false.
+   */
+  trustApprovedSteps?: boolean
+  /**
+   * Set only while `mode === 'awaiting_approval'` (plan mode's P2) — correlates a
+   * `turn(message, { planApprovalId, planDecision })` resolution to exactly this staged snapshot,
+   * same "resolved by ID, never re-derived" discipline pendingActionId/pendingClarificationId
+   * already follow. Cleared (undefined) once the plan is activated or the draft is abandoned.
+   */
+  planApprovalId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Pre-P0 persisted shape: `status` instead of `mode`, no `rationale`/`executingOnPlan`. */
+interface LegacyPlanRecordShape {
   templateName: string
   successCriteria: string
   tasks: PlanTaskRecord[]
@@ -43,35 +87,252 @@ export interface PlanRecord {
   updatedAt: string
 }
 
+function isLegacyShape(record: PlanRecord | LegacyPlanRecordShape): record is LegacyPlanRecordShape {
+  return !('mode' in record) && 'status' in record
+}
+
+/**
+ * Maps a persisted record — old 3-value `status` shape or the current 5-value `mode` shape — to
+ * the current PlanRecord shape, same "default pre-existing records without demoting a real value"
+ * convention fact-extraction.ts's migrateFact already uses elsewhere in this package. A migrated
+ * `active` plan gets `executingOnPlan: true` so an in-flight plan from before this change keeps
+ * progressing rather than silently stalling.
+ */
+export function migratePlanRecord(record: PlanRecord | LegacyPlanRecordShape): PlanRecord {
+  if (!isLegacyShape(record)) return record
+  return {
+    templateName: record.templateName,
+    successCriteria: record.successCriteria,
+    rationale: '',
+    tasks: record.tasks,
+    mode: record.status,
+    executingOnPlan: record.status === 'active',
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
+}
+
 function planKey(sessionId: string): string {
   return `plan:${sessionId}`
 }
 
+/**
+ * Plan mode's P5 file-backed persistence: when a real filesystem is available (CLI/desktop —
+ * the same `{backend, workspaceRoot}` pair AssistantSession.undoWorkspace() already resolves for
+ * write_file/run_shell_command), every plan write is mirrored to
+ * `<workspaceRoot>/.buildaharness/plans/<sessionId>.plan.json` (plus a generated `.plan.md`
+ * view), and every load prefers that file over the Dexie/IndexedDB State-tier record so a
+ * hand-edit to the JSON between turns is picked up. On a surface with no filesystem (a browser
+ * tab), this is `undefined` throughout and Dexie alone remains the source of truth, unchanged
+ * from before P5.
+ */
+export interface PlanFsPersistence {
+  backend: FsBackend
+  workspaceRoot: string
+}
+
+function planFilePaths(workspaceRoot: string, sessionId: string): { dir: string; json: string; md: string } {
+  // sessionId is an API-level identifier, not sandboxed user input the way write_file's `path`
+  // arg is — but it still flows into a filesystem path, so strip anything that could traverse
+  // out of the plans directory rather than trusting it's always a plain slug.
+  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const dir = `${workspaceRoot}/.buildaharness/plans`
+  return { dir, json: `${dir}/${safeId}.plan.json`, md: `${dir}/${safeId}.plan.md` }
+}
+
+/**
+ * Writes `contents` to `path` via write-tmp-then-rename when the backend supports `rename`
+ * (real disk backends — see FsBackend.rename's doc comment), mirroring
+ * adapter/harness/plan_store.py's `tmp.write_text(...); os.replace(tmp, final)` reference
+ * design. Falls back to a plain (non-atomic) write when the backend can't rename.
+ */
+async function atomicWriteFile(backend: FsBackend, path: string, contents: string): Promise<void> {
+  if (!backend.rename) {
+    await backend.writeTextFile(path, contents)
+    return
+  }
+  const tmp = `${path}.tmp-${crypto.randomUUID()}`
+  await backend.writeTextFile(tmp, contents)
+  await backend.rename(tmp, path)
+}
+
+/**
+ * Human-readable file view alongside the JSON — reuses formatPlanProgress's exact task-status
+ * rendering rather than re-deriving it, and appends the fields formatPlanProgress doesn't cover
+ * (rationale, review notes, verification timestamp). Purely generated: explicitly not parsed
+ * back in if hand-edited (the plan document's own non-goal) — the JSON file next to it is the
+ * one editable-and-reloadable artifact.
+ */
+function formatPlanFileMarkdown(plan: PlanRecord): string {
+  const lines = [
+    `# Plan: ${plan.templateName ?? '(custom)'}`,
+    '',
+    `_Mode: ${plan.mode} — generated ${plan.updatedAt}. This file is a generated view, not re-parsed if hand-edited; edit the sibling .plan.json instead._`,
+    '',
+    '```',
+    formatPlanProgress(plan),
+    '```',
+  ]
+  if (plan.rationale) lines.push('', '## Rationale', plan.rationale)
+  if (plan.reviewNotes && plan.reviewNotes.length > 0) lines.push('', '## Review notes', ...plan.reviewNotes.map((n) => `- ${n}`))
+  if (plan.verifiedAt) lines.push('', `_Verified at: ${plan.verifiedAt}_`)
+  return `${lines.join('\n')}\n`
+}
+
+/**
+ * Best-effort dual-write side channel — never throws (matches plan_store.py's "save errors are
+ * swallowed and logged" convention) since a filesystem hiccup here must never lose the plan,
+ * which the Dexie/State-tier write (the caller's other half of the dual write) still holds.
+ */
+async function writePlanFiles(fsPersistence: PlanFsPersistence, sessionId: string, plan: PlanRecord): Promise<void> {
+  try {
+    const { backend, workspaceRoot } = fsPersistence
+    const { dir, json, md } = planFilePaths(workspaceRoot, sessionId)
+    await backend.mkdir(dir)
+    await atomicWriteFile(backend, json, JSON.stringify(plan, null, 2))
+    await atomicWriteFile(backend, md, formatPlanFileMarkdown(plan))
+  } catch (err) {
+    console.error(`plan-store: writing plan files for session ${sessionId} failed:`, err)
+  }
+}
+
+/**
+ * Reads back the fs-persisted plan JSON, if any. Returns `undefined` (not `null`) when there's
+ * nothing to prefer over Dexie — no fs configured, no file yet (a session that predates P5 or
+ * has never run on a filesystem surface), or a read/parse error — so callers can tell "fall back
+ * to Dexie" apart from "the fs file legitimately holds no active plan".
+ */
+async function readPlanFile(fsPersistence: PlanFsPersistence | undefined, sessionId: string): Promise<PlanRecord | undefined> {
+  if (!fsPersistence) return undefined
+  try {
+    const { json } = planFilePaths(fsPersistence.workspaceRoot, sessionId)
+    const raw = await fsPersistence.backend.readTextFile(json)
+    if (raw === undefined) return undefined
+    return migratePlanRecord(JSON.parse(raw) as PlanRecord | LegacyPlanRecordShape)
+  } catch (err) {
+    console.error(`plan-store: reading plan file for session ${sessionId} failed:`, err)
+    return undefined
+  }
+}
+
+/**
+ * Reads `sessionId`'s stored plan record regardless of `mode` — unlike `loadActivePlan`, which
+ * filters to `mode === 'active'` only. Plan mode's P1 drafting path needs to resume a
+ * `mode: 'drafting'` record across turns (and P2 needs `awaiting_approval` the same way), neither
+ * of which `loadActivePlan` would ever return.
+ *
+ * When `fsPersistence` is configured and its plan JSON file exists, that file wins over the
+ * Dexie/State-tier record (P5 — the file is the editable-and-reloadable artifact, so a hand-edit
+ * between turns takes effect on the very next load) and is written back into `memory` to
+ * reconcile the two (INV-33: after any interrupted dual write, the next load's result is
+ * self-consistent and Dexie catches back up to it, rather than the two staying silently split).
+ */
+export async function loadPlanRecord(memory: MemoryAdapter, sessionId: string, fsPersistence?: PlanFsPersistence): Promise<PlanRecord | null> {
+  const fromFile = await readPlanFile(fsPersistence, sessionId)
+  if (fromFile !== undefined) {
+    await memory.set(planKey(sessionId), fromFile)
+    return fromFile
+  }
+  const stored = (await memory.get(planKey(sessionId))) as PlanRecord | LegacyPlanRecordShape | undefined
+  if (!stored) return null
+  return migratePlanRecord(stored)
+}
+
 /** Returns null when no plan exists for this session, or the stored plan is already done/abandoned — a finished plan never auto-resumes. */
-export async function loadActivePlan(memory: MemoryAdapter, sessionId: string): Promise<PlanRecord | null> {
-  const record = (await memory.get(planKey(sessionId))) as PlanRecord | undefined
-  if (!record || record.status !== 'active') return null
+export async function loadActivePlan(memory: MemoryAdapter, sessionId: string, fsPersistence?: PlanFsPersistence): Promise<PlanRecord | null> {
+  const record = await loadPlanRecord(memory, sessionId, fsPersistence)
+  if (!record || record.mode !== 'active') return null
   return record
 }
 
+/**
+ * Builds an immediately-`active` PlanRecord with no drafting/approval step at all. Before P3 of
+ * plans/ask_question_and_plan_mode_plan.html, TurnInterpreter.resolveTasks called this the instant
+ * classifyTurnIntent matched a template; P3 retired that call site — a template match (or the
+ * newer general needsMultiStepPlan judgment) now always routes through plan mode's exclusive
+ * drafting+approval loop instead (see assistant.ts's auto-trigger and
+ * PlanDraftingService.draftTurn's template-seeding). This function itself is unchanged and still
+ * used directly by tests/callers that want to seed an already-active plan without going through
+ * drafting. The ONLY other place `mode: 'active'` is ever set is `activatePlanRecord` below,
+ * reached solely via a drafted plan's explicit approve/approve-with-edits (INV-31) — this function
+ * remains the one intentional exception to "exactly one place", now purely a low-level primitive
+ * rather than something classification wires up automatically.
+ */
 export function createPlanRecord(plan: Plan): PlanRecord {
   const now = new Date().toISOString()
   return {
     templateName: plan.templateName,
     successCriteria: plan.successCriteria,
+    rationale: plan.rationale ?? '',
     tasks: plan.tasks.map((t): PlanTaskRecord => ({ id: t.id, description: t.description, depends_on: t.depends_on, status: 'PENDING', riskLevel: t.riskLevel })),
-    status: 'active',
+    mode: 'active',
+    executingOnPlan: true,
     createdAt: now,
     updatedAt: now,
   }
 }
 
-export async function savePlan(memory: MemoryAdapter, sessionId: string, plan: PlanRecord): Promise<void> {
+/**
+ * The funnel every plan mutation in this module writes through. When `fsPersistence` is
+ * configured, the fs file is written first and Dexie second (P5, INV-33): if the process dies
+ * between the two, the fs file — which `loadPlanRecord` always prefers when present — already
+ * reflects either the old state (rename never happened) or the new one (rename completed),
+ * never a half-written file, so the next load resolves to one consistent version of both instead
+ * of a silently split pair.
+ */
+export async function savePlan(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, fsPersistence?: PlanFsPersistence): Promise<void> {
+  if (fsPersistence) await writePlanFiles(fsPersistence, sessionId, plan)
   await memory.set(planKey(sessionId), plan)
 }
 
-export async function abandonPlan(memory: MemoryAdapter, sessionId: string, plan: PlanRecord): Promise<void> {
-  await savePlan(memory, sessionId, { ...plan, status: 'abandoned', updatedAt: new Date().toISOString() })
+/**
+ * A fresh, empty `mode: 'drafting'` record — the seed for plan mode's P1 drafting loop, started
+ * either from nothing (a from-scratch draft, P3) or already carrying a `templateName` seed.
+ * Unlike `createPlanRecord`, `executingOnPlan` starts false (P4's auto-advance only ever applies
+ * once P2 approval flips the record to `active`) and `mode` starts `'drafting'`, not `'active'`.
+ */
+export function createDraftPlanRecord(templateName: string | null): PlanRecord {
+  const now = new Date().toISOString()
+  return {
+    templateName,
+    successCriteria: '',
+    rationale: '',
+    tasks: [],
+    mode: 'drafting',
+    executingOnPlan: false,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+export async function abandonPlan(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, fsPersistence?: PlanFsPersistence): Promise<void> {
+  await savePlan(memory, sessionId, { ...plan, mode: 'abandoned', executingOnPlan: false, updatedAt: new Date().toISOString() }, fsPersistence)
+}
+
+/**
+ * Stages a drafted plan for plan mode's P2 mandatory whole-plan approval gate: `mode` moves to
+ * `'awaiting_approval'` and a fresh `planApprovalId` is minted so the eventual
+ * `turn(message, { planApprovalId, planDecision })` resolves exactly this snapshot, never a
+ * second, re-derived one (see PlanRecord.planApprovalId's doc comment).
+ */
+export async function stagePlanForApproval(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, fsPersistence?: PlanFsPersistence): Promise<PlanRecord> {
+  const updated: PlanRecord = { ...plan, mode: 'awaiting_approval', planApprovalId: crypto.randomUUID(), updatedAt: new Date().toISOString() }
+  await savePlan(memory, sessionId, updated, fsPersistence)
+  return updated
+}
+
+/**
+ * The sole place a *drafted* plan reaches `mode: 'active'` (INV-31) — called only from
+ * PlanApprovalService's approve/approve-with-edits branch, once any edits have already landed on
+ * `plan`. `createPlanRecord` above sets `mode: 'active'` too, but that's the pre-existing,
+ * unrelated template-instant-match path — not a second way for a *drafted* plan to skip approval.
+ * `planApprovalId` is cleared since the staged snapshot it correlated to no longer exists once
+ * activated.
+ */
+export async function activatePlanRecord(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, fsPersistence?: PlanFsPersistence): Promise<PlanRecord> {
+  const updated: PlanRecord = { ...plan, mode: 'active', executingOnPlan: true, planApprovalId: undefined, updatedAt: new Date().toISOString() }
+  await savePlan(memory, sessionId, updated, fsPersistence)
+  return updated
 }
 
 export interface TaskCancelMatch {
@@ -145,10 +406,22 @@ export function matchTaskCancelAttempt(message: string, plan: PlanRecord): TaskC
  * for why status becomes 'COMPLETE' alongside the cancelled flag). Unlike abandonPlan, the plan
  * itself stays 'active' so the remaining tasks continue normally.
  */
-export async function cancelPlanTask(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, taskId: string): Promise<PlanRecord> {
+export async function cancelPlanTask(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, taskId: string, fsPersistence?: PlanFsPersistence): Promise<PlanRecord> {
   const tasks = plan.tasks.map((t): PlanTaskRecord => (t.id === taskId ? { ...t, status: 'COMPLETE', cancelled: true } : t))
   const updated: PlanRecord = { ...plan, tasks, updatedAt: new Date().toISOString() }
-  await savePlan(memory, sessionId, updated)
+  await savePlan(memory, sessionId, updated, fsPersistence)
+  return updated
+}
+
+/**
+ * Changes one task's description without marking it complete — a lighter sibling of
+ * cancelPlanTask, for plan mode's P2 approve-with-edits path (a user can want a task reworded
+ * without dropping it entirely, which cancelPlanTask's "mark COMPLETE + cancelled" would do).
+ */
+export async function editPlanTask(memory: MemoryAdapter, sessionId: string, plan: PlanRecord, taskId: string, newDescription: string, fsPersistence?: PlanFsPersistence): Promise<PlanRecord> {
+  const tasks = plan.tasks.map((t): PlanTaskRecord => (t.id === taskId ? { ...t, description: newDescription } : t))
+  const updated: PlanRecord = { ...plan, tasks, updatedAt: new Date().toISOString() }
+  await savePlan(memory, sessionId, updated, fsPersistence)
   return updated
 }
 
@@ -157,6 +430,10 @@ export async function cancelPlanTask(memory: MemoryAdapter, sessionId: string, p
  * mirrors what adapter/harness/plan_store.py's task_graph_to_plan does for the
  * Python planner, just keyed to a chat session instead of a snapshot file. Marks
  * the plan 'done' once every task is COMPLETE, so loadActivePlan stops resuming it.
+ * Also flips `executingOnPlan` back to false in that same allComplete branch (plan
+ * mode's P4, INV-32) — one of exactly two places that happens, the other being
+ * `abandonPlan`'s explicit user-abort path; every other event (a task failing, a
+ * needs_approval/needs_clarification interrupt, a harness error) leaves it untouched.
  */
 export function updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[]): PlanRecord {
   const statusById = new Map(taskGraphTasks.map((t) => [t.id, normalizeRestingStatus(t.status)]))
@@ -165,7 +442,8 @@ export function updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string
   return {
     ...plan,
     tasks,
-    status: allComplete ? 'done' : plan.status,
+    mode: allComplete ? 'done' : plan.mode,
+    executingOnPlan: allComplete ? false : plan.executingOnPlan,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -198,7 +476,7 @@ export function planCompletionPct(plan: PlanRecord): number {
  * the last COMPLETE task, or the first task before anything has started.
  */
 export interface PlanPosition {
-  templateName: string
+  templateName: string | null
   stepIndex: number
   stepCount: number
   currentTaskDescription: string

@@ -1,4 +1,25 @@
 import { z } from 'zod'
+import type { AskAnswer, AskQuestion } from '../nodes/escalate.js'
+
+/**
+ * Q4 (plans/ask_question_and_plan_mode_plan.html) — renders one AskAnswer as a distinct,
+ * kind-tagged constraint line so a "selected" pick, a "selected_with_edit" pick-plus-caveat,
+ * and a "free_text" answer never collapse into one indistinguishable joined string once they
+ * reach current_constraints. Kept separate from ask-clarification-service.ts's own
+ * transcript-facing formatAnswer() (a distinct, human-chat-message concern) even though the
+ * shape of the logic is similar.
+ */
+export function describeAskAnswer(question: AskQuestion | undefined, answer: AskAnswer): string {
+  const label = question?.question ?? answer.questionId
+  switch (answer.kind) {
+    case 'selected':
+      return `Selected — ${label}: ${answer.selectedLabels.join(', ')}`
+    case 'selected_with_edit':
+      return `Selected with note — ${label}: ${answer.selectedLabels.join(', ')} (note: ${answer.editText})`
+    case 'free_text':
+      return `Free-text answer — ${label}: ${answer.freeText}`
+  }
+}
 
 export const CallerStateSchema = z.object({
   current_constraints: z.array(z.string()),
@@ -38,12 +59,29 @@ export class CallerState {
    * path for caller updates. Always appends the raw update to clarification_history
    * (never truncated); current_constraints/success_criteria are replaced wholesale
    * when present, output_preferences is merged.
+   *
+   * Q4 — a `clarification_answers` key (an AskResponse's answers, as set by
+   * AskClarificationService's OneShotAnswerChannel / the adapter's escalation-resume
+   * endpoint) is handled distinctly from a plain `current_constraints` replacement: each
+   * AskAnswer is rendered via describeAskAnswer() (kind-tagged — a bare "selected" pick
+   * reads differently from "selected_with_edit"'s caveat or a "free_text" answer) and
+   * *appended* to current_constraints, using the optional `ask_questions` list (the
+   * original AskQuestion batch) to resolve question text where available.
    */
   updateConstraints(update: Record<string, unknown>): void {
     this.clarification_history.push({ ...update })
 
     if ('current_constraints' in update) {
       this.current_constraints = [...(update.current_constraints as string[])]
+    }
+    if ('clarification_answers' in update) {
+      const answers = update.clarification_answers as AskAnswer[]
+      const questions = (update.ask_questions as AskQuestion[] | undefined) ?? []
+      const byId = new Map(questions.map((q) => [q.id, q]))
+      this.current_constraints = [
+        ...this.current_constraints,
+        ...answers.map((a) => describeAskAnswer(byId.get(a.questionId), a)),
+      ]
     }
     if ('output_preferences' in update) {
       this.output_preferences = { ...this.output_preferences, ...(update.output_preferences as Record<string, unknown>) }

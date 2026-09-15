@@ -1,0 +1,22 @@
+{
+  "id": "70-rdb-some-moot-after-first-batch",
+  "op": "refine_deferred_batch",
+  "description": "batch one's answers already resolved c5, leaving c6/c7 material",
+  "deferred": [
+    {
+      "id": "c5",
+      "question": "Question about c5?"
+    },
+    {
+      "id": "c6",
+      "question": "Question about c6?"
+    },
+    {
+      "id": "c7",
+      "question": "Question about c7?"
+    }
+  ],
+  "moot_ids": [
+    "c5"
+  ]
+}

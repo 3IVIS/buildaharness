@@ -1,0 +1,18 @@
+{
+  "id": "54-bab-effective-false-collapse-free-text-only",
+  "op": "build_ask_blocker",
+  "description": "collapsing a free-text-only (no options) question omits the options key entirely",
+  "global_enabled": false,
+  "structured": true,
+  "questions": [
+    {
+      "id": "note",
+      "question": "Anything else to add?"
+    }
+  ],
+  "reason": "cannot_make_progress",
+  "missing_info": [
+    "goal unclear"
+  ],
+  "current_task_summary": "drafting"
+}

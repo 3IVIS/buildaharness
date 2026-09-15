@@ -1,0 +1,14 @@
+{
+  "id": "03-vq-too-few-options",
+  "op": "validate_ask_question",
+  "description": "a single-option question is below MIN_OPTIONS_PER_QUESTION and must be rejected",
+  "question": {
+    "id": "q3",
+    "question": "Pick one",
+    "options": [
+      {
+        "label": "only-one"
+      }
+    ]
+  }
+}

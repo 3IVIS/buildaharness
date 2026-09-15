@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { InMemoryAdapter } from '@buildaharness/runtime'
+import { InMemoryAdapter, type FsBackend, type MemoryAdapter } from '@buildaharness/runtime'
 import {
   loadActivePlan,
+  loadPlanRecord,
   createPlanRecord,
+  createDraftPlanRecord,
   savePlan,
   abandonPlan,
   updatePlanFromRun,
@@ -12,9 +14,43 @@ import {
   formatPlanProgress,
   matchTaskCancelAttempt,
   cancelPlanTask,
+  editPlanTask,
+  migratePlanRecord,
   type PlanRecord,
+  type PlanFsPersistence,
 } from './plan-store.js'
 import type { Plan } from './plan-builder.js'
+
+/** In-memory FsBackend with a working `rename`, standing in for a real disk. */
+function makeFakeFsBackend(): FsBackend & { files: Map<string, string> } {
+  const files = new Map<string, string>()
+  return {
+    files,
+    async readTextFile(path) {
+      return files.get(path)
+    },
+    async writeTextFile(path, contents) {
+      files.set(path, contents)
+    },
+    async removeFile(path) {
+      files.delete(path)
+    },
+    async mkdir() {},
+    async readDir() {
+      return []
+    },
+    async rename(from, to) {
+      const contents = files.get(from)
+      if (contents === undefined) throw new Error(`ENOENT: ${from}`)
+      files.delete(from)
+      files.set(to, contents)
+    },
+  }
+}
+
+function makeFsPersistence(): PlanFsPersistence & { backend: FsBackend & { files: Map<string, string> } } {
+  return { backend: makeFakeFsBackend(), workspaceRoot: '/workspace' }
+}
 
 function makePlan(): Plan {
   return {
@@ -67,14 +103,72 @@ describe('loadActivePlan', () => {
 
     expect(await loadActivePlan(memory, 'session-2')).toBeNull()
   })
+
+  it('migrates and resumes a pre-P0 legacy record persisted with `status` instead of `mode`', async () => {
+    const memory = new InMemoryAdapter()
+    const legacy = {
+      templateName: 'project_planning',
+      successCriteria: 'The launch ships on time.',
+      tasks: [{ id: 't1', description: 'Gather requirements', depends_on: [], status: 'PENDING' as const }],
+      status: 'active' as const,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    await memory.set('plan:session-1', legacy)
+
+    const loaded = await loadActivePlan(memory, 'session-1')
+    expect(loaded?.mode).toBe('active')
+    expect(loaded?.executingOnPlan).toBe(true)
+    expect(loaded?.rationale).toBe('')
+  })
+
+  it('does not resume a plan still in drafting or awaiting_approval (plan mode, not yet wired to any producer)', async () => {
+    const memory = new InMemoryAdapter()
+    const drafting: PlanRecord = { ...createPlanRecord(makePlan()), mode: 'drafting' }
+    await savePlan(memory, 'session-1', drafting)
+
+    expect(await loadActivePlan(memory, 'session-1')).toBeNull()
+  })
+})
+
+describe('migratePlanRecord', () => {
+  it('maps a legacy status straight across to mode, unchanged, without demoting executingOnPlan for a non-active plan', () => {
+    const legacy = {
+      templateName: 'project_planning',
+      successCriteria: 'y',
+      tasks: [],
+      status: 'abandoned' as const,
+      createdAt: '',
+      updatedAt: '',
+    }
+    const migrated = migratePlanRecord(legacy)
+    expect(migrated.mode).toBe('abandoned')
+    expect(migrated.executingOnPlan).toBe(false)
+  })
+
+  it('passes a current-shape record through unchanged', () => {
+    const record = createPlanRecord(makePlan())
+    expect(migratePlanRecord(record)).toEqual(record)
+  })
 })
 
 describe('createPlanRecord', () => {
   it('starts every task as PENDING and the plan as active', () => {
     const record = createPlanRecord(makePlan())
-    expect(record.status).toBe('active')
+    expect(record.mode).toBe('active')
+    expect(record.executingOnPlan).toBe(true)
     expect(record.tasks.every((t) => t.status === 'PENDING')).toBe(true)
     expect(record.tasks.map((t) => t.id)).toEqual(['t1', 't2', 't3'])
+  })
+
+  it('defaults rationale to empty string when the source Plan has none', () => {
+    const record = createPlanRecord(makePlan())
+    expect(record.rationale).toBe('')
+  })
+
+  it('carries a Plan-supplied rationale through', () => {
+    const record = createPlanRecord({ ...makePlan(), rationale: 'Because X depends on Y being done first.' })
+    expect(record.rationale).toBe('Because X depends on Y being done first.')
   })
 })
 
@@ -89,14 +183,38 @@ describe('updatePlanFromRun', () => {
 
     expect(updated.tasks.find((t) => t.id === 't1')!.status).toBe('COMPLETE')
     expect(updated.tasks.find((t) => t.id === 't2')!.status).toBe('PENDING')
-    expect(updated.status).toBe('active')
+    expect(updated.mode).toBe('active')
   })
 
-  it('flips status to done once every task is COMPLETE', () => {
+  it('flips mode to done once every task is COMPLETE', () => {
     const record = createPlanRecord(makePlan())
     const updated = updatePlanFromRun(record, record.tasks.map((t) => ({ id: t.id, status: 'COMPLETE' })))
 
-    expect(updated.status).toBe('done')
+    expect(updated.mode).toBe('done')
+  })
+
+  // INV-32 (plan mode's P4): executingOnPlan flips back to false only once planCompletionPct
+  // reaches 100 (all tasks COMPLETE) or on an explicit user abort (abandonPlan, tested below) —
+  // never as a side effect of an error, a paused turn, or an in-progress task resolving.
+  it('flips executingOnPlan to false in the same allComplete branch that flips mode to done (INV-32)', () => {
+    const record = createPlanRecord(makePlan())
+    expect(record.executingOnPlan).toBe(true)
+    const updated = updatePlanFromRun(record, record.tasks.map((t) => ({ id: t.id, status: 'COMPLETE' })))
+
+    expect(updated.mode).toBe('done')
+    expect(updated.executingOnPlan).toBe(false)
+  })
+
+  it('leaves executingOnPlan true while any task is still PENDING, RUNNING, or FAILED (INV-32 — no side-effect flip on a failed or in-progress task)', () => {
+    const record = createPlanRecord(makePlan())
+    const stillGoing = updatePlanFromRun(record, [
+      { id: 't1', status: 'FAILED' },
+      { id: 't2', status: 'PENDING' },
+      { id: 't3', status: 'PENDING' },
+    ])
+
+    expect(stillGoing.mode).toBe('active')
+    expect(stillGoing.executingOnPlan).toBe(true)
   })
 
   it('leaves a task status unchanged if the harness result omits it', () => {
@@ -115,7 +233,24 @@ describe('updatePlanFromRun', () => {
     ])
 
     expect(updated.tasks.find((t) => t.id === 't1')!.status).toBe('PENDING')
-    expect(updated.status).toBe('active')
+    expect(updated.mode).toBe('active')
+  })
+})
+
+describe('abandonPlan', () => {
+  // INV-32 (plan mode's P4): the other of exactly two places executingOnPlan flips back to
+  // false — an explicit user abort, distinct from updatePlanFromRun's allComplete branch above.
+  it('flips executingOnPlan to false alongside mode: abandoned', async () => {
+    const memory = new InMemoryAdapter()
+    const record = createPlanRecord(makePlan())
+    expect(record.executingOnPlan).toBe(true)
+    await savePlan(memory, 'session-1', record)
+
+    await abandonPlan(memory, 'session-1', record)
+
+    const stored = await loadPlanRecord(memory, 'session-1')
+    expect(stored?.mode).toBe('abandoned')
+    expect(stored?.executingOnPlan).toBe(false)
   })
 })
 
@@ -128,7 +263,7 @@ describe('planCompletionPct', () => {
   })
 
   it('returns 0 for a plan with no tasks', () => {
-    const empty: PlanRecord = { templateName: 'x', successCriteria: 'y', tasks: [], status: 'active', createdAt: '', updatedAt: '' }
+    const empty: PlanRecord = { templateName: 'x', successCriteria: 'y', rationale: '', tasks: [], mode: 'active', executingOnPlan: true, createdAt: '', updatedAt: '' }
     expect(planCompletionPct(empty)).toBe(0)
   })
 })
@@ -273,8 +408,23 @@ describe('cancelPlanTask', () => {
     const cancelledTask = updated.tasks.find((t) => t.id === 'itinerary_planning')!
     expect(cancelledTask.status).toBe('COMPLETE')
     expect(cancelledTask.cancelled).toBe(true)
-    expect(updated.status).toBe('active')
+    expect(updated.mode).toBe('active')
     expect(updated.tasks.find((t) => t.id === 'destination_research')!.cancelled).toBeFalsy()
+    expect(await loadActivePlan(memory, 'session-1')).toEqual(updated)
+  })
+
+  it('changes a task description without marking it complete', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = makeTripPlan()
+    await savePlan(memory, 'session-1', plan)
+
+    const updated = await editPlanTask(memory, 'session-1', plan, 'itinerary_planning', 'Draft the daily-budget itinerary, in yen')
+
+    const editedTask = updated.tasks.find((t) => t.id === 'itinerary_planning')!
+    expect(editedTask.description).toBe('Draft the daily-budget itinerary, in yen')
+    expect(editedTask.status).toBe('PENDING')
+    expect(editedTask.cancelled).toBeFalsy()
+    expect(updated.tasks.find((t) => t.id === 'destination_research')!.description).toBe('Research the Kyoto destination')
     expect(await loadActivePlan(memory, 'session-1')).toEqual(updated)
   })
 
@@ -354,3 +504,155 @@ describe('nextPendingTask', () => {
     expect(nextPendingTask(plan)).toBeNull()
   })
 })
+
+describe('createDraftPlanRecord', () => {
+  it('starts in mode "drafting" with executingOnPlan false and no tasks', () => {
+    const draft = createDraftPlanRecord(null)
+    expect(draft.mode).toBe('drafting')
+    expect(draft.executingOnPlan).toBe(false)
+    expect(draft.tasks).toEqual([])
+    expect(draft.templateName).toBeNull()
+  })
+
+  it('carries a seed templateName through when given one', () => {
+    const draft = createDraftPlanRecord('project_planning')
+    expect(draft.templateName).toBe('project_planning')
+  })
+})
+
+describe('loadPlanRecord', () => {
+  it('returns null when no plan exists for the session', async () => {
+    const memory = new InMemoryAdapter()
+    expect(await loadPlanRecord(memory, 'session-1')).toBeNull()
+  })
+
+  it('returns a drafting-mode record — unlike loadActivePlan, which would return null for it', async () => {
+    const memory = new InMemoryAdapter()
+    const draft = createDraftPlanRecord(null)
+    await savePlan(memory, 'session-1', draft)
+
+    expect(await loadActivePlan(memory, 'session-1')).toBeNull()
+    expect((await loadPlanRecord(memory, 'session-1'))?.mode).toBe('drafting')
+  })
+
+  it('returns an active record too, same as loadActivePlan', async () => {
+    const memory = new InMemoryAdapter()
+    const plan = createPlanRecord(makePlan())
+    await savePlan(memory, 'session-1', plan)
+    expect((await loadPlanRecord(memory, 'session-1'))?.mode).toBe('active')
+  })
+})
+
+describe('P5 file-backed plan persistence', () => {
+  it('mirrors a savePlan to <workspaceRoot>/.buildaharness/plans/<sessionId>.plan.json and a sibling .plan.md', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    const plan = createPlanRecord(makePlan())
+
+    await savePlan(memory, 'session-1', plan, fs)
+
+    const jsonRaw = fs.backend.files.get('/workspace/.buildaharness/plans/session-1.plan.json')
+    expect(jsonRaw).toBeDefined()
+    expect(JSON.parse(jsonRaw!)).toEqual(plan)
+
+    const mdRaw = fs.backend.files.get('/workspace/.buildaharness/plans/session-1.plan.md')
+    expect(mdRaw).toBeDefined()
+    expect(mdRaw).toContain('not re-parsed if hand-edited')
+    expect(mdRaw).toContain('Gather requirements')
+
+    // No stray .tmp-* files left behind once the write-tmp-then-rename sequence completes.
+    for (const path of fs.backend.files.keys()) expect(path).not.toContain('.tmp-')
+  })
+
+  it('sanitizes sessionId so it cannot escape the plans directory via path traversal', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    const plan = createPlanRecord(makePlan())
+
+    await savePlan(memory, '../../etc/passwd', plan, fs)
+
+    expect([...fs.backend.files.keys()].every((p) => p.startsWith('/workspace/.buildaharness/plans/'))).toBe(true)
+  })
+
+  it('reflects a hand-edited plan JSON file on the next load (the file is the editable-and-reloadable artifact)', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    const plan = createPlanRecord(makePlan())
+    await savePlan(memory, 'session-1', plan, fs)
+
+    // Simulate a user hand-editing the JSON file between turns: drop task t3 and reword t1.
+    const path = '/workspace/.buildaharness/plans/session-1.plan.json'
+    const handEdited: PlanRecord = {
+      ...plan,
+      tasks: plan.tasks.filter((t) => t.id !== 't3').map((t) => (t.id === 't1' ? { ...t, description: 'Gather requirements (edited by hand)' } : t)),
+    }
+    fs.backend.files.set(path, JSON.stringify(handEdited))
+
+    const reloaded = await loadPlanRecord(memory, 'session-1', fs)
+    expect(reloaded?.tasks.map((t) => t.id)).toEqual(['t1', 't2'])
+    expect(reloaded?.tasks[0].description).toBe('Gather requirements (edited by hand)')
+
+    // Reconciled back into Dexie/State-tier too, not just returned in-memory for this one call.
+    expect(((await memory.get('plan:session-1')) as PlanRecord).tasks.map((t) => t.id)).toEqual(['t1', 't2'])
+  })
+
+  it('INV-33: a fs write that fails mid-sequence (rename never lands) leaves the old file+Dexie pair consistent, reconciled on next load', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    const original = createPlanRecord(makePlan())
+    await savePlan(memory, 'session-1', original, fs)
+
+    // Simulate a crash between the tmp write and the rename: the next save's rename never lands.
+    const realRename = fs.backend.rename!.bind(fs.backend)
+    fs.backend.rename = async () => {
+      throw new Error('simulated crash before rename completed')
+    }
+    const edited = editPlanTaskShape(original)
+    await expect(savePlan(memory, 'session-1', edited, fs)).resolves.toBeUndefined() // writePlanFiles swallows the error
+
+    // Old file is still intact (rename never happened) — but Dexie was written through as `edited`
+    // by savePlan's second step, so right after the failed write the two are split...
+    expect(JSON.parse(fs.backend.files.get('/workspace/.buildaharness/plans/session-1.plan.json')!)).toEqual(original)
+    expect(await memory.get('plan:session-1')).toEqual(edited)
+
+    // ...but the very next load reconciles them to a single consistent state: the old fs version,
+    // written back through to Dexie — never a load that returns a mix of the two.
+    fs.backend.rename = realRename
+    const reloaded = await loadPlanRecord(memory, 'session-1', fs)
+    expect(reloaded).toEqual(original)
+    expect(await memory.get('plan:session-1')).toEqual(original)
+  })
+
+  it('INV-33: a Dexie write that fails after the fs file already landed reconciles to the new state on next load', async () => {
+    const memory = new InMemoryAdapter()
+    const failingMemory: MemoryAdapter = {
+      get: (key) => memory.get(key),
+      set: async () => {
+        throw new Error('simulated crash before Dexie write completed')
+      },
+      search: (query, topK, minScore) => memory.search(query, topK, minScore),
+      delete: (key) => memory.delete(key),
+    }
+    const fs = makeFsPersistence()
+    const original = createPlanRecord(makePlan())
+    await savePlan(memory, 'session-1', original, fs)
+
+    const edited = editPlanTaskShape(original)
+    await expect(savePlan(failingMemory, 'session-1', edited, fs)).rejects.toThrow('simulated crash')
+
+    // The fs file already reflects the new version (it's written before Dexie); Dexie itself
+    // never got the new value at all since its own write is what "crashed".
+    expect(JSON.parse(fs.backend.files.get('/workspace/.buildaharness/plans/session-1.plan.json')!)).toEqual(edited)
+    expect(await memory.get('plan:session-1')).toEqual(original)
+
+    // The next load (through the real, working memory adapter) resolves to the new version and
+    // reconciles Dexie to match — never stuck on the old value forever.
+    const reloaded = await loadPlanRecord(memory, 'session-1', fs)
+    expect(reloaded).toEqual(edited)
+    expect(await memory.get('plan:session-1')).toEqual(edited)
+  })
+})
+
+function editPlanTaskShape(plan: PlanRecord): PlanRecord {
+  return { ...plan, tasks: plan.tasks.map((t) => (t.id === 't1' ? { ...t, description: 'Gather requirements v2' } : t)), updatedAt: new Date().toISOString() }
+}

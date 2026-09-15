@@ -333,3 +333,103 @@ a regression.
 ```bash
 node scripts/harness-conformance/compare-verify.mjs   # cross-language diff (CI gate)
 ```
+
+---
+
+## ASK-QUESTION-EQUIVALENCE CONTRACT
+
+The `fixtures-ask-question/*.json` set *is* the equivalence contract for
+Q8 of `plans/ask_question_and_plan_mode_plan.html` — the generic,
+Trajectory-Supervisor-independent ask-question mechanism.
+`adapter/harness/ask_question.py` + the `AskQuestion`/`AskAnswer`/
+`AskResponse`/`SurfaceBlocker` types and helpers in
+`adapter/harness/escalation.py` are hand-mirrored by
+`packages/harness/src/ask-question.ts` +
+`packages/harness/src/nodes/escalate.ts`.
+
+**This contract is deliberately narrower than the resolver's**, same
+carve-out as the Trajectory Supervisor pair: it covers only the
+deterministic parts — schema validation (`AskQuestion`/`AskAnswer`
+construction rules), batching/cap enforcement, the three-tier
+`resolve_ask_mode`/`resolveAskMode` INV-29 resolution, `build_ask_blocker`/
+`buildAskBlocker`'s degrade-vs-batch decision, and `SurfaceBlocker`
+round-tripping. The LLM-authored question *text* itself (Q7's
+`budget_exhausted`/`review_failure` sites still draft nothing — they're
+templated — but any future model-drafted question content) is out of
+scope, same as `compare-supervisor.mjs`'s carve-out.
+
+Each fixture names an `op` (`validate_ask_question`, `make_questions_batch`,
+`validate_ask_answer`, `validate_ask_response`, `resolve_ask_mode`,
+`build_ask_blocker`, `batch_questions`, `refine_deferred_batch`, or
+`surface_blocker_roundtrip`) plus that op's inputs; the runner pair
+(`run_py_ask_question.py` / `run-ts-ask-question.mts`) feeds them through
+the real primitive on each side and reports either a normalised output
+object or `{"threw": true/false}` for the validation ops — the exact
+error *message* text is not part of the contract (Python and TS phrase
+errors differently), only whether each side agrees an input is valid.
+
+One genuine cross-language gap this pass surfaced and fixed rather than
+tracked: `validateAskAnswer` (`packages/harness/src/nodes/escalate.ts`)
+had a `switch` over `kind` with no `default` branch, so a payload
+carrying an unrecognized `kind` (e.g. deserialized from a malformed
+resume payload) silently passed instead of throwing, while the Python
+twin's `AskAnswer.__post_init__` always rejects an unknown `kind`. Fixed
+by adding a `default` case that throws, matching Python — pinned by
+`26-vaa-unknown-kind.json`. `known-discrepancies-ask-question.json` is
+empty; there are no other tracked divergences.
+
+Same three rules as the resolver contract: an algorithm change on either
+side that ships without fixtures proving the other side's `op` output
+still matches must not merge; new behaviour needs a new fixture pinning
+it on both runtimes; a genuine intentional divergence goes in
+`known-discrepancies-ask-question.json` with a reason.
+
+### Coverage
+
+**49 fixtures (2026-09-14).** Per op:
+
+- **`validate_ask_question`** (7) — the min/max option-count boundary (2
+  and 4 valid; 1 and 5 rejected), the `allowMultiple`+`preview` conflict
+  (rejected) and its non-conflicting sibling (accepted), and a
+  free-text-only question (no `options` key at all) constructing cleanly.
+- **`make_questions_batch`** (3) — exactly `MAX_QUESTIONS_PER_BATCH` (4)
+  batches cleanly; 5 is rejected (INV-34); an empty batch is trivially
+  valid.
+- **`validate_ask_answer`** (7) — each of the three `kind`s valid and
+  invalid (empty `selectedLabels`, empty `editText`, empty `freeText`),
+  plus the unknown-`kind` case above.
+- **`validate_ask_response`** (6) — full match (INV-27); a missing answer
+  (INV-28); an answer referencing an unknown question id; multiple
+  selected labels rejected on an `allowMultiple: false` question and
+  accepted on an `allowMultiple: true` one; a 2-question batch with mixed
+  answer kinds all answered.
+- **`resolve_ask_mode`** (9) — the full INV-29 three-tier table: all-on,
+  each tier independently forcing off (global, session, call-site
+  `structured`), and the one-way-override cases proving a narrower tier's
+  `true` never overrides a broader tier's `false`.
+- **`build_ask_blocker`** (7) — effective-on with questions (full Q0 batch
+  shape) vs. effective-off with questions (collapses to the first
+  question's pre-Q0 `question`/`options` shape); both effective states
+  with zero questions (plain `missing_info`-only halt, identical either
+  way); the free-text-only collapse (no `options` key emitted); and the
+  session/call-site override cases forcing collapse even with the global
+  flag on.
+- **`batch_questions`** (3) — 6 candidates over the default cap (4+2
+  deferred, INV-37); exactly the cap (empty deferred); a caller-supplied
+  cap of 2.
+- **`refine_deferred_batch`** (3) — some deferred questions moot after an
+  earlier batch's answers, all moot, and none moot with the cap
+  re-applied to the refined list.
+- **`surface_blocker_roundtrip`** (4) — no `questions` field round-trips
+  byte-identical to a pre-Q0 blocker (INV-26); the legacy single
+  `question`/`options` fields still round-trip; a full multi-question
+  batch; and `header`/`description`/`preview`/`recommended` all
+  round-tripping together.
+
+Result: **49 PASS, 0 tracked discrepancies, 0 untracked.**
+
+### Usage
+
+```bash
+node scripts/harness-conformance/compare-ask-question.mjs   # cross-language diff (CI gate)
+```

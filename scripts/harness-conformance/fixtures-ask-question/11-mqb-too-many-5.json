@@ -1,0 +1,27 @@
+{
+  "id": "11-mqb-too-many-5",
+  "op": "make_questions_batch",
+  "description": "5 questions exceeds MAX_QUESTIONS_PER_BATCH and must be rejected (INV-34)",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "Question 1?"
+    },
+    {
+      "id": "q2",
+      "question": "Question 2?"
+    },
+    {
+      "id": "q3",
+      "question": "Question 3?"
+    },
+    {
+      "id": "q4",
+      "question": "Question 4?"
+    },
+    {
+      "id": "q5",
+      "question": "Question 5?"
+    }
+  ]
+}

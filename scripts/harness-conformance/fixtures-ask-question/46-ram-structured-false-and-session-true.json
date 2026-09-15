@@ -1,0 +1,8 @@
+{
+  "id": "46-ram-structured-false-and-session-true",
+  "op": "resolve_ask_mode",
+  "description": "call-site off wins over an on session and on global",
+  "global_enabled": true,
+  "structured": false,
+  "session_ask_mode": true
+}

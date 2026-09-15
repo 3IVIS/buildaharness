@@ -1,0 +1,38 @@
+{
+  "id": "51-bab-effective-false-collapses-to-single",
+  "op": "build_ask_blocker",
+  "description": "effective ask mode off + questions -> collapses to the pre-Q0 question/options shape from the first question",
+  "global_enabled": false,
+  "structured": true,
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "question": "Confirm deploy?",
+      "options": [
+        {
+          "label": "yes"
+        },
+        {
+          "label": "no"
+        }
+      ]
+    }
+  ],
+  "reason": "cannot_make_progress",
+  "missing_info": [
+    "deploy target unclear"
+  ],
+  "current_task_summary": "preparing a deploy"
+}

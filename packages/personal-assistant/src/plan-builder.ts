@@ -6,6 +6,13 @@ export interface Plan {
   templateName: string
   successCriteria: string
   tasks: DecomposedTaskSpec[]
+  /**
+   * Why this approach, not just what the success criteria are — optional for now since neither
+   * buildPlanFromTemplate's template-personalization call nor any other current producer of a
+   * Plan asks the LLM for one; plan-store.ts's createPlanRecord defaults it to '' when absent.
+   * A future from-scratch drafting path (plan mode's P3) is expected to populate it.
+   */
+  rationale?: string
 }
 
 const PLAN_SCHEMA = {

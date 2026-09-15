@@ -1,5 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/personal-assistant'
-import { normalizeOneLoopMode } from '@buildaharness/personal-assistant'
+import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode } from '@buildaharness/personal-assistant'
 
 /**
  * Browser-side companion to personal-assistant's cli-config.ts — same idea (env-var-name map
@@ -14,6 +14,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   authToken: 'VITE_ASSISTANT_PROXY_TOKEN',
   model: 'VITE_ASSISTANT_MODEL',
   oneLoopMode: 'VITE_ASSISTANT_ONE_LOOP',
+  askMode: 'VITE_ASSISTANT_ASK_MODE',
+  planMode: 'VITE_ASSISTANT_PLAN_MODE',
   enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
   webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
 }
@@ -33,6 +35,14 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   // CLI's ASSISTANT_ONE_LOOP. normalizeOneLoopMode warns-and-defaults on a typo, so a build that
   // sets this at all always resolves to a concrete 'enabled'/'disabled'.
   if (env.VITE_ASSISTANT_ONE_LOOP) overrides.oneLoopMode = normalizeOneLoopMode(env.VITE_ASSISTANT_ONE_LOOP, 'VITE_ASSISTANT_ONE_LOOP')
+  // Q2 of plans/ask_question_and_plan_mode_plan.html — the browser/desktop counterpart of the
+  // CLI's ASSISTANT_ASK_MODE. normalizeAskMode warns-and-defaults on a typo, so a build that
+  // sets this at all always resolves to a concrete 'enabled'/'disabled'.
+  if (env.VITE_ASSISTANT_ASK_MODE) overrides.askMode = normalizeAskMode(env.VITE_ASSISTANT_ASK_MODE, 'VITE_ASSISTANT_ASK_MODE')
+  // P11 of plans/ask_question_and_plan_mode_plan.html — the browser/desktop counterpart of the
+  // CLI's ASSISTANT_PLAN_MODE. normalizePlanMode warns-and-defaults on a typo, so a build that
+  // sets this at all always resolves to a concrete 'gated'/'legacy'.
+  if (env.VITE_ASSISTANT_PLAN_MODE) overrides.planMode = normalizePlanMode(env.VITE_ASSISTANT_PLAN_MODE, 'VITE_ASSISTANT_PLAN_MODE')
   // W8 of plans/browser_web_tools_via_proxy_plan.html — lets a specific build (the hosted /try
   // trial) default web tools on and routed through the proxy, without touching DEFAULT_CONFIG
   // for every other build (dev, self-hosted, etc).

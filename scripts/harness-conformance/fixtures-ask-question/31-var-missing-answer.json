@@ -1,0 +1,42 @@
+{
+  "id": "31-var-missing-answer",
+  "op": "validate_ask_response",
+  "description": "a question with no matching answer must be rejected (INV-28)",
+  "questions": [
+    {
+      "id": "env",
+      "question": "Which environment?",
+      "options": [
+        {
+          "label": "staging"
+        },
+        {
+          "label": "prod"
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "question": "Other?",
+      "options": [
+        {
+          "label": "x"
+        },
+        {
+          "label": "y"
+        }
+      ]
+    }
+  ],
+  "response": {
+    "answers": [
+      {
+        "questionId": "env",
+        "kind": "selected",
+        "selectedLabels": [
+          "staging"
+        ]
+      }
+    ]
+  }
+}

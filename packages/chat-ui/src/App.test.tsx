@@ -24,7 +24,41 @@ vi.mock('@buildaharness/personal-assistant', async () => {
       create: vi.fn(async () => {
         let transcript: FakeTranscriptEntry[] = []
         return {
-          turn: vi.fn(async (message: string, options?: { approved?: boolean; pendingActionId?: string }) => {
+          turn: vi.fn(async (
+            message: string,
+            options?: {
+              approved?: boolean
+              pendingActionId?: string
+              pendingClarificationId?: string
+              clarificationAnswer?: { answers: { questionId: string; kind: string; selectedLabels?: string[] }[] }
+            },
+          ) => {
+            // Q5 (plans/ask_question_and_plan_mode_plan.html): a needs_clarification pause,
+            // resolved by pendingClarificationId + clarificationAnswer exactly like the staged
+            // write/shell/batch pause above is resolved by pendingActionId — never re-derived.
+            if (message.includes('needs clarification')) {
+              if (options?.pendingClarificationId === 'pending-ask-1' && options.clarificationAnswer) {
+                transcript.push({ role: 'user', content: message })
+                const picked = options.clarificationAnswer.answers[0]?.selectedLabels?.join(', ') ?? ''
+                const reply = `Building it in ${picked}.`
+                transcript.push({ role: 'assistant', content: reply })
+                return { status: 'ok', reply }
+              }
+              transcript.push({ role: 'user', content: message })
+              return {
+                status: 'needs_clarification',
+                reply: null,
+                riskLevel: 'MEDIUM',
+                pendingClarificationId: 'pending-ask-1',
+                questions: [
+                  {
+                    id: 'lang',
+                    question: 'Which language should the new service use?',
+                    options: [{ label: 'TypeScript', recommended: true }, { label: 'Python' }],
+                  },
+                ],
+              }
+            }
             // Mirrors a real staged write_file/run_shell_command/batch-research pause
             // (assistant.ts's pendingActionId gate, not the message-level risk gate below):
             // only resolves — either applying or discarding — once the caller resumes with the
@@ -59,6 +93,7 @@ vi.mock('@buildaharness/personal-assistant', async () => {
             return { status: 'ok', reply, riskLevel: 'LOW', usage: { inputTokens: 10, outputTokens: 5 } }
           }),
           getTranscript: vi.fn(async () => transcript),
+          getPlanState: vi.fn(async () => null),
           clearSession: vi.fn(async () => { transcript = [] }),
           undoLastTurn: vi.fn(async () => {
             if (transcript.length === 0) return { undone: false }
@@ -188,6 +223,50 @@ describe('App', () => {
       // simply abandoned — no "Cancelled..." reply was ever produced. Getting this message back
       // proves a real turn({approved: false, pendingActionId}) round trip happened.
       await waitFor(() => expect(screen.getByText('Cancelled — nothing was written or run.')).toBeInTheDocument())
+    })
+  })
+
+  describe('needs_clarification flow (Q5 — AskQuestionCard)', () => {
+    it('renders the real interactive card (not the plain escalation banner) and resolves it on submit', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'needs clarification please')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(screen.getByTestId('ask-question-card')).toBeInTheDocument())
+      // The pre-existing plain-text escalation path must NOT have fired for this result.
+      expect(screen.queryByText('Halted — needs your input')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('radio', { name: /TypeScript/ }))
+      await user.click(screen.getByRole('button', { name: 'Submit' }))
+
+      // Resolves via turn(pendingMessage, { pendingClarificationId, clarificationAnswer }) —
+      // the mock only replies "Building it in..." once that exact round trip happens.
+      await waitFor(() => expect(screen.getByText('Building it in TypeScript.')).toBeInTheDocument())
+      expect(screen.getByText('Answered')).toBeInTheDocument()
+      expect(screen.queryByTestId('ask-question-card')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('needs_clarification flow (Q5 — AskQuestionCard)', () => {
+    it('renders AskQuestionCard for a needs_clarification pause and resolves it on submit', async () => {
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'needs clarification please')
+      await user.click(screen.getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(screen.getByTestId('ask-question-card')).toBeInTheDocument())
+      // TypeScript is `recommended: true` — AskQuestionCard renders it first.
+      await user.click(screen.getByRole('radio', { name: /TypeScript/ }))
+      await user.click(screen.getByRole('button', { name: 'Submit' }))
+
+      // Without threading pendingClarificationId/clarificationAnswer back into turn(), the mock
+      // (mirroring the real AskClarificationService.resolvePendingClarification gate) has no
+      // pending-ask-1 match and re-stages the same question instead of resolving.
+      await waitFor(() => expect(screen.getByText('Answered')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText('Building it in TypeScript.')).toBeInTheDocument())
     })
   })
 

@@ -1,0 +1,31 @@
+{
+  "id": "60-bq-6-candidates-default-cap",
+  "op": "batch_questions",
+  "description": "6 ranked candidates split into a 4-question first batch + 2 deferred (INV-37)",
+  "candidates": [
+    {
+      "id": "c1",
+      "question": "Question about c1?"
+    },
+    {
+      "id": "c2",
+      "question": "Question about c2?"
+    },
+    {
+      "id": "c3",
+      "question": "Question about c3?"
+    },
+    {
+      "id": "c4",
+      "question": "Question about c4?"
+    },
+    {
+      "id": "c5",
+      "question": "Question about c5?"
+    },
+    {
+      "id": "c6",
+      "question": "Question about c6?"
+    }
+  ]
+}

@@ -183,6 +183,13 @@ jobs:
       - name: Harness TS/Python conformance — trajectory supervisor
         run: node scripts/harness-conformance/compare-supervisor.mjs
 
+      # Q8 of plans/ask_question_and_plan_mode_plan.html: the generic ask-question
+      # mechanism's deterministic parts (schema validation, degradation rules,
+      # INV-26/27/28/29/34/37), pinned byte-identical across the twins. Tracked
+      # divergences in known-discrepancies-ask-question.json exit 0, untracked exit 1.
+      - name: Harness TS/Python conformance — ask-question
+        run: node scripts/harness-conformance/compare-ask-question.mjs
+
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest

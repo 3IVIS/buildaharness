@@ -17,6 +17,7 @@
 import type { ILLMClient } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from '../src/assistant.js'
+import type { AskMode } from '../src/ask-mode-flag.js'
 import type { TaskSpec } from './corpus/schema.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
@@ -34,6 +35,7 @@ export type ArmName =
   | 'contradictionOff'
   | 'injectionDetectOff'
   | 'failureMatchOff'
+  | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -53,6 +55,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'contradictionOff',
   'injectionDetectOff',
   'failureMatchOff',
+  'askModeOn',
 ]
 
 /**
@@ -86,6 +89,13 @@ interface RunArmOpts {
    * feature flag this way. E.g. `{ AUDIT_SEMANTIC_CONTRADICTION: '0' }` for `contradictionOff`.
    */
   env?: Record<string, string>
+  /**
+   * Q8 of plans/ask_question_and_plan_mode_plan.html — the `askModeOn` differential arm.
+   * `askMode` is a `PersonalAssistant` constructor option, not an env-gated flag (unlike the
+   * flags above, which harness-bridge.ts reads fresh from `process.env`), so it's threaded
+   * straight through to the constructor call in `runAssistantInner` rather than via `overrides`.
+   */
+  askMode?: AskMode
 }
 
 async function runAssistant(
@@ -110,7 +120,7 @@ async function runAssistant(
     process.env[key] = overrides[key]
   }
   try {
-    return await runAssistantInner(task, makeLlm, oneLoopMode)
+    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode)
   } finally {
     for (const key of Object.keys(overrides)) {
       if (prior[key] === undefined) delete process.env[key]
@@ -123,6 +133,7 @@ async function runAssistantInner(
   task: TaskSpec,
   makeLlm: MakeLlm,
   oneLoopMode: 'enabled' | 'disabled',
+  askMode?: AskMode,
 ): Promise<ArmTurnOutput | null> {
 
   const ws = makeWorkspace(task)
@@ -158,6 +169,7 @@ async function runAssistantInner(
     fileTools: ctx.fileTools,
     shellTools: ctx.shellTools,
     oneLoopMode,
+    askMode,
     onTrace: (e) => {
       sideEvents.push({ t: Date.now(), kind: 'trace', detail: e })
       if (e.kind === 'layer_activity' && e.layer === 'supervisor') {
@@ -320,6 +332,17 @@ export const failureMatchOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_FAILURE_MATCH: '0' } }),
 }
 
+export const askModeOnArm: Arm = {
+  name: 'askModeOn',
+  label:
+    'PersonalAssistant (flagOn) with askMode=enabled — the generic ask-question mechanism (Q0-Q7 of plans/ask_question_and_plan_mode_plan.html) offers a structured, resumable question instead of the plain escalated/reply:null path',
+  // Q8's default-flip gate: baseline for this feature is `flagOn` (askMode stays at
+  // DEFAULT_ASK_MODE = 'disabled', today's behavior); this arm isolates the one differential —
+  // ambiguity-resolution correctness, user-turns-to-resolution, and cost/latency overhead — on
+  // the `ask_*` corpus slice.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { askMode: 'enabled' }),
+}
+
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -336,6 +359,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
+  askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
   baselineArm,
@@ -345,5 +369,6 @@ export const ALL_ARMS: Arm[] = [
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
+  askModeOnArm,
   langgraphArm,
 ]

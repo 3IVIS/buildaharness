@@ -1,0 +1,8 @@
+{
+  "id": "47-ram-all-off",
+  "op": "resolve_ask_mode",
+  "description": "every tier off -> False",
+  "global_enabled": false,
+  "structured": false,
+  "session_ask_mode": false
+}

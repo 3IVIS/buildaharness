@@ -1,0 +1,28 @@
+{
+  "id": "83-sbr-question-with-header-and-recommended",
+  "op": "surface_blocker_roundtrip",
+  "description": "header, description, preview, and recommended fields all round-trip",
+  "blocker": {
+    "reason": "review_failure",
+    "missing_info": [],
+    "current_task_summary": "fixing review violations",
+    "questions": [
+      {
+        "id": "fix",
+        "header": "Fix",
+        "question": "Which fix should I apply?",
+        "options": [
+          {
+            "label": "Adjust format",
+            "description": "reformat only",
+            "recommended": true
+          },
+          {
+            "label": "Add section",
+            "preview": "+ ## New Section\\n..."
+          }
+        ]
+      }
+    ]
+  }
+}

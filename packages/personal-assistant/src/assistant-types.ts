@@ -1,4 +1,4 @@
-import type { RiskState, LayerActivityEvent } from '@buildaharness/harness'
+import type { RiskState, LayerActivityEvent, AskQuestion } from '@buildaharness/harness'
 import type { TokenUsage } from '@buildaharness/runtime'
 import type { AnswerClaim } from './answer-claim.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
@@ -44,7 +44,24 @@ export interface AssistantTrace {
 export type ProposerKind = 'posthoc' | 'flat-oneloop' | 'batch-oneloop'
 
 export interface AssistantTurnResult {
-  status: 'ok' | 'needs_approval' | 'escalated'
+  /**
+   * `needs_clarification` (Q2 of plans/ask_question_and_plan_mode_plan.html): a structured
+   * ask-question escalation (a populated `EscalationHalt.blocker.questions`, Q0) was staged for
+   * resume via AskClarificationService instead of terminating the turn — pass
+   * `pendingClarificationId` + a completed `AskResponse` back into
+   * `turn(message, { pendingClarificationId, clarificationAnswer })` to resolve it. Only reachable
+   * when the effective askMode (Q1's three-tier INV-29 resolution) is enabled; flag-off leaves
+   * every escalation on the pre-existing `escalated`/`reply: null` path, byte-identical to today.
+   */
+  /**
+   * `needs_plan_approval` (P2 of plans/ask_question_and_plan_mode_plan.html): a drafted plan
+   * (plan mode's P1/P3) was staged for the mandatory whole-plan approval gate instead of
+   * continuing to revise — pass `planApprovalId` back into
+   * `turn(message, { planApprovalId, planDecision, edits? })` to resolve it. Every drafted plan
+   * passes through this exactly once, regardless of risk (no risk-tiered skip — see
+   * PlanApprovalService's doc comment).
+   */
+  status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval'
   reply: string | null
   reason?: string
   /** See ProposerKind. Always set (defaults to 'posthoc'), on every status. */
@@ -70,7 +87,7 @@ export interface AssistantTurnResult {
    * every task is COMPLETE or the user abandons it. See plan-store.ts.
    */
   planStatus?: {
-    templateName: string
+    templateName: string | null
     successCriteria: string
     completionPct: number
     tasks: { id: string; description: string; status: string }[]
@@ -100,6 +117,26 @@ export interface AssistantTurnResult {
    * is computed after the harness run completes, well after streaming finished.
    */
   pausedNote?: string
+  /** Set only on `status: 'needs_clarification'` — pass back into `turn(message, { pendingClarificationId, clarificationAnswer })` to resolve it. See AskClarificationService. */
+  pendingClarificationId?: string
+  /** The batch of questions `pendingClarificationId` refers to — set only on `status: 'needs_clarification'`, absent otherwise (same "absent when unused" convention as trace/sources). */
+  questions?: AskQuestion[]
+  /** Set only on `status: 'needs_plan_approval'` — pass back into `turn(message, { planApprovalId, planDecision, edits? })` to resolve it. See PlanApprovalService. */
+  planApprovalId?: string
+  /**
+   * The staged plan `planApprovalId` refers to — set only on `status: 'needs_plan_approval'`,
+   * absent otherwise (same "absent when unused" convention as trace/sources). Each task's own
+   * `riskLevel` is included so an approval screen can show it prominently even though nothing
+   * about risk ever skips this gate (Section 5b-2). `reviewNotes` stays absent until P6's
+   * self-verification pass exists.
+   */
+  planApproval?: {
+    templateName: string | null
+    successCriteria: string
+    rationale: string
+    tasks: { id: string; description: string; riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' }[]
+    reviewNotes?: string[]
+  }
 }
 
 export interface AssistantProgress {

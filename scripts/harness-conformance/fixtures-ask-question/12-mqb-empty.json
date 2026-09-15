@@ -1,0 +1,6 @@
+{
+  "id": "12-mqb-empty",
+  "op": "make_questions_batch",
+  "description": "an empty batch is trivially valid",
+  "questions": []
+}
