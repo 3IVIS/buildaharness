@@ -203,17 +203,51 @@ export class MemoryService {
     private readonly experienceStore: ExperienceStore,
     private readonly llmClient: ILLMClient,
     private readonly model: () => string | undefined,
+    /** Resolves to `config.activeProject` if the user set one via `/project <name>`, else the workspace root — read through a getter (same convention as `model` above) so a mid-session `/project`/`/config set activeProject` change takes effect on the very next turn. See UserFact.project's doc comment for how this is used. */
+    private readonly currentProject: () => string = () => '',
   ) {}
 
-  /** Durable + session facts for `sessionId`, plus the ready-to-splice system-prompt block — see runTurn's former factsBlock. */
+  /**
+   * Durable + session facts for `sessionId`, plus the ready-to-splice system-prompt block — see
+   * runTurn's former factsBlock. `facts` is the full inventory, unfiltered by project — `/memory`
+   * (getMemorySummary) needs to show and let the user forget a fact regardless of which project is
+   * currently active. `factsBlock` — what the model actually sees this turn — filters to
+   * global-or-current-project only, so an unrelated project's facts don't leak into context (see
+   * UserFact.project's doc comment).
+   */
   async loadFacts(sessionId: string): Promise<{ facts: UserFact[]; factsBlock: string }> {
     const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
-    const factsBlock = facts.length > 0
-      ? `\nKnown facts about the user:\n${facts.slice(-FACT_CAP).map(factLine).join('\n')}`
+    const project = this.currentProject()
+    const inScope = facts.filter((f) => f.project === undefined || f.project === project)
+    const factsBlock = inScope.length > 0
+      ? `\nKnown facts about the user:\n${inScope.slice(-FACT_CAP).map(factLine).join('\n')}`
       : ''
     return { facts, factsBlock }
+  }
+
+  /**
+   * `/memory forget <n>` — removes the nth entry (1-based in `/memory`'s "Facts I know" display,
+   * 0-based here) from whichever store(s) it actually lives in. `index` is over the same merged,
+   * durable-first ordering `loadFacts()`/`getMemorySummary()` already produce, so the number a user
+   * sees in `/memory` is the number they pass here — no separate "durable index" vs "session index"
+   * to track. A fact that's both durable and session-scoped under an identical restated text (see
+   * mergeFacts's dedup) is removed from both stores by `sameFact` identity, not just the copy that
+   * happened to win the display dedup. Returns undefined for an out-of-range index (the caller's
+   * `/memory` view is stale — nothing to forget).
+   */
+  async forgetFact(index: number, sessionId: string): Promise<UserFact | undefined> {
+    const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const merged = mergeFacts(durableFacts, sessionFacts)
+    if (index < 0 || index >= merged.length) return undefined
+    const fact = merged[index]
+    const remainingDurable = durableFacts.filter((f) => !sameFact(f, fact))
+    const remainingSession = sessionFacts.filter((f) => !sameFact(f, fact))
+    if (remainingDurable.length !== durableFacts.length) await this.memory.set(DURABLE_FACTS_KEY, remainingDurable)
+    if (remainingSession.length !== sessionFacts.length) await this.memory.set(`facts:${sessionId}`, remainingSession)
+    return fact
   }
 
   /**
@@ -275,7 +309,15 @@ export class MemoryService {
     statedFacts: StatedFact[],
     onUsage?: (usage: TokenUsage) => void,
   ): Promise<RecordFactsResult> {
-    const newFacts = buildTurnFacts(sessionId, userMessage, statedFacts)
+    // Only a fact classified `category: 'project'` gets scoped — everything else (identity,
+    // health, preference, ...) is inherently about the user, not a codebase, and stays global
+    // regardless of which project is active. An empty currentProject() (no workspace/override
+    // resolved — see the constructor's default) leaves the fact unscoped rather than tagging it
+    // with a meaningless empty string.
+    const project = this.currentProject()
+    const newFacts = buildTurnFacts(sessionId, userMessage, statedFacts).map((f) =>
+      f.category === 'project' && project ? { ...f, project } : f,
+    )
     // A no-op turn (neither pass found anything) must stay a true no-op — no store touched at
     // all, not even an empty-array write — matching every reader that treats an absent key the
     // same as an empty one, and the "records nothing" test's expectation that the key itself

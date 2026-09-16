@@ -19,7 +19,7 @@ export type FactConfidence = 'high' | 'medium' | 'low'
  * plans/personal_assistant_fact_extraction_llm_confidence_plan.html) can group entries stably
  * instead of drifting between synonyms ("job"/"occupation"/"work") for the same underlying topic.
  */
-export type FactCategory = 'identity' | 'health' | 'preference' | 'location' | 'occupation' | 'relationships' | 'other'
+export type FactCategory = 'identity' | 'health' | 'preference' | 'location' | 'occupation' | 'relationships' | 'project' | 'other'
 
 export interface StatedFact {
   text: string
@@ -141,7 +141,7 @@ const TASK_SCHEMA = {
   required: ['id', 'description', 'depends_on', 'riskLevel'],
 }
 
-const FACT_CATEGORIES = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'other']
+const FACT_CATEGORIES = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'project', 'other']
 
 const STATED_FACT_SCHEMA = {
   type: 'object',
@@ -237,16 +237,20 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'Priya, I\'m vegetarian, and I live in Austin" is three entries) — return all of them, not just ' +
   'the first. Return an empty array if the message states no fact about the user. Each entry has: ' +
   '`text`, the fact restated concisely in the third person (e.g. "the user is allergic to ' +
-  'peanuts"); `durable`, true only for identity/safety-relevant facts meant to persist indefinitely ' +
-  '(name, stated preference, health/dietary) — false for something expected to change (current ' +
-  'location, current job, one-off context); `confidence`, judged against an observable criterion, ' +
+  'peanuts"); `durable`, true for identity/safety-relevant facts meant to persist indefinitely ' +
+  '(name, stated preference, health/dietary) and equally true for a stable fact about a project\'s ' +
+  'architecture, tech stack, or conventions (e.g. "the project uses PostgreSQL") since those persist ' +
+  'the same way a preference does — false for something expected to change (current location, ' +
+  'current job, one-off context, or a one-off status update like "currently debugging the auth ' +
+  'flow"); `confidence`, judged against an observable criterion, ' +
   'not a self-reported guess — `high` if the user states it directly and unhedged about themselves ' +
   'in first person ("I\'m allergic to peanuts", "my name is Priya"); `medium` if stated about ' +
   'themselves but hedged, indirect, or inferred from context rather than asserted outright ("I ' +
   'think I might be lactose intolerant", a fact implied by something else they said); `low` if it ' +
   'is a weak inference, or a statement primarily about a third party that is only tangentially ' +
   'about the user; and `category`, one of identity, health, preference, location, occupation, ' +
-  'relationships, other.\n\n' +
+  'relationships, project (a fact about a codebase/project the user is working on — its stack, ' +
+  'conventions, architecture, or current focus — rather than about the user personally), other.\n\n' +
   '8. needsMultiStepPlan: true if the request genuinely needs a multi-step, durable plan built and ' +
   'tracked — even though it does not match one of the 7 named kinds in judgment 6 — because its ' +
   'natural completion criteria requires several dependent steps most people would want to see ' +
@@ -261,7 +265,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
-  '"location"|"occupation"|"relationships"|"other"}]}'
+  '"location"|"occupation"|"relationships"|"project"|"other"}]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown

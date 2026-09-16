@@ -43,6 +43,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   oneLoopMode: 'ASSISTANT_ONE_LOOP',
   askMode: 'ASSISTANT_ASK_MODE',
   planMode: 'ASSISTANT_PLAN_MODE',
+  activeProject: 'ASSISTANT_ACTIVE_PROJECT',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -110,6 +111,7 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   // resolvePlanMode already warns-and-defaults on an unrecognized value, so an explicit
   // ASSISTANT_PLAN_MODE always resolves to a concrete 'gated'/'legacy' override here.
   if (env.ASSISTANT_PLAN_MODE !== undefined) overrides.planMode = resolvePlanMode(env)
+  if (env.ASSISTANT_ACTIVE_PROJECT !== undefined) overrides.activeProject = env.ASSISTANT_ACTIVE_PROJECT
   return overrides
 }
 

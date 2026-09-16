@@ -148,6 +148,9 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
   return PersonalAssistant.create({
     llmClient,
     model: config.model,
+    // config.activeProject (set via /project <name>) overrides the default of "the workspace
+    // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
+    activeProject: config.activeProject || workspaceRoot,
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
@@ -303,6 +306,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // start) and everything from here to the rl.on('line', ...)/rl.resume() pair at the bottom
   // runs synchronously with no further awaits, so the listener is always in place first.
   rl.pause()
+
+  // With no 'SIGINT' listener, readline's own Ctrl+C handling just pauses the interface
+  // instead of exiting (see readline's 'SIGINT' event docs) — silently contradicting the
+  // startup banner's "Ctrl+C to exit". Registering this listener makes Ctrl+C actually exit.
+  rl.on('SIGINT', () => {
+    console.log('\nExiting.')
+    process.exit(0)
+  })
 
   // Display-only defaults, mirroring each backend's own fallback so the banner shows the
   // model that will actually be used even when config.model is unset — not authoritative
@@ -694,7 +705,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log(`\n${formatMemoryPendingOutcome(action === 'confirm' ? 'confirmed' : 'rejected', outcome)}\n`)
   }
 
-  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending). */
+  /** `/memory forget <n>` — removes an already-durable/session fact by its `/memory` display number. Unlike confirm/reject, there's no category form (see PersonalAssistant.forgetFact's doc comment). */
+  async function handleMemoryForget(args: string[]): Promise<void> {
+    const selector = args[0]
+    if (!selector) {
+      console.log('\nUsage: /memory forget <n>\n')
+      return
+    }
+    const outcome = await assistant.forgetFact(selector, 'cli')
+    console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
+  }
+
+  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending); `/memory forget <n>` removes an already-learned fact (see handleMemoryForget). */
   async function handleMemory(args: string[]): Promise<void> {
     if (args[0] === 'export') {
       await handleMemoryExport(args.slice(1))
@@ -702,6 +724,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     if (args[0] === 'confirm' || args[0] === 'reject') {
       await handleMemoryPending(args[0], args.slice(1))
+      return
+    }
+    if (args[0] === 'forget') {
+      await handleMemoryForget(args.slice(1))
       return
     }
     await printMemory()
@@ -977,7 +1003,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     let streamedAnyTokens = false
     function writeToken(token: string): void {
       if (!streamedAnyTokens) {
-        process.stdout.write('\nassistant> ')
+        process.stdout.write('\nAielia> ')
         streamedAnyTokens = true
       }
       process.stdout.write(token)
@@ -1131,7 +1157,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
         process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
       } else {
-        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
+        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
@@ -1290,6 +1316,25 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     await handleConfigCommand(['set', 'model', args.join(' ')])
   }
 
+  /**
+   * Thin convenience wrapper over /config set|reset activeProject — same relationship handleModel
+   * has to /config set model. Bare /project shows the resolved current value (an explicit override
+   * if one is set, else the workspace root buildAssistant derived it from — see
+   * PersonalAssistant.getActiveProject's doc comment for why this is never itself undefined once
+   * the assistant is built). /project clear reverts to that workspace-derived default.
+   */
+  async function handleProject(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      console.log(`\n${assistant.getActiveProject() || '(none)'}\n`)
+      return
+    }
+    if (args[0] === 'clear') {
+      await handleConfigCommand(['reset', 'activeProject'])
+      return
+    }
+    await handleConfigCommand(['set', 'activeProject', args.join(' ')])
+  }
+
   // A lookup keyed by the message's first whitespace-separated token — replaces what used to
   // be a growing `if (message === '/why') ... if (message === '/sources') ...` chain. Each
   // handler receives the remaining tokens as `args` (empty for commands that take none).
@@ -1310,6 +1355,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     '/memory': (args) => handleMemory(args),
     '/search': (args) => handleSearch(args),
     '/model': (args) => handleModel(args),
+    '/project': (args) => handleProject(args),
     '/cost': () => printCost(),
     '/doctor': () => handleDoctor(),
     '/config': (args) => handleConfigCommand(args),

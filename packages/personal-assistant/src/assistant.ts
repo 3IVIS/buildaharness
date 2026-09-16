@@ -77,7 +77,7 @@ export type MemoryPendingOutcome =
   | { ok: true; facts: UserFact[]; conflictNotices: string[] }
   | { ok: false; error: string }
 
-const FACT_CATEGORIES: FactCategory[] = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'other']
+const FACT_CATEGORIES: FactCategory[] = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'project', 'other']
 
 /** `selector` matches a FactCategory name (case-insensitive) — used by confirmPendingFact/rejectPendingFact to distinguish `/memory confirm health` from `/memory confirm 3`. */
 function asFactCategory(selector: string): FactCategory | undefined {
@@ -160,6 +160,15 @@ export interface TurnOptions {
 export interface PersonalAssistantOptions {
   llmClient: ILLMClient
   model?: string
+  /**
+   * The already-resolved project label a project-scoped fact gets tagged with and filtered
+   * against — see UserFact.project's doc comment. Callers resolve `config.activeProject ??
+   * workspaceRoot` themselves (cli.ts's buildAssistant) before passing it in; PersonalAssistant
+   * doesn't know about workspaceRoot itself (it's a per-tool option, not assistant-wide — see
+   * fileTools/shellTools/actionTools). Undefined/empty leaves every fact unscoped, matching a
+   * fresh install with no workspace concept at all.
+   */
+  activeProject?: string
   /** Conversation transcript storage — defaults to an in-process Map, swap for IndexedDBAdapter in the browser. */
   memory?: MemoryAdapter
   /** Learning-layer store — persist and pass the same instance back in across sessions to retain strategy weights. */
@@ -290,6 +299,7 @@ export interface PersonalAssistantOptions {
 export class PersonalAssistant {
   private readonly llmClient: ILLMClient
   private model?: string
+  private activeProject?: string
   private readonly memory: MemoryAdapter
   private readonly webTools?: WebToolsContext
   private readonly onTrace?: (event: TraceEvent) => void
@@ -328,6 +338,7 @@ export class PersonalAssistant {
   constructor(options: PersonalAssistantOptions) {
     this.llmClient = options.llmClient
     this.model = options.model
+    this.activeProject = options.activeProject
     this.memory = options.memory ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant' })
     const experienceStore = options.experienceStore ?? new InMemoryExperienceStore()
     const checkpointStore = options.checkpointStore ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-checkpoints' })
@@ -350,8 +361,11 @@ export class PersonalAssistant {
     // reads the current model, so `setModel()` (the `/model` command) keeps working for all of
     // them mid-session instead of freezing whichever model was set at construction time.
     const model = (): string | undefined => this.model
+    // Same getter-closure convention as `model` above — MemoryService reads this fresh on every
+    // recordFacts()/loadFacts() call, so setActiveProject() takes effect on the very next turn.
+    const currentProject = (): string => this.activeProject ?? ''
 
-    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model)
+    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model, currentProject)
     this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools, actionTools)
     this.agentLoop = new AgentLoop(
       this.memory,
@@ -621,6 +635,21 @@ export class PersonalAssistant {
     return { ok: true, facts: [fact], conflictNotices: [] }
   }
 
+  /**
+   * `/memory forget <n>` — `n` is a 1-based index into `/memory`'s "Facts I know" listing (durable
+   * facts first, then session facts — the same order `getMemorySummary()` returns). Unlike
+   * confirm/reject, there's no category form: a durable/session fact carries no `category` field,
+   * only pending model-inferred guesses do. Hard-deletes rather than routing through
+   * REJECTED_FACTS_KEY — see MemoryService.forgetFact's doc comment.
+   */
+  async forgetFact(selector: string, sessionId: string): Promise<MemoryPendingOutcome> {
+    const index = parsePendingIndex(selector)
+    if (index === undefined) return { ok: false, error: 'Usage: /memory forget <n>' }
+    const fact = await this.memoryService.forgetFact(index, sessionId)
+    if (!fact) return { ok: false, error: `No fact #${index + 1}.` }
+    return { ok: true, facts: [fact], conflictNotices: [] }
+  }
+
   /** Ranked search over the per-message index — see AssistantSession.searchTranscript's doc comment. Used by `/search`. */
   async searchTranscript(query: string, topK = 10): Promise<TranscriptSearchHit[]> {
     return this.session.searchTranscript(query, topK)
@@ -629,6 +658,16 @@ export class PersonalAssistant {
   /** Changes the model used by every subsequent `turn()` call, mid-session — no reconstruction needed. Used by `/model`. Every collaborator constructed above reads this field through a getter closure, never a captured string, so this takes effect for all of them immediately. */
   setModel(model: string | undefined): void {
     this.model = model
+  }
+
+  /** The project label new project-scoped facts are tagged with and existing ones are filtered against this session — see UserFact.project's doc comment. Empty string when none is set (cli.ts's buildAssistant always resolves one from workspaceRoot, but a bare `new PersonalAssistant()` with no `activeProject` option should read as "no project concept" rather than `undefined`). */
+  getActiveProject(): string {
+    return this.activeProject ?? ''
+  }
+
+  /** Mid-session override for `activeProject`, mirroring setModel — takes effect on the very next turn via the same getter-closure MemoryService already reads through. Used by `/project <name>` outside the CLI's own /config-set-and-reload path (e.g. a future non-CLI embedder). */
+  setActiveProject(project: string | undefined): void {
+    this.activeProject = project
   }
 
   /**

@@ -37,11 +37,11 @@ class QueuedStructuredLLMClient implements ILLMClient {
 
 const EMPTY_CHECK = JSON.stringify({ contradictions: [], corroborations: [] })
 
-function newService(llm: ILLMClient): { service: MemoryService; memory: InMemoryAdapter } {
+function newService(llm: ILLMClient, currentProject?: () => string): { service: MemoryService; memory: InMemoryAdapter } {
   const memory = new InMemoryAdapter({ scope: 'thread', namespace: `memory-service-test-${Math.random()}` })
   const reminderStore = new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'reminders' }))
   const experienceStore = new InMemoryExperienceStore()
-  return { service: new MemoryService(memory, reminderStore, experienceStore, llm, () => undefined), memory }
+  return { service: new MemoryService(memory, reminderStore, experienceStore, llm, () => undefined, currentProject), memory }
 }
 
 const statedFact = (overrides: Partial<StatedFact> = {}): StatedFact => ({
@@ -200,6 +200,36 @@ describe('MemoryService.loadFacts factsBlock confidence annotation', () => {
   })
 })
 
+describe('MemoryService project scoping', () => {
+  it('recordFacts stamps a category:"project" fact with currentProject(), leaving other categories global', async () => {
+    const llm = new QueuedStructuredLLMClient([EMPTY_CHECK])
+    const { service, memory } = newService(llm, () => '/repo/a')
+    await service.recordFacts('s1', 'a', [
+      statedFact({ text: 'uses PostgreSQL', category: 'project', confidence: 'high' }),
+      statedFact({ text: 'the user is vegetarian', category: 'preference', confidence: 'high' }),
+    ])
+    const sessionFacts = (await memory.get('facts:s1')) as UserFact[]
+    expect(sessionFacts.find((f) => f.text === 'uses PostgreSQL')?.project).toBe('/repo/a')
+    expect(sessionFacts.find((f) => f.text === 'the user is vegetarian')?.project).toBeUndefined()
+  })
+
+  it('loadFacts factsBlock includes global facts and current-project facts, excluding other projects’', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]), () => '/repo/a')
+    await memory.set(DURABLE_FACTS_KEY, [
+      userFact({ text: 'global fact' }),
+      userFact({ text: 'repo-a fact', category: 'project', project: '/repo/a' }),
+      userFact({ text: 'repo-b fact', category: 'project', project: '/repo/b' }),
+    ])
+    const { facts, factsBlock } = await service.loadFacts('s1')
+    // getMemorySummary/`/memory` always sees the full inventory, regardless of active project.
+    expect(facts.map((f) => f.text).sort()).toEqual(['global fact', 'repo-a fact', 'repo-b fact'])
+    // The turn's actual context only gets global-or-current-project facts.
+    expect(factsBlock).toContain('global fact')
+    expect(factsBlock).toContain('repo-a fact')
+    expect(factsBlock).not.toContain('repo-b fact')
+  })
+})
+
 describe('MemoryService confirm/reject', () => {
   it('confirmPendingFact promotes by 0-based index and removes it from the pending store', async () => {
     const llm = new QueuedStructuredLLMClient([EMPTY_CHECK, EMPTY_CHECK])
@@ -266,5 +296,44 @@ describe('MemoryService confirm/reject', () => {
     const pending = (await memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[]
     expect(pending.map((f) => f.text)).toEqual(['location fact'])
     expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).map((f) => f.text).sort()).toEqual(['health fact', 'health fact 2'])
+  })
+})
+
+const userFact = (overrides: Partial<UserFact> = {}): UserFact => ({
+  text: 'fact',
+  extractedAt: '2026-01-01T00:00:00.000Z',
+  sourceTurn: 'turn:test',
+  durable: true,
+  source: 'user_asserted',
+  ...overrides,
+})
+
+describe('MemoryService.forgetFact', () => {
+  it('removes a durable fact by its 1-based /memory display index (0-based here)', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    await memory.set(DURABLE_FACTS_KEY, [userFact({ text: 'fact A' }), userFact({ text: 'fact B' })])
+
+    const forgotten = await service.forgetFact(0, 's1')
+    expect(forgotten?.text).toBe('fact A')
+    expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).map((f) => f.text)).toEqual(['fact B'])
+  })
+
+  it('removes a session-scoped fact that lives past the durable list in the merged ordering', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    await memory.set(DURABLE_FACTS_KEY, [userFact({ text: 'durable fact' })])
+    await memory.set('facts:s1', [userFact({ text: 'session fact', extractedAt: '2026-01-02T00:00:00.000Z' })])
+
+    const forgotten = await service.forgetFact(1, 's1')
+    expect(forgotten?.text).toBe('session fact')
+    expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).map((f) => f.text)).toEqual(['durable fact'])
+    expect((await memory.get('facts:s1') as UserFact[])).toEqual([])
+  })
+
+  it('returns undefined for an out-of-range index and leaves the stores untouched', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    await memory.set(DURABLE_FACTS_KEY, [userFact({ text: 'fact A' })])
+
+    expect(await service.forgetFact(5, 's1')).toBeUndefined()
+    expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).map((f) => f.text)).toEqual(['fact A'])
   })
 })

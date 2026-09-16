@@ -62,6 +62,25 @@ export interface UserFact {
    * `/memory` grouping needs — see that file's `PendingFact`.
    */
   category?: FactCategory
+  /**
+   * The project label this fact is scoped to — undefined means global (always shown, regardless
+   * of which project is active). Set by `MemoryService.recordFacts()`/`buildTurnFacts()` only for
+   * a fact classified `category: 'project'` (see FactCategory), using whatever
+   * `PersonalAssistant`'s `currentProject()` getter resolves to at capture time: an explicit
+   * `config.activeProject` override if the user set one via `/project <name>`, else the workspace
+   * root the assistant is running in. A fact in any other category is inherently about the user,
+   * not a codebase, so it stays global on purpose even while a project is active.
+   * `loadFacts()`/`getMemorySummary()` still return every fact regardless of `project` — only the
+   * turn's `factsBlock` (what the model actually sees) filters to global-or-current-project, so
+   * `/memory` stays a complete inventory the user can review/forget from regardless of which
+   * project is currently active.
+   */
+  project?: string
+}
+
+/** Every fact has a certainty for `/memory` display purposes, even one with no `confidence` gradient (user_asserted/observed/externally_verified) — those are exactly as certain as a stated fact gets, so they display as 'high' rather than blank. Never used for promotion/tier logic, which still reads `fact.confidence` directly and treats undefined as "no LLM confidence signal" (see that field's own doc comment) — this is purely a rendering convenience. */
+export function certaintyLabel(fact: UserFact): FactConfidence {
+  return fact.confidence ?? 'high'
 }
 
 // Old, pre-Phase-5 on-disk facts (Dexie `entries` table, keys `facts:<sessionId>`/
