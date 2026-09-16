@@ -27,7 +27,7 @@ import {
 import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
-import { extractFactsFromTurn, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
+import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
@@ -60,6 +60,17 @@ export interface HarnessRunParams {
   sessionId: string
   userMessage: string
   facts: UserFact[]
+  /**
+   * Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: this turn's
+   * merged lexical+LLM fact list — memory-service.ts's `buildTurnFacts()`, the exact helper
+   * `recordFacts()` itself uses to decide what to write to the fact stores — fed into
+   * `factExtractor` below as this turn's "isNew" belief seed. Replaces this file's former direct
+   * `extractFactsFromTurn(objective, runId)` call, which only ever saw the free lexical pass and
+   * left a same-turn LLM-caught fact invisible to contradiction detection until (if ever) a later
+   * turn's re-seed. Defaults to `[]` when omitted, matching pre-Phase-4 behavior for a caller that
+   * doesn't supply it.
+   */
+  currentTurnFacts?: UserFact[]
   draftReply: string
   classification: TurnIntentClassification
   initialTasks: Task[]
@@ -133,7 +144,7 @@ export class HarnessBridge {
   ) {}
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -190,24 +201,31 @@ export class HarnessBridge {
     // than one turn's own facts to work with, no matter how long the conversation runs. Seeded
     // once per turn (not once per task, unlike the current-turn extraction below) — every task
     // in a multi-task turn re-deriving the same prior beliefs would just duplicate them.
+    // isNew:true marks a fact this turn's message actually stated — see harness-runtime.ts's
+    // world_model layer_activity report, which only surfaces one of these as "Remembered: ...".
+    // Computed once, outside factExtractor: ctx.objective never changes across tasks within one
+    // run (harness-runtime.ts's buildInitialContext fixes it to the run's initial objective,
+    // always this turn's userMessage for personal-assistant), so re-deriving it per call would
+    // just repeat the same work. Phase 4: this is currentTurnFacts (memory-service.ts's
+    // buildTurnFacts() merge of the lexical pass and classifyTurnIntent's statesDurableFacts),
+    // not just the lexical pass — an LLM-caught fact is now visible to this turn's contradiction
+    // detection immediately, not just written to the session store and left for a later turn's
+    // re-seed. Deliberately unfiltered by tier here, same as before this phase: these are new
+    // candidate statements to check against Knowledge, not Knowledge themselves.
+    const currentTurnFactStatements = currentTurnFacts.map(f => ({ statement: f.text, isNew: true }))
     let priorFactsSeeded = false
-    const factExtractor = (objective: string): Array<{ statement: string; isNew?: boolean }> => {
-      // isNew:true marks a fact this turn's message actually stated — see harness-runtime.ts's
-      // world_model layer_activity report, which only surfaces one of these as "Remembered:
-      // ...". Prior facts are re-seeded so the contradiction checker has something to compare
-      // against, but they're not new this turn and shouldn't be reported as if they were.
-      const currentTurnFacts = extractFactsFromTurn(objective, runId).map(f => ({ statement: f.text, isNew: true }))
-      if (priorFactsSeeded) return currentTurnFacts
+    const factExtractor = (_objective: string): Array<{ statement: string; isNew?: boolean }> => {
+      // Prior facts are re-seeded so the contradiction checker has something to compare against,
+      // but they're not new this turn and shouldn't be reported as if they were.
+      if (priorFactsSeeded) return currentTurnFactStatements
       priorFactsSeeded = true
       // Phase E / criticism001 #8: contradiction detection reads the Knowledge tier only — a
       // model_inferred musing recorded on some earlier turn (classifyTurnIntent's unconfirmed
-      // statesDurableFact guess, see fact-extraction.ts's recordFacts doc comment) must not
+      // statesDurableFacts guess, see fact-extraction.ts's recordFacts doc comment) must not
       // re-enter the belief pool on a later turn and get treated as an established fact to
-      // contradict against. Every fact this file's own extractFactsFromTurn call below produces
-      // is already user_asserted, so this filter is a no-op for currentTurnFacts and only ever
-      // narrows the re-seeded prior set.
+      // contradict against unless it earned Knowledge-tier promotion (Phase 4's tierForFact rule).
       const priorFacts = facts.filter(f => isKnowledgeTier(tierForFact(f))).slice(-FACT_CAP).map(f => ({ statement: f.text }))
-      return [...priorFacts, ...currentTurnFacts]
+      return [...priorFacts, ...currentTurnFactStatements]
     }
 
     try {
@@ -282,11 +300,11 @@ export class HarnessBridge {
         // lexical / negation-pair check only. Default ON — unchanged shipped behaviour.
         contradictionChecker: semanticContradictionEnabled()
           ? async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
-              const results = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
+              const { contradictions } = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
               const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
               const seen = await this.assistantSession.getNotifiedContradictions(sessionId)
-              const filtered: typeof results = []
-              for (const c of results) {
+              const filtered: typeof contradictions = []
+              for (const c of contradictions) {
                 const signature = [...c.beliefIds].map((id) => statementById.get(id) ?? id).sort().join(' ')
                 if (seen.has(signature)) continue
                 await this.assistantSession.recordNotifiedContradiction(sessionId, seen, signature)

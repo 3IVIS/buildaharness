@@ -49,7 +49,7 @@ function response(overrides: Record<string, unknown> = {}): string {
     isAbandonRequest: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
-    statesDurableFact: null,
+    statesDurableFacts: [],
     ...overrides,
   })
 }
@@ -71,7 +71,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       isAbandonRequest: false,
       matchedPlanTemplate: null,
       needsMultiStepPlan: false,
-      statesDurableFact: null,
+      statesDurableFacts: [],
     })
     expect(llm.calls).toBe(1)
   })
@@ -242,32 +242,69 @@ describe('classifyTurnIntent — happy path field derivation', () => {
   })
 })
 
-describe('classifyTurnIntent — statesDurableFact', () => {
-  it('passes through a stated fact', async () => {
+describe('classifyTurnIntent — statesDurableFacts', () => {
+  it('passes through a single stated fact', async () => {
     const llm = new StructuredOnlyLLMClient(
-      response({ statesDurableFact: { text: 'the user is allergic to peanuts', durable: true } }),
+      response({ statesDurableFacts: [{ text: 'the user is allergic to peanuts', durable: true, confidence: 'high', category: 'health' }] }),
     )
     const result = await classifyTurnIntent("I'm allergic to peanuts.", llm, NO_PLAN)
-    expect(result.statesDurableFact).toEqual({ text: 'the user is allergic to peanuts', durable: true })
+    expect(result.statesDurableFacts).toEqual([{ text: 'the user is allergic to peanuts', durable: true, confidence: 'high', category: 'health' }])
   })
 
-  it('defaults to null when the message states no fact', async () => {
-    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: null }))
+  it('passes through more than one fact stated in the same turn', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        statesDurableFacts: [
+          { text: 'the user is named Priya', durable: true, confidence: 'high', category: 'identity' },
+          { text: 'the user is vegetarian', durable: true, confidence: 'high', category: 'preference' },
+          { text: 'the user lives in Austin', durable: false, confidence: 'high', category: 'location' },
+        ],
+      }),
+    )
+    const result = await classifyTurnIntent("I'm Priya, I'm vegetarian, and I live in Austin.", llm, NO_PLAN)
+    expect(result.statesDurableFacts).toHaveLength(3)
+  })
+
+  it('defaults to an empty array when the message states no fact', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ statesDurableFacts: [] }))
     const result = await classifyTurnIntent('What time is it in Tokyo?', llm, NO_PLAN)
-    expect(result.statesDurableFact).toBeNull()
+    expect(result.statesDurableFacts).toEqual([])
   })
 
-  it('treats a malformed statesDurableFact (missing durable) as null rather than failing the whole classification', async () => {
-    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: { text: 'the user likes tea' } }))
-    const result = await classifyTurnIntent('I really like tea.', llm, NO_PLAN)
-    expect(result.statesDurableFact).toBeNull()
+  it('drops a malformed entry (missing durable) rather than failing the whole classification', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        statesDurableFacts: [
+          { text: 'the user likes tea', confidence: 'high', category: 'preference' },
+          { text: 'the user likes coffee', durable: false, confidence: 'medium', category: 'preference' },
+        ],
+      }),
+    )
+    const result = await classifyTurnIntent('I really like tea and coffee.', llm, NO_PLAN)
+    expect(result.statesDurableFacts).toEqual([{ text: 'the user likes coffee', durable: false, confidence: 'medium', category: 'preference' }])
     expect(result.riskLevel).toBe('LOW') // rest of the classification is unaffected
   })
 
-  it('treats an empty-string text as null', async () => {
-    const llm = new StructuredOnlyLLMClient(response({ statesDurableFact: { text: '', durable: true } }))
+  it('drops an entry with empty-string text', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ statesDurableFacts: [{ text: '', durable: true, confidence: 'high', category: 'other' }] }))
     const result = await classifyTurnIntent('...', llm, NO_PLAN)
-    expect(result.statesDurableFact).toBeNull()
+    expect(result.statesDurableFacts).toEqual([])
+  })
+
+  it('drops an entry with an unrecognized confidence value', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({ statesDurableFacts: [{ text: 'the user is allergic to peanuts', durable: true, confidence: 'certain', category: 'health' }] }),
+    )
+    const result = await classifyTurnIntent("I'm allergic to peanuts.", llm, NO_PLAN)
+    expect(result.statesDurableFacts).toEqual([])
+  })
+
+  it('drops an entry with an unrecognized category value', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({ statesDurableFacts: [{ text: 'the user is allergic to peanuts', durable: true, confidence: 'high', category: 'allergies' }] }),
+    )
+    const result = await classifyTurnIntent("I'm allergic to peanuts.", llm, NO_PLAN)
+    expect(result.statesDurableFacts).toEqual([])
   })
 })
 
@@ -325,7 +362,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     isAbandonRequest: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
-    statesDurableFact: null,
+    statesDurableFacts: [],
   }
 
   it('falls back on malformed JSON instead of throwing, folding the JSON.parse error into riskReason (same classifyError path as a genuine LLM-call throw, since JSON.parse throwing inside parseTurnIntent is likewise a real caught error, not a semantic-validation null-return)', async () => {

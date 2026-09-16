@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractFactsFromTurn, migrateFact, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, tierForFact, type UserFact } from './fact-extraction.js'
 
 describe('extractFactsFromTurn', () => {
   it('captures a message stating the user\'s name', () => {
@@ -459,5 +459,53 @@ describe('migrateFact', () => {
     const modern: UserFact = { ...base, durable: false, source: 'model_inferred' }
     expect(migrateFact(modern)).toEqual(modern)
     expect(migrateFact(modern)).toBe(modern)
+  })
+})
+
+// Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: model_inferred
+// facts are no longer unconditionally episodic — a durable, high-confidence one now routes exactly
+// like a user_asserted fact, while anything short of that stays episodic (excluded from
+// contradiction detection) until confirmation.
+describe('tierForFact — Phase 4 confidence-aware model_inferred routing', () => {
+  const modelInferred = (overrides: Partial<UserFact> = {}): UserFact => ({
+    text: 'the user is vegetarian',
+    extractedAt: '2026-01-01T00:00:00.000Z',
+    sourceTurn: 'turn:1',
+    durable: true,
+    source: 'model_inferred',
+    confidence: 'high',
+    ...overrides,
+  })
+
+  it('routes a durable, high-confidence model_inferred fact to semantic, same as a user_asserted one', () => {
+    expect(tierForFact(modelInferred())).toBe('semantic')
+  })
+
+  it('routes a durable, high-confidence model_inferred identity-shaped statement to identity', () => {
+    expect(tierForFact(modelInferred({ text: 'my name is Priya' }))).toBe('identity')
+  })
+
+  it('routes a durable, high-confidence model_inferred preference-shaped statement to preference', () => {
+    expect(tierForFact(modelInferred({ text: 'I love hiking' }))).toBe('preference')
+  })
+
+  it('keeps a durable, medium-confidence model_inferred fact episodic', () => {
+    expect(tierForFact(modelInferred({ confidence: 'medium' }))).toBe('episodic')
+  })
+
+  it('keeps a durable, low-confidence model_inferred fact episodic', () => {
+    expect(tierForFact(modelInferred({ confidence: 'low' }))).toBe('episodic')
+  })
+
+  it('keeps a high-confidence but non-durable model_inferred fact episodic', () => {
+    expect(tierForFact(modelInferred({ durable: false }))).toBe('episodic')
+  })
+
+  it('keeps a model_inferred fact with no confidence signal at all episodic', () => {
+    expect(tierForFact(modelInferred({ confidence: undefined }))).toBe('episodic')
+  })
+
+  it('keeps an observed fact episodic regardless of durable/confidence', () => {
+    expect(tierForFact({ text: 'build succeeded', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:1', durable: true, source: 'observed' })).toBe('episodic')
   })
 })

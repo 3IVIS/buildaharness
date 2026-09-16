@@ -68,7 +68,7 @@ function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string,
     isAbandonRequest: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
-    statesDurableFact: null,
+    statesDurableFacts: [],
   }
   return JSON.stringify({ ...base, ...override })
 }

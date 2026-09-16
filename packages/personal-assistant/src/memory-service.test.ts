@@ -3,6 +3,7 @@ import { InMemoryAdapter, InMemoryReminderStore, type ChatMessage, type ChatOpti
 import { InMemoryExperienceStore } from '@buildaharness/harness'
 import {
   MemoryService,
+  buildTurnFacts,
   DURABLE_FACTS_KEY,
   PENDING_CONFIRMATION_KEY,
   REJECTED_FACTS_KEY,
@@ -133,6 +134,70 @@ describe('MemoryService.recordFacts', () => {
     expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).some((f) => f.text === 'the user should avoid dairy')).toBe(true)
     expect((await memory.get(PENDING_CONFIRMATION_KEY) as PendingFact[]).some((f) => f.text === 'the user should avoid dairy')).toBe(false)
   })
+
+  // Phase 5's negative case: a genuinely unrelated fact stated in between must not be mistaken
+  // for corroboration of an existing uncertain fact — regression-tests the id-mapping between
+  // checkForContradictions' corroborations output and the uncertain-pool entry it's meant to
+  // upgrade, not just the "happy path" where the right pair is scripted.
+  it('does not mistake an unrelated interposed fact for corroboration of an existing uncertain fact', async () => {
+    const llm = new QueuedStructuredLLMClient([EMPTY_CHECK])
+    const { service, memory } = newService(llm)
+    // Turn 1: capture a low-confidence guess.
+    await service.recordFacts('s1', 'my doctor says I should avoid dairy', [statedFact({ text: 'the user should avoid dairy', confidence: 'low', category: 'health' })])
+
+    // Turn 2: an unrelated fact — scripted checker correctly reports no corroboration, since the
+    // two statements share nothing in common.
+    llm.responses.push(EMPTY_CHECK)
+    await service.recordFacts('s1', 'I live in Denver now', [statedFact({ text: 'the user lives in Denver', confidence: 'high', durable: false, category: 'location' })])
+
+    const session = (await memory.get('facts:s1')) as UserFact[]
+    const dairyFact = session.find((f) => f.text === 'the user should avoid dairy')
+    expect(dairyFact?.confidence).toBe('low')
+    expect(session.some((f) => f.text === 'the user lives in Denver')).toBe(true)
+    expect(await memory.get(PENDING_CONFIRMATION_KEY)).toBeUndefined()
+    expect(await memory.get(DURABLE_FACTS_KEY)).toBeUndefined()
+  })
+})
+
+// Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: confidence must
+// reach the model's own reasoning, not just the promotion logic — an unconfirmed guess spliced
+// into the system prompt unqualified would read exactly as certain as a confirmed fact.
+// Phase 4: exposed so a caller (harness-bridge.ts, via HarnessRunParams.currentTurnFacts) can
+// seed the World Model with the exact same merged list recordFacts() itself writes from.
+describe('buildTurnFacts', () => {
+  it('merges the lexical pass and the LLM list, deduping near-identical text (the same merge recordFacts uses)', () => {
+    const facts = buildTurnFacts('s1', 'My name is Priya.', [statedFact({ text: 'My name is Priya', confidence: 'high', category: 'identity' })])
+    expect(facts).toHaveLength(1)
+    expect(facts[0].source).toBe('user_asserted')
+  })
+
+  it('includes a distinct LLM-caught fact the lexical pass never admits at all', () => {
+    const facts = buildTurnFacts('s1', 'what time is it', [statedFact({ text: 'the user is vegetarian', confidence: 'high', category: 'preference' })])
+    expect(facts).toHaveLength(1)
+    expect(facts[0].source).toBe('model_inferred')
+  })
+})
+
+describe('MemoryService.loadFacts factsBlock confidence annotation', () => {
+  it('annotates medium/low-confidence model_inferred facts as (unconfirmed); leaves high-confidence and user_asserted facts unqualified', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    const facts: UserFact[] = [
+      { text: 'the user is allergic to peanuts', extractedAt: 't1', sourceTurn: 'turn:s1', durable: true, source: 'user_asserted' },
+      { text: 'the user might be lactose intolerant', extractedAt: 't2', sourceTurn: 'turn:s1', durable: true, source: 'model_inferred', confidence: 'medium' },
+      { text: 'the user may be tired lately', extractedAt: 't3', sourceTurn: 'turn:s1', durable: false, source: 'model_inferred', confidence: 'low' },
+      { text: 'the user is definitely vegetarian', extractedAt: 't4', sourceTurn: 'turn:s1', durable: true, source: 'model_inferred', confidence: 'high' },
+    ]
+    await memory.set('facts:s1', facts)
+    const { factsBlock } = await service.loadFacts('s1')
+    const lines = factsBlock.split('\n').filter(Boolean)
+    expect(lines).toEqual([
+      'Known facts about the user:',
+      '- the user is allergic to peanuts',
+      '- the user might be lactose intolerant (unconfirmed)',
+      '- the user may be tired lately (unconfirmed)',
+      '- the user is definitely vegetarian',
+    ])
+  })
 })
 
 describe('MemoryService confirm/reject', () => {
@@ -161,6 +226,16 @@ describe('MemoryService confirm/reject', () => {
     const outcome = await service.confirmPendingFact(0)
     expect(outcome?.conflictNotice).toContain('Boston and Seattle')
     expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[])).toHaveLength(1)
+  })
+
+  it('confirmPendingFact re-sources the confirmed fact to externally_verified and clears confidence (Phase 4)', async () => {
+    const llm = new QueuedStructuredLLMClient([EMPTY_CHECK, EMPTY_CHECK])
+    const { service, memory } = newService(llm)
+    await service.recordFacts('s1', 'a', [statedFact({ text: 'fact A', confidence: 'medium' })])
+    await service.confirmPendingFact(0)
+    const durable = (await memory.get(DURABLE_FACTS_KEY)) as UserFact[]
+    expect(durable[0].source).toBe('externally_verified')
+    expect(durable[0].confidence).toBeUndefined()
   })
 
   it('confirmPendingFact returns undefined for an out-of-range index', async () => {
