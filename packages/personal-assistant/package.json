@@ -43,6 +43,7 @@
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
     "eval:turn-intent": "tsx scripts/eval-turn-intent.ts",
+    "eval:contradiction-checker": "tsx scripts/eval-contradiction-checker.ts",
     "eval:harness-benchmark": "tsx scripts/run-harness-benchmark.ts"
   },
   "dependencies": {

@@ -32,10 +32,11 @@ import { SYSTEM_PROMPT } from './system-prompt.js'
 import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
-import { MemoryService, type MemorySummary, type MemoryExport } from './memory-service.js'
+import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
+import type { UserFact } from './fact-extraction.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
-import type { TurnIntentClassification } from './turn-intent-classifier.js'
+import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
@@ -58,7 +59,8 @@ import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKi
 // in this file; they now live in the module that owns their logic (see each module's own doc
 // comment), and this file re-exports them under their original names so existing imports from
 // './assistant.js' (index.ts, cli.ts, cli-session.ts, assistant.test.ts) keep working unchanged.
-export type { MemorySummary, MemoryExport } from './memory-service.js'
+export type { MemorySummary, MemoryExport, PendingFact } from './memory-service.js'
+export type { FactCategory } from './turn-intent-classifier.js'
 export type { IndexedMessage, TranscriptSearchHit } from './assistant-session.js'
 export type { BatchBudgetState } from './agent-loop.js'
 export { trimmedAverage, nextItemBudget } from './agent-loop.js'
@@ -69,6 +71,25 @@ export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js
 export type { PlanMode } from './plan-store.js'
 
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
+
+/** Result of `/memory confirm`/`/memory reject` (single index or bulk category) — see PersonalAssistant.confirmPendingFact/rejectPendingFact. */
+export type MemoryPendingOutcome =
+  | { ok: true; facts: UserFact[]; conflictNotices: string[] }
+  | { ok: false; error: string }
+
+const FACT_CATEGORIES: FactCategory[] = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'other']
+
+/** `selector` matches a FactCategory name (case-insensitive) — used by confirmPendingFact/rejectPendingFact to distinguish `/memory confirm health` from `/memory confirm 3`. */
+function asFactCategory(selector: string): FactCategory | undefined {
+  const normalized = selector.trim().toLowerCase()
+  return FACT_CATEGORIES.find((c) => c === normalized)
+}
+
+/** `/memory`'s pending listing is 1-based for the user; MemoryService's confirm/reject take a 0-based index. Returns undefined for anything that isn't a positive integer. */
+function parsePendingIndex(selector: string): number | undefined {
+  const n = Number.parseInt(selector.trim(), 10)
+  return Number.isInteger(n) && n >= 1 ? n - 1 : undefined
+}
 
 export interface TurnOptions {
   sessionId?: string
@@ -330,7 +351,7 @@ export class PersonalAssistant {
     // them mid-session instead of freezing whichever model was set at construction time.
     const model = (): string | undefined => this.model
 
-    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore)
+    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model)
     this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools, actionTools)
     this.agentLoop = new AgentLoop(
       this.memory,
@@ -562,6 +583,42 @@ export class PersonalAssistant {
   /** Full, unbounded snapshot of everything learned so far — see MemoryService.exportMemory's doc comment. Used by `/memory export`. */
   async exportMemory(sessionId: string): Promise<MemoryExport> {
     return this.memoryService.exportMemory(sessionId)
+  }
+
+  /**
+   * `/memory confirm <n|category>` — `selector` is either a 1-based index into `/memory`'s
+   * flat, display-order "Pending confirmation" listing, or one of FactCategory's names for a
+   * bulk confirm. Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html.
+   * `conflictNotices` (if any) are advisory only — every confirmed fact is promoted regardless,
+   * matching how every other contradiction check in this codebase never gates belief admission.
+   */
+  async confirmPendingFact(selector: string): Promise<MemoryPendingOutcome> {
+    const category = asFactCategory(selector)
+    if (category) {
+      const outcomes = await this.memoryService.confirmPendingCategory(category)
+      if (outcomes.length === 0) return { ok: false, error: `No pending facts in category "${category}".` }
+      return { ok: true, facts: outcomes.map((o) => o.fact), conflictNotices: outcomes.map((o) => o.conflictNotice).filter((n): n is string => Boolean(n)) }
+    }
+    const index = parsePendingIndex(selector)
+    if (index === undefined) return { ok: false, error: 'Usage: /memory confirm <n> or /memory confirm <category>' }
+    const outcome = await this.memoryService.confirmPendingFact(index)
+    if (!outcome) return { ok: false, error: `No pending fact #${index + 1}.` }
+    return { ok: true, facts: [outcome.fact], conflictNotices: outcome.conflictNotice ? [outcome.conflictNotice] : [] }
+  }
+
+  /** `/memory reject <n|category>` — mirror of confirmPendingFact, see its doc comment for `selector`'s shape. */
+  async rejectPendingFact(selector: string): Promise<MemoryPendingOutcome> {
+    const category = asFactCategory(selector)
+    if (category) {
+      const rejected = await this.memoryService.rejectPendingCategory(category)
+      if (rejected.length === 0) return { ok: false, error: `No pending facts in category "${category}".` }
+      return { ok: true, facts: rejected, conflictNotices: [] }
+    }
+    const index = parsePendingIndex(selector)
+    if (index === undefined) return { ok: false, error: 'Usage: /memory reject <n> or /memory reject <category>' }
+    const fact = await this.memoryService.rejectPendingFact(index)
+    if (!fact) return { ok: false, error: `No pending fact #${index + 1}.` }
+    return { ok: true, facts: [fact], conflictNotices: [] }
   }
 
   /** Ranked search over the per-message index — see AssistantSession.searchTranscript's doc comment. Used by `/search`. */
@@ -844,7 +901,7 @@ export class PersonalAssistant {
       requiresApproval: turnPolicyDecision.decision === 'REQUIRE_APPROVAL',
     })
     if (classification.isTrivial) {
-      return this.responseService.buildTrivialResult({ sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal })
+      return this.responseService.buildTrivialResult({ sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal, onUsage: accumulateUsage })
     }
 
     // A compound-looking request decomposes into multiple tasks, and/or an active/matched
@@ -866,6 +923,12 @@ export class PersonalAssistant {
         sessionId,
         userMessage,
         facts,
+        // Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: the same
+        // merged lexical+LLM list recordFacts() (called later, in responseService's build*Result)
+        // derives its writes from — computed independently here (both calls are pure given the
+        // same sessionId/userMessage/statedFacts) so the harness's World Model sees a same-turn
+        // LLM-caught fact immediately instead of only after this turn's post-hoc recordFacts call.
+        currentTurnFacts: buildTurnFacts(sessionId, userMessage, classification.statesDurableFacts),
         draftReply,
         classification,
         initialTasks,
@@ -906,6 +969,7 @@ export class PersonalAssistant {
           sources,
           batchBudgetTrace,
           usageTotal,
+          onUsage: accumulateUsage,
         })
       }
 
@@ -922,6 +986,7 @@ export class PersonalAssistant {
         sources,
         batchBudgetTrace,
         usageTotal,
+        onUsage: accumulateUsage,
       })
     } catch (err) {
       if (err instanceof EscalationHalt) {

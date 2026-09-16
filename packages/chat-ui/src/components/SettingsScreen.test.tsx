@@ -250,6 +250,7 @@ describe('SettingsScreen', () => {
         memorySummary: {
           facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test', durable: true, source: 'user_asserted' }],
           reminders: [],
+          pending: [],
           experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
         },
       })

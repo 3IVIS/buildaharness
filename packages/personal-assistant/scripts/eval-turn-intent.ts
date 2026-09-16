@@ -10,6 +10,12 @@
  *    RISK_STEP_BACKSTOP_CASES below, which specifically target the two fields that plan's Phase 1 added to
  *    this same classifier (statesDurableFact, per-task riskLevel) as the LLM backstop for
  *    fact-extraction.ts's FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS and risk-classifier.ts's classifyRisk.
+ * 3. plans/personal_assistant_fact_extraction_llm_confidence_plan.html's Phase 5 gate — PORTED_FACT_CASES
+ *    (every "found via live testing" fact-extraction.ts comment ported verbatim, proving the LLM path this
+ *    plan makes primary catches them too, not just architecturally cleaner than the regex patches that were
+ *    written to catch these exact phrasings) and CONFIDENCE_CASES (direct/hedged/third-party-about-self
+ *    phrasings, proving judgment 7's confidence field — added by that plan's Phase 1 — is calibrated against
+ *    its own stated observable criterion rather than just schema-shaped).
  *
  * turn-intent-classifier.test.ts only proves the parsing/derivation code around the LLM call is correct
  * (via scripted canned responses); this script proves the prompt/schema design itself classifies real
@@ -33,7 +39,7 @@
  * Code installed.
  */
 import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
-import { classifyTurnIntent, type TurnIntentClassification, type TurnIntentContext } from '../src/turn-intent-classifier.js'
+import { classifyTurnIntent, type TurnIntentClassification, type TurnIntentContext, type FactConfidence } from '../src/turn-intent-classifier.js'
 import { extractFactsFromTurn } from '../src/fact-extraction.js'
 import { classifyRisk } from '../src/risk-classifier.js'
 
@@ -210,6 +216,97 @@ const RISK_STEP_BACKSTOP_CASES: RiskStepBackstopCase[] = [
   },
 ]
 
+/**
+ * A verbatim quote from one of fact-extraction.ts's "found via live testing" comments (see that
+ * file's batch history), which prompted a specific regex widening at the time. Unlike
+ * FactBackstopCase above, this does NOT require the lexical pass to find nothing — most of these
+ * phrasings were subsequently patched into the regex, so lexicalFacts.length is informational
+ * only (logged, not gated on) — the point here is proving the LLM path (now primary per this
+ * plan) independently catches what the regex patches were written to catch, "at least as good as
+ * the regex patches it's meant to obsolete, not just architecturally cleaner" (Phase 5's own
+ * framing). `expectDurable` mirrors fact-extraction.ts's own isDurable() classification for each
+ * quote: name/health facts durable, job/location/pet facts not.
+ */
+interface PortedFactCase {
+  id: string
+  message: string
+  expectDurable: boolean
+}
+
+const PORTED_FACT_CASES: PortedFactCase[] = [
+  {
+    // "batch (h6)" — the "severely" intensifier between "i'm" and "allergic" broke the old
+    // zero-gap regex; a durable, safety-relevant health fact.
+    id: 'ported-peanut-allergy-intensifier',
+    message: "I'm severely allergic to peanuts, so please keep that in mind for any food suggestions.",
+    expectDurable: true,
+  },
+  {
+    // batch 23 (re-probing conv380) — "I currently live in..." dropped the fact entirely before
+    // the pronoun-verb gap fix; location is expected-to-change, so not durable.
+    id: 'ported-live-in-denver',
+    message: 'I currently live in a small apartment in Denver.',
+    expectDurable: false,
+  },
+  {
+    // batch 23 (re-probing conv380) — a possessive-noun-plus-adjective gap ("good friend's")
+    // before "name is" dropped this entirely; a third party's name, not the user's own identity,
+    // so not durable even though it matches the "name is" phrasing.
+    id: 'ported-friend-name-marcus',
+    message: "My good friend's name is Marcus.",
+    expectDurable: false,
+  },
+  {
+    // batch 21 (h2/convA) — an ordinary pet-ownership/naming statement matched none of the old
+    // marker lists at all; a pet's name is not durable (closer to job/location than to the user's
+    // own identity).
+    id: 'ported-golden-retriever-max',
+    message: 'Also, I have a golden retriever named Max.',
+    expectDurable: false,
+  },
+  {
+    // batch 23 (re-probing conv354/373) — "i work" needed a pronoun-verb gap for the leading
+    // adverb "currently"; a stated job is expected-to-change, so not durable.
+    id: 'ported-project-manager-job',
+    message: 'I currently work as a project manager at a mid-size logistics company.',
+    expectDurable: false,
+  },
+]
+
+/**
+ * Judgment 7's confidence field (Phase 1 of the fact-extraction-confidence plan) is defined
+ * against an observable criterion, not a bare self-report — these three fixtures check the model
+ * actually applies that criterion rather than just returning a plausible-sounding label.
+ */
+interface ConfidenceCase {
+  id: string
+  message: string
+  /** More than one value accepted where the plan's own spec allows a range (e.g. "medium/low"). */
+  acceptableConfidences: FactConfidence[]
+}
+
+const CONFIDENCE_CASES: ConfidenceCase[] = [
+  {
+    // Direct, unhedged, first-person — judgment 7's "high" criterion.
+    id: 'confidence-high-direct',
+    message: "I'm allergic to peanuts.",
+    acceptableConfidences: ['high'],
+  },
+  {
+    // Hedged ("I think I might") — judgment 7's "medium" criterion.
+    id: 'confidence-medium-hedged',
+    message: 'I think I might be gluten intolerant.',
+    acceptableConfidences: ['medium'],
+  },
+  {
+    // Third-party-reported ("my doctor says") rather than a first-person assertion — judgment 7
+    // names this shape as "medium/low" explicitly, so either is accepted here.
+    id: 'confidence-third-party-blend',
+    message: 'My doctor says I should avoid dairy.',
+    acceptableConfidences: ['medium', 'low'],
+  },
+]
+
 function matchesExpected(actual: TurnIntentClassification, expected: Partial<TurnIntentClassification>): string[] {
   const mismatches: string[] = []
   for (const [key, value] of Object.entries(expected)) {
@@ -244,10 +341,37 @@ async function runFactCase(testCase: FactBackstopCase, llm: ClaudeCliLLMClient):
   }
   const actual = await classifyTurnIntent(testCase.message, llm, NO_PLAN)
   const mismatches: string[] = []
-  if (actual.statesDurableFact === null) {
-    mismatches.push('statesDurableFact: expected non-null, got null')
-  } else if (actual.statesDurableFact.durable !== testCase.expectDurable) {
-    mismatches.push(`statesDurableFact.durable: expected ${testCase.expectDurable}, got ${actual.statesDurableFact.durable}`)
+  if (actual.statesDurableFacts.length === 0) {
+    mismatches.push('statesDurableFacts: expected at least one entry, got none')
+  } else if (actual.statesDurableFacts[0].durable !== testCase.expectDurable) {
+    mismatches.push(`statesDurableFacts[0].durable: expected ${testCase.expectDurable}, got ${actual.statesDurableFacts[0].durable}`)
+  }
+  return { id: testCase.id, message: testCase.message, passed: mismatches.length === 0, mismatches }
+}
+
+async function runPortedFactCase(testCase: PortedFactCase, llm: ClaudeCliLLMClient): Promise<CaseResult> {
+  const lexicalFacts = extractFactsFromTurn(testCase.message, 'eval-turn')
+  const actual = await classifyTurnIntent(testCase.message, llm, NO_PLAN)
+  const mismatches: string[] = []
+  if (actual.statesDurableFacts.length === 0) {
+    mismatches.push(
+      `statesDurableFacts: expected at least one entry, got none (lexical pass found ${lexicalFacts.length} — the LLM path failed on a case the regex patches were written to catch)`,
+    )
+  } else if (!actual.statesDurableFacts.some((f) => f.durable === testCase.expectDurable)) {
+    mismatches.push(`statesDurableFacts: no entry with durable=${testCase.expectDurable}, got ${JSON.stringify(actual.statesDurableFacts)}`)
+  }
+  return { id: testCase.id, message: testCase.message, passed: mismatches.length === 0, mismatches }
+}
+
+async function runConfidenceCase(testCase: ConfidenceCase, llm: ClaudeCliLLMClient): Promise<CaseResult> {
+  const actual = await classifyTurnIntent(testCase.message, llm, NO_PLAN)
+  const mismatches: string[] = []
+  if (actual.statesDurableFacts.length === 0) {
+    mismatches.push('statesDurableFacts: expected at least one entry, got none')
+  } else if (!testCase.acceptableConfidences.includes(actual.statesDurableFacts[0].confidence)) {
+    mismatches.push(
+      `statesDurableFacts[0].confidence: expected one of ${testCase.acceptableConfidences.join('/')}, got ${actual.statesDurableFacts[0].confidence}`,
+    )
   }
   return { id: testCase.id, message: testCase.message, passed: mismatches.length === 0, mismatches }
 }
@@ -284,12 +408,19 @@ async function main(): Promise<void> {
   const turnIntentCases = [...ENGLISH_CASES, ...CHINESE_CASES].filter((c) => !langFilter || c.lang === langFilter)
   const factCases = FACT_BACKSTOP_CASES.filter((c) => !langFilter || c.lang === langFilter)
   const riskStepCases = RISK_STEP_BACKSTOP_CASES.filter((c) => !langFilter || c.lang === langFilter)
+  // PORTED_FACT_CASES/CONFIDENCE_CASES are English-only fixtures (no zh equivalents exist yet —
+  // see this plan's Phase 5 text, which only asked for English fixtures here); --lang=zh
+  // correctly excludes them the same way it excludes en-* turnIntentCases.
+  const portedFactCases = langFilter && langFilter !== 'en' ? [] : PORTED_FACT_CASES
+  const confidenceCases = langFilter && langFilter !== 'en' ? [] : CONFIDENCE_CASES
 
   const llm = new ClaudeCliLLMClient()
   const results: CaseResult[] = []
 
   for (const testCase of turnIntentCases) results.push(await runCase(testCase, llm))
   for (const testCase of factCases) results.push(await runFactCase(testCase, llm))
+  for (const testCase of portedFactCases) results.push(await runPortedFactCase(testCase, llm))
+  for (const testCase of confidenceCases) results.push(await runConfidenceCase(testCase, llm))
   for (const testCase of riskStepCases) results.push(await runRiskStepCase(testCase, llm))
 
   for (const r of results) {

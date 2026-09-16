@@ -164,8 +164,19 @@ const CONTRADICTION_SCHEMA = {
         required: ['beliefIds', 'description'],
       },
     },
+    corroborations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          existingId: { type: 'string' },
+          newId: { type: 'string' },
+        },
+        required: ['existingId', 'newId'],
+      },
+    },
   },
-  required: ['contradictions'],
+  required: ['contradictions', 'corroborations'],
 }
 
 // batch 21 (convA): a job-promotion self-correction ("I work as a data analyst..." then "Actually,
@@ -211,13 +222,22 @@ const SYSTEM_PROMPT =
   'user\'s existing beliefs. Do not flag a newBelief that explicitly updates or corrects an ' +
   'existingBelief (e.g. "Actually, I\'m now a senior analyst" superseding "I\'m an analyst", or "I ' +
   'no longer live in Boston") — that is a stated change over time, not two simultaneously-held ' +
-  'conflicting claims. You are given "newBeliefs" (just learned) and "existingBeliefs" (already ' +
-  'known and already mutually consistent with each other) as JSON. Check newBeliefs against ' +
-  'existingBeliefs, and against each other. Respond with JSON only: {"contradictions": ' +
-  '[{"beliefIds": [id, id, ...], "description": string}]}. "description" is shown directly to the ' +
-  'user in prose — describe what the beliefs say, never their ids (e.g. write "you said you work ' +
-  'as a nurse, but also as a physical therapist", not "fact-respond-1-0 states..."). Empty array ' +
-  'if none.'
+  'conflicting claims. You are given "newBeliefs" (just learned), "existingBeliefs" (confirmed, ' +
+  'already known, and already mutually consistent with each other), "uncertainFacts" (guesses the ' +
+  'assistant is not yet sure of — a hedged or inferred statement from an earlier turn, not yet ' +
+  'confirmed by the user), and "rejectedFacts" (guesses the user previously rejected or retracted) ' +
+  'as JSON. Check newBeliefs against existingBeliefs, against uncertainFacts, against ' +
+  'rejectedFacts, and against each other, exactly the same way regardless of which pool the other ' +
+  'side came from — a newBelief that conflicts with an uncertainFacts or rejectedFacts entry is ' +
+  'reported as a contradiction exactly like a conflict with existingBeliefs. Separately, also ' +
+  'check whether any newBelief restates or reinforces an uncertainFacts or rejectedFacts entry in ' +
+  'different words rather than conflicting with it (e.g. "I can\'t have dairy" corroborating "I ' +
+  'think I might be lactose intolerant") — report each such pair as a corroboration, not a ' +
+  'contradiction; a belief cannot be both for the same pair. Respond with JSON only: ' +
+  '{"contradictions": [{"beliefIds": [id, id, ...], "description": string}], "corroborations": ' +
+  '[{"existingId": id, "newId": id}]}. "description" is shown directly to the user in prose — ' +
+  'describe what the beliefs say, never their ids (e.g. write "you said you work as a nurse, but ' +
+  'also as a physical therapist", not "fact-respond-1-0 states..."). Empty arrays if none.'
 
 /**
  * One LLM call reviewing whatever belief(s) were just added against everything already known —
@@ -257,30 +277,67 @@ export function semanticContradictionEnabled(env?: Record<string, string | undef
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/** A newBelief restating/reinforcing an uncertainFacts or rejectedFacts entry in different words — see checkForContradictions' doc comment. Caller resolves which pool `existingId` came from by id membership (both ids are always from this call's own known-id set, filtered below). */
+export interface Corroboration {
+  existingId: string
+  newId: string
+}
+
+export interface ContradictionCheckResult {
+  contradictions: ExternalContradictionInput[]
+  corroborations: Corroboration[]
+}
+
+const EMPTY_RESULT: ContradictionCheckResult = { contradictions: [], corroborations: [] }
+
 export async function checkForContradictions(
   newBeliefs: BeliefCandidate[],
   existingBeliefs: BeliefCandidate[],
   llmClient: ILLMClient,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
-): Promise<ExternalContradictionInput[]> {
-  if (newBeliefs.length === 0) return []
-  if (newBeliefs.every((b) => !isCheckWorthy(b.statement))) return []
+  // Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — the entry-time
+  // consistency check's two extra comparison pools (memory-service.ts's recordFacts()/confirm
+  // flows). Both default to [] so the harness-bridge.ts call site (Knowledge only, unaffected by
+  // this phase) needs no change. isCheckWorthy's skip-the-whole-call gate below is a per-call,
+  // not per-pool, decision — deliberate: it only ever looks at newBeliefs (never at
+  // uncertainFacts/rejectedFacts), so a batch of ordinary personal-fact newBeliefs still reaches
+  // the LLM and gets compared against every pool in one shot; it's just as wrong to think this
+  // gate "only covers Knowledge" as it is to think it needs a second, pool-specific copy.
+  uncertainFacts: BeliefCandidate[] = [],
+  rejectedFacts: BeliefCandidate[] = [],
+): Promise<ContradictionCheckResult> {
+  if (newBeliefs.length === 0) return EMPTY_RESULT
+  if (newBeliefs.every((b) => !isCheckWorthy(b.statement))) return EMPTY_RESULT
 
   try {
     const response = await llmClient.callChatStructured(
       [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify({ newBeliefs, existingBeliefs }) },
+        { role: 'user', content: JSON.stringify({ newBeliefs, existingBeliefs, uncertainFacts, rejectedFacts }) },
       ],
       undefined,
       { model, onUsage, structuredOutput: { schema: CONTRADICTION_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { contradictions?: ExternalContradictionInput[] }
+    const parsed = JSON.parse(response.content) as {
+      contradictions?: ExternalContradictionInput[]
+      corroborations?: { existingId?: unknown; newId?: unknown }[]
+    }
     const contradictions = Array.isArray(parsed.contradictions) ? parsed.contradictions : []
-    const knownIds = [...newBeliefs, ...existingBeliefs].map((b) => b.id)
-    return contradictions.map((c) => ({ ...c, description: stripBeliefIds(c.description, knownIds) }))
+    const rawCorroborations = Array.isArray(parsed.corroborations) ? parsed.corroborations : []
+    const knownIds = [...newBeliefs, ...existingBeliefs, ...uncertainFacts, ...rejectedFacts].map((b) => b.id)
+    const knownIdSet = new Set(knownIds)
+    // Same tolerant-drop-the-bad-entry precedent as isDecomposedTaskSpec/isStatedFact — an
+    // unrecognized or dangling id drops just that one corroboration, not the whole array.
+    const corroborations: Corroboration[] = rawCorroborations.filter(
+      (c): c is Corroboration =>
+        typeof c.existingId === 'string' && typeof c.newId === 'string' && knownIdSet.has(c.existingId) && knownIdSet.has(c.newId),
+    )
+    return {
+      contradictions: contradictions.map((c) => ({ ...c, description: stripBeliefIds(c.description, knownIds) })),
+      corroborations,
+    }
   } catch {
-    return []
+    return EMPTY_RESULT
   }
 }

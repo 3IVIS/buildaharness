@@ -1,5 +1,6 @@
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.js'
+import type { FactConfidence, FactCategory } from './turn-intent-classifier.js'
 
 const factPatterns = getFactMarkerPatterns()
 
@@ -40,6 +41,27 @@ export interface UserFact {
   durable: boolean
   /** See FactSource. */
   source: FactSource
+  /**
+   * Confidence `classifyTurnIntent`'s `StatedFact.confidence` (turn-intent-classifier.ts) assigns
+   * a `model_inferred` fact — undefined for `user_asserted`/`observed`/`externally_verified`
+   * facts, which have no confidence gradient (they either matched a lexical pattern or didn't).
+   * Added in Phase 2 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html for
+   * `recordFacts()`'s three-way promotion policy; Phase 4 additionally uses it to adjust
+   * `tierForFact()` and to annotate the per-turn facts prompt block. `migrateFact()` needs no
+   * change for this field — a pre-existing on-disk fact with no `confidence` reads back as
+   * `undefined`, which every reader here already treats as "no confidence signal, most
+   * conservative".
+   */
+  confidence?: FactConfidence
+  /**
+   * `StatedFact.category` (turn-intent-classifier.ts) carried through onto the stored fact —
+   * undefined for `user_asserted`/`observed`/`externally_verified` facts, same "no signal from
+   * that source" convention `confidence` already follows. Added in Phase 3 of
+   * plans/personal_assistant_fact_extraction_llm_confidence_plan.html so a medium-confidence
+   * fact queued to `facts:pending-confirmation` (memory-service.ts) carries the topic its
+   * `/memory` grouping needs — see that file's `PendingFact`.
+   */
+  category?: FactCategory
 }
 
 // Old, pre-Phase-5 on-disk facts (Dexie `entries` table, keys `facts:<sessionId>`/
@@ -86,9 +108,13 @@ export interface TierRule {
  */
 export const TIER_RULES: Record<MemoryTier, TierRule> = {
   episodic: { allowedSources: ['user_asserted', 'model_inferred', 'observed', 'externally_verified'], retention: 'session', contradictionChecked: false },
-  semantic: { allowedSources: ['user_asserted', 'externally_verified'], retention: 'durable', contradictionChecked: true },
-  identity: { allowedSources: ['user_asserted'], retention: 'durable', contradictionChecked: true },
-  preference: { allowedSources: ['user_asserted'], retention: 'durable', contradictionChecked: true },
+  // model_inferred added to semantic/identity/preference in Phase 4 of
+  // plans/personal_assistant_fact_extraction_llm_confidence_plan.html: tierForFact() now routes a
+  // model_inferred fact here too, but only once it's durable AND high-confidence — see that
+  // function's doc comment.
+  semantic: { allowedSources: ['user_asserted', 'model_inferred', 'externally_verified'], retention: 'durable', contradictionChecked: true },
+  identity: { allowedSources: ['user_asserted', 'model_inferred'], retention: 'durable', contradictionChecked: true },
+  preference: { allowedSources: ['user_asserted', 'model_inferred'], retention: 'durable', contradictionChecked: true },
   procedural: { allowedSources: [], retention: 'durable', contradictionChecked: false },
   commitment: { allowedSources: [], retention: 'durable', contradictionChecked: false },
 }
@@ -102,21 +128,31 @@ const IDENTITY_TIER_PATTERN = /\b(my name is|i go by|call me|i'm called|everyone
 const PREFERENCE_TIER_PATTERN = /\b(i (?:like|love|enjoy|prefer|hate|dislike)|my favorite)\b/i
 
 /**
- * Routes a `UserFact` to its `MemoryTier` per Phase E / E3's rule: `model_inferred` (the LLM's
- * unconfirmed `statesDurableFact` guess) and `observed` (a future tool-observed claim) always stay
- * `episodic` — a musing or an uncorroborated observation, never Knowledge — regardless of their
- * `durable` bit. `user_asserted`/`externally_verified` facts land in the durable `identity` or
- * `preference` tier when the text itself reads as a name/preference statement and the fact earned
- * promotion (`durable: true`); every other `user_asserted`/`externally_verified` fact (a stated
- * job, location, or coding-fact-shaped claim — see `looksLikeCodingFact` — none of which are
- * `durable` under `isDurable()` above) is `semantic`: still a stated claim about what's currently
- * true, still eligible for contradiction detection (the "tests passed"/"tests failed" and
- * nurse-vs-designer job-flip cases this file's admission logic exists to support), just not
- * promoted to cross-session storage. Pure and total — every `UserFact` maps to exactly one tier,
- * and `procedural`/`commitment` are never returned (see `TIER_RULES`'s doc comment).
+ * Routes a `UserFact` to its `MemoryTier` per Phase E / E3's rule, extended by Phase 4 of
+ * plans/personal_assistant_fact_extraction_llm_confidence_plan.html: `observed` (a future
+ * tool-observed claim) always stays `episodic` — an uncorroborated observation, never Knowledge.
+ * `model_inferred` (the LLM's `statesDurableFacts` guess) stays `episodic` too UNLESS it's both
+ * `durable` and `confidence === 'high'` — Phase 1's own definition of high confidence ("the user
+ * states it directly and unhedged about themselves in first person") is the same trust bar
+ * `user_asserted` facts clear by construction, so a high-confidence durable guess is routed
+ * exactly the same way from here on; medium/low confidence (or no confidence signal at all) stays
+ * a musing until/unless it's promoted via `/memory confirm` or corroboration reaches high — see
+ * `memory-service.ts`'s `promoteConfirmedFact()`, which re-sources a confirmed fact to
+ * `externally_verified` rather than relying on this function's `durable` check, since a fact
+ * queued via the low-confidence corroboration path isn't guaranteed to carry `durable: true`.
+ * `user_asserted`/`externally_verified`/qualifying `model_inferred` facts land in the durable
+ * `identity` or `preference` tier when the text itself reads as a name/preference statement and
+ * the fact earned promotion (`durable: true`); every other such fact (a stated job, location, or
+ * coding-fact-shaped claim — see `looksLikeCodingFact` — none of which are `durable` under
+ * `isDurable()` above) is `semantic`: still a stated claim about what's currently true, still
+ * eligible for contradiction detection (the "tests passed"/"tests failed" and nurse-vs-designer
+ * job-flip cases this file's admission logic exists to support), just not promoted to
+ * cross-session storage. Pure and total — every `UserFact` maps to exactly one tier, and
+ * `procedural`/`commitment` are never returned (see `TIER_RULES`'s doc comment).
  */
 export function tierForFact(fact: UserFact): MemoryTier {
-  if (fact.source === 'model_inferred' || fact.source === 'observed') return 'episodic'
+  if (fact.source === 'observed') return 'episodic'
+  if (fact.source === 'model_inferred' && !(fact.durable && fact.confidence === 'high')) return 'episodic'
   if (fact.durable) {
     if (IDENTITY_TIER_PATTERN.test(fact.text)) return 'identity'
     if (PREFERENCE_TIER_PATTERN.test(fact.text)) return 'preference'

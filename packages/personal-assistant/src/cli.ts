@@ -36,7 +36,7 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing } from './cli-session.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
@@ -683,10 +683,25 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
   }
 
-  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport). */
+  /** `/memory confirm <n|category>` / `/memory reject <n|category>` — see PersonalAssistant.confirmPendingFact/rejectPendingFact's doc comments for `selector`'s shape. */
+  async function handleMemoryPending(action: 'confirm' | 'reject', args: string[]): Promise<void> {
+    const selector = args[0]
+    if (!selector) {
+      console.log(`\nUsage: /memory ${action} <n> or /memory ${action} <category>\n`)
+      return
+    }
+    const outcome = action === 'confirm' ? await assistant.confirmPendingFact(selector) : await assistant.rejectPendingFact(selector)
+    console.log(`\n${formatMemoryPendingOutcome(action === 'confirm' ? 'confirmed' : 'rejected', outcome)}\n`)
+  }
+
+  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending). */
   async function handleMemory(args: string[]): Promise<void> {
     if (args[0] === 'export') {
       await handleMemoryExport(args.slice(1))
+      return
+    }
+    if (args[0] === 'confirm' || args[0] === 'reject') {
+      await handleMemoryPending(args[0], args.slice(1))
       return
     }
     await printMemory()

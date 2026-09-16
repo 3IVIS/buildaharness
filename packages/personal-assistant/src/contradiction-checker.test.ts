@@ -236,7 +236,7 @@ describe('checkForContradictions', () => {
   it('returns [] without calling the LLM when there are no new beliefs', async () => {
     const llm = new StructuredOnlyLLMClient('{"contradictions":[]}')
     const result = await checkForContradictions([], [{ id: 'b1', statement: 'the user lives in Boston' }], llm)
-    expect(result).toEqual([])
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
     expect(llm.calls).toBe(0)
   })
 
@@ -247,7 +247,7 @@ describe('checkForContradictions', () => {
       [{ id: 'b1', statement: 'the build is failing' }],
       llm,
     )
-    expect(result).toEqual([])
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
     expect(llm.calls).toBe(0)
   })
 
@@ -258,7 +258,7 @@ describe('checkForContradictions', () => {
       [{ id: 'b1', statement: 'Completed: Kick off the redesign' }],
       llm,
     )
-    expect(result).toEqual([])
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
     expect(llm.calls).toBe(0)
   })
 
@@ -272,7 +272,10 @@ describe('checkForContradictions', () => {
       llm,
     )
     expect(llm.calls).toBe(1)
-    expect(result).toEqual([{ beliefIds: ['b1', 'b2'], description: 'Boston and Seattle cannot both be the user\'s home city.' }])
+    expect(result).toEqual({
+      contradictions: [{ beliefIds: ['b1', 'b2'], description: 'Boston and Seattle cannot both be the user\'s home city.' }],
+      corroborations: [],
+    })
     // Both the new and existing beliefs are sent so the model can compare across the boundary.
     const [sentMessages] = llm.receivedMessages
     const userMessage = sentMessages.find((m) => m.role === 'user')?.content ?? ''
@@ -296,10 +299,10 @@ describe('checkForContradictions', () => {
       [{ id: 'fact-respond-1-0', statement: 'the user works as a nurse' }],
       llm,
     )
-    expect(result).toHaveLength(1)
-    expect(result[0].description).not.toContain('fact-respond-1-0')
-    expect(result[0].description).not.toContain('fact-respond-1-1')
-    expect(result[0].description).toContain('states the person works as a nurse')
+    expect(result.contradictions).toHaveLength(1)
+    expect(result.contradictions[0].description).not.toContain('fact-respond-1-0')
+    expect(result.contradictions[0].description).not.toContain('fact-respond-1-1')
+    expect(result.contradictions[0].description).toContain('states the person works as a nurse')
   })
 
   it('returns [] on malformed JSON instead of throwing', async () => {
@@ -309,7 +312,7 @@ describe('checkForContradictions', () => {
       [{ id: 'b1', statement: 'the user lives in Boston' }],
       llm,
     )
-    expect(result).toEqual([])
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
   })
 
   it('returns [] when the LLM call itself throws', async () => {
@@ -319,7 +322,98 @@ describe('checkForContradictions', () => {
       [{ id: 'b1', statement: 'the user lives in Boston' }],
       llm,
     )
-    expect(result).toEqual([])
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
+  })
+
+  it('sends uncertainFacts/rejectedFacts pools to the LLM and returns a corroboration against an uncertain-pool entry', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({ contradictions: [], corroborations: [{ existingId: 'u1', newId: 'n1' }] }),
+    )
+    const result = await checkForContradictions(
+      [{ id: 'n1', statement: "the user can't have dairy" }],
+      [],
+      llm,
+      undefined,
+      undefined,
+      [{ id: 'u1', statement: 'the user might be lactose intolerant' }],
+      [{ id: 'r1', statement: 'the user used to be vegetarian' }],
+    )
+    expect(result).toEqual({ contradictions: [], corroborations: [{ existingId: 'u1', newId: 'n1' }] })
+    const [sentMessages] = llm.receivedMessages
+    const userMessage = sentMessages.find((m) => m.role === 'user')?.content ?? ''
+    expect(userMessage).toContain('lactose intolerant')
+    expect(userMessage).toContain('used to be vegetarian')
+  })
+
+  // Phase 5 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — multi-turn
+  // corroboration/retraction fixtures for the entry-time check, modeled here as a single call
+  // whose uncertainFacts pool represents "what an earlier turn already captured" (exactly how
+  // memory-service.ts's recordFacts() calls this function each turn: previously-captured
+  // medium/low-confidence facts are read back from the store and passed in as uncertainFacts).
+  it('corroborates a paraphrased restatement of a hedged uncertain fact stated on an earlier turn', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ contradictions: [], corroborations: [{ existingId: 'u1', newId: 'n1' }] }))
+    const result = await checkForContradictions(
+      [{ id: 'n1', statement: "the user can't have dairy" }],
+      [],
+      llm,
+      undefined,
+      undefined,
+      [{ id: 'u1', statement: 'the user might be lactose intolerant' }],
+    )
+    expect(result.corroborations).toEqual([{ existingId: 'u1', newId: 'n1' }])
+    expect(result.contradictions).toEqual([])
+  })
+
+  it('does not corroborate an uncertain fact against a genuinely unrelated new statement', async () => {
+    // The scripted LLM response is the ground truth here (this test proves the function passes
+    // the model's judgment through unmodified, not that it invents its own similarity heuristic)
+    // — an unrelated fact interposed between the original hedge and its eventual paraphrase must
+    // not be mistaken for corroboration just because both entries exist in the same call.
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ contradictions: [], corroborations: [] }))
+    const result = await checkForContradictions(
+      [{ id: 'n2', statement: 'the user lives in Denver' }],
+      [],
+      llm,
+      undefined,
+      undefined,
+      [{ id: 'u1', statement: 'the user might be lactose intolerant' }],
+    )
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
+  })
+
+  it('reports a contradiction against the uncertain pool as a retraction, distinguished only by which pool the matched id came from', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({
+        contradictions: [{ beliefIds: ['u1', 'n3'], description: 'Vegetarian and eating steak regularly cannot both be true.' }],
+        corroborations: [],
+      }),
+    )
+    const result = await checkForContradictions(
+      [{ id: 'n3', statement: 'the user eats steak all the time' }],
+      [],
+      llm,
+      undefined,
+      undefined,
+      [{ id: 'u1', statement: 'the user might be vegetarian' }],
+    )
+    expect(result.contradictions).toHaveLength(1)
+    expect(result.contradictions[0].beliefIds).toEqual(['u1', 'n3'])
+    expect(result.corroborations).toEqual([])
+  })
+
+  it('drops a corroboration naming an id outside the known set rather than throwing', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({ contradictions: [], corroborations: [{ existingId: 'not-a-real-id', newId: 'n1' }] }),
+    )
+    const result = await checkForContradictions(
+      [{ id: 'n1', statement: 'the user lives in Denver' }],
+      [],
+      llm,
+      undefined,
+      undefined,
+      [{ id: 'u1', statement: 'the user might live in Denver' }],
+    )
+    expect(result).toEqual({ contradictions: [], corroborations: [] })
   })
 })
 

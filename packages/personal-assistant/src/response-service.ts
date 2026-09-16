@@ -43,16 +43,23 @@ export class ResponseService {
     sources: AssistantSource[] | undefined
     batchBudgetTrace: BatchBudgetTrace | undefined
     usageTotal: TokenUsage | undefined
+    onUsage?: (usage: TokenUsage) => void
   }): Promise<AssistantTurnResult> {
-    const { sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal } = params
+    const { sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal, onUsage } = params
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
-    await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFact)
+    // Phase 3 ordering constraint: recordFacts()'s entry-time consistency check must run, and its
+    // contradictions must be folded into the turn's contradictionNotice, before returning — a
+    // plain fact-stating message is exactly the shape most likely to hit this trivial fast path,
+    // so this can't be the one path that silently drops the signal (see memory-service.ts's
+    // recordFacts doc comment).
+    const { contradictions } = await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFacts, onUsage)
+    const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, [], contradictions)
     // No layer fired this turn — an empty trace rather than an absent one, so the "Why?"/"Run
     // detail" UI can still render (all 11 layer cells shown, none highlighted) instead of hiding
     // the panel outright, which read as broken rather than "skipped on purpose".
     const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [], batchBudget: batchBudgetTrace }
-    return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal }
+    return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal, contradictionNotice }
   }
 
   async buildPausedResult(params: {
@@ -68,8 +75,9 @@ export class ResponseService {
     sources: AssistantSource[] | undefined
     batchBudgetTrace: BatchBudgetTrace | undefined
     usageTotal: TokenUsage | undefined
+    onUsage?: (usage: TokenUsage) => void
   }): Promise<AssistantTurnResult> {
-    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, checkpoint, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal } = params
+    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, checkpoint, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage } = params
 
     // An intentional plan-pacing stop — not a bug. Persist the plan's current task statuses (same
     // as the success path) so the next turn's pacing/position computations start from up-to-date
@@ -112,7 +120,13 @@ export class ResponseService {
       reply = reportedReply.trim() ? `${reportedReply}\n\n${pacingNote}` : pacingNote
       pausedNote = pacingNote
     }
-    const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, layerActivity)
+
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+    // Phase 3 ordering constraint — see buildTrivialResult's comment: recordFacts() must run, and
+    // its contradictions must be folded in, before contradictionNotice is finalized below.
+    const { contradictions } = await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFacts, onUsage)
+    const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, layerActivity, contradictions)
 
     const trace: AssistantTrace = {
       nodeExecutionOrder: checkpoint.progress.nodeExecutionOrder,
@@ -127,10 +141,6 @@ export class ResponseService {
       contradicted: contradictionNotice !== undefined,
       verificationHealth: trace.verificationHealth,
     })
-
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
-    await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFact)
 
     return {
       status: 'ok',
@@ -165,8 +175,9 @@ export class ResponseService {
     sources: AssistantSource[] | undefined
     batchBudgetTrace: BatchBudgetTrace | undefined
     usageTotal: TokenUsage | undefined
+    onUsage?: (usage: TokenUsage) => void
   }): Promise<AssistantTurnResult> {
-    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, result, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal } = params
+    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, result, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage } = params
 
     const stepsUsed = result.stepsUsed
     const controlState = {
@@ -181,7 +192,13 @@ export class ResponseService {
     }
 
     const reply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
-    const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, layerActivity)
+
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+    // Phase 3 ordering constraint — see buildTrivialResult's comment: recordFacts() must run, and
+    // its contradictions must be folded in, before contradictionNotice is finalized below.
+    const { contradictions } = await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFacts, onUsage)
+    const contradictionNotice = await this.session.dedupedContradictionNotice(sessionId, layerActivity, contradictions)
 
     // Write the harness's resulting task statuses back onto the plan only on this success path —
     // an aborted/errored turn leaves the stored plan as-is, so a crash mid-turn can't corrupt
@@ -199,10 +216,6 @@ export class ResponseService {
       contradicted: contradictionNotice !== undefined,
       verificationHealth: trace.verificationHealth,
     })
-
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
-    await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFact)
 
     return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, answerClaim, usage: usageTotal }
   }

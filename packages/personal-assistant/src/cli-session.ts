@@ -1,7 +1,7 @@
 import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
-import type { MemorySummary, MemoryExport, TranscriptSearchHit } from './assistant.js'
+import type { MemorySummary, MemoryExport, TranscriptSearchHit, PendingFact, FactCategory, MemoryPendingOutcome } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 
 /**
@@ -24,8 +24,10 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/export [file]', description: "Save this session's transcript to a markdown file" },
   { command: '/undo', description: 'Remove the last exchange from conversation history — never reverses a real write_file/run_shell_command effect (see /undo-action)' },
   { command: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval' },
-  { command: '/memory', description: 'Show learned facts, reminders, and experience-store content' },
-  { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders) to a JSON file' },
+  { command: '/memory', description: 'Show learned facts, reminders, pending-confirmation guesses, and experience-store content' },
+  { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file' },
+  { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
+  { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
   { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
   { command: '/model [name]', description: 'Show or switch the active model' },
   { command: '/cost', description: 'Show token usage for the last turn and this session' },
@@ -76,6 +78,56 @@ export function formatStatus(info: StatusInfo): string {
   return lines.join('\n')
 }
 
+const CATEGORY_LABELS: Record<FactCategory, string> = {
+  identity: 'Identity',
+  health: 'Health',
+  preference: 'Preference',
+  location: 'Location',
+  occupation: 'Occupation',
+  relationships: 'Relationships',
+  other: 'Other',
+}
+
+/**
+ * `/memory`'s "Pending confirmation" section — Phase 3 of
+ * plans/personal_assistant_fact_extraction_llm_confidence_plan.html. Grouped by category (so a
+ * topic that accumulated several related guesses reads as one group, not scattered numbers) but
+ * numbered in one flat, display-order sequence across every group — `/memory confirm <n>`/
+ * `/memory reject <n>` take that same 1-based number, not a per-category one.
+ */
+function formatPendingConfirmation(pending: PendingFact[]): string {
+  const lines = ['\nPending confirmation:']
+  if (pending.length === 0) {
+    lines.push('  None')
+    return lines.join('\n')
+  }
+  const byCategory = new Map<FactCategory, { fact: PendingFact; n: number }[]>()
+  pending.forEach((fact, i) => {
+    const group = byCategory.get(fact.category) ?? []
+    group.push({ fact, n: i + 1 })
+    byCategory.set(fact.category, group)
+  })
+  for (const [category, entries] of byCategory) {
+    lines.push(`  ${CATEGORY_LABELS[category]}:`)
+    for (const { fact, n } of entries) {
+      const suffix = fact.previouslyRejected ? ' (previously rejected — restated)' : ''
+      lines.push(`    ${n}. ${fact.text}${suffix}`)
+    }
+  }
+  lines.push('  Use /memory confirm <n|category> or /memory reject <n|category>.')
+  return lines.join('\n')
+}
+
+/** Renders the result of `/memory confirm`/`/memory reject` — cli.ts's handleMemoryConfirm/handleMemoryReject print this directly. */
+export function formatMemoryPendingOutcome(action: 'confirmed' | 'rejected', outcome: MemoryPendingOutcome): string {
+  if (!outcome.ok) return `✗ ${outcome.error}`
+  const lines = outcome.facts.map((f) => `✓ ${action}: ${f.text}`)
+  for (const notice of outcome.conflictNotices) {
+    lines.push(`  ⚠ ${notice}`)
+  }
+  return lines.join('\n')
+}
+
 export function formatMemorySummary(summary: MemorySummary): string {
   const sections: string[] = []
 
@@ -88,6 +140,8 @@ export function formatMemorySummary(summary: MemorySummary): string {
       ? summary.reminders.map((r) => `  - ${r.rawText}${r.done ? ' (done)' : ''}`).join('\n')
       : '  None yet',
   )
+
+  sections.push(formatPendingConfirmation(summary.pending))
 
   const strategyWeightEntries = Object.entries(summary.experience.strategyWeights)
   sections.push('\nStrategy weights:')

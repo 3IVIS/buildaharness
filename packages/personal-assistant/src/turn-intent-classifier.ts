@@ -11,6 +11,23 @@ import { classifyError } from './error-classifier.js'
  */
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN'
 
+/** Only meaningful for `source: 'model_inferred'` facts — see fact-extraction.ts's `UserFact`. */
+export type FactConfidence = 'high' | 'medium' | 'low'
+
+/**
+ * Fixed enum, not free text, so the pending-confirmation queue (Phase 3 of
+ * plans/personal_assistant_fact_extraction_llm_confidence_plan.html) can group entries stably
+ * instead of drifting between synonyms ("job"/"occupation"/"work") for the same underlying topic.
+ */
+export type FactCategory = 'identity' | 'health' | 'preference' | 'location' | 'occupation' | 'relationships' | 'other'
+
+export interface StatedFact {
+  text: string
+  durable: boolean
+  confidence: FactConfidence
+  category: FactCategory
+}
+
 export interface TurnIntentContext {
   /** Whether an active durable plan exists for this session — gates whether the abandon
    *  judgment means anything and whether plan-template matching should even be attempted
@@ -53,13 +70,20 @@ export interface TurnIntentClassification {
    */
   needsMultiStepPlan: boolean
   /**
-   * Set when the message states a durable/session fact about the user (name, preference,
-   * health/dietary, current location/job, ...) — the LLM-backed backstop for
-   * fact-extraction.ts's lexical FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS, which have no fallback of
-   * their own. assistant.ts only trusts this when the lexical pass found nothing for the same
-   * message; the lexical path stays authoritative (and free) when it already matches.
+   * Every durable/session fact the message states about the user (name, preference,
+   * health/dietary, current location/job, ...) — the LLM-backed primary extraction path this
+   * plan builds (plans/personal_assistant_fact_extraction_llm_confidence_plan.html Phase 1),
+   * superseding the old single-fact `statesDurableFact` fallback so a turn stating more than one
+   * fact ("I'm Priya, I'm vegetarian, and I live in Austin") isn't truncated to one. `confidence`
+   * is anchored to an observable criterion, not a bare self-report: `high` = stated directly and
+   * unhedged in first person; `medium` = stated about the user but hedged, indirect, or inferred
+   * from context; `low` = a weak inference, or primarily about a third party and only tangentially
+   * about the user. `durable`'s contract is unchanged from the old field: true only for
+   * identity/safety-relevant facts meant to persist indefinitely, false for something expected to
+   * change. Empty array (not null) when nothing was stated, including on classifier failure — see
+   * failSafeClassification.
    */
-  statesDurableFact: { text: string; durable: boolean } | null
+  statesDurableFacts: StatedFact[]
 }
 
 const FAIL_SAFE_REASON = 'Risk could not be determined — classification failed or returned an unusable result.'
@@ -102,7 +126,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     isAbandonRequest: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
-    statesDurableFact: null,
+    statesDurableFacts: [],
   }
 }
 
@@ -117,14 +141,20 @@ const TASK_SCHEMA = {
   required: ['id', 'description', 'depends_on', 'riskLevel'],
 }
 
-const STATES_DURABLE_FACT_SCHEMA = {
-  type: ['object', 'null'],
+const FACT_CATEGORIES = ['identity', 'health', 'preference', 'location', 'occupation', 'relationships', 'other']
+
+const STATED_FACT_SCHEMA = {
+  type: 'object',
   properties: {
     text: { type: 'string' },
     durable: { type: 'boolean' },
+    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+    category: { type: 'string', enum: FACT_CATEGORIES },
   },
-  required: ['text', 'durable'],
+  required: ['text', 'durable', 'confidence', 'category'],
 }
+
+const STATES_DURABLE_FACTS_SCHEMA = { type: 'array', items: STATED_FACT_SCHEMA }
 
 const TURN_INTENT_SCHEMA = {
   type: 'object',
@@ -138,7 +168,7 @@ const TURN_INTENT_SCHEMA = {
     isAbandonRequest: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
     needsMultiStepPlan: { type: 'boolean' },
-    statesDurableFact: STATES_DURABLE_FACT_SCHEMA,
+    statesDurableFacts: STATES_DURABLE_FACTS_SCHEMA,
   },
   required: [
     'riskLevel',
@@ -150,7 +180,7 @@ const TURN_INTENT_SCHEMA = {
     'isAbandonRequest',
     'matchedPlanTemplate',
     'needsMultiStepPlan',
-    'statesDurableFact',
+    'statesDurableFacts',
   ],
 }
 
@@ -200,13 +230,23 @@ const TURN_INTENT_SYSTEM_PROMPT =
   `to warrant a durable, tracked plan (decomposes into several sub-tasks toward one of the named ` +
   `kinds below), return the single best-matching name from: ${listTemplateNames().join(', ')}. ` +
   'Otherwise return null. If told a plan is already active, always return null.\n\n' +
-  '7. statesDurableFact: set only if the message states a durable or session-scoped fact about the ' +
-  "user themselves (their name, a stated preference, an allergy/dietary restriction, their current " +
-  'location or job, "remember that..." framing, ...) — not a question, request, or fact about ' +
-  'something else. `text` is the fact restated concisely in the third person (e.g. "the user is ' +
-  'allergic to peanuts"); `durable` is true only for identity/safety-relevant facts meant to persist ' +
-  'indefinitely (name, stated preference, health/dietary) — false for something expected to change ' +
-  '(current location, current job, one-off context). Otherwise return null.\n\n' +
+  '7. statesDurableFacts: a list with one entry per durable or session-scoped fact the message ' +
+  "states about the user themselves (their name, a stated preference, an allergy/dietary " +
+  'restriction, their current location or job, "remember that..." framing, ...) — not a question, ' +
+  'request, or fact about someone else. A single message can state more than one fact (e.g. "I\'m ' +
+  'Priya, I\'m vegetarian, and I live in Austin" is three entries) — return all of them, not just ' +
+  'the first. Return an empty array if the message states no fact about the user. Each entry has: ' +
+  '`text`, the fact restated concisely in the third person (e.g. "the user is allergic to ' +
+  'peanuts"); `durable`, true only for identity/safety-relevant facts meant to persist indefinitely ' +
+  '(name, stated preference, health/dietary) — false for something expected to change (current ' +
+  'location, current job, one-off context); `confidence`, judged against an observable criterion, ' +
+  'not a self-reported guess — `high` if the user states it directly and unhedged about themselves ' +
+  'in first person ("I\'m allergic to peanuts", "my name is Priya"); `medium` if stated about ' +
+  'themselves but hedged, indirect, or inferred from context rather than asserted outright ("I ' +
+  'think I might be lactose intolerant", a fact implied by something else they said); `low` if it ' +
+  'is a weak inference, or a statement primarily about a third party that is only tangentially ' +
+  'about the user; and `category`, one of identity, health, preference, location, occupation, ' +
+  'relationships, other.\n\n' +
   '8. needsMultiStepPlan: true if the request genuinely needs a multi-step, durable plan built and ' +
   'tracked — even though it does not match one of the 7 named kinds in judgment 6 — because its ' +
   'natural completion criteria requires several dependent steps most people would want to see ' +
@@ -219,8 +259,9 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
-  'string|null, "needsMultiStepPlan": boolean, "statesDurableFact": {"text": string, "durable": ' +
-  'boolean}|null}'
+  'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
+  'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
+  '"location"|"occupation"|"relationships"|"other"}]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -232,7 +273,23 @@ interface RawTurnIntent {
   isAbandonRequest?: unknown
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
-  statesDurableFact?: unknown
+  statesDurableFacts?: unknown
+}
+
+const FACT_CATEGORY_VALUES = new Set(FACT_CATEGORIES)
+
+/** Same tolerance sanitizeDependsOn/isDecomposedTaskSpec apply to decomposedTasks — drop a malformed entry, don't discard the whole array over one bad element. */
+function isStatedFact(value: unknown): value is StatedFact {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.text === 'string' &&
+    v.text !== '' &&
+    typeof v.durable === 'boolean' &&
+    (v.confidence === 'high' || v.confidence === 'medium' || v.confidence === 'low') &&
+    typeof v.category === 'string' &&
+    FACT_CATEGORY_VALUES.has(v.category)
+  )
 }
 
 function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
@@ -291,15 +348,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
       : null
   const needsMultiStepPlan = !context.hasActivePlan && matchedPlanTemplate === null && parsed.needsMultiStepPlan === true
 
-  const rawFact = parsed.statesDurableFact
-  const statesDurableFact =
-    typeof rawFact === 'object' &&
-    rawFact !== null &&
-    typeof (rawFact as Record<string, unknown>).text === 'string' &&
-    (rawFact as Record<string, unknown>).text !== '' &&
-    typeof (rawFact as Record<string, unknown>).durable === 'boolean'
-      ? { text: (rawFact as { text: string; durable: boolean }).text, durable: (rawFact as { text: string; durable: boolean }).durable }
-      : null
+  const statesDurableFacts = Array.isArray(parsed.statesDurableFacts) ? parsed.statesDurableFacts.filter(isStatedFact) : []
 
   return {
     riskLevel: parsed.riskLevel,
@@ -312,7 +361,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isAbandonRequest,
     matchedPlanTemplate,
     needsMultiStepPlan,
-    statesDurableFact,
+    statesDurableFacts,
   }
 }
 
@@ -322,13 +371,15 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
  * back to failSafeClassification's conservative defaults on any parse failure or LLM error:
  * UNKNOWN risk requiring approval / not trivial / no decomposition / no abandon / no template
  * match / no stated fact — i.e. "do the careful thing" (run the full harness, require approval
- * rather than guessing LOW, don't auto-abandon, don't silently claim a fact was stated when the
- * call failed). Per-task riskLevel
- * (Phase 1 of plans/lexical_functions_hardening_plan.html) and statesDurableFact are this call's
- * LLM-backed backstops for what used to be pure-lexical, no-fallback judgments — risk-classifier.ts's
- * standalone per-task classifyRisk and fact-extraction.ts's FACT_MARKERS respectively — both of
- * which stay as the free, zero-latency first check; this call is only trusted when they find
- * nothing (see assistant.ts's call sites for exactly how each is gated).
+ * rather than guessing LOW, don't auto-abandon, return no stated facts when the call failed).
+ * Per-task riskLevel (Phase 1 of plans/lexical_functions_hardening_plan.html) is this call's
+ * LLM-backed backstop for what used to be a pure-lexical, no-fallback judgment —
+ * risk-classifier.ts's standalone per-task classifyRisk — which stays as the free, zero-latency
+ * first check; this call is only trusted when it finds nothing (see assistant.ts's call site).
+ * statesDurableFacts (Phase 1 of
+ * plans/personal_assistant_fact_extraction_llm_confidence_plan.html) is, as of that plan, the
+ * *primary* fact-extraction path rather than a fallback — see that plan for how memory-service.ts
+ * merges it with fact-extraction.ts's regex backstop.
  */
 export async function classifyTurnIntent(
   message: string,

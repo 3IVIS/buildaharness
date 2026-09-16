@@ -851,6 +851,7 @@ describe('PersonalAssistant session management extras', () => {
     expect(summary).toEqual({
       facts: [],
       reminders: [],
+      pending: [],
       experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
     })
   })
@@ -2338,29 +2339,34 @@ describe('PersonalAssistant durable fact capture — classifyTurnIntent LLM back
       undefined,
       (userMessage) =>
         userMessage === message
-          ? { statesDurableFact: { text: 'the user breaks out in hives from tomatoes', durable: true } }
+          ? {
+              statesDurableFacts: [
+                { text: 'the user breaks out in hives from tomatoes', durable: true, confidence: 'high', category: 'health' },
+              ],
+            }
           : undefined,
     )
     const assistant = new PersonalAssistant({ llmClient: llm, memory })
 
     await assistant.turn(message, { sessionId: 'fact-session' })
 
-    const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean; source: string }>
+    const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean; source: string; confidence?: string }>
     expect(facts).toHaveLength(1)
     expect(facts[0].text).toBe('the user breaks out in hives from tomatoes')
-    // Phase 5 (memory model separation & fact provenance): a MODEL_INFERRED fact is captured
-    // session-scoped exactly as before, but no longer auto-promoted to the cross-session durable
-    // store on the LLM's own say-so — it has no lexical corroboration (that's this test's whole
-    // premise: the lexical pass found nothing) and there's no explicit user-confirmation flow yet
-    // to earn promotion the other way. Previously asserted `durable: true`, trusting
-    // `statesDurableFact.durable` directly; this is the tightened policy, not a regression.
+    // Phase 2 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: a
+    // MODEL_INFERRED fact captured with `durable: true, confidence: 'high'` now auto-promotes to
+    // the cross-session durable store — the LLM's own judgment IS the trust signal once it's
+    // anchored to an observable confidence criterion, replacing the earlier policy (Phase 5 of the
+    // architecture remediation plan) that required lexical corroboration for any promotion at all.
     expect(facts[0].source).toBe('model_inferred')
-    expect(facts[0].durable).toBe(false)
+    expect(facts[0].confidence).toBe('high')
+    expect(facts[0].durable).toBe(true)
     const durableFacts = (await memory.get('facts:durable')) as Array<{ text: string }> | undefined
-    expect(durableFacts ?? []).toHaveLength(0)
+    expect(durableFacts ?? []).toHaveLength(1)
+    expect(durableFacts?.[0].text).toBe('the user breaks out in hives from tomatoes')
   })
 
-  it('does not use the LLM-derived fact when the lexical pass already found one — lexical stays authoritative', async () => {
+  it('records both the lexical fact and a non-duplicate LLM fact from the same turn — both passes are always considered', async () => {
     const message = "My name is Priya and, incidentally, tomatoes make me break out in hives."
     const memory = new InMemoryAdapter()
     const llm = new ScriptedToolLLMClient(
@@ -2369,18 +2375,110 @@ describe('PersonalAssistant durable fact capture — classifyTurnIntent LLM back
       undefined,
       (userMessage) =>
         userMessage === message
-          ? { statesDurableFact: { text: 'the user breaks out in hives from tomatoes', durable: true } }
+          ? {
+              statesDurableFacts: [
+                { text: 'the user breaks out in hives from tomatoes', durable: true, confidence: 'high', category: 'health' },
+              ],
+            }
           : undefined,
     )
     const assistant = new PersonalAssistant({ llmClient: llm, memory })
 
     await assistant.turn(message, { sessionId: 'fact-session-2' })
 
-    const facts = (await memory.get('facts:fact-session-2')) as Array<{ text: string; durable: boolean }>
-    expect(facts).toHaveLength(1)
-    // The lexical FACT_MARKERS match ("My name is Priya") wins verbatim — the LLM's paraphrased
-    // hives fact is not additionally recorded.
+    const facts = (await memory.get('facts:fact-session-2')) as Array<{ text: string; durable: boolean; source: string }>
+    // Phase 2: the lexical pass and the LLM pass are merged, not mutually exclusive — the lexical
+    // FACT_MARKERS match ("My name is Priya...") and the LLM's distinct hives fact are both
+    // recorded, since neither is a near-duplicate (case-insensitive substring containment) of the
+    // other's text.
+    expect(facts).toHaveLength(2)
     expect(facts[0].text).toBe(message)
+    expect(facts[0].source).toBe('user_asserted')
+    expect(facts[1].text).toBe('the user breaks out in hives from tomatoes')
+    expect(facts[1].source).toBe('model_inferred')
+  })
+
+  it('does not double-record when the LLM restates the same fact the lexical pass already caught', async () => {
+    const message = "I'm allergic to peanuts."
+    const memory = new InMemoryAdapter()
+    const llm = new ScriptedToolLLMClient(
+      () => ({ content: '{}' }),
+      [''],
+      undefined,
+      (userMessage) =>
+        userMessage === message
+          ? {
+              statesDurableFacts: [
+                { text: "I'm allergic to peanuts.", durable: true, confidence: 'high', category: 'health' },
+              ],
+            }
+          : undefined,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session-2b' })
+
+    const facts = (await memory.get('facts:fact-session-2b')) as Array<{ text: string }>
+    // Case-insensitive substring containment (isNearDuplicateText in memory-service.ts) recognizes
+    // the LLM's verbatim restatement of the lexical hit and doesn't record it a second time.
+    expect(facts).toHaveLength(1)
+    expect(facts[0].text).toBe(message)
+  })
+
+  it('records a medium-confidence LLM fact session-scoped only, never auto-promoted', async () => {
+    const message = 'I think I might be lactose intolerant.'
+    const memory = new InMemoryAdapter()
+    const llm = new ScriptedToolLLMClient(
+      () => ({ content: '{}' }),
+      [''],
+      undefined,
+      (userMessage) =>
+        userMessage === message
+          ? {
+              statesDurableFacts: [
+                { text: 'the user may be lactose intolerant', durable: true, confidence: 'medium', category: 'health' },
+              ],
+            }
+          : undefined,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session-medium' })
+
+    const facts = (await memory.get('facts:fact-session-medium')) as Array<{ text: string; confidence?: string }>
+    expect(facts).toHaveLength(1)
+    expect(facts[0].confidence).toBe('medium')
+    // Phase 2's promotion table: medium confidence stays session-scoped, never auto-promoted —
+    // queuing it to facts:pending-confirmation is Phase 3's own deliverable, not yet built.
+    const durableFacts = (await memory.get('facts:durable')) as Array<{ text: string }> | undefined
+    expect(durableFacts ?? []).toHaveLength(0)
+  })
+
+  it('records a low-confidence LLM fact session-scoped only, never auto-promoted', async () => {
+    const message = 'My coworker mentioned I seem stressed lately.'
+    const memory = new InMemoryAdapter()
+    const llm = new ScriptedToolLLMClient(
+      () => ({ content: '{}' }),
+      [''],
+      undefined,
+      (userMessage) =>
+        userMessage === message
+          ? {
+              statesDurableFacts: [
+                { text: 'the user may be stressed', durable: true, confidence: 'low', category: 'other' },
+              ],
+            }
+          : undefined,
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+
+    await assistant.turn(message, { sessionId: 'fact-session-low' })
+
+    const facts = (await memory.get('facts:fact-session-low')) as Array<{ text: string; confidence?: string }>
+    expect(facts).toHaveLength(1)
+    expect(facts[0].confidence).toBe('low')
+    const durableFacts = (await memory.get('facts:durable')) as Array<{ text: string }> | undefined
+    expect(durableFacts ?? []).toHaveLength(0)
   })
 
   it('still records nothing when neither the lexical pass nor the LLM find a fact', async () => {

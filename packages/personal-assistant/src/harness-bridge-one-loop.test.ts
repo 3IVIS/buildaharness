@@ -50,7 +50,7 @@ const baseParams = {
     isAbandonRequest: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
-    statesDurableFact: null,
+    statesDurableFacts: [],
   },
   initialTasks: [],
   activePlan: null,

@@ -13,10 +13,11 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 19 commands documented for this plan', () => {
+  it('includes all 21 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
-      '/memory export [file]', '/search <query>', '/model [name]', '/cost', '/doctor', '/why', '/layers',
+      '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/search <query>',
+      '/model [name]', '/cost', '/doctor', '/why', '/layers',
       '/sources', '/plan', '/plan sketch <request>', '/config ...', '/checkpoint [clear]',
     ])
   })
@@ -111,6 +112,7 @@ describe('formatMemorySummary', () => {
     const summary: MemorySummary = {
       facts: [],
       reminders: [],
+      pending: [],
       experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
     }
     const output = formatMemorySummary(summary)
@@ -121,6 +123,7 @@ describe('formatMemorySummary', () => {
     const summary: MemorySummary = {
       facts: [],
       reminders: [],
+      pending: [],
       experience: { strategyWeights: { 'decompose:timeout': 0.825, 'retry:network_error': 0.4 }, decompositions: [], recoverySequences: [] },
     }
     const output = formatMemorySummary(summary)
@@ -135,6 +138,7 @@ describe('formatMemorySummary', () => {
         { id: '1', rawText: 'Call mom', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: false },
         { id: '2', rawText: 'Buy milk', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: true },
       ],
+      pending: [],
       experience: {
         strategyWeights: { 'decompose:timeout': 0.5 },
         decompositions: [{ task_type: 'research', decomposition: ['search', 'summarize'], success_rate: 0.9 }],
@@ -156,6 +160,7 @@ describe('formatMemoryExport', () => {
       exportedAt: '2026-01-01T00:00:00.000Z',
       facts: [{ text: 'My name is Ali.', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:test', durable: true, source: 'user_asserted' }],
       reminders: [{ id: '1', rawText: 'Call mom', createdAt: '2026-01-01T00:00:00.000Z', dueAt: null, done: false }],
+      pending: [],
       experience: {
         strategy_weights: { 'decompose:timeout': 0.5 },
         class_priors: { timeout: 0.2 },

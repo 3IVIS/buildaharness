@@ -3,6 +3,7 @@ import {
   deleteHarnessCheckpoint,
   type CheckpointStore,
   type LayerActivityEvent,
+  type ExternalContradictionInput,
 } from '@buildaharness/harness'
 import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
@@ -193,19 +194,34 @@ export class AssistantSession {
    * lexical Contradiction layer re-fires the identical notice on every subsequent non-trivial
    * turn, since the WorldModel it runs against is rebuilt fresh (re-seeded from all known facts)
    * each turn with no memory of its own that this exact conflict was already surfaced. */
-  async dedupedContradictionNotice(sessionId: string, layerActivity: LayerActivityEvent[]): Promise<string | undefined> {
-    const notice = findContradictionNotice(layerActivity)
-    if (!notice) return undefined
+  async dedupedContradictionNotice(
+    sessionId: string,
+    layerActivity: LayerActivityEvent[],
+    // Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html —
+    // memory-service.ts's recordFacts()'s entry-time consistency check runs earlier and
+    // separately from the harness's own layerActivity-derived Contradiction layer, but its
+    // findings need the exact same path to the user: deduped through this same
+    // notifiedContradictions Set, not a second parallel notice mechanism.
+    extraContradictions: ExternalContradictionInput[] = [],
+  ): Promise<string | undefined> {
+    const candidates = [
+      findContradictionNotice(layerActivity),
+      ...extraContradictions.map((c) => c.description).filter((d) => d.trim().length > 0),
+    ]
     const seen = await this.getNotifiedContradictions(sessionId)
-    if (seen.has(notice)) return undefined
-    // The generic fallback (used when the raw reason leaked belief ids — see
-    // findContradictionNotice) carries no information beyond "something conflicts", so exact-text
-    // dedup alone doesn't catch it — a different string, so `seen.has(notice)` above missed it.
-    // Once the user has already seen ANY contradiction notice this session, a content-free repeat
-    // of this one adds nothing, so it's suppressed rather than recorded/shown.
-    if (notice === GENERIC_CONTRADICTION_NOTICE && seen.size > 0) return undefined
-    await this.recordNotifiedContradiction(sessionId, seen, notice)
-    return notice
+    for (const notice of candidates) {
+      if (!notice) continue
+      if (seen.has(notice)) continue
+      // The generic fallback (used when the raw reason leaked belief ids — see
+      // findContradictionNotice) carries no information beyond "something conflicts", so exact-text
+      // dedup alone doesn't catch it — a different string, so `seen.has(notice)` above missed it.
+      // Once the user has already seen ANY contradiction notice this session, a content-free repeat
+      // of this one adds nothing, so it's suppressed rather than recorded/shown.
+      if (notice === GENERIC_CONTRADICTION_NOTICE && seen.size > 0) continue
+      await this.recordNotifiedContradiction(sessionId, seen, notice)
+      return notice
+    }
+    return undefined
   }
 
   /** Persisted alongside transcript/facts/plan (this.memory) — survives a process restart, same as everything else keyed by sessionId, so the ceiling is genuinely cross-session, not just cross-turn within one process lifetime. */

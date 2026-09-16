@@ -9,6 +9,7 @@ import type { UserFact } from './fact-extraction.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { formatAskResponse } from './ask-response-format.js'
+import { buildTurnFacts } from './memory-service.js'
 
 /**
  * Everything AskClarificationService.resolvePendingClarification needs to re-drive the harness
@@ -144,6 +145,11 @@ export class AskClarificationService {
         sessionId,
         userMessage: answerText,
         facts: staged.facts,
+        // Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — same
+        // reasoning as assistant.ts's own call site: buildSuccessResult below runs recordFacts()
+        // with this same (sessionId, answerText, staged.classification.statesDurableFacts) triple,
+        // so this stays consistent with what actually gets written to the fact stores this turn.
+        currentTurnFacts: buildTurnFacts(sessionId, answerText, staged.classification.statesDurableFacts),
         draftReply: staged.draftReply,
         classification: staged.classification,
         initialTasks: [],

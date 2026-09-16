@@ -104,6 +104,7 @@ vi.mock('@buildaharness/personal-assistant', async () => {
           getMemorySummary: vi.fn(async () => ({
             facts: [],
             reminders: [],
+            pending: [],
             experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
           })),
           searchTranscript: vi.fn(async (query: string) =>
