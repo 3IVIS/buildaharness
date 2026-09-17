@@ -3,6 +3,7 @@ import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
 import type { MemorySummary, MemoryExport, TranscriptSearchHit, PendingFact, FactCategory, MemoryPendingOutcome } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
+import { certaintyLabel, type UserFact } from './fact-extraction.js'
 
 /**
  * Pure formatting/logic backing cli.ts's session-level commands (/help, /status, /export,
@@ -28,8 +29,10 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file' },
   { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
   { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
+  { command: '/memory forget <n>', description: 'Remove an already-learned fact by its number in the "Facts I know" listing' },
   { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
   { command: '/model [name]', description: 'Show or switch the active model' },
+  { command: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)' },
   { command: '/cost', description: 'Show token usage for the last turn and this session' },
   { command: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health' },
   { command: '/why', description: 'Explain the harness path the last turn took' },
@@ -85,7 +88,18 @@ const CATEGORY_LABELS: Record<FactCategory, string> = {
   location: 'Location',
   occupation: 'Occupation',
   relationships: 'Relationships',
+  project: 'Project',
   other: 'Other',
+}
+
+/** One "Facts I know" line — text plus its metadata chips (topic, certainty, established date, and, for a project-scoped fact, which project) so /memory reads as a real inventory rather than a flat, unlabeled list. Certainty always shows via certaintyLabel() (see its doc comment on why an inherently-certain user_asserted fact still gets a label); category/project are omitted when absent rather than shown as "none". */
+function formatFactLine(f: UserFact): string {
+  const chips: string[] = []
+  if (f.category) chips.push(CATEGORY_LABELS[f.category].toLowerCase())
+  chips.push(`${certaintyLabel(f)} certainty`)
+  chips.push(`established ${f.extractedAt.slice(0, 10)}`)
+  if (f.project) chips.push(`project: ${f.project}`)
+  return `${f.text} (${chips.join(', ')})`
 }
 
 /**
@@ -119,7 +133,7 @@ function formatPendingConfirmation(pending: PendingFact[]): string {
 }
 
 /** Renders the result of `/memory confirm`/`/memory reject` — cli.ts's handleMemoryConfirm/handleMemoryReject print this directly. */
-export function formatMemoryPendingOutcome(action: 'confirmed' | 'rejected', outcome: MemoryPendingOutcome): string {
+export function formatMemoryPendingOutcome(action: 'confirmed' | 'rejected' | 'forgotten', outcome: MemoryPendingOutcome): string {
   if (!outcome.ok) return `✗ ${outcome.error}`
   const lines = outcome.facts.map((f) => `✓ ${action}: ${f.text}`)
   for (const notice of outcome.conflictNotices) {
@@ -132,7 +146,11 @@ export function formatMemorySummary(summary: MemorySummary): string {
   const sections: string[] = []
 
   sections.push('Facts I know:')
-  sections.push(summary.facts.length > 0 ? summary.facts.map((f) => `  - ${f.text}`).join('\n') : '  None yet')
+  sections.push(
+    summary.facts.length > 0
+      ? [...summary.facts.map((f, i) => `  ${i + 1}. ${formatFactLine(f)}`), '  Use /memory forget <n> to remove one.'].join('\n')
+      : '  None yet',
+  )
 
   sections.push('\nReminders:')
   sections.push(

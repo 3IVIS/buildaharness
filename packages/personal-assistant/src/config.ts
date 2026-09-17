@@ -9,6 +9,7 @@
 import type { OneLoopMode } from './one-loop-flag.js'
 import type { AskMode } from './ask-mode-flag.js'
 import type { PlanRolloutMode } from './plan-mode-flag.js'
+import type { TuiMode } from './tui-mode-flag.js'
 
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
@@ -132,6 +133,29 @@ export interface AssistantConfig {
    * out of DEFAULT_CONFIG so an unset value stays undefined.
    */
   planMode?: PlanRolloutMode
+  /**
+   * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html — the rollout flag for the
+   * Ink-driven pinned-bottom-input interactive shell (tui-app.ts's runTuiApp()). Undefined (the
+   * default, for this plan's whole rollout window) means cli.ts's main() falls back to
+   * DEFAULT_TUI_MODE ('disabled') — today's plain readline-based REPL, byte-for-byte. Mirrors
+   * oneLoopMode/askMode/planMode's exact chain: env override (ASSISTANT_TUI, cli-config.ts) and
+   * a package-owned default kept out of DEFAULT_CONFIG so an unset value stays undefined. Unlike
+   * those three, this has no chat-ui/desktop build-time counterpart — there's no terminal to pin
+   * input to in a browser tab, so this is a CLI-only flag. Even when 'enabled', main() only
+   * launches the Ink shell when stdout/stdin are both a real TTY (see cli.ts) — piped/scripted
+   * input always takes the readline path regardless of this setting.
+   */
+  tuiMode?: TuiMode
+  /**
+   * The project label newly captured project-scoped facts are tagged with, and the one
+   * project-scoped facts are filtered against when building a turn's context (see
+   * memory-service.ts's `loadFacts`/`recordFacts` and fact-extraction.ts's `UserFact.project`).
+   * Undefined (the default) means "derive it from `workspaceRoot` instead" — set this only when
+   * the user is explicitly talking about a project other than the one they're currently `cd`'d
+   * into. `/project [name]` is sugar over `/config set activeProject <name>` /
+   * `/config reset activeProject`, mirroring `/model`'s relationship to `/config set model`.
+   */
+  activeProject?: string
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -162,6 +186,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'oneLoopMode',
   'askMode',
   'planMode',
+  'tuiMode',
+  'activeProject',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, web/shell off) — this plan changes nothing for a caller that never touches config. */

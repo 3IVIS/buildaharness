@@ -42,6 +42,7 @@ import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
+import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -148,6 +149,9 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
   return PersonalAssistant.create({
     llmClient,
     model: config.model,
+    // config.activeProject (set via /project <name>) overrides the default of "the workspace
+    // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
+    activeProject: config.activeProject || workspaceRoot,
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
@@ -214,6 +218,15 @@ export interface CliInstance {
   /** Parses and dispatches one line of input exactly as the REPL's 'line' handler does (same dispatchQueue serialization) — the seam cli.test.ts drives command dispatch through without a live TTY. */
   dispatchLine(line: string): Promise<void>
   close(): void
+  /**
+   * Additive, read-only accessor for the pinned-input TUI shell's status line
+   * (plans/personal_assistant_cli_pinned_input_plan.html Phase 3) — the same two signals
+   * printStatus() already renders as part of `/status` (lastPlanStatus !== undefined,
+   * spendCapStatusLine()), just exposed here instead of only printed. Returns short indicator
+   * strings in priority order; empty when there's nothing to report. Not used by the ordinary
+   * readline REPL or by non-interactive/piped mode — only the TUI shell polls this.
+   */
+  getStatusIndicators(): Promise<string[]>
 }
 
 /**
@@ -303,6 +316,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // start) and everything from here to the rl.on('line', ...)/rl.resume() pair at the bottom
   // runs synchronously with no further awaits, so the listener is always in place first.
   rl.pause()
+
+  // With no 'SIGINT' listener, readline's own Ctrl+C handling just pauses the interface
+  // instead of exiting (see readline's 'SIGINT' event docs) — silently contradicting the
+  // startup banner's "Ctrl+C to exit". Registering this listener makes Ctrl+C actually exit.
+  rl.on('SIGINT', () => {
+    console.log('\nExiting.')
+    process.exit(0)
+  })
 
   // Display-only defaults, mirroring each backend's own fallback so the banner shows the
   // model that will actually be used even when config.model is unset — not authoritative
@@ -694,7 +715,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log(`\n${formatMemoryPendingOutcome(action === 'confirm' ? 'confirmed' : 'rejected', outcome)}\n`)
   }
 
-  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending). */
+  /** `/memory forget <n>` — removes an already-durable/session fact by its `/memory` display number. Unlike confirm/reject, there's no category form (see PersonalAssistant.forgetFact's doc comment). */
+  async function handleMemoryForget(args: string[]): Promise<void> {
+    const selector = args[0]
+    if (!selector) {
+      console.log('\nUsage: /memory forget <n>\n')
+      return
+    }
+    const outcome = await assistant.forgetFact(selector, 'cli')
+    console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
+  }
+
+  /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending); `/memory forget <n>` removes an already-learned fact (see handleMemoryForget). */
   async function handleMemory(args: string[]): Promise<void> {
     if (args[0] === 'export') {
       await handleMemoryExport(args.slice(1))
@@ -702,6 +734,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     if (args[0] === 'confirm' || args[0] === 'reject') {
       await handleMemoryPending(args[0], args.slice(1))
+      return
+    }
+    if (args[0] === 'forget') {
+      await handleMemoryForget(args.slice(1))
       return
     }
     await printMemory()
@@ -977,7 +1013,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     let streamedAnyTokens = false
     function writeToken(token: string): void {
       if (!streamedAnyTokens) {
-        process.stdout.write('\nassistant> ')
+        process.stdout.write('\nAielia> ')
         streamedAnyTokens = true
       }
       process.stdout.write(token)
@@ -1131,7 +1167,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
         process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
       } else {
-        console.log(`\nassistant>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
+        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
@@ -1290,6 +1326,25 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     await handleConfigCommand(['set', 'model', args.join(' ')])
   }
 
+  /**
+   * Thin convenience wrapper over /config set|reset activeProject — same relationship handleModel
+   * has to /config set model. Bare /project shows the resolved current value (an explicit override
+   * if one is set, else the workspace root buildAssistant derived it from — see
+   * PersonalAssistant.getActiveProject's doc comment for why this is never itself undefined once
+   * the assistant is built). /project clear reverts to that workspace-derived default.
+   */
+  async function handleProject(args: string[]): Promise<void> {
+    if (args.length === 0) {
+      console.log(`\n${assistant.getActiveProject() || '(none)'}\n`)
+      return
+    }
+    if (args[0] === 'clear') {
+      await handleConfigCommand(['reset', 'activeProject'])
+      return
+    }
+    await handleConfigCommand(['set', 'activeProject', args.join(' ')])
+  }
+
   // A lookup keyed by the message's first whitespace-separated token — replaces what used to
   // be a growing `if (message === '/why') ... if (message === '/sources') ...` chain. Each
   // handler receives the remaining tokens as `args` (empty for commands that take none).
@@ -1310,6 +1365,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     '/memory': (args) => handleMemory(args),
     '/search': (args) => handleSearch(args),
     '/model': (args) => handleModel(args),
+    '/project': (args) => handleProject(args),
     '/cost': () => printCost(),
     '/doctor': () => handleDoctor(),
     '/config': (args) => handleConfigCommand(args),
@@ -1367,10 +1423,52 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await enqueue(message)
     },
     close: () => rl.close(),
+    getStatusIndicators: async () => {
+      const indicators: string[] = []
+      // Persistent context, not a notable/active state — always shown, same reasoning as the
+      // spend-cap gauge below (once relevant, stays visible rather than only flashing on
+      // change). fileTools is wired unconditionally in buildAssistant() (unlike shell/web/email
+      // tools), so there's always an effective workspace root to show; mirrors the same
+      // `config.workspaceRoot ?? process.cwd()` fallback buildAssistant() itself uses.
+      indicators.push(`Workspace: ${config.workspaceRoot ?? process.cwd()}`)
+      // A standing risk state, not a one-off event — worth keeping visible for the rest of the
+      // session the same way dangerBanner warns once at startup (line ~349), since that startup
+      // line scrolls out of view long before the session ends. Only shown when ON, mirroring
+      // every other indicator here ("blank when nothing to report").
+      if (config.dangerouslySkipPermissions) indicators.push('⚠ Permissions: auto-approved (dangerouslySkipPermissions)')
+      if (lastPlanStatus !== undefined) indicators.push('Plan mode: active')
+      const spendCapLine = await spendCapStatusLine()
+      if (spendCapLine) indicators.push(spendCapLine)
+      return indicators
+    },
   }
 }
 
+/**
+ * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html: `tuiMode` is resolved from the
+ * same persisted-config + env-override chain every other config key uses (not just the env var
+ * alone), so `/config set tuiMode enabled` works exactly like `/config set oneLoopMode enabled`
+ * already does. This is a second, separate `configStore.load()` from the one `runCli()` performs
+ * internally — an accepted duplication (one extra small JSON read at startup) rather than
+ * threading a pre-resolved config through `runCli()`'s options, since `runCli()` must remain
+ * callable on its own (tests, `non-interactive-mode.ts`) with no knowledge of this gate.
+ *
+ * `shouldLaunchTuiApp` (tui-mode-flag.ts) additionally requires both stdio streams to be a real
+ * TTY — this repo's documented piped/scripted workflow (`printf 'msg\nexit\n' | node dist/cli.js`)
+ * and every non-interactive shell always take the `runCli()` branch below regardless of the flag.
+ * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
+ * at all — `main()` behaves byte-for-byte as it does today in both those cases.
+ */
 async function main(): Promise<void> {
+  const persisted = await defaultConfigStore.load()
+  const { config } = resolveConfig(persisted, defaultEnvOverrides)
+
+  if (shouldLaunchTuiApp(config.tuiMode ?? 'disabled', Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
+    const { runTuiApp } = await import('./tui-app.js')
+    await runTuiApp()
+    return
+  }
+
   await runCli()
 }
 

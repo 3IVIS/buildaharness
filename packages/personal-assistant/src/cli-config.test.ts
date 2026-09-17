@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { DEFAULT_CONFIG } from './config.js'
 import { DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
+import { DEFAULT_TUI_MODE } from './tui-mode-flag.js'
 import {
   isConfigKey,
   envOverridesFromProcessEnv,
@@ -69,6 +70,15 @@ describe('envOverridesFromProcessEnv', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })
+
+  it('resolves ASSISTANT_TUI into tuiMode, defaulting a typo to the current default', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromProcessEnv({ ASSISTANT_TUI: 'enabled' })).toEqual({ tuiMode: 'enabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_TUI: 'disabled' })).toEqual({ tuiMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_TUI: 'on' })).toEqual({ tuiMode: DEFAULT_TUI_MODE })
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
 })
 
 describe('parseConfigValue', () => {
@@ -103,6 +113,12 @@ describe('parseConfigValue', () => {
     expect(parseConfigValue('oneLoopMode', 'enabled')).toBe('enabled')
     expect(parseConfigValue('oneLoopMode', 'disabled')).toBe('disabled')
     expect(() => parseConfigValue('oneLoopMode', 'on')).toThrow(ConfigValueParseError)
+  })
+
+  it('accepts "enabled"/"disabled" for tuiMode and rejects anything else', () => {
+    expect(parseConfigValue('tuiMode', 'enabled')).toBe('enabled')
+    expect(parseConfigValue('tuiMode', 'disabled')).toBe('disabled')
+    expect(() => parseConfigValue('tuiMode', 'on')).toThrow(ConfigValueParseError)
   })
 
   it.each(['anthropic', 'openai', 'openrouter'] as const)('accepts llmBackend "%s"', (backend) => {

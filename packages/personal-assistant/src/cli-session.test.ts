@@ -13,11 +13,11 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 21 commands documented for this plan', () => {
+  it('includes all 23 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
-      '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/search <query>',
-      '/model [name]', '/cost', '/doctor', '/why', '/layers',
+      '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/memory forget <n>', '/search <query>',
+      '/model [name]', '/project [name]', '/cost', '/doctor', '/why', '/layers',
       '/sources', '/plan', '/plan sketch <request>', '/config ...', '/checkpoint [clear]',
     ])
   })
