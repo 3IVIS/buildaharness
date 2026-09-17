@@ -10,8 +10,6 @@ import {
   discardPendingAction,
   sweepAbandonedPendingActions,
   PENDING_ACTION_MAX_AGE_MS,
-  recordShellCacheEntry,
-  findCachedShellResult,
   type FileToolsContext,
 } from './file-tools.js'
 import { listUndoLogEntries, UNDO_SNAPSHOT_MAX_FILES } from './action-snapshot.js'
@@ -237,24 +235,6 @@ describe('pending-action staging', () => {
     await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow(/executeShell/)
   })
 
-  it('applyPendingAction clears the shell result cache once a write actually lands (h4/convF)', async () => {
-    // A cached `ls` result predates the write below — it must not survive to be served as if it
-    // still reflected the current (now-changed) workspace state.
-    const backend = makeFakeBackend()
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'ls',
-      cwd: ROOT,
-      execution: { output: '', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-    expect(await findCachedShellResult(backend, ROOT, 'ls', ROOT)).toBeDefined()
-
-    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'note.txt', content: 'hello world' })
-    await applyPendingAction(backend, ROOT, id)
-
-    expect(await findCachedShellResult(backend, ROOT, 'ls', ROOT)).toBeUndefined()
-  })
-
   it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
@@ -410,35 +390,6 @@ describe('pending-action staging', () => {
     await discardPendingAction(backend, ROOT, id)
 
     expect(await listUndoLogEntries(backend, ROOT)).toEqual([])
-  })
-
-  it('applying a revert clears the shell result cache, mirroring the original write/shell apply (T4)', async () => {
-    const backend = makeFakeBackend()
-    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'draft one')
-    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'draft two' })
-    await applyPendingAction(backend, ROOT, writeId)
-    const [entry] = await listUndoLogEntries(backend, ROOT)
-
-    // A command cached AFTER the write we're about to revert — reverting should invalidate it,
-    // since the revert changes the workspace exactly as the original write did.
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'cat notes/summary.md',
-      cwd: ROOT,
-      execution: { output: 'draft two', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-    expect(await findCachedShellResult(backend, ROOT, 'cat notes/summary.md', ROOT)).toBeDefined()
-
-    const { id: revertId } = await stagePendingAction(backend, ROOT, {
-      kind: 'revert',
-      revertedEntryId: entry.id,
-      restore: [{ path: 'notes/summary.md', content: 'draft one' }],
-      remove: [],
-    })
-    await applyPendingAction(backend, ROOT, revertId)
-
-    expect(await findCachedShellResult(backend, ROOT, 'cat notes/summary.md', ROOT)).toBeUndefined()
-    expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBe('draft one')
   })
 
   // T7 step 2: the file-count ceiling (T2 step 7) must only ever affect revertibility, never the

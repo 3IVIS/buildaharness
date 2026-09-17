@@ -3,7 +3,6 @@ import {
   resolveInWorkspace,
   assertRealPathInWorkspace,
   stagePendingAction,
-  findCachedShellResult,
   type ShellExecutionResult,
 } from './file-tools.js'
 
@@ -67,10 +66,8 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
     'request to a non-allowlisted host never reaches the real destination — it gets an immediate local HTTP 403 instead. ' +
     "If a command's output shows a 403 (or a connection failure) for an external host, treat that as this local " +
     "containment blocking the request, not as the remote server's own response — do not describe it as the destination " +
-    'declining or rejecting the request. An identical ' +
-    'repeat of a command already resolved earlier in this conversation (same command, same cwd) returns that cached result ' +
-    'immediately instead of staging a new approval — you do not need to avoid calling this for a genuine repeat; ' +
-    "it's handled automatically.",
+    'declining or rejecting the request. Every call always stages a fresh approval — even an identical repeat of an ' +
+    'earlier command, since its result may no longer reflect current state.',
   input_schema: {
     type: 'object',
     properties: {
@@ -112,9 +109,7 @@ export interface ShellToolsContext extends ShellStagingContext {
   executeCommand: ShellCommandExecutor
 }
 
-export type ShellToolResult =
-  | { kind: 'staged_shell'; id: string; command: string; cwd: string }
-  | { kind: 'cached_shell'; command: string; cwd: string; execution: ShellExecutionResult }
+export type ShellToolResult = { kind: 'staged_shell'; id: string; command: string; cwd: string }
 
 function requireStringArg(input: Record<string, unknown>, key: string): string {
   const value = input[key]
@@ -124,9 +119,8 @@ function requireStringArg(input: Record<string, unknown>, key: string): string {
 
 /**
  * Executes run_shell_command by name. Never spawns anything itself — only stages, exactly like
- * write_file does for file-tools — UNLESS an identical (command, cwd) pair was already resolved
- * earlier this session (see file-tools.ts's shell-result-cache doc comment for why this exists),
- * in which case it returns that cached result directly instead of staging a new approval.
+ * write_file does for file-tools, every time — no cached-result shortcut, since a command's real
+ * output can change from one run to the next regardless of whether its text is identical.
  *
  * The cwd validation above and the stagePendingAction call below both run unconditionally on this
  * call's own concrete (command, cwd) arguments, regardless of what risk-classifier.ts concluded
@@ -146,11 +140,6 @@ export async function executeShellTool(
   // Validate now — a proposal for an out-of-scope cwd fails immediately rather than getting staged.
   const resolvedCwd = resolveInWorkspace(ctx.workspaceRoot, requestedCwd)
   await assertRealPathInWorkspace(ctx.backend, ctx.workspaceRoot, resolvedCwd)
-
-  const cached = await findCachedShellResult(ctx.backend, ctx.workspaceRoot, command, resolvedCwd)
-  if (cached) {
-    return { kind: 'cached_shell', command, cwd: resolvedCwd, execution: cached.execution }
-  }
 
   const { id } = await stagePendingAction(ctx.backend, ctx.workspaceRoot, { kind: 'shell', command, cwd: resolvedCwd })
   return { kind: 'staged_shell', id, command, cwd: resolvedCwd }

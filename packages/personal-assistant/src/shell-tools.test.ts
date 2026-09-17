@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { FsBackend } from '@buildaharness/runtime'
 import { executeShellTool, commandMayLeaveWorkspace, type ShellStagingContext } from './shell-tools.js'
-import { PathOutsideWorkspaceError, loadPendingAction, discardPendingAction, recordShellCacheEntry, clearShellCache } from './file-tools.js'
+import { PathOutsideWorkspaceError, loadPendingAction, discardPendingAction } from './file-tools.js'
 
 /** In-memory FsBackend, standing in for a real disk — mirrors file-tools.test.ts's fake. */
 function makeFakeBackend(root: string): FsBackend {
@@ -44,7 +44,6 @@ describe('executeShellTool', () => {
     const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
 
     const result = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
-    if (result.kind !== 'staged_shell') throw new Error('expected a fresh command to stage, not a cache hit')
 
     expect(result.kind).toBe('staged_shell')
     expect(writeSpy).toHaveBeenCalledTimes(1)
@@ -85,76 +84,18 @@ describe('executeShellTool', () => {
   })
 })
 
-describe('executeShellTool — shell result cache (conv4/12/21 shell-reuse finding)', () => {
-  it('answers an identical (command, cwd) repeat from cache instead of staging a new approval', async () => {
+describe('executeShellTool — always stages, never caches', () => {
+  it('stages a fresh approval for an identical (command, cwd) repeat rather than reusing a prior result', async () => {
     const backend = makeFakeBackend(ROOT)
     const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'echo hi',
-      cwd: ROOT,
-      execution: { output: 'hi\n', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-    const writeSpy = vi.spyOn(backend, 'writeTextFile')
 
-    const result = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
+    const first = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
+    const second = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
 
-    expect(result.kind).toBe('cached_shell')
-    if (result.kind !== 'cached_shell') throw new Error('unreachable')
-    expect(result.execution.output).toBe('hi\n')
-    // No new pending action written — a cache hit must not also stage.
-    expect(writeSpy).not.toHaveBeenCalled()
-  })
-
-  it('does not match a different command or a different cwd', async () => {
-    const backend = makeFakeBackend(ROOT)
-    const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
-    await backend.mkdir(`${ROOT}/sub`)
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'echo hi',
-      cwd: ROOT,
-      execution: { output: 'hi\n', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-
-    const differentCommand = await executeShellTool(ctx, 'run_shell_command', { command: 'echo bye' })
-    expect(differentCommand.kind).toBe('staged_shell')
-
-    const differentCwd = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi', cwd: 'sub' })
-    expect(differentCwd.kind).toBe('staged_shell')
-  })
-
-  it('clearShellCache removes cached entries so the same command stages again', async () => {
-    const backend = makeFakeBackend(ROOT)
-    const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'echo hi',
-      cwd: ROOT,
-      execution: { output: 'hi\n', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-
-    await clearShellCache(backend, ROOT)
-
-    const result = await executeShellTool(ctx, 'run_shell_command', { command: 'echo hi' })
-    expect(result.kind).toBe('staged_shell')
-  })
-
-  it('never serves a cached result for a clock/randomness command, even with an identical (command, cwd) repeat', async () => {
-    // conv-R: `date +%s%N` run twice in a row returned the FIRST run's stale timestamp both
-    // times — the cache's "identical command, cwd -> identical result" assumption is false by
-    // construction for a command whose entire purpose is to vary each invocation.
-    const backend = makeFakeBackend(ROOT)
-    const ctx: ShellStagingContext = { backend, workspaceRoot: ROOT }
-    await recordShellCacheEntry(backend, ROOT, {
-      command: 'date +%s%N',
-      cwd: ROOT,
-      execution: { output: '1111111111\n', exitCode: 0, timedOut: false },
-      resolvedAt: new Date().toISOString(),
-    })
-
-    const result = await executeShellTool(ctx, 'run_shell_command', { command: 'date +%s%N' })
-    expect(result.kind).toBe('staged_shell')
+    expect(first.kind).toBe('staged_shell')
+    expect(second.kind).toBe('staged_shell')
+    if (first.kind !== 'staged_shell' || second.kind !== 'staged_shell') throw new Error('unreachable')
+    expect(second.id).not.toBe(first.id)
   })
 })
 

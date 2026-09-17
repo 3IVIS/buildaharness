@@ -5,7 +5,6 @@ import {
   loadPendingAction,
   type FileToolsContext,
 } from './file-tools.js'
-import { recordShellCacheEntry } from './file-tools.js'
 import type { ShellToolsContext } from './shell-tools.js'
 import { commandLooksLikeNetworkRequest } from './shell-tools.js'
 import type { ActionToolsContext } from './action-tools.js'
@@ -138,19 +137,6 @@ export class ActionApprovalService {
       reply = `Sent the email to ${applied.to} — subject "${applied.subject}".`
       transcriptContent = reply
     } else {
-      // Record this resolution in the shell cache BEFORE anything else — this is the only place
-      // a shell command is ever actually executed, regardless of which backend proposed it (the
-      // claude-cli backend's MCP server only ever stages, never runs for real), so it's the only
-      // place that can populate the cache executeShellTool/the MCP server both check to answer an
-      // identical repeat without a fresh approval. See file-tools.ts's shell-result-cache doc
-      // comment.
-      await recordShellCacheEntry(backend, workspaceRoot, {
-        command: applied.command,
-        cwd: applied.cwd,
-        execution: applied.execution,
-        resolvedAt: new Date().toISOString(),
-      })
-
       // Command output is untrusted external content exactly the same way a fetched web
       // page is — it can carry the same injection-shaped text (e.g. a `cat`'d file or a
       // `curl`'d page) — so it gets the same detectInjectionLikelyWithLLM treatment as
