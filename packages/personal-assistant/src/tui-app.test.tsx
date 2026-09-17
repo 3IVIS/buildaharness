@@ -63,7 +63,7 @@ function setup(overrides: { onSubmitChat?: (line: string) => void; onExit?: () =
 describe('TuiApp', () => {
   it('renders committed scrollback lines pushed to the event log', async () => {
     const { eventLog, instance } = setup()
-    eventLog.handleEvent({ type: 'line', lines: ['backend: claude-cli (your Claude Code default)'] })
+    eventLog.handleEvent({ type: 'line', lines: ['backend: claude-cli (your Claude Code default)'], stream: 'stdout' })
     await sleep()
     // <Static> content is written once, incrementally, and never appears in a later lastFrame()
     // (the redrawn dynamic region only) — see fullOutput()'s doc comment in ink-test-render.ts.
@@ -92,13 +92,14 @@ describe('TuiApp', () => {
     expect(strip(instance.lastFrame())).toContain('Plan mode: active')
   })
 
-  it('Enter in chat mode echoes the line to scrollback and calls onSubmitChat', async () => {
+  it('Enter in chat mode echoes the line to scrollback (no "you>" label) and calls onSubmitChat', async () => {
     const onSubmitChat = vi.fn()
-    const { instance } = setup({ onSubmitChat })
+    const { eventLog, instance } = setup({ onSubmitChat })
     await type(instance, 'hello')
     await key(instance, ENTER)
     expect(onSubmitChat).toHaveBeenCalledWith('hello')
-    expect(strip(instance.lastFrame())).toContain('you> hello')
+    expect(strip(instance.fullOutput())).toContain('hello')
+    expect(eventLog.getSnapshot().lines.some((l) => l.kind === 'user' && l.text === 'hello')).toBe(true)
   })
 
   it('a pending prompt switches the input to prompt mode and Enter resolves it via PromptBridge, echoing "> <answer>"', async () => {
@@ -117,5 +118,35 @@ describe('TuiApp', () => {
     const { instance } = setup({ onExit })
     await key(instance, CTRL_C)
     expect(onExit).toHaveBeenCalledOnce()
+  })
+
+  it('a chat turn gets blank margins on both sides of its echo, but a resolved prompt answer does not', async () => {
+    const { eventLog, prompt, instance } = setup()
+    await type(instance, 'first')
+    await key(instance, ENTER)
+    const pending = prompt.askYesNo('Proceed? (y/N) ')
+    await sleep()
+    await type(instance, 'y')
+    await key(instance, ENTER)
+    await pending
+    await type(instance, 'second')
+    await key(instance, ENTER)
+    await sleep()
+    const lines = eventLog.getSnapshot().lines
+    // 'first' (margin after), '> y' (no margins — grouped with the chat turn above it), then
+    // 'second's own margin-before collapses into the same one (pushTurnMargin is a no-op when the
+    // last line is already a margin), margin after.
+    expect(lines.map((l) => l.text)).toEqual(['first', '', '> y', '', 'second', ''])
+    expect(lines.map((l) => l.kind)).toEqual(['user', 'margin', 'user', 'margin', 'user', 'margin'])
+  })
+
+  it('renders both a stderr line and an ordinary stdout line into scrollback (kind-to-color mapping itself is unit-tested in tui-app-bridges.test.ts\'s classifyLineKind coverage; this fake TestStdout reports no color support, so ANSI codes aren\'t observable here)', async () => {
+    const { eventLog, instance } = setup()
+    eventLog.handleEvent({ type: 'line', lines: ['a normal banner line'], stream: 'stdout' })
+    eventLog.handleEvent({ type: 'line', lines: ['something went wrong'], stream: 'stderr' })
+    await sleep()
+    const raw = strip(instance.fullOutput())
+    expect(raw).toContain('a normal banner line')
+    expect(raw).toContain('something went wrong')
   })
 })

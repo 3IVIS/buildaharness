@@ -60,16 +60,24 @@ afterEach(() => {
 })
 
 describe('TuiInput — chat mode basics', () => {
-  it('renders the default chat label and an empty box', () => {
+  it('renders the default placeholder in an empty box, with no standalone "you" label line above it', () => {
     const instance = render(<TuiInput onSubmitChat={vi.fn()} onSubmitPrompt={vi.fn()} columns={40} />)
     const frame = strip(instance.lastFrame())
-    expect(frame).toContain('you')
+    expect(frame).toContain('Type your message here')
+    expect(frame.split('\n').map((l) => l.trim())).not.toContain('you')
   })
 
-  it('typed characters are inserted at the cursor and appear in the frame', async () => {
+  it('a custom placeholder overrides the default', () => {
+    const instance = render(<TuiInput onSubmitChat={vi.fn()} onSubmitPrompt={vi.fn()} columns={40} placeholder="Ask me anything" />)
+    expect(strip(instance.lastFrame())).toContain('Ask me anything')
+  })
+
+  it('typed characters replace the placeholder and appear in the frame', async () => {
     const instance = render(<TuiInput onSubmitChat={vi.fn()} onSubmitPrompt={vi.fn()} columns={40} />)
     await type(instance, 'hi')
-    expect(strip(instance.lastFrame())).toContain('hi')
+    const frame = strip(instance.lastFrame())
+    expect(frame).toContain('hi')
+    expect(frame).not.toContain('Type your message here')
   })
 
   it('Enter submits a non-empty draft via onSubmitChat and clears the box', async () => {

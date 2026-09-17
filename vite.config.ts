@@ -36,6 +36,19 @@ export default defineConfig({
       // Vitest runner, so the blanket root run must skip them just as chat-ui's own vitest.config.ts
       // does. They run via `npm run test:e2e` / phase B4's CI job. See plans/chat_ui_browser_e2e_plan.html B2.
       'packages/*/e2e/**',
+      // tui-input.test.tsx renders real `ink` components through ink's own React 19 reconciler.
+      // ink/react are deliberately nested under packages/personal-assistant only (root pins React
+      // 18 for the rest of the repo — see ink-test-render.ts's header comment). Root's blanket run
+      // goes through this file's own `@vitejs/plugin-react` + jsdom React-18 test environment, so
+      // elements ink's reconciler receives come from a different React copy than the one it was
+      // built against ("A React Element from an older version of React was rendered"). This file
+      // is already covered, correctly isolated, by `npm run test:personal-assistant`'s own
+      // vitest.config.ts (no alias/shared React 18 environment).
+      'packages/personal-assistant/src/tui-input.test.tsx',
+      // Same reason as tui-input.test.tsx immediately above — tui-app.test.tsx (Phase 3 of the
+      // same plan) also mounts real `ink` components via ink-test-render.ts. Already covered by
+      // `npm run test:personal-assistant`'s own vitest.config.ts.
+      'packages/personal-assistant/src/tui-app.test.tsx',
     ],
   },
 })

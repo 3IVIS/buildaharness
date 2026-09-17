@@ -36,6 +36,13 @@ class TestStdout extends EventEmitter {
     this.lastFrameValue = frame
   }
   lastFrame = (): string | undefined => this.lastFrameValue
+  /**
+   * Every write this stdout has ever received, concatenated in order — unlike `lastFrame()`
+   * (the most recent *re-rendered* dynamic frame only), `<Static>` content (Phase 3's scrollback
+   * log) is written once, incrementally, as its own separate write call and never appears again
+   * in a later `lastFrame()` — this is the only way a test can see it.
+   */
+  fullOutput = (): string => this.frames.join('')
 }
 
 class TestStderr extends EventEmitter {
@@ -66,6 +73,8 @@ class TestStdin extends EventEmitter {
 export interface TestInkInstance {
   stdin: TestStdin
   lastFrame: () => string | undefined
+  /** See `TestStdout.fullOutput`'s doc comment — needed to assert on `<Static>` content. */
+  fullOutput: () => string
   rerender: (tree: ReactElement) => void
   unmount: () => void
 }
@@ -85,6 +94,7 @@ export function renderInk(tree: ReactElement): TestInkInstance {
   return {
     stdin,
     lastFrame: stdout.lastFrame,
+    fullOutput: stdout.fullOutput,
     rerender: instance.rerender,
     unmount: instance.unmount,
   }

@@ -90,10 +90,10 @@ export function computeViewportStart(prevStart: number, cursorRow: number, total
 }
 
 export interface TuiInputProps {
-  /** Question text for a pending askYesNo/askLine prompt (Decision 1's override seam) — undefined means ordinary chat mode. */
+  /** Question text for a pending askYesNo/askLine prompt (Decision 1's override seam) — undefined means ordinary chat mode. Shown as a label above the box, since it's real information (the question being asked), unlike chat mode's old static "you" label, which was dropped in favor of a placeholder inside the box (see `placeholder` below). */
   promptLabel?: string
-  /** Label shown above the box in chat mode (promptLabel undefined). */
-  chatLabel?: string
+  /** Faint placeholder shown inside the (empty) box in chat mode, replacing the old "you" label above it. */
+  placeholder?: string
   /** Called when Enter submits a non-empty draft in chat mode. Also appended to in-session history. */
   onSubmitChat: (line: string) => void
   /** Called when Enter resolves a pending prompt (promptLabel set). Not added to chat history. */
@@ -106,7 +106,7 @@ export interface TuiInputProps {
 }
 
 export function TuiInput(props: TuiInputProps): React.JSX.Element {
-  const { promptLabel, chatLabel = 'you', onSubmitChat, onSubmitPrompt, maxRows = DEFAULT_MAX_ROWS, isActive = true } = props
+  const { promptLabel, placeholder = 'Type your message here', onSubmitChat, onSubmitPrompt, maxRows = DEFAULT_MAX_ROWS, isActive = true } = props
 
   const [value, setValue] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -221,30 +221,35 @@ export function TuiInput(props: TuiInputProps): React.JSX.Element {
   )
 
   const visibleRows = rows.slice(viewportStart, viewportStart + maxRows)
-  const label = promptLabel ?? chatLabel
 
   return (
     <Box flexDirection="column">
-      <Text bold color={promptLabel !== undefined ? 'yellow' : 'cyan'}>
-        {label}
-      </Text>
-      <Box borderStyle="round" flexDirection="column" paddingX={1}>
-        {visibleRows.map((row, i) => {
-          const absoluteRow = viewportStart + i
-          if (absoluteRow !== cursorRow) {
-            return <Text key={absoluteRow}>{row.text.length > 0 ? row.text : ' '}</Text>
-          }
-          const before = row.text.slice(0, cursorCol)
-          const atCursor = row.text[cursorCol] ?? ' '
-          const after = row.text.slice(cursorCol + 1)
-          return (
-            <Text key={absoluteRow}>
-              {before}
-              <Text inverse>{atCursor}</Text>
-              {after}
-            </Text>
-          )
-        })}
+      {promptLabel !== undefined && (
+        <Text bold color="yellow">
+          {promptLabel}
+        </Text>
+      )}
+      <Box borderStyle="round" borderColor={promptLabel !== undefined ? 'yellow' : 'cyan'} flexDirection="column" paddingX={1}>
+        {promptLabel === undefined && value.length === 0 ? (
+          <Text dimColor>{placeholder}</Text>
+        ) : (
+          visibleRows.map((row, i) => {
+            const absoluteRow = viewportStart + i
+            if (absoluteRow !== cursorRow) {
+              return <Text key={absoluteRow}>{row.text.length > 0 ? row.text : ' '}</Text>
+            }
+            const before = row.text.slice(0, cursorCol)
+            const atCursor = row.text[cursorCol] ?? ' '
+            const after = row.text.slice(cursorCol + 1)
+            return (
+              <Text key={absoluteRow}>
+                {before}
+                <Text inverse>{atCursor}</Text>
+                {after}
+              </Text>
+            )
+          })
+        )}
       </Box>
     </Box>
   )

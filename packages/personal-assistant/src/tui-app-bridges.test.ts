@@ -37,24 +37,93 @@ describe('EventLogBridge', () => {
     expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '\nAielia> Hi there' })
   })
 
-  it('a line event with no pending transientText commits its lines directly', () => {
+  it('a line event with no pending transientText commits its lines directly, classified "tool" from the ⚙ prefix', () => {
     const bridge = new EventLogBridge()
-    bridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'] })
-    expect(bridge.getSnapshot().lines).toEqual(['  ⚙ Listing .'])
+    bridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '  ⚙ Listing .', kind: 'tool' }])
   })
 
-  it('merges pending transientText with a closing line event into committed lines, matching cli.ts\'s streamed-reply sequence', () => {
+  it('merges pending transientText with a closing line event into committed lines, matching cli.ts\'s streamed-reply sequence, classified "assistant", with the "Aielia>" label (and its leading blank-line artifact) stripped from the displayed text', () => {
     const bridge = new EventLogBridge()
     bridge.handleEvent({ type: 'token', text: '\nAielia> ' })
     bridge.handleEvent({ type: 'token', text: 'Hi' })
-    bridge.handleEvent({ type: 'line', lines: [' there!', ''] })
-    expect(bridge.getSnapshot()).toEqual({ lines: ['', 'Aielia> Hi there!', ''], progressText: '', transientText: '' })
+    bridge.handleEvent({ type: 'line', lines: [' there!', ''], stream: 'stdout' })
+    expect(bridge.getSnapshot()).toEqual({
+      lines: [
+        { text: 'Hi there!', kind: 'assistant' },
+        { text: '', kind: 'assistant' },
+        { text: '', kind: 'margin' },
+      ],
+      progressText: '',
+      transientText: '',
+    })
   })
 
-  it('pushEchoLine appends a prefixed line to permanent scrollback', () => {
+  it('classifies a non-streaming "Aielia>"-prefixed console.log as "assistant" and strips the label, even with no pending transientText', () => {
     const bridge = new EventLogBridge()
-    bridge.pushEchoLine('you> ', 'hello there')
-    expect(bridge.getSnapshot().lines).toEqual(['you> hello there'])
+    bridge.handleEvent({ type: 'line', lines: ['', 'Aielia> Hello there', ''], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([
+      { text: 'Hello there', kind: 'assistant' },
+      { text: '', kind: 'assistant' },
+      { text: '', kind: 'margin' },
+    ])
+  })
+
+  it('an assistant reply gets a trailing blank margin line, and clears any stale progressText from before it finished', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'progress', text: '[step 3/5] Verification…' })
+    bridge.handleEvent({ type: 'line', lines: ['Aielia> Done.'], stream: 'stdout' })
+    expect(bridge.getSnapshot()).toEqual({
+      lines: [
+        { text: 'Done.', kind: 'assistant' },
+        { text: '', kind: 'margin' },
+      ],
+      progressText: '',
+      transientText: '',
+    })
+  })
+
+  it('a tool-step line does not get a trailing margin (only a finished assistant reply does)', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '  ⚙ Listing .', kind: 'tool' }])
+  })
+
+  it('classifies a stream: "stderr" line as "error" regardless of content', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['boom'], stream: 'stderr' })
+    expect(bridge.getSnapshot().lines).toEqual([{ text: 'boom', kind: 'error' }])
+  })
+
+  it('classifies ordinary output (e.g. /help, banners) as "system"', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['Type /help to see all commands.'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([{ text: 'Type /help to see all commands.', kind: 'system' }])
+  })
+
+  it('pushEchoLine with an empty prefix (ordinary chat mode) appends the bare text, classified "user"', () => {
+    const bridge = new EventLogBridge()
+    bridge.pushEchoLine('', 'hello there')
+    expect(bridge.getSnapshot().lines).toEqual([{ text: 'hello there', kind: 'user' }])
+  })
+
+  it('pushEchoLine with a "> " prefix (a resolved prompt answer) keeps that prefix', () => {
+    const bridge = new EventLogBridge()
+    bridge.pushEchoLine('> ', 'y')
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '> y', kind: 'user' }])
+  })
+
+  it('pushTurnMargin appends one blank "margin" line, is a no-op on an empty log, and never stacks two in a row', () => {
+    const bridge = new EventLogBridge()
+    bridge.pushTurnMargin()
+    expect(bridge.getSnapshot().lines).toEqual([])
+    bridge.pushEchoLine('', 'first')
+    bridge.pushTurnMargin()
+    bridge.pushTurnMargin()
+    expect(bridge.getSnapshot().lines).toEqual([
+      { text: 'first', kind: 'user' },
+      { text: '', kind: 'margin' },
+    ])
   })
 
   it('unsubscribe stops further notifications', () => {

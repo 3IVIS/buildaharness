@@ -48,7 +48,7 @@ describe('startCapture', () => {
     const events = capture(() => {
       console.log('  ⚙ Listing .')
     })
-    expect(events).toEqual([{ type: 'line', lines: ['  ⚙ Listing .'] }])
+    expect(events).toEqual([{ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' }])
   })
 
   it('classifies writeToken\'s opening "\\nAielia> " write as a token event', () => {
@@ -75,21 +75,21 @@ describe('startCapture', () => {
     const events = capture(() => {
       console.log('\nAielia> Hello there\n')
     })
-    expect(events).toEqual([{ type: 'line', lines: ['', 'Aielia> Hello there', ''] }])
+    expect(events).toEqual([{ type: 'line', lines: ['', 'Aielia> Hello there', ''], stream: 'stdout' }])
   })
 
-  it('classifies console.error the same as console.log — a committed line', () => {
+  it('classifies console.error as a committed line tagged stream: "stderr", distinct from console.log', () => {
     const events = capture(() => {
       console.error('boom')
     })
-    expect(events).toEqual([{ type: 'line', lines: ['boom'] }])
+    expect(events).toEqual([{ type: 'line', lines: ['boom'], stream: 'stderr' }])
   })
 
   it('classifies the post-streaming tail write (trailing \\n\\n, no leading \\n) as a committed line plus one blank line', () => {
     const events = capture(() => {
       process.stdout.write(' (2 sources — /sources)\n\n')
     })
-    expect(events).toEqual([{ type: 'line', lines: [' (2 sources — /sources)', ''] }])
+    expect(events).toEqual([{ type: 'line', lines: [' (2 sources — /sources)', ''], stream: 'stdout' }])
   })
 
   it('reproduces a full turn sequence: progress, then a tool step clearing it, then streamed tokens, then the final line', () => {
@@ -104,10 +104,10 @@ describe('startCapture', () => {
     expect(events).toEqual([
       { type: 'progress', text: '[step 1/5] Gathering evidence…' },
       { type: 'progress', text: '' },
-      { type: 'line', lines: ['  ⚙ Listing .'] },
+      { type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' },
       { type: 'token', text: '\nAielia> ' },
       { type: 'token', text: 'Hi' },
-      { type: 'line', lines: [' there!', ''] },
+      { type: 'line', lines: [' there!', ''], stream: 'stdout' },
     ])
   })
 

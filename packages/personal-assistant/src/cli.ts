@@ -42,6 +42,7 @@ import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
+import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -217,6 +218,15 @@ export interface CliInstance {
   /** Parses and dispatches one line of input exactly as the REPL's 'line' handler does (same dispatchQueue serialization) — the seam cli.test.ts drives command dispatch through without a live TTY. */
   dispatchLine(line: string): Promise<void>
   close(): void
+  /**
+   * Additive, read-only accessor for the pinned-input TUI shell's status line
+   * (plans/personal_assistant_cli_pinned_input_plan.html Phase 3) — the same two signals
+   * printStatus() already renders as part of `/status` (lastPlanStatus !== undefined,
+   * spendCapStatusLine()), just exposed here instead of only printed. Returns short indicator
+   * strings in priority order; empty when there's nothing to report. Not used by the ordinary
+   * readline REPL or by non-interactive/piped mode — only the TUI shell polls this.
+   */
+  getStatusIndicators(): Promise<string[]>
 }
 
 /**
@@ -1413,10 +1423,52 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await enqueue(message)
     },
     close: () => rl.close(),
+    getStatusIndicators: async () => {
+      const indicators: string[] = []
+      // Persistent context, not a notable/active state — always shown, same reasoning as the
+      // spend-cap gauge below (once relevant, stays visible rather than only flashing on
+      // change). fileTools is wired unconditionally in buildAssistant() (unlike shell/web/email
+      // tools), so there's always an effective workspace root to show; mirrors the same
+      // `config.workspaceRoot ?? process.cwd()` fallback buildAssistant() itself uses.
+      indicators.push(`Workspace: ${config.workspaceRoot ?? process.cwd()}`)
+      // A standing risk state, not a one-off event — worth keeping visible for the rest of the
+      // session the same way dangerBanner warns once at startup (line ~349), since that startup
+      // line scrolls out of view long before the session ends. Only shown when ON, mirroring
+      // every other indicator here ("blank when nothing to report").
+      if (config.dangerouslySkipPermissions) indicators.push('⚠ Permissions: auto-approved (dangerouslySkipPermissions)')
+      if (lastPlanStatus !== undefined) indicators.push('Plan mode: active')
+      const spendCapLine = await spendCapStatusLine()
+      if (spendCapLine) indicators.push(spendCapLine)
+      return indicators
+    },
   }
 }
 
+/**
+ * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html: `tuiMode` is resolved from the
+ * same persisted-config + env-override chain every other config key uses (not just the env var
+ * alone), so `/config set tuiMode enabled` works exactly like `/config set oneLoopMode enabled`
+ * already does. This is a second, separate `configStore.load()` from the one `runCli()` performs
+ * internally — an accepted duplication (one extra small JSON read at startup) rather than
+ * threading a pre-resolved config through `runCli()`'s options, since `runCli()` must remain
+ * callable on its own (tests, `non-interactive-mode.ts`) with no knowledge of this gate.
+ *
+ * `shouldLaunchTuiApp` (tui-mode-flag.ts) additionally requires both stdio streams to be a real
+ * TTY — this repo's documented piped/scripted workflow (`printf 'msg\nexit\n' | node dist/cli.js`)
+ * and every non-interactive shell always take the `runCli()` branch below regardless of the flag.
+ * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
+ * at all — `main()` behaves byte-for-byte as it does today in both those cases.
+ */
 async function main(): Promise<void> {
+  const persisted = await defaultConfigStore.load()
+  const { config } = resolveConfig(persisted, defaultEnvOverrides)
+
+  if (shouldLaunchTuiApp(config.tuiMode ?? 'disabled', Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
+    const { runTuiApp } = await import('./tui-app.js')
+    await runTuiApp()
+    return
+  }
+
   await runCli()
 }
 

@@ -22,6 +22,8 @@ export type CaptureEvent =
       /** A `console.log`/`console.error` call, or any write that completes with a trailing newline — one or more committed, permanently-scrolled lines. */
       type: 'line'
       lines: string[]
+      /** Which global function produced this — `'stderr'` only for `console.error`, everything else (`console.log`, raw `process.stdout.write`) is `'stdout'`. Lets a consumer (Phase 3's `EventLogBridge`) style error output distinctly without guessing from content. */
+      stream: 'stdout' | 'stderr'
     }
 
 /**
@@ -30,7 +32,7 @@ export type CaptureEvent =
  * leading `\r` means progress, a trailing `\n` means one or more committed lines, and everything
  * else (streamed reply tokens — the only writer left that produces neither) is a token.
  */
-function classify(raw: string): CaptureEvent {
+function classify(raw: string, stream: 'stdout' | 'stderr'): CaptureEvent {
   if (raw.startsWith('\r')) {
     // `padEnd`'s filler spaces exist only to overwrite a longer previous line on a real
     // terminal — Ink re-renders the whole frame every time, so that artifact would just show up
@@ -41,7 +43,7 @@ function classify(raw: string): CaptureEvent {
     // Drop only the one trailing empty element `split` produces because the string itself ends
     // in '\n' — any other blank lines in the middle (e.g. a call site's own leading/trailing
     // '\n' for spacing) are real committed blank lines, not a split artifact.
-    return { type: 'line', lines: raw.slice(0, -1).split('\n') }
+    return { type: 'line', lines: raw.slice(0, -1).split('\n'), stream }
   }
   return { type: 'token', text: raw }
 }
@@ -60,14 +62,14 @@ export function startCapture(onEvent: (event: CaptureEvent) => void): () => void
   const originalError = console.error
   const originalWrite = process.stdout.write
 
-  const captureConsole = (...args: unknown[]): void => {
-    onEvent(classify(`${format(...(args as [unknown, ...unknown[]]))}\n`))
+  const makeCaptureConsole = (stream: 'stdout' | 'stderr') => (...args: unknown[]): void => {
+    onEvent(classify(`${format(...(args as [unknown, ...unknown[]]))}\n`, stream))
   }
-  console.log = captureConsole
-  console.error = captureConsole
+  console.log = makeCaptureConsole('stdout')
+  console.error = makeCaptureConsole('stderr')
 
   const captureWrite: StdoutWrite = ((chunk: unknown, ...rest: unknown[]): boolean => {
-    onEvent(classify(typeof chunk === 'string' ? chunk : String(chunk)))
+    onEvent(classify(typeof chunk === 'string' ? chunk : String(chunk), 'stdout'))
     // Honor process.stdout.write's real contract (an optional trailing callback) even though no
     // call site in cli.ts currently passes one — costs nothing and avoids a silent hang for any
     // future one that does.
