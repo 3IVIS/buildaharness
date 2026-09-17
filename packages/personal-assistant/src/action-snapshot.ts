@@ -167,7 +167,6 @@ export const UNDO_SNAPSHOT_MAX_FILES = 2000
 export const UNDO_SNAPSHOT_EXCLUDED_DIRS = [
   '.pending-actions',
   '.undo-log',
-  '.shell-cache',
   'node_modules',
   '.git',
   'dist',

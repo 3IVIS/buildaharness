@@ -1913,30 +1913,28 @@ describe('PersonalAssistant shell tools', () => {
     expect(llm.calls).toBe(2)
   })
 
-  it('an identical (command, cwd) repeat in a later turn answers from cache instead of staging a new approval (conv4/12/21)', async () => {
+  it('an identical (command, cwd) repeat in a later turn stages and runs again — no result caching', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
       { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la' } }] },
-      { content: 'The files here are a.txt and b.txt.' },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
-    const sessionId = 'shell-cache-test'
+    const sessionId = 'shell-repeat-test'
 
     const staged = await assistant.turn('List the files here', { sessionId })
     await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
 
-    const followUp = await assistant.turn('What did that print again?', { sessionId })
+    const followUp = await assistant.turn('List the files here again', { sessionId })
 
-    expect(followUp.status).toBe('ok')
-    expect(followUp.reply).toBe('The files here are a.txt and b.txt.')
-    // The real command only ran once — the repeat was answered from the cache, never re-executed
-    // and never re-gated behind a fresh approval.
+    // A genuine repeat is gated exactly like a fresh call — its result may no longer reflect
+    // current state, so it is never answered from a prior resolution.
+    expect(followUp.status).toBe('needs_approval')
     expect(executeCommand).toHaveBeenCalledTimes(1)
   })
 
-  it('a different command, or the same command in a different cwd, is not a cache hit and still gates', async () => {
+  it('a different command, or the same command in a different cwd, also still gates', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
@@ -1944,7 +1942,7 @@ describe('PersonalAssistant shell tools', () => {
       { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la /tmp' } }] },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
-    const sessionId = 'shell-cache-miss-test'
+    const sessionId = 'shell-different-command-test'
 
     const staged = await assistant.turn('List the files here', { sessionId })
     await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
@@ -1952,26 +1950,6 @@ describe('PersonalAssistant shell tools', () => {
     const differentCommand = await assistant.turn('Now list /tmp', { sessionId })
 
     expect(differentCommand.status).toBe('needs_approval')
-    expect(executeCommand).toHaveBeenCalledTimes(1)
-  })
-
-  it('/new (clearSession) clears the shell cache — a repeat in a fresh session gates again', async () => {
-    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\n', exitCode: 0, timedOut: false })
-    const { ctx } = makeShellTools(executeCommand)
-    const llm = scriptedResponses([
-      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
-      { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la' } }] },
-    ])
-    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
-    const sessionId = 'shell-cache-clear-test'
-
-    const staged = await assistant.turn('List the files here', { sessionId })
-    await assistant.turn('List the files here', { sessionId, approved: true, pendingActionId: staged.pendingActionId })
-
-    await assistant.clearSession(sessionId)
-    const afterNew = await assistant.turn('List the files here', { sessionId })
-
-    expect(afterNew.status).toBe('needs_approval')
     expect(executeCommand).toHaveBeenCalledTimes(1)
   })
 })

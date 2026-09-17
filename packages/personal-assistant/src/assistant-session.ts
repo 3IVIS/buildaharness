@@ -12,7 +12,6 @@ import {
   loadPendingAction,
   stagePendingAction,
   sweepAbandonedPendingActions,
-  clearShellCache,
   type FileToolsContext,
 } from './file-tools.js'
 import {
@@ -451,11 +450,6 @@ export class AssistantSession {
     await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)
     await this.memory.delete(AssistantSession.notifiedContradictionsKey(sessionId))
-    const backend = this.fileTools?.backend ?? this.shellTools?.backend ?? this.actionTools?.backend
-    const workspaceRoot = this.fileTools?.workspaceRoot ?? this.shellTools?.workspaceRoot ?? this.actionTools?.workspaceRoot
-    if (backend && workspaceRoot) {
-      await clearShellCache(backend, workspaceRoot)
-    }
   }
 
   /**

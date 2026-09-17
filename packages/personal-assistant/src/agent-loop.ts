@@ -21,12 +21,7 @@ import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifi
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import {
-  FILE_TOOLS,
-  executeFileTool,
-  type FileToolsContext,
-  type ShellExecutionResult,
-} from './file-tools.js'
+import { FILE_TOOLS, executeFileTool, type FileToolsContext } from './file-tools.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
 import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
@@ -223,17 +218,6 @@ function shellApprovalReason(command: string, cwd: string): string {
   return (
     `${base}\n  [Warning: this command references a path outside its working directory — unlike file writes, ` +
     'shell commands are not filesystem-sandboxed once approved; approval is the only gate.]'
-  )
-}
-
-/** Formats a shell-cache hit (see file-tools.ts's ShellCacheEntry) as a tool result the model can
- * answer a follow-up question from, worded so it's unambiguous that nothing new was executed. */
-function formatCachedShellResult(command: string, cwd: string, execution: ShellExecutionResult): string {
-  const output = execution.output || '(no output)'
-  return (
-    `Already ran \`${command}\` in "${cwd}" earlier in this conversation (exit code ${execution.exitCode ?? 'n/a'}` +
-    `${execution.timedOut ? ', timed out' : ''}). Output:\n${output}\n\n` +
-    'Answer the current question from this instead of re-running it — nothing new was executed.'
   )
 }
 
@@ -822,21 +806,10 @@ export class AgentLoop {
       if (shellCall) {
         if (!this.shellTools) throw new Error('run_shell_command tool call received but shellTools is not configured')
         reportStep('run_shell_command', shellCall.input)
-        // Every genuinely new run_shell_command call is gated, full stop — there is no "safe
-        // subset" that skips staging. An identical repeat of an already-resolved (command, cwd)
-        // pair is different: executeShellTool returns 'cached_shell' for that (see file-tools.ts's
-        // shell-result-cache doc comment), so it's answered from the cached result as an ordinary
-        // tool result below instead of re-opening an approval prompt.
+        // Every run_shell_command call is gated, full stop — there is no "safe subset" that
+        // skips staging, including an identical repeat of an already-resolved (command, cwd) pair
+        // (its result may no longer reflect current state).
         const result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
-        if (result.kind === 'cached_shell') {
-          messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
-          messages.push({
-            role: 'tool',
-            content: formatCachedShellResult(result.command, result.cwd, result.execution),
-            toolCallId: shellCall.id,
-          })
-          return { done: false, dispatchedAnyToolCall: true }
-        }
         return {
           done: true,
           result: {
