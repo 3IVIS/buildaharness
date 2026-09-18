@@ -1,6 +1,6 @@
 {
   "name": "@buildaharness/harness",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript implementation of the Build A Harness 11-layer agent reasoning and control architecture — a resumable async engine (world model, control state, verification, recovery, reviewer pass).",
   "license": "Apache-2.0",
   "homepage": "https://buildaharness.com",
