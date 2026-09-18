@@ -85,7 +85,7 @@ true`, which sets `ENABLE_SHELL_TOOLS=1` on the file-tools MCP server's env so
 it registers `run_shell_command` (`file-tools-mcp-server.mjs`) alongside
 read/list/write; and `App.tsx` wires `shellTools.executeCommand` to
 `tauri-shell-executor.ts`, which invokes a new `run_shell_command` Tauri
-command (`src-tauri/src/lib.rs`) — a Rust port of personal-assistant's
+command (`src-tauri/src/lib.rs`) — a Rust port of aielia's
 `shell-executor.ts`, since the webview can't spawn processes itself. A
 proposed command is always staged first via the same pending-action flow
 `write_file` already uses — nothing runs until the user approves it in the
@@ -134,6 +134,6 @@ In practice:
 
 The browser build (`@buildaharness/chat-ui` on its own, Dexie/IndexedDB
 storage), this desktop app (same chat-ui, filesystem storage), and the CLI
-(`@buildaharness/personal-assistant`'s `cli.ts`, also filesystem storage) all
+(`@buildaharness/aielia`'s `cli.ts`, also filesystem storage) all
 run the identical `PersonalAssistant`/harness underneath — see that package's
 README for the full comparison table.

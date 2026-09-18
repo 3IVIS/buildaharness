@@ -15,7 +15,7 @@ export interface RiskClassification {
 // HIGH_RISK_PATTERNS, MEDIUM_RISK_PATTERNS, REMINDER_PATTERN, REMINDER_RECALL_QUESTION,
 // BULK_REMINDER_REASON, PAST_TENSE_QUESTION, FIRST_PERSON_PAST_NARRATIVE,
 // REPORTED_THIRD_PARTY_SPEECH, RISK_CLAUSE_BOUNDARY) now live as compiled regex source strings in
-// packages/personal-assistant/src/lexical/patterns/risk-patterns.json (see lexical/patterns.ts's
+// packages/aielia/src/lexical/patterns/risk-patterns.json (see lexical/patterns.ts's
 // getRiskPatterns()) — concentrated there so a future non-English pattern set is a pure data
 // addition, not a second copy of this file's logic. The historical rationale below (every
 // "found via live testing" fix that shaped each pattern's exact wording) stays here rather than

@@ -9,7 +9,7 @@ import {
   type AssistantConfig,
   type MemorySummary,
   type DoctorCheck,
-} from '@buildaharness/personal-assistant'
+} from '@buildaharness/aielia'
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
 

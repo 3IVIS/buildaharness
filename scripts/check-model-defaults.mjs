@@ -27,8 +27,8 @@ const SCANNED_FILES = [
   'packages/runtime/src/anthropic-client.ts',
   'packages/runtime/src/llm-client.ts',
   'packages/runtime/src/openai-compatible-client.ts',
-  'packages/personal-assistant/src/cli.ts',
-  'packages/personal-assistant/src/assistant-session.ts',
+  'packages/aielia/src/cli.ts',
+  'packages/aielia/src/assistant-session.ts',
   'packages/chat-ui/src/App.tsx',
   'packages/chat-ui/src/components/SettingsScreen.tsx',
 ]

@@ -2,7 +2,7 @@
 Support module for the ``langgraph`` arm of the comparative harness benchmark
 (Plan Phase B — ``plans/harness_consolidation_and_control_plane_plan.html``).
 
-This is the Python side of ``packages/personal-assistant/eval/``. It re-implements
+This is the Python side of ``packages/aielia/eval/``. It re-implements
 just enough of that TypeScript harness to run one extra arm — a minimal LangGraph
 ReAct agent — over the *same* shared task corpus and emit a report in the *same*
 JSON shape, so a human (or ``diffReports``) can put the arms side by side.
@@ -34,7 +34,7 @@ from typing import Any
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # adapter/eval/harness_bench_common.py → parents[2] == repo root (buildaharness/)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-CORPUS_DIR = _REPO_ROOT / "packages" / "personal-assistant" / "eval" / "corpus"
+CORPUS_DIR = _REPO_ROOT / "packages" / "aielia" / "eval" / "corpus"
 
 # ── The curated subset ────────────────────────────────────────────────────────
 # 10 tasks spanning file_read / compute / lookup / multi_step / adversarial.
@@ -340,7 +340,7 @@ def build_row(task: TaskSpec, out: ArmTurnOutput, graded: GradedTask) -> dict[st
 
 
 def build_report(rows: list[dict[str, Any]], corpus_size: int) -> dict[str, Any]:
-    """Same top-level shape as ``packages/personal-assistant/eval/reports/*.json``:
+    """Same top-level shape as ``packages/aielia/eval/reports/*.json``:
     ``generatedAt`` / ``corpusSize`` / ``judgeEnabled`` / ``perArm`` / ``rows``.
     Only the ``langgraph`` arm is present."""
     ran = [r for r in rows if r["ran"]]

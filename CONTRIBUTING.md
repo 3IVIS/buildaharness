@@ -12,8 +12,8 @@ v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-
 - Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
 - SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@buildaharness/canvas` package
 - Full harness architecture: 11-layer reasoning and control system, harness tests (P0–P11, P-PC, integration, E2E, invariants)
-- **Aielia** — a personal assistant running the full harness client-side every turn (`@buildaharness/personal-assistant`), with a CLI, a browser build (`@buildaharness/chat-ui`), and a native desktop app (`@buildaharness/desktop`)
-- npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/canvas`, `@buildaharness/personal-assistant`, `@buildaharness/proxy`
+- **Aielia** — a personal assistant running the full harness client-side every turn (`@buildaharness/aielia`), with a CLI, a browser build (`@buildaharness/chat-ui`), and a native desktop app (`@buildaharness/desktop`)
+- npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/canvas`, `@buildaharness/aielia`, `@buildaharness/proxy`
 
 **Not in this repo:** a few pieces referenced in internal docs are maintained in a private overlay
 and aren't part of this public clone — most visibly the coaching-agent example flow and its
@@ -68,7 +68,7 @@ through `handleApprove` / `handleDeny`.
 ### 2 · Make cross-run learning legible and deletable `[assistant]`
 
 The assistant already learns across runs via `ExperienceStore`
-(`packages/personal-assistant/src/`), but there's no user-facing surface for it —
+(`packages/aielia/src/`), but there's no user-facing surface for it —
 you can't see what it has generalised or forget a specific lesson. Add a
 `/experience` CLI command (list + delete-by-id) and a short "What Aielia has
 learned" section to the package README, sourced from the existing store API. Done
@@ -77,7 +77,7 @@ when a user can enumerate stored experience entries and delete one, with tests.
 ### 3 · Inverted index for transcript search `[assistant]`
 
 Transcript search is a linear scan over every stored message
-(`packages/personal-assistant/src/`). Fine for now, O(n) per query as history
+(`packages/aielia/src/`). Fine for now, O(n) per query as history
 grows. Add an in-memory inverted index (token → message ids) built lazily on first
 search and updated on append, falling back to the linear scan when absent. Done
 when search returns identical results with the index enabled and a benchmark shows
@@ -104,7 +104,7 @@ before starting.
 | `[observability]` | Tracing, token counts, Langfuse wiring |
 | `[collab]` | Yjs real-time collaboration, presence, offline persistence |
 | `[canvas-pkg]` | `@buildaharness/canvas` npm package — props API, embedding, theming |
-| `[assistant]` | Aielia / `@buildaharness/personal-assistant` — harness bridge, risk gate, tools, memory, CLI |
+| `[assistant]` | Aielia / `@buildaharness/aielia` — harness bridge, risk gate, tools, memory, CLI |
 | `[chat-ui]` | `@buildaharness/chat-ui` browser build — approval UI, settings, `/try` |
 
 ---
@@ -238,7 +238,7 @@ The y-websocket server is stateless with respect to the flow spec (it only relay
 
 ## Working on Aielia & the npm packages
 
-No Docker, no stack. `@buildaharness/personal-assistant` and its front ends run
+No Docker, no stack. `@buildaharness/aielia` and its front ends run
 against `@buildaharness/harness` + `@buildaharness/runtime` by workspace link.
 
 ```bash
@@ -247,20 +247,20 @@ npm run build:harness && npm run build:runtime      # workspace deps the assista
 
 # CLI — the fastest loop. claude-cli backend needs no API key (shells to `claude`).
 printf 'what time zone is Tokyo in?\nexit\n' | \
-  ASSISTANT_LLM_BACKEND=claude-cli node packages/personal-assistant/dist/cli.js
+  ASSISTANT_LLM_BACKEND=claude-cli node packages/aielia/dist/cli.js
 # or, without a build step:
-npm run cli --workspace=packages/personal-assistant
+npm run cli --workspace=packages/aielia
 
 # Browser build (chat-ui / the /try page)
 npm run dev --workspace=packages/chat-ui           # → http://localhost:3010, paste a key in Settings
 
-npm test --workspace=packages/personal-assistant   # ~900 tests, must stay green
+npm test --workspace=packages/aielia   # ~900 tests, must stay green
 npm test --workspace=packages/chat-ui
 ```
 
 The full 11-layer harness runs client-side every turn — the harness loop itself
 makes no LLM calls (it's synchronous state-machine bookkeeping), so the per-turn
-cost is one real model call, or zero for a risk-gated one. `packages/personal-assistant/README.md`
+cost is one real model call, or zero for a risk-gated one. `packages/aielia/README.md`
 is the design reference; keep it in sync with behaviour changes. Any change to
 risk classification, the tool-policy gate, or the approval flow needs a test that
 pins the new behaviour.

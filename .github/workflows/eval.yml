@@ -8,7 +8,7 @@ name: Offline eval harness
 #   eval-spec-validation             — spec + MAF compile gate (always, no LLM)
 #   eval-rag / eval-moderation / eval-debate
 #                                    — DeepEval/Ragas quality metrics; real-LLM nightly (OPENAI_API_KEY)
-#   eval-harness-benchmark           — the personal-assistant comparative harness benchmark
+#   eval-harness-benchmark           — the aielia comparative harness benchmark
 #                                      (Plan Phase B). Push: keyless tsc + baseline.json parse.
 #                                      Nightly: real-LLM run of the baseline/flagOn/bare arms via
 #                                      the `claude` CLI (ANTHROPIC_API_KEY), Rule 6 gate + artifact.
@@ -25,7 +25,7 @@ on:
     paths:
       - "adapter/**"
       - "flows/**"
-      - "packages/personal-assistant/**"
+      - "packages/aielia/**"
       - ".github/workflows/eval.yml"
   schedule:
     - cron: "0 3 * * *"   # nightly at 03:00 UTC
@@ -181,9 +181,9 @@ jobs:
           retention-days: 30
 
   # ── Comparative harness benchmark (Plan Phase B) ─────────────────────────────
-  # packages/personal-assistant/eval/ — arm-vs-arm task benchmark.
+  # packages/aielia/eval/ — arm-vs-arm task benchmark.
   # Push: LLM-free sanity only (the eval/*.test.ts machinery is covered by the CI
-  #   frontend job's `npm test`; here we add a personal-assistant typecheck the CI
+  #   frontend job's `npm test`; here we add an aielia typecheck the CI
   #   job does not run, plus a parse check on the committed Rule 6 baseline).
   # Schedule / workflow_dispatch: real run of the implemented arms (baseline,
   #   flagOn, bare) against the `claude` CLI, gated on ANTHROPIC_API_KEY exactly
@@ -199,10 +199,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      # packages/personal-assistant imports @buildaharness/harness and
+      # packages/aielia imports @buildaharness/harness and
       # @buildaharness/runtime by their built dist/ — tsc and the tsx benchmark
       # run both resolve them from there, so build them first. Same prerequisite
-      # as ci.yml's "@buildaharness/personal-assistant" job.
+      # as ci.yml's "@buildaharness/aielia" job.
       - name: Build workspace deps (harness, runtime)
         run: |
           npm run build:harness
@@ -210,8 +210,8 @@ jobs:
       - name: Push — LLM-free sanity (typecheck + baseline.json parses)
         if: github.event_name == 'push'
         run: |
-          npm run typecheck:personal-assistant
-          node -e "const r=JSON.parse(require('fs').readFileSync('packages/personal-assistant/eval/reports/baseline.json','utf8')); if(!r.perArm||!r.rows) throw new Error('baseline.json missing perArm/rows'); console.log('baseline.json parses — corpusSize', r.corpusSize)"
+          npm run typecheck:aielia
+          node -e "const r=JSON.parse(require('fs').readFileSync('packages/aielia/eval/reports/baseline.json','utf8')); if(!r.perArm||!r.rows) throw new Error('baseline.json missing perArm/rows'); console.log('baseline.json parses — corpusSize', r.corpusSize)"
       - name: Nightly — real-LLM comparative benchmark (Rule 6 gate)
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
@@ -221,7 +221,7 @@ jobs:
             echo "::notice::ANTHROPIC_API_KEY not set — skipping the real-LLM harness benchmark (nightly not failed)."
             exit 0
           fi
-          cd packages/personal-assistant
+          cd packages/aielia
           npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/baseline.json
       - name: Upload harness benchmark report
         if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -229,7 +229,7 @@ jobs:
         with:
           name: eval-harness-benchmark-${{ github.run_id }}
           path: |
-            packages/personal-assistant/eval/reports/*.json
+            packages/aielia/eval/reports/*.json
             docs/harness_comparative_benchmark.md
           retention-days: 30
           if-no-files-found: ignore

@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     from harness.plan_schema import PlanSnapshot  # type: ignore[import]
 
 # Keywords that map to each template name for heuristic selection — kept in sync with
-# packages/personal-assistant/src/lexical/patterns/template-keywords.json (that package's own
+# packages/aielia/src/lexical/patterns/template-keywords.json (that package's own
 # canonical copy) via this file's own byte-for-byte mirror at
 # adapter/agents/planner/lexical_patterns/template-keywords.json, checked by
 # scripts/check-lexical-patterns-sync.mjs. Same pattern this repo already uses for
-# adapter/agents/planner/data/plan_templates/ vs. packages/personal-assistant/src/plan-templates/data/
+# adapter/agents/planner/data/plan_templates/ vs. packages/aielia/src/plan-templates/data/
 # (scripts/check-plan-templates-sync.mjs) — Python and the TS package keep their own local copies
 # rather than reaching into each other's source trees at runtime.
 _TEMPLATE_KEYWORDS_PATH = Path(__file__).parent / "lexical_patterns" / "template-keywords.json"

@@ -19,7 +19,7 @@ const BULLET_MARKER = /^[-*]\s+(.+)$/
 // Rüdesheimer Platz") actually uses. Excluded from the capitalization ratio so a real name isn't
 // penalized for the connective tissue it needs, while an instruction sentence ("Add a submit
 // button") still reads as mostly lowercase once its own articles are excluded the same way.
-// Compiled from packages/personal-assistant/src/lexical/patterns/batch-list-markers.json (see
+// Compiled from packages/aielia/src/lexical/patterns/batch-list-markers.json (see
 // lexical/patterns.ts).
 const CONNECTOR_WORDS = getConnectorWords()
 

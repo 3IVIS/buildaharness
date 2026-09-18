@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { DnsResolver } from '@buildaharness/personal-assistant'
+import type { DnsResolver } from '@buildaharness/aielia'
 
 /**
  * DnsResolver for fetch_url's SSRF guard (web-tools.ts's assertPublicHttpUrl) on desktop —

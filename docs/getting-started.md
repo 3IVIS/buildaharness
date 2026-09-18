@@ -10,7 +10,7 @@ No clone, no Docker. You need Node.js 18+ and one of: a `claude` CLI already
 logged in, or an Anthropic / OpenAI / OpenRouter API key.
 
 ```bash
-npx @buildaharness/personal-assistant
+npx @buildaharness/aielia
 ```
 
 On the first run it asks how to reach a model — pick the `claude` CLI if it's

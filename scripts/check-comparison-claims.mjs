@@ -66,51 +66,51 @@ export const CLAIMS = [
     description: 'A classifier error requires approval (UNKNOWN), never silently defaults to low-risk.',
     expected: true,
     resolve: () =>
-      fileHas('packages/personal-assistant/src/turn-intent-classifier.ts', /function failSafeClassification\b/) &&
-      fileHas('packages/personal-assistant/src/turn-intent-classifier.ts', /'UNKNOWN'/) &&
-      fileHas('packages/personal-assistant/src/task-mapping.ts', /'UNKNOWN'\s*\?\s*'HIGH'/),
+      fileHas('packages/aielia/src/turn-intent-classifier.ts', /function failSafeClassification\b/) &&
+      fileHas('packages/aielia/src/turn-intent-classifier.ts', /'UNKNOWN'/) &&
+      fileHas('packages/aielia/src/task-mapping.ts', /'UNKNOWN'\s*\?\s*'HIGH'/),
   },
   {
     id: 'per_tool_call_control_state_gate',
     description: 'Every read-only tool call is checked against a live per-turn ControlState before it runs.',
     expected: true,
     resolve: () =>
-      fileHas('packages/personal-assistant/src/tool-policy.ts', /export function evaluateToolPolicy\b/) &&
-      existsSync('packages/personal-assistant/src/tool-control-plane.ts'),
+      fileHas('packages/aielia/src/tool-policy.ts', /export function evaluateToolPolicy\b/) &&
+      existsSync('packages/aielia/src/tool-control-plane.ts'),
   },
   {
     id: 'typed_fact_provenance',
     description: 'Facts carry a source; only user-asserted facts auto-promote to durable memory.',
     expected: true,
-    resolve: () => fileHas('packages/personal-assistant/src/fact-extraction.ts', /\bFactSource\b|\buser_asserted\b/),
+    resolve: () => fileHas('packages/aielia/src/fact-extraction.ts', /\bFactSource\b|\buser_asserted\b/),
   },
   {
     id: 'untrusted_content_boundary',
     description: 'Web/shell output is wrapped as untrusted content the model is told not to obey.',
     expected: true,
     resolve: () =>
-      fileHas('packages/personal-assistant/src/trust-tagging.ts', /export function wrapUntrusted\b/) &&
-      fileHas('packages/personal-assistant/src/system-prompt.ts', /untrusted_external_content/),
+      fileHas('packages/aielia/src/trust-tagging.ts', /export function wrapUntrusted\b/) &&
+      fileHas('packages/aielia/src/system-prompt.ts', /untrusted_external_content/),
   },
   {
     id: 'crash_safe_mid_turn_resume',
     description: 'A turn that dies mid-flight resumes from its last checkpoint.',
     expected: true,
-    resolve: () => fileHas('packages/personal-assistant/src/assistant-session.ts', /loadHarnessCheckpoint\(/),
+    resolve: () => fileHas('packages/aielia/src/assistant-session.ts', /loadHarnessCheckpoint\(/),
   },
   {
     id: 'answer_claim',
     description: 'Replies distinguish verified-against-evidence from found-but-unconfirmed.',
     expected: true,
-    resolve: () => fileHas('packages/personal-assistant/src/answer-claim.ts', /export function buildAnswerClaim\b/),
+    resolve: () => fileHas('packages/aielia/src/answer-claim.ts', /export function buildAnswerClaim\b/),
   },
   {
     id: 'web_search_on_claude_cli',
     description: 'The claude-cli backend can run web_search (not just fetch_url), given a Brave Search API key.',
     expected: true, // F3 — flip to false only if the wiring is removed
     resolve: () =>
-      fileHas('packages/personal-assistant/src/claude-cli-llm-client.ts', /this\.webTools\b/) &&
-      fileHas('packages/personal-assistant/src/file-tools-mcp-server.mjs', /\bBRAVE_SEARCH_API_KEY\b/),
+      fileHas('packages/aielia/src/claude-cli-llm-client.ts', /this\.webTools\b/) &&
+      fileHas('packages/aielia/src/file-tools-mcp-server.mjs', /\bBRAVE_SEARCH_API_KEY\b/),
   },
   {
     id: 'send_effect_tool',
@@ -118,7 +118,7 @@ export const CLAIMS = [
     expected: true, // F2(a) — send_email; flip to false only if action-tools.ts is removed
     resolve: () =>
       sourceHas("name:\\s*['\\\"]send_email['\\\"]") &&
-      fileHas('packages/personal-assistant/src/file-tools.ts', /kind: 'email'/),
+      fileHas('packages/aielia/src/file-tools.ts', /kind: 'email'/),
   },
   {
     id: 'os_level_shell_sandbox',

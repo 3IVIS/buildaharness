@@ -55,7 +55,7 @@ export function listTemplateNames(): string[] {
 // Kept in sync with adapter/agents/planner/lexical_patterns/template-keywords.json (the Python
 // planner agent's own copy of the same data) — same 7 keys, same keyword lists, same insertion
 // order (which decides ties, see scoreTemplates). See
-// packages/personal-assistant/src/lexical/patterns/template-keywords.json (this package's own
+// packages/aielia/src/lexical/patterns/template-keywords.json (this package's own
 // canonical copy) and lexical/patterns.ts's getTemplateKeywords().
 const TEMPLATE_KEYWORDS: Record<string, string[]> = getTemplateKeywords()
 

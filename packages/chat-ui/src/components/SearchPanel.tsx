@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { TranscriptSearchHit } from '@buildaharness/personal-assistant'
+import type { TranscriptSearchHit } from '@buildaharness/aielia'
 
 interface Props {
   /** Bound to assistant.searchTranscript — cross-session by design, same as the CLI's /search (see assistant.ts's doc comment on searchTranscript). */

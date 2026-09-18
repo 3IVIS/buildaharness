@@ -1,5 +1,5 @@
-import { createScriptedLLMClient } from '@buildaharness/personal-assistant'
-import type { ScriptedLLMClientScript } from '@buildaharness/personal-assistant'
+import { createScriptedLLMClient } from '@buildaharness/aielia'
+import type { ScriptedLLMClientScript } from '@buildaharness/aielia'
 import { createInMemoryFsBackend } from './in-memory-fs-backend'
 
 /**

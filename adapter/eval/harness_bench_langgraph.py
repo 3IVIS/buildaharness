@@ -77,7 +77,7 @@ from eval.harness_bench_common import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_REPORTS_DIR = _REPO_ROOT / "packages" / "personal-assistant" / "eval" / "reports"
+_REPORTS_DIR = _REPO_ROOT / "packages" / "aielia" / "eval" / "reports"
 
 _SYSTEM_PROMPT = (
     "You are a careful assistant with access to a small file workspace via tools. "

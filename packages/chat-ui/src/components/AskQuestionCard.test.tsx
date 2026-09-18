@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { AskQuestion, AskResponse } from '@buildaharness/personal-assistant'
+import type { AskQuestion, AskResponse } from '@buildaharness/aielia'
 import { AskQuestionCard } from './AskQuestionCard'
 
 afterEach(() => cleanup())
@@ -12,7 +12,7 @@ const SINGLE_SELECT: AskQuestion = {
   question: 'Which language should the new service use?',
   options: [
     { label: 'Python', description: 'Matches the adapter' },
-    { label: 'TypeScript', recommended: true, description: 'Matches the rest of personal-assistant' },
+    { label: 'TypeScript', recommended: true, description: 'Matches the rest of aielia' },
   ],
 }
 
@@ -39,7 +39,7 @@ describe('AskQuestionCard', () => {
     // toHaveAccessibleName: the accessible-name algorithm trims/collapses inter-node whitespace,
     // which would hide a real missing space in the actual rendered text.
     expect(options[0].closest('label')?.textContent).toMatch(/^TypeScript \(Recommended\)/)
-    expect(screen.getByText('Matches the rest of personal-assistant')).toBeInTheDocument()
+    expect(screen.getByText('Matches the rest of aielia')).toBeInTheDocument()
   })
 
   it('Submit is disabled until the single question in the batch is answered, then fires onSubmit with a "selected" answer', async () => {

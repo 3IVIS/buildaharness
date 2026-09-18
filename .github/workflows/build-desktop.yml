@@ -83,7 +83,7 @@ jobs:
         run: npm ci
 
       # chat-ui's beforeBuildCommand bundles @buildaharness/{harness,runtime,
-      # personal-assistant} rather than externalizing them, so their dist/
+      # aielia} rather than externalizing them, so their dist/
       # (gitignored, not checked in) must exist before tauri-action invokes it.
       - name: Build harness dependency
         run: npm run build:harness
@@ -91,8 +91,8 @@ jobs:
       - name: Build runtime dependency
         run: npm run build:runtime
 
-      - name: Build personal-assistant dependency
-        run: npm run build:personal-assistant
+      - name: Build aielia dependency
+        run: npm run build:aielia
 
       # ── Build + publish release ──────────────────────────────────────────────
       - uses: tauri-apps/tauri-action@v0

@@ -24,7 +24,7 @@ import {
   type PlanRecord,
   type PlanDecision,
   type PlanApprovalEdits,
-} from '@buildaharness/personal-assistant'
+} from '@buildaharness/aielia'
 import {
   LLMClient,
   AnthropicLLMClient,

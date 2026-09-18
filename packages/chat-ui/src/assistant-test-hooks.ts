@@ -1,4 +1,4 @@
-import type { AssistantConfig } from '@buildaharness/personal-assistant'
+import type { AssistantConfig } from '@buildaharness/aielia'
 import type { ILLMClient, FsBackend } from '@buildaharness/runtime'
 
 /**

@@ -13,7 +13,7 @@ const NO_RESULTS_LITERAL = 'No results found.'
 // "productive") only costs one extra call, while a false positive (calling real content a dead
 // end) would prematurely abandon a findable item — the same asymmetry decomposition-classifier.ts
 // accepts elsewhere.
-// Compiled from packages/personal-assistant/src/lexical/patterns/tool-yield-markers.json (see
+// Compiled from packages/aielia/src/lexical/patterns/tool-yield-markers.json (see
 // lexical/patterns.ts).
 const DEAD_END_MARKERS = getDeadEndMarkers()
 

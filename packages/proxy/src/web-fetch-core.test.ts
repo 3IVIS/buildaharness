@@ -5,7 +5,7 @@ import { fetchTextSafely, PrivateNetworkTargetError, type DnsResolver } from './
 // the real route in web-tools.integration.test.ts (mocked upstream + DNS, via app.request). This
 // file covers one invariant that route-level testing can't directly assert: fetchTextSafely has
 // no way to skip assertPublicHttpUrl, regardless of what a caller passes in FetchTextSafelyOptions.
-// packages/personal-assistant/src/web-fetch-core.test.ts asserts the same invariant for the other
+// packages/aielia/src/web-fetch-core.test.ts asserts the same invariant for the other
 // hand-kept-in-sync copy of this module.
 
 function fakeDns(map: Record<string, string[]>): DnsResolver {

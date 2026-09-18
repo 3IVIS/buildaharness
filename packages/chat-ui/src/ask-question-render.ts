@@ -1,4 +1,4 @@
-import type { AskQuestion, AssistantTurnResult } from '@buildaharness/personal-assistant'
+import type { AskQuestion, AssistantTurnResult } from '@buildaharness/aielia'
 
 type AskableResult = Pick<AssistantTurnResult, 'status' | 'questions' | 'pendingClarificationId'>
 

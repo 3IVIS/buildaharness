@@ -10,7 +10,7 @@ const enumeration = getEnumerationPatterns()
 // fell through every signal and was under-reported as a single-step request. A sentence-initial
 // "First" (no comma/colon immediately after, so it doesn't double-match the branch above) followed
 // somewhere later by "and" is the same two-step shape without the punctuation.
-// Compiled from packages/personal-assistant/src/lexical/patterns/enumeration-markers.json (see
+// Compiled from packages/aielia/src/lexical/patterns/enumeration-markers.json (see
 // lexical/patterns.ts) — the historical rationale in this file documents each pattern's current
 // shape; edit the JSON to change it, not this file.
 const SEQUENCING_MARKERS = enumeration.sequencingMarkers

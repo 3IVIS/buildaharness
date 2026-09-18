@@ -124,7 +124,7 @@ export interface BeliefCandidate {
 // that an ordinary personal diary/journal entry is 日记, not 日志; 日志 is close to unambiguously
 // technical (build/system/error log, or a formal record like 航海日志 "ship's log"), so it's kept
 // in this list with no everyday-collision caveat, unlike its 通过/状态 siblings above.
-// Compiled from packages/personal-assistant/src/lexical/patterns/coding-fact-markers.json (see
+// Compiled from packages/aielia/src/lexical/patterns/coding-fact-markers.json (see
 // lexical/patterns.ts) — the historical rationale above documents this pattern's current shape;
 // edit the JSON to change it, not this file.
 const CODING_FACT_MARKERS = getCodingFactMarkerPatterns()

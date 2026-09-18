@@ -51,17 +51,17 @@ if (readme === null) {
 // Each boundary the threat model claims → the source symbol + file that enforces it.
 // If the doc cites it, the code must still define it.
 const CITED_SYMBOLS = [
-  ['stagePendingAction', 'packages/personal-assistant/src/file-tools.ts'],
-  ['resolveInWorkspace', 'packages/personal-assistant/src/file-tools.ts'],
-  ['assertRealPathInWorkspace', 'packages/personal-assistant/src/file-tools.ts'],
-  ['failSafeClassification', 'packages/personal-assistant/src/turn-intent-classifier.ts'],
-  ['toTaskRiskLevel', 'packages/personal-assistant/src/task-mapping.ts'],
-  ['wrapUntrusted', 'packages/personal-assistant/src/trust-tagging.ts'],
-  ['detectInjectionLikely', 'packages/personal-assistant/src/trust-tagging.ts'],
-  ['assertPublicHttpUrl', 'packages/personal-assistant/src/web-tools.ts'],
-  ['ALLOWED_ENV_VARS', 'packages/personal-assistant/src/shell-executor.ts'],
-  ['allowlistedEnv', 'packages/personal-assistant/src/shell-executor.ts'],
-  ['getNetworkContainmentProxy', 'packages/personal-assistant/src/network-containment.ts'],
+  ['stagePendingAction', 'packages/aielia/src/file-tools.ts'],
+  ['resolveInWorkspace', 'packages/aielia/src/file-tools.ts'],
+  ['assertRealPathInWorkspace', 'packages/aielia/src/file-tools.ts'],
+  ['failSafeClassification', 'packages/aielia/src/turn-intent-classifier.ts'],
+  ['toTaskRiskLevel', 'packages/aielia/src/task-mapping.ts'],
+  ['wrapUntrusted', 'packages/aielia/src/trust-tagging.ts'],
+  ['detectInjectionLikely', 'packages/aielia/src/trust-tagging.ts'],
+  ['assertPublicHttpUrl', 'packages/aielia/src/web-tools.ts'],
+  ['ALLOWED_ENV_VARS', 'packages/aielia/src/shell-executor.ts'],
+  ['allowlistedEnv', 'packages/aielia/src/shell-executor.ts'],
+  ['getNetworkContainmentProxy', 'packages/aielia/src/network-containment.ts'],
 ]
 
 if (threatModel !== null) {

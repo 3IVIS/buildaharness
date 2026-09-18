@@ -1,8 +1,8 @@
-import type { AssistantConfig } from '@buildaharness/personal-assistant'
-import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode } from '@buildaharness/personal-assistant'
+import type { AssistantConfig } from '@buildaharness/aielia'
+import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode } from '@buildaharness/aielia'
 
 /**
- * Browser-side companion to personal-assistant's cli-config.ts — same idea (env-var-name map
+ * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
  * + an overrides builder for resolveConfig), but for Vite's build-time VITE_ASSISTANT_* vars
  * instead of the CLI's process.env ones. Used by both App.tsx (T7, to compute overrides) and
  * SettingsScreen.tsx (to show which fields are build-time-pinned and therefore read-only).

@@ -1,4 +1,4 @@
-# @buildaharness/personal-assistant
+# @buildaharness/aielia
 
 A general-purpose, everyday-use chat assistant that runs on the full 11-layer
 harness (`@buildaharness/harness`) every turn — light enough for "what's the
@@ -168,7 +168,7 @@ re-deriving the mapping if it changes.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/personal-assistant'
+import { PersonalAssistant } from '@buildaharness/aielia'
 
 const assistant = new PersonalAssistant({
   llmClient: new LLMClient({ proxyUrl, authToken }),
@@ -285,8 +285,8 @@ is delivered only after `{ approved: true, pendingActionId }`, through the
 injected transport, never by the model.
 
 ```ts
-import { PersonalAssistant, createResendSender } from '@buildaharness/personal-assistant'
-// or: import { createSmtpSender } from '@buildaharness/personal-assistant'
+import { PersonalAssistant, createResendSender } from '@buildaharness/aielia'
+// or: import { createSmtpSender } from '@buildaharness/aielia'
 
 const assistant = new PersonalAssistant({
   llmClient,
@@ -582,7 +582,7 @@ decision this plan makes *safe*, not *risk-free*.
 ## CLI
 
 ```bash
-ASSISTANT_PROXY_URL=http://localhost:8787 ASSISTANT_PROXY_TOKEN=... npm run cli --workspace=packages/personal-assistant
+ASSISTANT_PROXY_URL=http://localhost:8787 ASSISTANT_PROXY_TOKEN=... npm run cli --workspace=packages/aielia
 ```
 
 Set `ASSISTANT_WORKSPACE_DIR` to sandbox the file tools to a specific directory
@@ -590,7 +590,7 @@ Set `ASSISTANT_WORKSPACE_DIR` to sandbox the file tools to a specific directory
 defaults to the launch directory):
 
 ```bash
-ASSISTANT_WORKSPACE_DIR=/path/to/workspace npm run cli --workspace=packages/personal-assistant
+ASSISTANT_WORKSPACE_DIR=/path/to/workspace npm run cli --workspace=packages/aielia
 ```
 
 When the model calls `write_file`, the CLI prints the proposed path and a
@@ -608,7 +608,7 @@ default; `ASSISTANT_ENABLE_SHELL` must be exactly `"1"` (a stray
 `ASSISTANT_SHELL_TIMEOUT_MS` (default 30000) tunes the shell timeout:
 
 ```bash
-ASSISTANT_ENABLE_WEB=1 ASSISTANT_ENABLE_SHELL=1 npm run cli --workspace=packages/personal-assistant
+ASSISTANT_ENABLE_WEB=1 ASSISTANT_ENABLE_SHELL=1 npm run cli --workspace=packages/aielia
 ```
 
 The startup banner only mentions a capability when it's actually enabled —
@@ -650,7 +650,7 @@ decision. `ASSISTANT_NON_INTERACTIVE_APPROVAL` makes it explicit:
   should always be rejected outright:
 
   ```bash
-  ASSISTANT_NON_INTERACTIVE_APPROVAL=decline npm run cli --workspace=packages/personal-assistant < script.txt
+  ASSISTANT_NON_INTERACTIVE_APPROVAL=decline npm run cli --workspace=packages/aielia < script.txt
   ```
 
 - `ASSISTANT_NON_INTERACTIVE_APPROVAL=require-tty` — fails fast at startup
@@ -672,7 +672,7 @@ Brave Search is the only backend `web_search` supports. Enable web tools with
 
 ```bash
 ASSISTANT_ENABLE_WEB=1 BRAVE_SEARCH_API_KEY=your-key \
-  npm run cli --workspace=packages/personal-assistant
+  npm run cli --workspace=packages/aielia
 ```
 
 If `ASSISTANT_ENABLE_WEB=1` is set without `BRAVE_SEARCH_API_KEY`, the CLI
@@ -688,7 +688,7 @@ Claude Code CLI session rather than an API key (`CLAUDE_PATH` overrides the
 `claude` binary path if it's not on `PATH`):
 
 ```bash
-ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/personal-assistant
+ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/aielia
 ```
 
 Or skip both the proxy and claude-cli and call a provider directly with your
@@ -697,13 +697,13 @@ own API key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus
 
 ```bash
 ASSISTANT_LLM_BACKEND=anthropic ASSISTANT_API_KEY=sk-ant-... \
-  npm run cli --workspace=packages/personal-assistant
+  npm run cli --workspace=packages/aielia
 
 ASSISTANT_LLM_BACKEND=openai ASSISTANT_API_KEY=sk-... \
-  npm run cli --workspace=packages/personal-assistant
+  npm run cli --workspace=packages/aielia
 
 ASSISTANT_LLM_BACKEND=openrouter ASSISTANT_API_KEY=sk-or-... \
-  npm run cli --workspace=packages/personal-assistant
+  npm run cli --workspace=packages/aielia
 ```
 
 These three go straight from this process to the provider's own API
@@ -826,7 +826,7 @@ them is not always the same kind of number:
 ## Commands
 
 ```bash
-npm run build --workspace=packages/personal-assistant
-npm test --workspace=packages/personal-assistant
-npm run typecheck --workspace=packages/personal-assistant
+npm run build --workspace=packages/aielia
+npm test --workspace=packages/aielia
+npm run typecheck --workspace=packages/aielia
 ```

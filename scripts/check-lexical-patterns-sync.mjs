@@ -5,7 +5,7 @@
  * mirrors scripts/check-plan-templates-sync.mjs's exact approach (sorted-key JSON comparison,
  * not a raw byte diff, so key reordering alone doesn't false-positive).
  *
- * Most lexical pattern JSON (packages/personal-assistant/src/lexical/patterns/*.json other than
+ * Most lexical pattern JSON (packages/aielia/src/lexical/patterns/*.json other than
  * template-keywords.json) has only ONE copy — TypeScript's own canonical source, read directly by
  * file-tools-mcp-server.mjs (a plain JSON read, no import barrier) — so there's nothing to check
  * for those; this script only covers the two pairs that genuinely have independent copies:
@@ -14,7 +14,7 @@
  *     <-> adapter/harness/lexical_patterns/negation.json
  *   packages/harness/src/lexical/patterns/granularity-markers.json
  *     <-> adapter/harness/lexical_patterns/granularity-markers.json
- *   packages/personal-assistant/src/lexical/patterns/template-keywords.json
+ *   packages/aielia/src/lexical/patterns/template-keywords.json
  *     <-> adapter/agents/planner/lexical_patterns/template-keywords.json
  *
  * Run manually:  node scripts/check-lexical-patterns-sync.mjs
@@ -47,7 +47,7 @@ const PAIRS = [
   },
   {
     name: 'template-keywords.json (plan-templates)',
-    a: 'packages/personal-assistant/src/lexical/patterns/template-keywords.json',
+    a: 'packages/aielia/src/lexical/patterns/template-keywords.json',
     b: 'adapter/agents/planner/lexical_patterns/template-keywords.json',
   },
 ]

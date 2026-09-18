@@ -91,7 +91,7 @@ export type { AskClarificationPendingState } from './ask-clarification-service.j
 // Q5 (plans/ask_question_and_plan_mode_plan.html) — chat-ui renders the ask-question batch
 // carried on a needs_clarification AssistantTurnResult and must build an AskResponse to resume
 // it, so these harness-owned shapes/helpers are re-exported here the same way RiskLevel is above:
-// chat-ui depends on @buildaharness/personal-assistant only, never @buildaharness/harness directly.
+// chat-ui depends on @buildaharness/aielia only, never @buildaharness/harness directly.
 export { validateAskResponse, MAX_QUESTIONS_PER_BATCH, MIN_OPTIONS_PER_QUESTION, MAX_OPTIONS_PER_QUESTION } from '@buildaharness/harness'
 export type { AskQuestion, AskQuestionOption, AskAnswer, AskResponse } from '@buildaharness/harness'
 // Deterministic, network-free ILLMClient for tests and demos — see plans/chat_ui_browser_e2e_plan.html phase B1.

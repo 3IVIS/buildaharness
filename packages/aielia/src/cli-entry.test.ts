@@ -8,8 +8,8 @@ import { entryArgMatchesModule } from './cli.js'
 /**
  * Regression for the npx-launch bug: `isEntryModule()` compared a raw
  * `pathToFileURL(process.argv[1])` against `import.meta.url`. Under `npx
- * @buildaharness/personal-assistant` (and every other npm-bin path) argv[1] is
- * the `node_modules/.bin/personal-assistant` symlink, so the two never matched
+ * @buildaharness/aielia` (and every other npm-bin path) argv[1] is
+ * the `node_modules/.bin/aielia` symlink, so the two never matched
  * and `main()` was skipped — the CLI exited 0 with no REPL.
  */
 describe('entryArgMatchesModule', () => {
@@ -21,7 +21,7 @@ describe('entryArgMatchesModule', () => {
   })
 
   it('matches when argv[1] is a symlink to the module (the npm-bin / npx case)', () => {
-    const binShim = join(tmpdir(), 'pa-fake', 'node_modules', '.bin', 'personal-assistant')
+    const binShim = join(tmpdir(), 'pa-fake', 'node_modules', '.bin', 'aielia')
     const resolveReal = (p: string) => (p === binShim ? moduleReal : p)
     expect(entryArgMatchesModule(binShim, moduleHref, resolveReal)).toBe(true)
   })

@@ -31,7 +31,7 @@ export function createSmtpSender(options: SmtpSenderOptions): SendEmail {
     } catch (err) {
       throw new EmailDeliveryError(
         'smtp',
-        `could not load nodemailer (${err instanceof Error ? err.message : String(err)}) — reinstall @buildaharness/personal-assistant`,
+        `could not load nodemailer (${err instanceof Error ? err.message : String(err)}) — reinstall @buildaharness/aielia`,
       )
     }
     const transport = nodemailer.createTransport({

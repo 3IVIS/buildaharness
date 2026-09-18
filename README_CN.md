@@ -27,14 +27,14 @@
 ## 1 · 助手 —— Aielia
 
 ```bash
-npx @buildaharness/personal-assistant
+npx @buildaharness/aielia
 ```
 
 首次运行会引导你选择一个模型 —— 复用已登录的 `claude` CLI（无需 API 密钥），或粘贴一个 Anthropic / OpenAI / OpenRouter 密钥。然后直接和它对话即可。
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/personal-assistant'
+import { PersonalAssistant } from '@buildaharness/aielia'
 
 const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
 
@@ -66,7 +66,7 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 - **崩溃安全的轮内恢复** —— 一轮对话中途崩溃时会从最后一个检查点恢复，而非静默重来；一个在重放中反复崩溃的检查点会在两次尝试后被自动丢弃。
 - **不可信内容边界** —— 网页结果和 shell 输出会被包裹为数据，模型被明确要求绝不将其当作指令执行。
 
-完整说明：[`packages/personal-assistant/README.md`](packages/personal-assistant/README.md)。
+完整说明：[`packages/aielia/README.md`](packages/aielia/README.md)。
 
 ---
 
@@ -146,7 +146,7 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 **只想要助手？** 无需克隆：
 
 ```bash
-npx @buildaharness/personal-assistant          # 终端
+npx @buildaharness/aielia          # 终端
 # 或打开 https://buildaharness.com/try           # 浏览器，使用你自己的密钥
 ```
 

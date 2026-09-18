@@ -261,8 +261,8 @@ jobs:
         working-directory: packages/harness
         run: npm run build
 
-  personal-assistant-package:
-    name: '@buildaharness/personal-assistant — typecheck, test, build'
+  aielia-package:
+    name: '@buildaharness/aielia — typecheck, test, build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -274,7 +274,7 @@ jobs:
       - name: Install deps (root + workspaces)
         run: npm ci
 
-      # personal-assistant depends on the real @buildaharness/harness and
+      # aielia depends on the real @buildaharness/harness and
       # @buildaharness/runtime packages (no source-path aliasing) — their
       # dist/ must exist before typecheck/test, not just before build.
       - name: Build harness dependency
@@ -284,15 +284,15 @@ jobs:
         run: npm run build:runtime
 
       - name: Type-check
-        working-directory: packages/personal-assistant
+        working-directory: packages/aielia
         run: npm run typecheck
 
       - name: Test
-        working-directory: packages/personal-assistant
+        working-directory: packages/aielia
         run: npm test
 
       - name: Build
-        working-directory: packages/personal-assistant
+        working-directory: packages/aielia
         run: npm run build
 
   chat-ui-package:
@@ -308,7 +308,7 @@ jobs:
       - name: Install deps (root + workspaces)
         run: npm ci
 
-      # chat-ui depends on the real @buildaharness/{harness,runtime,personal-assistant}
+      # chat-ui depends on the real @buildaharness/{harness,runtime,aielia}
       # packages (no source-path aliasing) — their dist/ must exist before
       # typecheck/test, and chat-ui also bundles them into its own `vite build`
       # rather than externalizing them (it's an app, not a library), so the
@@ -319,8 +319,8 @@ jobs:
       - name: Build runtime dependency
         run: npm run build:runtime
 
-      - name: Build personal-assistant dependency
-        run: npm run build:personal-assistant
+      - name: Build aielia dependency
+        run: npm run build:aielia
 
       - name: Type-check
         working-directory: packages/chat-ui
