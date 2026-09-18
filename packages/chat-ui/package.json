@@ -14,8 +14,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@buildaharness/aielia": "^0.3.0",
-    "@buildaharness/runtime": "^0.2.0",
+    "@buildaharness/aielia": "^0.3.1",
+    "@buildaharness/runtime": "^0.3.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-http": "^2.5.9",

@@ -1,6 +1,6 @@
 {
   "name": "@buildaharness/runtime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-agnostic client-side FlowSpec executor for Build A Harness — storage adapters (in-memory, IndexedDB/Dexie), experience store, and LLM clients (proxy, Anthropic, OpenAI-compatible).",
   "license": "Apache-2.0",
   "homepage": "https://buildaharness.com",
@@ -36,7 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@buildaharness/harness": "^0.2.0",
+    "@buildaharness/harness": "^0.3.0",
     "dexie": "^4.4.4",
     "zod": "^3.23.8"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@buildaharness/aielia",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "An open-source AI chat assistant that runs the full 11-layer Build A Harness every turn — light for a fact lookup, and it stops for approval before it sends an email or runs a shell command. CLI, browser, and desktop.",
   "license": "Apache-2.0",
   "homepage": "https://buildaharness.com/personal-assistant",
@@ -48,8 +48,8 @@
     "eval:harness-benchmark": "tsx scripts/run-harness-benchmark.ts"
   },
   "dependencies": {
-    "@buildaharness/harness": "^0.2.0",
-    "@buildaharness/runtime": "^0.2.0",
+    "@buildaharness/harness": "^0.3.0",
+    "@buildaharness/runtime": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ink": "^7.1.1",
     "nodemailer": "^6.9.14",
