@@ -121,9 +121,11 @@ function renderInlineSegments(text: string): React.ReactNode[] {
  * Renders one committed line of assistant/system text, recognizing a leading `#`/`##`/… header or
  * `- [ ]`/`- [x]` checkbox before falling back to plain inline-styled text. `key` is the React key
  * for the returned element (the caller already has a per-line index from `<Static>`'s own render
- * prop — see `tui-app.tsx`'s `LogLineText`).
+ * prop — see `tui-app.tsx`'s `LogLineText`). `continuation` is `LogLine.continuation` — true for
+ * every line of a multi-line reply after the first, which suppresses `ASSISTANT_BULLET` (the
+ * marker belongs once at the front of the whole message, not on every wrapped line).
  */
-export function renderMarkdownLine(text: string, key: React.Key): React.JSX.Element {
+export function renderMarkdownLine(text: string, key: React.Key, continuation = false): React.JSX.Element {
   const diffElement = renderDiffLine(text, key)
   if (diffElement) return diffElement
   const headerMatch = HEADER_RE.exec(text)
@@ -149,7 +151,7 @@ export function renderMarkdownLine(text: string, key: React.Key): React.JSX.Elem
   if (text.length === 0) return <Text key={key}> </Text>
   return (
     <Text key={key}>
-      {ASSISTANT_BULLET}
+      {continuation ? '' : ASSISTANT_BULLET}
       {renderInlineSegments(text)}
     </Text>
   )

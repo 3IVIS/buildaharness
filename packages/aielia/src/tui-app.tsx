@@ -45,6 +45,15 @@ export type LineKind = 'user' | 'assistant' | 'tool' | 'error' | 'system' | 'mar
 export interface LogLine {
   text: string
   kind: LineKind
+  /**
+   * True for every split line of a multi-line assistant reply after the first one (see
+   * `handleEvent`'s own `displayText.split('\n')`) — `markdown-line.tsx`'s `ASSISTANT_BULLET`
+   * belongs once at the front of the whole message, not on every wrapped line (found live: a
+   * two-line write confirmation, "Wrote X."/"apple", rendered as two separate bulleted lines
+   * instead of one statement). Unset (falsy) for a single-line reply or any other kind, so the
+   * bullet still shows by default wherever this flag isn't threaded through.
+   */
+  continuation?: boolean
 }
 
 export interface TuiLogState {
@@ -182,7 +191,13 @@ export class EventLogBridge implements Store<TuiLogState> {
     // 'plan' stays one un-split LogLine (see PlanBox's doc comment) — every other kind splits
     // per-line since their own rendering (plain/dim/red text, or per-line markdown) doesn't need
     // the whole block intact the way a single bordered box does.
-    this.lines = kind === 'plan' ? [...this.lines, { text: displayText, kind }] : [...this.lines, ...displayText.split('\n').map((text) => ({ text, kind }))]
+    this.lines =
+      kind === 'plan'
+        ? [...this.lines, { text: displayText, kind }]
+        : // continuation is only meaningful (and only set) for 'assistant' — every other kind's
+          // LogLine stays a bare { text, kind } so existing exact-shape equality checks elsewhere
+          // (classifyLineKind's own test coverage) don't have to account for an unused field.
+          [...this.lines, ...displayText.split('\n').map((text, i) => (kind === 'assistant' ? { text, kind, continuation: i > 0 } : { text, kind }))]
     this.transientText = ''
     // Any committed line means the progress indicator that was describing the still-in-flight
     // turn is now stale — cli.ts's own clearProgress() deliberately skips itself once a reply has
@@ -362,7 +377,7 @@ function LogLineText({ line, width }: { line: LogLine; width: number }): React.J
     case 'assistant':
       return (
         <Box paddingLeft={ASSISTANT_INDENT_WIDTH}>
-          {renderMarkdownLine(line.text, 0)}
+          {renderMarkdownLine(line.text, 0, line.continuation)}
         </Box>
       )
     case 'plan':

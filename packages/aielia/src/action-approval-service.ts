@@ -114,7 +114,10 @@ export class ActionApprovalService {
       }
     }
     if (applied.kind === 'write') {
-      reply = `Wrote "${applied.path}".\n${formatWriteDiff(applied.previousContent, applied.content)}`
+      // No diff here — it was already shown once, at the pre-approval preview (the decision
+      // point that actually matters), a few lines up in the same scrollback. Repeating it here
+      // duplicated content the reader had already reviewed and approved seconds earlier.
+      reply = `Wrote "${applied.path}".`
       transcriptContent = reply
     } else if (applied.kind === 'revert') {
       const parts: string[] = []

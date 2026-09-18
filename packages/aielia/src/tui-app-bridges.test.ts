@@ -84,8 +84,8 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'line', lines: [' there!', ''], stream: 'stdout' })
     expect(bridge.getSnapshot()).toEqual({
       lines: [
-        { text: 'Hi there!', kind: 'assistant' },
-        { text: '', kind: 'assistant' },
+        { text: 'Hi there!', kind: 'assistant', continuation: false },
+        { text: '', kind: 'assistant', continuation: true },
         { text: '', kind: 'margin' },
       ],
       progressText: '',
@@ -98,10 +98,27 @@ describe('EventLogBridge', () => {
     const bridge = new EventLogBridge()
     bridge.handleEvent({ type: 'line', lines: ['', 'Aielia> Hello there', ''], stream: 'stdout' })
     expect(bridge.getSnapshot().lines).toEqual([
-      { text: 'Hello there', kind: 'assistant' },
-      { text: '', kind: 'assistant' },
+      { text: 'Hello there', kind: 'assistant', continuation: false },
+      { text: '', kind: 'assistant', continuation: true },
       { text: '', kind: 'margin' },
     ])
+  })
+
+  // Regression: "Wrote demo4.txt."/"apple" (a two-line, non-streaming assistant reply) rendered as
+  // two separately-bulleted lines instead of one statement, since markdown-line.tsx's
+  // ASSISTANT_BULLET was added to every split line with no way to tell "first" from "rest".
+  it('marks only the first split line of a multi-line assistant reply as non-continuation; every other kind never gets the field at all', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['Aielia> Wrote "demo4.txt".\napple'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([
+      { text: 'Wrote "demo4.txt".', kind: 'assistant', continuation: false },
+      { text: 'apple', kind: 'assistant', continuation: true },
+      { text: '', kind: 'margin' },
+    ])
+
+    const toolBridge = new EventLogBridge()
+    toolBridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' })
+    expect(toolBridge.getSnapshot().lines).toEqual([{ text: '  ⚙ Listing .', kind: 'tool' }])
   })
 
   it('an assistant reply gets a trailing blank margin line, and clears any stale progressText from before it finished', () => {
@@ -110,7 +127,7 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'line', lines: ['Aielia> Done.'], stream: 'stdout' })
     expect(bridge.getSnapshot()).toEqual({
       lines: [
-        { text: 'Done.', kind: 'assistant' },
+        { text: 'Done.', kind: 'assistant', continuation: false },
         { text: '', kind: 'margin' },
       ],
       progressText: '',

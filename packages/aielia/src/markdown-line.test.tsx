@@ -13,8 +13,8 @@ function strip(frame: string | undefined): string {
 
 const instances: TestInkInstance[] = []
 
-function render(text: string): TestInkInstance {
-  const instance = renderInk(<>{renderMarkdownLine(text, 'k')}</>)
+function render(text: string, continuation = false): TestInkInstance {
+  const instance = renderInk(<>{renderMarkdownLine(text, 'k', continuation)}</>)
   instances.push(instance)
   return instance
 }
@@ -74,6 +74,11 @@ describe('renderDiffLine', () => {
 describe('renderMarkdownLine — plain prose gets a leading "- " marker', () => {
   it('prefixes an ordinary line with "- "', () => {
     expect(strip(render('hello there').lastFrame())).toContain('- hello there')
+  })
+
+  it('does not prefix a continuation line (the second+ split line of one multi-line reply) — the bullet belongs once at the front of the whole message', () => {
+    const frame = strip(render('apple', true).lastFrame())
+    expect(frame).toBe('apple')
   })
 
   it('does not prefix a blank line (a paragraph break, not a bullet)', () => {
