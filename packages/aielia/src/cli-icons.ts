@@ -13,7 +13,18 @@ export const ICONS = {
   toolStep: '⚙',
   /** A tool step that is itself the proposal of a state-changing action (write_file, run_shell_command) — printed on the same in-flight step line, before the separate "[needs approval — …]" prompt appears. */
   proposalStep: '⚠',
+  /** A read-only tool call `tool-policy.ts` denied before it executed — deliberately not `✗` (cli.ts already uses that, unprefixed, as the leading character of several unrelated config/undo-action error lines; reusing it here would misclassify those as `'tool'`-kind in tui-app.tsx's `TOOL_STEP_PREFIXES` match). */
+  deniedStep: '⛔',
 } as const
+
+/**
+ * Marker `cli.ts`'s `printPlan()` prepends to its combined plan-status block (Phase 6, "distinct
+ * plan-mode UI") so `tui-app.tsx`'s `classifyLineKind` renders it as a dedicated `PlanBox` instead
+ * of plain `'system'` text — lives here rather than in `tui-app.tsx` itself so `cli.ts` (which
+ * `tui-app.tsx` already imports) doesn't need a reverse import back to it, the same reason the
+ * tool-step glyphs above live here instead of in either of those two files.
+ */
+export const PLAN_LINE_PREFIX = '▤PLAN▤'
 
 /** Tool names whose step line should use {@link ICONS.proposalStep} instead of {@link ICONS.toolStep} — the same two tools `risk-classifier.ts` treats as state-changing/approval-gated. */
 const PROPOSAL_TOOLS = new Set(['write_file', 'run_shell_command'])

@@ -18,15 +18,8 @@ import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import type { TraceEvent } from './trace-events.js'
 import { SYNTHESIS_SYSTEM_PROMPT } from './system-prompt.js'
 import type { DebugLogEntry } from './debug-log.js'
-
-/** Formats a preview of staged write content, or a proposed shell command, shared by
- * loadChainedApproval below and, previously, runToolIterations — small enough to duplicate the
- * one-line truncation locally rather than add a shared micro-util module. */
-function previewContent(content: string, maxLines = 20): string {
-  const lines = content.split('\n')
-  if (lines.length <= maxLines) return content
-  return `${lines.slice(0, maxLines).join('\n')}\n… (truncated)`
-}
+import { readCurrentFileContent } from './file-tools.js'
+import { formatWriteDiff, previewContent } from './diff-format.js'
 
 /**
  * Owns the "approval-by-ID" pattern: a staged write/shell/revert/batch-research action resolved
@@ -121,7 +114,7 @@ export class ActionApprovalService {
       }
     }
     if (applied.kind === 'write') {
-      reply = `Wrote "${applied.path}".`
+      reply = `Wrote "${applied.path}".\n${formatWriteDiff(applied.previousContent, applied.content)}`
       transcriptContent = reply
     } else if (applied.kind === 'revert') {
       const parts: string[] = []
@@ -242,14 +235,15 @@ export class ActionApprovalService {
   ): Promise<AssistantTurnResult | undefined> {
     const next = await loadPendingAction(backend, workspaceRoot, nextPendingActionId)
     if (!next) return undefined
-    const reason =
-      next.kind === 'write'
-        ? `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${previewContent(next.content)}`
-        : next.kind === 'shell'
-          ? `${previousOutcome}\n\nNext, it also proposes running: ${next.command}\n  (cwd: ${next.cwd})`
-          : next.kind === 'email'
-            ? `${previousOutcome}\n\nNext, it also proposes sending an email:\n  To: ${next.to}\n  Subject: ${next.subject}\n\n${previewContent(next.body)}`
-            : undefined
+    let reason: string | undefined
+    if (next.kind === 'write') {
+      const previousContent = await readCurrentFileContent(backend, workspaceRoot, next.path)
+      reason = `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${formatWriteDiff(previousContent, next.content)}`
+    } else if (next.kind === 'shell') {
+      reason = `${previousOutcome}\n\nNext, it also proposes running: ${next.command}\n  (cwd: ${next.cwd})`
+    } else if (next.kind === 'email') {
+      reason = `${previousOutcome}\n\nNext, it also proposes sending an email:\n  To: ${next.to}\n  Subject: ${next.subject}\n\n${previewContent(next.body)}`
+    }
     if (!reason) return undefined
     return {
       status: 'needs_approval',

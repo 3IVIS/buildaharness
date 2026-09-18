@@ -9,6 +9,16 @@ import type { ToolStepEvent } from '@buildaharness/runtime'
  */
 export interface AssistantToolStep extends ToolStepEvent {
   summary: string
+  /**
+   * Set only on a second, follow-up `onToolStep` call fired immediately after `tool-policy.ts`'s
+   * `evaluateToolPolicy()` denies this exact call (see `agent-loop.ts`'s `checkToolPolicy`) — the
+   * first call (this field absent) already reported the proposal itself. Without this, a denied
+   * read-only tool call was invisible to the user: the model saw a "Denied by tool policy: …"
+   * result, but nothing ever told the person watching the transcript that the call didn't happen
+   * (report finding: "no confirmation, no denial message, nothing to distinguish 'the policy
+   * allowed this' from 'there was no policy at all'").
+   */
+  deniedReason?: string
 }
 
 /**

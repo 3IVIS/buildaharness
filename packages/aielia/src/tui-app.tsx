@@ -1,9 +1,12 @@
 import { Readable, Writable } from 'node:stream'
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Box, Static, Text, render as inkRender, useInput, useWindowSize } from 'ink'
-import { runCli, type CliInstance, type RunCliOptions } from './cli.js'
+import { runCli, type CliInstance, type RunCliOptions, type SelectOption } from './cli.js'
 import { startCapture, type CaptureEvent } from './tui-output-capture.js'
 import { TuiInput } from './tui-input.js'
+import { SelectPrompt } from './ink-select-prompt.js'
+import { ICONS, PLAN_LINE_PREFIX } from './cli-icons.js'
+import { renderMarkdownLine } from './markdown-line.js'
 
 /**
  * A minimal pub/sub store, one per piece of state the Ink tree needs — deliberately not React
@@ -30,7 +33,7 @@ function useStore<T>(store: Store<T>): T {
  * turns, not a real writer's output — kept as its own kind rather than reusing `'system'` so
  * rendering never has to guess a blank line's intent from empty text alone.
  */
-export type LineKind = 'user' | 'assistant' | 'tool' | 'error' | 'system' | 'margin'
+export type LineKind = 'user' | 'assistant' | 'tool' | 'error' | 'system' | 'margin' | 'plan'
 
 export interface LogLine {
   text: string
@@ -44,24 +47,38 @@ export interface TuiLogState {
   progressText: string
   /** `writeToken`'s not-yet-newline-terminated streamed reply text — shown in the transient region until the next committed-line event closes it out. */
   transientText: string
+  /**
+   * True from `beginTurn()` (called right after a chat line or a resolved approval/clarification
+   * prompt is submitted) until the first `CaptureEvent` of that turn actually lands. Covers the
+   * gap the comparison report flagged — "nothing shows between hitting enter and the first
+   * output" — that neither `progressText` nor `transientText` can, since both start empty and
+   * only a genuine harness event ever populates them.
+   */
+  waitingForOutput: boolean
 }
 
-const EMPTY_LOG: TuiLogState = { lines: [], progressText: '', transientText: '' }
+const EMPTY_LOG: TuiLogState = { lines: [], progressText: '', transientText: '', waitingForOutput: false }
 
-/** `writeToolStep`'s own indent+glyph (see cli.ts) — matched after trimming so a `'line'` event's kind survives cli.ts adding/removing leading whitespace. */
-const TOOL_STEP_PREFIX = '⚙'
+/** `writeToolStep`'s own indent+glyph (see cli.ts's `toolStepIcon`/cli-icons.ts) — matched after trimming so a `'line'` event's kind survives cli.ts adding/removing leading whitespace. Three possible glyphs since cli-icons.ts distinguishes a routine tool step, one that's itself proposing a state-changing action, and one `tool-policy.ts` denied before it executed — all three still classify as the same `'tool'` LineKind here, just with a different leading icon. */
+const TOOL_STEP_PREFIXES = [ICONS.toolStep, ICONS.proposalStep, ICONS.deniedStep]
 /** cli.ts hardcodes this literal label for every assistant-reply write, streamed or not (`writeToken`'s opening write and the non-streaming `console.log` fallback both start with it) — see this class's `handleEvent` doc comment for why streaming state alone isn't a reliable-enough signal on its own. */
 const ASSISTANT_REPLY_PREFIX = 'Aielia>'
 
 /** Classifies one already-merged, already-stream-tagged committed block into a `LineKind` — shared by every resulting split line, since a multi-line reply/tool/system block reads as one unit, not a mix of styles line to line. */
 function classifyLineKind(mergedText: string, streamedReplyWasOpen: boolean, stream: 'stdout' | 'stderr'): LineKind {
   if (stream === 'stderr') return 'error'
+  if (mergedText.trimStart().startsWith(PLAN_LINE_PREFIX)) return 'plan'
   // Streaming state alone would miss the non-streaming `console.log('\nAielia>…')` fallback path
   // (harness_d2's non-one-loop path) that never opens a `'token'` stream at all — checked first
   // since it's the more specific, unambiguous signal when it does apply.
   if (streamedReplyWasOpen || mergedText.trimStart().startsWith(ASSISTANT_REPLY_PREFIX)) return 'assistant'
-  if (mergedText.trimStart().startsWith(TOOL_STEP_PREFIX)) return 'tool'
+  if (TOOL_STEP_PREFIXES.some((prefix) => mergedText.trimStart().startsWith(prefix))) return 'tool'
   return 'system'
+}
+
+/** Strips {@link PLAN_LINE_PREFIX} the same way `stripAssistantLabel` strips `ASSISTANT_REPLY_PREFIX` — the marker exists only for `classifyLineKind` to match on, never shown. */
+function stripPlanLabel(text: string): string {
+  return text.replace(new RegExp(`^\\s*${PLAN_LINE_PREFIX}\\s*`), '')
 }
 
 /**
@@ -90,6 +107,7 @@ export class EventLogBridge implements Store<TuiLogState> {
   private lines: LogLine[] = []
   private progressText = ''
   private transientText = ''
+  private waitingForOutput = false
   private snapshot: TuiLogState = EMPTY_LOG
   private listeners = new Set<() => void>()
 
@@ -103,8 +121,14 @@ export class EventLogBridge implements Store<TuiLogState> {
   getSnapshot = (): TuiLogState => this.snapshot
 
   private commit(): void {
-    this.snapshot = { lines: this.lines, progressText: this.progressText, transientText: this.transientText }
+    this.snapshot = { lines: this.lines, progressText: this.progressText, transientText: this.transientText, waitingForOutput: this.waitingForOutput }
     for (const listener of this.listeners) listener()
+  }
+
+  /** Marks the start of a turn's wait for its first output (see `TuiLogState.waitingForOutput`'s doc comment) — called by `TuiApp` right after a chat line or resolved prompt answer is submitted. */
+  beginTurn(): void {
+    this.waitingForOutput = true
+    this.commit()
   }
 
   /**
@@ -131,6 +155,9 @@ export class EventLogBridge implements Store<TuiLogState> {
   }
 
   handleEvent(event: CaptureEvent): void {
+    // Any real event closes the "waiting for first output" gap — a spinner covering it makes no
+    // sense once the turn has actually started producing something.
+    this.waitingForOutput = false
     if (event.type === 'progress') {
       this.progressText = event.text
       this.commit()
@@ -144,8 +171,11 @@ export class EventLogBridge implements Store<TuiLogState> {
     const streamedReplyWasOpen = this.transientText.length > 0
     const merged = this.transientText + event.lines.join('\n')
     const kind = classifyLineKind(merged, streamedReplyWasOpen, event.stream)
-    const displayText = kind === 'assistant' ? stripAssistantLabel(merged) : merged
-    this.lines = [...this.lines, ...displayText.split('\n').map((text) => ({ text, kind }))]
+    const displayText = kind === 'assistant' ? stripAssistantLabel(merged) : kind === 'plan' ? stripPlanLabel(merged) : merged
+    // 'plan' stays one un-split LogLine (see PlanBox's doc comment) — every other kind splits
+    // per-line since their own rendering (plain/dim/red text, or per-line markdown) doesn't need
+    // the whole block intact the way a single bordered box does.
+    this.lines = kind === 'plan' ? [...this.lines, { text: displayText, kind }] : [...this.lines, ...displayText.split('\n').map((text) => ({ text, kind }))]
     this.transientText = ''
     // Any committed line means the progress indicator that was describing the still-in-flight
     // turn is now stale — cli.ts's own clearProgress() deliberately skips itself once a reply has
@@ -165,14 +195,16 @@ export class EventLogBridge implements Store<TuiLogState> {
   }
 }
 
-export type PendingPrompt = { question: string } | undefined
+export type PendingPrompt = { question: string; options?: SelectOption[] } | undefined
 
 /**
- * Bridges `runCli()`'s `askYesNo`/`askLine` override seam (Decision 1) to Ink: each call parks
- * a resolver and exposes the pending question to the component tree via `getSnapshot()`, instead
- * of the original `rl.question`-based implementation. `TuiInput`'s own `promptLabel` prop
- * (Phase 2) already knows how to render this state and route Enter to `onSubmitPrompt` instead
- * of `onSubmitChat` — this class only needs to supply the question text and resolve the answer.
+ * Bridges `runCli()`'s `askYesNo`/`askLine`/`askSelect` override seam (Decision 1, extended by
+ * Phase 7 for the structured selector) to Ink: each call parks a resolver and exposes the pending
+ * question (and, for `askSelect`, its option list) to the component tree via `getSnapshot()`,
+ * instead of the original `rl.question`-based implementation. `TuiInput`'s own `promptLabel` prop
+ * (Phase 2) renders a plain-text pending question; `TuiApp` (below) renders `SelectPrompt` instead
+ * whenever `pending.options` is set — this class only needs to supply the question (and options)
+ * and resolve the answer, the same way for either shape.
  */
 export class PromptBridge implements Store<PendingPrompt> {
   private pending: PendingPrompt
@@ -188,9 +220,9 @@ export class PromptBridge implements Store<PendingPrompt> {
 
   getSnapshot = (): PendingPrompt => this.pending
 
-  private ask(question: string): Promise<string> {
+  private ask(question: string, options?: SelectOption[]): Promise<string> {
     return new Promise((resolve) => {
-      this.pending = { question }
+      this.pending = { question, options }
       this.resolve = resolve
       for (const listener of this.listeners) listener()
     })
@@ -200,6 +232,9 @@ export class PromptBridge implements Store<PendingPrompt> {
   askYesNo = (question: string): Promise<boolean> => this.ask(question).then((answer) => answer.trim().toLowerCase().startsWith('y'))
 
   askLine = (question: string): Promise<string> => this.ask(question)
+
+  /** Matches `RunCliOptions.askSelect`'s contract exactly — resolves with the chosen `SelectOption.key`, answered via `SelectPrompt` instead of `rl.question`. */
+  askSelect = (question: string, options: SelectOption[]): Promise<string> => this.ask(question, options)
 
   submit(answer: string): void {
     const resolve = this.resolve
@@ -280,11 +315,41 @@ function UserMessageBox({ text, width }: { text: string; width: number }): React
   )
 }
 
+/**
+ * Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — a dedicated bordered widget for
+ * `cli.ts`'s `printPlan()` status block, the same "one box around the whole multi-line text"
+ * pattern {@link UserMessageBox} already uses (see `EventLogBridge.handleEvent`'s `kind === 'plan'`
+ * branch, which — unlike every other kind — pushes the whole block as one un-split `LogLine` so
+ * this component receives it intact instead of one already-split line at a time). Cyan border
+ * distinguishes it from the user box's gray without introducing a new color for its own sake — cyan
+ * is `TuiInput`'s own live-input border color, so a plan box reads as "structured, awaiting your
+ * attention" the same way the input box does. The header line (`Plan: … % complete`, always first —
+ * see `formatPlanProgress`/`printPlan`) is bolded for a lightweight title, without the separate
+ * "Updated Plan" banner line Codex uses, since `formatPlanProgress`'s own first line already serves
+ * that purpose and a second title would be redundant.
+ */
+function PlanBox({ text, width }: { text: string; width: number }): React.JSX.Element {
+  return (
+    <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={1} width={width}>
+      {text.split('\n').map((line, i) => (
+        <Text key={i} bold={i === 0}>{line.length > 0 ? line : ' '}</Text>
+      ))}
+    </Box>
+  )
+}
+
 function LogLineText({ line, width }: { line: LogLine; width: number }): React.JSX.Element {
   switch (line.kind) {
     case 'user':
       return <UserMessageBox text={line.text} width={width} />
+    // Basic markdown (headers, `- [ ]`/`- [x]` checkboxes, **bold**, `code`) rendered for the
+    // assistant's own reply text only (see markdown-line.tsx) — system output (banner, /help,
+    // /status, etc.) is left as plain text since it's already deterministic, controlled prose
+    // with no markdown of its own to render.
     case 'assistant':
+      return renderMarkdownLine(line.text, 0)
+    case 'plan':
+      return <PlanBox text={line.text} width={width} />
     case 'system':
       return <Text>{line.text}</Text>
     case 'tool':
@@ -294,6 +359,31 @@ function LogLineText({ line, width }: { line: LogLine; width: number }): React.J
     case 'margin':
       return <Text> </Text>
   }
+}
+
+/** Braille frames for {@link Spinner} — the same cycle `cli-spinner`/`ora`'s default `dots` style uses, hand-rolled here since no spinner dependency exists in this package (Ink-native, no new dependency, matching this phase's other items). */
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+/** How often the spinner advances a frame — fast enough to read as "alive," slow enough not to flood a redraw-on-every-frame terminal. */
+const SPINNER_INTERVAL_MS = 80
+
+/**
+ * A minimal thinking/loading indicator for the gap between hitting Enter and the first real
+ * output (report finding: "nothing shows... no spinner, no status line, unlike Pi/Codex") — shown
+ * only while `TuiLogState.waitingForOutput` is true and cleared automatically the instant any real
+ * `CaptureEvent` lands (see `EventLogBridge.handleEvent`), so it can never linger over genuine
+ * progress/streamed output.
+ */
+function Spinner(): React.JSX.Element {
+  const [frame, setFrame] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), SPINNER_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <Text dimColor>
+      {SPINNER_FRAMES[frame]} Thinking…
+    </Text>
+  )
 }
 
 /** The reserved status line (Phase 3 step 5) — each indicator its own `<Text>` so a `⚠`-prefixed warning (currently only the dangerouslySkipPermissions notice) can stand out in yellow while the rest stay dim, without string-parsing a single joined line. */
@@ -344,6 +434,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
       eventLog.pushTurnMargin()
       eventLog.pushEchoLine('', line)
       eventLog.pushTurnMargin()
+      eventLog.beginTurn()
       onSubmitChat(line)
     },
     [eventLog, onSubmitChat],
@@ -351,17 +442,35 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
 
   const handleSubmitPrompt = useCallback(
     (line: string) => {
-      eventLog.pushEchoLine('> ', line)
+      // Commit the question alongside its answer (Phase 2) — `pending.question` only lives in
+      // `PromptBridge` state and disappears the instant `prompt.submit()` clears it below, so
+      // without this the resolved prompt (e.g. "Run this command? (y/N)") would vanish from
+      // scrollback entirely, leaving only the bare answer echo with no context for what it
+      // answered. Falls back to the bare answer if `pending` is somehow already cleared (Enter
+      // fired with no promptLabel), which shouldn't happen since `TuiInput` only calls
+      // `onSubmitPrompt` when `promptLabel` is set.
+      // `.trimEnd()` — every real `askYesNo`/`askLine` question text ends with a trailing space
+      // (e.g. `'Proceed? (y/N) '`), a holdover from the old `rl.question()` flow where the answer
+      // was typed inline right after it; here it'd otherwise double up with the arrow's own
+      // leading space.
+      // For an `askSelect` answer, `line` is the chosen option's raw `key` (e.g. `'a'`) — look up
+      // its `label` so the persistent record reads "Proceed? → Yes, don't ask again this session"
+      // rather than the bare, less legible key.
+      const displayAnswer = pending?.options?.find((option) => option.key === line)?.label ?? line
+      eventLog.pushEchoLine('> ', pending?.question !== undefined ? `${pending.question.trimEnd()} → ${displayAnswer}` : line)
+      eventLog.beginTurn()
       prompt.submit(line)
     },
-    [eventLog, prompt],
+    [eventLog, prompt, pending],
   )
 
   const hasTransient = log.progressText.length > 0 || log.transientText.length > 0
+  const showSpinner = log.waitingForOutput && !hasTransient
 
   return (
     <Box flexDirection="column">
       <Static items={log.lines}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
+      {showSpinner && <Spinner />}
       {hasTransient && (
         <Box flexDirection="column">
           {log.progressText.length > 0 && <Text dimColor>{log.progressText}</Text>}
@@ -369,12 +478,16 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
         </Box>
       )}
       <Text dimColor>{'─'.repeat(Math.max(1, width))}</Text>
-      <TuiInput
-        promptLabel={pending?.question}
-        onSubmitChat={handleSubmitChat}
-        onSubmitPrompt={handleSubmitPrompt}
-        columns={columns}
-      />
+      {pending?.options ? (
+        <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} />
+      ) : (
+        <TuiInput
+          promptLabel={pending?.question}
+          onSubmitChat={handleSubmitChat}
+          onSubmitPrompt={handleSubmitPrompt}
+          columns={columns}
+        />
+      )}
       <StatusLine indicators={statusIndicators} />
     </Box>
   )
@@ -424,7 +537,7 @@ function createInertStreams(): { input: NodeJS.ReadableStream; output: NodeJS.Wr
   return { input, output }
 }
 
-export type RunTuiAppOptions = Omit<RunCliOptions, 'askYesNo' | 'askLine'>
+export type RunTuiAppOptions = Omit<RunCliOptions, 'askYesNo' | 'askLine' | 'askSelect'>
 
 /**
  * Constructs `runCli()` wired to this file's Ink shell (Phase 4 calls this once, behind the
@@ -456,6 +569,7 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
       output: options.output ?? inert.output,
       askYesNo: prompt.askYesNo,
       askLine: prompt.askLine,
+      askSelect: prompt.askSelect,
     })
   } catch (err) {
     restoreCapture()

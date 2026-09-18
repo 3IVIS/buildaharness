@@ -37,6 +37,27 @@ class ProposingFakeLLMClient implements ILLMClient {
   }
 }
 
+/** Stands in for the proxy backend: one call returns a real `toolCalls` array (not `onToolProposal`), exercising the manual dispatch loop's own `checkToolPolicy` gate (agent-loop.ts's `runToolIterationStep`, DENY branch) rather than the claude-cli-shaped propose→gate seam `ProposingFakeLLMClient` above exercises. */
+class DispatchingFakeLLMClient implements ILLMClient {
+  private calls = 0
+
+  async *callChat(): AsyncIterable<string> {
+    yield ''
+  }
+
+  async callChatSync(): Promise<string> {
+    return ''
+  }
+
+  async callChatStructured(): Promise<LLMStructuredResponse> {
+    this.calls += 1
+    if (this.calls === 1) {
+      return { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] }
+    }
+    return { content: 'done' }
+  }
+}
+
 const fakeFileTools: FileToolsContext = { backend: {} as FsBackend, workspaceRoot: '/workspace' }
 
 function buildAgentLoop(llmClient: ILLMClient): AgentLoop {
@@ -81,6 +102,57 @@ describe('AgentLoop onToolProposal wiring (Phase D0)', () => {
       content: 'denied: harness control state denies action this turn',
       sources: [],
     })
+  })
+
+  it('reports a denied claude-cli-shaped proposal via onToolStep with deniedReason set, so the CLI can print it', async () => {
+    const llmClient = new ProposingFakeLLMClient()
+    const agentLoop = buildAgentLoop(llmClient)
+    const controlPlaneState: TurnControlPlaneState = createTurnControlPlaneState(['read_file'])
+    controlPlaneState.controlState = new ControlState({ permission: 'DENY' })
+
+    const steps: { tool: string; deniedReason?: string }[] = []
+    await agentLoop.runToolLoop(
+      'session-1',
+      [],
+      'read notes.txt',
+      'system prompt',
+      undefined,
+      (step) => steps.push({ tool: step.tool, deniedReason: step.deniedReason }),
+      undefined,
+      'LOW',
+      controlPlaneState,
+    )
+
+    // ProposingFakeLLMClient only calls onToolProposal (the gate), not onToolStep (the separate
+    // tool_use-event signal ClaudeCliLLMClient's own stream parsing fires) — so only the denial
+    // itself is reported here; claude-cli-llm-client.test.ts covers the tool_use-event half.
+    expect(steps).toEqual([{ tool: 'read_file', deniedReason: 'harness control state denies action this turn' }])
+  })
+
+  it('reports a denied manual-dispatch-loop tool call via onToolStep with deniedReason set', async () => {
+    const llmClient = new DispatchingFakeLLMClient()
+    const agentLoop = buildAgentLoop(llmClient)
+    const controlPlaneState: TurnControlPlaneState = createTurnControlPlaneState(['read_file'])
+    controlPlaneState.controlState = new ControlState({ permission: 'DENY' })
+
+    const steps: { tool: string; deniedReason?: string }[] = []
+    const result = await agentLoop.runToolLoop(
+      'session-1',
+      [],
+      'read notes.txt',
+      'system prompt',
+      undefined,
+      (step) => steps.push({ tool: step.tool, deniedReason: step.deniedReason }),
+      undefined,
+      'LOW',
+      controlPlaneState,
+    )
+
+    expect(steps).toEqual([
+      { tool: 'read_file', deniedReason: undefined },
+      { tool: 'read_file', deniedReason: 'harness control state denies action this turn' },
+    ])
+    expect(result).toEqual({ kind: 'final', content: 'done', sources: [] })
   })
 
   it('denies (REQUIRE_APPROVAL folded into deny — see D0 plan note) on a fail-safe UNKNOWN risk hint', async () => {

@@ -9,6 +9,7 @@ import {
   applyPendingAction,
   discardPendingAction,
   sweepAbandonedPendingActions,
+  readCurrentFileContent,
   PENDING_ACTION_MAX_AGE_MS,
   type FileToolsContext,
 } from './file-tools.js'
@@ -221,6 +222,25 @@ describe('pending-action staging', () => {
     expect((applied as { content: string }).content).toBe('final content')
     expect(await backend.readTextFile(`${ROOT}/notes/summary.md`)).toBe('final content')
     expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+  })
+
+  it('applyPendingAction reports the file\'s prior content for kind: write when overwriting an existing file', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes/summary.md`, 'draft content')
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'final content' })
+
+    const applied = await applyPendingAction(backend, ROOT, id)
+
+    expect((applied as { previousContent?: string }).previousContent).toBe('draft content')
+  })
+
+  it('applyPendingAction reports no previousContent for kind: write when the file is new', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/new.md', content: 'brand new' })
+
+    const applied = await applyPendingAction(backend, ROOT, id)
+
+    expect((applied as { previousContent?: string }).previousContent).toBeUndefined()
   })
 
   it('applyPendingAction throws for an unknown id and writes nothing', async () => {
@@ -492,5 +512,26 @@ describe('pending-action sweep (T12)', () => {
     const backend = makeFakeBackend()
     const { swept } = await sweepAbandonedPendingActions(backend, ROOT, Date.now())
     expect(swept).toEqual([])
+  })
+})
+
+describe('readCurrentFileContent', () => {
+  it('returns the current on-disk content of an existing file', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'hello')
+
+    expect(await readCurrentFileContent(backend, ROOT, 'notes.txt')).toBe('hello')
+  })
+
+  it('returns undefined for a file that does not exist yet', async () => {
+    const backend = makeFakeBackend()
+
+    expect(await readCurrentFileContent(backend, ROOT, 'missing.txt')).toBeUndefined()
+  })
+
+  it('rejects a path that resolves outside the workspace', async () => {
+    const backend = makeFakeBackend()
+
+    await expect(readCurrentFileContent(backend, ROOT, '../outside.txt')).rejects.toThrow(PathOutsideWorkspaceError)
   })
 })

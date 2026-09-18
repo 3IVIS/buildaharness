@@ -7,6 +7,7 @@ import { PersonalAssistant } from './assistant.js'
 import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
 import { classifyRisk } from './risk-classifier.js'
+import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 /**
  * cli.ts's `main()` runs at import time (see non-interactive-mode.ts's doc comment) — runCli()
@@ -78,8 +79,15 @@ class FakeLLMClient implements ILLMClient {
 
 /** Scripts a single tool-calling response (e.g. write_file), then a plain follow-up reply once the loop resolves — trimmed version of assistant.test.ts's ScriptedToolLLMClient. */
 class ScriptedToolLLMClient implements ILLMClient {
-  private served = false
-  constructor(private readonly toolCall: { id: string; name: string; input: Record<string, unknown> }) {}
+  // One tool call served per non-turn-intent callChatStructured invocation, in order — a plain
+  // array + shift() rather than the original single `served` boolean, so a test can script one
+  // staged tool call per dispatchLine() turn across several separate turns (e.g. the "don't ask
+  // again" remember-across-turns coverage below), not just once ever. Every call site that only
+  // ever passes one tool call keeps exactly its old one-shot-then-"Done." behavior.
+  private readonly toolCalls: { id: string; name: string; input: Record<string, unknown> }[]
+  constructor(...toolCalls: { id: string; name: string; input: Record<string, unknown> }[]) {
+    this.toolCalls = [...toolCalls]
+  }
   async *callChat(): AsyncIterable<string> {
     yield 'Done.'
   }
@@ -88,10 +96,8 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
-    if (!this.served) {
-      this.served = true
-      return { content: '', toolCalls: [this.toolCall] }
-    }
+    const next = this.toolCalls.shift()
+    if (next) return { content: '', toolCalls: [next] }
     return { content: 'Done.' }
   }
 }
@@ -323,6 +329,40 @@ describe('/status and /cost — spend cap display (T2)', () => {
   })
 })
 
+describe('getStatusIndicators — persistent model/token/cost chrome (aielia_cli_formatting_plan.html Phase 1)', () => {
+  it('always includes a model indicator and a zeroed token/cost indicator before any turn has run', async () => {
+    const { cli } = await setupCli()
+
+    const indicators = await cli.getStatusIndicators()
+
+    expect(indicators.some((i) => i.startsWith('Model: '))).toBe(true)
+    expect(indicators).toContain('↑0 ↓0 tokens (~$0.0000)')
+  })
+
+  it('token/cost indicator reflects accumulated spend after a turn, cross-turn like /cost', async () => {
+    class UsageReportingLLMClient implements ILLMClient {
+      async *callChat(_messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+        options?.onUsage?.({ inputTokens: 100, outputTokens: 100, costUsd: 2 })
+        yield 'Noted.'
+      }
+      async callChatSync(_messages: ChatMessage[], options?: ChatOptions): Promise<string> {
+        options?.onUsage?.({ inputTokens: 100, outputTokens: 100, costUsd: 2 })
+        return 'Noted.'
+      }
+      async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+        if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        return { content: 'Noted.' }
+      }
+    }
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: new UsageReportingLLMClient() }) })
+
+    await cli.dispatchLine('hi')
+    const indicators = await cli.getStatusIndicators()
+
+    expect(indicators).toContain('↑100 ↓100 tokens (~$2.0000)')
+  })
+})
+
 describe('/checkpoint', () => {
   async function saveLeftoverCheckpoint(checkpointStore: InMemoryAdapter, sessionId: string): Promise<void> {
     const staleTask: Task = {
@@ -389,24 +429,27 @@ describe('/checkpoint', () => {
 })
 
 describe('approval-prompt handling', () => {
-  it('a message-level HIGH-risk gate resolves through turn({approved}) on accept', async () => {
+  it('a message-level HIGH-risk gate resolves through turn({approved}) on accept, via the askSelect selector (Phase 7) rather than free-text y/N', async () => {
     const llm = new FakeLLMClient('Draft sent.')
     const assistant = new PersonalAssistant({ llmClient: llm })
-    const askYesNo = vi.fn().mockResolvedValue(true)
-    const { cli } = await setupCli({ assistant, askYesNo })
+    const askSelect = vi.fn().mockResolvedValue('y')
+    const { cli } = await setupCli({ assistant, askSelect })
     const lines = captureOutput()
 
     await cli.dispatchLine('Please send an email to my boss telling him I quit.')
 
-    expect(askYesNo).toHaveBeenCalledWith(expect.stringContaining('Proceed?'))
+    expect(askSelect).toHaveBeenCalledWith(
+      expect.stringContaining('Proceed?'),
+      expect.arrayContaining([expect.objectContaining({ key: 'y', label: 'Yes' }), expect.objectContaining({ key: 'n', label: 'No' })]),
+    )
     expect(lines.join('\n')).toContain('Draft sent.')
   })
 
-  it('a message-level HIGH-risk gate resolves through turn({approved}) on decline, and records the declined request rather than silently dropping it', async () => {
+  it('a message-level HIGH-risk gate resolves through turn({approved}) on decline (askSelect resolving "n"), and records the declined request rather than silently dropping it', async () => {
     const llm = new FakeLLMClient('Draft sent.')
     const assistant = new PersonalAssistant({ llmClient: llm })
-    const askYesNo = vi.fn().mockResolvedValue(false)
-    const { cli } = await setupCli({ assistant, askYesNo })
+    const askSelect = vi.fn().mockResolvedValue('n')
+    const { cli } = await setupCli({ assistant, askSelect })
     const lines = captureOutput()
 
     await cli.dispatchLine('Please send an email to my boss telling him I quit.')
@@ -421,13 +464,13 @@ describe('approval-prompt handling', () => {
     const backend = makeFakeBackend()
     const llm = new ScriptedToolLLMClient({ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'hello' } })
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' } })
-    const askYesNo = vi.fn().mockResolvedValue(true)
-    const { cli } = await setupCli({ assistant, askYesNo })
+    const askSelect = vi.fn().mockResolvedValue('y')
+    const { cli } = await setupCli({ assistant, askSelect })
     captureOutput()
 
     await cli.dispatchLine('Write a summary to summary.md')
 
-    expect(askYesNo).toHaveBeenCalledWith(expect.stringContaining('Apply this write?'))
+    expect(askSelect).toHaveBeenCalledWith(expect.stringContaining('Apply this write?'), expect.any(Array))
     expect(await backend.readTextFile('/workspace/summary.md')).toBe('hello')
   })
 
@@ -435,13 +478,49 @@ describe('approval-prompt handling', () => {
     const backend = makeFakeBackend()
     const llm = new ScriptedToolLLMClient({ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'hello' } })
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' } })
-    const askYesNo = vi.fn().mockResolvedValue(false)
-    const { cli } = await setupCli({ assistant, askYesNo })
+    const askSelect = vi.fn().mockResolvedValue('n')
+    const { cli } = await setupCli({ assistant, askSelect })
     captureOutput()
 
     await cli.dispatchLine('Write a summary to summary.md')
 
     expect(await backend.readTextFile('/workspace/summary.md')).toBeUndefined()
+  })
+
+  it('picking "don\'t ask again" ("a") on a staged write approves it and auto-approves the next same-kind staged write without prompting again', async () => {
+    const backend = makeFakeBackend()
+    const llm = new ScriptedToolLLMClient(
+      { id: 'toolu_1', name: 'write_file', input: { path: 'one.md', content: 'first' } },
+      { id: 'toolu_2', name: 'write_file', input: { path: 'two.md', content: 'second' } },
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' } })
+    const askSelect = vi.fn().mockResolvedValue('a')
+    const { cli } = await setupCli({ assistant, askSelect })
+    captureOutput()
+
+    await cli.dispatchLine('Write a summary to one.md')
+    expect(askSelect).toHaveBeenCalledTimes(1)
+    expect(await backend.readTextFile('/workspace/one.md')).toBe('first')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('Write a summary to two.md')
+
+    // Second staged write_file is auto-approved from the remembered "don't ask again" — askSelect
+    // is not called again, and the write still actually applies.
+    expect(askSelect).toHaveBeenCalledTimes(1)
+    expect(lines.join('\n')).toContain('auto-approved')
+    expect(await backend.readTextFile('/workspace/two.md')).toBe('second')
+  })
+
+  it('askSelect with no test override falls back to the last (safe) option when nonInteractiveApprovalMode is "decline", never approving', async () => {
+    const llm = new FakeLLMClient('Draft sent.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const { cli } = await setupCli({ assistant, nonInteractiveApprovalMode: 'decline' })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Please send an email to my boss telling him I quit.')
+
+    expect(lines.join('\n')).toContain('Cancelled.')
   })
 
   it('/undo-action with no argument lists entries rather than erroring (bare form is a valid listing, not a missing-id failure)', async () => {
@@ -754,5 +833,48 @@ describe('/plan vs. the triviality fast path', () => {
     await cli.dispatchLine('/plan')
 
     expect(lines.join('\n')).toContain('No active plan for this session')
+  })
+
+  // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — printPlan()'s output must
+  // carry PLAN_LINE_PREFIX so tui-app.tsx's classifyLineKind renders it as a dedicated PlanBox
+  // instead of plain 'system' text; this is the plain (non-TUI) CLI's own view of that same
+  // console.log call, so the raw marker is expected to show through here unstripped (only the
+  // TUI strips it for display).
+  it("/plan's printed status carries the PLAN_LINE_PREFIX marker for the TUI to render as a dedicated widget", async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant })
+
+    const planStatus: NonNullable<Awaited<ReturnType<PersonalAssistant['turn']>>['planStatus']> = {
+      templateName: 'project_planning',
+      successCriteria: 'Launch shipped',
+      completionPct: 50,
+      tasks: [{ id: 'scope_definition', description: 'Define scope', status: 'COMPLETE' }],
+    }
+    vi.spyOn(assistant, 'turn').mockResolvedValueOnce({ status: 'ok', reply: 'Kicking off the plan.', harnessSkipped: false, planStatus })
+    await cli.dispatchLine('Plan the product launch')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan')
+
+    expect(lines.join('\n')).toContain(PLAN_LINE_PREFIX)
+  })
+})
+
+describe('/plan sketch', () => {
+  // Report finding: legacy-path plan prose (markdown headers, `- [ ]` checklists) rendered as
+  // literal characters because it was classified as plain 'system' text, not 'assistant' text —
+  // the only kind tui-app.tsx renders through markdown-line.tsx. Routing this specific reply
+  // through the same 'Aielia>' marker an ordinary chat reply already uses fixes that without any
+  // new rendering path.
+  it("prefixes the sketch's reply with the assistant-reply marker so the TUI renders its markdown instead of literal characters", async () => {
+    const llm = new FakeLLMClient('ok')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    vi.spyOn(assistant, 'sketchPlan').mockResolvedValue({ status: 'ok', reply: '## Checklist\n- [ ] Book venue', harnessSkipped: true })
+    const { cli } = await setupCli({ assistant })
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan sketch a small conference')
+
+    expect(lines.join('\n')).toContain('Aielia> ## Checklist\n- [ ] Book venue')
   })
 })

@@ -49,6 +49,10 @@ export default defineConfig({
       // same plan) also mounts real `ink` components via ink-test-render.ts. Already covered by
       // `npm run test:aielia`'s own vitest.config.ts.
       'packages/aielia/src/tui-app.test.tsx',
+      // Same reason as tui-input.test.tsx immediately above — ink-select-prompt.test.tsx (Phase 7
+      // of the same plan) also mounts a real `ink` component via ink-test-render.ts. Already
+      // covered by `npm run test:aielia`'s own vitest.config.ts.
+      'packages/aielia/src/ink-select-prompt.test.tsx',
     ],
   },
 })

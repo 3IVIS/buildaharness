@@ -111,6 +111,17 @@ async function resolveAndVerify(ctx: FileToolsContext, requestedPath: string): P
   return resolved
 }
 
+/**
+ * Reads a file's current on-disk content for building a diff preview against a proposed write
+ * (see diff-format.ts's formatWriteDiff) — `undefined` if the file doesn't exist yet, the same
+ * "nothing to diff against" signal `applyPendingAction`'s own `previousContent` uses.
+ */
+export async function readCurrentFileContent(backend: FsBackend, workspaceRoot: string, requestedPath: string): Promise<string | undefined> {
+  const resolved = resolveInWorkspace(workspaceRoot, requestedPath)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolved)
+  return backend.readTextFile(resolved)
+}
+
 export const READ_FILE_TOOL: ToolDefinition = {
   name: 'read_file',
   description:
@@ -246,7 +257,7 @@ export interface ShellExecutionResult {
 }
 
 export type ApplyPendingActionResult =
-  | ({ kind: 'write' } & PendingActionRecord)
+  | ({ kind: 'write' } & PendingActionRecord & { previousContent?: string })
   | ({ kind: 'shell' } & PendingActionRecord & { execution: ShellExecutionResult })
   | ({ kind: 'revert' } & PendingActionRecord)
   | ({ kind: 'email' } & PendingActionRecord & { delivery: SendEmailResult })
@@ -360,7 +371,13 @@ export async function applyPendingAction(
     await backend.writeTextFile(resolved, record.content)
     await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
-    return record as ApplyPendingActionResult
+    // `snapshot.previousContent` is `string | null` when undoable (null meaning "new file, no
+    // prior content"); collapsed to `undefined` here since both that case and !undoable (binary,
+    // couldn't capture) mean the same thing to a diff: nothing to diff against.
+    return {
+      ...record,
+      previousContent: snapshot.undoable ? (snapshot.previousContent ?? undefined) : undefined,
+    } as ApplyPendingActionResult
   }
 
   if (record.kind === 'email') {
