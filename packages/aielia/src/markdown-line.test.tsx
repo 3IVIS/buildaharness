@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { renderInk, type TestInkInstance } from './ink-test-render.js'
-import { renderMarkdownLine, matchDiffLine } from './markdown-line.js'
+import { renderMarkdownLine, matchDiffLine, renderDiffLine } from './markdown-line.js'
 import { formatWriteDiff } from './diff-format.js'
 
 // Same isolation reason as tui-input.test.tsx — see vite.config.ts's exclude comment for this file.
@@ -54,6 +54,16 @@ describe('matchDiffLine', () => {
 
   it('does not misfire on text that merely starts with two spaces', () => {
     expect(matchDiffLine('  just an indented sentence')).toBeUndefined()
+  })
+})
+
+describe('renderDiffLine', () => {
+  it('returns undefined for a non-diff line, letting the caller fall back to plain rendering', () => {
+    expect(renderDiffLine('just a system message', 0)).toBeUndefined()
+  })
+
+  it('returns an element for a diff line — used by both the assistant (post-write) and system (pre-approval preview) LogLine kinds', () => {
+    expect(renderDiffLine('  +goodbye world', 0)).toBeDefined()
   })
 })
 

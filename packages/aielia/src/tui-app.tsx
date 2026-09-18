@@ -6,7 +6,7 @@ import { startCapture, type CaptureEvent } from './tui-output-capture.js'
 import { TuiInput } from './tui-input.js'
 import { SelectPrompt } from './ink-select-prompt.js'
 import { ICONS, PLAN_LINE_PREFIX } from './cli-icons.js'
-import { renderMarkdownLine } from './markdown-line.js'
+import { renderMarkdownLine, renderDiffLine } from './markdown-line.js'
 
 /**
  * A minimal pub/sub store, one per piece of state the Ink tree needs — deliberately not React
@@ -351,7 +351,10 @@ function LogLineText({ line, width }: { line: LogLine; width: number }): React.J
     case 'plan':
       return <PlanBox text={line.text} width={width} />
     case 'system':
-      return <Text>{line.text}</Text>
+      // The pre-approval write/edit preview ("[needs approval — write] Proposes writing to
+      // X:\n<diff>") is system-classified, not assistant-classified — this is the other
+      // LogLine kind a formatWriteDiff() string reaches (see renderDiffLine's own doc comment).
+      return renderDiffLine(line.text, 0) ?? <Text>{line.text}</Text>
     case 'tool':
       return <Text dimColor>{line.text}</Text>
     case 'error':

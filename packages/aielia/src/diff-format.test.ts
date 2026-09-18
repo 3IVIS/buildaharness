@@ -21,6 +21,11 @@ describe('formatWriteDiff', () => {
     for (const line of result.split('\n')) expect(line).toMatch(/^ {2}/)
   })
 
+  it('suppresses the "\\ No newline at end of file" marker — real diff notation about the file, not the change, that reads as noise in a chat reply', () => {
+    const result = formatWriteDiff('one', 'one\ntwo')
+    expect(result).not.toContain('No newline')
+  })
+
   it('reports no changes when old and new content are identical', () => {
     expect(formatWriteDiff('same\n', 'same\n')).toBe('(no changes)')
   })

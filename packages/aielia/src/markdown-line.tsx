@@ -40,6 +40,24 @@ export function matchDiffLine(text: string): { content: string; color: 'cyan' | 
   return undefined
 }
 
+/**
+ * Renders one line as colored diff content if `matchDiffLine` recognizes it, otherwise
+ * `undefined` so the caller falls back to its own plain/markdown rendering. Used by
+ * `renderMarkdownLine` below (the `'assistant'`-kind, post-write confirmation) and by
+ * `tui-app.tsx`'s `'system'`-kind branch (the pre-approval preview) — the two `LogLine` kinds a
+ * `formatWriteDiff()` string actually reaches, per `classifyLineKind`.
+ */
+export function renderDiffLine(text: string, key: React.Key): React.JSX.Element | undefined {
+  const diffLine = matchDiffLine(text)
+  if (!diffLine) return undefined
+  return (
+    <Text key={key} color={diffLine.color}>
+      {DIFF_INDENT}
+      {diffLine.content}
+    </Text>
+  )
+}
+
 /** Splits a line's text on `**bold**`/`` `code` `` tokens into plain strings and styled `<Text>` spans, preserving order. */
 function renderInlineSegments(text: string): React.ReactNode[] {
   const segments: React.ReactNode[] = []
@@ -75,15 +93,8 @@ function renderInlineSegments(text: string): React.ReactNode[] {
  * prop — see `tui-app.tsx`'s `LogLineText`).
  */
 export function renderMarkdownLine(text: string, key: React.Key): React.JSX.Element {
-  const diffLine = matchDiffLine(text)
-  if (diffLine) {
-    return (
-      <Text key={key} color={diffLine.color}>
-        {DIFF_INDENT}
-        {diffLine.content}
-      </Text>
-    )
-  }
+  const diffElement = renderDiffLine(text, key)
+  if (diffElement) return diffElement
   const headerMatch = HEADER_RE.exec(text)
   if (headerMatch) {
     return (

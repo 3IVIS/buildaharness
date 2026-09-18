@@ -31,6 +31,11 @@ export function formatWriteDiff(oldContent: string | undefined, newContent: stri
     .split('\n')
     .slice(3)
     .filter((line) => line.length > 0)
+    // "\ No newline at end of file" is real, standard unified-diff notation (git/diff -u emit
+    // it too) — but it's about the *file*, not the *change* being reviewed, and it reads as
+    // confusing noise in a chat reply rather than a real terminal's diff pager. Dropped rather
+    // than colored/hidden by the renderer, so both the plain CLI and the TUI never show it.
+    .filter((line) => !line.startsWith('\\ No newline'))
     .map((line) => `${DIFF_INDENT}${line}`)
   if (hunkLines.length === 0) return '(no changes)'
   return previewLines(hunkLines, maxLines)
