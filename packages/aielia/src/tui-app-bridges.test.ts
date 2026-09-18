@@ -143,10 +143,10 @@ describe('EventLogBridge', () => {
     expect(bridge.getSnapshot().lines).toEqual([{ text: 'hello there', kind: 'user' }])
   })
 
-  it('pushEchoLine with a "> " prefix (a resolved prompt answer) keeps that prefix', () => {
+  it('pushEchoLine with a "> " prefix (a resolved prompt answer) keeps that prefix and classifies "approval", not "user" — its own box color, distinct from a real chat message', () => {
     const bridge = new EventLogBridge()
     bridge.pushEchoLine('> ', 'y')
-    expect(bridge.getSnapshot().lines).toEqual([{ text: '> y', kind: 'user' }])
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '> y', kind: 'approval' }])
   })
 
   it('pushTurnMargin appends one blank "margin" line, is a no-op on an empty log, and never stacks two in a row', () => {

@@ -6,14 +6,23 @@ describe('formatWriteDiff', () => {
     expect(formatWriteDiff(undefined, 'line1\nline2')).toBe('line1\nline2')
   })
 
-  it('renders a unified diff for a one-line change to an existing file', () => {
+  it('renders a gutter-numbered diff for a one-line change to an existing file, Claude Code style (line number, then sign, then content) rather than an "@@" hunk header', () => {
     const result = formatWriteDiff('line1\nline2\nline3\n', 'line1\nlineX\nline3\n')
-    expect(result).toContain('@@')
-    expect(result).toContain('-line2')
-    expect(result).toContain('+lineX')
+    expect(result).toBe('  1  line1\n  2 -line2\n  2 +lineX\n  3  line3')
+    expect(result).not.toContain('@@')
     expect(result).not.toContain('===')
     expect(result).not.toContain('--- before')
     expect(result).not.toContain('+++ after')
+  })
+
+  it('right-aligns the gutter to the widest line number in the diff', () => {
+    const oldContent = Array.from({ length: 12 }, (_, i) => `line${i}`).join('\n')
+    const newContent = oldContent.replace('line9', 'CHANGED')
+    const result = formatWriteDiff(oldContent, newContent)
+    // The hunk (context: 3 around the changed line) spans both single-digit (7, 8, 9) and
+    // two-digit (10, 11, 12) line numbers — every gutter pads to the two-digit width, so the
+    // 2-char field right after DIFF_INDENT is always digit-or-padding-space, never anything else.
+    for (const line of result.split('\n')) expect(line).toMatch(/^ {2}[ \d]{2} [+\- ]/)
   })
 
   it('indents every diff line two spaces, visually separating it from the summary line above', () => {

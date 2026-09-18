@@ -6,7 +6,14 @@ import { startCapture, type CaptureEvent } from './tui-output-capture.js'
 import { TuiInput } from './tui-input.js'
 import { SelectPrompt } from './ink-select-prompt.js'
 import { ICONS, PLAN_LINE_PREFIX } from './cli-icons.js'
-import { renderMarkdownLine, renderDiffLine } from './markdown-line.js'
+import { renderMarkdownLine, renderDiffLine, renderNeedsApprovalLine } from './markdown-line.js'
+
+// "Indent everything coming from the assistant" — a uniform left margin on every assistant-reply
+// line, separate from (and additive with) formatWriteDiff()'s own DIFF_INDENT baked into diff
+// content: a diff line already starts with two of its own spaces, so wrapping it in this padding
+// too makes it sit visibly deeper than plain prose in the same reply — "the code" (diff/code
+// content) reads as more indented than ordinary text without a separate, parallel indent scheme.
+const ASSISTANT_INDENT_WIDTH = 2
 
 /**
  * A minimal pub/sub store, one per piece of state the Ink tree needs — deliberately not React
@@ -33,7 +40,7 @@ function useStore<T>(store: Store<T>): T {
  * turns, not a real writer's output — kept as its own kind rather than reusing `'system'` so
  * rendering never has to guess a blank line's intent from empty text alone.
  */
-export type LineKind = 'user' | 'assistant' | 'tool' | 'error' | 'system' | 'margin' | 'plan'
+export type LineKind = 'user' | 'assistant' | 'tool' | 'error' | 'system' | 'margin' | 'plan' | 'approval'
 
 export interface LogLine {
   text: string
@@ -148,9 +155,9 @@ export class EventLogBridge implements Store<TuiLogState> {
     this.commit()
   }
 
-  /** Records a line the user just submitted (chat or a resolved prompt answer) into permanent scrollback — mirrors a real terminal's own line-echo, which the inert (non-TTY) input stream this shell uses never produces on its own. `prefix` is `''` for an ordinary chat line (no "you>" label — see `LogLineText`'s doc comment) and `'> '` for a resolved prompt answer, which keeps its prefix since it's answering a question printed just above it, not identifying whose turn it is. */
+  /** Records a line the user just submitted (chat or a resolved prompt answer) into permanent scrollback — mirrors a real terminal's own line-echo, which the inert (non-TTY) input stream this shell uses never produces on its own. `prefix` is `''` for an ordinary chat line (no "you>" label — see `LogLineText`'s doc comment, kind `'user'`) and `'> '` for a resolved prompt answer (kind `'approval'`, its own box color — see `LogLineText` — distinct from a real chat message even though both are the user's own input), which keeps its prefix since it's answering a question printed just above it, not identifying whose turn it is. */
   pushEchoLine(prefix: string, text: string): void {
-    this.lines = [...this.lines, { text: `${prefix}${text}`, kind: 'user' }]
+    this.lines = [...this.lines, { text: `${prefix}${text}`, kind: prefix === '' ? 'user' : 'approval' }]
     this.commit()
   }
 
@@ -305,9 +312,9 @@ export interface TuiAppProps {
  * instead of stretching, unlike a `Box` in the main persistent tree (`TuiInput`'s own), so without
  * this every message box shrink-wrapped to its own text length instead of matching the input box.
  */
-function UserMessageBox({ text, width }: { text: string; width: number }): React.JSX.Element {
+function UserMessageBox({ text, width, borderColor = 'gray' }: { text: string; width: number; borderColor?: string }): React.JSX.Element {
   return (
-    <Box borderStyle="round" borderColor="gray" flexDirection="column" paddingX={1} width={width}>
+    <Box borderStyle="round" borderColor={borderColor} flexDirection="column" paddingX={1} width={width}>
       {text.split('\n').map((line, i) => (
         <Text key={i}>{line.length > 0 ? line : ' '}</Text>
       ))}
@@ -342,19 +349,31 @@ function LogLineText({ line, width }: { line: LogLine; width: number }): React.J
   switch (line.kind) {
     case 'user':
       return <UserMessageBox text={line.text} width={width} />
+    // A resolved approval/clarification-prompt answer (pushEchoLine's '> ' prefix case) — same
+    // box shape as a real chat message, but a distinct light-green border (was reusing 'user''s
+    // gray, indistinguishable from an actual message the person typed) so a permission decision
+    // reads as its own kind of record, not "something I said."
+    case 'approval':
+      return <UserMessageBox text={line.text} width={width} borderColor="greenBright" />
     // Basic markdown (headers, `- [ ]`/`- [x]` checkboxes, **bold**, `code`) rendered for the
     // assistant's own reply text only (see markdown-line.tsx) — system output (banner, /help,
     // /status, etc.) is left as plain text since it's already deterministic, controlled prose
     // with no markdown of its own to render.
     case 'assistant':
-      return renderMarkdownLine(line.text, 0)
+      return (
+        <Box paddingLeft={ASSISTANT_INDENT_WIDTH}>
+          {renderMarkdownLine(line.text, 0)}
+        </Box>
+      )
     case 'plan':
       return <PlanBox text={line.text} width={width} />
     case 'system':
       // The pre-approval write/edit preview ("[needs approval — write] Proposes writing to
       // X:\n<diff>") is system-classified, not assistant-classified — this is the other
       // LogLine kind a formatWriteDiff() string reaches (see renderDiffLine's own doc comment).
-      return renderDiffLine(line.text, 0) ?? <Text>{line.text}</Text>
+      // Checked before renderNeedsApprovalLine since the two can never both match the same line
+      // (a diff line never starts with the literal "[needs approval" tag) — order is arbitrary.
+      return renderDiffLine(line.text, 0) ?? renderNeedsApprovalLine(line.text, 0) ?? <Text>{line.text}</Text>
     case 'tool':
       return <Text dimColor>{line.text}</Text>
     case 'error':

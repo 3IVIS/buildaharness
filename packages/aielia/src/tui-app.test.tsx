@@ -165,7 +165,9 @@ describe('TuiApp', () => {
     // margin-before collapses into the same one (pushTurnMargin is a no-op when the last line is
     // already a margin), margin after.
     expect(lines.map((l) => l.text)).toEqual(['first', '', '> Proceed? (y/N) → y', '', 'second', ''])
-    expect(lines.map((l) => l.kind)).toEqual(['user', 'margin', 'user', 'margin', 'user', 'margin'])
+    // The resolved prompt answer is 'approval', not 'user' — its own box color (see tui-app.tsx's
+    // LogLineText), distinct from the two real chat lines around it.
+    expect(lines.map((l) => l.kind)).toEqual(['user', 'margin', 'approval', 'margin', 'user', 'margin'])
   })
 
   it('renders both a stderr line and an ordinary stdout line into scrollback (kind-to-color mapping itself is unit-tested in tui-app-bridges.test.ts\'s classifyLineKind coverage; this fake TestStdout reports no color support, so ANSI codes aren\'t observable here)', async () => {

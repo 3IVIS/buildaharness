@@ -19,25 +19,35 @@ import { DIFF_INDENT } from './diff-format.js'
 
 const HEADER_RE = /^(#{1,6})\s+(.*)$/
 const CHECKBOX_RE = /^(\s*[-*]\s)\[([ xX])\]\s+(.*)$/
-const DIFF_HUNK_RE = /^@@ .+ @@$/
+// diff-format.ts's gutter format: a right-aligned line number, a separator space, then the
+// unified-diff sign character (`+`/`-`/a plain space for context) immediately against content.
+const DIFF_LINE_RE = /^(\s*\d+) ([+\- ])(.*)$/
 const INLINE_TOKEN_RE = /\*\*(.+?)\*\*|`([^`]+)`/g
+// Mirrors the user side's own "you>"/"> " convention (readline's prompt, the persistent
+// approval-record line) with a marker on the assistant's side too, on ordinary prose lines only —
+// a header/checkbox/diff line already carries its own leading glyph, and doubling up would read
+// as two markers stacked on one line.
+const ASSISTANT_BULLET = '- '
 
 /**
- * Recognizes one line of `diff-format.ts`'s output by shape: `DIFF_INDENT` followed immediately
- * (no space) by a unified-diff prefix. That combination — a fixed two-space indent no ordinary
- * assistant prose produces, paired with a `+`/`-` immediately butted against content — doesn't
- * occur in natural writing (a markdown bullet is always `- text`, dash *then* a space, which
- * `CHECKBOX_RE`/plain rendering already own), so this can't misfire on a real bullet list. A
- * diff's context lines (space-prefixed) and its `\ No newline at end of file` marker intentionally
- * fall through to plain rendering below — real diff tools don't color those either.
+ * Recognizes one line of `diff-format.ts`'s output by shape: `DIFF_INDENT` followed by a
+ * right-aligned line number and a unified-diff sign character. That combination — a fixed
+ * two-space indent no ordinary assistant prose produces, paired with a line-number gutter no
+ * markdown construct produces — doesn't occur in natural writing (a markdown bullet is always
+ * `- text`, dash *then* a space with no number in front, which `CHECKBOX_RE`/plain rendering
+ * already own), so this can't misfire on a real bullet list. Context lines (sign is a plain
+ * space) are recognized too, with `color: undefined` — they still need to short-circuit
+ * `renderMarkdownLine`'s plain-text fallback below (which would otherwise prepend `ASSISTANT_BULLET`
+ * to them as if they were ordinary prose), they just aren't colored the way a real diff tool
+ * doesn't color its context lines either.
  */
-export function matchDiffLine(text: string): { content: string; color: 'cyan' | 'green' | 'red' } | undefined {
+export function matchDiffLine(text: string): { content: string; color: 'green' | 'red' | undefined } | undefined {
   if (!text.startsWith(DIFF_INDENT)) return undefined
   const rest = text.slice(DIFF_INDENT.length)
-  if (DIFF_HUNK_RE.test(rest)) return { content: rest, color: 'cyan' }
-  if (rest.startsWith('+')) return { content: rest, color: 'green' }
-  if (rest.startsWith('-')) return { content: rest, color: 'red' }
-  return undefined
+  const match = DIFF_LINE_RE.exec(rest)
+  if (!match) return undefined
+  const sign = match[2]
+  return { content: rest, color: sign === '+' ? 'green' : sign === '-' ? 'red' : undefined }
 }
 
 /**
@@ -54,6 +64,27 @@ export function renderDiffLine(text: string, key: React.Key): React.JSX.Element 
     <Text key={key} color={diffLine.color}>
       {DIFF_INDENT}
       {diffLine.content}
+    </Text>
+  )
+}
+
+const NEEDS_APPROVAL_RE = /^(\[needs approval[^\]]*\])(.*)$/
+
+/**
+ * Colors the `[needs approval — write/shell command/…]`/`[needs approval — HIGH/…]` tag
+ * `cli.ts` prints ahead of every approval prompt (see its own `console.log` call sites) yellow —
+ * the same "worth your attention" color `StatusLine`'s own `⚠`-prefixed indicators already use —
+ * leaving the reason text after it in the default color. This line is `'system'`-classified (see
+ * `classifyLineKind`), not `'assistant'`, so it's checked from `tui-app.tsx`'s own `'system'`
+ * branch rather than from `renderMarkdownLine`.
+ */
+export function renderNeedsApprovalLine(text: string, key: React.Key): React.JSX.Element | undefined {
+  const match = NEEDS_APPROVAL_RE.exec(text)
+  if (!match) return undefined
+  return (
+    <Text key={key}>
+      <Text color="yellow">{match[1]}</Text>
+      {match[2]}
     </Text>
   )
 }
@@ -113,5 +144,13 @@ export function renderMarkdownLine(text: string, key: React.Key): React.JSX.Elem
       </Text>
     )
   }
-  return <Text key={key}>{renderInlineSegments(text)}</Text>
+  // Blank lines (paragraph breaks within a multi-line reply) stay bare — a lone "- " with
+  // nothing after it would read as a stray bullet, not a paragraph break.
+  if (text.length === 0) return <Text key={key}> </Text>
+  return (
+    <Text key={key}>
+      {ASSISTANT_BULLET}
+      {renderInlineSegments(text)}
+    </Text>
+  )
 }
