@@ -1,0 +1,32 @@
+name: Deprecate npm package
+
+# Manual, workflow_dispatch-only utility for marking an npm package as
+# deprecated (e.g. after a rename) without needing local npm credentials —
+# reuses the same NPM_TOKEN secret every publish-*.yml workflow already has.
+#
+#   gh workflow run npm-deprecate.yml -f package=@buildaharness/personal-assistant -f message="Renamed to @buildaharness/aielia — see https://www.npmjs.com/package/@buildaharness/aielia"
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'npm package name to deprecate (e.g. @buildaharness/personal-assistant)'
+        required: true
+      message:
+        description: 'Deprecation message shown to installers'
+        required: true
+
+jobs:
+  deprecate:
+    name: npm deprecate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Deprecate
+        run: npm deprecate "${{ inputs.package }}" "${{ inputs.message }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
