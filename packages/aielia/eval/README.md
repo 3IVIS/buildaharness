@@ -47,13 +47,13 @@ A phase that regresses a gating metric without a written accepted-reason overrid
 Machinery tests (fast, no LLM, part of CI):
 
 ```
-npm test --workspace=packages/personal-assistant   # includes eval/*.test.ts
+npm test --workspace=packages/aielia   # includes eval/*.test.ts
 ```
 
 A real run (real model via the `claude-cli` backend — no API key, see CLAUDE.md):
 
 ```
-cd packages/personal-assistant
+cd packages/aielia
 npx tsx scripts/run-harness-benchmark.ts
 npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,mutation-delete-file
 npx tsx scripts/run-harness-benchmark.ts --arms=baseline
@@ -98,7 +98,7 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
    `adapter/eval/test_harness_bench_langgraph.py`. Still open: a true FlowSpec→LangGraph compile of
    the assistant's toolset.
 4. ~~Wire a nightly real-LLM job~~ into `.github/workflows/eval.yml` — **done**. Job
-   `eval-harness-benchmark`: on `push` (when `packages/personal-assistant/**` changed) it runs a
+   `eval-harness-benchmark`: on `push` (when `packages/aielia/**` changed) it runs a
    keyless `typecheck:personal-assistant` + a `baseline.json` parse check; on `schedule` /
    `workflow_dispatch` it runs `run-harness-benchmark.ts --gate=eval/reports/baseline.json` against
    the `claude` CLI when `ANTHROPIC_API_KEY` is present (skips + exits 0 otherwise) and uploads

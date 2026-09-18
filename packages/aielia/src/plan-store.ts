@@ -7,7 +7,7 @@ import { getTaskCancelPatterns, testAny } from './lexical/patterns.js'
 // now") — `plan:${sessionId}` records the currently-active task graph and its per-task status,
 // distinct from Knowledge (fact-extraction.ts's UserFact, "what we believe") or Experience
 // (DexieExperienceStore, "what worked before"). See
-// packages/personal-assistant/README.md's "Memory, Knowledge, and the other four" section for
+// packages/aielia/README.md's "Memory, Knowledge, and the other four" section for
 // the full six-tier map.
 
 export interface PlanTaskRecord {
@@ -340,7 +340,7 @@ export interface TaskCancelMatch {
   taskDescription: string
 }
 
-// Compiled from packages/personal-assistant/src/lexical/patterns/task-cancel-markers.json (see
+// Compiled from packages/aielia/src/lexical/patterns/task-cancel-markers.json (see
 // lexical/patterns.ts) — the historical rationale below documents this pattern's current shape;
 // edit the JSON to change it, not this file.
 const { taskCancelVerbs: TASK_CANCEL_VERBS, taskReferenceMarker: TASK_REFERENCE_MARKER, cancelMatchStopwords: CANCEL_MATCH_STOPWORDS } = getTaskCancelPatterns()

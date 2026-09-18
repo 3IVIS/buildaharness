@@ -24,7 +24,7 @@ on:
     branches: [main]
     paths:
       - 'packages/chat-ui/**'
-      - 'packages/personal-assistant/**'
+      - 'packages/aielia/**'
       - 'packages/harness/**'
       - 'packages/runtime/**'
       - '.github/workflows/browser-e2e.yml'
@@ -49,15 +49,15 @@ jobs:
       - name: Install deps (root + workspaces)
         run: npm ci
 
-      # chat-ui imports @buildaharness/{harness,runtime,personal-assistant} by
+      # chat-ui imports @buildaharness/{harness,runtime,aielia} by
       # workspace link with no source-path aliasing — their dist/ must exist before
-      # the e2e build bundles them (personal-assistant's build also pulls harness,
+      # the e2e build bundles them (aielia's build also pulls harness,
       # but build them explicitly and in order to be safe).
       - name: Build workspace deps
         run: |
           npm run build:harness
           npm run build:runtime
-          npm run build:personal-assistant
+          npm run build:aielia
 
       # Cache the Playwright browser binaries, keyed by the resolved @playwright/test
       # version so a bump busts the cache automatically.

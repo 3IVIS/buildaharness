@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { ShellCommandExecutor } from '@buildaharness/personal-assistant'
+import type { ShellCommandExecutor } from '@buildaharness/aielia'
 
 interface ShellCommandOutcome {
   output: string

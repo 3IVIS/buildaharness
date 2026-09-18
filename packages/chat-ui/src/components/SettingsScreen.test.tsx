@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { DEFAULT_CONFIG, type AssistantConfig } from '@buildaharness/personal-assistant'
+import { DEFAULT_CONFIG, type AssistantConfig } from '@buildaharness/aielia'
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from '@buildaharness/runtime'
 import { SettingsScreen } from './SettingsScreen'
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Real-LLM accuracy eval for classifyTurnIntent (packages/personal-assistant/src/turn-intent-classifier.ts) —
+ * Real-LLM accuracy eval for classifyTurnIntent (packages/aielia/src/turn-intent-classifier.ts) —
  * serves two plans' evidence requirements at once:
  *
  * 1. plans/personal_assistant_consolidated_classifier_plan.html's Phase 3 gate ("gate the cutover on this
@@ -30,7 +30,7 @@
  * superseded regex classifiers (risk-classifier.ts's LLM/pattern bits, triviality-classifier.ts,
  * decomposition-classifier.ts's gate, plan-store.ts's abandon detection, planning-classifier.ts):
  *
- *   cd packages/personal-assistant && npx tsx scripts/eval-turn-intent.ts
+ *   cd packages/aielia && npx tsx scripts/eval-turn-intent.ts
  *   npx tsx scripts/eval-turn-intent.ts --lang=zh              # only the Chinese fixtures
  *   npx tsx scripts/eval-turn-intent.ts --min-pass-rate=0.95   # override the default 0.85 threshold
  *

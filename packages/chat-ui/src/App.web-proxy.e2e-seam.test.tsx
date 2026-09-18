@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createScriptedLLMClient } from '@buildaharness/personal-assistant'
+import { createScriptedLLMClient } from '@buildaharness/aielia'
 import { App } from './App'
 import { setAssistantTestHooks } from './assistant-test-hooks'
 import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'

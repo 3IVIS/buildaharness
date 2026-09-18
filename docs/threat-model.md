@@ -1,6 +1,6 @@
 # Threat model — the personal assistant
 
-This is the trust model for `@buildaharness/personal-assistant` (a.k.a. Aielia) and
+This is the trust model for `@buildaharness/aielia` (a.k.a. Aielia) and
 its browser/desktop surfaces. It describes what the assistant defends against, how,
 and — just as importantly — what it explicitly does **not** try to defend against.
 The disclosure process is in [`../SECURITY.md`](../SECURITY.md).

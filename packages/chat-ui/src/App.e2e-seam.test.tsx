@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createScriptedLLMClient } from '@buildaharness/personal-assistant'
+import { createScriptedLLMClient } from '@buildaharness/aielia'
 import { App } from './App'
 import { setAssistantTestHooks } from './assistant-test-hooks'
 import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
@@ -9,7 +9,7 @@ import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
 /**
  * The "extended jsdom test" from plans/chat_ui_browser_e2e_plan.html's rejected-alternatives
  * list, now earned as phase B1's own coverage: NO module-wide `vi.mock` of
- * `@buildaharness/personal-assistant` — a real `PersonalAssistant` runs against a scripted
+ * `@buildaharness/aielia` — a real `PersonalAssistant` runs against a scripted
  * `ILLMClient` injected through the B1 seam, mounted in `<App/>`, on a real `turn()`.
  *
  * Asserts (a) flag OFF → proposerKind 'posthoc', (b) a persisted `oneLoopMode: 'enabled'` →

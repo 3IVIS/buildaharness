@@ -1,5 +1,5 @@
 import { test as base, expect, type BrowserContext, type Page, type Locator } from '@playwright/test'
-import type { ScriptedLLMClientScript } from '@buildaharness/personal-assistant'
+import type { ScriptedLLMClientScript } from '@buildaharness/aielia'
 
 /**
  * Page objects + the `chat` fixture for the browser-e2e lane

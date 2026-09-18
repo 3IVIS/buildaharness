@@ -19,12 +19,12 @@ fn dev_workspace_root() -> Result<PathBuf, String> {
     .map_err(|e| format!("Couldn't resolve the dev workspace root: {e}"))
 }
 
-/// Path to personal-assistant's plain-Node-ESM MCP server script — see that file's own doc
+/// Path to aielia's plain-Node-ESM MCP server script — see that file's own doc
 /// comment for why it's plain .mjs rather than compiled TS. Read directly from `src/`
 /// (identical to what the package's build script copies verbatim into `dist/`) so editing
-/// the MCP server doesn't require a personal-assistant rebuild to take effect here.
+/// the MCP server doesn't require an aielia rebuild to take effect here.
 fn dev_file_tools_mcp_server_path() -> Result<PathBuf, String> {
-  let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../personal-assistant/src/file-tools-mcp-server.mjs");
+  let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../aielia/src/file-tools-mcp-server.mjs");
   path
     .canonicalize()
     .map_err(|e| format!("Couldn't resolve the file-tools MCP server path: {e}"))
@@ -39,7 +39,7 @@ fn get_dev_workspace_root() -> Result<String, String> {
   Ok(dev_workspace_root()?.to_string_lossy().to_string())
 }
 
-/// Desktop equivalent of personal-assistant's doctor-checks.ts checkClaudeCli — backs the
+/// Desktop equivalent of aielia's doctor-checks.ts checkClaudeCli — backs the
 /// Settings screen's Diagnostics > Health section (see chat-ui's gui-doctor-checks.ts). Same
 /// `claude --version` probe and CLAUDE_PATH resolution as run_claude_prompt/
 /// run_claude_prompt_with_file_tools, just checking exit status rather than running a real
@@ -87,7 +87,7 @@ async fn pick_workspace_directory(app_handle: tauri::AppHandle) -> Result<Option
 struct ToolCallOutcome {
   stdout: String,
   /// Raw JSON text of a `.pending-actions/<id>.json` record staged mid-call, if any — the
-  /// frontend parses and reduces it via personal-assistant's shared `stagedActionInput`
+  /// frontend parses and reduces it via aielia's shared `stagedActionInput`
   /// (see claude-cli-prompt.ts), the same way claude-cli-llm-client.ts's
   /// findPendingActionStagedSince result feeds into it for the CLI front end.
   staged_action: Option<String>,
@@ -120,7 +120,7 @@ fn find_staged_action(workspace_root: &Path, since: SystemTime) -> Option<String
 }
 
 /// Strips an MCP-qualified tool name (`mcp__<server>__<tool>`, how Claude Code CLI surfaces
-/// a tool registered via --mcp-config) down to the bare name — mirrors personal-assistant's
+/// a tool registered via --mcp-config) down to the bare name — mirrors aielia's
 /// stripMcpToolPrefix (tool-step.ts) exactly; kept in sync by hand since Rust can't import
 /// that TS module, the same tradeoff already accepted for file-tools-mcp-server.mjs
 /// duplicating file-tools.ts's sandboxing logic.
@@ -144,7 +144,7 @@ struct ToolStepPayload {
 const TOOL_STEP_EVENT: &str = "claude-tool-step";
 
 /// The desktop-app equivalent of ClaudeCliLLMClient.callChatStructured's MCP-wiring branch:
-/// wires personal-assistant's file-tools MCP server into a single `claude -p` call and lets
+/// wires aielia's file-tools MCP server into a single `claude -p` call and lets
 /// Claude Code's own agentic loop call read_file/list_directory/write_file autonomously —
 /// scoped to whatever `workspace_root` the frontend resolved (config.workspaceRoot if the user
 /// picked one via Settings' Workspace section, otherwise get_dev_workspace_root()'s fallback —
@@ -292,9 +292,9 @@ async fn run_claude_prompt_with_file_tools(
 }
 
 /// Runs a single `claude -p` turn on the host — the desktop-app equivalent of
-/// personal-assistant's ClaudeCliLLMClient, which can't run inside a webview because it
+/// aielia's ClaudeCliLLMClient, which can't run inside a webview because it
 /// needs node:child_process. `system_prompt`/`prompt` are built on the JS side by the
-/// shared `buildClaudePrompt` helper (@buildaharness/personal-assistant) so the CLI and
+/// shared `buildClaudePrompt` helper (@buildaharness/aielia) so the CLI and
 /// desktop front ends stay byte-for-byte consistent in how a transcript becomes a prompt;
 /// this command is deliberately a dumb pipe (spawn, capture stdout/stderr, return raw
 /// stdout) rather than re-parsing --output-format json itself — that parsing lives in the
@@ -366,7 +366,7 @@ async fn run_claude_prompt(
 struct ShellCommandOutcome {
   /// Combined stdout+stderr, truncated to SHELL_MAX_OUTPUT_BYTES — mirrors
   /// shell-executor.ts's ShellExecutionResult shape exactly, so the frontend can hand this
-  /// straight to personal-assistant's applyPendingAction without reshaping it.
+  /// straight to aielia's applyPendingAction without reshaping it.
   output: String,
   exit_code: Option<i32>,
   timed_out: bool,
@@ -413,7 +413,7 @@ fn kill_process_tree(child: &std::process::Child) {
 }
 
 /// Actually runs a previously staged, already-sandboxed command — the Rust equivalent of
-/// personal-assistant's shell-executor.ts (which can't run inside a webview because it needs
+/// aielia's shell-executor.ts (which can't run inside a webview because it needs
 /// node:child_process). Invoked only at approval time, via the frontend's ShellCommandExecutor
 /// (tauri-shell-executor.ts) passed into PersonalAssistant's `shellTools.executeCommand` — the
 /// same generic resolvePendingAction path the CLI uses, just backed by a Tauri command instead
@@ -505,7 +505,7 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
 
 // ── Workspace-scoped file I/O (raw std::fs, not @tauri-apps/plugin-fs) ──
 //
-// personal-assistant's fileTools/shellTools (read_file/list_directory/write_file/
+// aielia's fileTools/shellTools (read_file/list_directory/write_file/
 // run_shell_command, and the .pending-actions staging both share) need real read/write
 // access to `workspaceRoot` — a path chosen at runtime (the dev fallback from
 // get_dev_workspace_root, or a directory the user picks via Settings), never known at

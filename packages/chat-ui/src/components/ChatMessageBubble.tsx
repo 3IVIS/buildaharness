@@ -12,7 +12,7 @@ import {
   type AssistantToolStep,
   type AssistantTurnResult,
   type AnswerClaim,
-} from '@buildaharness/personal-assistant'
+} from '@buildaharness/aielia'
 
 // A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
 // container — putting overflow-x directly on the <table> element instead breaks browsers'

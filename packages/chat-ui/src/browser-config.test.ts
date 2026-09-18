@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { envOverridesFromImportMetaEnv, ENV_VAR_FOR_CONFIG_KEY } from './browser-config'
-import { DEFAULT_ONE_LOOP_MODE } from '@buildaharness/personal-assistant'
+import { DEFAULT_ONE_LOOP_MODE } from '@buildaharness/aielia'
 
 /** A minimal ImportMetaEnv stand-in — the real one has an index signature, so this is enough. */
 function env(overrides: Record<string, string>): ImportMetaEnv {

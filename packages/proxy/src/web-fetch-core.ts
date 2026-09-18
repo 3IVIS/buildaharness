@@ -2,7 +2,7 @@
  * Server-side safe-fetch core for POST /web/fetch: the SSRF guard (assertPublicHttpUrl) plus a
  * redirect-following, byte-capped, content-type-checked fetch loop (fetchTextSafely).
  *
- * Ported from packages/personal-assistant/src/web-fetch-core.ts (same reasoning as
+ * Ported from packages/aielia/src/web-fetch-core.ts (same reasoning as
  * web-search.ts's doc comment: this package's only workspace-dependency-free build target is the
  * Worker bundle, and personal-assistant's only `exports` entry is its whole `dist/index.js`
  * bundle — nodemailer, the MCP SDK, the CLI — which this repo's proxy CI job and this plan's own

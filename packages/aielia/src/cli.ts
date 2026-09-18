@@ -1478,7 +1478,7 @@ async function main(): Promise<void> {
  *
  * The naive check — `moduleHref === pathToFileURL(entryArg).href` — breaks
  * whenever the script is launched through the npm bin: `npx
- * @buildaharness/personal-assistant`, a global install, or any
+ * @buildaharness/aielia`, a global install, or any
  * `node_modules/.bin` shim all pass a **symlink** to this file as
  * `process.argv[1]`, while Node reports `import.meta.url` as the resolved real
  * path. So resolve `entryArg` to its real path before comparing. `resolveReal`

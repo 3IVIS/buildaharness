@@ -1,4 +1,4 @@
-import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim, AskQuestion, AskResponse } from '@buildaharness/personal-assistant'
+import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim, AskQuestion, AskResponse } from '@buildaharness/aielia'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }

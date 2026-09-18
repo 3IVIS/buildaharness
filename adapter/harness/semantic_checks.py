@@ -1,7 +1,7 @@
 """
 LLM-backed semantic escalation layered on top of the lexical checks wired into loop.py's
 run_one_iteration() (Phase 5 of plans/lexical_functions_hardening_plan.html). Mirrors
-packages/personal-assistant/src/contradiction-checker.ts's checkForContradictions and
+packages/aielia/src/contradiction-checker.ts's checkForContradictions and
 failure-mode-matcher.ts's checkSemanticFailureMatch — same "one call for whatever's new, never
 per-pair, fall back to the free check's own verdict on any parse failure or LLM error" shape,
 using the litellm.acompletion pattern already established (synchronously) in

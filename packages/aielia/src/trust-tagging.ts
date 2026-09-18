@@ -15,7 +15,7 @@ export function wrapUntrusted(text: string): string {
 
 // A speed bump, not real defense — regex-based, will miss paraphrased attempts
 // and can false-positive on benign text that happens to use these phrases. Patterns now live in
-// packages/personal-assistant/src/lexical/patterns/injection-patterns.json (see
+// packages/aielia/src/lexical/patterns/injection-patterns.json (see
 // lexical/patterns.ts) — mirrored in this package's file-tools-mcp-server.mjs, which reads the
 // same JSON directly since it's a standalone script that can't import this module.
 const INJECTION_PATTERNS = getInjectionPatterns()

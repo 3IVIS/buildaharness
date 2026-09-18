@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LLMClient, AnthropicLLMClient, OpenAICompatibleLLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/personal-assistant'
+import { PersonalAssistant } from '@buildaharness/aielia'
 import { App } from './App'
 
 vi.mock('@buildaharness/runtime', async () => {
@@ -16,8 +16,8 @@ interface FakeTranscriptEntry {
   content: string
 }
 
-vi.mock('@buildaharness/personal-assistant', async () => {
-  const actual = await vi.importActual<typeof import('@buildaharness/personal-assistant')>('@buildaharness/personal-assistant')
+vi.mock('@buildaharness/aielia', async () => {
+  const actual = await vi.importActual<typeof import('@buildaharness/aielia')>('@buildaharness/aielia')
   return {
     ...actual,
     PersonalAssistant: {

@@ -20,7 +20,7 @@ const factPatterns = getFactMarkerPatterns()
  * Storage-taxonomy note (Phase 5b, superseded by Phase E's typed `MemoryTier` below): `UserFact`
  * is this codebase's Knowledge-shaped data ("what we believe") — `text`/`durable` is the belief
  * itself; `FactSource` is its provenance ("why we believe it"). See
- * packages/personal-assistant/README.md's "Memory tiers" section for the full tier map this fits
+ * packages/aielia/README.md's "Memory tiers" section for the full tier map this fits
  * into, and memory-service.ts's DURABLE_FACTS_KEY doc comment for where promoted facts are stored.
  */
 export type FactSource = 'user_asserted' | 'model_inferred' | 'observed' | 'externally_verified'
@@ -254,7 +254,7 @@ export function isKnowledgeTier(tier: MemoryTier): boolean {
 // Texas." was never captured as a fact at all (/memory showed no location fact), even though the
 // pronoun-verb gap fix from batch 23 already handles "I currently live in Austin". Added a second,
 // narrower 0-2-word gap between "live" and "in" for the same reason as the other gaps in this file.
-// Compiled from packages/personal-assistant/src/lexical/patterns/fact-markers.json's "en".factMarkers
+// Compiled from packages/aielia/src/lexical/patterns/fact-markers.json's "en".factMarkers
 // (see lexical/patterns.ts) — the historical rationale above documents that pattern's current
 // shape; edit the JSON to change it, not this file.
 const FACT_MARKERS = factPatterns.factMarkers

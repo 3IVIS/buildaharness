@@ -147,7 +147,7 @@ export interface TurnOptions {
    */
   onToolStep?: (step: AssistantToolStep) => void
   /**
-   * **Eval harness only** (`packages/personal-assistant/eval/`). Wraps the one-loop
+   * **Eval harness only** (`packages/aielia/eval/`). Wraps the one-loop
    * proposer so its first `failIterations` harness iterations report a failed execution
    * and `seedFailures` recurring same-class records are seeded into the run's
    * `failureDiagnostics` — enough to trip `cannotMakeProgress()` on iteration 1 and

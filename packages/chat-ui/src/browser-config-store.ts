@@ -1,4 +1,4 @@
-import type { AssistantConfig, ConfigStore } from '@buildaharness/personal-assistant'
+import type { AssistantConfig, ConfigStore } from '@buildaharness/aielia'
 
 const STORAGE_KEY = 'buildaharness.personal-assistant.config'
 

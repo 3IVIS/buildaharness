@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Verifies that packages/personal-assistant/src/plan-templates/data/*.json are
+ * Verifies that packages/aielia/src/plan-templates/data/*.json are
  * byte-identical (as parsed JSON, ignoring key order) to the canonical templates
  * in adapter/agents/planner/data/plan_templates/ — the personal assistant's
  * structured-planning gate (see plans/personal_assistant_structured_planning_plan.html)
@@ -14,7 +14,7 @@ import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 const CANONICAL_DIR = 'adapter/agents/planner/data/plan_templates'
-const MIRROR_DIR = 'packages/personal-assistant/src/plan-templates/data'
+const MIRROR_DIR = 'packages/aielia/src/plan-templates/data'
 
 function sortKeysDeep(value) {
   if (Array.isArray(value)) return value.map(sortKeysDeep)

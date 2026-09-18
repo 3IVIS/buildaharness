@@ -18,7 +18,7 @@ on:
     branches: [main]
     paths:
       - 'packages/chat-ui/**'
-      - 'packages/personal-assistant/**'
+      - 'packages/aielia/**'
       - 'packages/runtime/**'
       - 'packages/harness/**'
       - '.github/workflows/deploy-chat-ui.yml'
@@ -44,13 +44,13 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      # chat-ui imports @buildaharness/personal-assistant + runtime by workspace link;
-      # build their dist first (personal-assistant's build also pulls harness).
+      # chat-ui imports @buildaharness/aielia + runtime by workspace link;
+      # build their dist first (aielia's build also pulls harness).
       - name: Build workspace deps
         run: |
           npm run build --workspace=packages/harness
           npm run build --workspace=packages/runtime
-          npm run build --workspace=packages/personal-assistant
+          npm run build --workspace=packages/aielia
 
       - name: Build chat-ui
         env:

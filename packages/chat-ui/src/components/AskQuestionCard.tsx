@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/personal-assistant'
+import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/aielia'
 
 interface Props {
   questions: AskQuestion[]

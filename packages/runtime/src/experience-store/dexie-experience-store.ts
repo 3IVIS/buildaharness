@@ -49,7 +49,7 @@ export interface DexieExperienceStoreOptions {
  *
  * Storage-taxonomy note (personal-assistant's Phase 5b): this is the Experience tier ("what
  * worked before"), distinct from Knowledge (a UserFact belief) or State (a Plan's current
- * status) — see packages/personal-assistant/README.md's "Memory, Knowledge, and the other four"
+ * status) — see packages/aielia/README.md's "Memory, Knowledge, and the other four"
  * section for the full six-tier map this store fits into.
  */
 export class DexieExperienceStore implements ExperienceStore {

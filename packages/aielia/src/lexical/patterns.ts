@@ -1,5 +1,5 @@
 /**
- * Loads personal-assistant's own lexical pattern data (packages/personal-assistant/src/lexical/
+ * Loads personal-assistant's own lexical pattern data (packages/aielia/src/lexical/
  * patterns/*.json) — the canonical, language-keyed source for this application's own checks
  * (fact extraction, risk classification, injection detection, enumeration, task-cancel matching,
  * ...). Distinct from packages/harness/src/lexical/patterns.ts (harness-core primitives, used by

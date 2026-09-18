@@ -2,7 +2,7 @@
 
 Framework-agnostic client-side executor for FlowSpec-authored flows, plus the
 concrete storage and LLM-client implementations `@buildaharness/harness` and
-`@buildaharness/personal-assistant` are built on. Runs in the browser or Node.
+`@buildaharness/aielia` are built on. Runs in the browser or Node.
 
 ## FlowSpec execution
 
@@ -78,7 +78,7 @@ implements ExperienceStore` (the latter using the same sync-wrapper pattern as
 `DexieExperienceStore` above — an in-memory store is the real synchronous
 source of truth, persisted to disk in the background after every mutation)
 give real, restart-surviving storage to code that isn't running in a browser:
-the CLI (`@buildaharness/personal-assistant`) and the Tauri desktop app
+the CLI (`@buildaharness/aielia`) and the Tauri desktop app
 (`@buildaharness/desktop`, via `@buildaharness/chat-ui`).
 
 Neither class imports a filesystem API directly. Both take an injected
@@ -99,7 +99,7 @@ That's what let both classes ship here without this package ever depending on
 edges instead, each unreachable from the other's build so neither leaks into
 a bundle that doesn't need it:
 
-- `node:fs/promises` backend: `packages/personal-assistant/src/node-fs-backend.ts`, imported only by that package's `cli.ts` (never re-exported from its `index.ts`, so chat-ui's browser bundle never sees a Node builtin).
+- `node:fs/promises` backend: `packages/aielia/src/node-fs-backend.ts`, imported only by that package's `cli.ts` (never re-exported from its `index.ts`, so chat-ui's browser bundle never sees a Node builtin).
 - `@tauri-apps/plugin-fs` backend: `packages/chat-ui/src/tauri-fs-backend.ts`, dynamically imported only when `isTauri()` (so a plain browser build never loads it).
 
 ```ts

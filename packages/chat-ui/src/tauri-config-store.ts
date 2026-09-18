@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AssistantConfig, ConfigStore } from '@buildaharness/personal-assistant'
+import type { AssistantConfig, ConfigStore } from '@buildaharness/aielia'
 import { FileSystemAdapter, type FsBackend } from '@buildaharness/runtime'
 
 const CONFIG_KEY = 'settings'

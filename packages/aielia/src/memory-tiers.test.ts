@@ -109,15 +109,15 @@ describe('TIER_RULES — retention rule matches existing storage split', () => {
   })
 })
 
-describe('Phase E scope guard — tier types stay internal to personal-assistant', () => {
-  it('no file outside packages/personal-assistant imports MemoryTier/tierForFact/TIER_RULES/isKnowledgeTier', () => {
+describe('Phase E scope guard — tier types stay internal to aielia', () => {
+  it('no file outside packages/aielia imports MemoryTier/tierForFact/TIER_RULES/isKnowledgeTier', () => {
     const packagesDir = join(__dirname, '..', '..')
     const offenders: string[] = []
     const changedTypeNames = ['MemoryTier', 'tierForFact', 'isKnowledgeTier', 'TIER_RULES']
 
     function walk(dir: string): void {
       for (const entry of readdirSync(dir)) {
-        if (entry === 'node_modules' || entry === 'dist' || entry === 'personal-assistant') continue
+        if (entry === 'node_modules' || entry === 'dist' || entry === 'aielia') continue
         const full = join(dir, entry)
         const stat = statSync(full)
         if (stat.isDirectory()) {

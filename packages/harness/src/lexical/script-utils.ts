@@ -2,7 +2,7 @@
  * Script-aware text utilities shared by every lexical (non-LLM) check in this monorepo — the one
  * place CJK-vs-Latin handling lives, so a check's own regex/keyword logic doesn't need its own
  * tokenization strategy. Mirrored in adapter/harness/script_utils.py for Python's own harness
- * implementation; packages/personal-assistant imports this module (via @buildaharness/harness,
+ * implementation; packages/aielia imports this module (via @buildaharness/harness,
  * already a real dependency) rather than reimplementing it — personal-assistant is one
  * application built on buildaharness, not a place for harness-core infrastructure to live.
  *

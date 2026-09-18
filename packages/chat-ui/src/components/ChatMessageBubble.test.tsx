@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { AnswerClaim } from '@buildaharness/personal-assistant'
+import type { AnswerClaim } from '@buildaharness/aielia'
 import { answerClaimLabel } from './ChatMessageBubble'
 
 function claim(verification_status: AnswerClaim['verification_status']): AnswerClaim {

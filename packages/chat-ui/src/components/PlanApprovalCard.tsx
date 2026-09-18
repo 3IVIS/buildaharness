@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AssistantTurnResult, PlanApprovalEdits } from '@buildaharness/personal-assistant'
+import type { AssistantTurnResult, PlanApprovalEdits } from '@buildaharness/aielia'
 
 type PlanApprovalSnapshot = NonNullable<AssistantTurnResult['planApproval']>
 

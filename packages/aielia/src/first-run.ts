@@ -1,5 +1,5 @@
 /**
- * First-run setup for the CLI. `npx @buildaharness/personal-assistant` with no
+ * First-run setup for the CLI. `npx @buildaharness/aielia` with no
  * env vars and no persisted config used to land on the default `proxy` backend
  * pointed at `http://localhost:8787` — a proxy almost nobody running it for the
  * first time has, so every turn failed with a connection error and no hint about

@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { FsBackend } from '@buildaharness/runtime'
-import type { DoctorCheck } from '@buildaharness/personal-assistant'
+import type { DoctorCheck } from '@buildaharness/aielia'
 
 /**
- * Browser/desktop equivalents of personal-assistant's doctor-checks.ts (CLI-only, Node-only —
+ * Browser/desktop equivalents of aielia's doctor-checks.ts (CLI-only, Node-only —
  * uses node:child_process/node:fs/promises, so it can't be imported here). Same checks, same
  * DoctorCheck shape (reused from the package so SettingsScreen's formatDoctorReport renders
  * both consistently), different plumbing per platform: `fetch` in a plain browser,

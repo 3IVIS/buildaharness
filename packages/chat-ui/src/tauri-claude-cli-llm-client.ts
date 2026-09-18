@@ -7,14 +7,14 @@ import {
   ALREADY_STAGED_ACTION_TOOL,
   stagedActionInput,
   type PendingActionRecord,
-} from '@buildaharness/personal-assistant'
+} from '@buildaharness/aielia'
 
 /** Event name run_claude_prompt_with_file_tools emits on — see src-tauri/src/lib.rs's TOOL_STEP_EVENT. */
 const TOOL_STEP_EVENT = 'claude-tool-step'
 
 export interface TauriClaudeCliLLMClientOptions {
   /**
-   * When set, callChatStructured wires personal-assistant's file-tools MCP server into the
+   * When set, callChatStructured wires aielia's file-tools MCP server into the
    * `claude -p` call (via the `run_claude_prompt_with_file_tools` Tauri command) instead of
    * throwing when tools are supplied. Absent by default — an ordinary chat turn stays fully
    * tool-free, exactly as before this option existed. `workspaceRoot` is forwarded to the Rust
@@ -36,7 +36,7 @@ export interface TauriClaudeCliLLMClientOptions {
  * ILLMClient backed by the desktop shell's `run_claude_prompt`/`run_claude_prompt_with_file_tools`
  * Tauri commands (see src-tauri/src/lib.rs) instead of an HTTP proxy — runs the desktop app
  * against the user's already-authenticated Claude Code CLI session, no ANTHROPIC_API_KEY
- * required. The desktop equivalent of personal-assistant's ClaudeCliLLMClient, which can't
+ * required. The desktop equivalent of aielia's ClaudeCliLLMClient, which can't
  * run directly inside a webview because it needs node:child_process; buildClaudePrompt/
  * parseClaudeCliOutput/ALREADY_STAGED_ACTION_TOOL/stagedActionInput are all imported from
  * that same package so both front ends turn a transcript into a `claude -p` prompt, parse

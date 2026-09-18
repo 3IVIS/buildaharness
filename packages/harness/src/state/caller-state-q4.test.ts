@@ -47,7 +47,7 @@ describe('describeAskAnswer', () => {
 
 describe('no remaining code path flattens a populated `questions` batch answer into one joined string', () => {
   it('no ask-question-answer-consuming source file joins distinct answers/options with " / " the way the old single-question escalated-reason string did', () => {
-    const roots = [join(import.meta.dirname, '..'), join(import.meta.dirname, '..', '..', '..', 'personal-assistant', 'src')]
+    const roots = [join(import.meta.dirname, '..'), join(import.meta.dirname, '..', '..', '..', 'aielia', 'src')]
     const offenders: string[] = []
     for (const root of roots) {
       for (const file of walk(root)) {

@@ -1,7 +1,7 @@
 # @buildaharness/chat-ui
 
 A minimal chat UI wrapping `PersonalAssistant.create()` from
-`@buildaharness/personal-assistant` directly — no FlowSpec/canvas involved,
+`@buildaharness/aielia` directly — no FlowSpec/canvas involved,
 this is the assistant's own UI, not the flow editor.
 
 Ships as a normal web app first, buildable and testable independent of Tauri
@@ -74,7 +74,7 @@ backends, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
 behave identically on both surfaces since they're just `fetch()` calls to the
 provider, which works the same inside Tauri's webview as in a browser tab.
 
-Settings persist through a `ConfigStore` (`@buildaharness/personal-assistant`'s
+Settings persist through a `ConfigStore` (`@buildaharness/aielia`'s
 shared `AssistantConfig`/`resolveConfig`) — `browser-config-store.ts`
 (`localStorage`) in a plain browser, `tauri-config-store.ts` (the same
 `FileSystemAdapter` already used for transcripts, under a `config`
@@ -165,7 +165,7 @@ Save/Cancel footer) — the GUI equivalents of `/status` (transcript length),
 kept live — Settings and the chat view are mutually exclusive, so there's no
 risk of it going stale while both are visible), and rendered with the exact
 same formatters (`formatMemorySummary`/`formatCostSummary`/`formatDoctorReport`
-from `@buildaharness/personal-assistant`) the CLI's `/memory`/`/cost`/`/doctor`
+from `@buildaharness/aielia`) the CLI's `/memory`/`/cost`/`/doctor`
 use, so the two front ends never drift into two descriptions of the same
 facts. Health checks are platform-specific (`src/gui-doctor-checks.ts`): a
 plain browser checks proxy reachability via `fetch`; the Tauri desktop build
@@ -179,7 +179,7 @@ accounting) — every other backend, including `proxy` and now the three
 direct-API ones, gets the same static-table estimate (`estimateCostUsd`, from
 `model-pricing.ts`). This is keyed off `config.llmBackend` directly, not
 `isTauri()` — desktop is no longer synonymous with claude-cli, see
-`App.tsx`'s `withCostEstimate`. See the personal-assistant README's
+`App.tsx`'s `withCostEstimate`. See the aielia README's
 "`/cost` and real vs. estimated dollar figures" section for the full
 explanation.
 
@@ -225,7 +225,7 @@ Playwright manages its own browser binary; first run needs
 `npx playwright install --with-deps chromium`. The `webServer` block in
 `playwright.config.ts` does the `build:e2e` + `preview:e2e` itself, so there is no
 separate build step. CI runs this via `.github/workflows/browser-e2e.yml`
-(phase B4) on PRs touching `packages/chat-ui|personal-assistant|harness|runtime`
+(phase B4) on PRs touching `packages/chat-ui|aielia|harness|runtime`
 plus a nightly cron.
 
 **This dev container cannot run `test:e2e`.** Per the repo `CLAUDE.md`: `$DISPLAY`

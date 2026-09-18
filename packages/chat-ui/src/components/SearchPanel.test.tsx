@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { TranscriptSearchHit } from '@buildaharness/personal-assistant'
+import type { TranscriptSearchHit } from '@buildaharness/aielia'
 import { SearchPanel } from './SearchPanel'
 
 const HITS: TranscriptSearchHit[] = [

@@ -38,7 +38,7 @@ Mastra / MS Agent Framework, trace every decision in Langfuse.
 ## 1 · The assistant — Aielia
 
 ```bash
-npx @buildaharness/personal-assistant
+npx @buildaharness/aielia
 ```
 
 First run walks you through picking a model — reuse an existing `claude` CLI
@@ -47,7 +47,7 @@ talk to it.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/personal-assistant'
+import { PersonalAssistant } from '@buildaharness/aielia'
 
 const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
 
@@ -95,7 +95,7 @@ a reviewer/output gate. Aielia ships:
 - **Untrusted-content boundary** — web results and shell output are wrapped as
   data the model is instructed never to follow as commands.
 
-Full write-up: [`packages/personal-assistant/README.md`](packages/personal-assistant/README.md).
+Full write-up: [`packages/aielia/README.md`](packages/aielia/README.md).
 
 ---
 
@@ -186,7 +186,7 @@ prompts via the Langfuse prompt API (`prompt_ref` on any `llm_call` node).
 **Just want the assistant?** Nothing to clone:
 
 ```bash
-npx @buildaharness/personal-assistant          # terminal
+npx @buildaharness/aielia          # terminal
 # or open https://buildaharness.com/try         # browser, bring your own key
 ```
 

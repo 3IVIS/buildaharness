@@ -6,7 +6,7 @@ contradiction.py and review_gate.py.
 Kept as a byte-for-byte-checked mirror of packages/harness/src/lexical/patterns/*.json (see
 scripts/check-lexical-patterns-sync.mjs) rather than a cross-package file read, matching this
 repo's existing plan-templates convention (adapter/agents/planner/data/plan_templates/ vs.
-packages/personal-assistant/src/plan-templates/data/, checked by
+packages/aielia/src/plan-templates/data/, checked by
 scripts/check-plan-templates-sync.mjs) — Python and the TS packages shouldn't reach into each
 other's source trees at runtime.
 

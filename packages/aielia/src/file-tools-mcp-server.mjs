@@ -328,7 +328,7 @@ export function wrapUntrusted(text) {
 }
 
 // Reads the same canonical JSON trust-tagging.ts's own INJECTION_PATTERNS compiles from
-// (packages/personal-assistant/src/lexical/patterns/injection-patterns.json).
+// (packages/aielia/src/lexical/patterns/injection-patterns.json).
 const injectionPatternsData = JSON.parse(readFileSync(join(__dirname, 'lexical/patterns/injection-patterns.json'), 'utf8'))
 const INJECTION_PATTERNS = Object.values(injectionPatternsData).flatMap((lang) =>
   lang.injectionPatterns.map(({ source, reason }) => ({ pattern: new RegExp(source, 'i'), reason })),
@@ -504,7 +504,7 @@ async function runWebSearch(query, fetchImpl = fetch) {
 // on-disk `{ key, value }` entry shape exactly (packages/runtime/src/memory/filesystem.ts).
 
 // Reads the same canonical JSON fact-extraction.ts's own FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS
-// compile from (packages/personal-assistant/src/lexical/patterns/fact-markers.json) — this file
+// compile from (packages/aielia/src/lexical/patterns/fact-markers.json) — this file
 // is a standalone script copied verbatim to dist (not bundled through the TS build), but a plain
 // JSON read has no such barrier, so it no longer needs a hand-duplicated regex copy. The build
 // script also copies dist/lexical/patterns/ alongside this file — see package.json.

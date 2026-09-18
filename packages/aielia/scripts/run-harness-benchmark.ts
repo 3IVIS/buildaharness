@@ -7,14 +7,14 @@
  * eval/corpus/*.json against a real model, grades each turn mechanically, and writes:
  *
  *   docs/harness_comparative_benchmark.md     — the human table (new run prepended)
- *   packages/personal-assistant/eval/reports/<timestamp>.json — the machine report
+ *   packages/aielia/eval/reports/<timestamp>.json — the machine report
  *
  * (docs/harness_benchmark_report.md is the older P11.5 *perf* micro-benchmark — left alone.)
  *
  * Not part of `npm test` / CI's fast path — it makes real LLM calls. Uses the claude-cli backend
  * (shells out to `claude -p`, no API key — see CLAUDE.md) so it runs in any dev environment.
  *
- *   cd packages/personal-assistant && npx tsx scripts/run-harness-benchmark.ts
+ *   cd packages/aielia && npx tsx scripts/run-harness-benchmark.ts
  *   npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,lookup-capital
  *   npx tsx scripts/run-harness-benchmark.ts --arms=baseline
  *   npx tsx scripts/run-harness-benchmark.ts --slice=supervisor_pivot,supervisor_lookup   # the S7 trajectory-supervisor slice
