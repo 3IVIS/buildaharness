@@ -16,7 +16,9 @@ export default defineConfig({
     lib: {
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
-        cli: resolve(__dirname, 'src/cli.ts'),
+        // Not src/cli.ts directly — see bin.ts's own header comment for why the packaged
+        // entry has to be a separate, never-imported-elsewhere file.
+        cli: resolve(__dirname, 'src/bin.ts'),
         // Phase 0 feasibility spike (the internal plan) —
         // temporary entry, removed along with src/tui-spike.tsx once Phase 5 confirms Ink
         // works over a real live terminal.

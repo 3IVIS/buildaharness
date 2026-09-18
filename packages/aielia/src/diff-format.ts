@@ -1,6 +1,14 @@
 import { createTwoFilesPatch } from 'diff'
 
 const DEFAULT_MAX_LINES = 20
+// Visually separates diff content from the surrounding chat prose (the "Wrote X." / "Proposes
+// writing to X:" line immediately above it) — matches Claude Code/Codex's own indented-diff
+// convention. Two spaces, not colored here: this string is consumed by both the plain readline
+// CLI and the Ink TUI (markdown-line.tsx), and the TUI applies its own per-line color via real
+// Ink `<Text color>` props (see that file) rather than embedded ANSI, which risks colliding with
+// Ink's own dimColor/reset handling. Exported so markdown-line.tsx's diff-line recognition can't
+// drift from the indent this file actually emits.
+export const DIFF_INDENT = '  '
 
 /**
  * Renders a unified diff of a proposed write against what's already on disk, for both the
@@ -23,6 +31,7 @@ export function formatWriteDiff(oldContent: string | undefined, newContent: stri
     .split('\n')
     .slice(3)
     .filter((line) => line.length > 0)
+    .map((line) => `${DIFF_INDENT}${line}`)
   if (hunkLines.length === 0) return '(no changes)'
   return previewLines(hunkLines, maxLines)
 }

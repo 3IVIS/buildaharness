@@ -16,6 +16,11 @@ describe('formatWriteDiff', () => {
     expect(result).not.toContain('+++ after')
   })
 
+  it('indents every diff line two spaces, visually separating it from the summary line above', () => {
+    const result = formatWriteDiff('line1\nline2\nline3\n', 'line1\nlineX\nline3\n')
+    for (const line of result.split('\n')) expect(line).toMatch(/^ {2}/)
+  })
+
   it('reports no changes when old and new content are identical', () => {
     expect(formatWriteDiff('same\n', 'same\n')).toBe('(no changes)')
   })

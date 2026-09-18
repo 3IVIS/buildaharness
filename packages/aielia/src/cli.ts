@@ -1583,7 +1583,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
  * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
  * at all — `main()` behaves byte-for-byte as it does today in both those cases.
  */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
 
@@ -1627,5 +1627,12 @@ function isEntryModule(): boolean {
 
 // Guarded so importing this module (e.g. from cli.test.ts, which drives runCli() directly
 // instead) never starts a second live REPL against the real process.stdin/stdout and the real
-// ~/.buildaharness/personal-assistant data directory.
+// ~/.buildaharness/personal-assistant data directory. Correctly resolves argv[1] vs.
+// import.meta.url for `tsx src/cli.ts` and other unbundled invocations, but this comparison
+// is fundamentally unreliable once this module is bundled: Vite/Rollup hoists this file's code
+// into a shared chunk (tui-app.ts statically imports runCli/SelectOption from here), so
+// import.meta.url inside the built dist/cli.js is that shared chunk's own URL, never
+// dist/cli.js's — the guard silently evaluates false and the packaged CLI exits 0 with no
+// REPL. bin.ts is the real, never-shared entry for the packaged binary (see its own comment)
+// and calls main() unconditionally instead of relying on this check.
 if (isEntryModule()) void main()
