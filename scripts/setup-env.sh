@@ -97,26 +97,13 @@ if ! command -v openssl &>/dev/null; then
   error "openssl not found. Install it and re-run."; exit 1
 fi
 
-# Use the tracked hooks in .githooks/ (e.g. the pre-commit guard that blocks
-# .private.git/ and test_convs/ from ever being staged — see .githooks/pre-commit).
-# Local .git/hooks/ isn't version-controlled, so every fresh clone needs this.
-git config core.hooksPath .githooks
-success "Configured git to use .githooks/ (blocks committing .private.git/, test_convs/)"
-
-# If a private overlay (.private.git) is present locally, it tracks a source
-# file naming every individually-private path (.git-private-excludes-source —
-# never committed to THIS repo, see .gitignore's own comment on
-# .git-private-excludes for why). Provision a local-only copy outside the
-# working tree and point this repo's core.excludesFile at it, so those paths
-# are excluded from `git status`/`git add` here too, without their names ever
-# living inside a file this repo could commit. Deliberately generic: this
-# script doesn't know or care what's in that file, only whether it exists.
-if [[ -f .git-private-excludes-source ]]; then
-  private_excludes_dir="${XDG_CONFIG_HOME:-$HOME/.config}/buildaharness"
-  mkdir -p "$private_excludes_dir"
-  cp .git-private-excludes-source "$private_excludes_dir/git-private-excludes"
-  git config core.excludesFile "$private_excludes_dir/git-private-excludes"
-  success "Configured core.excludesFile from the private overlay's path list ($private_excludes_dir/git-private-excludes)"
+# Optional per-checkout setup. If scripts/setup-env.local.sh exists it is sourced here — from the repo
+# root, with this script's info/success/warn helpers and `set -euo pipefail` — so a checkout can add
+# its own steps (extra git config, provisioning local-only files) without them living in this script.
+# A plain clone doesn't have one and skips this.
+if [[ -f scripts/setup-env.local.sh ]]; then
+  # shellcheck source=/dev/null
+  source scripts/setup-env.local.sh
 fi
 
 # ── Step 1: Secrets ────────────────────────────────────────────────────────────
