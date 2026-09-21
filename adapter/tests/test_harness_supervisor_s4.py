@@ -1,5 +1,5 @@
 """
-S4 of plans/harness_trajectory_supervisor_plan.html — GATHER_EVIDENCE: the bounded
+S4 of the internal plan — GATHER_EVIDENCE: the bounded
 read-only investigation sub-agent.
 
 Two layers:

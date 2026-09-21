@@ -27,8 +27,8 @@ export interface PlanTemplate {
 }
 
 /**
- * Mirrored byte-for-byte from adapter/agents/planner/data/plan_templates/ — see
- * scripts/check-plan-templates-sync.mjs, which fails CI if the two drift. Bundled
+ * Mirrored byte-for-byte from the Python planner agent's canonical plan templates (a drift
+ * check for the two lives outside this repo). Bundled
  * as static imports (not read from disk at runtime) so this loader works unchanged
  * in the browser build, not just the CLI/Node one.
  */
@@ -52,7 +52,7 @@ export function listTemplateNames(): string[] {
   return Object.keys(TEMPLATES)
 }
 
-// Kept in sync with adapter/agents/planner/lexical_patterns/template-keywords.json (the Python
+// Kept in sync with the planner agent's copy of template-keywords.json (the Python
 // planner agent's own copy of the same data) — same 7 keys, same keyword lists, same insertion
 // order (which decides ties, see scoreTemplates). See
 // packages/aielia/src/lexical/patterns/template-keywords.json (this package's own
@@ -80,7 +80,7 @@ function bestScoring(scores: Record<string, number>): [string, number] {
 /**
  * Heuristic: match description keywords to a template name. Always returns a
  * template — falls back to 'problem_solving' on zero keyword hits, exactly like
- * agents/planner/utils.py's pick_template_for_task. Used by buildPlanFromTemplate
+ * the Python planner agent's pick_template_for_task. Used by buildPlanFromTemplate
  * once a template has already been chosen some other way (e.g. matchTemplateIfConfident).
  */
 export function pickTemplateForTask(description: string): string {

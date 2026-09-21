@@ -92,7 +92,7 @@ export interface BeliefCandidate {
 // but dropped from the "still-untested" tracking list without ever actually being fixed — this
 // closes that stray gap too.) Widened all six for the same reason as before: confirm each live
 // rather than widening speculatively. This closes out the last of the batch10-named sibling gaps.
-// "zh" content added (plans/personal_assistant_chinese_lexical_checks_plan.html Phase 2a step 3,
+// "zh" content added (the internal plan Phase 2a step 3,
 // lower priority within that phase — a missed match here just means the LLM contradiction check
 // always runs instead of being skipped, which is strictly safe, just slower). English loanwords
 // (test, bug, API, CI/CD, ...) were deliberately NOT duplicated in the "zh" entry: testAny() ORs
@@ -120,7 +120,7 @@ export interface BeliefCandidate {
 // passed" collision (excluded via a negative lookahead), Chinese "passed away" uses entirely
 // different characters (去世/过世/走了), so no equivalent lookahead is needed or was added for 通过.
 // 日志 ("log", as in build/system log) does NOT carry the same everyday-ambiguity risk — a fluent
-// speaker confirmed (native-speaker review, plans/personal_assistant_chinese_lexical_checks_plan.html)
+// speaker confirmed (native-speaker review, the internal plan)
 // that an ordinary personal diary/journal entry is 日记, not 日志; 日志 is close to unambiguously
 // technical (build/system/error log, or a formal record like 航海日志 "ship's log"), so it's kept
 // in this list with no everyday-collision caveat, unlike its 通过/状态 siblings above.
@@ -264,7 +264,7 @@ function stripBeliefIds(description: string, knownIds: string[]): string {
 
 /**
  * `AUDIT_SEMANTIC_CONTRADICTION` gate — feature-value audit (Phase A4 of
- * plans/feature_audit_automation_plan.html). Default **ON**: the semantic contradiction-checker
+ * the internal plan). Default **ON**: the semantic contradiction-checker
  * LLM call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a
  * falsy value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM call entirely and fall
  * back to the harness's always-on lexical / negation-pair check only. Read at exactly one call
@@ -296,7 +296,7 @@ export async function checkForContradictions(
   llmClient: ILLMClient,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
-  // Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — the entry-time
+  // Phase 3 of the internal plan — the entry-time
   // consistency check's two extra comparison pools (memory-service.ts's recordFacts()/confirm
   // flows). Both default to [] so the harness-bridge.ts call site (Knowledge only, unaffected by
   // this phase) needs no change. isCheckWorthy's skip-the-whole-call gate below is a per-call,

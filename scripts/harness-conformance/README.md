@@ -247,7 +247,7 @@ per-implementation human-facing prose — each `verify_*` function's own
 docstring owns its wording, and the TS side legitimately says things the
 Python side can't (e.g. "no execution boundary in packages/harness"
 vs. Python's "no target_path provided"). The plan's scope for this pair
-(`plans/harness_consolidation_and_control_plane_plan.html`, Phase C2) is
+(the internal plan, Phase C2) is
 "fixtures covering each layer's PASS / FAIL / SKIPPED and
 `has_critical_failure` aggregation" — status, not prose.
 
@@ -339,7 +339,7 @@ node scripts/harness-conformance/compare-verify.mjs   # cross-language diff (CI 
 ## ASK-QUESTION-EQUIVALENCE CONTRACT
 
 The `fixtures-ask-question/*.json` set *is* the equivalence contract for
-Q8 of `plans/ask_question_and_plan_mode_plan.html` — the generic,
+Q8 of the internal plan — the generic,
 Trajectory-Supervisor-independent ask-question mechanism.
 `adapter/harness/ask_question.py` + the `AskQuestion`/`AskAnswer`/
 `AskResponse`/`SurfaceBlocker` types and helpers in

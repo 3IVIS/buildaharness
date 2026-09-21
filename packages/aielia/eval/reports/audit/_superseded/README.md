@@ -18,4 +18,4 @@ parent if ever needed). The fair re-run — those tasks excluded (`excludeSlice`
 the manifest + the runner skip-guard), on Sonnet, 5 seeds, with F3/F4 landed —
 writes fresh reports to `harness-vs-bare/` and `one-loop/`.
 
-See `plans/feature_audit_fair_comparison_plan.html`.
+See the internal plan.

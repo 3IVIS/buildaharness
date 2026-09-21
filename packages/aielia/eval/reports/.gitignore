@@ -4,6 +4,6 @@
 !baseline.json
 
 # Feature Value Audit matrix — seed reports + transcripts under audit/<feature>/ ARE the
-# published evidence trail (plans/feature_audit_automation_plan.html), not throwaway local runs.
+# published evidence trail (the internal plan), not throwaway local runs.
 !audit/
 !audit/**

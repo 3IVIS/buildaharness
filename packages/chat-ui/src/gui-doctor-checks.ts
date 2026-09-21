@@ -34,7 +34,7 @@ export async function checkProxyReachable(proxyUrl: string): Promise<DoctorCheck
  * Browser-only, `webBackend: 'proxy'` sidecar to checkProxyReachable: a real `POST
  * <proxyUrl>/web/search` call (not just `/health`) so Settings can tell "the proxy is up" apart
  * from "the proxy is up but /web/search 401s / the Brave key is missing / DDG scraping broke" —
- * see plans/browser_web_tools_via_proxy_plan.html's W5 section.
+ * see the internal plan's W5 section.
  */
 export async function checkWebSearchReachable(proxyUrl: string, authToken: string): Promise<DoctorCheck> {
   const label = `web search via proxy (${proxyUrl}/web/search)`

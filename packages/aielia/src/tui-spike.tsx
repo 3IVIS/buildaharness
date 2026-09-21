@@ -1,4 +1,4 @@
-// Phase 0 feasibility spike for plans/personal_assistant_cli_pinned_input_plan.html.
+// Phase 0 feasibility spike for the internal plan.
 // Throwaway — not part of the shipped feature. Delete once Phase 5 confirms Ink
 // works over a real live terminal (raw-mode input + redraw), along with its
 // temporary build entry in vite.config.lib.ts.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Standalone TS-vs-Python conformance runner for the generic ask-question mechanism
-// (Q8 of plans/ask_question_and_plan_mode_plan.html) — the companion to compare.mjs
+// (Q8 of the internal plan) — the companion to compare.mjs
 // (resolveControlState), compare-verify.mjs (verify), and compare-supervisor.mjs
 // (Trajectory Supervisor).
 //

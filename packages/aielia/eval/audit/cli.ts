@@ -1,9 +1,9 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Feature Value Audit — the thin TS entrypoint `~/clam/feature_audit_driver.py` shells out to.
+ * Feature Value Audit — the thin TS entrypoint the audit driver shells out to.
  *
- * The driver is Python (it lives in `~/clam` with the other scheduler drivers and reuses
- * `claude_pipeline`), but the audit's decision logic — which cell runs next, how N seed reports
+ * The driver is Python (it lives in the scheduler repo with the other scheduler drivers and reuses
+ * a shared pipeline library), but the audit's decision logic — which cell runs next, how N seed reports
  * fold into a verdict — is TS and must stay in one place (`select.ts`, `aggregate.ts`). Rather
  * than reimplement it in Python, the driver calls these subcommands and reads back one JSON object
  * on stdout (the `run_json_script` pattern the other drivers use).

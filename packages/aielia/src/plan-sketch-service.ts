@@ -8,7 +8,7 @@ import type { AgentLoop } from './agent-loop.js'
 const SKETCH_GROUNDING_BUDGET = 8
 
 /**
- * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate: one
+ * P9 of the internal plan — the lightweight plan-sketch delegate: one
  * bounded LLM call (grounded, best-effort, via the same read_file/list_directory investigation
  * walk P3's from-scratch drafting reuses — AgentLoop.runSupervisorInvestigation, not a new search
  * engine) that returns a plain proposed task list in the chat reply itself. Deliberately NOT

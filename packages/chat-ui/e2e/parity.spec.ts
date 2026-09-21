@@ -2,7 +2,7 @@ import { test, expect, type ChatBootstrap, type ChatPage, type SettleOn } from '
 import type { LLMStructuredResponse } from '@buildaharness/runtime'
 
 /**
- * B3 — the flag OFF-vs-ON parity matrix (plans/chat_ui_browser_e2e_plan.html phase B3).
+ * B3 — the flag OFF-vs-ON parity matrix (the internal plan phase B3).
  *
  * The same shape as R5's CLI live-verification, now in a real browser, run under both
  * `oneLoopMode` states. Each scenario is one deterministic scripted-LLM conversation. The

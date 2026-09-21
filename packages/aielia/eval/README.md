@@ -1,6 +1,6 @@
 # Comparative harness benchmark (Plan Phase B)
 
-> `plans/harness_consolidation_and_control_plane_plan.html` — Phase B. The thing that turns
+> the internal plan — Phase B. The thing that turns
 > "759 tests" into "here is the number", and the **Rule 6** gate every behavior-changing phase
 > (C, D, E) must pass before its flag defaults on.
 
@@ -50,7 +50,7 @@ Machinery tests (fast, no LLM, part of CI):
 npm test --workspace=packages/aielia   # includes eval/*.test.ts
 ```
 
-A real run (real model via the `claude-cli` backend — no API key, see CLAUDE.md):
+A real run (real model via the `claude-cli` backend — no API key, see the internal developer notes):
 
 ```
 cd packages/aielia
@@ -124,7 +124,7 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
 
 ## Trajectory-supervisor slice (S7)
 
-> `plans/harness_trajectory_supervisor_plan.html` phase S7 · ADR-005
+> the internal plan phase S7 · ADR-005
 
 `corpus/*.json` carry an optional `slice` tag (`corpus/schema.ts` `SUPERVISOR_SLICES`). The
 trajectory-supervisor slice is tasks that are **unsolvable without a strategy pivot, an external
@@ -169,7 +169,7 @@ being consulted on the `cannotMakeProgress()` stall edge. It is now in `IMPLEMEN
 comparison for the default-on flip is **`flagOn` vs `supervisorOn`** (isolates the supervisor; both
 run one-loop), not `baseline` vs `supervisorOn`.
 
-**`contradictionOff` arm** (feature-value audit, Batch B — `plans/feature_audit_automation_plan.html`
+**`contradictionOff` arm** (feature-value audit, Batch B — the internal plan
 A4) — `PersonalAssistant` (`flagOn` one-loop config) with `AUDIT_SEMANTIC_CONTRADICTION=0`. That env
 var gates the whole `contradictionChecker` host hook in `harness-bridge.ts`: OFF → no hook is wired,
 so the harness runs its always-on lexical / negation-pair contradiction check alone (the semantic

@@ -1,5 +1,5 @@
 // Bounded read-only investigation sub-agent — S5 of
-// plans/harness_trajectory_supervisor_plan.html (GATHER_EVIDENCE). TS twin of
+// the internal plan (GATHER_EVIDENCE). TS twin of
 // adapter/harness/investigation.py.
 //
 // When the Trajectory Supervisor emits a GATHER_EVIDENCE directive at a stall edge,

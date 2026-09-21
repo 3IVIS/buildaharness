@@ -3,7 +3,7 @@ import type { AskQuestion, AssistantTurnResult } from '@buildaharness/aielia'
 type AskableResult = Pick<AssistantTurnResult, 'status' | 'questions' | 'pendingClarificationId'>
 
 /**
- * Q5 (plans/ask_question_and_plan_mode_plan.html) — the one place that decides whether a
+ * Q5 (the internal plan) — the one place that decides whether a
  * `needs_clarification` result gets the real interactive AskQuestionCard or falls back to the
  * pre-existing plain-text EscalationBanner. Kept as a small pure function (mirrors
  * ChatMessageBubble.tsx's answerClaimLabel/verificationHealthLabel convention) so App.tsx's

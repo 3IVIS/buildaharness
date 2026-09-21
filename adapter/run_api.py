@@ -1690,7 +1690,7 @@ async def put_harness_state(
 
 class EscalationRespondRequest(BaseModel):
     clarification: dict = {}
-    # Q3 (plans/ask_question_and_plan_mode_plan.html) — the batched-questions counterpart
+    # Q3 (the internal plan) — the batched-questions counterpart
     # to `clarification` above. Populated only when the paused run's `pending_escalation`
     # carries a `questions` batch (Q0); mirrors AskResponse.to_dict()'s `answers` shape
     # exactly (personal-assistant's OneShotAnswerChannel wraps the same list under

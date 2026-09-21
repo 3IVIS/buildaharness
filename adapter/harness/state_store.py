@@ -89,7 +89,7 @@ class HarnessRunState:
     # pass into the next iteration's resolve_control_state() call (INV-18); one-shot,
     # cleared by run_one_iteration() immediately after that one resolve consumes it.
     pending_reviewer_verdict: Any | None = None
-    # Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html) — S0 adds the
+    # Trajectory Supervisor (the internal plan) — S0 adds the
     # slots; nothing writes them until S1. pending_supervisor_directive is one-shot (INV-20),
     # consumed and cleared by run_one_iteration() after it is applied at the stall edge.
     # pending_investigation carries a GATHER_EVIDENCE request out to the async driver (S4).

@@ -1,7 +1,7 @@
 """
 Q0 acceptance tests — shared question/answer types, both twins, inert.
 
-Plan: plans/ask_question_and_plan_mode_plan.html, Phase Q0.
+Plan: the internal plan, Phase Q0.
 
 Nothing in this file constructs a populated `questions` field outside these
 test fixtures — no behavior change is possible at this phase (see plan Q0).

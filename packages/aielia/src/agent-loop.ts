@@ -36,7 +36,7 @@ export type ToolLoopResult =
   | { kind: 'escalated'; reason: string }
 
 /**
- * R2 of plans/harness_d2_one_loop_rewire_plan.html: thrown by a harness-driven proposer
+ * R2 of the internal plan: thrown by a harness-driven proposer
  * (createHarnessProposer, below) when runToolIterationStep produces a 'needs_approval' or
  * 'escalated' ToolLoopResult — the harness's own execute() rethrows anything satisfying
  * isHarnessPauseSignal unexamined (no SYSTEM_ERROR evidence, no task-FAILED transition), so this
@@ -50,7 +50,7 @@ export class OneLoopPause extends Error implements HarnessPauseSignal {
   constructor(
     readonly result: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
     /**
-     * P10 of plans/ask_question_and_plan_mode_plan.html: the plan task (if any) that was RUNNING
+     * P10 of the internal plan: the plan task (if any) that was RUNNING
      * — i.e. whichever task `execute()` was calling this proposer for — when `result` was
      * produced, threaded from `ToolExecutorContext.currentTaskId`. Lets the catcher
      * (assistant.ts's `buildToolLoopPauseResult`) check INV-36's trust condition without
@@ -68,7 +68,7 @@ export class OneLoopPause extends Error implements HarnessPauseSignal {
 // Batch-research tuning constants (dynamic tool-call budget for batch research tasks): a
 // self-calibrating alternative to the flat maxSteps cap for the one task shape that needs it —
 // an explicit list of N similar lookup targets in one turn. See
-// plans/personal_assistant_dynamic_tool_budget_plan.html for the reasoning behind each value.
+// the internal plan for the reasoning behind each value.
 const BATCH_PROBE_ITEM_CAP = 10 // generous fixed cap for the probe items, before calibration exists yet
 const BATCH_PER_ITEM_FLOOR = 2 // never project a per-item budget below this — a cheap probe item can't starve the rest
 const BATCH_SLACK_FACTOR = 1.4 // headroom multiplier over the calibrated average
@@ -264,7 +264,7 @@ export class AgentLoop {
   }
 
   /**
-   * R2 of plans/harness_d2_one_loop_rewire_plan.html: builds the real toolExecutors['default']
+   * R2 of the internal plan: builds the real toolExecutors['default']
    * entry HarnessBridge.run() swaps in when the one-loop flag is enabled — a proposer that calls
    * runToolIterationStep once per driveMainLoop iteration and translates its discriminated result
    * into the primitives D0/D1 already built: a plain return (status 'continue', no output yet) for
@@ -356,7 +356,7 @@ export class AgentLoop {
   }
 
   /**
-   * R3 of plans/harness_d2_one_loop_rewire_plan.html: the wiring-level counterpart to
+   * R3 of the internal plan: the wiring-level counterpart to
    * `createHarnessProposer` above — builds the same `messages`/`tools` shape `runToolLoop` builds
    * (system prompt + transcript + user message; whichever of FILE_TOOLS/WEB_TOOLS/SHELL_TOOLS/
    * ACTION_TOOLS/REMINDER_TOOLS are configured) so `assistant.ts`'s `runTurn` doesn't need to
@@ -396,7 +396,7 @@ export class AgentLoop {
   }
 
   /**
-   * R4 of plans/harness_d2_one_loop_rewire_plan.html: the batch-research counterpart to
+   * R4 of the internal plan: the batch-research counterpart to
    * `createOneLoopProposer` above — routes `runBatchToolLoop`'s probe → calibrate → confirm-gate
    * → resolve-remaining → synthesize sequence through the same harness-driven proposer mechanism,
    * instead of batch research remaining a second code path that (per R3) never reached the
@@ -621,7 +621,7 @@ export class AgentLoop {
 
   /**
    * One iteration's worth of `runToolIterations`' ReAct loop, extracted (R1 of the D2
-   * one-loop-rewire follow-up plan, `plans/harness_d2_one_loop_rewire_plan.html`) so a
+   * one-loop-rewire follow-up plan, the internal plan) so a
    * harness-driven proposer (R2) can call this directly, once per `driveMainLoop` iteration,
    * instead of only ever being driven by `runToolIterations`' own `for` loop. Preserves every
    * early-return branch of the original loop body exactly — the unparsed-tool-call retry,
@@ -1198,7 +1198,7 @@ export class AgentLoop {
 
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
-   * plans/harness_trajectory_supervisor_plan.html). A bounded, strictly read-only tool
+   * the internal plan). A bounded, strictly read-only tool
    * loop the harness calls (via HarnessRunOptions.runInvestigation) when the supervisor
    * decides the run is stuck for lack of a fact.
    *

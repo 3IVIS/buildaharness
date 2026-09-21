@@ -1,7 +1,7 @@
 """
 Q4 acceptance tests — answer shapes threaded into constraint propagation.
 
-Plan: plans/ask_question_and_plan_mode_plan.html, Phase Q4.
+Plan: the internal plan, Phase Q4.
 
 Run: pytest adapter/tests/test_harness_q4_ask_question.py -v --noconftest
 """

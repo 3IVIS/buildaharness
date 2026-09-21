@@ -247,7 +247,7 @@ export async function loadActivePlan(memory: MemoryAdapter, sessionId: string, f
 
 /**
  * Builds an immediately-`active` PlanRecord with no drafting/approval step at all. Before P3 of
- * plans/ask_question_and_plan_mode_plan.html, TurnInterpreter.resolveTasks called this the instant
+ * the internal plan, TurnInterpreter.resolveTasks called this the instant
  * classifyTurnIntent matched a template; P3 retired that call site — a template match (or the
  * newer general needsMultiStepPlan judgment) now always routes through plan mode's exclusive
  * drafting+approval loop instead (see assistant.ts's auto-trigger and
@@ -520,7 +520,7 @@ const STATUS_ICON: Record<TaskStatus, string> = {
   HUMAN_REQUIRED: '~',
 }
 
-/** Human-readable plan status — mirrors agents/planner/utils.py's format_plan_progress, for callers (the CLI) that want text instead of the structured planStatus field. */
+/** Human-readable plan status — mirrors the Python planner agent's format_plan_progress, for callers (the CLI) that want text instead of the structured planStatus field. */
 export function formatPlanProgress(plan: PlanRecord): string {
   const lines = [
     `Plan: ${plan.templateName} (${planCompletionPct(plan).toFixed(1)}% complete)`,

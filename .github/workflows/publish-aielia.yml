@@ -9,7 +9,7 @@ name: Publish @buildaharness/aielia
 # resolve them from the registry.
 #
 # Note: this tag prefix is shared with the standalone-binary release workflow
-# from plans/aielia_cli_install_and_self_update_plan.html once that's built —
+# from the internal plan once that's built —
 # one aielia-v* tag triggers both the npm publish here and that binary build.
 
 on:

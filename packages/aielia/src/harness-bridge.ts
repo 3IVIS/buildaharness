@@ -43,7 +43,7 @@ import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 
 /**
- * P4 of plans/ask_question_and_plan_mode_plan.html (Open Decisions #2, recommended default: yes):
+ * P4 of the internal plan (Open Decisions #2, recommended default: yes):
  * once an approved plan's `executingOnPlan` removes the per-MEDIUM/HIGH-risk pacing pause below,
  * auto-advance could otherwise chain arbitrarily many tasks' worth of LLM calls into one turn. This
  * is a distinct, always-on ceiling — a hard stop on task count regardless of risk level, mirroring
@@ -61,7 +61,7 @@ export interface HarnessRunParams {
   userMessage: string
   facts: UserFact[]
   /**
-   * Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: this turn's
+   * Phase 4 of the internal plan: this turn's
    * merged lexical+LLM fact list — memory-service.ts's `buildTurnFacts()`, the exact helper
    * `recordFacts()` itself uses to decide what to write to the fact stores — fed into
    * `factExtractor` below as this turn's "isNew" belief seed. Replaces this file's former direct
@@ -79,7 +79,7 @@ export interface HarnessRunParams {
   onProgress?: (progress: AssistantProgress) => void
   onUsage: (usage: TokenUsage) => void
   /**
-   * R2 of plans/harness_d2_one_loop_rewire_plan.html: a harness-driven proposer (built by
+   * R2 of the internal plan: a harness-driven proposer (built by
    * AgentLoop.createHarnessProposer) swapped in as the toolExecutors 'default' entry instead of
    * `() => draftReply`, when the one-loop flag is enabled and a caller actually supplies one.
    * `undefined` (every caller today, before R3 wires runTurn to build one) means `run()` falls
@@ -90,7 +90,7 @@ export interface HarnessRunParams {
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
-   * plans/harness_trajectory_supervisor_plan.html) — AgentLoop.runSupervisorInvestigation bound
+   * the internal plan) — AgentLoop.runSupervisorInvestigation bound
    * to this turn's read-only tools + risk hint. Passed straight through to
    * HarnessRunOptions.runInvestigation. `undefined` (every caller until a supervisorDecider is
    * also wired) → GATHER_EVIDENCE degrades to CONTINUE inside the harness, so this is inert by
@@ -98,7 +98,7 @@ export interface HarnessRunParams {
    */
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
   /**
-   * Q2 of plans/ask_question_and_plan_mode_plan.html — the already-resolved effective askMode
+   * Q2 of the internal plan — the already-resolved effective askMode
    * (Q1's three-tier INV-29 resolution), threaded straight into HarnessRunOptions.askMode so the
    * harness's own supervisor ASK_USER path (S3) batches questions consistently with
    * AskClarificationService's own gating. Also decides whether a thrown EscalationHalt carrying
@@ -135,7 +135,7 @@ export class HarnessBridge {
     private readonly planService: PlanService,
     private readonly assistantSession: AssistantSession,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
-    // R2 of plans/harness_d2_one_loop_rewire_plan.html: injected (not read from process.env here)
+    // R2 of the internal plan: injected (not read from process.env here)
     // so tests never touch real process.env — see one-loop-flag.ts's doc comment, mirroring
     // control-plane-flag.ts's now-removed injectable-mode convention. Only cli.ts (or an
     // equivalent surface entry point) is expected to call resolveOneLoopMode(process.env) and
@@ -237,7 +237,7 @@ export class HarnessBridge {
         // task-graph *shape* (visible in stepsUsed/nodeExecutionOrder), not the number of
         // distinct replies produced.
         //
-        // R2 of plans/harness_d2_one_loop_rewire_plan.html: flag-OFF (the default) and flag-ON
+        // R2 of the internal plan: flag-OFF (the default) and flag-ON
         // with no caller-supplied proposer are byte-identical to the line above — `() =>
         // draftReply` — satisfying INV-19. Flag-ON with a real oneLoopProposer swaps it in as the
         // 'default' toolExecutor instead, read once per turn right here.
@@ -273,7 +273,7 @@ export class HarnessBridge {
         // Trajectory Supervisor decider (S5) — the single stall-edge LLM call. Flag-gated on
         // HARNESS_TRAJECTORY_SUPERVISOR (default OFF); when off, the harness never consults it
         // and the whole supervisor path stays inert (INV-22). The harness itself only calls this
-        // inside its own cannotMakeProgress() branch. Twin of planner_api.py's _run_planner gate.
+        // inside its own cannotMakeProgress() branch. Twin of the planner driver's _run_planner gate.
         supervisorDecider: supervisorEnabled()
           ? (digest: TrajectoryDigestData) => decideSupervisorDirective(digest, this.llmClient, this.model(), onUsage)
           : undefined,

@@ -1,7 +1,7 @@
 import type { RiskLevel } from './turn-intent-classifier.js'
 
 /**
- * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html: the deterministic,
+ * Phase 4 of the internal plan: the deterministic,
  * authoritative decision point for whether a specific tool call may proceed — replacing "advisory
  * LLM classification, checked after the fact" with "deterministic policy informed by real harness
  * state, checked before execution" (the substantive fix both external architecture critiques

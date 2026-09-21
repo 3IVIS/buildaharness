@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { diagnoseReviewFailureOptions, buildReviewFailureQuestion } from './review-proposed-change.js'
 import type { DimensionResult } from './review-proposed-change.js'
 
-// Q7 of plans/ask_question_and_plan_mode_plan.html — deterministic trigger sites.
+// Q7 of the internal plan — deterministic trigger sites.
 // review_failure's candidate-fix diagnosis: deterministic, no LLM call.
 
 const dim = (dimension: DimensionResult['dimension'], reason = 'r'): DimensionResult => ({

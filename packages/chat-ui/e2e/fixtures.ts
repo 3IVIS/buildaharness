@@ -3,7 +3,7 @@ import type { ScriptedLLMClientScript } from '@buildaharness/aielia'
 
 /**
  * Page objects + the `chat` fixture for the browser-e2e lane
- * (plans/chat_ui_browser_e2e_plan.html phases B2 + B3).
+ * (the internal plan phases B2 + B3).
  *
  * A test calls `await chat({ script, oneLoopMode?, fsSeed? })` to boot the app with:
  *   - a deterministic scripted `ILLMClient` wired through the B1 seam (no proxy / key / network),
@@ -36,7 +36,7 @@ export interface ChatBootstrap {
    * Extra fields merged into the persisted `buildaharness.personal-assistant.config`, on top of
    * the `llmBackend: 'proxy'` default above — e.g. `{ enableWeb: true, webBackend: 'proxy',
    * proxyUrl, authToken }` for the web-tools-via-proxy scenario (W7 of
-   * plans/browser_web_tools_via_proxy_plan.html). The LLM client itself is always the scripted one
+   * the internal plan). The LLM client itself is always the scripted one
    * from the B1 seam regardless of `llmBackend`; `createWebTools` (App.tsx) is not seamed the same
    * way and makes real `fetch` calls to `config.proxyUrl`, so a test that sets `webBackend: 'proxy'`
    * needs a real HTTP server listening there.

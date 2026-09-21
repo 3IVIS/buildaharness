@@ -104,7 +104,7 @@ function formatFactLine(f: UserFact): string {
 
 /**
  * `/memory`'s "Pending confirmation" section — Phase 3 of
- * plans/personal_assistant_fact_extraction_llm_confidence_plan.html. Grouped by category (so a
+ * the internal plan. Grouped by category (so a
  * topic that accumulated several related guesses reads as one group, not scattered numbers) but
  * numbered in one flat, display-order sequence across every group — `/memory confirm <n>`/
  * `/memory reject <n>` take that same 1-based number, not a per-category one.

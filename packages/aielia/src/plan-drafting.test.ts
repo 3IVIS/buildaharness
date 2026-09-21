@@ -64,7 +64,7 @@ describe('draftPlanRevision', () => {
     expect(await draftPlanRevision(llm, 'Plan something.', [], '', '')).toBeNull()
   })
 
-  // P8 of plans/ask_question_and_plan_mode_plan.html — nested ask-question support.
+  // P8 of the internal plan — nested ask-question support.
   describe('question (P8)', () => {
     const baseFields = {
       reply: 'Which approach should this plan use?',

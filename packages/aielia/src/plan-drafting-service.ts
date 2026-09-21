@@ -57,7 +57,7 @@ function seedFromTemplate(templateName: string): { tasks: PlanTaskRecord[]; succ
 }
 
 /**
- * P3 of plans/ask_question_and_plan_mode_plan.html — how `assistant.ts`'s auto-trigger tells
+ * P3 of the internal plan — how `assistant.ts`'s auto-trigger tells
  * `draftTurn` what to seed a *fresh* draft with (ignored on every later revision of an
  * already-drafting plan). `templateName` set means a template matched — the draft starts from
  * that template's own skeleton (today's personalization behavior, reused, not discarded — see
@@ -73,7 +73,7 @@ export interface PlanDraftSeed {
 }
 
 /**
- * P8 of plans/ask_question_and_plan_mode_plan.html — everything `resolvePendingAsk` needs to fold
+ * P8 of the internal plan — everything `resolvePendingAsk` needs to fold
  * the user's answer back into the *next* drafting call. Deliberately thinner than
  * AskClarificationPendingState (Q2): there is no harness run to resume, so no
  * classification/activePlan/facts/draftReply to carry — the running `PlanRecord` itself (already
@@ -249,7 +249,7 @@ export class PlanDraftingService {
       return { status: 'ok', reply, riskLevel: 'LOW', harnessSkipped: true }
     }
 
-    // P8 of plans/ask_question_and_plan_mode_plan.html — the drafting call hit a genuine
+    // P8 of the internal plan — the drafting call hit a genuine
     // ambiguity and wants to ask instead of guess. Deliberately doesn't persist `revision`'s
     // tasks/successCriteria/rationale here (the system prompt asks the model to echo the current
     // draft unchanged when it sets `question`, so `draft` — already on disk — already reflects

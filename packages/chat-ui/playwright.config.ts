@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Browser E2E lane for plans/chat_ui_browser_e2e_plan.html phase B2.
+ * Browser E2E lane for the internal plan phase B2.
  *
  * Chromium only (Playwright ships and manages its own binary — works headless with no `$DISPLAY`
  * on Linux; system Firefox here is a broken snap, system Chrome is absent). The app under test is

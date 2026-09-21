@@ -71,7 +71,7 @@ describe('detectHomogeneousBatchList', () => {
   })
 
   // Chinese (Simplified) — documents, rather than fixes, a known accepted limitation (see
-  // plans/lexical_functions_hardening_plan.html Decision 4, and CONNECTOR_WORDS' own doc-comment
+  // the internal plan Decision 4, and CONNECTOR_WORDS' own doc-comment
   // in batch-list-detector.ts): the capitalization-ratio signal this detector's nameShapedContent
   // relies on structurally cannot fire for a script with no letter case. Every word in a CJK line
   // fails isCapitalizedWord (toLowerCase/toUpperCase are no-ops on CJK characters, so

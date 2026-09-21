@@ -3,7 +3,7 @@ import type { WebSearchResult } from './web-tools.js'
 
 /**
  * The real school-dates comparison this plan is built on (see
- * plans/personal_assistant_dynamic_tool_budget_plan.html's Reference Transcripts tab), encoded as
+ * the internal plan's Reference Transcripts tab), encoded as
  * a reusable scripted-LLM-response fixture instead of duplicated inline in assistant.test.ts —
  * so the integration replay test stays traceable back to the actual incident that motivated this
  * plan, and any recalibration of thresholds later has the real shape to check against.

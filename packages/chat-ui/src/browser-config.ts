@@ -31,19 +31,19 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   if (env.VITE_ASSISTANT_PROXY_URL) overrides.proxyUrl = env.VITE_ASSISTANT_PROXY_URL
   if (env.VITE_ASSISTANT_PROXY_TOKEN) overrides.authToken = env.VITE_ASSISTANT_PROXY_TOKEN
   if (env.VITE_ASSISTANT_MODEL) overrides.model = env.VITE_ASSISTANT_MODEL
-  // R5 of plans/harness_d2_one_loop_rewire_plan.html — the browser/desktop counterpart of the
+  // R5 of the internal plan — the browser/desktop counterpart of the
   // CLI's ASSISTANT_ONE_LOOP. normalizeOneLoopMode warns-and-defaults on a typo, so a build that
   // sets this at all always resolves to a concrete 'enabled'/'disabled'.
   if (env.VITE_ASSISTANT_ONE_LOOP) overrides.oneLoopMode = normalizeOneLoopMode(env.VITE_ASSISTANT_ONE_LOOP, 'VITE_ASSISTANT_ONE_LOOP')
-  // Q2 of plans/ask_question_and_plan_mode_plan.html — the browser/desktop counterpart of the
+  // Q2 of the internal plan — the browser/desktop counterpart of the
   // CLI's ASSISTANT_ASK_MODE. normalizeAskMode warns-and-defaults on a typo, so a build that
   // sets this at all always resolves to a concrete 'enabled'/'disabled'.
   if (env.VITE_ASSISTANT_ASK_MODE) overrides.askMode = normalizeAskMode(env.VITE_ASSISTANT_ASK_MODE, 'VITE_ASSISTANT_ASK_MODE')
-  // P11 of plans/ask_question_and_plan_mode_plan.html — the browser/desktop counterpart of the
+  // P11 of the internal plan — the browser/desktop counterpart of the
   // CLI's ASSISTANT_PLAN_MODE. normalizePlanMode warns-and-defaults on a typo, so a build that
   // sets this at all always resolves to a concrete 'gated'/'legacy'.
   if (env.VITE_ASSISTANT_PLAN_MODE) overrides.planMode = normalizePlanMode(env.VITE_ASSISTANT_PLAN_MODE, 'VITE_ASSISTANT_PLAN_MODE')
-  // W8 of plans/browser_web_tools_via_proxy_plan.html — lets a specific build (the hosted /try
+  // W8 of the internal plan — lets a specific build (the hosted /try
   // trial) default web tools on and routed through the proxy, without touching DEFAULT_CONFIG
   // for every other build (dev, self-hosted, etc).
   if (env.VITE_ASSISTANT_ENABLE_WEB) overrides.enableWeb = env.VITE_ASSISTANT_ENABLE_WEB === 'true'

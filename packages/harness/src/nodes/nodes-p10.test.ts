@@ -186,7 +186,7 @@ describe('reviewProposedChange', () => {
   })
 
   // Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker;
-  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  // see the internal plan's Fixture-writing caveat.
   it('world-model consistency check catches a literal Chinese negation trigger + verbatim belief-statement concatenation', () => {
     const wm = makeWorldModel()
     wm.beliefs.push({

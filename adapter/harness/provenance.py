@@ -1,5 +1,5 @@
 """
-Versioned identity model — Phase 1a of plans/harness_and_assistant_architecture_remediation_plan.html.
+Versioned identity model — Phase 1a of the internal plan.
 
 Answers the critique's "who is authoritative for what" / "stale state should be a graph
 property, not a counter convention" concerns without changing WorldModel.generation_id's

@@ -16,7 +16,7 @@ export type ChatEntry =
       planStatus?: AssistantTurnResult['planStatus']
       /** Epistemic-honesty signal — see AssistantTurnResult.answerClaim's doc comment. Absent on the triviality fast path, same convention as trace/sources. */
       answerClaim?: AnswerClaim
-      /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (plans/chat_ui_browser_e2e_plan.html phase B1), rendered as a hidden data-testid element. */
+      /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (the internal plan phase B1), rendered as a hidden data-testid element. */
       proposerKind?: AssistantTurnResult['proposerKind']
     }
   | {
@@ -68,7 +68,7 @@ export type ChatEntry =
       /** AssistantTurnResult.planApproval — the staged snapshot PlanApprovalCard renders. */
       planApproval: NonNullable<AssistantTurnResult['planApproval']>
       riskLevel?: RiskLevel
-      /** 'approved_trusted' — P10 of plans/ask_question_and_plan_mode_plan.html's "trust this approved plan" opt-in (PlanApprovalCard's third, non-default control). */
+      /** 'approved_trusted' — P10 of the internal plan's "trust this approved plan" opt-in (PlanApprovalCard's third, non-default control). */
       resolution?: 'approved' | 'approved_trusted' | 'approved_with_edits' | 'declined'
     }
   | {

@@ -34,7 +34,7 @@ interface Props {
   /**
    * Which proposer drove this turn (see AssistantTurnResult.proposerKind). Rendered only as a
    * hidden `data-testid="proposer-kind"` element, and only in a dev/E2E build — a test affordance
-   * for plans/chat_ui_browser_e2e_plan.html phase B1's flag-OFF-vs-ON parity assertions, never a
+   * for the internal plan phase B1's flag-OFF-vs-ON parity assertions, never a
    * user-facing or documented public surface.
    */
   proposerKind?: AssistantTurnResult['proposerKind']

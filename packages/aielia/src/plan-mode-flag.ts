@@ -3,7 +3,7 @@
  * unit-testable in isolation, mirroring one-loop-flag.ts/ask-mode-flag.ts's exact shape
  * (module-level default, an injectable resolver so tests never touch real process.env).
  *
- * P11 of plans/ask_question_and_plan_mode_plan.html — the rollout flag gating P1-P8's whole
+ * P11 of the internal plan — the rollout flag gating P1-P8's whole
  * plan-mode behavior change (exclusive drafting, mandatory approval, the generalized trigger,
  * auto-advance, the markdown/delegate/trust-mode extensions) behind one switch. 'legacy' (the
  * default, for the whole rollout window, per `DEFAULT_PLAN_MODE`): P3's judgment-based

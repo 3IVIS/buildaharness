@@ -2,7 +2,7 @@
 
 # Repo stats
 
-Canonical source for the counts quoted elsewhere in the docs (README.md, README_CN.md, CLAUDE.md,
+Canonical source for the counts quoted elsewhere in the docs (README.md, README_CN.md,
 docs/getting-started.md, docs/architecture.md) — those files are rewritten in place by this same script,
 not transcluded, since GitHub-rendered markdown has no include mechanism.
 

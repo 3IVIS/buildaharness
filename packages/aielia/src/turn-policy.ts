@@ -1,7 +1,7 @@
 import type { RiskLevel } from './turn-intent-classifier.js'
 
 /**
- * Phase D3 (plans/harness_consolidation_and_control_plane_plan.html, A3): the deterministic,
+ * Phase D3 (the internal plan, A3): the deterministic,
  * authoritative decision point for whether a turn's message-level risk requires human approval
  * before the turn proceeds — the message-level analog of tool-policy.ts's evaluateToolPolicy().
  *

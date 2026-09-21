@@ -3,14 +3,14 @@
  * Real-LLM accuracy eval for classifyTurnIntent (packages/aielia/src/turn-intent-classifier.ts) —
  * serves two plans' evidence requirements at once:
  *
- * 1. plans/personal_assistant_consolidated_classifier_plan.html's Phase 3 gate ("gate the cutover on this
+ * 1. the internal plan's Phase 3 gate ("gate the cutover on this
  *    suite passing") — ENGLISH_CASES/CHINESE_CASES below.
- * 2. plans/lexical_functions_hardening_plan.html's Phase 5 step 3 ("eval evidence for the paraphrase/
+ * 2. the internal plan's Phase 5 step 3 ("eval evidence for the paraphrase/
  *    non-English claim... so it's a measured claim, not just documented intent") — FACT_BACKSTOP_CASES/
  *    RISK_STEP_BACKSTOP_CASES below, which specifically target the two fields that plan's Phase 1 added to
  *    this same classifier (statesDurableFact, per-task riskLevel) as the LLM backstop for
  *    fact-extraction.ts's FACT_MARKERS/HEALTH_OR_DIETARY_MARKERS and risk-classifier.ts's classifyRisk.
- * 3. plans/personal_assistant_fact_extraction_llm_confidence_plan.html's Phase 5 gate — PORTED_FACT_CASES
+ * 3. the internal plan's Phase 5 gate — PORTED_FACT_CASES
  *    (every "found via live testing" fact-extraction.ts comment ported verbatim, proving the LLM path this
  *    plan makes primary catches them too, not just architecturally cleaner than the regex patches that were
  *    written to catch these exact phrasings) and CONFIDENCE_CASES (direct/hedged/third-party-about-self
@@ -35,7 +35,7 @@
  *   npx tsx scripts/eval-turn-intent.ts --min-pass-rate=0.95   # override the default 0.85 threshold
  *
  * Uses the claude-cli backend (shells out to `claude -p`, already on PATH, no API key needed — see
- * CLAUDE.md's "Driving the personal-assistant" section) so this runs in any dev environment with Claude
+ * the internal developer notes' "Driving the personal-assistant" section) so this runs in any dev environment with Claude
  * Code installed.
  */
 import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
@@ -128,7 +128,7 @@ const ENGLISH_CASES: Case[] = [
 ]
 
 // Chinese equivalents covering the same intent categories — vocabulary informed by
-// plans/personal_assistant_chinese_lexical_checks_plan.html's sketched risk/reminder/abandon
+// the internal plan's sketched risk/reminder/abandon
 // phrases (that plan is unimplemented scoping; nothing here is copied code, only the vocabulary
 // ideas). A fluent-speaker review of these phrasings is still worth doing before treating this as
 // an authoritative Chinese test corpus — see that plan's own open decisions on this point.

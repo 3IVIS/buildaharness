@@ -8,7 +8,7 @@ describe('classifyRisk', () => {
 
   // Chinese (Simplified) fixtures below are a first pass, not verified by a fluent Chinese
   // speaker — see this file's own risk-patterns.json "zh" entry and the plan doc
-  // (plans/personal_assistant_chinese_lexical_checks_plan.html) for the design rationale behind
+  // (the internal plan) for the design rationale behind
   // each pattern. Prioritized per that plan: money, deletion, and messaging first (the highest-
   // stakes HIGH-risk categories), since a missed match here means an approval gate never fires.
   it('flags a HIGH risk request in Chinese (delete)', () => {

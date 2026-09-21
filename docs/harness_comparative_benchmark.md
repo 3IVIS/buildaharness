@@ -1950,7 +1950,7 @@ What the run establishes:
 The higher-fidelity measurement is the multi-task / decomposed path (adapter `_run_planner`, or a
 decomposed PA turn) where `GATHER_EVIDENCE`'s merged findings and `REDIRECT_STRATEGY`'s strategy
 switch have downstream tasks to act on — see the S7 note in
-`plans/harness_trajectory_supervisor_plan.html`.
+the internal plan.
 
 ---
 

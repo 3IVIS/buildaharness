@@ -1,5 +1,5 @@
 // Trajectory digest — bounded, human-readable input to the supervisor
-// (S0 of plans/harness_trajectory_supervisor_plan.html). TS twin of
+// (S0 of the internal plan). TS twin of
 // adapter/harness/trajectory_digest.py.
 //
 // buildDigest() is a deterministic assembly step — no LLM call. It follows the same

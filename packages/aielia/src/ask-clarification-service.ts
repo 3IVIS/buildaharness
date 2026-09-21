@@ -47,7 +47,7 @@ class OneShotAnswerChannel implements UpdateChannel {
 
 /**
  * Owns the ask-question "staged clarification, resolved by ID" pattern — Q2 of
- * plans/ask_question_and_plan_mode_plan.html, structurally mirroring ActionApprovalService (T4 of
+ * the internal plan, structurally mirroring ActionApprovalService (T4 of
  * the file-tools plan: what gets resolved is exactly what was staged, never re-derived from a
  * second LLM call). Unlike a write/shell action, resolving a clarification means resuming a
  * *harness run* — the checkpoint HarnessBridge would otherwise have deleted on any thrown
@@ -145,7 +145,7 @@ export class AskClarificationService {
         sessionId,
         userMessage: answerText,
         facts: staged.facts,
-        // Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — same
+        // Phase 4 of the internal plan — same
         // reasoning as assistant.ts's own call site: buildSuccessResult below runs recordFacts()
         // with this same (sessionId, answerText, staged.classification.statesDurableFacts) triple,
         // so this stays consistent with what actually gets written to the fact stores this turn.

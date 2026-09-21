@@ -1,16 +1,16 @@
 /**
  * Feature Value Audit — manifest + progress schema.
  *
- * The audit (plans/feature_value_audit.html) tests, one reasoning feature at a time, whether that
+ * The audit (the internal plan) tests, one reasoning feature at a time, whether that
  * feature earns its per-turn LLM / latency cost: state the hypothesis, build an arm that toggles
  * exactly it, stress it with a corpus slice, measure 3-seed, decide KEEP / CUT / INCONCLUSIVE.
  *
- * This module is the machine-readable queue that `~/clam/feature_audit_driver.py` works through —
+ * This module is the machine-readable queue that the audit driver works through —
  * one `(feature, seed)` cell per scheduler wakeup — plus the pure functions that pick the next
  * cell (`select.ts`) and fold a feature's seed reports into a verdict (`aggregate.ts`).
  *
  * Test/tooling only — nothing under `eval/audit/` is imported by product code.
- * See plans/feature_audit_automation_plan.html (phase A0) and eval/audit/README.md.
+ * See the internal plan (phase A0) and eval/audit/README.md.
  */
 import { z } from 'zod'
 import type { ArmName } from '../arms.js'
@@ -44,7 +44,7 @@ export const AuditFeatureSchema = z.object({
   slice: z.string().nullable(),
   /** Full corpus MINUS these slice tags — for a full-corpus feature that must not run the
    * supervisor-specific stress fixtures (harness-vs-bare / one-loop; see
-   * plans/feature_audit_fair_comparison_plan.html F0). Passed to the benchmark as
+   * the internal plan F0). Passed to the benchmark as
    * `--exclude-slice`. Mutually exclusive with a non-null `slice`. */
   excludeSlice: z.string().optional(),
   /** Optional extra `--tasks=` filter (comma-separated ids), applied on top of `slice`. */
@@ -61,7 +61,7 @@ export const AuditFeatureSchema = z.object({
   /** Set by the finalize step. */
   verdict: AuditVerdictSchema.optional(),
   /** Reviewer's call on whether the single-turn corpus can actually exercise this feature's
-   * mechanism (review 2026-09-09, see plans/feature_value_audit.html#corpus-adequacy):
+   * mechanism (review 2026-09-09, see the internal plan#corpus-adequacy):
    *   'sufficient'  — the mechanism lives inside one turn; the slice covers it.
    *   'acceptable'  — testable single-turn with a noted caveat in the entry.
    *   'partial'     — the detector is tested but the real trigger / cost is cross-turn; add a slice.

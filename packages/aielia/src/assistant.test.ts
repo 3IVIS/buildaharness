@@ -2059,14 +2059,14 @@ describe('PersonalAssistant structured planning', () => {
 
   const planTemplateMatch = { decomposedTasks: decomposedTasksFixture(), matchedPlanTemplate: 'project_planning' }
 
-  // P6 of plans/ask_question_and_plan_mode_plan.html adds one bounded verification LLM call
+  // P6 of the internal plan adds one bounded verification LLM call
   // (verifyPlanDraft) right before a readyForApproval draft is staged — every scripted queue
   // below that stages a plan (planDraftResponse(true)) needs one more entry for it.
   function verifyResponse(findings: string[] = []): LLMStructuredResponse {
     return { content: JSON.stringify({ findings }) }
   }
 
-  // P3 of plans/ask_question_and_plan_mode_plan.html retired the old direct
+  // P3 of the internal plan retired the old direct
   // matchedPlanTemplate -> buildPlanFromTemplate -> createPlanRecord(active) path in favor of
   // routing every template match through PlanDraftingService.draftTurn's own drafting call
   // (plan-drafting.ts's draftPlanRevision), so a scripted response standing in for that call now
@@ -2148,7 +2148,7 @@ describe('PersonalAssistant structured planning', () => {
     expect(llm.calls).toBe(3) // classification + drafting + verification structured calls
     expect(staged.status).toBe('needs_plan_approval')
 
-    // P4 of plans/ask_question_and_plan_mode_plan.html: once P2's mandatory whole-plan approval
+    // P4 of the internal plan: once P2's mandatory whole-plan approval
     // gate has passed, `executingOnPlan` is true and the old per-MEDIUM/HIGH-step pacing pause
     // (introduced by Phase 1 of lexical_functions_hardening_plan.html, the prior version of this
     // test) is skipped entirely — an approved plan auto-advances through its whole unblocked
@@ -2331,7 +2331,7 @@ describe('PersonalAssistant durable fact capture — classifyTurnIntent LLM back
     const facts = (await memory.get('facts:fact-session')) as Array<{ text: string; durable: boolean; source: string; confidence?: string }>
     expect(facts).toHaveLength(1)
     expect(facts[0].text).toBe('the user breaks out in hives from tomatoes')
-    // Phase 2 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: a
+    // Phase 2 of the internal plan: a
     // MODEL_INFERRED fact captured with `durable: true, confidence: 'high'` now auto-promotes to
     // the cross-session durable store — the LLM's own judgment IS the trust signal once it's
     // anchored to an observable confidence criterion, replacing the earlier policy (Phase 5 of the
@@ -2692,7 +2692,7 @@ describe('PersonalAssistant world_model layer_activity reporting', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // Dynamic tool-call budget for batch research tasks (T7 — see
-// plans/personal_assistant_dynamic_tool_budget_plan.html). The point of this suite is proving
+// the internal plan). The point of this suite is proving
 // the feature *can't* misfire on anything it wasn't built for, not just demonstrating the happy
 // path — see the plan's Test Plan tab for the itemized list this implements.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -3006,7 +3006,7 @@ describe('PersonalAssistant batch research — confirmation gate', () => {
   })
 })
 
-// R4 of plans/harness_d2_one_loop_rewire_plan.html: with ASSISTANT_ONE_LOOP enabled, batch
+// R4 of the internal plan: with ASSISTANT_ONE_LOOP enabled, batch
 // research is deferred into AgentLoop.createBatchOneLoopProposer and driven by the harness's own
 // driveMainLoop instead of resolving eagerly before harnessBridge.run() is ever called — these
 // mirror the flag-OFF batch tests above (dead-end window, streaming, source tracking, confirmation
@@ -3083,7 +3083,7 @@ describe('PersonalAssistant batch research — harness-driven (flag ON)', () => 
   })
 })
 
-// R3 of plans/harness_d2_one_loop_rewire_plan.html — the flat (non-batch) one-loop path, driven
+// R3 of the internal plan — the flat (non-batch) one-loop path, driven
 // end-to-end through PersonalAssistant.turn() with ASSISTANT_ONE_LOOP enabled. R2's
 // one-loop-proposer.test.ts / harness-bridge-one-loop.test.ts cover createHarnessProposer and the
 // HarnessRuntime wiring in isolation, and the batch describe block above covers the batch proposer
@@ -3138,7 +3138,7 @@ describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => 
   })
 
   it("a plan-pacing pause surfaces the just-completed task's real output via reportedReply, not an empty prefix — legacy pre-P4 plan without executingOnPlan (safety net)", async () => {
-    // P4 of plans/ask_question_and_plan_mode_plan.html removes the per-MEDIUM/HIGH-risk pacing
+    // P4 of the internal plan removes the per-MEDIUM/HIGH-risk pacing
     // pause for an approved (`executingOnPlan: true`) plan — see "auto-advances through every
     // MEDIUM/HIGH-risk step of an approved plan" above. The pacing pause (and this reportedReply
     // codepath) only still fires as a safety net for a plan that reached `active` without
@@ -3210,7 +3210,7 @@ describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => 
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 
-  // P10 of plans/ask_question_and_plan_mode_plan.html: "trust this approved plan" mode (INV-36).
+  // P10 of the internal plan: "trust this approved plan" mode (INV-36).
   it('INV-36: trustApprovedSteps auto-applies a write_file call proposed while its matching RUNNING plan task executes', async () => {
     const memory = new InMemoryAdapter()
     const plan = {
@@ -3272,7 +3272,7 @@ describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => 
 })
 
 // T2: per-message search index, written alongside the transcript — see
-// plans/personal_assistant_memory_transparency_search_plan.html.
+// the internal plan.
 describe('PersonalAssistant message index (T2)', () => {
   it('every appended transcript message also produces a searchable transcript-msg: entry', async () => {
     const llm = new FakeLLMClient('Sure thing.')
@@ -3393,7 +3393,7 @@ describe('PersonalAssistant message index backfill (T2)', () => {
 })
 
 // T3: /search <query> over the message index — see
-// plans/personal_assistant_memory_transparency_search_plan.html.
+// the internal plan.
 describe('PersonalAssistant.searchTranscript (T3)', () => {
   it('a query matching one specific past message returns that message, not the whole session', async () => {
     const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'search-basic' })

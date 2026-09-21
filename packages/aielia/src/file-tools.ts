@@ -265,7 +265,7 @@ function pendingActionPath(workspaceRoot: string, id: string): string {
  * Stages an action for later approval. `id` is a random UUID, not derived from the session — see
  * T4 of the file-tools plan.
  *
- * Structural hardening principle (plans/lexical_functions_hardening_plan.html Phase 4 step 1):
+ * Structural hardening principle (the internal plan Phase 4 step 1):
  * this gate runs unconditionally on the tool call's own concrete arguments (the literal path/
  * content or command/cwd being proposed), independent of whatever risk-classifier.ts's pre-flight
  * text patterns concluded about the user's phrasing. That's deliberate — it's the same "gate on

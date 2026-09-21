@@ -6,7 +6,7 @@ const factPatterns = getFactMarkerPatterns()
 
 /**
  * Provenance of a captured fact — Phase 5 of the harness/personal-assistant remediation plan
- * (plans/harness_and_assistant_architecture_remediation_plan.html), replacing the previous bare
+ * (the internal plan), replacing the previous bare
  * `durable: boolean` with a typed source plus a promotion policy keyed off it (see
  * assistant.ts's recordFacts()). USER_ASSERTED is this file's own free lexical marker pass
  * (extractFactsFromTurn) — unchanged in behavior and still auto-promotable, exactly as before
@@ -45,7 +45,7 @@ export interface UserFact {
    * Confidence `classifyTurnIntent`'s `StatedFact.confidence` (turn-intent-classifier.ts) assigns
    * a `model_inferred` fact — undefined for `user_asserted`/`observed`/`externally_verified`
    * facts, which have no confidence gradient (they either matched a lexical pattern or didn't).
-   * Added in Phase 2 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html for
+   * Added in Phase 2 of the internal plan for
    * `recordFacts()`'s three-way promotion policy; Phase 4 additionally uses it to adjust
    * `tierForFact()` and to annotate the per-turn facts prompt block. `migrateFact()` needs no
    * change for this field — a pre-existing on-disk fact with no `confidence` reads back as
@@ -57,7 +57,7 @@ export interface UserFact {
    * `StatedFact.category` (turn-intent-classifier.ts) carried through onto the stored fact —
    * undefined for `user_asserted`/`observed`/`externally_verified` facts, same "no signal from
    * that source" convention `confidence` already follows. Added in Phase 3 of
-   * plans/personal_assistant_fact_extraction_llm_confidence_plan.html so a medium-confidence
+   * the internal plan so a medium-confidence
    * fact queued to `facts:pending-confirmation` (memory-service.ts) carries the topic its
    * `/memory` grouping needs — see that file's `PendingFact`.
    */
@@ -128,7 +128,7 @@ export interface TierRule {
 export const TIER_RULES: Record<MemoryTier, TierRule> = {
   episodic: { allowedSources: ['user_asserted', 'model_inferred', 'observed', 'externally_verified'], retention: 'session', contradictionChecked: false },
   // model_inferred added to semantic/identity/preference in Phase 4 of
-  // plans/personal_assistant_fact_extraction_llm_confidence_plan.html: tierForFact() now routes a
+  // the internal plan: tierForFact() now routes a
   // model_inferred fact here too, but only once it's durable AND high-confidence — see that
   // function's doc comment.
   semantic: { allowedSources: ['user_asserted', 'model_inferred', 'externally_verified'], retention: 'durable', contradictionChecked: true },
@@ -148,7 +148,7 @@ const PREFERENCE_TIER_PATTERN = /\b(i (?:like|love|enjoy|prefer|hate|dislike)|my
 
 /**
  * Routes a `UserFact` to its `MemoryTier` per Phase E / E3's rule, extended by Phase 4 of
- * plans/personal_assistant_fact_extraction_llm_confidence_plan.html: `observed` (a future
+ * the internal plan: `observed` (a future
  * tool-observed claim) always stays `episodic` — an uncorroborated observation, never Knowledge.
  * `model_inferred` (the LLM's `statesDurableFacts` guess) stays `episodic` too UNLESS it's both
  * `durable` and `confidence === 'high'` — Phase 1's own definition of high confidence ("the user

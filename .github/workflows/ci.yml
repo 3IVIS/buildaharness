@@ -35,8 +35,8 @@ jobs:
       - name: Check schema sync
         run: node scripts/check-schema-sync.mjs
 
-      # Guards against the two independent copies (TS <-> Python) of harness-core negation
-      # patterns and plan-template keywords drifting apart — see scripts/check-lexical-patterns-sync.mjs.
+      # Guards against the independent copies (TS <-> Python) of the harness-core lexical
+      # patterns drifting apart — see scripts/check-lexical-patterns-sync.mjs.
       - name: Check lexical patterns sync
         run: node scripts/check-lexical-patterns-sync.mjs
 
@@ -175,7 +175,7 @@ jobs:
       - name: Harness TS/Python conformance — verify()
         run: node scripts/harness-conformance/compare-verify.mjs
 
-      # Trajectory Supervisor S0 (plans/harness_trajectory_supervisor_plan.html):
+      # Trajectory Supervisor S0 (the internal plan):
       # the SupervisorDirective / TrajectoryDigest serialisation + enum-safety +
       # payload-shape + length-cap coercion rules, pinned byte-identical across
       # the twins. Tracked divergences in known-discrepancies-supervisor.json
@@ -183,7 +183,7 @@ jobs:
       - name: Harness TS/Python conformance — trajectory supervisor
         run: node scripts/harness-conformance/compare-supervisor.mjs
 
-      # Q8 of plans/ask_question_and_plan_mode_plan.html: the generic ask-question
+      # Q8 of the internal plan: the generic ask-question
       # mechanism's deterministic parts (schema validation, degradation rules,
       # INV-26/27/28/29/34/37), pinned byte-identical across the twins. Tracked
       # divergences in known-discrepancies-ask-question.json exit 0, untracked exit 1.
@@ -400,7 +400,7 @@ jobs:
         run: npm run build
 
   docs-stats:
-    name: 'Docs stats — README/CLAUDE.md counts match source (Phase 4)'
+    name: 'Docs stats — documented counts match source (Phase 4)'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -425,8 +425,7 @@ jobs:
       # scripts/gen-stats.mjs derives test/node-type/service counts from
       # vitest's own JSON reporter, `pytest --collect-only`, spec/schema.ts's
       # Node/HarnessNode unions, and docker-compose.yml, then checks that
-      # README.md, README_CN.md, CLAUDE.md (if present — gitignored in a
-      # public-only checkout), docs/getting-started.md, docs/architecture.md
+      # README.md, README_CN.md, docs/getting-started.md, docs/architecture.md
       # and docs/stats.md all quote those exact numbers.
       - name: Check doc stats are up to date
         run: node scripts/gen-stats.mjs --check

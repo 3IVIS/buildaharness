@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { test, expect } from './fixtures'
 
 /**
- * W7 of plans/browser_web_tools_via_proxy_plan.html: one browser-e2e scenario proving
+ * W7 of the internal plan: one browser-e2e scenario proving
  * `webBackend: 'proxy'` works end-to-end in a real browser — a scripted turn does `web_search`
  * then `fetch_url`, both routed through a real HTTP stub standing in for `@buildaharness/proxy`,
  * and the final reply (built from the fetched page text) renders.

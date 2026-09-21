@@ -155,7 +155,7 @@ function seedAdversarialPrior(
  * called only for a criterion the substring check found no coverage for, so a belief that covers
  * a success criterion in different words (a paraphrase, or any non-English phrasing) isn't
  * wrongly reported as an uncovered gap. See Phase 2/Decision 3b of
- * plans/lexical_functions_hardening_plan.html — mirrors the existing
+ * the internal plan — mirrors the existing
  * contradictionChecker/semanticChangeReviewer/semanticFailureMatcher hooks on HarnessRuntime
  * (packages/harness/src/harness-runtime.ts). A caller can cheaply return `false` without an LLM
  * call for a criterion it judges the substring check already covers.

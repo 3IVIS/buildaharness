@@ -22,23 +22,23 @@ P8 additions:
   - warm_start() called once on step_count == 0 (P8.2)
   - update_experience_store() hook when a completed_task is passed (P8.3)
 
-P9 additions (wired per-iteration, Phase 5 of plans/lexical_functions_hardening_plan.html):
+P9 additions (wired per-iteration, Phase 5 of the internal plan):
   - detect_contradictions() and FailureModeLibrary.match() — the lexical/free baseline, called
     unconditionally every iteration (mirroring TS's detectContradictions/updateDiagnostics call
     sites in driveMainLoop), right before the P9 reviewer pass block below
 
-Semantic-check hooks (Phase 2 of plans/lexical_functions_hardening_plan.html): unlike the TS
+Semantic-check hooks (Phase 2 of the internal plan): unlike the TS
 harness (packages/harness/src/harness-runtime.ts), whose driveMainLoop folds the outer per-turn
 loop and the async contradictionChecker/semanticChangeReviewer/semanticFailureMatcher hooks into
 one async generator, run_one_iteration() here is deliberately kept a synchronous, pure state
 transition with no async parameters of its own. The equivalent integration points instead live in
 contradiction.py's record_external_contradiction(), review_gate.py's apply_review_outcome(), and
 failure_modes.py's FailureDiagnostics.matched_pattern field — see each one's own doc comment.
-Whichever outer, already-async driver repeatedly calls run_one_iteration() (adapter/planner_api.py's
+Whichever outer, already-async driver repeatedly calls run_one_iteration() (the planner driver's
 _run_planner, or the per-adapter run functions in adapter/run_api.py) is where a real semantic
 check runs between iterations, gated on the lexical baseline above having found nothing, and feeds
 its result in through one of those three. See adapter/harness/semantic_checks.py for the
-litellm-backed implementations and planner_api.py's _run_planner for the gating/wiring itself.
+litellm-backed implementations and the planner driver's _run_planner for the gating/wiring itself.
 """
 
 from __future__ import annotations
@@ -176,7 +176,7 @@ def _build_surface_blocker(
 ) -> Any:
     """Build a SurfaceBlocker from current control_state context.
 
-    Q7 (plans/ask_question_and_plan_mode_plan.html): when `ask_questions` is provided by
+    Q7 (the internal plan): when `ask_questions` is provided by
     a deterministic call site with a genuine discrete option set (currently only
     budget_exhausted, below), the blocker is built via ask_question.build_ask_blocker()
     instead of a plain SurfaceBlocker — degrading to the same plain missing_info shape
@@ -279,7 +279,7 @@ def run_one_iteration(
     Sub-step B: post-execution increment → resolve → post_exec_gate
 
     success_criteria/assumptions/tool_manifest/task_risk/target_path/workspace_root
-    (Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html) feed
+    (Phase 2 of the internal plan) feed
     Sub-step B's real verify() call — all optional, all defaulting to values that reproduce
     the prior hardcoded `{"has_critical_failure": False}` stub's behavior exactly (tool_manifest
     defaulting to None means every layer is honestly SKIPPED, same net has_critical_failure
@@ -292,7 +292,7 @@ def run_one_iteration(
     triggers fire after resolve_control_state() in Sub-step A when
     permission==DENY, and after stall detection when strategy==ESCALATE.
 
-    ask_mode (Q1 of plans/ask_question_and_plan_mode_plan.html): the
+    ask_mode (Q1 of the internal plan): the
     per-session control point in ask_question.resolve_ask_mode's three-tier
     override (INV-29) — `False` forces the supervisor's ASK_USER path (and any
     other ask_question() caller reached from this iteration) to the legacy
@@ -415,7 +415,7 @@ def run_one_iteration(
                     "step_count": step_count,
                 }
 
-            # Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html, S1) —
+            # Trajectory Supervisor (the internal plan, S1) —
             # a directive decided by the async driver on THIS stall edge is applied here,
             # before the deterministic ladder. INV-22: only ever consulted inside this
             # cannot_make_progress() branch. INV-21: touches only strategy_state / task_graph /
@@ -463,7 +463,7 @@ def run_one_iteration(
             # control_state write. A malformed directive (question is None) falls through
             # to the CONTINUE-coercion path below.
             #
-            # Q1 of plans/ask_question_and_plan_mode_plan.html: the blocker is now built via
+            # Q1 of the internal plan: the blocker is now built via
             # ask_question.build_ask_blocker() — the supervisor is one caller of that shared,
             # independently-flagged primitive, not its own inline question/options builder.
             # With HARNESS_ASK_QUESTION at its default (DEFAULT_ASK_MODE = "disabled"),
@@ -617,7 +617,7 @@ def run_one_iteration(
                 # with nothing runnable, re-queue the FAILED leaf(s) so the redirected strategy
                 # actually gets an attempt. Bounded by recovery_budget + switch_count (INV-21:
                 # task_graph only, never control_state). GATHER_EVIDENCE's own re-queue happens
-                # on the driver's investigation re-entry (planner_api.py), not here.
+                # on the driver's investigation re-entry (the planner driver), not here.
                 if (
                     directive is not None
                     and directive.action == "REDIRECT_STRATEGY"
@@ -716,13 +716,13 @@ def run_one_iteration(
     if strategy_state is not None:
         strategy_state.risk_state_history.append(risk_summary(control_state_b))
 
-    # ── Lexical contradiction + failure-pattern detection (Phase 5 of plans/
-    # lexical_functions_hardening_plan.html) — unconditional every iteration, mirroring TS's
+    # ── Lexical contradiction + failure-pattern detection (Phase 5 of the internal
+    # plan) — unconditional every iteration, mirroring TS's
     # detectContradictions/updateDiagnostics call sites in driveMainLoop exactly. This is the
     # missing free/lexical baseline a semantic (LLM-backed) escalation needs to layer on top of —
     # without it, "only call the LLM when the lexical check found nothing" can't hold, since the
     # lexical check never ran. The semantic escalation itself belongs one layer up, in whichever
-    # async driver calls run_one_iteration() (e.g. planner_api.py's `_run_planner`), per
+    # async driver calls run_one_iteration() (e.g. the planner driver's `_run_planner`), per
     # record_external_contradiction's and matched_pattern's own doc comments — this block only
     # produces the lexical result those hooks are gated on.
     if evidence_store is not None:

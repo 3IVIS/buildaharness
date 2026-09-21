@@ -563,8 +563,8 @@ class TestJournalAndBudget:
 
 
 class TestRecoveryBudget:
-    """RecoveryBudget (Phase 2 of plans/harness_and_assistant_architecture_remediation_
-    plan.html) — genuine multi-dimensional resource bounds on recovery, additional to (not
+    """RecoveryBudget (Phase 2 of the internal
+    plan) — genuine multi-dimensional resource bounds on recovery, additional to (not
     instead of) the existing STRATEGY_ORDER-length implicit bound TestRecoveryStrategies
     and TestJournalAndBudget's tests above already cover."""
 

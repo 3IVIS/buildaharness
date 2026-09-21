@@ -1,5 +1,5 @@
 """
-S1 of plans/harness_trajectory_supervisor_plan.html — the supervisor directive is
+S1 of the internal plan — the supervisor directive is
 decided by the async driver on the cannot_make_progress() edge and applied inside
 run_one_iteration()'s stall branch (REDIRECT_STRATEGY / REFRAME_PLAN / CONTINUE;
 ASK_USER coerced to CONTINUE until S3 — GATHER_EVIDENCE wired in S4, ABORT in S6).

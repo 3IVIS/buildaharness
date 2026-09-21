@@ -39,7 +39,7 @@ export interface AssistantConfig {
    * CORS error for most real targets (see createWebTools's doc comment) — kept as
    * the default so a fresh browser install never silently starts sending traffic through a proxy
    * that isn't configured. 'proxy' routes both tools through `${proxyUrl}/web/search`,
-   * `/web/fetch`, and `/web/grant` (see plans/browser_web_tools_via_proxy_plan.html) using the
+   * `/web/fetch`, and `/web/grant` (see the internal plan) using the
    * same `authToken` already wired for `/llm/chat`.
    */
   webBackend: 'direct' | 'proxy'
@@ -47,7 +47,7 @@ export interface AssistantConfig {
   shellTimeoutMs?: number
   /**
    * Node-level network containment for an approved run_shell_command execution (Decision 6,
-   * plans/lexical_functions_hardening_plan.html Phase 4 step 2): the spawned command's
+   * the internal plan Phase 4 step 2): the spawned command's
    * HTTP(S)_PROXY env vars are forced to point at a loopback-only proxy (see
    * network-containment.ts) that only relays a CONNECT/request whose target host matches an
    * entry here (exact match or subdomain). Undefined/empty denies all network access from an
@@ -99,7 +99,7 @@ export interface AssistantConfig {
   /** Secondary ceiling on completed turns this session — see SpendCapConfig's doc comment in spend-cap.ts for why this counts turns, not raw internal LLM calls. */
   sessionCallLimit?: number
   /**
-   * R5 of plans/harness_d2_one_loop_rewire_plan.html — the rollout flag for the harness-driven
+   * R5 of the internal plan — the rollout flag for the harness-driven
    * one-loop proposer (see one-loop-flag.ts's doc comment for the full rationale). Undefined (the
    * default, for the whole rollout window) means PersonalAssistant falls back to
    * DEFAULT_ONE_LOOP_MODE ('disabled') — today's behavior, byte-for-byte. This is the shared
@@ -112,7 +112,7 @@ export interface AssistantConfig {
    */
   oneLoopMode?: OneLoopMode
   /**
-   * Q2 of plans/ask_question_and_plan_mode_plan.html — the global-flag control point (tier 1 of
+   * Q2 of the internal plan — the global-flag control point (tier 1 of
    * INV-29's three-tier resolution) for the batched-questions ask-question mechanism. Undefined
    * (the default, for the whole rollout window) means PersonalAssistant falls back to
    * `DEFAULT_ASK_MODE` ('disabled') — today's behavior, byte-for-byte: a structured-question
@@ -123,7 +123,7 @@ export interface AssistantConfig {
    */
   askMode?: AskMode
   /**
-   * P11 of plans/ask_question_and_plan_mode_plan.html — the rollout flag for P1-P8's plan-mode
+   * P11 of the internal plan — the rollout flag for P1-P8's plan-mode
    * behavior change (see plan-mode-flag.ts's doc comment for the full rationale). Undefined (the
    * default, for the whole rollout window) means PersonalAssistant falls back to
    * `DEFAULT_PLAN_MODE` ('legacy') — P3's auto-trigger never fires, so a turn never auto-enters
@@ -134,7 +134,7 @@ export interface AssistantConfig {
    */
   planMode?: PlanRolloutMode
   /**
-   * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html — the rollout flag for the
+   * Phase 4 of the internal plan — the rollout flag for the
    * Ink-driven pinned-bottom-input interactive shell (tui-app.ts's runTuiApp()). Undefined (the
    * default, for this plan's whole rollout window) means cli.ts's main() falls back to
    * DEFAULT_TUI_MODE ('disabled') — today's plain readline-based REPL, byte-for-byte. Mirrors

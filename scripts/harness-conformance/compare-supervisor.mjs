@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Standalone TS-vs-Python conformance runner for the Trajectory Supervisor's
 // serialisation + coercion contract (S0 of
-// plans/harness_trajectory_supervisor_plan.html) — the companion to compare.mjs
+// the internal plan) — the companion to compare.mjs
 // (resolveControlState) and compare-verify.mjs (verify).
 //
 // Usage: node scripts/harness-conformance/compare-supervisor.mjs

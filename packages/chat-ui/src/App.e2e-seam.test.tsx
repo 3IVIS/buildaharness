@@ -7,7 +7,7 @@ import { setAssistantTestHooks } from './assistant-test-hooks'
 import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
 
 /**
- * The "extended jsdom test" from plans/chat_ui_browser_e2e_plan.html's rejected-alternatives
+ * The "extended jsdom test" from the internal plan's rejected-alternatives
  * list, now earned as phase B1's own coverage: NO module-wide `vi.mock` of
  * `@buildaharness/aielia` — a real `PersonalAssistant` runs against a scripted
  * `ILLMClient` injected through the B1 seam, mounted in `<App/>`, on a real `turn()`.

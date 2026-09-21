@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F1 (plans/adoption_plan.html): the per-provider default model id must live in exactly one
+ * F1 (the internal plan): the per-provider default model id must live in exactly one
  * place — packages/runtime/src/model-defaults.ts — and every runtime client + every surface
  * that displays "the model that will be used" must import it rather than hand-type a literal
  * that silently rots a generation behind (the repo shipped `claude-3-5-sonnet-20241022` /

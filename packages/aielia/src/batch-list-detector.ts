@@ -23,7 +23,7 @@ const BULLET_MARKER = /^[-*]\s+(.+)$/
 // lexical/patterns.ts).
 const CONNECTOR_WORDS = getConnectorWords()
 
-// Known, accepted limitation (plans/lexical_functions_hardening_plan.html, Decision 4): the
+// Known, accepted limitation (the internal plan, Decision 4): the
 // capitalization-ratio signal below structurally cannot fire for scripts with no letter case
 // (Chinese, Japanese, Korean, Arabic, Thai, ...) — no amount of added marker content fixes this,
 // unlike the other lexical checks in this repo. This gate fails closed for those lines (falls

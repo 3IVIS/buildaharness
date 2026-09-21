@@ -63,7 +63,7 @@ describe('pickTemplateForTask', () => {
     expect(pickTemplateForTask('There is a problem with the plan.')).toBe('problem_solving')
   })
 
-  // Chinese (Simplified) — see plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 3
+  // Chinese (Simplified) — see the internal plan's Phase 3
   // step 3. Category-detection keywords only (template task content itself stays English-only,
   // out of scope here — see that plan). Caveat: phrasing here is a first pass, not verified by a
   // fluent Chinese speaker.

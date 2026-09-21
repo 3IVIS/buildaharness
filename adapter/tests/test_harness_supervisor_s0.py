@@ -1,5 +1,5 @@
 """
-S0 of plans/harness_trajectory_supervisor_plan.html — types + digest builder, inert.
+S0 of the internal plan — types + digest builder, inert.
 
 Covers the plan's Testing-strategy Layer 1 (deterministic): serialization round-trip,
 enum + payload safety, digest boundedness, digest coherence from each stall proxy,

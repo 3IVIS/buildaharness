@@ -73,7 +73,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
  * A benchmark comparison is only fair if every arm in it can honour a task's injected failure —
  * otherwise one arm is stress-tested and the other runs clean. `runBenchmark` (runner.ts) skips
  * a task that fails this for any arm in the run and records it in `report.skippedForAsymmetry`.
- * See plans/feature_audit_fair_comparison_plan.html (Defect 1 / F0).
+ * See the internal plan (Defect 1 / F0).
  */
 export function armHonorsInjectedFailure(arm: ArmName, kind: InjectedFailureKind): boolean {
   if (kind === 'persistent_tool_failure') return ONE_LOOP_ARMS.includes(arm)
@@ -90,7 +90,7 @@ interface RunArmOpts {
    */
   env?: Record<string, string>
   /**
-   * Q8 of plans/ask_question_and_plan_mode_plan.html — the `askModeOn` differential arm.
+   * Q8 of the internal plan — the `askModeOn` differential arm.
    * `askMode` is a `PersonalAssistant` constructor option, not an env-gated flag (unlike the
    * flags above, which harness-bridge.ts reads fresh from `process.env`), so it's threaded
    * straight through to the constructor call in `runAssistantInner` rather than via `overrides`.
@@ -107,8 +107,8 @@ async function runAssistant(
   if (task.tools.web) return null // web arm not wired — see eval/README.md
 
   // Feature flags are gated on env vars, read in both twins (the trajectory supervisor —
-  // plans/harness_trajectory_supervisor_plan.html — and the Batch B audit arms —
-  // plans/feature_audit_automation_plan.html). Arms run sequentially (runner.ts), so a
+  // the internal plan — and the Batch B audit arms —
+  // the internal plan). Arms run sequentially (runner.ts), so a
   // set/restore around the turn is safe. harness-bridge.ts reads these flags to decide which
   // host hooks to wire, so e.g. `supervisorOn` / `contradictionOff` genuinely diverge from
   // `flagOn` — the differential is one feature.
@@ -302,7 +302,7 @@ export const contradictionOffArm: Arm = {
   name: 'contradictionOff',
   label:
     'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_CONTRADICTION=0 — the semantic contradiction-checker LLM call disabled, lexical pass only',
-  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A4). Same one-loop
+  // Batch B feature-value audit (the internal plan A4). Same one-loop
   // config as `flagOn`; the only difference is harness-bridge.ts wiring no host
   // `contradictionChecker` hook, so the harness's always-on lexical / negation-pair check runs
   // alone. Baseline for this feature is `flagOn`; slice `audit_contradiction_semantic`.
@@ -313,7 +313,7 @@ export const injectionDetectOffArm: Arm = {
   name: 'injectionDetectOff',
   label:
     'PersonalAssistant (flagOn) with AUDIT_LLM_INJECTION_DETECT=0 — the per-tool-output LLM injection-detection call disabled, deterministic regex/pattern pass only',
-  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A5). Same one-loop config
+  // Batch B feature-value audit (the internal plan A5). Same one-loop config
   // as `flagOn`; the only difference is trust-tagging.ts's detectInjectionLikelyWithLLM short-circuiting
   // after the regex pass instead of escalating to the LLM classifier on every fetched page / shell
   // output. Baseline for this feature is `flagOn`; slice `audit_injection_llm`.
@@ -324,7 +324,7 @@ export const failureMatchOffArm: Arm = {
   name: 'failureMatchOff',
   label:
     'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 — the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only',
-  // Batch B feature-value audit (plans/feature_audit_automation_plan.html A6). Same one-loop config
+  // Batch B feature-value audit (the internal plan A6). Same one-loop config
   // as `flagOn`; the only difference is harness-bridge.ts wiring no host `semanticFailureMatcher`
   // hook, so the harness classifies a failure only when an observed symptom string overlaps a
   // curated one byte-for-byte. Baseline for this feature is `flagOn`; slice
@@ -335,7 +335,7 @@ export const failureMatchOffArm: Arm = {
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
-    'PersonalAssistant (flagOn) with askMode=enabled — the generic ask-question mechanism (Q0-Q7 of plans/ask_question_and_plan_mode_plan.html) offers a structured, resumable question instead of the plain escalated/reply:null path',
+    'PersonalAssistant (flagOn) with askMode=enabled — the generic ask-question mechanism (Q0-Q7 of the internal plan) offers a structured, resumable question instead of the plain escalated/reply:null path',
   // Q8's default-flip gate: baseline for this feature is `flagOn` (askMode stays at
   // DEFAULT_ASK_MODE = 'disabled', today's behavior); this arm isolates the one differential —
   // ambiguity-resolution correctness, user-turns-to-resolution, and cost/latency overhead — on

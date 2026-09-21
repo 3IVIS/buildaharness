@@ -16,7 +16,7 @@ export type FactConfidence = 'high' | 'medium' | 'low'
 
 /**
  * Fixed enum, not free text, so the pending-confirmation queue (Phase 3 of
- * plans/personal_assistant_fact_extraction_llm_confidence_plan.html) can group entries stably
+ * the internal plan) can group entries stably
  * instead of drifting between synonyms ("job"/"occupation"/"work") for the same underlying topic.
  */
 export type FactCategory = 'identity' | 'health' | 'preference' | 'location' | 'occupation' | 'relationships' | 'project' | 'other'
@@ -59,7 +59,7 @@ export interface TurnIntentClassification {
   /** One of listTemplateNames()'s names, or null. Only ever set when context.hasActivePlan is false. */
   matchedPlanTemplate: string | null
   /**
-   * P3 of plans/ask_question_and_plan_mode_plan.html — the generalized, domain-general
+   * P3 of the internal plan — the generalized, domain-general
    * counterpart to matchedPlanTemplate: true when the request warrants a durable, tracked,
    * user-approved plan even though it doesn't match one of the 7 named template kinds (e.g. a
    * code-implementation request spanning several files/tests). Always false when
@@ -72,7 +72,7 @@ export interface TurnIntentClassification {
   /**
    * Every durable/session fact the message states about the user (name, preference,
    * health/dietary, current location/job, ...) — the LLM-backed primary extraction path this
-   * plan builds (plans/personal_assistant_fact_extraction_llm_confidence_plan.html Phase 1),
+   * plan builds (the internal plan Phase 1),
    * superseding the old single-fact `statesDurableFact` fallback so a turn stating more than one
    * fact ("I'm Priya, I'm vegetarian, and I live in Austin") isn't truncated to one. `confidence`
    * is anchored to an observable criterion, not a bare self-report: `high` = stated directly and
@@ -188,7 +188,7 @@ const TURN_INTENT_SCHEMA = {
  * Single consolidated judgment covering the five classifiers assistant.ts's runTurn() used to
  * run separately (risk, triviality, decomposition candidacy, plan-abandonment, plan-template
  * match) against the same raw user message — see
- * plans/personal_assistant_consolidated_classifier_plan.html for the full rationale. Each field's
+ * the internal plan for the full rationale. Each field's
  * contract matches what its former single-purpose classifier produced, so callers don't need to
  * change their downstream handling, only how the classification is obtained.
  *
@@ -376,12 +376,12 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
  * UNKNOWN risk requiring approval / not trivial / no decomposition / no abandon / no template
  * match / no stated fact — i.e. "do the careful thing" (run the full harness, require approval
  * rather than guessing LOW, don't auto-abandon, return no stated facts when the call failed).
- * Per-task riskLevel (Phase 1 of plans/lexical_functions_hardening_plan.html) is this call's
+ * Per-task riskLevel (Phase 1 of the internal plan) is this call's
  * LLM-backed backstop for what used to be a pure-lexical, no-fallback judgment —
  * risk-classifier.ts's standalone per-task classifyRisk — which stays as the free, zero-latency
  * first check; this call is only trusted when it finds nothing (see assistant.ts's call site).
  * statesDurableFacts (Phase 1 of
- * plans/personal_assistant_fact_extraction_llm_confidence_plan.html) is, as of that plan, the
+ * the internal plan) is, as of that plan, the
  * *primary* fact-extraction path rather than a fallback — see that plan for how memory-service.ts
  * merges it with fact-extraction.ts's regex backstop.
  */

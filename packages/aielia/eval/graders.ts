@@ -189,7 +189,7 @@ export async function gradeTask(
   // F2: `recovered` is scored only when the injected failure *actually fired for this arm*
   // (`injectedFailureFired`), not merely because the task declares one. An arm that can't honour
   // the injection (bare / pre-one-loop `baseline` under claude-cli) contributes `null` and is
-  // left out of `recoveryRate` entirely — see plans/feature_audit_fair_comparison_plan.html F2.
+  // left out of `recoveryRate` entirely — see the internal plan F2.
   const recovered = task.injectedFailure && out.injectedFailureFired === true ? success : null
 
   // AnswerClaim calibration: only meaningful when the turn produced a claim status *and* the

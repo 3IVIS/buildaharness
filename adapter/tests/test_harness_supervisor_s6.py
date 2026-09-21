@@ -1,5 +1,5 @@
 """
-S6 of plans/harness_trajectory_supervisor_plan.html — the ABORT directive and the
+S6 of the internal plan — the ABORT directive and the
 Q3 resolution (option a: the supervisor stays entirely out of
 resolve_control_state()).
 

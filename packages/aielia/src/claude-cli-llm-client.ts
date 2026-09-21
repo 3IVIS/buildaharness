@@ -83,7 +83,7 @@ export interface ClaudeCliLLMClientOptions {
 /**
  * Runs `claude` with cwd pinned to the OS temp directory, never the caller's actual
  * working directory — `claude` has no flag to suppress project-context loading, it
- * infers it entirely from the process's cwd (project CLAUDE.md, .mcp.json, skills, all
+ * infers it entirely from the process's cwd (project instruction files, .mcp.json, skills, all
  * auto-loaded regardless of --system-prompt/--tools). Since PersonalAssistant's whole
  * point is a plain personal-assistant persona, not a coding agent scoped to whatever
  * repo happens to be the launch directory, every invocation runs from a directory that's
@@ -242,7 +242,7 @@ function startToolGateServer(
 /**
  * ILLMClient backed by a local `claude -p` subprocess instead of a hosted API key —
  * runs PersonalAssistant against an already-authenticated Claude Code CLI session.
- * Always passes --system-prompt (so the CLI's own default prompt/CLAUDE.md/skills
+ * Always passes --system-prompt (so the CLI's own default prompt/project instructions/skills
  * never leak into an ordinary chat turn) and --tools "" (PersonalAssistant only
  * ever calls callChatSync — there's nothing here that expects tool use). **Bash is
  * never added to --tools, under any configuration** — run_shell_command instead goes
@@ -314,7 +314,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
    * agentic loop call read_file/list_directory/write_file/fetch_url/create_reminder/
    * list_reminders/run_shell_command autonomously — we don't get to intercept each
    * call the way the proxy backend's manual tool loop does (see
-   * plans/personal_assistant_file_tools_plan.html, T6). fetch_url is always
+   * the internal plan, T6). fetch_url is always
    * registered on that server; create_reminder/list_reminders only when
    * `remindersFile` is set; run_shell_command only when `shellTools` is set;
    * web_search only when `webTools` is set (Brave Search — see the `webTools`

@@ -159,7 +159,7 @@ describe('MemoryService.recordFacts', () => {
   })
 })
 
-// Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: confidence must
+// Phase 4 of the internal plan: confidence must
 // reach the model's own reasoning, not just the promotion logic — an unconfirmed guess spliced
 // into the system prompt unqualified would read exactly as certain as a confirmed fact.
 // Phase 4: exposed so a caller (harness-bridge.ts, via HarnessRunParams.currentTurnFacts) can

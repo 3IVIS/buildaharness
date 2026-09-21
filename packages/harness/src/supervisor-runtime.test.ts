@@ -1,4 +1,4 @@
-// S2 of plans/harness_trajectory_supervisor_plan.html.
+// S2 of the internal plan.
 //
 // The coercion + fail-open contract of the driveMainLoop wiring lives in
 // resolveSupervisorDirective() (tested exhaustively in supervisor.test.ts, since

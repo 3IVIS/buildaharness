@@ -6,7 +6,7 @@ import type { FsBackend } from '@buildaharness/runtime'
  * assistant turn has `fileTools` configured and actually runs the tool loop. No real files.
  *
  * `seed` pre-populates it (keys are absolute paths under the `/workspace` root
- * `buildAssistant()` passes). Built for plans/chat_ui_browser_e2e_plan.html phase B1.
+ * `buildAssistant()` passes). Built for the internal plan phase B1.
  */
 export function createInMemoryFsBackend(seed: Record<string, string> = {}): FsBackend {
   const files = new Map<string, string>(Object.entries(seed))

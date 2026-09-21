@@ -1,29 +1,24 @@
 #!/usr/bin/env node
 /**
  * Verifies the lexical pattern JSON files that exist as two independent copies (one per
- * language/runtime that can't import the other's module graph at runtime) stay byte-identical —
- * mirrors scripts/check-plan-templates-sync.mjs's exact approach (sorted-key JSON comparison,
- * not a raw byte diff, so key reordering alone doesn't false-positive).
+ * language/runtime that can't import the other's module graph at runtime) stay byte-identical
+ * (sorted-key JSON comparison, not a raw byte diff, so key reordering alone doesn't
+ * false-positive).
  *
- * Most lexical pattern JSON (packages/aielia/src/lexical/patterns/*.json other than
- * template-keywords.json) has only ONE copy — TypeScript's own canonical source, read directly by
- * file-tools-mcp-server.mjs (a plain JSON read, no import barrier) — so there's nothing to check
- * for those; this script only covers the two pairs that genuinely have independent copies:
+ * Most lexical pattern JSON (packages/aielia/src/lexical/patterns/*.json) has only ONE copy —
+ * TypeScript's own canonical source, read directly by file-tools-mcp-server.mjs (a plain JSON
+ * read, no import barrier) — so there's nothing to check for those; this script only covers the
+ * pairs that genuinely have independent copies in this repo:
  *
  *   packages/harness/src/lexical/patterns/negation.json
  *     <-> adapter/harness/lexical_patterns/negation.json
  *   packages/harness/src/lexical/patterns/granularity-markers.json
  *     <-> adapter/harness/lexical_patterns/granularity-markers.json
- *   packages/aielia/src/lexical/patterns/template-keywords.json
- *     <-> adapter/agents/planner/lexical_patterns/template-keywords.json
  *
  * Run manually:  node scripts/check-lexical-patterns-sync.mjs
  * Run in CI:     same command; exits 1 on mismatch.
- *
- * The adapter/agents/planner/ copy is maintained in a private overlay, so a plain public clone
- * doesn't have it; a pair whose counterpart file is absent is skipped (with a notice), not failed.
  */
-import { existsSync, readFileSync } from 'fs'
+import { readFileSync } from 'fs'
 
 function sortKeysDeep(value) {
   if (Array.isArray(value)) return value.map(sortKeysDeep)
@@ -48,21 +43,10 @@ const PAIRS = [
     a: 'packages/harness/src/lexical/patterns/granularity-markers.json',
     b: 'adapter/harness/lexical_patterns/granularity-markers.json',
   },
-  {
-    name: 'template-keywords.json (plan-templates)',
-    a: 'packages/aielia/src/lexical/patterns/template-keywords.json',
-    b: 'adapter/agents/planner/lexical_patterns/template-keywords.json',
-  },
 ]
 
 const mismatched = []
-let checked = 0
 for (const { name, a, b } of PAIRS) {
-  if (!existsSync(a) || !existsSync(b)) {
-    console.log(`⏭️   Skipping ${name} — ${!existsSync(a) ? a : b} isn't part of this checkout.`)
-    continue
-  }
-  checked += 1
   if (loadJson(a) !== loadJson(b)) mismatched.push({ name, a, b })
 }
 
@@ -75,4 +59,4 @@ if (mismatched.length > 0) {
   process.exit(1)
 }
 
-console.log(`✅  Lexical patterns sync OK — ${checked} of ${PAIRS.length} mirrored pair(s) checked, all match byte-for-byte (ignoring key order).`)
+console.log(`✅  Lexical patterns sync OK — ${PAIRS.length} mirrored pair(s) match byte-for-byte (ignoring key order).`)

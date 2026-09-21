@@ -4,7 +4,7 @@ import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import type { PlanTaskRecord } from './plan-store.js'
 
 /**
- * P1 of plans/ask_question_and_plan_mode_plan.html — the "plan-drafting revision call" P1's
+ * P1 of the internal plan — the "plan-drafting revision call" P1's
  * routing (assistant.ts's runTurn, PlanDraftingService) sends every message to while
  * `planMode.active`. Deliberately narrower than P3's eventual version: no tools at all (P3 adds
  * read_file/list_directory grounding for a from-scratch draft — see Section &amp; non-goals),
@@ -19,7 +19,7 @@ export interface PlanDraftTurn {
   successCriteria: string
   rationale: string
   /**
-   * P2 of plans/ask_question_and_plan_mode_plan.html — true only once the model judges the user
+   * P2 of the internal plan — true only once the model judges the user
    * has clearly signaled they're satisfied with the current draft and want to proceed, at which
    * point PlanDraftingService hands off to PlanApprovalService instead of returning another plain
    * drafting reply. Defaults false on any malformed/missing value (see parsing below) — a
@@ -27,7 +27,7 @@ export interface PlanDraftTurn {
    */
   readyForApproval: boolean
   /**
-   * P8 of plans/ask_question_and_plan_mode_plan.html — set only when this revision hit a genuine
+   * P8 of the internal plan — set only when this revision hit a genuine
    * ambiguity worth pausing on instead of guessing (an ambiguous scope boundary, or a
    * MEDIUM/HIGH-risk branch point with more than one viable approach) — e.g. "which of these two
    * frameworks should the plan target?" A drafting call that sets this always also leaves
@@ -141,7 +141,7 @@ export async function draftPlanRevision(
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
   /**
-   * P3 of plans/ask_question_and_plan_mode_plan.html — grounding text for a from-scratch (no
+   * P3 of the internal plan — grounding text for a from-scratch (no
    * template match) draft, gathered from a bounded read_file/list_directory investigation walk
    * (see AgentLoop.runSupervisorInvestigation, reused rather than building a new search engine —
    * Scope & non-goals) so a code-shaped request's draft can reference real repo state instead of

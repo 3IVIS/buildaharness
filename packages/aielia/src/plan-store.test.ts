@@ -353,7 +353,7 @@ describe('matchTaskCancelAttempt (conv59/conv70 h9 finding)', () => {
     expect(match).toEqual({ taskId: 'itinerary_planning', taskDescription: '起草每日预算行程' })
   })
 
-  // Chinese (Simplified) cases — see plans/personal_assistant_chinese_lexical_checks_plan.html's
+  // Chinese (Simplified) cases — see the internal plan's
   // Phase 3 step 4. The task above already regression-tests the ASCII-only tokenizer fix (an
   // English verb/marker against a CJK task description); these additionally exercise a
   // fully-Chinese cancel verb and reference marker. Caveat: phrasing here is a first pass, not

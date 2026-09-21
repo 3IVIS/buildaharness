@@ -30,7 +30,7 @@ function fsFrom(files: Record<string, string>): FsBackend {
 }
 
 /**
- * S5 of plans/harness_trajectory_supervisor_plan.html — the personal-assistant host
+ * S5 of the internal plan — the personal-assistant host
  * implementation of HarnessRunOptions.runInvestigation
  * (AgentLoop.runSupervisorInvestigation). Read-only only, own Budget, tool-policy gated,
  * no staging path.

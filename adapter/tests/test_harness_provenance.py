@@ -1,6 +1,6 @@
 """
 Tests for provenance.py — versioned identity model (Phase 1a of
-plans/harness_and_assistant_architecture_remediation_plan.html).
+the internal plan).
 
 Covers PlanVersion/ExecutionVersion/VerificationVersion's world_model_version pinning,
 their staleness_check()/is_stale() compatibility (via the shared `.generation_id`

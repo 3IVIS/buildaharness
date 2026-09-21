@@ -76,7 +76,7 @@ describe('runApprovedShellCommand (real subprocess)', () => {
   })
 })
 
-// Phase 4 of plans/lexical_functions_hardening_plan.html (Decision 6): proves the network
+// Phase 4 of the internal plan (Decision 6): proves the network
 // containment claim directly rather than just documenting intent — a legitimate command with no
 // network need is unaffected, an allowlisted host is actually reachable, and a non-allowlisted
 // host is actually blocked (not just declined at some earlier approval-prompt stage).

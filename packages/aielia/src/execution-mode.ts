@@ -1,5 +1,5 @@
 /**
- * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html: a named,
+ * Phase 4 of the internal plan: a named,
  * typed replacement for the three implicit bypass branches runTurn() used to make on its
  * own, ad hoc, with no shared vocabulary between them:
  *   - classification.isTrivial          → skip the harness run entirely (assistant.ts:1487-1495)

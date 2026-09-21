@@ -1,11 +1,11 @@
 /**
  * **Eval harness only** — the mechanism behind `TurnOptions.__benchmarkInjectedFailure`.
  *
- * The Trajectory Supervisor (`plans/harness_trajectory_supervisor_plan.html`, ADR-005) is
+ * The Trajectory Supervisor (the internal plan, ADR-005) is
  * only consulted on the `cannotMakeProgress()` stall edge. A single benchmark turn in the
  * personal-assistant path resolves in 1–2 harness iterations and never reaches that edge,
  * so `supervisorOn` is behaviourally identical to `flagOn` and the S7 Rule-6 delta cannot
- * be measured (see `plans/harness_trajectory_supervisor_plan.html` S7 note).
+ * be measured (see the internal plan S7 note).
  *
  * This wrapper manufactures a genuine stall at the proposer seam: on the first call it
  * seeds `seedFailures` recurring same-class records into the run's live
@@ -40,7 +40,7 @@ export interface InjectedFailureOptions {
    * injected into this turn). The benchmark reads it back as `ArmTurnOutput.injectedFailureFired`
    * so `recoveryRate` only counts tasks where the failure genuinely fired for this arm — not
    * every task that merely *declares* an `injectedFailure` (see
-   * plans/feature_audit_fair_comparison_plan.html F2).
+   * the internal plan F2).
    */
   onInjected?: () => void
 }

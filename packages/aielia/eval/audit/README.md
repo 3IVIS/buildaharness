@@ -1,7 +1,7 @@
 # Feature Value Audit — matrix queue
 
-> `plans/feature_value_audit.html` — the audit programme.
-> `plans/feature_audit_automation_plan.html` — how this directory is built and driven.
+> the internal plan — the audit programme.
+> the internal plan — how this directory is built and driven.
 
 The audit prices one reasoning feature at a time: state the hypothesis, build an arm that toggles
 exactly it, stress it with a corpus slice, measure 3-seed, decide **KEEP / CUT / INCONCLUSIVE**.
@@ -43,8 +43,8 @@ runs. Runtime progress is `../reports/audit/progress.json`, written by the drive
 
 | Driver | Runs | Reads |
 |---|---|---|
-| `~/clam/plan_driver.py` (`plan-feature-audit-automation`) | the **build phases** A0–A8, one per wakeup, gate-checked | `plans/feature_audit_automation_plan.html` |
-| `~/clam/feature_audit_driver.py` (`feature-audit-matrix`) | the **benchmark matrix**, one `(feature, seed)` cell per wakeup, after the build lands | `manifest.json` + `progress.json` |
+| the plan driver (`plan-feature-audit-automation`) | the **build phases** A0–A8, one per wakeup, gate-checked | the internal plan |
+| the audit driver (`feature-audit-matrix`) | the **benchmark matrix**, one `(feature, seed)` cell per wakeup, after the build lands | `manifest.json` + `progress.json` |
 
 ## Manifest entry
 

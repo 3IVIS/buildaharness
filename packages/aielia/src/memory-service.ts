@@ -19,7 +19,7 @@ export const DURABLE_FACTS_KEY = 'facts:durable'
 /**
  * Global, never cleared by `/new` — same retention shape as DURABLE_FACTS_KEY (a pending fact
  * shouldn't vanish just because the session changed). Phase 3 of
- * plans/personal_assistant_fact_extraction_llm_confidence_plan.html: a `model_inferred` fact
+ * the internal plan: a `model_inferred` fact
  * that reached `durable: true, confidence: 'medium'` lands here instead of being silently
  * promoted or silently dropped — see `recordFacts()`'s promotion policy and
  * `confirmPendingFact()`/`rejectPendingFact()` below.
@@ -106,7 +106,7 @@ function mergeFacts(durableFacts: UserFact[], sessionFacts: UserFact[]): UserFac
 /**
  * Case-insensitive substring containment, not fuzzy matching — deliberately narrow so a genuinely
  * distinct fact is never dropped for merely sharing a few words with another. Used by
- * `recordFacts()` (Phase 2 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html)
+ * `recordFacts()` (Phase 2 of the internal plan)
  * to recognize when the lexical pass and the LLM caught the same underlying statement in different
  * phrasing ("My name is Priya" / "the user's name is Priya").
  */
@@ -129,7 +129,7 @@ function mergeTurnFacts(lexicalFacts: UserFact[], llmFacts: UserFact[]): UserFac
 
 /**
  * The exact lexical+LLM merge `recordFacts()` uses to decide what to write to the fact stores,
- * exposed (Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html) so a
+ * exposed (Phase 4 of the internal plan) so a
  * caller can seed `HarnessRunParams.currentTurnFacts` (harness-bridge.ts's `factExtractor`) with
  * the identical merged, deduplicated list — instead of harness-bridge.ts recomputing only the free
  * lexical half and never seeing an LLM-caught fact at all, which left a same-turn LLM-caught fact
@@ -174,7 +174,7 @@ function toBeliefCandidates(facts: UserFact[], prefix: string): BeliefCandidate[
 }
 
 /**
- * Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: confidence must
+ * Phase 4 of the internal plan: confidence must
  * reach the model's own reasoning, not just the promotion logic — an unconfirmed guess spliced
  * into the system prompt unqualified would read exactly as certain as a confirmed fact. Only
  * medium/low-confidence `model_inferred` facts get the "(unconfirmed)" suffix; a high-confidence

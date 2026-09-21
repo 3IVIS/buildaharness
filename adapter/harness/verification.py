@@ -1,7 +1,7 @@
 """
 Verification layer runner — P5.5.
 
-Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html closed the gap
+Phase 2 of the internal plan closed the gap
 found during Phase 1b's planning: 7 of these 9 layers were stub functions that checked only
 whether a *tool* was available, then unconditionally returned PASS — never actually
 inspecting anything. In production that meant `unit` (whose tool name "pytest" happens to

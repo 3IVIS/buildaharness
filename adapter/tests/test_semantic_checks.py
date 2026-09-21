@@ -1,7 +1,7 @@
 """
 Tests for harness.semantic_checks — the LLM-backed semantic escalation layered on top of
 run_one_iteration's lexical contradiction/failure-match baselines (Phase 5 of
-plans/lexical_functions_hardening_plan.html).
+the internal plan).
 
 Run with:
   pytest adapter/tests/test_semantic_checks.py -v --noconftest

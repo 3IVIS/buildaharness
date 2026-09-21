@@ -7,7 +7,7 @@ import { subjectOf } from './web-quota-middleware'
  * POST /web/grant — mints a fetchTag for a URL that didn't come from a /web/search result,
  * namely a URL the user typed verbatim in their own message. The caller (chat-ui) is trusted to
  * call this only for user-authored URLs, never for a URL sourced from tool output or model text
- * — see plans/browser_web_tools_via_proxy_plan.html's W3 section. Deliberately no different from
+ * — see the internal plan's W3 section. Deliberately no different from
  * /web/search's tag in shape or TTL; the only difference is the caller's provenance guarantee.
  *
  * Rate-limited harder than /web/fetch's shared per-token quota (an open URL-signing oracle is

@@ -6,7 +6,7 @@ harness/experience_store.py's module docstring: a candidate strategy-weight row 
 judged against the currently-promoted baseline (minimum sample size, then no-regression)
 before run_offline_eval_pipeline() will promote it — closing the "softmax reinforcement
 of accidental correlations" risk named in
-plans/harness_consolidation_and_control_plane_plan.html Phase G.
+the internal plan Phase G.
 
 Run with: pytest adapter/tests/test_experience_offline_eval.py -v --noconftest
 """

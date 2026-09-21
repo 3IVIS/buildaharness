@@ -89,7 +89,7 @@ function skipped(layer: VerificationLayer): LayerResult {
   return { layer, status: 'SKIPPED', detail: `${LAYER_TO_TOOL[layer]} not available` }
 }
 
-// Phase 3 of plans/harness_and_assistant_architecture_remediation_plan.html ports Phase 2's
+// Phase 3 of the internal plan ports Phase 2's
 // verification-honesty fix (adapter/harness/verification.py) forward: a layer whose tool is
 // nominally "available" no longer fakes a PASS it can't back up. syntax/unit have no TS-side
 // execution boundary equivalent to Python's Phase 1b subprocess sandbox (packages/harness runs

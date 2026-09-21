@@ -14,7 +14,7 @@ import {
 } from '@buildaharness/harness'
 
 /**
- * Phase 4c of plans/harness_and_assistant_architecture_remediation_plan.html — a live, per-turn
+ * Phase 4c of the internal plan — a live, per-turn
  * harness ControlState, so tool-policy.ts's evaluateToolPolicy() can be given a real
  * controlState instead of the pre-evidence-baseline `undefined` every call site passed before
  * this phase. Deliberately builds on the fallback control-plane design (no packages/harness core

@@ -1,6 +1,6 @@
 /**
  * Task-corpus schema for the comparative harness benchmark (Plan Phase B —
- * plans/harness_consolidation_and_control_plane_plan.html).
+ * the internal plan).
  *
  * One JSON file per task in this directory. Every file is validated against `TaskSpecSchema`
  * by `corpus.test.ts` (runs in `npm test`) — a malformed task fails CI, not the benchmark run.
@@ -30,7 +30,7 @@ export type TaskCategory = (typeof TASK_CATEGORIES)[number]
 
 /**
  * Benchmark-slice tags. The trajectory-supervisor S7 slice
- * (`plans/harness_trajectory_supervisor_plan.html`) groups tasks that are unsolvable without a
+ * (the internal plan) groups tasks that are unsolvable without a
  * strategy pivot, an external lookup, or a user clarification — the exact conditions the
  * supervisor exists for. `run-harness-benchmark.ts --slice=<name>` filters the run to one.
  */
@@ -48,7 +48,7 @@ export const SUPERVISOR_SLICES = [
 export type SupervisorSlice = (typeof SUPERVISOR_SLICES)[number]
 
 /**
- * Feature-value audit slices (`plans/feature_audit_automation_plan.html`). Kept a closed enum,
+ * Feature-value audit slices (the internal plan). Kept a closed enum,
  * validated in `corpus.test.ts`, exactly like `SUPERVISOR_SLICES`. Each groups the "here or
  * nowhere" stress tasks for one Batch B feature the audit is testing the value of.
  */
@@ -83,7 +83,7 @@ export const AUDIT_SLICES = [
 export type AuditSlice = (typeof AUDIT_SLICES)[number]
 
 /**
- * Ask-question benchmark slices (Q8 of plans/ask_question_and_plan_mode_plan.html). Gates the
+ * Ask-question benchmark slices (Q8 of the internal plan). Gates the
  * default-flip of `DEFAULT_ASK_MODE`/`askMode-flag.ts`'s default: `askModeOn` (arms.ts) vs.
  * `flagOn` baseline over these tasks measures whether a structured, resumable question
  * (instead of the plain `escalated`/`reply: null` path) actually resolves ambiguity better,

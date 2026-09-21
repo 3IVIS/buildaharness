@@ -66,7 +66,7 @@ describe('classifyToolYield', () => {
     expect(classifyToolYield('fetch_url', text)).toBe('productive')
   })
 
-  // Chinese (Simplified) — see plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 3
+  // Chinese (Simplified) — see the internal plan's Phase 3
   // step 5. Caveat: phrasing here is a first pass, not verified by a fluent Chinese speaker.
   const realDeadEndPhrasingsZh = [
     '页面上没有提到具体的开放日日期。',

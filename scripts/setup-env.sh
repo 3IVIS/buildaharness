@@ -97,14 +97,15 @@ if ! command -v openssl &>/dev/null; then
   error "openssl not found. Install it and re-run."; exit 1
 fi
 
-# Optional per-checkout setup. If scripts/setup-env.local.sh exists it is sourced here — from the repo
-# root, with this script's info/success/warn helpers and `set -euo pipefail` — so a checkout can add
-# its own steps (extra git config, provisioning local-only files) without them living in this script.
-# A plain clone doesn't have one and skips this.
-if [[ -f scripts/setup-env.local.sh ]]; then
+# Optional per-checkout setup. Every scripts/setup-env.d/*.sh is sourced here, in name order — from
+# the repo root, with this script's info/success/warn helpers and `set -euo pipefail` — so a checkout
+# can add its own steps (extra git config, provisioning local-only files) without them living in this
+# script. A plain clone has no such directory and skips this.
+for hook in scripts/setup-env.d/*.sh; do
+  [[ -f "$hook" ]] || continue
   # shellcheck source=/dev/null
-  source scripts/setup-env.local.sh
-fi
+  source "$hook"
+done
 
 # ── Step 1: Secrets ────────────────────────────────────────────────────────────
 header "Step 1 — Secrets"

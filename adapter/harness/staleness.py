@@ -8,7 +8,7 @@ via TTL and environment_change_log (P2.6).
 Gate implementations were stubs until P3; they are now fully implemented
 in gates.py.
 
-Phase 1a of plans/harness_and_assistant_architecture_remediation_plan.html generalized
+Phase 1a of the internal plan generalized
 staleness_check()/assert_generation_fresh()'s documented contract: they were written
 against ControlState specifically, but only ever touch `.generation_id` — so they already
 work unchanged against provenance.py's PlanVersion/ExecutionVersion/VerificationVersion,

@@ -1,6 +1,6 @@
 """
 Tests for execution_boundary.py — Phase 1b's minimal trusted execution boundary
-(plans/harness_and_assistant_architecture_remediation_plan.html).
+(the internal plan).
 
 Adversarial cases (disallowed executable, path-as-executable, shell metacharacters,
 path traversal, cwd escape via symlink, timeout-as-resource-bound) get the same rigor

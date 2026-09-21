@@ -2,7 +2,7 @@
 
 FlowSpec (JSON, `v1.0.0`) is the neutral intermediate representation that buildaharness uses to describe agent workflows. The canvas authors it; adapters compile it to LangGraph, CrewAI, Mastra, or MS Agent Framework code; the adapter API executes it.
 
-The canonical Zod schema lives in `spec/schema.ts`. Canvas and package copies are in `src/spec/schema.ts` and `packages/canvas/src/spec/schema.ts` — see `CLAUDE.md` for sync rules.
+The canonical Zod schema lives in `spec/schema.ts`. Canvas and package copies are in `src/spec/schema.ts` and `packages/canvas/src/spec/schema.ts` — see the internal developer notes for sync rules.
 
 ---
 

@@ -1,7 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 
 /**
- * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate's one
+ * P9 of the internal plan — the lightweight plan-sketch delegate's one
  * bounded LLM call. Deliberately the cheapest possible shape: a single plain-text reply the
  * caller shows directly in the chat, not a structured task list staged anywhere — there is no
  * PlanRecord, no PlanTaskRecord, nothing for P2's approval gate to see (INV-35). Distinct from

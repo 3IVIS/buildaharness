@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 /**
  * Real-LLM accuracy eval for checkForContradictions (packages/aielia/src/contradiction-checker.ts),
- * scoped to the corroboration/retraction judgment plans/personal_assistant_fact_extraction_llm_confidence_plan.html's
+ * scoped to the corroboration/retraction judgment the internal plan's
  * Phase 3 added to that function (the uncertainFacts/rejectedFacts pools and the "corroborations" output) — that
  * plan's Phase 5 asks for "a real-LLM eval pass scoped to this function, rather than eval-turn-intent.ts", since
  * the corroboration/retraction logic now lives entirely in this one call, not in classifyTurnIntent.
@@ -32,7 +32,7 @@
  *   npx tsx scripts/eval-contradiction-checker.ts --min-pass-rate=0.95   # override the default 0.85 threshold
  *
  * Uses the claude-cli backend (shells out to `claude -p`, already on PATH, no API key needed — see
- * CLAUDE.md's "Driving the personal-assistant" section), same as eval-turn-intent.ts.
+ * the internal developer notes' "Driving the personal-assistant" section), same as eval-turn-intent.ts.
  */
 import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
 import { checkForContradictions, type BeliefCandidate } from '../src/contradiction-checker.js'

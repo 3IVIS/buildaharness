@@ -135,7 +135,7 @@ describe('looksLikeCodingFact', () => {
   })
 
   // Simplified Chinese fixtures — first-pass phrasing per
-  // plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 2a step 3 (lower priority
+  // the internal plan's Phase 2a step 3 (lower priority
   // within that phase: a missed match here just means the LLM contradiction check always runs
   // instead of being skipped, which is strictly safe, just slower); not yet reviewed by a fluent
   // Chinese speaker, see that plan's "Fixture-writing caveat".
@@ -174,7 +174,7 @@ describe('looksLikeCodingFact', () => {
 
   it('日志 ("log") does not carry the same everyday-ambiguity risk as 通过/状态 — confirmed by native-speaker review', () => {
     // An ordinary personal diary/journal entry is 日记, not 日志 — a native speaker rejected the
-    // original fixture here (plans/personal_assistant_chinese_lexical_checks_plan.html's
+    // original fixture here (the internal plan's
     // native-speaker review), so 日志 stays flagged as (near-)unambiguously technical, unlike its
     // 通过/状态 siblings above.
     expect(looksLikeCodingFact('构建日志显示部署失败了。')).toBe(true)
@@ -345,7 +345,7 @@ describe('checkForContradictions', () => {
     expect(userMessage).toContain('used to be vegetarian')
   })
 
-  // Phase 5 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html — multi-turn
+  // Phase 5 of the internal plan — multi-turn
   // corroboration/retraction fixtures for the entry-time check, modeled here as a single call
   // whose uncertainFacts pool represents "what an earlier turn already captured" (exactly how
   // memory-service.ts's recordFacts() calls this function each turn: previously-captured

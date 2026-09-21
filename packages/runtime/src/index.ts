@@ -25,7 +25,7 @@ export { BUILT_IN_TOOLS } from './tools/built-ins'
 export { DexieExperienceStore } from './experience-store/dexie-experience-store'
 export type { DexieExperienceStoreOptions } from './experience-store/dexie-experience-store'
 export { requestPersistentStorage } from './storage-persistence'
-// Filesystem-backed storage (Tauri desktop / CLI) — see plans/tauri_desktop_plan.html Phase 3
+// Filesystem-backed storage (Tauri desktop / CLI) — see the internal plan Phase 3
 export { FileSystemAdapter } from './memory/filesystem'
 export type { FileSystemAdapterOptions } from './memory/filesystem'
 export type { FsBackend } from './memory/fs-backend'

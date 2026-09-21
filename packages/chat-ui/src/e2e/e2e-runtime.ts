@@ -3,7 +3,7 @@ import type { ScriptedLLMClientScript } from '@buildaharness/aielia'
 import { createInMemoryFsBackend } from './in-memory-fs-backend'
 
 /**
- * The browser-side half of the B2 Playwright harness (plans/chat_ui_browser_e2e_plan.html).
+ * The browser-side half of the B2 Playwright harness (the internal plan).
  *
  * A Playwright `addInitScript` runs in the page *before* the app bundle and cannot `import`
  * anything, so it can't build the {@link import('../assistant-test-hooks').AssistantTestHooks}

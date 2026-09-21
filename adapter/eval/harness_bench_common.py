@@ -1,6 +1,6 @@
 """
 Support module for the ``langgraph`` arm of the comparative harness benchmark
-(Plan Phase B — ``plans/harness_consolidation_and_control_plane_plan.html``).
+(Plan Phase B — the internal plan).
 
 This is the Python side of ``packages/aielia/eval/``. It re-implements
 just enough of that TypeScript harness to run one extra arm — a minimal LangGraph

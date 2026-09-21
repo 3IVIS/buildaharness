@@ -5,7 +5,7 @@ Six named strategies in a fixed progression. Advisory bias from the failure mode
 library does not override caller decisions. Adaptive softmax upgrade falls back to
 fixed order when experience_store is unavailable (INV-10).
 
-RecoveryBudget (Phase 2 of plans/harness_and_assistant_architecture_remediation_plan.html):
+RecoveryBudget (Phase 2 of the internal plan):
 before this, the only bound on "how much recovery is too much" was implicitly
 STRATEGY_ORDER's fixed length (6) — reaching the terminal "ESCALATE" strategy already
 triggers escalation in loop.py, but that's a strategy-switch count, not a real resource

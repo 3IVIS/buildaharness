@@ -5,7 +5,7 @@
  * a module-level default resolved once from process.env, threaded as an injectable constructor
  * option so tests never touch real process.env.
  *
- * Backs plans/harness_d2_one_loop_rewire_plan.html's R2 phase: the harness-driven proposer that
+ * Backs the internal plan's R2 phase: the harness-driven proposer that
  * lets HarnessRuntime's driveMainLoop actually call AgentLoop's tool-calling machinery once per
  * main-loop iteration, instead of receiving an already-finished draftReply after the fact. R2
  * landed it default OFF; R3/R4 built the rest of the wiring behind it; R5 gathered the rollout

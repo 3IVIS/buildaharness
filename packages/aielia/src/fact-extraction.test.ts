@@ -11,7 +11,7 @@ describe('extractFactsFromTurn', () => {
 
   // Chinese (Simplified) fixtures below are a first pass, not verified by a fluent Chinese
   // speaker — see fact-markers.json's "zh" entry and
-  // plans/personal_assistant_chinese_lexical_checks_plan.html for the design rationale. Per the
+  // the internal plan for the design rationale. Per the
   // plan, allergy/health cases are prioritized first — this is the file where a missed match
   // means the fact is never captured, full stop (no LLM fallback exists at all).
   it('captures an allergy statement in Chinese and flags it durable', () => {
@@ -251,7 +251,7 @@ describe('extractFactsFromTurn', () => {
   })
 
   it('captures a filler-prefixed "call me" ("其实，叫我阿里就行") — native-speaker review flagged this as worth', () => {
-    // fixing (plans/personal_assistant_chinese_lexical_checks_plan.html's native-speaker review):
+    // fixing (the internal plan's native-speaker review):
     // "其实" ("actually") is a common lead-in before a polite bare "叫我" restatement, the same
     // shape as "你可以叫我"/"请叫我" above — added as its own explicit lead-in rather than a
     // generic filler-skipping rule, matching this fix's existing narrow-enumeration style.
@@ -462,7 +462,7 @@ describe('migrateFact', () => {
   })
 })
 
-// Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: model_inferred
+// Phase 4 of the internal plan: model_inferred
 // facts are no longer unconditionally episodic — a durable, high-confidence one now routes exactly
 // like a user_asserted fact, while anything short of that stays episodic (excluded from
 // contradiction detection) until confirmation.

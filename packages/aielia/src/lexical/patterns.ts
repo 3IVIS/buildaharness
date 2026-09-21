@@ -128,7 +128,7 @@ function compileRiskPatternsAcrossLanguages(data: RiskPatternsJson): RiskPattern
     mediumRiskPatterns: languages.flatMap((lang) => lang.mediumRiskPatterns.map(compileRiskPattern)),
     // Reason text stays whichever language declared it first (today: "en") — the assistant's own
     // output isn't translated by this change, only its ability to understand non-English input;
-    // see plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 4 for that separate,
+    // see the internal plan's Phase 4 for that separate,
     // later concern.
     reminderPattern: { pattern: new RegExp(languages.map((lang) => lang.reminderPattern.source).join('|'), 'i'), reason: first.reminderPattern.reason },
     reminderRecallQuestion: languages.map((lang) => new RegExp(lang.reminderRecallQuestion, 'i')),
@@ -142,7 +142,7 @@ function compileRiskPatternsAcrossLanguages(data: RiskPatternsJson): RiskPattern
 
 const riskPatterns = compileRiskPatternsAcrossLanguages(riskPatternsData as RiskPatternsJson)
 
-// Forward-looking, not inert (plans/lexical_functions_hardening_plan.html Phase 4 step 1):
+// Forward-looking, not inert (the internal plan Phase 4 step 1):
 // risk-patterns.json's send-email/pay-or-buy/publish/cancel-subscription highRiskPatterns
 // currently gate on this text alone because no corresponding tool exists yet for this assistant
 // to call (there's no send_email/payments/social-posting tool the way write_file/run_shell_command

@@ -103,7 +103,7 @@ export interface ShellToolsContext extends ShellStagingContext {
    * Hostnames an approved command's HTTP(S)_PROXY traffic may reach (exact match or subdomain) —
    * see network-containment.ts and shell-executor.ts's networkContainmentEnv. Passed through to
    * executeCommand at apply time, same as timeoutMs. Undefined/empty denies all network access,
-   * the safe default (Decision 6, plans/lexical_functions_hardening_plan.html Phase 4).
+   * the safe default (Decision 6, the internal plan Phase 4).
    */
   networkAllowlist?: string[]
   executeCommand: ShellCommandExecutor

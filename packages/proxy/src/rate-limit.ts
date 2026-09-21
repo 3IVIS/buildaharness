@@ -1,6 +1,6 @@
 /**
  * In-memory quota + observability primitives for /web/* routes (W4 of
- * plans/browser_web_tools_via_proxy_plan.html — the plan's own successor to the W1-W3 SSRF-guard
+ * the internal plan — the plan's own successor to the W1-W3 SSRF-guard
  * + signed-URL-capability work).
  *
  * Single-instance, fixed-window counters — state lives in module-level Maps, so it is NOT shared

@@ -1,5 +1,5 @@
 // Trajectory Supervisor — types + flag (S0 of
-// plans/harness_trajectory_supervisor_plan.html). TS twin of
+// the internal plan). TS twin of
 // adapter/harness/supervisor.py.
 //
 // A slow-loop meta-controller that intervenes *only* on the cannot_make_progress()

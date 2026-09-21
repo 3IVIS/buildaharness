@@ -33,7 +33,7 @@ vi.mock('@buildaharness/aielia', async () => {
               clarificationAnswer?: { answers: { questionId: string; kind: string; selectedLabels?: string[] }[] }
             },
           ) => {
-            // Q5 (plans/ask_question_and_plan_mode_plan.html): a needs_clarification pause,
+            // Q5 (the internal plan): a needs_clarification pause,
             // resolved by pendingClarificationId + clarificationAnswer exactly like the staged
             // write/shell/batch pause above is resolved by pendingActionId — never re-derived.
             if (message.includes('needs clarification')) {

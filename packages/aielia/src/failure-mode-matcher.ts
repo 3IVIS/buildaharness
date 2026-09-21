@@ -14,7 +14,7 @@ const MATCH_SCHEMA = {
 
 /**
  * `AUDIT_SEMANTIC_FAILURE_MATCH` gate — feature-value audit (Phase A6 of
- * plans/feature_audit_automation_plan.html). Default **ON**: the semantic failure-mode-matcher
+ * the internal plan). Default **ON**: the semantic failure-mode-matcher
  * LLM call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a
  * falsy value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM call entirely and fall
  * back to `FailureModeLibrary.match()`'s exact-string-overlap check only. Read at exactly one call

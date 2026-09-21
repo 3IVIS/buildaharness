@@ -17,7 +17,7 @@ export default defineConfig({
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
         cli: resolve(__dirname, 'src/cli.ts'),
-        // Phase 0 feasibility spike (plans/personal_assistant_cli_pinned_input_plan.html) —
+        // Phase 0 feasibility spike (the internal plan) —
         // temporary entry, removed along with src/tui-spike.tsx once Phase 5 confirms Ink
         // works over a real live terminal.
         spike: resolve(__dirname, 'src/tui-spike.tsx'),

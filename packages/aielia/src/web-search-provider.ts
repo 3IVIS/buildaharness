@@ -9,7 +9,7 @@ import type { WebSearchResult } from './web-tools.js'
  * offers. A prior DuckDuckGo-HTML-scraping backend was removed: DuckDuckGo's HTML endpoint
  * resets the TLS connection outright for any non-browser client (curl, Node, Cloudflare
  * Workers all hit the same wall, confirmed live during
- * plans/browser_web_tools_via_proxy_plan.html's W8) — a TLS-fingerprint/IP-reputation block
+ * the internal plan's W8) — a TLS-fingerprint/IP-reputation block
  * beneath the HTTP layer, not something a request header or retry can work around.
  */
 

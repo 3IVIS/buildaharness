@@ -3,7 +3,7 @@
  * MCP stdio server exposing read_file/list_directory/write_file/fetch_url/
  * create_reminder/list_reminders/run_shell_command to the Claude CLI — the same
  * MCP mechanism already proven for the coaching/planner agents (see
- * adapter/agents/coaching/mcp_server.py, adapter/agents/planner/mcp_server.py: both
+ * the coaching and planner agents' MCP servers: both
  * FastMCP stdio servers started via --mcp-config, alongside --dangerously-skip-permissions
  * so a headless `claude -p` call can actually invoke them without an interactive
  * permission prompt — this server is started the same way, for the same reason).
@@ -468,7 +468,7 @@ export async function fetchUrlSafely(url) {
 // DuckDuckGo's HTML endpoint resets the TLS connection outright for any
 // non-browser client, a block beneath the HTTP layer no request header or retry
 // can work around (confirmed live during
-// plans/browser_web_tools_via_proxy_plan.html's W8).
+// the internal plan's W8).
 
 const WEB_SEARCH_MAX_RESULTS = 5
 const NO_WEB_RESULTS_LITERAL = 'No results found.'

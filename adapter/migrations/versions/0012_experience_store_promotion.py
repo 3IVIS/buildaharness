@@ -1,5 +1,5 @@
 """Add promotion boundary to experience store tables — Phase 2 of
-plans/harness_and_assistant_architecture_remediation_plan.html
+the internal plan
 
 Revision ID: 0012
 Revises: 0011

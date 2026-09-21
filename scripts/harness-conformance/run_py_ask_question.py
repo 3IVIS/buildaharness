@@ -4,7 +4,7 @@ result on stdout.
 
 Invoked by compare-ask-question.mjs via `python3.12 run_py_ask_question.py
 <fixture.json>` — the cross-language byte-equality check for Q8 of
-plans/ask_question_and_plan_mode_plan.html. Covers the deterministic parts only
+the internal plan. Covers the deterministic parts only
 (schema validation, degradation rules, INV-26/27/28/29/34/37) — the LLM-authored
 question text itself is out of scope, same carve-out compare-supervisor.mjs makes.
 """

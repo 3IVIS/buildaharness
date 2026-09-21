@@ -1,5 +1,5 @@
 """
-Ask-question primitive — Q1 of plans/ask_question_and_plan_mode_plan.html.
+Ask-question primitive — Q1 of the internal plan.
 
 A generic, independently invocable module that builds a batched-questions (Q0)
 SurfaceBlocker and halts the run through the existing escalate()/EscalationHalt
@@ -141,7 +141,7 @@ def ask_question(
 # ── Q7 — deterministic-site question builders ────────────────────────────────
 #
 # Static, templated question content for the two deterministic (non-supervisor) halt
-# sites plans/ask_question_and_plan_mode_plan.html's Q7 wires: budget_exhausted (loop.py)
+# sites the internal plan's Q7 wires: budget_exhausted (loop.py)
 # and review_failure (output_contract.py). Both builders are pure and add no LLM call —
 # the options are fixed text (budget_exhausted) or mechanically derived from a caller's
 # already-computed diagnostics (review_failure), never drafted by a model.

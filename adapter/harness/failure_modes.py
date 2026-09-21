@@ -188,13 +188,13 @@ class FailureDiagnostics:
     for duplicates against a growing list — matched_pattern is a single slot, so last-write-wins
     is already correct). See record_external_contradiction's doc comment (contradiction.py) for
     why the integration point for this lives in whichever outer, already-async driver repeatedly
-    calls run_one_iteration() (e.g. adapter/planner_api.py's `_run_planner`, or the per-adapter
+    calls run_one_iteration() (e.g. the planner driver's `_run_planner`, or the per-adapter
     run functions in adapter/run_api.py) rather than inside harness-core's own synchronous loop.
 
     failure_mode_library mirrors TS's `readonly failure_mode_library: FailureModeLibrary` field
     (packages/harness/src/state/failure-diagnostics.ts) — previously absent here, which meant
     nothing ever populated matched_pattern from a real lexical match (see loop.py's per-iteration
-    wiring, Phase 5 of plans/lexical_functions_hardening_plan.html). Defaults to the 4 seed
+    wiring, Phase 5 of the internal plan). Defaults to the 4 seed
     patterns from build_default_library() rather than an empty library, since an empty one would
     make the lexical match (and everything layered on top of it) permanently inert by default —
     every existing caller that never set this field gets real patterns to match against instead of

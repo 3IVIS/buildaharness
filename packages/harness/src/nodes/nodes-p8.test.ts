@@ -338,7 +338,7 @@ describe('detect_contradictions', () => {
   })
 
   // Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker;
-  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  // see the internal plan's Fixture-writing caveat.
   it('pairwise contradiction detected on Chinese 通过/失败 (passed/failed) status flip', () => {
     const wm = new WorldModel()
     wm.beliefs.push({ id: 'b1', statement: '登录测试通过', confidence: 0.9, derived_from: ['o1'], recorded_at: '' })
@@ -655,7 +655,7 @@ describe('update_diagnostics', () => {
   })
 
   // Chinese-language fixture — first-pass phrasing, not verified by a fluent Chinese speaker;
-  // see plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+  // see the internal plan's Fixture-writing caveat.
   it('estimateWorldModelGranularity recognizes Chinese "行号"/"字符"/"列" as statement-level', () => {
     const wm = new WorldModel()
     wm.beliefs.push({ id: 'b1', statement: '解析器在行号5、字符12处失败', confidence: 0.8, derived_from: ['o1'], recorded_at: '' })

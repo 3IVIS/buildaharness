@@ -1,4 +1,4 @@
-// S5 of plans/harness_trajectory_supervisor_plan.html — TS twin of
+// S5 of the internal plan — TS twin of
 // adapter/tests/test_harness_supervisor_s4.py's investigation-module layer.
 // INV-23 (read-only allowlist), INV-24 (depth cap), INV-25 (bounded budget + timeout),
 // provenance merge + generation bump, per-run cap counting.

@@ -64,7 +64,7 @@ const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(proc
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
-// what gives the CLI real persistence across runs. See plans/tauri_desktop_plan.html Phase 3.
+// what gives the CLI real persistence across runs. See the internal plan Phase 3.
 const defaultBackend = createNodeFsBackend()
 
 /**
@@ -179,7 +179,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
     // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
-    // P11 of plans/ask_question_and_plan_mode_plan.html — resolved through the same shared config
+    // P11 of the internal plan — resolved through the same shared config
     // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
     // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
     planMode: config.planMode,
@@ -220,7 +220,7 @@ export interface CliInstance {
   close(): void
   /**
    * Additive, read-only accessor for the pinned-input TUI shell's status line
-   * (plans/personal_assistant_cli_pinned_input_plan.html Phase 3) — the same two signals
+   * (the internal plan Phase 3) — the same two signals
    * printStatus() already renders as part of `/status` (lastPlanStatus !== undefined,
    * spendCapStatusLine()), just exposed here instead of only printed. Returns short indicator
    * strings in priority order; empty when there's nothing to report. Not used by the ordinary
@@ -410,7 +410,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   }
 
   /**
-   * P9 of plans/ask_question_and_plan_mode_plan.html — `/plan sketch <request>` invokes the
+   * P9 of the internal plan — `/plan sketch <request>` invokes the
    * lightweight plan-sketch delegate (PersonalAssistant.sketchPlan): one bounded, advisory LLM
    * call that prints a proposed task list directly, with no approve/decline controls (nothing was
    * staged — INV-35) and no effect on `/plan`'s own drafting-plan display above.
@@ -881,7 +881,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   }
 
   /**
-   * Text-mode equivalent of AskQuestionCard.tsx (Q6 of plans/ask_question_and_plan_mode_plan.html):
+   * Text-mode equivalent of AskQuestionCard.tsx (Q6 of the internal plan):
    * runs a self-contained prompt loop over `result.questions`, then resumes the paused turn by
    * calling back into handleTurn with `pendingClarificationId`/the assembled AskResponse — same
    * "resolved by ID, never re-derived" shape as the write/shell/email pause above. Only reached
@@ -1445,7 +1445,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 }
 
 /**
- * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html: `tuiMode` is resolved from the
+ * Phase 4 of the internal plan: `tuiMode` is resolved from the
  * same persisted-config + env-override chain every other config key uses (not just the env var
  * alone), so `/config set tuiMode enabled` works exactly like `/config set oneLoopMode enabled`
  * already does. This is a second, separate `configStore.load()` from the one `runCli()` performs

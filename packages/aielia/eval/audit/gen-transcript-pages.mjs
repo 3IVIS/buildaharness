@@ -1,6 +1,6 @@
 /**
  * Feature Value Audit — transcript page generator (Plan A2,
- * plans/feature_audit_automation_plan.html).
+ * the internal plan).
  *
  * No shebang here on purpose: this file is never executed directly (not +x; every caller does
  * `node eval/audit/gen-transcript-pages.mjs ...`), and a leading `#!` line combined with the
@@ -265,7 +265,7 @@ function friendlyModel(id) {
   return FRIENDLY_MODEL[id] || id || 'unknown'
 }
 
-// Canonical harness-layer order for the trace table (matches CLAUDE.md's layer list).
+// Canonical harness-layer order for the trace table (matches the internal developer notes' layer list).
 const LAYER_ORDER = [
   'world_model', 'evidence_reasoning', 'hypothesis', 'contradiction', 'diagnostics', 'control_state',
   'planning', 'execution', 'verification', 'recovery', 'reviewer_pass', 'supervisor',

@@ -21,7 +21,7 @@ Invariants:
   INV-11  Diagnostic provenance — no sub-dimension reaches the resolver un-provenanced;
           the uncalibrated-model-block annotation is advisory (Phase C2; ADR-004)
   INV-20  Trajectory Supervisor directive is one-shot — applied at the stall edge once,
-          never re-applied on a later iteration (plans/harness_trajectory_supervisor_plan.html)
+          never re-applied on a later iteration (the internal plan)
   INV-21  The supervisor never influences resolve_control_state() or adds/edits beliefs,
           observations, or contradictions — only strategy_state / task_graph / budget
   INV-22  The supervisor directive is consulted only inside the cannot_make_progress()
@@ -181,8 +181,8 @@ def test_inv_02_all_diagnostic_values_clamped_to_0_1():
 # INV-03 — WorldModel version is monotonic; staleness detection is correct
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# Superseded 2026-08-10 (Phase 1a of plans/harness_and_assistant_architecture_remediation_
-# plan.html): the original INV-03 asserted "generation_id increments exactly twice per
+# Superseded 2026-08-10 (Phase 1a of the internal
+# plan): the original INV-03 asserted "generation_id increments exactly twice per
 # iteration" — a specific implementation-lifecycle detail (run_one_iteration's Sub-step
 # A / Sub-step B structure), not the property that actually matters. What matters is that
 # staleness detection is reliable, regardless of exactly how or when the version advances.

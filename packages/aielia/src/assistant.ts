@@ -96,7 +96,7 @@ export interface TurnOptions {
   approved?: boolean
   pendingActionId?: string
   /**
-   * Q2 of plans/ask_question_and_plan_mode_plan.html — resolves a staged `needs_clarification`
+   * Q2 of the internal plan — resolves a staged `needs_clarification`
    * result (see AssistantTurnResult.pendingClarificationId) with the user's answer. Mirrors
    * `pendingActionId`/`approved`'s own "resolved by ID, never re-derived" shape:
    * `clarificationAnswer` must answer exactly the questions that were staged, validated
@@ -105,7 +105,7 @@ export interface TurnOptions {
   pendingClarificationId?: string
   clarificationAnswer?: AskResponse
   /**
-   * P2 of plans/ask_question_and_plan_mode_plan.html — resolves a staged `needs_plan_approval`
+   * P2 of the internal plan — resolves a staged `needs_plan_approval`
    * result (see AssistantTurnResult.planApprovalId) with the user's decision. Mirrors
    * `pendingActionId`/`approved`'s "resolved by ID, never re-derived" shape: what gets
    * approved/declined is exactly the plan that was staged, never re-drafted.
@@ -249,7 +249,7 @@ export interface PersonalAssistantOptions {
    */
   spendCap?: SpendCapConfig
   /**
-   * R2 of plans/harness_d2_one_loop_rewire_plan.html — see one-loop-flag.ts's doc comment for the
+   * R2 of the internal plan — see one-loop-flag.ts's doc comment for the
    * full rollout rationale. 'disabled' (the default, for the whole R2-R4 rollout window): today's
    * behavior, byte-for-byte — HarnessBridge.run() always uses `() => draftReply` as its toolFn,
    * regardless of whether a caller happens to supply a proposer. 'enabled' lets a supplied
@@ -259,7 +259,7 @@ export interface PersonalAssistantOptions {
    */
   oneLoopMode?: OneLoopMode
   /**
-   * Q2 of plans/ask_question_and_plan_mode_plan.html — global-flag control point (tier 1 of
+   * Q2 of the internal plan — global-flag control point (tier 1 of
    * INV-29) for the ask-question mechanism. Undefined (the default) falls back to
    * `DEFAULT_ASK_MODE` ('disabled') — today's behavior, byte-for-byte: every escalation stays on
    * the plain `escalated`/`reply: null` path. Only cli.ts/chat-ui's App.tsx (or an equivalent
@@ -269,7 +269,7 @@ export interface PersonalAssistantOptions {
    */
   askMode?: AskMode
   /**
-   * P11 of plans/ask_question_and_plan_mode_plan.html — see plan-mode-flag.ts's doc comment for
+   * P11 of the internal plan — see plan-mode-flag.ts's doc comment for
    * the full rollout rationale. 'legacy' (the default, for the whole rollout window): P3's
    * judgment-based auto-trigger below never fires, so `turn()` never auto-enters plan mode's
    * exclusive drafting+approval loop — today's behavior, byte-for-byte, for every real user turn.
@@ -307,7 +307,7 @@ export class PersonalAssistant {
   private readonly dangerouslySkipPermissions: boolean
   /** Whenever any of fileTools/webTools/shellTools is configured, `turn()` routes through AgentLoop instead of a single plain chat call — computed once here since it never changes for the lifetime of an instance. */
   private readonly toolLoopWillRun: boolean
-  /** R3 of plans/harness_d2_one_loop_rewire_plan.html — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
+  /** R3 of the internal plan — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
   /** Q2 — global-flag tier of the ask-question mechanism's three-tier INV-29 resolution. See PersonalAssistantOptions.askMode's doc comment. */
   private readonly askMode: AskMode
@@ -318,7 +318,7 @@ export class PersonalAssistant {
    * AssistantTurnResult.proposerKind, and emitted as a 'proposer_selected' trace event from
    * runTurn itself. A single mutable field is safe because `turn()` is awaited end to end (turns
    * never overlap within one instance). See AssistantTurnResult.proposerKind and
-   * plans/chat_ui_browser_e2e_plan.html phase B1.
+   * the internal plan phase B1.
    */
   private lastProposerKind: ProposerKind = 'posthoc'
 
@@ -515,7 +515,7 @@ export class PersonalAssistant {
   }
 
   /**
-   * P1 of plans/ask_question_and_plan_mode_plan.html — explicit entry point into plan mode's
+   * P1 of the internal plan — explicit entry point into plan mode's
    * exclusive drafting state. No production caller yet: P3 will later set this automatically from
    * a judgment-based trigger ahead of TurnInterpreter's classification. Until then this is reached
    * only by a caller (a future `/plan` CLI command, or a test) that wants to exercise the drafting
@@ -528,7 +528,7 @@ export class PersonalAssistant {
   }
 
   /**
-   * P7 of plans/ask_question_and_plan_mode_plan.html — the raw current `PlanRecord` for this
+   * P7 of the internal plan — the raw current `PlanRecord` for this
    * session, regardless of `mode`, so a caller (chat-ui's persistent banner, the CLI's `/plan
    * show`) can display live drafting/awaiting-approval state independent of any single turn's
    * own result (a `needs_plan_approval` result only carries a snapshot at the moment it's
@@ -540,7 +540,7 @@ export class PersonalAssistant {
   }
 
   /**
-   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate: a
+   * P9 of the internal plan — the lightweight plan-sketch delegate: a
    * cheaper "just go research and draft an approach" path than plan mode's durable task-graph
    * machinery (P0-P8), explicitly invoked (a CLI `/plan sketch <request>` command, a chat-ui
    * "Sketch a plan" action) rather than auto-triggered. Returns advice in the reply text — it
@@ -602,7 +602,7 @@ export class PersonalAssistant {
   /**
    * `/memory confirm <n|category>` — `selector` is either a 1-based index into `/memory`'s
    * flat, display-order "Pending confirmation" listing, or one of FactCategory's names for a
-   * bulk confirm. Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html.
+   * bulk confirm. Phase 3 of the internal plan.
    * `conflictNotices` (if any) are advisory only — every confirmed fact is promoted regardless,
    * matching how every other contradiction check in this codebase never gates belief admission.
    */
@@ -697,7 +697,7 @@ export class PersonalAssistant {
     }
 
     // A staged action is resumed by ID, not re-derived from a second LLM call — see T4 in
-    // plans/personal_assistant_file_tools_plan.html for why a second call has no guarantee of
+    // the internal plan for why a second call has no guarantee of
     // proposing identical content (and, for a shell command, no guarantee of proposing the same
     // command at all).
     if (options.pendingActionId) {
@@ -709,7 +709,7 @@ export class PersonalAssistant {
     // re-stages instead of falling back to the terminal `escalated` path — see
     // AskClarificationService.resolvePendingClarification's own EscalationHalt catch.
     if (options.pendingClarificationId) {
-      // P8 of plans/ask_question_and_plan_mode_plan.html — a nested ask raised mid-draft stages
+      // P8 of the internal plan — a nested ask raised mid-draft stages
       // into PlanDraftingService's own side channel, not AskClarificationService's (there is no
       // harness run mid-draft to resume). Both produce the same opaque `pendingClarificationId`
       // shape, so the caller (chat-ui/CLI) never needs to know which one it's resolving — this is
@@ -737,7 +737,7 @@ export class PersonalAssistant {
       if (!('fallThrough' in outcome)) return outcome
     }
 
-    // P1 of plans/ask_question_and_plan_mode_plan.html — the exclusive plan-mode session-state
+    // P1 of the internal plan — the exclusive plan-mode session-state
     // switch: while active, every message (short of an explicit cancel phrase, handled inside
     // PlanDraftingService itself) is routed here instead of TurnInterpreter's normal
     // classify/tool-loop pipeline below, and no tool loop of any kind runs for this turn (INV-30).
@@ -784,7 +784,7 @@ export class PersonalAssistant {
 
     const { classification, planForCancelCheck } = interpretation
 
-    // P3 of plans/ask_question_and_plan_mode_plan.html — the generalized, judgment-based auto-entry
+    // P3 of the internal plan — the generalized, judgment-based auto-entry
     // into plan mode's exclusive drafting loop (P1/P2), replacing the old direct-to-active
     // template-match path (TurnInterpreter.resolveTasks used to build and immediately activate a
     // PlanRecord the instant a template matched, with no approval step at all). A template match
@@ -841,7 +841,7 @@ export class PersonalAssistant {
     // though the batch loop itself finishes long before the harness run that ultimately builds
     // `trace`.
     let batchBudgetTrace: BatchBudgetTrace | undefined
-    // R3 of plans/harness_d2_one_loop_rewire_plan.html: set only on the flag-ON, non-batch,
+    // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
     // driveMainLoop drives the actual tool calls one iteration at a time.
@@ -864,7 +864,7 @@ export class PersonalAssistant {
       // byte-for-byte unchanged.
       const batch = this.webTools && !planForCancelCheck ? detectHomogeneousBatchList(userMessage) : null
       // R3 routed the flat (non-batch) tool loop under the harness's own driveMainLoop when the
-      // flag is enabled; R4 (plans/harness_d2_one_loop_rewire_plan.html) does the same for batch
+      // flag is enabled; R4 (the internal plan) does the same for batch
       // research, via AgentLoop.createBatchOneLoopProposer — so `!batch` no longer excludes a
       // turn from useOneLoop. A trivial turn still returns below without ever calling
       // harnessBridge.run() (see classification.isTrivial below) — there is no harness run to
@@ -962,7 +962,7 @@ export class PersonalAssistant {
         sessionId,
         userMessage,
         facts,
-        // Phase 4 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html: the same
+        // Phase 4 of the internal plan: the same
         // merged lexical+LLM list recordFacts() (called later, in responseService's build*Result)
         // derives its writes from — computed independently here (both calls are pure given the
         // same sessionId/userMessage/statedFacts) so the harness's World Model sees a same-turn
@@ -1047,7 +1047,7 @@ export class PersonalAssistant {
         }
         return this.responseService.buildEscalatedResult({ sessionId, transcriptKey, userMessage, err, classification })
       }
-      // R3 of plans/harness_d2_one_loop_rewire_plan.html: the harness-driven proposer's
+      // R3 of the internal plan: the harness-driven proposer's
       // counterpart to the flag-OFF loopResult.kind === 'needs_approval'/'escalated' branches
       // above — execute.ts rethrows a HarnessPauseSignal (which OneLoopPause implements)
       // unexamined, so it propagates out of harnessBridge.run() as a thrown error rather than a
@@ -1067,7 +1067,7 @@ export class PersonalAssistant {
   /**
    * Shared by the flag-OFF flat/batch tool loop's own needs_approval/escalated ToolLoopResult and
    * the flag-ON harness-driven proposer's equivalent OneLoopPause (R3 of
-   * plans/harness_d2_one_loop_rewire_plan.html, see runTurn's two call sites) — "the model wants
+   * the internal plan, see runTurn's two call sites) — "the model wants
    * to write/run/send something" or "the tool loop gave up" means the same thing to the caller
    * regardless of which loop discovered it.
    */

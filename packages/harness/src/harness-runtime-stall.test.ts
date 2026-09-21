@@ -1,4 +1,4 @@
-// S7 of plans/harness_trajectory_supervisor_plan.html — the benchmark's stall-induction
+// S7 of the internal plan — the benchmark's stall-induction
 // mechanism, exercised directly against HarnessRuntime.
 //
 // A single-task run normally completes in one iteration and never reaches

@@ -464,7 +464,7 @@ describe('approval-prompt handling', () => {
 })
 
 /**
- * Q6 (plans/ask_question_and_plan_mode_plan.html) — the CLI's text-mode equivalent of chat-ui's
+ * Q6 (the internal plan) — the CLI's text-mode equivalent of chat-ui's
  * AskQuestionCard. Drives a real PersonalAssistant instance whose `turn` method is spied on
  * (rather than a scripted ILLMClient) so the needs_clarification/resolve pair is scripted exactly
  * the same way App.test.tsx mocks PersonalAssistant.create's `turn` for the same feature — cli.ts

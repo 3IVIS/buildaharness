@@ -5,7 +5,7 @@ import type { MakeLlm } from './arms.js'
 import { parseTaskSpec } from './corpus/schema.js'
 
 /**
- * Multi-turn support (plans/multi_turn_benchmark_corpus_plan.md): a task with `followups` is
+ * Multi-turn support (the internal plan): a task with `followups` is
  * sent turn-by-turn to the *same* session. Exercised here against the `bare` arm because it
  * needs no `PersonalAssistant` — a fake `ILLMClient` that replies with plain text (no tool
  * calls) is enough to prove the loop.

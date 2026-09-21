@@ -8,7 +8,7 @@ import { BENCHMARK_SLICES } from '../corpus/schema.js'
 import { loadCorpus } from '../corpus/index.js'
 
 /**
- * A7 — the seeded feature-value-audit matrix. `feature_audit_driver.py` reads this file every
+ * A7 — the seeded feature-value-audit matrix. the audit driver reads this file every
  * wakeup; a bad arm name or an unknown slice would only surface as a mid-run subprocess failure,
  * so gate it here (plan A7 Validation item 1).
  */

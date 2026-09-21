@@ -230,7 +230,7 @@ def apply_review_outcome(
     """Records a single review outcome into the per-task consecutive-failure counter and derives
     escalation_triggered from it — the same bookkeeping review_proposed_change() itself uses for
     its 5 lexical dimensions, extracted so an *additional* check (e.g. a semantic consistency
-    check layered on top — see Phase 2 of plans/lexical_functions_hardening_plan.html and
+    check layered on top — see Phase 2 of the internal plan and
     record_external_contradiction's doc comment for why Python's harness-core loop stays
     synchronous and the integration point for an async semantic check lives one layer up, in
     whichever outer driver repeatedly calls run_one_iteration()) gets identical consecutive-

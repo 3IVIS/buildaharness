@@ -7,7 +7,7 @@ import type { FileToolsContext } from './file-tools.js'
 import type { FsBackend } from '@buildaharness/runtime'
 
 /**
- * R2 of plans/harness_d2_one_loop_rewire_plan.html: unit tests for
+ * R2 of the internal plan: unit tests for
  * AgentLoop.createHarnessProposer — the toolExecutors['default'] entry HarnessBridge.run() swaps
  * in when the one-loop flag is enabled. These call the returned proposer directly (the shape
  * driveMainLoop itself calls it, once per main-loop iteration) rather than going through a full

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 /**
  * Comparative harness benchmark — Plan Phase B
- * (plans/harness_consolidation_and_control_plane_plan.html).
+ * (the internal plan).
  *
  * Runs the implemented arms (`baseline`, `flagOn`) over the task corpus in
  * eval/corpus/*.json against a real model, grades each turn mechanically, and writes:
@@ -12,7 +12,7 @@
  * (docs/harness_benchmark_report.md is the older P11.5 *perf* micro-benchmark — left alone.)
  *
  * Not part of `npm test` / CI's fast path — it makes real LLM calls. Uses the claude-cli backend
- * (shells out to `claude -p`, no API key — see CLAUDE.md) so it runs in any dev environment.
+ * (shells out to `claude -p`, no API key — see the internal developer notes) so it runs in any dev environment.
  *
  *   cd packages/aielia && npx tsx scripts/run-harness-benchmark.ts
  *   npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,lookup-capital
@@ -55,7 +55,7 @@ function arg(name: string): string | undefined {
   return process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=')
 }
 
-/** Alias → concrete id, matching CLAUDE.md's documented model ids. Passthrough for a full id. */
+/** Alias → concrete id, matching the internal developer notes' documented model ids. Passthrough for a full id. */
 const MODEL_IDS: Record<string, string> = {
   sonnet: 'claude-sonnet-5',
   opus: 'claude-opus-5',

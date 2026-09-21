@@ -27,7 +27,7 @@ The model's *text* is never trusted to be safe on its own.
 2. **Injected content** — a fetched web page, a search result, or shell output
    containing instruction-shaped text aimed at steering the next turn.
 3. **A malicious local prompt** — a user pointing the assistant at a repo whose
-   files or `CLAUDE.md` try to hijack it.
+   files, including any project instruction files, try to hijack it.
 
 ## Boundaries covered
 
@@ -114,7 +114,7 @@ and:
 ## Non-goals (explicitly accepted)
 
 These are deliberate tradeoffs, per
-[`plans/lexical_functions_hardening_plan.html`](../plans/lexical_functions_hardening_plan.html)
+the internal plan
 Decision 6. Reporting one of these as a vulnerability will get a pointer here.
 
 - **No OS-level sandbox.** The shell containment is Node-level: it strips env and

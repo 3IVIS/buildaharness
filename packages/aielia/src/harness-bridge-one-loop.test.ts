@@ -7,7 +7,7 @@ import { PlanService } from './plan-service.js'
 import { AssistantSession } from './assistant-session.js'
 
 /**
- * R2 of plans/harness_d2_one_loop_rewire_plan.html: HarnessBridge.run() reads the one-loop flag
+ * R2 of the internal plan: HarnessBridge.run() reads the one-loop flag
  * once per turn (its own constructor param, injected — see one-loop-flag.ts) and decides between
  * `() => draftReply` and a caller-supplied `oneLoopProposer` for the toolExecutors 'default' entry.
  * INV-19 requires flag-OFF (and flag-ON with no proposer supplied) to stay byte-identical to

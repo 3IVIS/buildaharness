@@ -6,7 +6,7 @@ resolve_control_state() applies five tiers in strict order.
 detect_deadlock() uses directed cycle detection on the recovery-action graph.
 dep_class_gap_annotation is attached to notes[] only — never enters arithmetic (INV-07).
 
-Phase 1a of plans/harness_and_assistant_architecture_remediation_plan.html split the old
+Phase 1a of the internal plan split the old
 single `risk_state: NORMAL/CAUTIOUS/BLOCKED` field into five distinct concepts, per the
 critique's "what does CAUTIOUS actually mean — a probability? a permission? a mode?"
 objection:

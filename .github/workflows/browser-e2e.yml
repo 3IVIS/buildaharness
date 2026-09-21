@@ -1,6 +1,6 @@
 name: Browser E2E (chat-ui)
 
-# Real-browser end-to-end lane for plans/chat_ui_browser_e2e_plan.html phase B4.
+# Real-browser end-to-end lane for the internal plan phase B4.
 #
 # Runs the Playwright suite in packages/chat-ui/e2e (B2 harness + B3 flag OFF/ON
 # parity matrix) against a real Vite production-shape build served by `vite preview`

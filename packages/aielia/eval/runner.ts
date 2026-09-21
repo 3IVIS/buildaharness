@@ -32,7 +32,7 @@ export interface BenchmarkRow {
   supervisorDirectives: string[] | null
   failedChecks: string[]
   /** `ArmTurnOutput.status` for a row that ran; `undefined` for a skipped row. Lets the audit
-   * driver (`~/clam/feature_audit_driver.py`) tell a rate-limited run (`status === 'error'` with a
+   * driver (the audit driver) tell a rate-limited run (`status === 'error'` with a
    * rate-limit `errorMessage`) apart from a genuine hard failure. */
   status?: ArmTurnOutput['status']
   /** Populated when `status === 'error'` — the underlying error text (e.g. a `claude` CLI

@@ -13,7 +13,7 @@ policy-governed gates decide what's actually allowed to happen — see
 ADR-003 (harness consolidation) for the 5-primitive model this
 assistant's design is one instance of. **As of 2026-09-06 the tool loop
 runs inside the harness by default** (`ASSISTANT_ONE_LOOP`, default
-`enabled` — `plans/harness_d2_one_loop_rewire_plan.html`): `HarnessRuntime`'s
+`enabled` — the internal plan): `HarnessRuntime`'s
 own `driveMainLoop` calls `AgentLoop`'s tool-calling machinery one iteration
 at a time, and the per-tool-call gate composes the harness's own live
 `ControlState` with the turn-local one accumulated from this turn's prior
@@ -367,7 +367,7 @@ follow-up `needs_clarification` batch if it's still unresolved once the first ba
 folded in, resolved through this exact same path.
 
 Two kinds of sites can raise a `questions` batch: the Trajectory Supervisor's `ASK_USER` directive
-(see `docs/adr/005-trajectory-supervisor.md` — currently inert by default, since
+(see ADR-005 — currently inert by default, since
 `HARNESS_TRAJECTORY_SUPERVISOR` stays off) and a handful of deterministic sites with a genuinely
 enumerable option set, e.g. a batch-research budget running out ("continue with N more steps" /
 "stop and summarize" / "let me clarify the goal"). A site with no discrete option set keeps
@@ -382,7 +382,7 @@ time, or a per-`turn()` `{ askMode: 'enabled' }` override — following `oneLoop
 env/build-time/per-call chain. The effective mode is always the most restrictive of (global
 config, per-session override, per-call-site opt-out): a narrower scope can turn structured
 questions off even when a broader one left them on, never the reverse. See
-`docs/adr/006-generic-ask-question-mechanism.md` for the full design and why the default hasn't
+ADR-006 for the full design and why the default hasn't
 flipped to `'enabled'` yet — the mechanism and its conformance suite are done, but the benchmark
 run that would justify the flip hasn't happened.
 
@@ -549,7 +549,7 @@ that opens raw sockets and ignores those env vars entirely. That tradeoff —
 weaker than real OS-native sandboxing (Linux seccomp/landlock, macOS
 `sandbox-exec`, Windows job objects) or a container-per-command, but
 identical across the CLI and the Tauri desktop app with no new dependency —
-is deliberate; see `plans/lexical_functions_hardening_plan.html`'s Decision 6
+is deliberate; see the internal plan's Decision 6
 for the full comparison.
 
 **The command's output gets the same trust boundary as `fetch_url`/`web_search`.**

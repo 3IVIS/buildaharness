@@ -1,5 +1,5 @@
 """
-Trajectory Supervisor — types + flag (S0 of plans/harness_trajectory_supervisor_plan.html).
+Trajectory Supervisor — types + flag (S0 of the internal plan).
 
 A slow-loop meta-controller that intervenes *only* on the ``cannot_make_progress()``
 stall edge (and, from S1, a reviewer-HIGH streak). This module holds the closed
@@ -201,7 +201,7 @@ class SupervisorDirective:
 #
 # run_one_iteration() is a pure synchronous state transition (see loop.py's module
 # doc comment), so — exactly like semantic_checks.py — this async call is made by the
-# outer driver (planner_api.py's _run_planner) on the cannot_make_progress() edge and
+# outer driver (the planner driver's _run_planner) on the cannot_make_progress() edge and
 # its result is threaded back in as run_one_iteration(supervisor_directive=...).
 #
 # Fail-safe: any LLM error, timeout, unparseable body, or wrong-shaped JSON resolves

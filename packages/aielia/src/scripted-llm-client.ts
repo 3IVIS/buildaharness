@@ -10,7 +10,7 @@ import { classifyRisk } from './risk-classifier.js'
 /**
  * A deterministic, network-free {@link ILLMClient} for tests and demos — the one publicly
  * supported way to drive a real `PersonalAssistant` turn end to end without a proxy, an API key,
- * or a live model. Built for plans/chat_ui_browser_e2e_plan.html phase B1 (the browser-e2e lane
+ * or a live model. Built for the internal plan phase B1 (the browser-e2e lane
  * that unblocks the `ASSISTANT_ONE_LOOP` default-flip), and reusable by chat-ui's `demo-seed.ts`.
  *
  * It mirrors the shape of the internal `ScriptedToolLLMClient` that `assistant.test.ts` has used

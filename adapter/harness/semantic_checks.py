@@ -1,6 +1,6 @@
 """
 LLM-backed semantic escalation layered on top of the lexical checks wired into loop.py's
-run_one_iteration() (Phase 5 of plans/lexical_functions_hardening_plan.html). Mirrors
+run_one_iteration() (Phase 5 of the internal plan). Mirrors
 packages/aielia/src/contradiction-checker.ts's checkForContradictions and
 failure-mode-matcher.ts's checkSemanticFailureMatch — same "one call for whatever's new, never
 per-pair, fall back to the free check's own verdict on any parse failure or LLM error" shape,
@@ -9,7 +9,7 @@ adapter/harness/taxonomy_classifier.py.
 
 Not wired into loop.py's run_one_iteration() itself — that function is deliberately kept
 synchronous (see loop.py's module doc comment). The caller is whichever outer async driver
-repeatedly calls run_one_iteration() (adapter/planner_api.py's `_run_planner`); see that module for
+repeatedly calls run_one_iteration() (the planner driver's `_run_planner`); see that module for
 the actual gating (only called when the lexical check already found nothing, with a delta guard so
 an unchanged belief/symptom set isn't re-asked every iteration).
 

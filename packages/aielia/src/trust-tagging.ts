@@ -47,7 +47,7 @@ const MIN_LENGTH_FOR_LLM_CHECK = 200
 // content for both, rather than requiring roughly 3x more actual Chinese text before the LLM
 // escalation ever fires. The 3x weight is a first-pass estimate (not derived from a corpus
 // analysis) — worth a native/fluent-speaker sanity check alongside the rest of this plan's
-// Chinese content, per plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 2b step 2.
+// Chinese content, per the internal plan's Phase 2b step 2.
 function effectiveLengthForLLMCheck(text: string): number {
   let weighted = 0
   for (const ch of text) {
@@ -58,7 +58,7 @@ function effectiveLengthForLLMCheck(text: string): number {
 
 /**
  * `AUDIT_LLM_INJECTION_DETECT` gate — feature-value audit (Phase A5 of
- * plans/feature_audit_automation_plan.html). Default **ON**: the semantic injection-detection LLM
+ * the internal plan). Default **ON**: the semantic injection-detection LLM
  * call ships enabled, so an unset / empty / truthy value keeps today's behaviour. Set to a falsy
  * value (`0` / `false` / `off` / `no` / `disabled`) to skip the LLM escalation entirely and fall
  * back to the always-on deterministic regex/pattern pass only. Read at exactly one place —

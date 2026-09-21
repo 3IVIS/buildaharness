@@ -6,8 +6,8 @@ tool workflows, verification plans, and recovery sequences, then seeds the
 next run via warm_start(). When the store is unavailable every function
 is a silent no-op (INV-10).
 
-Promotion boundary (Phase 2 of plans/harness_and_assistant_architecture_remediation_
-plan.html): before this, update_experience_store() wrote directly into the same rows
+Promotion boundary (Phase 2 of the internal
+plan): before this, update_experience_store() wrote directly into the same rows
 warm_start() read on the very next run — a completed run's own outcome could influence
 that same run's later reads, and definitely influenced every subsequent run immediately.
 ADR-002's (the Harness Semantic Contract) guarantee #8 ("learning cannot alter

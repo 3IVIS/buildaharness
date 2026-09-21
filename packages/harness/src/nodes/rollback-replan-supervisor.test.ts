@@ -1,4 +1,4 @@
-// S2 of plans/harness_trajectory_supervisor_plan.html — rollbackAndReplan's
+// S2 of the internal plan — rollbackAndReplan's
 // supervisorDirective param (TS twin of loop.py's S1 stall-branch behaviour).
 
 import { describe, it, expect } from 'vitest'

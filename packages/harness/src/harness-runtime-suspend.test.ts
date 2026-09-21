@@ -8,7 +8,7 @@ import { EscalationHalt } from './nodes/escalate.js'
 // Phase D1 — the "not done" signal: execute.ts's ContinuableExecutionOutcome, the
 // pendingProposal suspend point reused for a 'continue' outcome, the BLOCK/ESCALATE
 // consequence surfaced via onGateDecision, and the v1→v2 checkpoint migration this phase
-// introduces. See plans/harness_consolidation_and_control_plane_plan.html, Phase D1.
+// introduces. See the internal plan, Phase D1.
 
 function makeTask(id: string, overrides: Partial<Task> = {}): Task {
   return {
@@ -211,7 +211,7 @@ describe('Phase D1 — onGateDecision', () => {
   // The test above tolerates zero firings (its comment says so). This one forces a real BLOCK
   // end-to-end through the public HarnessRuntime.run() surface with nothing about the control
   // state stubbed — the follow-up the Phase D1 implementation note in
-  // plans/harness_consolidation_and_control_plane_plan.html asked for ("a stronger test that
+  // the internal plan asked for ("a stronger test that
   // actually drives a real BLOCK end-to-end is a good follow-up").
   it('fires with a real BLOCK when a SYSTEM_BREAKING contradiction denies the gate — no resolver stubbing', async () => {
     const rt = new HarnessRuntime()

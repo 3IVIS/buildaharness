@@ -1,4 +1,4 @@
-"""Q7 of plans/ask_question_and_plan_mode_plan.html — deterministic trigger sites.
+"""Q7 of the internal plan — deterministic trigger sites.
 
 Covers the two new zero-LLM-cost question builders (budget_exhausted, review_failure)
 and their wiring into loop.py / output_contract.py, both with the ask-mode flag on and

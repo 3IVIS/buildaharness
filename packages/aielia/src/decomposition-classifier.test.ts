@@ -130,7 +130,7 @@ describe('looksLikeEnumeratedItems', () => {
     expect(looksLikeEnumeratedItems('This is my first time trying sushi.')).toBe(false)
   })
 
-  // Chinese (Simplified) cases — see plans/personal_assistant_chinese_lexical_checks_plan.html's
+  // Chinese (Simplified) cases — see the internal plan's
   // Phase 3 step 1. Chinese has no \b word-boundary support for CJK content (JS regex treats CJK
   // characters as non-word chars, so \b never fires around them — verified against the underlying
   // patterns before writing this file), and reworks list-enumeration around 、 (the Chinese

@@ -224,7 +224,7 @@ export function reviewProposedChange(
   return applyReviewOutcome(taskId, true, consecutiveFailuresMap)
 }
 
-// ── Q7 — deterministic-site question builder (plans/ask_question_and_plan_mode_plan.html) ──
+// ── Q7 — deterministic-site question builder (the internal plan) ──
 //
 // Twin note: unlike adapter/harness/review_gate.py's review_proposed_change() (which runs
 // all 5 dimensions and collects every failure), reviewProposedChange() above short-circuits

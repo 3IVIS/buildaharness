@@ -422,14 +422,14 @@ def record_external_contradiction(
     """Records a contradiction found by an external (e.g. LLM-based semantic) check — not one this
     module's own lexical/negation-pair detectors found. Python port of
     packages/harness/src/nodes/detect-contradictions.ts's `recordExternalContradiction` — see
-    Phase 2 of plans/lexical_functions_hardening_plan.html.
+    Phase 2 of the internal plan.
 
     Unlike TS (where this is called from inside HarnessRuntime's own async loop, since
     driveMainLoop folds the outer iteration loop and per-step logic into one async generator),
     Python's adapter/harness/loop.py deliberately keeps `run_one_iteration` a synchronous, pure
     state-transition function — there is no async entry point inside harness-core itself to hang
     an async hook parameter on. The intended caller is whichever *outer*, already-async driver
-    repeatedly invokes `run_one_iteration()` (e.g. `_run_planner` in adapter/planner_api.py, or the
+    repeatedly invokes `run_one_iteration()` (e.g. `_run_planner` in the planner driver, or the
     per-adapter run functions in adapter/run_api.py): call a real semantic check between
     iterations, then call this function with its result to fold the finding into world_model
     through the exact same resolution-policy pipeline a lexically-detected contradiction gets.

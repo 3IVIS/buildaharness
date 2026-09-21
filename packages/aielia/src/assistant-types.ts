@@ -28,7 +28,7 @@ export interface AssistantTrace {
 
 /**
  * Which code path actually produced this turn's reply — a test/telemetry affordance for
- * plans/chat_ui_browser_e2e_plan.html phase B1 (the browser-e2e lane that unblocks the
+ * the internal plan phase B1 (the browser-e2e lane that unblocks the
  * ASSISTANT_ONE_LOOP default-flip, R5 of the D2 one-loop rewire). The reply text itself is
  * identical across all three by design (INV-19); this field is how a test asserts "the flag
  * changed which path ran" without diffing internal traces.
@@ -45,7 +45,7 @@ export type ProposerKind = 'posthoc' | 'flat-oneloop' | 'batch-oneloop'
 
 export interface AssistantTurnResult {
   /**
-   * `needs_clarification` (Q2 of plans/ask_question_and_plan_mode_plan.html): a structured
+   * `needs_clarification` (Q2 of the internal plan): a structured
    * ask-question escalation (a populated `EscalationHalt.blocker.questions`, Q0) was staged for
    * resume via AskClarificationService instead of terminating the turn — pass
    * `pendingClarificationId` + a completed `AskResponse` back into
@@ -54,7 +54,7 @@ export interface AssistantTurnResult {
    * every escalation on the pre-existing `escalated`/`reply: null` path, byte-identical to today.
    */
   /**
-   * `needs_plan_approval` (P2 of plans/ask_question_and_plan_mode_plan.html): a drafted plan
+   * `needs_plan_approval` (P2 of the internal plan): a drafted plan
    * (plan mode's P1/P3) was staged for the mandatory whole-plan approval gate instead of
    * continuing to revise — pass `planApprovalId` back into
    * `turn(message, { planApprovalId, planDecision, edits? })` to resolve it. Every drafted plan

@@ -1,4 +1,4 @@
-// S0 of plans/harness_trajectory_supervisor_plan.html — TS twin of
+// S0 of the internal plan — TS twin of
 // adapter/tests/test_harness_supervisor_s0.py. Layer 1 (deterministic):
 // round-trip identity, enum + payload safety, digest boundedness, digest
 // coherence from each stall proxy.

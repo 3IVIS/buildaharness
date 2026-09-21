@@ -2,7 +2,7 @@ import type { AskQuestion, EscalationReason, SurfaceBlocker } from './nodes/esca
 import { EscalationHalt, makeQuestionsBatch } from './nodes/escalate.js'
 
 /**
- * Ask-question primitive — Q1 of plans/ask_question_and_plan_mode_plan.html, twin of
+ * Ask-question primitive — Q1 of the internal plan, twin of
  * adapter/harness/ask_question.py.
  *
  * A generic, independently invocable module that builds a batched-questions (Q0)

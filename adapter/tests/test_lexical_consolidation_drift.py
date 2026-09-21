@@ -1,6 +1,6 @@
 """
 Regression tests for the lexical-pattern consolidation done as Phase 0 of
-plans/lexical_functions_hardening_plan.html — proves the fixes actually changed consumer behavior
+the internal plan — proves the fixes actually changed consumer behavior
 (not just that the shared getters return the expected content, already covered in
 test_script_utils.py), and drift-guards that reviewer.py/hypothesis.py now share one negation-word
 set instead of two independently-hardcoded, drifted copies.
@@ -118,7 +118,7 @@ def test_estimate_world_model_granularity_now_recognizes_column_and_char():
 
 
 # Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker; see
-# plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+# the internal plan's Fixture-writing caveat.
 def test_detect_abstraction_contradictions_recognizes_chinese_statement_level_markers():
     """The shared granularity-markers.json now has a zh statementLevelMarkers entry
     ("语句"/"表达式") mirroring the English "statement"/"expression" entries exercised above."""

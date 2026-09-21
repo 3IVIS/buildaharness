@@ -81,7 +81,7 @@ export interface ExecutionContext {
   beliefDepGraph?: BeliefDepGraph
   planToolWorkflow?: () => void
   /**
-   * R2 of the D2 one-loop-rewire follow-up plan (plans/harness_d2_one_loop_rewire_plan.html):
+   * R2 of the D2 one-loop-rewire follow-up plan (the internal plan):
    * this main-loop iteration's already-resolved ControlState (see driveMainLoop's actionGate
    * block, which runs before execute() is ever called) — optional so every pre-existing test
    * that builds an ExecutionContext by hand without one keeps compiling unchanged. Threaded
@@ -114,7 +114,7 @@ export interface ToolExecutorContext {
   diagnostics?: Diagnostics
   failureDiagnostics?: FailureDiagnostics
   /**
-   * P10 of plans/ask_question_and_plan_mode_plan.html: the id of the task `toolFn` is being
+   * P10 of the internal plan: the id of the task `toolFn` is being
    * invoked for (mirrors `ExecutionContext.currentTask.id`, the one value `execute()` already
    * had in scope but never threaded through before this phase) — lets a harness-driven proposer
    * (personal-assistant's `OneLoopPause`) tag a pending write/shell/email approval with which
@@ -163,7 +163,7 @@ const SYSTEM_ERROR_SYMPTOM_PATTERNS: SymptomPattern[] = [
 // vocabulary with a curated FailureModeEntry symptom phrase (e.g. "file not found"),
 // so this bridges the two before SYSTEM_ERROR evidence is written.
 //
-// Accepted as-is (plans/lexical_functions_hardening_plan.html Phase 3 step 3): unlike the
+// Accepted as-is (the internal plan Phase 3 step 3): unlike the
 // user-phrasing lexical checks elsewhere in this plan, these tokens are largely language-agnostic
 // OS/protocol vocabulary (errno names, HTTP status codes), not natural language a non-English or
 // paraphrased-English speaker would author differently — the language/rephrasing framing doesn't

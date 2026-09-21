@@ -731,8 +731,8 @@ def test_inv10_warm_start_absent_vs_present_identical_strategy_state():
 
 
 def test_inv_promotion_disabled_vs_enabled_but_unpromoted_produce_identical_mutations():
-    """New invariant (Phase 2 of plans/harness_and_assistant_architecture_remediation_
-    plan.html): warm_start() against a store that's AVAILABLE and holds real candidate
+    """New invariant (Phase 2 of the internal
+    plan): warm_start() against a store that's AVAILABLE and holds real candidate
     data — decompositions, tool workflows, verification plans, strategy weights — but
     where NONE of it has been promoted, must mutate strategy_state/task_graph/
     dep_graph_budget identically to warm_start() against a fully-absent store. Unpromoted

@@ -1,7 +1,7 @@
 """
 Q3 acceptance tests — multi-question batching, navigation, and one final submit.
 
-Plan: plans/ask_question_and_plan_mode_plan.html, Phase Q3.
+Plan: the internal plan, Phase Q3.
 
 INV-27/28/34 already have direct unit-level coverage against the shared
 validators (validate_ask_response/make_questions_batch) in

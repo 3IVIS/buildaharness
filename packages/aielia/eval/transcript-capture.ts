@@ -1,6 +1,6 @@
 /**
  * Full-conversation capture for a benchmark arm — Plan A1
- * (plans/feature_audit_automation_plan.html).
+ * (the internal plan).
  *
  * The benchmark historically kept only a 500-char `replyPreview` per row, so a published audit
  * number had no evidence trail. This module records every LLM request/response, every tool call,

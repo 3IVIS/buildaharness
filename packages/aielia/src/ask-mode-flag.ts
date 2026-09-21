@@ -3,7 +3,7 @@
  * unit-testable in isolation, mirroring one-loop-flag.ts's exact shape (module-level default,
  * an injectable resolver so tests never touch real process.env).
  *
- * Q2 of plans/ask_question_and_plan_mode_plan.html: the "global flag" control point (tier 1 of
+ * Q2 of the internal plan: the "global flag" control point (tier 1 of
  * Q1's three-tier INV-29 resolution) for the batched-questions ask-question mechanism, resolved
  * at this package's boundary and handed to `@buildaharness/harness`'s `resolveAskMode()` as
  * `globalEnabled`. 'disabled' (the default, for the whole rollout window, per Q1's

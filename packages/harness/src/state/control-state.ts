@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Phase 3 of plans/harness_and_assistant_architecture_remediation_plan.html ports Python's
+// Phase 3 of the internal plan ports Python's
 // Phase 1a split (adapter/harness/control_state.py) forward: the old single
 // `risk_state: NORMAL/CAUTIOUS/BLOCKED` field is replaced by five distinct concepts —
 // permission (authoritative ALLOW/DENY), execution_mode (a caution label independent of

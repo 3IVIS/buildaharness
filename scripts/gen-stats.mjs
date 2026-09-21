@@ -2,7 +2,7 @@
 /**
  * Phase 4 (accuracy & reliability plan): stop hand-typing test/node-type/
  * service counts that drift out of sync across README.md, README_CN.md,
- * CLAUDE.md, docs/getting-started.md and docs/architecture.md.
+ * docs/getting-started.md and docs/architecture.md.
  *
  * This script computes those counts from the actual sources of truth
  * (vitest's own JSON reporter, `pytest --collect-only`, the Node/HarnessNode
@@ -34,6 +34,8 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync, mkdtempSync, mkdir
 import { spawnSync } from 'child_process'
 import { tmpdir } from 'os'
 import { join, dirname } from 'path'
+import { createRequire } from 'module'
+import { fileURLToPath } from 'url'
 
 const ROOT = new URL('..', import.meta.url).pathname
 const CHECK = process.argv.includes('--check')
@@ -113,9 +115,8 @@ function computeDockerServiceCount() {
 // Public-only snapshot — this repo uses a dual public/private git overlay
 // (two GIT_DIRs sharing one working tree). Counting tests directly against
 // the live working tree silently includes private-only content: private-only test files
-// (adapter/tests/test_coaching_llm_screens.py, test_planner_agent.py) inflate
-// the pytest count, and private-only source (src/spec/flows/coaching.ts,
-// picked up by src/spec/flows/index.ts's import.meta.glob) adds extra
+// inflate the pytest count, and private-only source picked up by
+// src/spec/flows/index.ts's import.meta.glob adds extra
 // EXAMPLE_FLOWS entries and therefore extra parameterized vitest cases. That
 // produced wrong numbers twice before this existed (commits c5b0277,
 // 33bab9c) — CI's own checkout is always public-only, so a local run against
@@ -123,18 +124,35 @@ function computeDockerServiceCount() {
 //
 // Fix: reuse git's own idea of "what's in the public repo" — `git ls-files`
 // (tracked) plus `git ls-files --others --exclude-standard` (untracked but
-// not excluded by core.excludesFile, the same mechanism .githooks/pre-commit
-// uses to keep private-only paths out of commits) is exactly the file set a
+// not excluded by core.excludesFile, the same mechanism that keeps
+// private-only paths out of commits) is exactly the file set a
 // clean `git clone` of the public repo would contain. Copy just that set into
 // a scratch directory and compute every count against the copy instead of
 // the live tree. node_modules is symlinked in rather than reinstalled —
 // dependencies don't differ between the two overlays, only source does.
 // ---------------------------------------------------------------------------
 
+// Optional extensions: every scripts/gen-stats.d/*.cjs may export
+// `extraReplacements(stats, { single })` returning more in-place replacement
+// targets, for docs that exist only in a checkout with an overlay layered on
+// top. A plain public clone has none, so nothing here is loaded and the
+// public-only file set is simply the whole tree. Loaded synchronously (CommonJS)
+// because main() below is synchronous.
+function loadExtensions() {
+  const dir = new URL('gen-stats.d/', import.meta.url)
+  if (!existsSync(dir)) return []
+  const require = createRequire(import.meta.url)
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.cjs'))
+    .sort()
+    .map((f) => require(fileURLToPath(new URL(f, dir))))
+}
+
+const EXTENSIONS = loadExtensions()
+
 function hasPrivateOverlay() {
-  // CLAUDE.md is private-only — absent in a clean public-only checkout,
-  // present whenever the private overlay is layered on this working tree.
-  return existsSync(new URL('CLAUDE.md', `file://${ROOT}`))
+  // An overlay is layered on this working tree exactly when it ships an extension.
+  return EXTENSIONS.length > 0
 }
 
 function listPublicFiles() {
@@ -345,26 +363,10 @@ function buildReplacements(stats) {
       ),
     },
 
-    // --- CLAUDE.md (private overlay — absent in a public-only checkout) ----
-    {
-      file: 'CLAUDE.md',
-      apply: single(
-        /(docker compose up(?: {2,})?# all )(\d+)( services)/,
-        (_m, pre, _num, post) => `${pre}${dockerServices}${post}`,
-      ),
-    },
-    {
-      // CLAUDE.md is private-only and documents *this actual working tree's*
-      // full suite (including private-only tests), not the public-repo
-      // count every other file's replacement uses — so this reads
-      // pytestLocal (unsanitized), not pytest (public-only snapshot).
-      file: 'CLAUDE.md',
-      requires: 'pytestLocal',
-      apply: single(
-        /(pytest adapter\/tests\/ -v(?: {2,})?# full suite \()(\d+)( tests\))/,
-        (_m, pre, _num, post) => `${pre}${pytestLocal.full}${post}`,
-      ),
-    },
+    // --- targets contributed by an overlay's extensions (scripts/gen-stats.d/) ---
+    // An extension target may set `requires: 'pytestLocal'` to read this actual
+    // working tree's full (unsanitized) suite instead of the public-only count.
+    ...EXTENSIONS.flatMap((ext) => ext.extraReplacements(stats, { single })),
 
     // --- docs/getting-started.md --------------------------------------------
     {
@@ -397,7 +399,7 @@ function renderStatsDoc(stats) {
 
 # Repo stats
 
-Canonical source for the counts quoted elsewhere in the docs (README.md, README_CN.md, CLAUDE.md,
+Canonical source for the counts quoted elsewhere in the docs (README.md, README_CN.md,
 docs/getting-started.md, docs/architecture.md) — those files are rewritten in place by this same script,
 not transcluded, since GitHub-rendered markdown has no include mechanism.
 
@@ -418,7 +420,7 @@ function main() {
   const overlay = hasPrivateOverlay()
   const statsCwd = overlay ? buildPublicOnlySnapshot() : ROOT
   if (overlay) {
-    console.log(`ℹ️   Private overlay detected (CLAUDE.md present) — computing vitest/pytest counts from a public-only snapshot at ${statsCwd}.`)
+    console.log(`ℹ️   Overlay detected (${EXTENSIONS.length} stats extension(s) loaded) — computing vitest/pytest counts from a public-only snapshot at ${statsCwd}.`)
   }
 
   const nodeTypes = computeNodeTypeCounts()
@@ -432,7 +434,7 @@ function main() {
     console.warn(`⚠️   Skipping pytest-derived stats: ${err.message}`)
   }
 
-  // CLAUDE.md is private-only and documents this actual working tree's own
+  // An overlay's targets may document this actual working tree's own
   // (unsanitized) full suite, not the public-repo count — only worth a
   // second pytest run when the overlay is actually present and the numbers
   // could differ; otherwise statsCwd === ROOT already and pytest === pytestLocal.
@@ -441,7 +443,7 @@ function main() {
     try {
       pytestLocal = computePytestStats(ROOT)
     } catch (err) {
-      console.warn(`⚠️   Skipping CLAUDE.md's local pytest count: ${err.message}`)
+      console.warn(`⚠️   Skipping the local (unsanitized) pytest count: ${err.message}`)
       pytestLocal = null
     }
   }
@@ -480,7 +482,7 @@ function main() {
   }
 
   for (const [file, rs] of byFile) {
-    if (!existsSync(new URL(file, `file://${ROOT}`))) continue // e.g. CLAUDE.md absent in a public-only checkout
+    if (!existsSync(new URL(file, `file://${ROOT}`))) continue // e.g. an extension's target file absent from this checkout
     const original = readRel(file)
     let content = original
     for (const r of rs) {

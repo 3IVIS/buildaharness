@@ -1,6 +1,6 @@
 """
 Tests for verification.py's Phase 2 rewrite
-(plans/harness_and_assistant_architecture_remediation_plan.html) — turning 7 stub
+(the internal plan) — turning 7 stub
 "tool available → unconditional PASS" layers into either a real check (syntax/unit via
 execution_boundary; consistency via direct world_model inspection) or an honest SKIPPED
 (requirements/assumptions/goal_correctness/integration, which need environmental/model-tier

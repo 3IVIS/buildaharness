@@ -8,7 +8,7 @@ name: Build desktop app
 # and Windows (.msi/.exe) via tauri-apps/tauri-action, and attaches them to a
 # draft GitHub Release. Unsigned means macOS/Windows show a security warning on
 # first launch (Gatekeeper / SmartScreen) — signing is a distribution decision
-# for later, not an engineering blocker. See plans/tauri_desktop_plan.html Phase 4.
+# for later, not an engineering blocker. See the internal plan Phase 4.
 
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
 
       # ── Rust (needs >= 1.88 for Tauri 2.11's dependency tree; dtolnay's
       #    action always installs the current stable, so no explicit version
-      #    pin is needed — see plans/tauri_desktop_plan.html Phase 2) ─────────
+      #    pin is needed — see the internal plan Phase 2) ─────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:

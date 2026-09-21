@@ -7,7 +7,7 @@ import { setAssistantTestHooks } from './assistant-test-hooks'
 import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
 
 /**
- * W5 of plans/browser_web_tools_via_proxy_plan.html: `webBackend: 'proxy'` routes web_search/
+ * W5 of the internal plan: `webBackend: 'proxy'` routes web_search/
  * fetch_url through a configured @buildaharness/proxy instead of calling Brave/the target URL
  * directly from the browser (which fails with CORS in a real browser — see createWebTools's doc
  * comment in App.tsx). Extends the B1 seam (App.e2e-seam.test.tsx) the same

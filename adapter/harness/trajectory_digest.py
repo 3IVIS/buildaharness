@@ -1,6 +1,6 @@
 """
 Trajectory digest — bounded, human-readable input to the supervisor
-(S0 of plans/harness_trajectory_supervisor_plan.html).
+(S0 of the internal plan).
 
 ``build_digest()`` is a deterministic assembly step — no LLM call. It follows the
 same contract as ``escalation.SurfaceBlocker``: the output carries **no** raw

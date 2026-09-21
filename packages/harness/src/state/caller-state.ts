@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { AskAnswer, AskQuestion } from '../nodes/escalate.js'
 
 /**
- * Q4 (plans/ask_question_and_plan_mode_plan.html) — renders one AskAnswer as a distinct,
+ * Q4 (the internal plan) — renders one AskAnswer as a distinct,
  * kind-tagged constraint line so a "selected" pick, a "selected_with_edit" pick-plus-caveat,
  * and a "free_text" answer never collapse into one indistinguishable joined string once they
  * reach current_constraints. Kept separate from ask-clarification-service.ts's own

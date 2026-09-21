@@ -4,7 +4,7 @@
  * A bare authenticated /web/fetch lets any token holder fetch any URL — an open relay. A
  * fetchTag makes a URL a capability: /web/search (and /web/grant, for user-pasted URLs) is the
  * only place a tag is minted, and /web/fetch refuses to run without one that verifies against
- * the exact URL and hasn't expired. See plans/browser_web_tools_via_proxy_plan.html's W3 section.
+ * the exact URL and hasn't expired. See the internal plan's W3 section.
  *
  * Tag shape: `${exp}.${base64url(HMAC-SHA256(PROXY_SECRET, url + "\n" + exp))}` — exp (unix
  * seconds) travels alongside the signature so verification doesn't need a side channel to know

@@ -175,7 +175,7 @@ export class TurnInterpreter {
       activePlan = null
     }
 
-    // P3 of plans/ask_question_and_plan_mode_plan.html: a matched template no longer builds and
+    // P3 of the internal plan: a matched template no longer builds and
     // activates a plan directly here — assistant.ts's auto-trigger (checked earlier in runTurn,
     // before this method is ever called) routes a template match (or the general
     // needsMultiStepPlan judgment) into plan mode's exclusive drafting+approval loop instead, so

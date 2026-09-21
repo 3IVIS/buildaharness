@@ -1,5 +1,5 @@
 """
-S8 of plans/harness_trajectory_supervisor_plan.html — lever 1: close the
+S8 of the internal plan — lever 1: close the
 single-node re-queue loop.
 
 Before S8, only REFRAME_PLAN could recover a stall on a one-node turn graph: the
@@ -10,7 +10,7 @@ NEUTRAL for exactly this reason.
 
 ``requeue_failed_leaves`` (harness/replanning.py) flips FAILED leaf tasks back to
 PENDING. run_one_iteration() calls it on the REDIRECT_STRATEGY stall edge when the
-LOCAL replan left nothing runnable; planner_api.py calls it on the GATHER_EVIDENCE
+LOCAL replan left nothing runnable; the planner driver calls it on the GATHER_EVIDENCE
 investigation re-entry. INV-21: task_graph only, never control_state. Bounded by
 recovery_budget + switch_count -> strategy loop.
 

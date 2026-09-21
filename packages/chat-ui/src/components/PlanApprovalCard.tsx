@@ -13,7 +13,7 @@ interface Props {
 }
 
 /**
- * P7 of plans/ask_question_and_plan_mode_plan.html — the interactive counterpart to
+ * P7 of the internal plan — the interactive counterpart to
  * `AssistantTurnResult.status === 'needs_plan_approval'` (P2's mandatory whole-plan approval
  * gate). Mirrors AskQuestionCard's "in-progress draft state, separate from the wire shape until
  * submit" pattern: `cancelled`/`edited` here is local UI state, collapsed into a
@@ -109,7 +109,7 @@ export function PlanApprovalCard({ planApproval, resolution, onApprove, onApprov
           <>
             <button type="button" onClick={onApprove}>Approve</button>
             <button type="button" className="plan-approval-card__secondary" onClick={() => setEditing(true)}>Approve with edits</button>
-            {/* P10 of plans/ask_question_and_plan_mode_plan.html — deliberately worded and styled
+            {/* P10 of the internal plan — deliberately worded and styled
                as a secondary, non-default choice (never the plan's only or primary approve
                control): opting in narrows nothing about what the plan discloses, only whether
                each of its own already-shown actions re-prompts individually while it runs. */}

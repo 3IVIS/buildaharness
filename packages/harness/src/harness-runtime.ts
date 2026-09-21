@@ -67,7 +67,7 @@ export const BUDGET_WARNING_FLOOR = 0.5
  * verdict, how many tasks this turn's graph has, whether a durable cross-turn plan is
  * driving it, and which tool kinds this turn's tasks touch. Read by the Phase 2 per-layer
  * trigger conditions instead of each layer inventing its own gating heuristic (see
- * plans/harness_layer_activation_plan.html, Design Principle 2). `consequentialTools`
+ * the internal plan, Design Principle 2). `consequentialTools`
  * is a bare string set (not a closed union) so the generic runtime never hardcodes any one
  * caller's tool names — well-known values in personal-assistant are 'read_file',
  * 'list_directory', 'web_search', 'fetch_url', 'write_file', 'run_shell_command'.
@@ -206,11 +206,11 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * otherwise only checks success-criteria coverage via a plain `.includes()` substring match —
    * called only for a criterion that substring check found no coverage for. A caller can cheaply
    * return `false` without an LLM call for a criterion it judges the substring check already
-   * covers. See Phase 2/Decision 3b of plans/lexical_functions_hardening_plan.html.
+   * covers. See Phase 2/Decision 3b of the internal plan.
    */
   semanticCriterionCoverage?: SemanticCriterionCoverage
   /**
-   * Trajectory Supervisor (plans/harness_trajectory_supervisor_plan.html, S2) — an optional
+   * Trajectory Supervisor (the internal plan, S2) — an optional
    * async hook consulted ONLY when the run stalls (cannotMakeProgress() is true at the point a
    * failed task would be rolled back). Given the bounded stall digest, return one directive
    * (or null / anything malformed → treated as CONTINUE). The harness has no LLM of its own —
@@ -241,7 +241,7 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    */
   askUser?: (question: UserQuestionData) => void
   /**
-   * Q1 of plans/ask_question_and_plan_mode_plan.html — the global-flag control point for the
+   * Q1 of the internal plan — the global-flag control point for the
    * batched-questions ask-question primitive (ask-question.ts), already resolved by the caller
    * (e.g. personal-assistant's `askMode` AssistantConfig field, mirroring `oneLoopMode`'s exact
    * chain: env override, VITE_ build-time override, package-owned default). Absent/'disabled'
@@ -555,7 +555,7 @@ function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired
 }
 
 /**
- * F3 (plans/feature_audit_fair_comparison_plan.html) — a turn that strands (a FAILED task, nothing
+ * F3 (the internal plan) — a turn that strands (a FAILED task, nothing
  * left runnable, nothing ever completed) must not return an empty `finalResult`: the caller
  * (personal-assistant's response-service.ts) turns a non-string `finalResult` into the draft
  * reply, and for the one-loop proposer path there is no draft — so `''` reaches the user as a
@@ -1290,7 +1290,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         // capability, or past the cap, degrade to a plain cannot_make_progress escalation.
         // Escalation only — never a resolveControlState() write, exactly like ABORT.
         //
-        // Q1 of plans/ask_question_and_plan_mode_plan.html: the blocker is now built via
+        // Q1 of the internal plan: the blocker is now built via
         // ask-question.ts's askQuestion() — the supervisor is one caller of that shared,
         // independently-flagged primitive, not its own inline question/options builder.
         // With ctx.askMode unset/'disabled' (DEFAULT_ASK_MODE, the default for the whole

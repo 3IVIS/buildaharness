@@ -37,7 +37,7 @@ export function nodeDisplayName(node: string | undefined): string | undefined {
 }
 
 /**
- * The 11 harness layer slugs, in the fixed order CLAUDE.md's architecture table lists them —
+ * The 11 harness layer slugs, in the fixed order the internal developer notes' architecture table lists them —
  * used by both the CLI's `/layers` and chat-ui's layer grid to render a stable 2-3 letter
  * code per layer (Phase 3.3 of the harness layer activation plan). Matches the `layer` field
  * on the `layer_activity` TraceEvent (see trace-events.ts) and HarnessRunOptions'
@@ -79,7 +79,7 @@ export const LAYER_SHORT_CODE: Record<LayerSlug, string> = {
 }
 
 /**
- * Collapses the harness's ~25 individual node ids down to the 11 layers from CLAUDE.md's
+ * Collapses the harness's ~25 individual node ids down to the 11 layers from the internal developer notes'
  * architecture table — `context_compression`, `check_caller_updates`, `update_task_state`, and
  * `output_validation` are loop scaffolding, not one of the 11, and deliberately map to nothing.
  */

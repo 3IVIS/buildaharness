@@ -1,5 +1,5 @@
 """
-Capability manifest — Phase 7 of plans/harness_and_assistant_architecture_remediation_plan.html.
+Capability manifest — Phase 7 of the internal plan.
 
 Formalizes the critique's H3/H4 finding: "compile anywhere" was an overstated claim because
 nothing actually checked whether a FlowSpec's declared needs (durable checkpointing, a human

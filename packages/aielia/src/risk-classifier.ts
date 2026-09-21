@@ -26,7 +26,7 @@ export interface RiskClassification {
 // "order"/"delete"/"pay"/etc. when preceded by a possessive/article/demonstrative/quantifier, so
 // "my coffee order" doesn't read as a live "order" verb) is specifically an English
 // noun/verb-homograph disambiguation — per
-// plans/personal_assistant_chinese_lexical_checks_plan.html's Phase 1a note, Chinese doesn't have
+// the internal plan's Phase 1a note, Chinese doesn't have
 // the same ambiguity for most of these verbs, so a future Chinese entry in risk-patterns.json is
 // very likely a much simpler pattern, not a port of this same lookbehind machinery.
 const risk = getRiskPatterns()

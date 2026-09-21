@@ -1,6 +1,6 @@
 """
 Minimal trusted execution boundary — Phase 1b of
-plans/harness_and_assistant_architecture_remediation_plan.html.
+the internal plan.
 
 The gap this closes: nothing in the harness can safely run a real subprocess. Verification
 today (verification.py) only checks whether a tool *exists* on PATH (tool_manifest.py's

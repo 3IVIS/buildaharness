@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.12
 """
 The ``langgraph`` arm of the comparative harness benchmark (Plan Phase B —
-``plans/harness_consolidation_and_control_plane_plan.html``; ``eval/README.md``
+the internal plan; ``eval/README.md``
 "Arms" table, "Build the ``langgraph`` arm" follow-on).
 
 WHAT THIS ARM IS (and is NOT)

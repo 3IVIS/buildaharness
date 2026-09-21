@@ -3,7 +3,7 @@ import type { SupervisorDirectiveData, TrajectoryDigestData } from '@buildaharne
 
 /**
  * Trajectory Supervisor decider (S5 host wiring of
- * plans/harness_trajectory_supervisor_plan.html) — the single LLM call the harness makes
+ * the internal plan) — the single LLM call the harness makes
  * ONLY on the `cannotMakeProgress()` stall edge, wired here as the personal-assistant's
  * `HarnessRunOptions.supervisorDecider`. TS twin of adapter/harness/supervisor.py's
  * `decide_supervisor_directive()`.

@@ -6,7 +6,7 @@
  * the two hand-readable surfaces:
  *
  *   docs/harness_comparative_benchmark.md   — a dated "Audit — <title>" section
- *   plans/feature_value_audit.html          — an "Audit — <title>" entry (`<h2 id="audit-<feature>">`)
+ *   the internal plan          — an "Audit — <title>" entry (`<h2 id="audit-<feature>">`)
  *
  * Both edits are marker-delimited and idempotent: a re-run replaces the feature's own block in
  * place rather than appending a duplicate. The transcript pages (`gen-transcript-pages.mjs`) are
@@ -156,7 +156,7 @@ export function generate({ reportPath, repoRoot }) {
   writeFileSync(mdPath, md)
   written.push(mdPath)
 
-  // ── plans/feature_value_audit.html ──────────────────────────────────────
+  // ── the internal plan ──────────────────────────────────────
   const htmlPath = join(repoRoot, 'plans', 'feature_value_audit.html')
   const startH = `<!-- audit-entry:${r.feature} start -->`
   const endH = `<!-- audit-entry:${r.feature} end -->`

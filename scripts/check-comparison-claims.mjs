@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F9 (plans/adoption_plan.html): the /harness-comparison page and the assistant-first
+ * F9 (the internal plan): the /harness-comparison page and the assistant-first
  * README make specific, checkable factual claims about what Aielia does and doesn't do.
  * The personal-assistant README itself warns "nothing in this repo will catch that
  * drifting silently" — this is that check.

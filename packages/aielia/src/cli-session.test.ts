@@ -190,7 +190,7 @@ describe('defaultMemoryExportFilename', () => {
 })
 
 // T3: /search <query> result formatting — see
-// plans/personal_assistant_memory_transparency_search_plan.html.
+// the internal plan.
 describe('formatSearchResults', () => {
   it('returns an explicit "no results" message for an empty hit list, never a blank output', () => {
     const output = formatSearchResults([], 'dentist appointment')

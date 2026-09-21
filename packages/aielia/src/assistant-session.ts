@@ -29,7 +29,7 @@ import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState 
 const DEFAULT_MODEL_FOR_COST_ESTIMATE = ANTHROPIC_DEFAULT_MODEL
 
 /**
- * P1 of plans/ask_question_and_plan_mode_plan.html — session/turn-routing switch, distinct from a
+ * P1 of the internal plan — session/turn-routing switch, distinct from a
  * tool-permission list. While `active`, `assistant.ts`'s turn entry point routes every incoming
  * message for this session to `PlanDraftingService` instead of `TurnInterpreter`'s normal
  * classify/tool-loop pipeline (see PlanDraftingService's own doc comment for the two designed
@@ -196,7 +196,7 @@ export class AssistantSession {
   async dedupedContradictionNotice(
     sessionId: string,
     layerActivity: LayerActivityEvent[],
-    // Phase 3 of plans/personal_assistant_fact_extraction_llm_confidence_plan.html —
+    // Phase 3 of the internal plan —
     // memory-service.ts's recordFacts()'s entry-time consistency check runs earlier and
     // separately from the harness's own layerActivity-derived Contradiction layer, but its
     // findings need the exact same path to the user: deduped through this same

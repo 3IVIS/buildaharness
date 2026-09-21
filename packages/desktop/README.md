@@ -14,7 +14,7 @@ detects `isTauri()` and, if true, builds `FileSystemAdapter`/`FileSystemExperien
 macOS that's `~/Library/Application Support/com.buildaharness.assistant/`. The
 `fs` plugin is registered in `src-tauri/src/lib.rs` and scoped in
 `src-tauri/capabilities/default.json` via the `fs:allow-applocaldata-*-recursive`
-permission sets. See Phase 3 of `plans/tauri_desktop_plan.html`.
+permission sets. See Phase 3 of the internal plan.
 
 ## Commands
 
@@ -121,7 +121,7 @@ a draft GitHub Release.
 
 **These builds are unsigned.** No Apple notarization, no Windows code-signing
 cert — that's a distribution/cost decision deferred past getting a working
-build into contributors' hands (see Phase 4 of `plans/tauri_desktop_plan.html`).
+build into contributors' hands (see Phase 4 of the internal plan).
 In practice:
 
 - **macOS**: Gatekeeper blocks the app as "damaged" or "from an unidentified

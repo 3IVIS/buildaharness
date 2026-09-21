@@ -219,7 +219,7 @@ async fn run_claude_prompt_with_file_tools(
 
     // cwd still pinned to the OS temp dir, same as the tool-free path — read_file/
     // list_directory/write_file are scoped to workspace_root via WORKSPACE_ROOT above,
-    // which is independent of claude's own cwd (only used for its own CLAUDE.md/.mcp.json
+    // which is independent of claude's own cwd (only used for its own project instructions/.mcp.json
     // auto-loading, which this deliberately avoids — see run_claude_prompt's doc comment).
     let mut child = Command::new(&claude_path)
       .args(&args)
@@ -339,7 +339,7 @@ async fn run_claude_prompt(
     args.push(prompt);
 
     // Pin cwd to the OS temp dir, never this app's own launch directory — `claude` has no
-    // flag to suppress project-context loading, it infers project CLAUDE.md/.mcp.json/
+    // flag to suppress project-context loading, it infers project instructions/.mcp.json/
     // skills entirely from the process's cwd regardless of --system-prompt/--tools. See
     // claude-cli-llm-client.ts's invokeClaude for the same fix on the CLI front end.
     let output = Command::new(&claude_path)

@@ -1,5 +1,5 @@
 """
-S3 of plans/harness_trajectory_supervisor_plan.html — the ASK_USER directive: a
+S3 of the internal plan — the ASK_USER directive: a
 structured question surfaced to the human at a stall edge, plus the resume path
 that turns the answer into a user_clarification world-model Observation.
 

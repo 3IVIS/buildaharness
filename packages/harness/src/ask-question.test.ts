@@ -111,7 +111,7 @@ describe('askQuestion — caller-agnostic', () => {
   })
 })
 
-// Q7 of plans/ask_question_and_plan_mode_plan.html — deterministic trigger sites.
+// Q7 of the internal plan — deterministic trigger sites.
 describe('buildBudgetExhaustedQuestion (Q7)', () => {
   it('returns static, templated options — no LLM call', () => {
     const question = buildBudgetExhaustedQuestion(42)

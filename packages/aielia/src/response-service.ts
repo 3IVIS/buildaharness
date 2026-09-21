@@ -83,7 +83,7 @@ export class ResponseService {
     // as the success path) so the next turn's pacing/position computations start from up-to-date
     // state, and surface a plain "ready to continue?" reply instead of the harness's own
     // draft/final result.
-    // R3 of plans/harness_d2_one_loop_rewire_plan.html: under the one-loop flag, `draftReply` is
+    // R3 of the internal plan: under the one-loop flag, `draftReply` is
     // deferred (assistant.ts never precomputes it before calling harnessBridge.run() when a
     // caller-supplied proposer is in play — see agent-loop.ts's createOneLoopProposer) — it stays
     // `''` unless a plan-pacing pause happens to fire after the harness-driven proposer has

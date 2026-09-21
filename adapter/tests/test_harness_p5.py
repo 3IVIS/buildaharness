@@ -415,7 +415,7 @@ def test_T07_unrelated_change_sharing_only_a_trigger_word_does_not_fail():
 
 
 # Chinese-language fixtures — first-pass phrasing, not verified by a fluent Chinese speaker; see
-# plans/personal_assistant_chinese_lexical_checks_plan.html's Fixture-writing caveat.
+# the internal plan's Fixture-writing caveat.
 def test_T07_chinese_literal_negation_trigger_concatenation_fails():
     """_is_negation's *primary* check — a trigger word immediately followed by the verbatim
     belief statement — is a plain substring check, so it works unchanged for Chinese."""

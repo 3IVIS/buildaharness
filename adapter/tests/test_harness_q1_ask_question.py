@@ -1,5 +1,5 @@
 """
-Q1 of plans/ask_question_and_plan_mode_plan.html — the ask-question primitive's
+Q1 of the internal plan — the ask-question primitive's
 own module (adapter/harness/ask_question.py): independent of the Trajectory
 Supervisor, three-channel mode resolution (INV-29), and the supervisor's S3
 ASK_USER site refactored to call it as one caller among several.

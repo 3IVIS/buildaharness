@@ -103,7 +103,7 @@ function newId(): string {
  * DNS API to give it a real answer anyway, and the real check already happens server-side in the
  * proxy's own `/web/fetch` handler (which does have real DNS). Chosen over threading a
  * `skipLocalGuard` flag through `web-fetch-core.ts` — see
- * plans/browser_web_tools_via_proxy_plan.html's W5 section for why the sentinel is the smaller
+ * the internal plan's W5 section for why the sentinel is the smaller
  * change. Non-http(s) schemes, credentialed URLs, literal IPs, and "localhost" are all still
  * rejected before this resolver is ever consulted, since those checks run first in
  * `assertPublicHttpUrl`.
@@ -226,7 +226,7 @@ async function createConfigStore(): Promise<ConfigStore> {
  * webview alike, so this is the one part of client selection that needs no isDesktop branch.
  */
 function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: { isDesktop: boolean; workspaceRoot: string }): ILLMClient {
-  // Test-only injection seam (plans/chat_ui_browser_e2e_plan.html phase B1) — returns null in any
+  // Test-only injection seam (the internal plan phase B1) — returns null in any
   // production build, so this is byte-identical to the switch below there.
   const testLlmClient = getAssistantTestHooks()?.makeLlmClient
   if (testLlmClient) return testLlmClient(config)
@@ -256,7 +256,7 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: 
  * (browser → Dexie), so passing filesystem-backed stores here is what gives the
  * desktop build real persistence instead of the IndexedDB it'd otherwise pick.
  * @tauri-apps/plugin-fs is dynamically imported so a plain (non-Tauri) browser
- * build never has to load it. See plans/tauri_desktop_plan.html Phase 3.
+ * build never has to load it. See the internal plan Phase 3.
  *
  * llmClient now comes from the shared createLlmClient() — desktop can use any of the 5
  * backends, not just claude-cli (see that function's doc comment for why this changed).
@@ -303,11 +303,11 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
       ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
       : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of plans/harness_d2_one_loop_rewire_plan.html — resolved through the same AssistantConfig
+    // R5 of the internal plan — resolved through the same AssistantConfig
     // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
     // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
-    // P11 of plans/ask_question_and_plan_mode_plan.html — same seam, from VITE_ASSISTANT_PLAN_MODE
+    // P11 of the internal plan — same seam, from VITE_ASSISTANT_PLAN_MODE
     // via browser-config.ts, or a persisted planMode. Undefined → falls back to DEFAULT_PLAN_MODE.
     planMode: config.planMode,
     onDebugLog: debugLog,
@@ -328,10 +328,10 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
     webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of plans/harness_d2_one_loop_rewire_plan.html — same AssistantConfig seam as the desktop
+    // R5 of the internal plan — same AssistantConfig seam as the desktop
     // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
-    // P11 of plans/ask_question_and_plan_mode_plan.html — same seam. Undefined → falls back to
+    // P11 of the internal plan — same seam. Undefined → falls back to
     // DEFAULT_PLAN_MODE.
     planMode: config.planMode,
     onDebugLog: debugLog,
@@ -375,7 +375,7 @@ export function App(): React.JSX.Element {
   // planStatus (present whenever a plan drove that turn, including a Phase-4 pause), cleared
   // once a turn completes with no plan behind it (finished/abandoned).
   const [activePlanStatus, setActivePlanStatus] = useState<AssistantTurnResult['planStatus']>(undefined)
-  // P7 of plans/ask_question_and_plan_mode_plan.html — the persistent plan-mode banner/input
+  // P7 of the internal plan — the persistent plan-mode banner/input
   // relabeling needs to know the session's raw plan `mode` (drafting/awaiting_approval), which
   // a turn's own `planStatus`/`planApproval` fields don't reliably distinguish (a drafting
   // reply's `planStatus` looks the same shape as an executing plan's). Refreshed after every
@@ -700,7 +700,7 @@ export function App(): React.JSX.Element {
   }
 
   /**
-   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate's
+   * P9 of the internal plan — the lightweight plan-sketch delegate's
    * chat-ui entry point: takes the composer text as the request and calls
    * PersonalAssistant.sketchPlan directly, bypassing runTurn/assistant.turn() entirely (there is
    * no approval/clarification/plan-approval branch to resolve — a sketch is advisory-only and
@@ -982,7 +982,7 @@ export function App(): React.JSX.Element {
           ({activePlanStatus.completionPct.toFixed(0)}%)
         </div>
       )}
-      {/* P7 of plans/ask_question_and_plan_mode_plan.html — persistent banner while exclusively
+      {/* P7 of the internal plan — persistent banner while exclusively
           drafting or staged for approval (P1/P2), distinct from app__plan-strip above (which only
           ever shows an already-*active*, executing plan). The awaiting_approval step already gets
           its own full PlanApprovalCard in the message list above, so this banner stays terse there

@@ -4,7 +4,7 @@
  * exact shape (module-level default, an injectable resolver so tests never touch real
  * process.env).
  *
- * Phase 4 of plans/personal_assistant_cli_pinned_input_plan.html — the rollout flag gating
+ * Phase 4 of the internal plan — the rollout flag gating
  * whether `cli.ts`'s `main()` launches the Phase 3 Ink shell (`runTuiApp()`) instead of
  * today's plain `readline`-based `runCli()` loop. 'disabled' (the default, for this plan's
  * whole rollout window, per `DEFAULT_TUI_MODE`) means `main()` behaves exactly as it does

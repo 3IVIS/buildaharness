@@ -21,7 +21,7 @@ export type TraceEvent =
   | { kind: 'error'; message: string }
   /**
    * One of the harness's 11 layers did (or explicitly skipped) real work this step —
-   * see plans/harness_layer_activation_plan.html Phase 2/3.1. `layer` is a stable slug
+   * see the internal plan Phase 2/3.1. `layer` is a stable slug
    * ('world_model' | 'evidence_reasoning' | 'hypothesis' | 'contradiction' | 'diagnostics' |
    * 'control_state' | 'planning' | 'execution' | 'verification' | 'recovery' | 'reviewer_pass'),
    * not a free-text name, so a "Why?"/`/layers` renderer can key off it directly.
@@ -36,7 +36,7 @@ export type TraceEvent =
    */
   | { kind: 'checkpoint_discarded'; sessionId: string; failedAttempts: number }
   /**
-   * Phase 4 of plans/harness_and_assistant_architecture_remediation_plan.html — see
+   * Phase 4 of the internal plan — see
    * execution-mode.ts's own doc comment for each mode's guarantee level.
    */
   | { kind: 'execution_mode_classified'; mode: ExecutionMode }
@@ -50,11 +50,11 @@ export type TraceEvent =
    * Which proposer drove this turn — 'posthoc' (flag OFF, or a trivial / no-tool turn),
    * 'flat-oneloop', or 'batch-oneloop' (both flag ON). Emitted once per turn from runTurn, right
    * after `useOneLoop` is resolved. See AssistantTurnResult.proposerKind and
-   * plans/chat_ui_browser_e2e_plan.html phase B1 for why this exists.
+   * the internal plan phase B1 for why this exists.
    */
   | { kind: 'proposer_selected'; proposerKind: ProposerKind }
   /**
-   * P9 of plans/ask_question_and_plan_mode_plan.html — the lightweight plan-sketch delegate
+   * P9 of the internal plan — the lightweight plan-sketch delegate
    * (PlanSketchService) ran. `requestPreview` is truncated to stay name/status-only per this
    * type's own doc comment, not the full request text. Distinct from `plan_classified`/
    * `plan_updated`, which are about the stateful drafting/approval machinery (PlanDraftingService)
@@ -62,7 +62,7 @@ export type TraceEvent =
    */
   | { kind: 'plan_sketch'; requestPreview: string }
   /**
-   * P10 of plans/ask_question_and_plan_mode_plan.html — a write_file/run_shell_command/send_email
+   * P10 of the internal plan — a write_file/run_shell_command/send_email
    * proposal was auto-applied instead of staged for approval because it was proposed while
    * `taskId` (part of a plan approved with `'approve_trusted'`) was the currently RUNNING task —
    * see PlanRecord.trustApprovedSteps and INV-36. The action itself still went through

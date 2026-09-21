@@ -55,7 +55,7 @@ jobs:
       - name: Build chat-ui
         env:
           CHAT_UI_BASE: /try/
-          # W8 of plans/browser_web_tools_via_proxy_plan.html: gives this build only a working
+          # W8 of the internal plan: gives this build only a working
           # default web_search/fetch_url path via the deployed proxy Worker — DEFAULT_CONFIG
           # itself (every other build: dev, self-hosted, desktop) is untouched. These are
           # defaults, not hard pins (browser-config.ts's envOverridesFromImportMetaEnv sets

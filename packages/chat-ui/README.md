@@ -5,7 +5,7 @@ A minimal chat UI wrapping `PersonalAssistant.create()` from
 this is the assistant's own UI, not the flow editor.
 
 Ships as a normal web app first, buildable and testable independent of Tauri
-(see `plans/tauri_desktop_plan.html`), so the UI and `PersonalAssistant`
+(see the internal plan), so the UI and `PersonalAssistant`
 wiring are validated in a browser before any native shell wraps it. The exact
 same build is what `@buildaharness/desktop` wraps — there's no separate
 "desktop version" of this package.
@@ -107,7 +107,7 @@ browser)"):
   reported to the model as an ordinary tool error, not a crash, so the turn
   still completes, but search/fetch mostly won't work. Settings shows this
   caveat inline when `'direct'` is selected in the browser build.
-- **`'proxy'`** (see `plans/browser_web_tools_via_proxy_plan.html`) routes
+- **`'proxy'`** (see the internal plan) routes
   both tools through a running `@buildaharness/proxy` instance's
   `/web/search`, `/web/fetch`, and `/web/grant` endpoints instead of calling
   Brave/the target URL directly — sidestepping the CORS problem
@@ -228,9 +228,9 @@ separate build step. CI runs this via `.github/workflows/browser-e2e.yml`
 (phase B4) on PRs touching `packages/chat-ui|aielia|harness|runtime`
 plus a nightly cron.
 
-**This dev container cannot run `test:e2e`.** Per the repo `CLAUDE.md`: `$DISPLAY`
+**This dev container cannot run `test:e2e`.** Per the repo's internal developer notes: `$DISPLAY`
 is empty, there is no `Xvfb`/`xvfb-run`, system Firefox is a broken snap and there
 is no Chromium/Chrome. The only assistant-behaviour checks runnable in-sandbox are
 the B1 seam's jsdom tests — `src/App.e2e-seam.test.tsx` and
 `src/assistant-test-hooks.test.ts` — which verify the injection seam itself but not
-a real browser. See `plans/chat_ui_browser_e2e_plan.html` for the full rationale.
+a real browser. See the internal plan for the full rationale.

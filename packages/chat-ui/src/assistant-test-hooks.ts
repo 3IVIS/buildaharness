@@ -7,7 +7,7 @@ import type { ILLMClient, FsBackend } from '@buildaharness/runtime'
  * byte-deterministic with no proxy / key / network) and, optionally, an in-memory
  * {@link FsBackend} (so `fileTools` is configured and the tool loop actually runs).
  *
- * Built for plans/chat_ui_browser_e2e_plan.html phase B1. Flag-OFF and no-hook behaviour is
+ * Built for the internal plan phase B1. Flag-OFF and no-hook behaviour is
  * byte-identical to today: {@link getAssistantTestHooks} returns `null` unless E2E mode is on.
  *
  * Two ways to install a hook, both gated on E2E mode:

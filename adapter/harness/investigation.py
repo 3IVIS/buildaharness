@@ -1,6 +1,6 @@
 """
 Bounded read-only investigation sub-agent — S4 of
-plans/harness_trajectory_supervisor_plan.html (GATHER_EVIDENCE).
+the internal plan (GATHER_EVIDENCE).
 
 When the Trajectory Supervisor decides the run is stuck for lack of a fact, it
 emits a ``GATHER_EVIDENCE`` directive carrying an ``InvestigationRequest``. This

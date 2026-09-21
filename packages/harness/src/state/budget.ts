@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Phase 7 of plans/harness_and_assistant_architecture_remediation_plan.html: a generic,
+ * Phase 7 of the internal plan: a generic,
  * reusable resource budget, mirroring adapter/harness/recovery.py's RecoveryBudget shape
  * (four max_* caps + four *_used counters, isExhausted() as OR-of-thresholds, immutable —
  * consume() returns a new instance rather than mutating in place, so a caller can't

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F8 (plans/adoption_plan.html): the comparison page and README lean on Aielia being
+ * F8 (the internal plan): the comparison page and README lean on Aielia being
  * "safer than an unsandboxed agent". That claim is only defensible if the trust model is
  * written down AND the boundaries it names still exist in the code. This gate fails CI when:
  *

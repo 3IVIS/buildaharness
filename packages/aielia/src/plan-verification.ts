@@ -2,7 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { PlanTaskRecord } from './plan-store.js'
 
 /**
- * P6 of plans/ask_question_and_plan_mode_plan.html — runs between drafting (P1/P3) and staging
+ * P6 of the internal plan — runs between drafting (P1/P3) and staging
  * for approval (P2). Two independent checks, deliberately ordered cheapest-and-most-certain
  * first: (1) dependency-graph validity (pure, synchronous, no LLM call — the same three checks
  * `adapter/harness/task_graph.py`'s `validate_task_graph` runs Python-side: orphaned `depends_on`

@@ -265,7 +265,7 @@ def completion_check_final(
     escalate() with reason="contract_violation". The harness must not return a
     contract-failing result silently.
 
-    Q7 (plans/ask_question_and_plan_mode_plan.html): when the violations diagnose two or
+    Q7 (the internal plan): when the violations diagnose two or
     more distinct candidate fixes (diagnose_review_failure_options — a plain deterministic
     grouping, no LLM call), the blocker offers them as a structured question via
     ask_question.build_ask_blocker(), gated by session_ask_mode + the global
