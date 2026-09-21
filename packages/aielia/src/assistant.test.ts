@@ -1110,6 +1110,23 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 
+  it('a write_file call editing an existing file shows a diff against its current content in the approval reason, but not a second time in the post-write confirmation (already reviewed at the decision point)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/summary.md`, 'line1\nline2\nline3\n')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'line1\nCHANGED\nline3\n' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Update summary.md')
+    expect(staged.reason).toContain('-line2')
+    expect(staged.reason).toContain('+CHANGED')
+    expect(staged.reason).not.toContain('line1\nCHANGED\nline3')
+
+    const applied = await assistant.turn('Update summary.md', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(applied.reply).toBe('Wrote "summary.md".')
+  })
+
   it('dangerouslySkipPermissions auto-applies a staged write_file with no needs_approval round trip', async () => {
     const backend = makeFakeBackend()
     const llm = scriptedResponses([

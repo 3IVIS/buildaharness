@@ -21,7 +21,8 @@ import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifi
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import { FILE_TOOLS, executeFileTool, type FileToolsContext } from './file-tools.js'
+import { FILE_TOOLS, executeFileTool, readCurrentFileContent, type FileToolsContext } from './file-tools.js'
+import { formatWriteDiff } from './diff-format.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
 import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
@@ -197,12 +198,6 @@ const UNPARSED_TOOL_CALL_PATTERN = /<tool_call>|<\/?｜[^｜<>]{1,32}｜(?:tool_
 // tool-call text this guards the tool-calling loop against.
 export function looksLikeUnparsedToolCall(content: string): boolean {
   return UNPARSED_TOOL_CALL_PATTERN.test(content)
-}
-
-function previewContent(content: string, maxLines = 20): string {
-  const lines = content.split('\n')
-  if (lines.length <= maxLines) return content
-  return `${lines.slice(0, maxLines).join('\n')}\n… (truncated)`
 }
 
 /**
@@ -667,6 +662,13 @@ export class AgentLoop {
     const reportStep = (tool: string, input: Record<string, unknown>): void => {
       onToolStep?.({ tool, input, summary: summarizeToolStep(tool, input) })
     }
+    // A second, follow-up report fired only when tool-policy denies a call reportStep already
+    // announced — see AssistantToolStep.deniedReason's doc comment. Without this, a denied
+    // read-only call was invisible to the user: the model saw the denial in its own conversation,
+    // but nothing was ever printed to say the call didn't happen.
+    const reportDenied = (tool: string, input: Record<string, unknown>, reason: string): void => {
+      onToolStep?.({ tool, input, summary: summarizeToolStep(tool, input), deniedReason: reason })
+    }
 
     {
       // For the claude-cli backend, this one call may run several tool round trips
@@ -685,9 +687,10 @@ export class AgentLoop {
         // makes directly, now also covering the calls this backend used to resolve invisibly.
         // A backend without such an internal loop (the proxy client) never calls this — its
         // calls come back as response.toolCalls and are gated inline below instead.
-        onToolProposal: async (tool) => {
+        onToolProposal: async (tool, input) => {
           const policy = this.checkToolPolicy(tool, riskHint, controlPlaneState?.controlState)
           if (policy.decision === 'ALLOW') return { decision: 'allow' }
+          reportDenied(tool, input, policy.reason)
           return { decision: 'deny', reason: policy.reason }
         },
       })
@@ -747,11 +750,14 @@ export class AgentLoop {
         const { id, kind, ...payload } = alreadyStagedCall.input as { id: string; kind: 'write' | 'shell' | 'email' } & Record<string, unknown>
         if (kind === 'write') {
           const { path, content } = payload as { path: string; content: string }
+          const previousContent = this.fileTools
+            ? await readCurrentFileContent(this.fileTools.backend, this.fileTools.workspaceRoot, path)
+            : undefined
           return {
             done: true,
             result: {
               kind: 'needs_approval',
-              reason: `Proposes writing to "${path}":\n${previewContent(content)}`,
+              reason: `Proposes writing to "${path}":\n${formatWriteDiff(previousContent, content)}`,
               pendingActionId: id,
               pendingActionKind: 'write',
             },
@@ -791,11 +797,12 @@ export class AgentLoop {
         if (result.kind !== 'staged_write') {
           throw new Error('write_file executor returned an unexpected result kind')
         }
+        const previousContent = await readCurrentFileContent(this.fileTools.backend, this.fileTools.workspaceRoot, result.path)
         return {
           done: true,
           result: {
             kind: 'needs_approval',
-            reason: `Proposes writing to "${result.path}":\n${previewContent(result.content)}`,
+            reason: `Proposes writing to "${result.path}":\n${formatWriteDiff(previousContent, result.content)}`,
             pendingActionId: result.id,
             pendingActionKind: 'write',
           },
@@ -851,6 +858,7 @@ export class AgentLoop {
         const policy = this.checkToolPolicy(call.name, riskHint, controlPlaneState?.controlState)
         if (policy.decision === 'DENY') {
           const resultText = `Denied by tool policy: ${policy.reason}`
+          reportDenied(call.name, call.input, policy.reason)
           messages.push({ role: 'tool', content: resultText, toolCallId: call.id })
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           continue

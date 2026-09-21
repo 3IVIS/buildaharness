@@ -43,6 +43,7 @@ import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWrita
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
+import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -186,6 +187,19 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
   })
 }
 
+/**
+ * One choice in a structured multi-option prompt (Phase 7 of the internal plan
+ * — the numbered/arrow-key approval selector). `key` is both the single-character shortcut shown
+ * inline next to the option and the value `askSelect` resolves with; callers order options with
+ * the safe/fail-closed choice last, matching `askYesNo`'s own "no real answer → treat as declined"
+ * convention (see `askSelect`'s default implementation below, and `ink-select-prompt.tsx`'s
+ * `SelectPrompt`, which renders this same list with arrow-key highlight + per-key shortcuts).
+ */
+export interface SelectOption {
+  key: string
+  label: string
+}
+
 export interface RunCliOptions {
   dataDir?: string
   configStore?: ConfigStore
@@ -206,6 +220,8 @@ export interface RunCliOptions {
   askYesNo?: (question: string) => Promise<boolean>
   /** Overrides the rl.question-based free-text prompt the clarification sub-loop uses for option numbers, edit notes, and "Other" free text — lets tests script a multi-step answer without faking stdin/a real TTY. */
   askLine?: (question: string) => Promise<string>
+  /** Overrides the rl.question-based structured multi-option prompt (Phase 7's approval selector) — lets tests script a selection by key without faking stdin/a real TTY. Resolves with the chosen `SelectOption.key`. */
+  askSelect?: (question: string, options: SelectOption[]) => Promise<string>
   /** Test seam: skip the interactive first-run setup regardless of TTY state (also implied when `assistant` is passed). */
   skipFirstRunSetup?: boolean
   /** Test seam: stub `claude` binary detection for the first-run setup. */
@@ -386,6 +402,28 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // when something very much did. Cleared whenever a turn actually produces a trace, and on /new.
   let lastNoTraceReason: string | undefined
 
+  // Phase 7's "don't ask again" option, session-scoped only (reset on every process start, never
+  // written to `configStore`). `tool-policy.ts`'s `ControlState` (the harness's own per-turn
+  // permission/escalation resolver) was checked as the natural home for this and rejected: it's
+  // recomputed fresh from world-model evidence every turn with no persisted-preference field at
+  // all, so wiring a durable "remembered" flag through it would mean inventing new cross-turn
+  // state inside a module that's deliberately a pure, stateless decision function today. A plain
+  // in-memory Set scoped to this `runCli()` closure gets the same "stop asking me this" behavior
+  // Codex/Claude Code's own selector offers, without that architectural change — at the cost of
+  // not surviving a restart, which matches this being explicitly a per-session convenience, not a
+  // durable trust decision. Keyed coarsely (pendingActionKind / riskLevel), not per fine-grained
+  // command pattern — a finer key would need the same new persisted-state work this deliberately
+  // avoids.
+  const rememberedActionKinds = new Set<string>()
+  const rememberedRiskLevels = new Set<string>()
+
+  /** The three choices every approval prompt offers (Phase 7) — "No" last, so `askSelect`'s fail-closed fallback (no real answer read) always resolves to declining, never approving. */
+  const APPROVAL_OPTIONS: SelectOption[] = [
+    { key: 'y', label: 'Yes' },
+    { key: 'a', label: "Yes, don't ask again this session" },
+    { key: 'n', label: 'No' },
+  ]
+
   /** claude-cli is the only backend that returns a real dollar cost (--output-format json's total_cost_usd) — every other backend (proxy, and now anthropic/openai/openrouter, none of which surface billing via TokenUsage.costUsd) gets an approximate estimate instead, see model-pricing.ts. */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
     if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
@@ -402,11 +440,23 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       console.log('\nNo active plan for this session.\n')
       return
     }
-    console.log(`\nPlan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`)
-    for (const task of lastPlanStatus.tasks) {
-      console.log(`  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`)
-    }
-    console.log(`\nSuccess criteria: ${lastPlanStatus.successCriteria}\n`)
+    // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — one combined console.log
+    // call, prefixed with PLAN_LINE_PREFIX, so the TUI's classifyLineKind (tui-app.tsx) renders
+    // the whole block as a single bordered PlanBox instead of plain 'system' text one line at a
+    // time. Prefix goes on its own leading line (stripped for display, same convention as
+    // ASSISTANT_REPLY_PREFIX) rather than glued onto "Plan: …" so it can never visually collide
+    // with real plan content. The plain (non-TUI) CLI path also goes through this same
+    // console.log call — startCapture's classify() there just emits the marker line as-is; the
+    // TUI-specific stripping never runs, and the marker glyph is unusual enough not to be
+    // mistaken for real output outside the TUI, matching how ASSISTANT_REPLY_PREFIX already
+    // behaves in non-TUI mode.
+    const lines = [
+      PLAN_LINE_PREFIX,
+      `Plan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`,
+      ...lastPlanStatus.tasks.map((task) => `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`),
+      `Success criteria: ${lastPlanStatus.successCriteria}`,
+    ]
+    console.log(`\n${lines.join('\n')}\n`)
   }
 
   /**
@@ -423,7 +473,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     console.log('\nSketching a plan (read-only grounding only, nothing staged)...\n')
     const result = await assistant.sketchPlan('cli', request)
-    console.log(`${result.reply ?? '(no reply)'}\n`)
+    // Phase 6 of the CLI formatting plan: this is genuine LLM-authored prose (often markdown —
+    // headers, `- [ ]` checklists), not deterministic CLI-controlled text, so it's routed through
+    // the same 'Aielia>' marker as an ordinary chat reply rather than left to default-classify as
+    // plain 'system' text — the TUI's classifyLineKind (tui-app.tsx) then renders it through the
+    // existing assistant-reply markdown path (markdown-line.tsx) instead of printing literal
+    // '##'/'- [ ]' characters, the same gap the underlying report flagged for the legacy
+    // (DEFAULT_PLAN_MODE) prose path specifically.
+    console.log(`Aielia> ${result.reply ?? '(no reply)'}\n`)
     if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
   }
 
@@ -817,7 +874,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // never gets mangled mid-overwrite.
   function writeToolStep(step: AssistantToolStep): void {
     clearProgress()
-    console.log(`  ⚙ ${step.summary}`)
+    // A denied call reports twice — see AssistantToolStep.deniedReason's doc comment — so the
+    // proposal line ("Reading X") a viewer already saw a moment earlier stays on screen and this
+    // second line closes the loop instead of replacing it.
+    if (step.deniedReason) {
+      console.log(`  ${ICONS.deniedStep} Denied: ${step.summary} — ${step.deniedReason}`)
+    } else {
+      console.log(`  ${toolStepIcon(step.tool)} ${step.summary}`)
+    }
     lastTurnToolSteps.push(step)
   }
 
@@ -1066,14 +1130,22 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
                 : 'write'
         const promptText =
           result.pendingActionKind === 'shell'
-            ? 'Run this command? (y/N) '
+            ? 'Run this command?'
             : result.pendingActionKind === 'email'
-              ? 'Send this email? (y/N) '
+              ? 'Send this email?'
               : result.pendingActionKind === 'batch'
-                ? 'Continue? (y/N) '
-                : 'Apply this write? (y/N) '
+                ? 'Continue?'
+                : 'Apply this write?'
         console.log(`\n[needs approval — ${kindLabel}] ${result.reason}`)
-        const confirmed = await askYesNo(promptText)
+        let confirmed: boolean
+        if (result.pendingActionKind && rememberedActionKinds.has(result.pendingActionKind)) {
+          console.log(`["don't ask again" active this session for ${kindLabel} — auto-approved]`)
+          confirmed = true
+        } else {
+          const decision = await askSelect(promptText, APPROVAL_OPTIONS)
+          confirmed = decision !== 'n'
+          if (decision === 'a' && result.pendingActionKind) rememberedActionKinds.add(result.pendingActionKind)
+        }
         lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn was a staged ${kindLabel} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
         await handleTurn(message, confirmed, result.pendingActionId)
@@ -1083,7 +1155,15 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       if (result.status === 'needs_approval') {
         console.log(`\n[needs approval — ${result.riskLevel}] ${result.reason}`)
         console.log(`  "${message}"`)
-        const confirmed = await askYesNo('Proceed? (y/N) ')
+        let confirmed: boolean
+        if (result.riskLevel && rememberedRiskLevels.has(result.riskLevel)) {
+          console.log(`["don't ask again" active this session for risk level ${result.riskLevel} — auto-approved]`)
+          confirmed = true
+        } else {
+          const decision = await askSelect('Proceed?', APPROVAL_OPTIONS)
+          confirmed = decision !== 'n'
+          if (decision === 'a' && result.riskLevel) rememberedRiskLevels.add(result.riskLevel)
+        }
         if (confirmed) {
           await handleTurn(message, true)
         } else {
@@ -1227,6 +1307,41 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       } catch {
         console.log(`\n[could not read a response — treating as blank]`)
         resolve('')
+      }
+    })
+  }
+
+  /**
+   * Structured multi-option counterpart of askYesNo/askLine (Phase 7's approval selector). The
+   * Ink shell overrides this with `PromptBridge.askSelect`, which routes to `SelectPrompt`'s
+   * real arrow-key/shortcut-key UI (`ink-select-prompt.tsx`); this plain-`readline` fallback is
+   * what a non-TUI REPL (or a piped/non-interactive session) actually reads from. Resolves with
+   * the chosen option's `key` — never the option's index or label. `selectOptions` is ordered by
+   * every call site with its safe/fail-closed choice last (mirroring askYesNo's own "no real
+   * answer → treat as declined" direction), and every failure-to-read path here resolves to that
+   * last option's key, never the first — same fail-closed reasoning as askYesNo's own doc comment
+   * above.
+   */
+  function askSelect(question: string, selectOptions: SelectOption[]): Promise<string> {
+    // Test-only seam — same shape as askYesNo's/askLine's own.
+    if (options.askSelect) return options.askSelect(question, selectOptions)
+    const fallbackKey = selectOptions[selectOptions.length - 1]!.key
+    if (nonInteractiveApprovalMode === 'decline') {
+      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      return Promise.resolve(fallbackKey)
+    }
+    const optionLines = selectOptions.map((option, i) => `  ${i + 1}) [${option.key}] ${option.label}`).join('\n')
+    return new Promise((resolve) => {
+      try {
+        rl.question(`${question}\n${optionLines}\n> `, (answer) => {
+          const trimmed = answer.trim().toLowerCase()
+          const byKey = selectOptions.find((option) => option.key.toLowerCase() === trimmed)
+          const byIndex = /^\d+$/.test(trimmed) ? selectOptions[Number(trimmed) - 1] : undefined
+          resolve((byKey ?? byIndex)?.key ?? fallbackKey)
+        })
+      } catch {
+        console.log(`\n[could not read a response — treating as declined]`)
+        resolve(fallbackKey)
       }
     })
   }
@@ -1437,7 +1552,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // every other indicator here ("blank when nothing to report").
       if (config.dangerouslySkipPermissions) indicators.push('⚠ Permissions: auto-approved (dangerouslySkipPermissions)')
       if (lastPlanStatus !== undefined) indicators.push('Plan mode: active')
-      const spendCapLine = await spendCapStatusLine()
+      // Persistent model/token/cost chrome (aielia_cli_formatting_plan.html Phase 1) — reuses
+      // the same cumulative spendState counters /cost already reads, so fetching it here once
+      // covers both the token/cost indicator and the cap-relative line below (replacing the
+      // separate spendCapStatusLine() call, which would otherwise re-fetch the same state).
+      indicators.push(`Model: ${config.model ?? backendDisplayModel[config.llmBackend]}`)
+      const spendState = await assistant.getSpendState('cli')
+      indicators.push(
+        `↑${spendState.cumulativeInputTokens.toLocaleString()} ↓${spendState.cumulativeOutputTokens.toLocaleString()} tokens (~$${spendState.cumulativeCostUsd.toFixed(4)})`,
+      )
+      const spendCapLine = formatSpendCapStatus(spendState, { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit })
       if (spendCapLine) indicators.push(spendCapLine)
       return indicators
     },
@@ -1459,7 +1583,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
  * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
  * at all — `main()` behaves byte-for-byte as it does today in both those cases.
  */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
 
@@ -1503,5 +1627,12 @@ function isEntryModule(): boolean {
 
 // Guarded so importing this module (e.g. from cli.test.ts, which drives runCli() directly
 // instead) never starts a second live REPL against the real process.stdin/stdout and the real
-// ~/.buildaharness/personal-assistant data directory.
+// ~/.buildaharness/personal-assistant data directory. Correctly resolves argv[1] vs.
+// import.meta.url for `tsx src/cli.ts` and other unbundled invocations, but this comparison
+// is fundamentally unreliable once this module is bundled: Vite/Rollup hoists this file's code
+// into a shared chunk (tui-app.ts statically imports runCli/SelectOption from here), so
+// import.meta.url inside the built dist/cli.js is that shared chunk's own URL, never
+// dist/cli.js's — the guard silently evaluates false and the packaged CLI exits 0 with no
+// REPL. bin.ts is the real, never-shared entry for the packaged binary (see its own comment)
+// and calls main() unconditionally instead of relying on this check.
 if (isEntryModule()) void main()

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { renderInk, type TestInkInstance } from './ink-test-render.js'
 import { TuiApp, EventLogBridge, PromptBridge, StatusBridge } from './tui-app.js'
+import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 // Full-mount smoke tests for the composed Ink shell (Phase 3). Excluded from root's blanket
 // `npm test` in vite.config.ts for the exact same reason tui-input.test.tsx already is — see
@@ -102,7 +103,7 @@ describe('TuiApp', () => {
     expect(eventLog.getSnapshot().lines.some((l) => l.kind === 'user' && l.text === 'hello')).toBe(true)
   })
 
-  it('a pending prompt switches the input to prompt mode and Enter resolves it via PromptBridge, echoing "> <answer>"', async () => {
+  it('a pending prompt switches the input to prompt mode and Enter resolves it via PromptBridge, echoing "> <question> → <answer>" (Phase 2 persistent approval record)', async () => {
     const { prompt, instance } = setup()
     const pending = prompt.askYesNo('Proceed? (y/N) ')
     await sleep()
@@ -110,7 +111,33 @@ describe('TuiApp', () => {
     await type(instance, 'y')
     await key(instance, ENTER)
     await expect(pending).resolves.toBe(true)
-    expect(strip(instance.lastFrame())).toContain('> y')
+    expect(strip(instance.lastFrame())).toContain('> Proceed? (y/N) → y')
+  })
+
+  it('a pending askSelect prompt (Phase 7) switches the input to the SelectPrompt selector instead of TuiInput, and a shortcut keystroke resolves it, echoing the chosen option\'s label', async () => {
+    const { prompt, instance } = setup()
+    const options = [
+      { key: 'y', label: 'Yes' },
+      { key: 'a', label: "Yes, don't ask again this session" },
+      { key: 'n', label: 'No' },
+    ]
+    const pending = prompt.askSelect('Proceed?', options)
+    await sleep()
+    const frame = strip(instance.lastFrame())
+    expect(frame).toContain('Proceed?')
+    expect(frame).toContain('[y] Yes')
+    expect(frame).toContain("[a] Yes, don't ask again this session")
+    expect(frame).toContain('[n] No')
+    await key(instance, 'a')
+    await expect(pending).resolves.toBe('a')
+    // The echoed answer is the option's label, not its raw key ("a") — but at columns=40 the
+    // combined "> Proceed? → Yes, don't ask again this session" line word-wraps inside its
+    // bordered box, so check the un-wrapped prefix and the label's own text rather than the
+    // full line as one unbroken substring.
+    const echoed = strip(instance.lastFrame())
+    expect(echoed).toContain('> Proceed? → Yes')
+    expect(echoed).toContain("don't ask again")
+    expect(echoed).toContain('this session')
   })
 
   it('Ctrl+C calls onExit', async () => {
@@ -133,11 +160,14 @@ describe('TuiApp', () => {
     await key(instance, ENTER)
     await sleep()
     const lines = eventLog.getSnapshot().lines
-    // 'first' (margin after), '> y' (no margins — grouped with the chat turn above it), then
-    // 'second's own margin-before collapses into the same one (pushTurnMargin is a no-op when the
-    // last line is already a margin), margin after.
-    expect(lines.map((l) => l.text)).toEqual(['first', '', '> y', '', 'second', ''])
-    expect(lines.map((l) => l.kind)).toEqual(['user', 'margin', 'user', 'margin', 'user', 'margin'])
+    // 'first' (margin after), '> Proceed? (y/N) → y' (no margins — grouped with the chat turn
+    // above it, and now carries the question text too — Phase 2), then 'second's own
+    // margin-before collapses into the same one (pushTurnMargin is a no-op when the last line is
+    // already a margin), margin after.
+    expect(lines.map((l) => l.text)).toEqual(['first', '', '> Proceed? (y/N) → y', '', 'second', ''])
+    // The resolved prompt answer is 'approval', not 'user' — its own box color (see tui-app.tsx's
+    // LogLineText), distinct from the two real chat lines around it.
+    expect(lines.map((l) => l.kind)).toEqual(['user', 'margin', 'approval', 'margin', 'user', 'margin'])
   })
 
   it('renders both a stderr line and an ordinary stdout line into scrollback (kind-to-color mapping itself is unit-tested in tui-app-bridges.test.ts\'s classifyLineKind coverage; this fake TestStdout reports no color support, so ANSI codes aren\'t observable here)', async () => {
@@ -148,5 +178,53 @@ describe('TuiApp', () => {
     const raw = strip(instance.fullOutput())
     expect(raw).toContain('a normal banner line')
     expect(raw).toContain('something went wrong')
+  })
+
+  it('renders basic markdown in assistant reply lines — headers, checkboxes, bold — instead of the literal source characters (report finding: "## Checklist" and "- [ ]" printed literally)', async () => {
+    const { eventLog, instance } = setup()
+    eventLog.handleEvent({ type: 'token', text: '\nAielia> ' })
+    eventLog.handleEvent({
+      type: 'line',
+      lines: ['## Checklist', '- [ ] Buy milk', '- [x] Done thing', '**important**'],
+      stream: 'stdout',
+    })
+    await sleep()
+    const raw = strip(instance.fullOutput())
+    expect(raw).not.toContain('## Checklist')
+    expect(raw).toContain('Checklist')
+    expect(raw).not.toContain('- [ ] Buy milk')
+    expect(raw).toContain('☐ Buy milk')
+    expect(raw).toContain('☑ Done thing')
+    expect(raw).not.toContain('**important**')
+    expect(raw).toContain('important')
+  })
+
+  it('renders a PLAN_LINE_PREFIX-marked block as a bordered PlanBox with the marker stripped (Phase 6, "distinct plan-mode UI")', async () => {
+    const { eventLog, instance } = setup()
+    eventLog.handleEvent({
+      type: 'line',
+      lines: [PLAN_LINE_PREFIX, 'Plan: project_planning (50.0% complete)', '  ✓ [COMPLETE] scope_definition — Define scope'],
+      stream: 'stdout',
+    })
+    await sleep()
+    const raw = strip(instance.fullOutput())
+    expect(raw).not.toContain(PLAN_LINE_PREFIX)
+    expect(raw).toContain('Plan: project_planning')
+    expect(raw).toContain('scope_definition')
+    // A bordered Box renders round-corner border characters — confirms this went through
+    // PlanBox, not plain <Text>, the same way UserMessageBox's own border is the observable
+    // signal that a line got boxed rather than printed flat.
+    expect(raw).toContain('╭')
+  })
+
+  it('shows a "Thinking…" spinner between submitting a chat line and the first output event, and hides it once output arrives (report finding: nothing shows in that gap today)', async () => {
+    const { eventLog, instance } = setup()
+    await type(instance, 'hi')
+    await key(instance, ENTER)
+    await sleep()
+    expect(strip(instance.lastFrame())).toContain('Thinking…')
+    eventLog.handleEvent({ type: 'progress', text: '[step 1/5] Gathering evidence…' })
+    await sleep()
+    expect(strip(instance.lastFrame())).not.toContain('Thinking…')
   })
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EventLogBridge, PromptBridge, StatusBridge } from './tui-app.js'
+import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 // These exercise only the plain classes (no JSX ever evaluated, no Ink mounted) — like
 // tui-input-layout.test.ts, importing them from a module that also imports 'ink' at the top is
@@ -10,7 +11,7 @@ import { EventLogBridge, PromptBridge, StatusBridge } from './tui-app.js'
 describe('EventLogBridge', () => {
   it('starts with an empty snapshot', () => {
     const bridge = new EventLogBridge()
-    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '' })
+    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '', waitingForOutput: false })
   })
 
   it('notifies subscribers and updates progressText on a progress event', () => {
@@ -34,13 +35,46 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'token', text: '\nAielia> ' })
     bridge.handleEvent({ type: 'token', text: 'Hi' })
     bridge.handleEvent({ type: 'token', text: ' there' })
-    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '\nAielia> Hi there' })
+    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '\nAielia> Hi there', waitingForOutput: false })
   })
 
   it('a line event with no pending transientText commits its lines directly, classified "tool" from the ⚙ prefix', () => {
     const bridge = new EventLogBridge()
     bridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' })
     expect(bridge.getSnapshot().lines).toEqual([{ text: '  ⚙ Listing .', kind: 'tool' }])
+  })
+
+  it('also classifies a ⚠-prefixed tool-step line (cli-icons.ts\'s toolStepIcon for a proposing tool like write_file/run_shell_command) as "tool", not "system"', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['  ⚠ Proposing to run: rm -rf /tmp/x'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '  ⚠ Proposing to run: rm -rf /tmp/x', kind: 'tool' }])
+  })
+
+  // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — cli.ts's printPlan() commits
+  // one PLAN_LINE_PREFIX-marked block; unlike every other kind, it must survive as a single
+  // un-split LogLine (marker stripped) so tui-app.tsx's PlanBox can wrap the whole multi-line
+  // status in one bordered widget instead of one row at a time.
+  it('a PLAN_LINE_PREFIX-marked line event commits as a single un-split "plan"-kind LogLine with the marker stripped', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({
+      type: 'line',
+      lines: [PLAN_LINE_PREFIX, 'Plan: project_planning (50.0% complete)', '  ✓ [COMPLETE] scope_definition — Define scope', 'Success criteria: Launch shipped'],
+      stream: 'stdout',
+    })
+    expect(bridge.getSnapshot().lines).toEqual([
+      {
+        text: 'Plan: project_planning (50.0% complete)\n  ✓ [COMPLETE] scope_definition — Define scope\nSuccess criteria: Launch shipped',
+        kind: 'plan',
+      },
+    ])
+  })
+
+  it('beginTurn() sets waitingForOutput, and the next handled event (of any type) clears it', () => {
+    const bridge = new EventLogBridge()
+    bridge.beginTurn()
+    expect(bridge.getSnapshot().waitingForOutput).toBe(true)
+    bridge.handleEvent({ type: 'progress', text: '[step 1/5] Gathering evidence…' })
+    expect(bridge.getSnapshot().waitingForOutput).toBe(false)
   })
 
   it('merges pending transientText with a closing line event into committed lines, matching cli.ts\'s streamed-reply sequence, classified "assistant", with the "Aielia>" label (and its leading blank-line artifact) stripped from the displayed text', () => {
@@ -50,12 +84,13 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'line', lines: [' there!', ''], stream: 'stdout' })
     expect(bridge.getSnapshot()).toEqual({
       lines: [
-        { text: 'Hi there!', kind: 'assistant' },
-        { text: '', kind: 'assistant' },
+        { text: 'Hi there!', kind: 'assistant', continuation: false },
+        { text: '', kind: 'assistant', continuation: true },
         { text: '', kind: 'margin' },
       ],
       progressText: '',
       transientText: '',
+      waitingForOutput: false,
     })
   })
 
@@ -63,10 +98,27 @@ describe('EventLogBridge', () => {
     const bridge = new EventLogBridge()
     bridge.handleEvent({ type: 'line', lines: ['', 'Aielia> Hello there', ''], stream: 'stdout' })
     expect(bridge.getSnapshot().lines).toEqual([
-      { text: 'Hello there', kind: 'assistant' },
-      { text: '', kind: 'assistant' },
+      { text: 'Hello there', kind: 'assistant', continuation: false },
+      { text: '', kind: 'assistant', continuation: true },
       { text: '', kind: 'margin' },
     ])
+  })
+
+  // Regression: "Wrote demo4.txt."/"apple" (a two-line, non-streaming assistant reply) rendered as
+  // two separately-bulleted lines instead of one statement, since markdown-line.tsx's
+  // ASSISTANT_BULLET was added to every split line with no way to tell "first" from "rest".
+  it('marks only the first split line of a multi-line assistant reply as non-continuation; every other kind never gets the field at all', () => {
+    const bridge = new EventLogBridge()
+    bridge.handleEvent({ type: 'line', lines: ['Aielia> Wrote "demo4.txt".\napple'], stream: 'stdout' })
+    expect(bridge.getSnapshot().lines).toEqual([
+      { text: 'Wrote "demo4.txt".', kind: 'assistant', continuation: false },
+      { text: 'apple', kind: 'assistant', continuation: true },
+      { text: '', kind: 'margin' },
+    ])
+
+    const toolBridge = new EventLogBridge()
+    toolBridge.handleEvent({ type: 'line', lines: ['  ⚙ Listing .'], stream: 'stdout' })
+    expect(toolBridge.getSnapshot().lines).toEqual([{ text: '  ⚙ Listing .', kind: 'tool' }])
   })
 
   it('an assistant reply gets a trailing blank margin line, and clears any stale progressText from before it finished', () => {
@@ -75,11 +127,12 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'line', lines: ['Aielia> Done.'], stream: 'stdout' })
     expect(bridge.getSnapshot()).toEqual({
       lines: [
-        { text: 'Done.', kind: 'assistant' },
+        { text: 'Done.', kind: 'assistant', continuation: false },
         { text: '', kind: 'margin' },
       ],
       progressText: '',
       transientText: '',
+      waitingForOutput: false,
     })
   })
 
@@ -107,10 +160,10 @@ describe('EventLogBridge', () => {
     expect(bridge.getSnapshot().lines).toEqual([{ text: 'hello there', kind: 'user' }])
   })
 
-  it('pushEchoLine with a "> " prefix (a resolved prompt answer) keeps that prefix', () => {
+  it('pushEchoLine with a "> " prefix (a resolved prompt answer) keeps that prefix and classifies "approval", not "user" — its own box color, distinct from a real chat message', () => {
     const bridge = new EventLogBridge()
     bridge.pushEchoLine('> ', 'y')
-    expect(bridge.getSnapshot().lines).toEqual([{ text: '> y', kind: 'user' }])
+    expect(bridge.getSnapshot().lines).toEqual([{ text: '> y', kind: 'approval' }])
   })
 
   it('pushTurnMargin appends one blank "margin" line, is a no-op on an empty log, and never stacks two in a row', () => {
@@ -168,6 +221,20 @@ describe('PromptBridge', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     bridge.submit('a note')
     expect(listener).toHaveBeenCalledTimes(2)
+  })
+
+  it('askSelect parks a pending question alongside its option list, and resolves with whatever key submit() is called with (Phase 7)', async () => {
+    const bridge = new PromptBridge()
+    const options = [
+      { key: 'y', label: 'Yes' },
+      { key: 'a', label: "Yes, don't ask again this session" },
+      { key: 'n', label: 'No' },
+    ]
+    const pending = bridge.askSelect('Proceed?', options)
+    expect(bridge.getSnapshot()).toEqual({ question: 'Proceed?', options })
+    bridge.submit('a')
+    await expect(pending).resolves.toBe('a')
+    expect(bridge.getSnapshot()).toBeUndefined()
   })
 })
 
