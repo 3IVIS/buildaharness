@@ -1,0 +1,101 @@
+name: Publish aielia update manifest
+
+# Runs when a human publishes the draft release build-aielia-cli.yml created. Writes the
+# product-scoped manifest `aielia-latest.json` (tag, per-asset URL/size/sha256) plus the
+# install scripts into the myaielia repo root, which GitHub Pages serves at
+# https://myaielia.com/. `aielia update` and install.sh/install.ps1 resolve through that
+# manifest — never GitHub's repo-wide /releases/latest, which is shared with every other
+# *-v* release line in this repo.
+#
+# Needs secrets.MYAIELIA_DEPLOY_KEY (same as deploy-chat-ui.yml).
+# workflow_dispatch with a tag lets a failed publish be re-run without re-publishing the release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish the manifest for (e.g. aielia-v0.3.1)'
+        required: true
+
+# A separate group from deploy-chat-ui on purpose: a shared group would drop an older *pending*
+# run even with cancel-in-progress: false, which could silently discard a manifest publish.
+# Both workflows instead rebase-and-retry their push (see the push step below).
+concurrency:
+  group: publish-aielia-manifest
+  cancel-in-progress: false
+
+jobs:
+  publish-manifest:
+    name: Write manifest to myaielia
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'aielia-v')
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout buildaharness
+        uses: actions/checkout@v4
+
+      - name: Check deploy key is present
+        run: |
+          if [ -z "${{ secrets.MYAIELIA_DEPLOY_KEY }}" ]; then
+            echo "❌  secrets.MYAIELIA_DEPLOY_KEY is not set — cannot push to 3IVIS/myaielia."
+            exit 1
+          fi
+
+      - name: Download release assets
+        run: |
+          case "$TAG" in aielia-v*) ;; *) echo "❌  $TAG is not an aielia-v* tag"; exit 1 ;; esac
+          mkdir release-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release-assets --pattern 'aielia-*'
+          ls -l release-assets
+
+      # HEAD-checks every asset URL and fails unless each is a 200, so a broken manifest is never published.
+      - name: Generate manifest
+        run: |
+          node scripts/generate-aielia-manifest.mjs \
+            --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --assets-dir release-assets --out aielia-latest.json --check-urls
+          cat aielia-latest.json
+
+      - name: Checkout myaielia
+        uses: actions/checkout@v4
+        with:
+          repository: 3IVIS/myaielia
+          ssh-key: ${{ secrets.MYAIELIA_DEPLOY_KEY }}
+          path: pages
+
+      - name: Sync manifest and install scripts into pages/
+        run: |
+          cp aielia-latest.json pages/aielia-latest.json
+          # install.sh / install.ps1 land in the next stage; copy whichever exist.
+          for f in install.sh install.ps1; do
+            if [ -f "packages/aielia/$f" ]; then cp "packages/aielia/$f" "pages/$f"; fi
+          done
+
+      - name: Commit and push if changed
+        working-directory: pages
+        run: |
+          git config user.name  "buildaharness-ci"
+          git config user.email "ci@buildaharness.com"
+          for f in aielia-latest.json install.sh install.ps1; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
+          if git diff --cached --quiet; then
+            echo "No changes — nothing to publish."
+            exit 0
+          fi
+          git commit -m "publish: aielia manifest for $TAG"
+          # deploy-chat-ui.yml also pushes to main (disjoint paths); if it won the race, rebase and retry.
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push failed (attempt $attempt) — rebasing onto origin and retrying"
+            git pull --rebase origin main
+          done
+          echo "❌  Could not push after 3 attempts"
+          exit 1

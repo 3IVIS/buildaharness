@@ -1,0 +1,136 @@
+name: Build aielia CLI binaries
+
+# Triggers on tags matching aielia-v* pushed to the repo — the same tag that triggers
+# publish-aielia.yml (npm), so one tag ships both channels.
+#
+#   git tag aielia-v0.3.1 && git push origin aielia-v0.3.1
+#
+# Builds the standalone (Node SEA) `aielia` binary natively per OS/arch — SEA has no
+# cross-compile story — and attaches each binary + its .sha256 sidecar to a DRAFT GitHub
+# Release. A human publishing that draft is what triggers publish-aielia-manifest.yml, which
+# writes the product-scoped aielia-latest.json manifest (and install scripts) to myaielia.com.
+#
+# Each matrix leg uploads to a workflow artifact and ONE final job creates the release: four
+# legs racing to create the same draft release by tag can yield duplicate drafts.
+#
+# Unsigned: macOS Gatekeeper / Windows SmartScreen will warn on first launch (same stance as
+# build-desktop.yml). Expect a debugging pass on the first real tag push for the macOS/Windows legs.
+
+on:
+  push:
+    tags:
+      - 'aielia-v*'
+
+jobs:
+  check-version:
+    name: Check version matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check package.json version matches tag
+        working-directory: packages/aielia
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#aielia-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "❌  packages/aielia/package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✅  Version $PKG_VERSION matches tag"
+      - name: Check version.ts CLI_VERSION matches tag
+        run: node scripts/check-cli-version-sync.mjs
+
+  build:
+    name: Build ${{ matrix.asset }}
+    needs: check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest       # Apple Silicon
+            asset: aielia-darwin-arm64
+          - runner: macos-15-intel     # Intel Mac. macos-13 (the label the plan was drafted with) has been retired by GitHub; verify this label still exists on the first real tag push.
+            asset: aielia-darwin-x64
+          - runner: ubuntu-latest
+            asset: aielia-linux-x64
+          - runner: windows-latest
+            asset: aielia-win32-x64.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # aielia imports @buildaharness/harness + runtime by workspace link; build their dist first.
+      - name: Build workspace dependencies
+        run: |
+          npm run build --workspace=packages/harness
+          npm run build --workspace=packages/runtime
+
+      - name: Build SEA binary
+        run: npm run build:sea --workspace=packages/aielia
+
+      - name: Check the binary was produced under the expected name
+        shell: bash
+        working-directory: packages/aielia/sea-build
+        run: |
+          for f in "${{ matrix.asset }}" "${{ matrix.asset }}.sha256"; do
+            if [ ! -f "$f" ]; then
+              echo "❌  Missing expected build output: $f (found: $(ls))"
+              exit 1
+            fi
+          done
+
+      # The binary must run on the platform that built it and report the tag's version.
+      - name: Smoke test (--version)
+        shell: bash
+        working-directory: packages/aielia/sea-build
+        run: |
+          OUT=$(./"${{ matrix.asset }}" --version)
+          echo "$OUT"
+          EXPECTED="${GITHUB_REF_NAME#aielia-v}"
+          if ! echo "$OUT" | grep -q "$EXPECTED"; then
+            echo "❌  --version output does not contain $EXPECTED"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            packages/aielia/sea-build/${{ matrix.asset }}
+            packages/aielia/sea-build/${{ matrix.asset }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: Create draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create the release and upload assets
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -l release-assets
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'aielia CLI ${{ github.ref_name }}'
+          body: |
+            Standalone `aielia` binaries (no Node required). Unsigned — macOS Gatekeeper / Windows SmartScreen will warn on first launch.
+            Publishing this release updates https://myaielia.com/aielia-latest.json, which `aielia update` and the install scripts read.
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/*

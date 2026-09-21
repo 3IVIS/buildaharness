@@ -100,4 +100,12 @@ jobs:
             exit 0
           fi
           git commit -m "deploy: chat-ui /try build from ${GITHUB_SHA::7}"
-          git push
+          # publish-aielia-manifest.yml also pushes to main (disjoint paths); if it won the
+          # race, rebase and retry rather than failing non-fast-forward.
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push failed (attempt $attempt) — rebasing onto origin and retrying"
+            git pull --rebase origin main
+          done
+          echo "❌  Could not push after 3 attempts"
+          exit 1
