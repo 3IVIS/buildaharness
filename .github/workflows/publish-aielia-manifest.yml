@@ -73,7 +73,7 @@ jobs:
       - name: Sync manifest and install scripts into pages/
         run: |
           cp aielia-latest.json pages/aielia-latest.json
-          # install.sh / install.ps1 land in the next stage; copy whichever exist.
+          # Copy the installers alongside the manifest (guarded so a missing file never fails the publish).
           for f in install.sh install.ps1; do
             if [ -f "packages/aielia/$f" ]; then cp "packages/aielia/$f" "pages/$f"; fi
           done
