@@ -90,6 +90,11 @@ export const AUDIT_SLICES = [
   // compatible — the shape `semanticChangeReviewer` (arm `flagOn` vs `changeReviewOff`) is layered
   // on the reviewer's lexical isNegation check for.
   'audit_change_review',
+  // Multi-turn: a fact is *implied* (not stated in a lexically catchable way) on turn 1, an
+  // unrelated turn follows, and turn 3 needs the fact to be answered well — plus controls where
+  // the "implied" fact is hypothetical or retracted and must not be remembered. The shape
+  // `classifyTurnIntent`'s `statesDurableFacts` (arm `flagOn` vs `modelInferredFactsOff`) exists for.
+  'audit_model_inferred_facts',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

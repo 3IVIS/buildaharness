@@ -1,0 +1,24 @@
+{
+  "id": "audit-model-inferred-night-shift",
+  "category": "lookup",
+  "slice": "audit_model_inferred_facts",
+  "intent": "Turn 1 implies the user works night shifts on a ward; turn 3's schedule should be built around that.",
+  "prompt": "Home at 7:40 this morning again after the overnight ward chaos, and now I have to try to sleep while the neighbours run their lawnmowers.",
+  "followups": [
+    {
+      "prompt": "How do I spell 'necessary'?"
+    },
+    {
+      "prompt": "Suggest a weekly gym schedule for me. Tailor it to my situation, which I've already told you about."
+    }
+  ],
+  "grader": {
+    "regex": "night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the schedule accounts for night-shift working hours. Fail = a generic morning-person schedule. [C3 audit_model_inferred_facts: turn 1 only *implies* a fact in wording the lexical user_asserted pass does not catch (checked with extractFactsFromTurn), turn 2 is unrelated, turn 3 needs the fact. Caveat: within-session only, and the raw transcript is still in context for all three turns, so a null arm differential can mean the transcript already carried the fact rather than that model-inferred facts add nothing; see the manifest corpusNote.]"
+}

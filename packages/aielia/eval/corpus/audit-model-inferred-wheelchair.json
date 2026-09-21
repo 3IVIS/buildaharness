@@ -1,0 +1,27 @@
+{
+  "id": "audit-model-inferred-wheelchair",
+  "category": "lookup",
+  "slice": "audit_model_inferred_facts",
+  "intent": "Turn 1 implies the user uses a wheelchair; turn 3's venue choice turns on step-free access.",
+  "prompt": "The lift at Bank station is out again, so I'll be rolling round to the street entrance with my chair.",
+  "followups": [
+    {
+      "prompt": "How many fluid ounces are in 350 ml?"
+    },
+    {
+      "prompt": "I'm choosing a restaurant for Friday: a rooftop place with a great view up 60 steps with no lift, or a plain one on the ground floor. Tailor the pick to my situation, which I've already told you about, and choose one."
+    }
+  ],
+  "grader": {
+    "regex": "ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)",
+    "notContains": [
+      "rooftop is the better"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = picks the ground-floor place with step-free access in mind. Fail = picks the rooftop for the view. [C3 audit_model_inferred_facts: turn 1 only *implies* a fact in wording the lexical user_asserted pass does not catch (checked with extractFactsFromTurn), turn 2 is unrelated, turn 3 needs the fact. Caveat: within-session only, and the raw transcript is still in context for all three turns, so a null arm differential can mean the transcript already carried the fact rather than that model-inferred facts add nothing; see the manifest corpusNote.]"
+}

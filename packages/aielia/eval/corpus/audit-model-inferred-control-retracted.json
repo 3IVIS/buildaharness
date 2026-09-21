@@ -1,0 +1,29 @@
+{
+  "id": "audit-model-inferred-control-retracted",
+  "category": "lookup",
+  "slice": "audit_model_inferred_facts",
+  "intent": "Control \u2014 a retracted implication must not be remembered as a fact about the user.",
+  "prompt": "Biscuit gets frantic when he's home alone past eight, so I left the pub early again.",
+  "followups": [
+    {
+      "prompt": "Sorry, ignore that last message. Biscuit is my sister's dog and I was only dog-sitting once. I don't have any pets."
+    },
+    {
+      "prompt": "I'm booking a weekend away: hotel A is in the city centre and does not allow pets, hotel B is a bit out of town and is pet-friendly. Pick one for me based on my actual circumstances."
+    }
+  ],
+  "grader": {
+    "regex": "hotel",
+    "notContains": [
+      "your dog",
+      "Biscuit",
+      "your pet"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers without treating the retracted dog as the user's. Fail = wrong-memory tax: still refers to Biscuit / a dog as the user's. [C3 audit_model_inferred_facts: turn 1 only *implies* a fact in wording the lexical user_asserted pass does not catch (checked with extractFactsFromTurn), turn 2 is unrelated, turn 3 needs the fact. Caveat: within-session only, and the raw transcript is still in context for all three turns, so a null arm differential can mean the transcript already carried the fact rather than that model-inferred facts add nothing; see the manifest corpusNote.]"
+}

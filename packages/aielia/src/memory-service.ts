@@ -117,6 +117,22 @@ function isNearDuplicateText(a: string, b: string): boolean {
 }
 
 /**
+ * `AUDIT_MODEL_INFERRED_FACTS` gate — feature-value audit (Phase C3 of the internal plan).
+ * Default **ON**: `classifyTurnIntent`'s `statesDurableFacts` (source `model_inferred`) reach
+ * memory today, so an unset / empty / truthy value keeps that behaviour. Set to a falsy value
+ * (`0` / `false` / `off` / `no` / `disabled`) to drop them, leaving only the lexical
+ * `user_asserted` pass. Gates the *consumption* of the classifier's facts, not the classifier call
+ * (which also produces the intent/risk fields every arm needs). Read at exactly one call site —
+ * `buildTurnFacts()` below. Same shape as `semanticContradictionEnabled()` (contradiction-checker.ts).
+ */
+export function modelInferredFactsEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_MODEL_INFERRED_FACTS ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
  * Combines this turn's two fact-capture passes into one ordered list: the free lexical pass
  * first, then any LLM-derived fact whose text isn't a near-duplicate of something the lexical pass
  * already caught (see isNearDuplicateText). Both passes are always considered now (Phase 2) —
@@ -140,15 +156,21 @@ function mergeTurnFacts(lexicalFacts: UserFact[], llmFacts: UserFact[]): UserFac
  */
 export function buildTurnFacts(sessionId: string, userMessage: string, statedFacts: StatedFact[]): UserFact[] {
   const lexicalFacts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
-  const llmFacts: UserFact[] = statedFacts.map((fact) => ({
-    text: fact.text,
-    extractedAt: new Date().toISOString(),
-    sourceTurn: `turn:${sessionId}`,
-    source: 'model_inferred',
-    durable: fact.durable,
-    confidence: fact.confidence,
-    category: fact.category,
-  }))
+  // The single AUDIT_MODEL_INFERRED_FACTS read: every path a `model_inferred` fact takes into the
+  // session store, durable store, pending-confirmation queue, prompt or the harness's
+  // currentTurnFacts goes through this function, so dropping them here (and only here) leaves the
+  // classifier call itself and the lexical `user_asserted` pass untouched.
+  const llmFacts: UserFact[] = modelInferredFactsEnabled()
+    ? statedFacts.map((fact) => ({
+        text: fact.text,
+        extractedAt: new Date().toISOString(),
+        sourceTurn: `turn:${sessionId}`,
+        source: 'model_inferred',
+        durable: fact.durable,
+        confidence: fact.confidence,
+        category: fact.category,
+      }))
+    : []
   return mergeTurnFacts(lexicalFacts, llmFacts)
 }
 

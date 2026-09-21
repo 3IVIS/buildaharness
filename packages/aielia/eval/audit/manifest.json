@@ -131,6 +131,22 @@
       "status": "queued",
       "corpusAdequacy": "acceptable",
       "corpusNote": "Within-turn once the belief is held; the belief-establishing turn is part of the task (pre-seeded memory is not a supported corpus shape, so every task states the constraint on turn 1 and proposes the conflicting change on turn 3). Caveats: conflicts against beliefs from a much earlier session are out of scope; the hook is skipped for a change that reads like a coding fact (looksLikeCodingFact) and runs only after the mechanical review passed, so the slice uses natural-language domains; whether the constraint reaches a >= 0.8-confidence belief depends on fact extraction, so a null arm differential may mean the belief was never held rather than that the call is worthless."
+    },
+    {
+      "id": "model-inferred-facts",
+      "title": "Model-inferred facts",
+      "hypothesis": "Facts the classifier infers from a message (statesDurableFacts, source model_inferred) are recalled correctly on later turns often enough to justify recording them, without a wrong-memory tax from hypotheticals and retracted statements.",
+      "arms": [
+        "modelInferredFactsOff",
+        "flagOn"
+      ],
+      "slice": "audit_model_inferred_facts",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 10,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "Mechanism is cross-turn; slice covers within-session recall over 3 turns. Cross-session persistence and the /memory confirm queue are not exercised. The flag gates consumption of the classifier's facts (buildTurnFacts), not the classifier call. Caveat: the raw transcript is still in context on turn 3, so a null differential may mean the transcript already carried the fact rather than that recording it adds nothing. Turn-1 phrasings were checked against the lexical pass (extractFactsFromTurn returns nothing), so only the model_inferred path can record them."
     }
   ]
 }

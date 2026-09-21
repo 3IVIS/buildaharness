@@ -1,0 +1,24 @@
+{
+  "id": "audit-model-inferred-finals",
+  "category": "lookup",
+  "slice": "audit_model_inferred_facts",
+  "intent": "Turn 1 implies the user is a pharmacology student sitting exams; turn 3's book pick should fit that.",
+  "prompt": "Only two weeks until my finals and I haven't opened the pharmacology notes yet.",
+  "followups": [
+    {
+      "prompt": "Give me a one-line definition of photosynthesis."
+    },
+    {
+      "prompt": "Recommend one book for me to read this month. Tailor it to my situation, which I've already told you about."
+    }
+  ],
+  "grader": {
+    "regex": "pharmac|exam|finals|revision|study|textbook|student"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the recommendation reflects the upcoming pharmacology finals. Fail = a generic pick. [C3 audit_model_inferred_facts: turn 1 only *implies* a fact in wording the lexical user_asserted pass does not catch (checked with extractFactsFromTurn), turn 2 is unrelated, turn 3 needs the fact. Caveat: within-session only, and the raw transcript is still in context for all three turns, so a null arm differential can mean the transcript already carried the fact rather than that model-inferred facts add nothing; see the manifest corpusNote.]"
+}

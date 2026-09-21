@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { InMemoryAdapter, InMemoryReminderStore, type ChatMessage, type ChatOptions, type ILLMClient, type LLMStructuredResponse, type ToolDefinition } from '@buildaharness/runtime'
 import { InMemoryExperienceStore } from '@buildaharness/harness'
 import {
   MemoryService,
   buildTurnFacts,
+  modelInferredFactsEnabled,
   DURABLE_FACTS_KEY,
   PENDING_CONFIRMATION_KEY,
   REJECTED_FACTS_KEY,
@@ -335,5 +336,66 @@ describe('MemoryService.forgetFact', () => {
 
     expect(await service.forgetFact(5, 's1')).toBeUndefined()
     expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[]).map((f) => f.text)).toEqual(['fact A'])
+  })
+})
+
+describe('modelInferredFactsEnabled (AUDIT_MODEL_INFERRED_FACTS gate — Phase C3)', () => {
+  it('defaults ON when the flag is unset or empty', () => {
+    expect(modelInferredFactsEnabled({})).toBe(true)
+    expect(modelInferredFactsEnabled({ AUDIT_MODEL_INFERRED_FACTS: '' })).toBe(true)
+    expect(modelInferredFactsEnabled({ AUDIT_MODEL_INFERRED_FACTS: '  ' })).toBe(true)
+  })
+
+  it('stays ON for truthy values', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'anything-else']) {
+      expect(modelInferredFactsEnabled({ AUDIT_MODEL_INFERRED_FACTS: v }), v).toBe(true)
+    }
+  })
+
+  it('turns OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', 'DISABLED', ' Off ']) {
+      expect(modelInferredFactsEnabled({ AUDIT_MODEL_INFERRED_FACTS: v }), v).toBe(false)
+    }
+  })
+
+  describe('when OFF (process.env)', () => {
+    const prior = process.env.AUDIT_MODEL_INFERRED_FACTS
+    beforeEach(() => {
+      process.env.AUDIT_MODEL_INFERRED_FACTS = '0'
+    })
+    afterEach(() => {
+      if (prior === undefined) delete process.env.AUDIT_MODEL_INFERRED_FACTS
+      else process.env.AUDIT_MODEL_INFERRED_FACTS = prior
+    })
+
+    it('buildTurnFacts drops model_inferred facts but keeps the lexical user_asserted pass', () => {
+      const facts = buildTurnFacts('s1', 'My name is Priya.', [
+        statedFact({ text: 'the user has a dog', confidence: 'high', category: 'other' }),
+      ])
+      expect(facts.length).toBeGreaterThan(0)
+      expect(facts.every((f) => f.source === 'user_asserted')).toBe(true)
+      expect(facts.some((f) => f.text.includes('dog'))).toBe(false)
+    })
+
+    it('recordFacts records nothing (no store touched) for a message only the classifier caught, and no contradiction-check LLM call is made', async () => {
+      const llm = new QueuedStructuredLLMClient([])
+      const { service, memory } = newService(llm)
+      const result = await service.recordFacts('s1', "Biscuit gets frantic when he's home alone past eight", [
+        statedFact({ text: 'the user has a dog named Biscuit', confidence: 'high', category: 'other' }),
+      ])
+      expect(result).toEqual({ contradictions: [], corroborations: [] })
+      expect(await memory.get('facts:s1')).toBeUndefined()
+      expect(await memory.get(DURABLE_FACTS_KEY)).toBeUndefined()
+      expect(await memory.get(PENDING_CONFIRMATION_KEY)).toBeUndefined()
+      expect(llm.calls).toBe(0)
+    })
+  })
+
+  it('when ON (default), the same classifier-only fact is recorded as model_inferred', () => {
+    const facts = buildTurnFacts('s1', "Biscuit gets frantic when he's home alone past eight", [
+      statedFact({ text: 'the user has a dog named Biscuit', confidence: 'high', category: 'other' }),
+    ])
+    expect(facts).toHaveLength(1)
+    expect(facts[0].source).toBe('model_inferred')
   })
 })

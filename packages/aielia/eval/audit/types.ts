@@ -26,6 +26,7 @@ import type { ArmName } from '../arms.js'
  *   semantic-failure-match→ ["failureMatchOff", "flagOn"]  (the LLM failure-mode-matcher call = candidate)
  *   semantic-criterion-coverage → ["criterionCoverageOff", "flagOn"] (the LLM criterion-coverage call = candidate)
  *   semantic-change-reviewer    → ["changeReviewOff", "flagOn"] (the LLM change-reviewer call = candidate)
+ *   model-inferred-facts        → ["modelInferredFactsOff", "flagOn"] (classifier-inferred facts recorded = candidate)
  */
 export const AuditVerdictSchema = z.enum(['KEEP', 'CUT', 'INCONCLUSIVE'])
 export type AuditVerdict = z.infer<typeof AuditVerdictSchema>

@@ -1,0 +1,30 @@
+{
+  "id": "audit-model-inferred-control-hypothetical",
+  "category": "lookup",
+  "slice": "audit_model_inferred_facts",
+  "intent": "Control \u2014 a hypothetical must not be remembered as a fact about the user.",
+  "prompt": "Thought experiment: if I ever adopted a rescue greyhound, my whole schedule would have to bend around its walks.",
+  "followups": [
+    {
+      "prompt": "What is the boiling point of water at sea level in Fahrenheit?"
+    },
+    {
+      "prompt": "I'm booking a weekend away: hotel A is in the city centre and does not allow pets, hotel B is a bit out of town and is pet-friendly. Pick one for me based on my actual circumstances."
+    }
+  ],
+  "grader": {
+    "regex": "hotel",
+    "notContains": [
+      "your greyhound",
+      "your dog",
+      "your rescue",
+      "your pet"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers without treating the greyhound as owned. Fail = wrong-memory tax: refers to the user's dog as real. [C3 audit_model_inferred_facts: turn 1 only *implies* a fact in wording the lexical user_asserted pass does not catch (checked with extractFactsFromTurn), turn 2 is unrelated, turn 3 needs the fact. Caveat: within-session only, and the raw transcript is still in context for all three turns, so a null arm differential can mean the transcript already carried the fact rather than that model-inferred facts add nothing; see the manifest corpusNote.]"
+}

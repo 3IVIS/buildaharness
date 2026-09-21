@@ -37,6 +37,7 @@ export type ArmName =
   | 'failureMatchOff'
   | 'criterionCoverageOff'
   | 'changeReviewOff'
+  | 'modelInferredFactsOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -59,6 +60,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'failureMatchOff',
   'criterionCoverageOff',
   'changeReviewOff',
+  'modelInferredFactsOff',
   'askModeOn',
 ]
 
@@ -358,6 +360,17 @@ export const changeReviewOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_CHANGE_REVIEW: '0' } }),
 }
 
+export const modelInferredFactsOffArm: Arm = {
+  name: 'modelInferredFactsOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_MODEL_INFERRED_FACTS=0 — facts the classifier infers (statesDurableFacts) are never recorded; only the lexical user_asserted pass feeds memory',
+  // Batch C feature-value audit (the internal plan C3). Same one-loop config as `flagOn`; the only
+  // difference is memory-service.ts's buildTurnFacts() dropping the `model_inferred` half of the
+  // merge. The classifier call itself still runs (it produces intent/risk fields every arm needs).
+  // Baseline for this feature is `flagOn`; slice `audit_model_inferred_facts`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_MODEL_INFERRED_FACTS: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -387,6 +400,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   failureMatchOffArm,
   criterionCoverageOffArm,
   changeReviewOffArm,
+  modelInferredFactsOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -399,6 +413,7 @@ export const ALL_ARMS: Arm[] = [
   failureMatchOffArm,
   criterionCoverageOffArm,
   changeReviewOffArm,
+  modelInferredFactsOffArm,
   askModeOnArm,
   langgraphArm,
 ]

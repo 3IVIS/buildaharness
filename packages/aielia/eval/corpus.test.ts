@@ -191,6 +191,23 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('audit_model_inferred_facts slice (C3) — >= 6 stress + >= 2 control, all 3+ turn, implied-fact graders, controls guard a wrong-memory tax', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'audit_model_inferred_facts')
+    const controls = inSlice.filter((t) => t.id.includes('-control-'))
+    const stress = inSlice.filter((t) => !t.id.includes('-control-'))
+    expect(stress.length, 'expected >= 6 implied-fact stress tasks').toBeGreaterThanOrEqual(6)
+    expect(controls.length, 'expected >= 2 hypothetical/retracted control tasks').toBeGreaterThanOrEqual(2)
+    for (const t of inSlice) {
+      expect(t.followups.length, `${t.id}: implying turn + unrelated turn + later using turn`).toBeGreaterThanOrEqual(2)
+    }
+    for (const t of stress) {
+      expect(t.grader.regex, `${t.id}: stress task needs a regex on the implied fact being used`).toBeDefined()
+    }
+    for (const t of controls) {
+      expect(t.grader.notContains, `${t.id}: control task needs notContains guarding a wrongly remembered fact`).toBeDefined()
+    }
+  })
+
   it('audit_contradiction_multiturn slice — >= 4 stress + >= 2 control, all multi-turn, graders shaped right', () => {
     const inSlice = tasks.filter((t) => t.slice === 'audit_contradiction_multiturn')
     const controls = inSlice.filter((t) => t.id.includes('-control-'))
