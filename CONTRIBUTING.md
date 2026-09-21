@@ -16,12 +16,13 @@ v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-
 - npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/canvas`, `@buildaharness/aielia`, `@buildaharness/proxy`
 
 **Not in this repo:** a few pieces referenced in internal docs are maintained in a private overlay
-and aren't part of this public clone — most visibly the coaching-agent example flow and its
-persona/prompt fixtures, and a deeper pseudo-code/state-model architecture write-up (the public
-[docs/architecture.md](docs/architecture.md) covers the same system at a level intended for external
-contributors). The `adapter/agents/coaching/` tool implementations that ship here are public and
-usable by any flow via `fn_ref`; the example flow and session-runner tooling built on top of them
-are not.
+and aren't part of this public clone — most visibly the coaching agent (its tool implementations,
+example flow, persona/prompt fixtures, and session-runner tooling), the planner agent's Python
+implementation and canonical plan templates, and a deeper pseudo-code/state-model architecture
+write-up (the public [docs/architecture.md](docs/architecture.md) covers the same system at a level
+intended for external contributors). `packages/aielia`'s TypeScript plan templates are self-contained
+and don't need the private copies to build or run; the drift checks in `scripts/` that compare
+against them are skipped when those copies are absent.
 
 ---
 
