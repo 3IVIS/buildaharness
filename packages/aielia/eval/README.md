@@ -99,7 +99,7 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
    the assistant's toolset.
 4. ~~Wire a nightly real-LLM job~~ into `.github/workflows/eval.yml` — **done**. Job
    `eval-harness-benchmark`: on `push` (when `packages/aielia/**` changed) it runs a
-   keyless `typecheck:personal-assistant` + a `baseline.json` parse check; on `schedule` /
+   keyless `typecheck:aielia` + a `baseline.json` parse check; on `schedule` /
    `workflow_dispatch` it runs `run-harness-benchmark.ts --gate=eval/reports/baseline.json` against
    the `claude` CLI when `ANTHROPIC_API_KEY` is present (skips + exits 0 otherwise) and uploads
    `eval/reports/*.json` + `docs/harness_comparative_benchmark.md` (retention 30). Sibling job
@@ -121,6 +121,35 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
    a rise in it is a regression (an assistant that is confidently wrong is worse than one that is
    honestly uncertain). When neither report ran any AnswerClaim task the metric is `null` on both
    sides and never gates.
+
+## Supported corpus task shapes (authoring reference)
+
+What a `corpus/*.json` task can express today (`corpus/schema.ts` `TaskSpecSchema`; multi-turn
+loop covered by `arms.multiturn.test.ts`; the `audit_contradiction_multiturn` slice is the worked
+example). Audit slices for a new feature (Batch C, `plans/feature_audit_batch_c_plan.html`) author
+against exactly this set — anything outside it needs a schema + runner change, not just a JSON file.
+
+| Shape | How to write it | Notes |
+|---|---|---|
+| **Single-turn** | `prompt` only; `followups` defaults to `[]` | Grader scores the reply + final workspace. |
+| **Multi-turn** | `followups: [{ prompt, addWorkspace?, injectedFailure?, injectedFailureCount? }, ...]` | Each followup goes to the *same* `PersonalAssistant` session (same memory + history) once the previous turn resolves. The grader scores the **last** turn's reply and the final workspace; cost / latency / tokens sum across turns. Per-turn boundaries are recorded for transcripts. |
+| **Fixture workspace** | `workspace: [{ path, content }]`, plus `followups[].addWorkspace` to add files mid-session | In-memory `FsBackend` (`fixtures.ts`); enable tools with `tools: { file, web, shell }`. `grader.filesUnchanged` checks byte-identical files afterwards. |
+| **Injected failure** | `injectedFailure` (+ `injectedFailureCount`), per task or per followup | `first_tool_call_throws` (proxy backend only) or `persistent_tool_failure` (one-loop proposer; trips `cannotMakeProgress()`). |
+| **Mechanical grader** | `grader`: `contains`, `notContains`, `regex`, `status` (`ok`/`needs_approval`/`escalated`), `filesUnchanged`, `answerClaimStatus`, optional `judge: { rubric }` | All present checks must pass; at least one required. `hallucinationProbe` / `unauthorizedEffectProbe` opt a task into those corpus-wide metrics. |
+
+**Not supported — pre-seeded memory.** There is no `memory` / `seedFacts` field: every task starts
+with a fresh `InMemoryAdapter` (`arms.ts`, namespaced per task id), so nothing carries over from
+"a previous session". A task that needs the assistant to *hold* a belief, constraint or fact must
+establish it in turn 1 (or an early followup) as part of the task, and the slice's
+`corpusNote` should say so. Cross-session persistence is therefore never exercised by a slice.
+
+**Not supported — staged-action list grading.** Graders see the reply text (`status`, `contains`,
+`regex`) and the workspace, not a structured list of staged actions; "the assistant declined to make the
+change" is graded via `status: 'needs_approval' | 'escalated'`, a `filesUnchanged` check, or a regex on
+the reply.
+
+New slices: add the name to `AUDIT_SLICES` in `corpus/schema.ts` (with a comment saying what the
+slice stresses) — `corpus.test.ts` and `audit/manifest.test.ts` reject an unknown slice or an empty one.
 
 ## Trajectory-supervisor slice (S7)
 
