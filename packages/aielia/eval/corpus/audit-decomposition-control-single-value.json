@@ -1,0 +1,24 @@
+{
+  "id": "audit-decomposition-control-single-value",
+  "category": "file_read",
+  "slice": "audit_decomposition",
+  "intent": "Single-part request over a small file.",
+  "prompt": "What is the database port in config/db.md?",
+  "workspace": [
+    {
+      "path": "config/db.md",
+      "content": "# Database\n\nHost: db.internal\nPort: 5433\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "5433"
+    ]
+  },
+  "note": "Pass = reports 5433. [C4 audit_decomposition control: a single-part request where the up-front task graph and reframe call are pure overhead; no quality gain expected, so any arm difference here is the cost/latency tax.]"
+}

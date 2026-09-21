@@ -238,6 +238,7 @@ const ARM_LABELS = {
   criterionCoverageOff: 'PersonalAssistant with the semantic success-criterion coverage check disabled (substring check only)',
   changeReviewOff: 'PersonalAssistant with the semantic change reviewer disabled (lexical conflict check only)',
   modelInferredFactsOff: 'PersonalAssistant with model-inferred facts disabled (only lexically-caught user_asserted facts reach memory)',
+  decompositionOff: 'PersonalAssistant with up-front decomposition and task reframing disabled (every turn runs as a single task)',
 }
 export function armLabel(name) {
   return ARM_LABELS[name] || name
@@ -254,6 +255,7 @@ const ARM_ONELINER = {
   'flagOn|criterionCoverageOff': 'the candidate disables the semantic success-criterion coverage check (reviewer substring match only)',
   'flagOn|changeReviewOff': 'the candidate disables the semantic change reviewer (lexical isNegation conflict check only)',
   'flagOn|modelInferredFactsOff': 'the candidate drops facts the classifier infers from a message (only lexically-caught user_asserted facts are recorded)',
+  'flagOn|decompositionOff': 'the candidate drops up-front decomposition and task reframing (the turn runs as one task)',
 }
 function armOneliner(control, candidate) {
   return (

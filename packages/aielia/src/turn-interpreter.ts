@@ -10,6 +10,24 @@ import { toHarnessTasks, toTaskRiskLevel, planTaskRiskLevel } from './task-mappi
 import type { AssistantTrace, AssistantTurnResult } from './assistant-types.js'
 
 /**
+ * `AUDIT_DECOMPOSITION` gate — feature-value audit (Phase C4 of the internal plan). Default
+ * **ON**: the classifier's `decomposedTasks` graph and the single-task
+ * `reframeTaskDescriptionWithLLM` call both shape the turn today, so an unset / empty / truthy
+ * value keeps that behaviour. Set to a falsy value (`0` / `false` / `off` / `no` / `disabled`) to
+ * take the single-task path: the raw user message as one `respond` task, no decomposition, no
+ * reframe call. The classifier call itself is untouched (it also produces the intent/risk fields
+ * every arm needs). Read at exactly one call site — the top of `resolveTasks()` below. An active
+ * plan's own tasks are not decomposition and are unaffected. Same shape as
+ * `semanticContradictionEnabled()` (contradiction-checker.ts).
+ */
+export function decompositionEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_DECOMPOSITION ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
  * The front portion of runTurn — plan-cancel-bypass detection, the classifyTurnIntent call, the
  * message-level risk-gate decision, and (via `resolveTasks`) decomposition/plan-template
  * resolution — as a pure decision-maker. Deliberately no MemoryAdapter/onTrace dependency beyond
@@ -152,6 +170,9 @@ export class TurnInterpreter {
     onUsage: (usage: TokenUsage) => void
   }): Promise<ResolvedTasks> {
     const { userMessage, sessionId, classification, planForCancelCheck, onUsage } = params
+    // The single AUDIT_DECOMPOSITION read: gates both the classifier's decomposedTasks graph and
+    // the reframe call below, so the OFF arm is exactly the single-task path.
+    const decompose = decompositionEnabled()
 
     // The single-task fallback — the raw userMessage verbatim as its description, unlike
     // classifyTurnIntent's own decomposedTasks/buildPlanFromTemplate, which already ask for a
@@ -159,7 +180,7 @@ export class TurnInterpreter {
     // belief statementsOpposed/isNegation compare against structured consistently across every
     // task-creation path.
     let initialTasks: Task[] = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], toTaskRiskLevel(classification.riskLevel))
-    const decomposed = classification.decomposedTasks
+    const decomposed = decompose ? classification.decomposedTasks : null
     if (decomposed) {
       initialTasks = toHarnessTasks(decomposed, toTaskRiskLevel(classification.riskLevel))
     }
@@ -198,6 +219,7 @@ export class TurnInterpreter {
     // "Completed: ..." trail belief from a single task (taskCount === 1, true here by
     // construction) when no fact was extracted from the turn *and* riskLevel !== 'LOW'.
     if (
+      decompose &&
       initialTasks.length === 1 &&
       initialTasks[0].id === 'respond' &&
       classification.riskLevel !== 'LOW' &&

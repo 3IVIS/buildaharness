@@ -1,0 +1,34 @@
+{
+  "id": "audit-decomposition-three-files",
+  "category": "research",
+  "slice": "audit_decomposition",
+  "intent": "Three files each carry one needed value; the reply must report all three.",
+  "prompt": "Check config/db.md for the database port, config/cache.md for the cache TTL in seconds, and config/queue.md for the queue's retry limit, and report all three values.",
+  "workspace": [
+    {
+      "path": "config/db.md",
+      "content": "# Database\n\nHost: db.internal\nPort: 5433\n"
+    },
+    {
+      "path": "config/cache.md",
+      "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n"
+    },
+    {
+      "path": "config/queue.md",
+      "content": "# Queue\n\nBroker: rabbitmq\nRetry limit: 6\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "5433",
+      "900",
+      "6"
+    ]
+  },
+  "note": "Pass = 5433, 900 and 6 all reported. Fail = any file's value dropped. [C4 audit_decomposition: the request names distinct deliverables over a fixture workspace and every one is graded individually, so a dropped part is a measurable miss. Caveat: every task in a decomposed graph executes against the same single draft reply, so decomposition changes what is verified more than what is generated; a null arm differential is plausible. See the manifest corpusNote.]"
+}

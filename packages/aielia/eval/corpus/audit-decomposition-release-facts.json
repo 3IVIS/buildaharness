@@ -1,0 +1,28 @@
+{
+  "id": "audit-decomposition-release-facts",
+  "category": "file_read",
+  "slice": "audit_decomposition",
+  "intent": "Five deliverables from one release notes file.",
+  "prompt": "From release/notes.md, give me: the version number, the release date, the number of breaking changes, the name of the release manager, and the rollback command. Please answer all five.",
+  "workspace": [
+    {
+      "path": "release/notes.md",
+      "content": "# Release 5.3.1\n\nDate: 2026-09-14\nRelease manager: Ingrid Vasquez\n\n## Breaking changes\n- Removed the legacy /v1/export endpoint\n- Renamed config key `retries` to `max_retries`\n\n## Rollback\nRun `deploy rollback --to 5.2.9` if health checks fail.\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "5.3.1",
+      "2026-09-14",
+      "Vasquez",
+      "deploy rollback --to 5.2.9"
+    ],
+    "regex": "\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b"
+  },
+  "note": "Pass = version, date, count of 2 breaking changes, manager and rollback command all present. [C4 audit_decomposition: the request names distinct deliverables over a fixture workspace and every one is graded individually, so a dropped part is a measurable miss. Caveat: every task in a decomposed graph executes against the same single draft reply, so decomposition changes what is verified more than what is generated; a null arm differential is plausible. See the manifest corpusNote.]"
+}

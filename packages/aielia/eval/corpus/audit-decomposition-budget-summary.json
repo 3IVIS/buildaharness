@@ -1,0 +1,27 @@
+{
+  "id": "audit-decomposition-budget-summary",
+  "category": "multi_step",
+  "slice": "audit_decomposition",
+  "intent": "Four computed/derived deliverables from a small table.",
+  "prompt": "Using budget/q3.md: list the total spend across all three lines, name the biggest line item, say which line is under 5,000, and state how much larger the biggest line is than the smallest.",
+  "workspace": [
+    {
+      "path": "budget/q3.md",
+      "content": "# Q3 budget\n\n| Line | Spend |\n|---|---|\n| Hosting | 12,000 |\n| Tooling | 4,500 |\n| Training | 7,500 |\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "24,000",
+      "Hosting",
+      "Tooling"
+    ],
+    "regex": "7,?500"
+  },
+  "note": "Total 24,000; biggest Hosting; under 5,000 is Tooling; difference 12,000-4,500 = 7,500. [C4 audit_decomposition: the request names distinct deliverables over a fixture workspace and every one is graded individually, so a dropped part is a measurable miss. Caveat: every task in a decomposed graph executes against the same single draft reply, so decomposition changes what is verified more than what is generated; a null arm differential is plausible. See the manifest corpusNote.]"
+}

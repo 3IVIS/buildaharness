@@ -1,0 +1,24 @@
+{
+  "id": "audit-decomposition-control-single-lookup",
+  "category": "file_read",
+  "slice": "audit_decomposition",
+  "intent": "Single-part request: decomposition is pure overhead.",
+  "prompt": "Read team/lead.md and tell me who leads the team.",
+  "workspace": [
+    {
+      "path": "team/lead.md",
+      "content": "# Team lead\n\nThe team is led by Marguerite Okonkwo.\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "Okonkwo"
+    ]
+  },
+  "note": "Pass = names Okonkwo. [C4 audit_decomposition control: a single-part request where the up-front task graph and reframe call are pure overhead; no quality gain expected, so any arm difference here is the cost/latency tax.]"
+}

@@ -10,6 +10,7 @@ import type { SendEmail } from './email.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 import { classifyRisk } from './risk-classifier.js'
+import { decompositionEnabled } from './turn-interpreter.js'
 
 // Every turn now spends exactly one classifyTurnIntent call up front (see
 // turn-intent-classifier.ts) — a distinctive phrase from its system prompt lets every fake
@@ -2050,6 +2051,57 @@ describe('PersonalAssistant single-task description reframing', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Handled anyway.')
     expect(llm.structuredCalls).toBe(1)
+  })
+})
+
+describe('decompositionEnabled (AUDIT_DECOMPOSITION gate — Phase C4)', () => {
+  it('defaults ON when unset, empty or truthy', () => {
+    expect(decompositionEnabled({})).toBe(true)
+    expect(decompositionEnabled({ AUDIT_DECOMPOSITION: '' })).toBe(true)
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled']) expect(decompositionEnabled({ AUDIT_DECOMPOSITION: v }), v).toBe(true)
+  })
+
+  it('is OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) expect(decompositionEnabled({ AUDIT_DECOMPOSITION: v }), v).toBe(false)
+  })
+})
+
+describe('PersonalAssistant with AUDIT_DECOMPOSITION=0 (single-task path)', () => {
+  it('ignores the classifier decomposedTasks and still completes the turn as one task', async () => {
+    vi.stubEnv('AUDIT_DECOMPOSITION', '0')
+    try {
+      const llm = new DecompositionAwareLLMClient('All booked.', [
+        { id: 'step-1', description: 'Book the flight', depends_on: [] },
+        { id: 'step-2', description: 'Book the hotel', depends_on: ['step-1'] },
+      ])
+      const assistant = new PersonalAssistant({ llmClient: llm })
+
+      const result = await assistant.turn('First book my flight to Paris, then book a hotel near the Louvre.')
+
+      expect(result.status).toBe('ok')
+      expect(result.reply).toBe('All booked.')
+      // Same step count as the single-task baseline, not the 3 the decomposed graph produces.
+      expect(result.stepsUsed).toBe(2)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('makes no reframeTaskDescriptionWithLLM call on a request that would otherwise trigger one', async () => {
+    vi.stubEnv('AUDIT_DECOMPOSITION', '0')
+    try {
+      const reframeJson = JSON.stringify({ description: 'the deploy tests: schedule a rerun tonight' })
+      const llm = new ReframeAwareLLMClient('Scheduled.', reframeJson)
+      const assistant = new PersonalAssistant({ llmClient: llm })
+
+      const result = await assistant.turn('Please schedule a rerun of the deploy tests tonight.')
+
+      expect(result.status).toBe('ok')
+      expect(result.reply).toBe('Scheduled.')
+      expect(llm.structuredCalls).toBe(0)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 

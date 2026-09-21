@@ -27,6 +27,7 @@ import type { ArmName } from '../arms.js'
  *   semantic-criterion-coverage → ["criterionCoverageOff", "flagOn"] (the LLM criterion-coverage call = candidate)
  *   semantic-change-reviewer    → ["changeReviewOff", "flagOn"] (the LLM change-reviewer call = candidate)
  *   model-inferred-facts        → ["modelInferredFactsOff", "flagOn"] (classifier-inferred facts recorded = candidate)
+ *   decomposition-reframing     → ["decompositionOff", "flagOn"] (up-front task graph + reframe call = candidate)
  */
 export const AuditVerdictSchema = z.enum(['KEEP', 'CUT', 'INCONCLUSIVE'])
 export type AuditVerdict = z.infer<typeof AuditVerdictSchema>

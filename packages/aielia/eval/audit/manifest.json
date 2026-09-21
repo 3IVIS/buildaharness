@@ -147,6 +147,22 @@
       "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "Mechanism is cross-turn; slice covers within-session recall over 3 turns. Cross-session persistence and the /memory confirm queue are not exercised. The flag gates consumption of the classifier's facts (buildTurnFacts), not the classifier call. Caveat: the raw transcript is still in context on turn 3, so a null differential may mean the transcript already carried the fact rather than that recording it adds nothing. Turn-1 phrasings were checked against the lexical pass (extractFactsFromTurn returns nothing), so only the model_inferred path can record them."
+    },
+    {
+      "id": "decomposition-reframing",
+      "title": "Up-front decomposition + task reframing",
+      "hypothesis": "Decomposing a multi-part request into a task graph and reframing each task with an LLM call completes more of the requested parts than treating the request as one task, at acceptable extra cost.",
+      "arms": [
+        "decompositionOff",
+        "flagOn"
+      ],
+      "slice": "audit_decomposition",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 12,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Within-turn; the harness executes each task against one draft reply, so decomposition changes what is verified more than what is generated, and a null quality differential is a plausible outcome. One flag (AUDIT_DECOMPOSITION) covers both mechanisms: decomposition is the classifier's decomposedTasks output (bundled into the mandatory classifyTurnIntent call, so it adds no LLM call of its own), and the reframe call only ever fires on the single-task path, so they cannot be toggled independently and stay one manifest entry. Caveats: the flag gates consumption of decomposedTasks, not the classifier call; the reframe call additionally requires a non-LOW risk classification and a coding-fact-shaped message, so the read-only fixture tasks mostly exercise decomposition, not reframing; a task the classifier routes into plan mode would bypass this hook."
     }
   ]
 }

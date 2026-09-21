@@ -208,6 +208,22 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('audit_decomposition slice (C4) — >= 6 multi-part stress + >= 2 single-part control, workspace-backed, individually graded', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'audit_decomposition')
+    const controls = inSlice.filter((t) => t.id.includes('-control-'))
+    const stress = inSlice.filter((t) => !t.id.includes('-control-'))
+    expect(stress.length, 'expected >= 6 multi-part stress tasks').toBeGreaterThanOrEqual(6)
+    expect(controls.length, 'expected >= 2 single-part control tasks').toBeGreaterThanOrEqual(2)
+    for (const t of inSlice) {
+      expect(t.workspace.length, `${t.id}: needs a fixture workspace`).toBeGreaterThanOrEqual(1)
+      expect(t.followups.length, `${t.id}: single-turn`).toBe(0)
+    }
+    for (const t of stress) {
+      const checks = (t.grader.contains?.length ?? 0) + (t.grader.regex ? 1 : 0)
+      expect(checks, `${t.id}: each deliverable needs its own check so a dropped part is a miss`).toBeGreaterThanOrEqual(3)
+    }
+  })
+
   it('audit_contradiction_multiturn slice — >= 4 stress + >= 2 control, all multi-turn, graders shaped right', () => {
     const inSlice = tasks.filter((t) => t.slice === 'audit_contradiction_multiturn')
     const controls = inSlice.filter((t) => t.id.includes('-control-'))

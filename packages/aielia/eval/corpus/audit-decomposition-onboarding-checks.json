@@ -1,0 +1,31 @@
+{
+  "id": "audit-decomposition-onboarding-checks",
+  "category": "file_read",
+  "slice": "audit_decomposition",
+  "intent": "Four checklist items to report from two files.",
+  "prompt": "Look at onboarding/day1.md and onboarding/day2.md. Tell me: what time day 1 starts, who the day 1 buddy is, which system gets set up on day 2, and what the day 2 review meeting is called.",
+  "workspace": [
+    {
+      "path": "onboarding/day1.md",
+      "content": "# Day 1\n\nStart: 09:30\nBuddy: Callum Ferreira\nAgenda: laptop, badge, intro to the team\n"
+    },
+    {
+      "path": "onboarding/day2.md",
+      "content": "# Day 2\n\nSet up: the VPN client\nMeeting: Week-One Retro\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "09:30",
+      "Ferreira",
+      "VPN",
+      "Week-One Retro"
+    ]
+  },
+  "note": "Pass = all four items across both files reported. [C4 audit_decomposition: the request names distinct deliverables over a fixture workspace and every one is graded individually, so a dropped part is a measurable miss. Caveat: every task in a decomposed graph executes against the same single draft reply, so decomposition changes what is verified more than what is generated; a null arm differential is plausible. See the manifest corpusNote.]"
+}

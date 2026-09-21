@@ -1,0 +1,27 @@
+{
+  "id": "audit-decomposition-team-roster",
+  "category": "file_read",
+  "slice": "audit_decomposition",
+  "intent": "Four distinct facts to pull from one roster file; each is graded individually.",
+  "prompt": "Read team/roster.md and tell me, as four separate items: (1) who leads the team, (2) how many engineers there are, (3) which city the design lead works from, and (4) the on-call rotation start date.",
+  "workspace": [
+    {
+      "path": "team/roster.md",
+      "content": "# Platform Team\n\nLead: Marguerite Okonkwo\nEngineers: 7\nDesign lead: Tobias Lindqvist (based in Gothenburg)\nOn-call rotation starts: 2026-10-05\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "Okonkwo",
+      "7",
+      "Gothenburg",
+      "2026-10-05"
+    ]
+  },
+  "note": "Pass = all four facts present. Fail = any one dropped. [C4 audit_decomposition: the request names distinct deliverables over a fixture workspace and every one is graded individually, so a dropped part is a measurable miss. Caveat: every task in a decomposed graph executes against the same single draft reply, so decomposition changes what is verified more than what is generated; a null arm differential is plausible. See the manifest corpusNote.]"
+}

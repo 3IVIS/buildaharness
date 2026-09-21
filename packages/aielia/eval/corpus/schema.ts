@@ -95,6 +95,11 @@ export const AUDIT_SLICES = [
   // the "implied" fact is hypothetical or retracted and must not be remembered. The shape
   // `classifyTurnIntent`'s `statesDurableFacts` (arm `flagOn` vs `modelInferredFactsOff`) exists for.
   'audit_model_inferred_facts',
+  // Single-turn requests that enumerate 3-5 distinct deliverables over a fixture workspace, each
+  // graded individually so a dropped part is a measurable miss — plus single-part controls where
+  // decomposition is pure overhead. The shape the classifier's `decomposedTasks` graph and
+  // `reframeTaskDescriptionWithLLM` (arm `flagOn` vs `decompositionOff`) exist for.
+  'audit_decomposition',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

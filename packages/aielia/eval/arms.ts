@@ -38,6 +38,7 @@ export type ArmName =
   | 'criterionCoverageOff'
   | 'changeReviewOff'
   | 'modelInferredFactsOff'
+  | 'decompositionOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -61,6 +62,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'criterionCoverageOff',
   'changeReviewOff',
   'modelInferredFactsOff',
+  'decompositionOff',
   'askModeOn',
 ]
 
@@ -371,6 +373,18 @@ export const modelInferredFactsOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_MODEL_INFERRED_FACTS: '0' } }),
 }
 
+export const decompositionOffArm: Arm = {
+  name: 'decompositionOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_DECOMPOSITION=0 — every turn takes the single-task path: no up-front task graph from the classifier, no reframeTaskDescriptionWithLLM call',
+  // Batch C feature-value audit (the internal plan C4). Same one-loop config as `flagOn`; the only
+  // difference is turn-interpreter.ts's resolveTasks() ignoring classification.decomposedTasks and
+  // skipping the reframe call. The classifier call itself still runs. Decomposition + reframing are
+  // one toggle: the reframe only ever fires on the single-task path, so the two aren't independent
+  // enough to split into two arms. Baseline is `flagOn`; slice `audit_decomposition`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_DECOMPOSITION: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -401,6 +415,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   criterionCoverageOffArm,
   changeReviewOffArm,
   modelInferredFactsOffArm,
+  decompositionOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -414,6 +429,7 @@ export const ALL_ARMS: Arm[] = [
   criterionCoverageOffArm,
   changeReviewOffArm,
   modelInferredFactsOffArm,
+  decompositionOffArm,
   askModeOnArm,
   langgraphArm,
 ]
