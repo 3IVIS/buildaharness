@@ -19,8 +19,11 @@
  *
  * Run manually:  node scripts/check-lexical-patterns-sync.mjs
  * Run in CI:     same command; exits 1 on mismatch.
+ *
+ * The adapter/agents/planner/ copy is maintained in a private overlay, so a plain public clone
+ * doesn't have it; a pair whose counterpart file is absent is skipped (with a notice), not failed.
  */
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 
 function sortKeysDeep(value) {
   if (Array.isArray(value)) return value.map(sortKeysDeep)
@@ -53,7 +56,13 @@ const PAIRS = [
 ]
 
 const mismatched = []
+let checked = 0
 for (const { name, a, b } of PAIRS) {
+  if (!existsSync(a) || !existsSync(b)) {
+    console.log(`⏭️   Skipping ${name} — ${!existsSync(a) ? a : b} isn't part of this checkout.`)
+    continue
+  }
+  checked += 1
   if (loadJson(a) !== loadJson(b)) mismatched.push({ name, a, b })
 }
 
@@ -66,4 +75,4 @@ if (mismatched.length > 0) {
   process.exit(1)
 }
 
-console.log(`✅  Lexical patterns sync OK — ${PAIRS.length} mirrored pair(s) match byte-for-byte (ignoring key order).`)
+console.log(`✅  Lexical patterns sync OK — ${checked} of ${PAIRS.length} mirrored pair(s) checked, all match byte-for-byte (ignoring key order).`)

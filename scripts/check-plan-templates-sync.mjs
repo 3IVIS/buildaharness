@@ -9,8 +9,11 @@
  *
  * Run manually:  node scripts/check-plan-templates-sync.mjs
  * Run in CI:     same command; exits 1 on mismatch.
+ *
+ * The canonical directory is maintained in a private overlay, so a plain public clone doesn't have
+ * it; the check is skipped (exit 0, with a notice) rather than failed in that case.
  */
-import { readFileSync, readdirSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 
 const CANONICAL_DIR = 'adapter/agents/planner/data/plan_templates'
@@ -27,6 +30,11 @@ function sortKeysDeep(value) {
 function loadTemplate(dir, name) {
   const raw = readFileSync(join(dir, name), 'utf8')
   return JSON.stringify(sortKeysDeep(JSON.parse(raw)))
+}
+
+if (!existsSync(CANONICAL_DIR)) {
+  console.log(`⏭️   Skipping plan-templates sync — ${CANONICAL_DIR}/ isn't part of this checkout.`)
+  process.exit(0)
 }
 
 const canonicalNames = readdirSync(CANONICAL_DIR).filter((f) => f.endsWith('.json')).sort()
