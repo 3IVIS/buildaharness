@@ -111,9 +111,8 @@ function computeDockerServiceCount() {
 
 // ---------------------------------------------------------------------------
 // Public-only snapshot — this repo uses a dual public/private git overlay
-// (two GIT_DIRs sharing one working tree; see .gitignore's comment on
-// .git-private-excludes). Counting tests directly against the live working
-// tree silently includes private-only content: private-only test files
+// (two GIT_DIRs sharing one working tree). Counting tests directly against
+// the live working tree silently includes private-only content: private-only test files
 // (adapter/tests/test_coaching_llm_screens.py, test_planner_agent.py) inflate
 // the pytest count, and private-only source (src/spec/flows/coaching.ts,
 // picked up by src/spec/flows/index.ts's import.meta.glob) adds extra
@@ -133,9 +132,8 @@ function computeDockerServiceCount() {
 // ---------------------------------------------------------------------------
 
 function hasPrivateOverlay() {
-  // CLAUDE.md is private-only (see .git-private-excludes-source) — absent in
-  // a clean public-only checkout, present whenever the private overlay is
-  // layered on this working tree.
+  // CLAUDE.md is private-only — absent in a clean public-only checkout,
+  // present whenever the private overlay is layered on this working tree.
   return existsSync(new URL('CLAUDE.md', `file://${ROOT}`))
 }
 
