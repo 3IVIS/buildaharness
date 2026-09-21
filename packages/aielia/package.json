@@ -1,6 +1,6 @@
 {
   "name": "@buildaharness/aielia",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "An open-source AI agent you can hand real work to. Runs the full 11-layer Build A Harness every turn, controlling what it may do, believe and spend, and stages file writes, shell commands and email for your approval. CLI, browser, and desktop.",
   "license": "Apache-2.0",
   "homepage": "https://myaielia.com",
