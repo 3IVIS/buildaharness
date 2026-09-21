@@ -31,7 +31,7 @@ import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.j
 import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate } from './contradiction-checker.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
-import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
+import { checkSemanticCriterionCoverage, semanticCriterionCoverageEnabled, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { FACT_CAP } from './memory-service.js'
 import { RESUME_ATTEMPT_CAP, resumeAttemptsKey, type AssistantSession } from './assistant-session.js'
@@ -331,8 +331,13 @@ export class HarnessBridge {
         // Layered on top of reviewerPass's implementerLens's own `.includes()` substring check —
         // called only for a success criterion that substring check found no coverage for. See
         // semantic-criterion-coverage.ts's doc comment.
-        semanticCriterionCoverage: (criterion: string, beliefs: Belief[]) =>
-          checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage),
+        // AUDIT_SEMANTIC_CRITERION_COVERAGE (feature-value audit, Phase C1) gates the whole hook:
+        // OFF → no host semanticCriterionCoverage is wired at all, so the reviewer's implementer
+        // lens runs its `.includes()` substring check alone. Default ON — unchanged shipped behaviour.
+        semanticCriterionCoverage: semanticCriterionCoverageEnabled()
+          ? (criterion: string, beliefs: Belief[]) =>
+              checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
+          : undefined,
         // Stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or FAILED), before
         // the loop would go pick the next one — undefined for a non-plan turn, so shouldPause is
         // simply never checked and behavior is unchanged.

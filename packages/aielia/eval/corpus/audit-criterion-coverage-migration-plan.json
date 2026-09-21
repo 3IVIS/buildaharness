@@ -1,0 +1,23 @@
+{
+  "id": "audit-criterion-coverage-migration-plan",
+  "category": "multi_step",
+  "slice": "audit_criterion_coverage",
+  "intent": "A correct reply meets each stated success criterion in different words than the criterion text.",
+  "prompt": "Read docs/db-migration.md and tell me the migration order. Done when: every step is in the answer, and the rollback step is called out.",
+  "workspace": [
+    {
+      "path": "docs/db-migration.md",
+      "content": "# DB migration\n\n1. Snapshot the database\n2. Apply schema change 0042\n3. Backfill the new column\n4. Switch reads to the new column\n\nIf step 3 fails: restore from the snapshot taken in step 1.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)",
+    "contains": [
+      "restore"
+    ]
+  },
+  "note": "Order plus the restore-from-snapshot rollback, which the criterion calls 'the rollback step'. [C1 audit_criterion_coverage: the task states explicit success criteria in the user's own wording; a correct reply meets each in different words, so a plain substring check on the criterion text would miss. Caveat: the shipped bridge passes only the non-checkable default criterion to the harness run, so plan criteria never reach this hook — see the manifest corpusNote.]"
+}

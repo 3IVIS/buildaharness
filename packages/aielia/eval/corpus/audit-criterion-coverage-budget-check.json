@@ -1,0 +1,23 @@
+{
+  "id": "audit-criterion-coverage-budget-check",
+  "category": "multi_step",
+  "slice": "audit_criterion_coverage",
+  "intent": "A correct reply meets each stated success criterion in different words than the criterion text.",
+  "prompt": "Look at finance/q3.csv and check whether we stayed under budget. Done when: the total spend is stated, and the answer says whether the limit was respected.",
+  "workspace": [
+    {
+      "path": "finance/q3.csv",
+      "content": "item,amount\nservers,4200\nlicenses,1800\ncontractors,3500\ntravel,900\n\n# quarterly limit: 12000\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "10400"
+    ],
+    "regex": "under|within|below|didn'?t exceed|not exceed|stayed"
+  },
+  "note": "Total 10400 against a limit of 12000 — under budget. [C1 audit_criterion_coverage: the task states explicit success criteria in the user's own wording; a correct reply meets each in different words, so a plain substring check on the criterion text would miss. Caveat: the shipped bridge passes only the non-checkable default criterion to the harness run, so plan criteria never reach this hook — see the manifest corpusNote.]"
+}

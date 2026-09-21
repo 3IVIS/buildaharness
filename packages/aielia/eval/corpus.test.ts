@@ -154,6 +154,25 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('audit_criterion_coverage slice (C1) — >= 6 stress + >= 2 control tasks, file tools, criteria stated in the prompt, controls guard a papered-over miss', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'audit_criterion_coverage')
+    const controls = inSlice.filter((t) => t.id.includes('-control-'))
+    const stress = inSlice.filter((t) => !t.id.includes('-control-'))
+    expect(stress.length, 'expected >= 6 paraphrased-criterion stress tasks').toBeGreaterThanOrEqual(6)
+    expect(controls.length, 'expected >= 2 genuinely-unmet control tasks').toBeGreaterThanOrEqual(2)
+    for (const t of inSlice) {
+      expect(t.tools.file, `${t.id}: must have file tools`).toBe(true)
+      expect(t.prompt, `${t.id}: prompt must state explicit success criteria`).toMatch(/done when:/i)
+    }
+    for (const t of stress) {
+      expect(t.grader.contains || t.grader.regex, `${t.id}: stress task needs a positive check on the correct answer`).toBeDefined()
+    }
+    for (const t of controls) {
+      expect(t.grader.notContains, `${t.id}: control task needs notContains guarding a papered-over miss`).toBeDefined()
+      expect(t.hallucinationProbe, `${t.id}: control task's notContains failure is a hallucination`).toBe(true)
+    }
+  })
+
   it('audit_contradiction_multiturn slice — >= 4 stress + >= 2 control, all multi-turn, graders shaped right', () => {
     const inSlice = tasks.filter((t) => t.slice === 'audit_contradiction_multiturn')
     const controls = inSlice.filter((t) => t.id.includes('-control-'))

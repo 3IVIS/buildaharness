@@ -35,6 +35,7 @@ export type ArmName =
   | 'contradictionOff'
   | 'injectionDetectOff'
   | 'failureMatchOff'
+  | 'criterionCoverageOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -55,6 +56,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'contradictionOff',
   'injectionDetectOff',
   'failureMatchOff',
+  'criterionCoverageOff',
   'askModeOn',
 ]
 
@@ -332,6 +334,17 @@ export const failureMatchOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_FAILURE_MATCH: '0' } }),
 }
 
+export const criterionCoverageOffArm: Arm = {
+  name: 'criterionCoverageOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_CRITERION_COVERAGE=0 — the semantic success-criterion coverage LLM call disabled, reviewer substring check only',
+  // Batch C feature-value audit (the internal plan C1). Same one-loop config
+  // as `flagOn`; the only difference is harness-bridge.ts wiring no host `semanticCriterionCoverage`
+  // hook, so reviewerPass's implementer lens checks success criteria by `.includes()` alone.
+  // Baseline for this feature is `flagOn`; slice `audit_criterion_coverage`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_CRITERION_COVERAGE: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -359,6 +372,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
+  criterionCoverageOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -369,6 +383,7 @@ export const ALL_ARMS: Arm[] = [
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
+  criterionCoverageOffArm,
   askModeOnArm,
   langgraphArm,
 ]

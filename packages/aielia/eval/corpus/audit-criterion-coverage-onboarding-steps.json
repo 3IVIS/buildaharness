@@ -1,0 +1,20 @@
+{
+  "id": "audit-criterion-coverage-onboarding-steps",
+  "category": "multi_step",
+  "slice": "audit_criterion_coverage",
+  "intent": "A correct reply meets each stated success criterion in different words than the criterion text.",
+  "prompt": "From onboarding/new-hire.md, list what a new engineer must do in their first week. Done when: access requests are covered, and the first-week meetings are covered.",
+  "workspace": [
+    {
+      "path": "onboarding/new-hire.md",
+      "content": "# First week\n\n- Day 1: file tickets for GitHub, VPN and the staging cluster logins\n- Day 2: 1:1 with your manager\n- Day 3: attend the architecture walkthrough\n- Day 5: team retro\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)"
+  },
+  "note": "Logins tickets (=access requests) and the 1:1/walkthrough/retro (=meetings). [C1 audit_criterion_coverage: the task states explicit success criteria in the user's own wording; a correct reply meets each in different words, so a plain substring check on the criterion text would miss. Caveat: the shipped bridge passes only the non-checkable default criterion to the harness run, so plan criteria never reach this hook — see the manifest corpusNote.]"
+}

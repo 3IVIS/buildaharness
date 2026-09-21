@@ -99,6 +99,22 @@
       "corpusAdequacy": "acceptable",
       "corpusNote": "Paraphrased-failure classification is testable single-turn. Whether it improves recovery is a compressed proxy (bounded re-answer loop). Injected-symptom mechanism is artificial but isolates the classifier; note the caveat in the entry.",
       "verdict": "CUT"
+    },
+    {
+      "id": "semantic-criterion-coverage",
+      "title": "Semantic criterion coverage",
+      "hypothesis": "The checkSemanticCriterionCoverage LLM call recognises success criteria a reply satisfies in different words than the plan states them, removing false 'criterion not met' findings the reviewer's substring check raises, often enough to justify +1 call per unmatched criterion.",
+      "arms": [
+        "criterionCoverageOff",
+        "flagOn"
+      ],
+      "slice": "audit_criterion_coverage",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 8,
+      "status": "queued",
+      "corpusAdequacy": "scoped",
+      "corpusNote": "Within-turn mechanism, but the shipped bridge (harness-bridge.ts) passes only NON_CHECKABLE_DEFAULT_CRITERION to runtime.run(), for which the hook returns false with no LLM call; plan successCriteria never reach it. Expect no arm differential: the entry must be published scoped to 'the hook is unreachable from a product turn', not as a verdict on paraphrase recognition. Any spurious-finding effect is seen by the single-turn grader only through retries/escalations."
     }
   ]
 }

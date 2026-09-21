@@ -235,6 +235,7 @@ const ARM_LABELS = {
   contradictionOff: 'PersonalAssistant with the semantic contradiction check disabled (lexical pass only)',
   injectionDetectOff: 'PersonalAssistant with LLM injection-detection on tool output disabled (regex pass only)',
   failureMatchOff: 'PersonalAssistant with the semantic failure-mode matcher disabled (exact-string match only)',
+  criterionCoverageOff: 'PersonalAssistant with the semantic success-criterion coverage check disabled (substring check only)',
 }
 export function armLabel(name) {
   return ARM_LABELS[name] || name
@@ -248,6 +249,7 @@ const ARM_ONELINER = {
   'flagOn|contradictionOff': 'the candidate disables the semantic contradiction backstop (lexical negation-pair check only)',
   'flagOn|injectionDetectOff': 'the candidate disables the LLM injection check on tool output (deterministic pattern pass only)',
   'flagOn|failureMatchOff': 'the candidate disables the semantic failure-mode matcher (exact-string overlap only)',
+  'flagOn|criterionCoverageOff': 'the candidate disables the semantic success-criterion coverage check (reviewer substring match only)',
 }
 function armOneliner(control, candidate) {
   return (

@@ -17,6 +17,22 @@ import type { Belief } from '@buildaharness/harness'
  */
 export const NON_CHECKABLE_DEFAULT_CRITERION = 'Respond helpfully, accurately, and safely to the user request.'
 
+/**
+ * `AUDIT_SEMANTIC_CRITERION_COVERAGE` gate — feature-value audit (Phase C1 of
+ * the internal plan). Default **ON**: the semantic criterion-coverage LLM call ships enabled, so an
+ * unset / empty / truthy value keeps today's behaviour. Set to a falsy value (`0` / `false` /
+ * `off` / `no` / `disabled`) to skip the hook entirely and leave the reviewer's implementer lens
+ * with its `.includes()` substring check alone. Read at exactly one call site — `harness-bridge.ts`,
+ * where the `semanticCriterionCoverage` host hook is wired. Same shape as
+ * `semanticContradictionEnabled()` (contradiction-checker.ts).
+ */
+export function semanticCriterionCoverageEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_SEMANTIC_CRITERION_COVERAGE ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
 const COVERAGE_SCHEMA = {
   type: 'object',
   properties: {

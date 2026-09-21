@@ -1,0 +1,23 @@
+{
+  "id": "audit-criterion-coverage-incident-summary",
+  "category": "multi_step",
+  "slice": "audit_criterion_coverage",
+  "intent": "A correct reply meets each stated success criterion in different words than the criterion text.",
+  "prompt": "Summarise incident/2026-08-30.md for the exec channel. Done when: the customer impact is described, and the root cause is identified.",
+  "workspace": [
+    {
+      "path": "incident/2026-08-30.md",
+      "content": "# Incident 2026-08-30\n\nFor 47 minutes, about 12% of checkout requests returned errors.\n\nCause: a connection-pool limit was lowered during a config push and exhausted under peak load.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "47\\s*min",
+    "contains": [
+      "pool"
+    ]
+  },
+  "note": "47 minutes / 12% of checkouts (impact) and the connection-pool limit (root cause). [C1 audit_criterion_coverage: the task states explicit success criteria in the user's own wording; a correct reply meets each in different words, so a plain substring check on the criterion text would miss. Caveat: the shipped bridge passes only the non-checkable default criterion to the harness run, so plan criteria never reach this hook — see the manifest corpusNote.]"
+}

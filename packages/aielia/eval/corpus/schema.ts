@@ -78,6 +78,13 @@ export const AUDIT_SLICES = [
   // escalation after repeated failure, not compounding an early wrong assumption. For
   // `harness-vs-bare` (which runs the full corpus, so these are picked up automatically).
   'harness_session',
+  // Multi-step tasks whose user prompt states explicit success criteria ("Done when: ...") that a
+  // correct reply meets in *different words* than the criterion text, plus controls where a
+  // criterion is genuinely unmet — the shape `checkSemanticCriterionCoverage` (arm `flagOn` vs
+  // `criterionCoverageOff`) is layered on the reviewer's substring check for. Caveat: the shipped
+  // bridge passes only the non-checkable default criterion to the harness run, so this hook is
+  // structurally unreachable from a product turn; see the manifest entry's corpusNote.
+  'audit_criterion_coverage',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

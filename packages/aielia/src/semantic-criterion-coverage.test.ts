@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import type { Belief } from '@buildaharness/harness'
-import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
+import { checkSemanticCriterionCoverage, semanticCriterionCoverageEnabled, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
   calls = 0
@@ -90,5 +90,46 @@ describe('checkSemanticCriterionCoverage', () => {
     )
     expect(result).toBe(false)
     expect(llm.calls).toBe(0)
+  })
+})
+
+describe('semanticCriterionCoverageEnabled (AUDIT_SEMANTIC_CRITERION_COVERAGE gate — Phase C1)', () => {
+  it('defaults ON when the flag is unset or empty', () => {
+    expect(semanticCriterionCoverageEnabled({})).toBe(true)
+    expect(semanticCriterionCoverageEnabled({ AUDIT_SEMANTIC_CRITERION_COVERAGE: '' })).toBe(true)
+    expect(semanticCriterionCoverageEnabled({ AUDIT_SEMANTIC_CRITERION_COVERAGE: '  ' })).toBe(true)
+  })
+
+  it('stays ON for truthy values', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'anything-else']) {
+      expect(semanticCriterionCoverageEnabled({ AUDIT_SEMANTIC_CRITERION_COVERAGE: v }), v).toBe(true)
+    }
+  })
+
+  it('turns OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', 'DISABLED', ' Off ']) {
+      expect(semanticCriterionCoverageEnabled({ AUDIT_SEMANTIC_CRITERION_COVERAGE: v }), v).toBe(false)
+    }
+  })
+
+  it('when OFF, the criterionCoverageOff arm never reaches the LLM call; when ON, it is called once per unmatched criterion', async () => {
+    // harness-bridge.ts gates the whole `semanticCriterionCoverage` hook on this helper, so an OFF
+    // value means the harness's implementer lens sees `undefined` and runs its substring check
+    // alone. Proven at the unit boundary, where the helper is the single decision point.
+    const llm = new StructuredOnlyLLMClient('{"covered":true}')
+    const beliefs = [belief('b1', 'the suite finished with zero failures')]
+    const criteria = ['the login tests pass', 'the build is green']
+
+    const offHook = semanticCriterionCoverageEnabled({ AUDIT_SEMANTIC_CRITERION_COVERAGE: '0' })
+      ? (c: string, b: Belief[]) => checkSemanticCriterionCoverage(c, b, llm)
+      : undefined
+    for (const c of criteria) if (offHook) await offHook(c, beliefs)
+    expect(llm.calls).toBe(0)
+
+    const onHook = semanticCriterionCoverageEnabled({})
+      ? (c: string, b: Belief[]) => checkSemanticCriterionCoverage(c, b, llm)
+      : undefined
+    for (const c of criteria) if (onHook) await onHook(c, beliefs)
+    expect(llm.calls).toBe(2)
   })
 })

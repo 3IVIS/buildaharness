@@ -1,0 +1,23 @@
+{
+  "id": "audit-criterion-coverage-oncall-handoff",
+  "category": "multi_step",
+  "slice": "audit_criterion_coverage",
+  "intent": "A correct reply meets each stated success criterion in different words than the criterion text.",
+  "prompt": "From oncall/roster.md work out who is on call this Saturday and how to reach them. Done when: one person is named, and a contact route is given.",
+  "workspace": [
+    {
+      "path": "oncall/roster.md",
+      "content": "# Roster\n\n| day | person | phone | slack |\n|---|---|---|---|\n| Fri | Dana | 555-0101 | @dana |\n| Sat | Priya | 555-0177 | @priya.n |\n| Sun | Marco | 555-0142 | @marco |\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Priya"
+    ],
+    "regex": "555-0177|@priya\\.n"
+  },
+  "note": "Priya, reachable by phone or slack; 'a contact route' is satisfied by '555-0177' with no shared words. [C1 audit_criterion_coverage: the task states explicit success criteria in the user's own wording; a correct reply meets each in different words, so a plain substring check on the criterion text would miss. Caveat: the shipped bridge passes only the non-checkable default criterion to the harness run, so plan criteria never reach this hook — see the manifest corpusNote.]"
+}
