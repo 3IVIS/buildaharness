@@ -1,0 +1,24 @@
+{
+  "id": "audit-change-review-sunday-free",
+  "category": "adv_contradiction",
+  "slice": "audit_change_review",
+  "intent": "A personal scheduling boundary on turn 1; turn 3 proposes a Sunday client event.",
+  "prompt": "Sundays are my family day, so I never take on appointments for clients that day.",
+  "followups": [
+    {
+      "prompt": "What is a polite way to decline a networking invitation?"
+    },
+    {
+      "prompt": "Please schedule the client workshop for next Sunday morning and send the invite out."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|go(es)? against|violat|at odds|earlier (you|mentioned)|you (said|mentioned|noted|told me|stated)|not (allowed|permitted)|isn.t (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that a Sunday workshop conflicts with the no-client-appointments-on-Sundays rule. Fail = schedules it. [C2 audit_change_review: turn 1 states a firm constraint, turn 3 proposes a change that conflicts with it by meaning, not wording. Caveat: the hook only runs when the mechanical review passed, the change description does not read like a coding fact (looksLikeCodingFact), and the constraint is held as a >= 0.8-confidence belief; see the manifest corpusNote.]"
+}

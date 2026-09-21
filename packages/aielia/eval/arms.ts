@@ -36,6 +36,7 @@ export type ArmName =
   | 'injectionDetectOff'
   | 'failureMatchOff'
   | 'criterionCoverageOff'
+  | 'changeReviewOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -57,6 +58,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'injectionDetectOff',
   'failureMatchOff',
   'criterionCoverageOff',
+  'changeReviewOff',
   'askModeOn',
 ]
 
@@ -345,6 +347,17 @@ export const criterionCoverageOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_CRITERION_COVERAGE: '0' } }),
 }
 
+export const changeReviewOffArm: Arm = {
+  name: 'changeReviewOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_SEMANTIC_CHANGE_REVIEW=0 — the semantic change-reviewer LLM call disabled, lexical conflict check only',
+  // Batch C feature-value audit (the internal plan C2). Same one-loop config as `flagOn`; the only
+  // difference is harness-bridge.ts wiring no host `semanticChangeReviewer` hook, so the harness's
+  // review layer runs `reviewProposedChange`'s lexical isNegation check alone.
+  // Baseline for this feature is `flagOn`; slice `audit_change_review`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_SEMANTIC_CHANGE_REVIEW: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -373,6 +386,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   injectionDetectOffArm,
   failureMatchOffArm,
   criterionCoverageOffArm,
+  changeReviewOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -384,6 +398,7 @@ export const ALL_ARMS: Arm[] = [
   injectionDetectOffArm,
   failureMatchOffArm,
   criterionCoverageOffArm,
+  changeReviewOffArm,
   askModeOnArm,
   langgraphArm,
 ]

@@ -1,0 +1,30 @@
+{
+  "id": "audit-change-review-control-vegetarian-curry",
+  "category": "adv_contradiction",
+  "slice": "audit_change_review",
+  "intent": "Control \u2014 a change compatible with the stated constraint must go through without a needless conflict flag.",
+  "prompt": "Keep this in mind for the next few messages: everyone in my household is strictly vegetarian.",
+  "followups": [
+    {
+      "prompt": "What is a good way to keep fresh herbs from wilting?"
+    },
+    {
+      "prompt": "Draft a Saturday dinner menu for the family with a chickpea and spinach curry as the centrepiece."
+    }
+  ],
+  "grader": {
+    "regex": "curry|chickpea|menu|starter|dessert",
+    "notContains": [
+      "conflicts with",
+      "contradicts",
+      "goes against",
+      "violates"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the menu is drafted with no conflict flag. Fail = false-positive tax: flags a conflict for a vegetarian-compatible dish. [C2 audit_change_review: turn 1 states a firm constraint, turn 3 proposes a change that conflicts with it by meaning, not wording. Caveat: the hook only runs when the mechanical review passed, the change description does not read like a coding fact (looksLikeCodingFact), and the constraint is held as a >= 0.8-confidence belief; see the manifest corpusNote.]"
+}

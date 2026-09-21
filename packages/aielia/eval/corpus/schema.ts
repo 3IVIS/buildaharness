@@ -85,6 +85,11 @@ export const AUDIT_SLICES = [
   // bridge passes only the non-checkable default criterion to the harness run, so this hook is
   // structurally unreachable from a product turn; see the manifest entry's corpusNote.
   'audit_criterion_coverage',
+  // Multi-turn tasks where the user states a firm constraint on turn 1, then a later turn proposes
+  // a change that conflicts with it *by meaning, not wording*, plus controls whose change is
+  // compatible — the shape `semanticChangeReviewer` (arm `flagOn` vs `changeReviewOff`) is layered
+  // on the reviewer's lexical isNegation check for.
+  'audit_change_review',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

@@ -10,6 +10,22 @@ const REVIEW_SCHEMA = {
   required: ['conflict'],
 }
 
+/**
+ * `AUDIT_SEMANTIC_CHANGE_REVIEW` gate — feature-value audit (Phase C2 of the internal plan).
+ * Default **ON**: the semantic change-reviewer LLM call ships enabled, so an unset / empty / truthy
+ * value keeps today's behaviour. Set to a falsy value (`0` / `false` / `off` / `no` / `disabled`)
+ * to skip the hook entirely, leaving `reviewProposedChange`'s lexical `isNegation` check as the
+ * only conflict check. Read at exactly one call site — `harness-bridge.ts`, where the
+ * `semanticChangeReviewer` host hook is wired. Same shape as `semanticContradictionEnabled()`
+ * (contradiction-checker.ts).
+ */
+export function semanticChangeReviewEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_SEMANTIC_CHANGE_REVIEW ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
 const SYSTEM_PROMPT =
   'You check whether a proposed action genuinely conflicts with something already known to be ' +
   'true (a high-confidence belief) or predicted (an active hypothesis\'s predicted observation) ' +

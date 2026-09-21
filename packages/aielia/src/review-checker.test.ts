@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { checkSemanticReviewConflict } from './review-checker.js'
+import { checkSemanticReviewConflict, semanticChangeReviewEnabled } from './review-checker.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
   calls = 0
@@ -79,5 +79,47 @@ describe('checkSemanticReviewConflict', () => {
     const llm = new ThrowingLLMClient()
     const result = await checkSemanticReviewConflict('rename the welcome message', [{ id: 'b1', statement: 'x' }], [], llm)
     expect(result).toEqual({ conflict: false })
+  })
+})
+
+describe('semanticChangeReviewEnabled (AUDIT_SEMANTIC_CHANGE_REVIEW gate — Phase C2)', () => {
+  it('defaults ON when the flag is unset or empty', () => {
+    expect(semanticChangeReviewEnabled({})).toBe(true)
+    expect(semanticChangeReviewEnabled({ AUDIT_SEMANTIC_CHANGE_REVIEW: '' })).toBe(true)
+    expect(semanticChangeReviewEnabled({ AUDIT_SEMANTIC_CHANGE_REVIEW: '  ' })).toBe(true)
+  })
+
+  it('stays ON for truthy values', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'anything-else']) {
+      expect(semanticChangeReviewEnabled({ AUDIT_SEMANTIC_CHANGE_REVIEW: v }), v).toBe(true)
+    }
+  })
+
+  it('turns OFF only for an explicit falsy value', () => {
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', 'DISABLED', ' Off ']) {
+      expect(semanticChangeReviewEnabled({ AUDIT_SEMANTIC_CHANGE_REVIEW: v }), v).toBe(false)
+    }
+  })
+
+  it('when OFF the hook is undefined and the LLM is never called; when ON it is called once per proposed change', async () => {
+    // harness-bridge.ts gates the whole `semanticChangeReviewer` hook on this helper, so an OFF
+    // value means HarnessRuntime sees `undefined` and only the mechanical review runs. Proven at
+    // the unit boundary, where the helper is the single decision point.
+    const llm = new StructuredOnlyLLMClient('{"conflict":true,"reason":"lamb is meat"}')
+    const beliefs = [{ id: 'b1', statement: 'everyone in the household is strictly vegetarian' }]
+    const build = (env: Record<string, string>) =>
+      semanticChangeReviewEnabled(env)
+        ? (change: string) => checkSemanticReviewConflict(change, beliefs, [], llm)
+        : undefined
+
+    const offHook = build({ AUDIT_SEMANTIC_CHANGE_REVIEW: '0' })
+    expect(offHook).toBeUndefined()
+    expect(llm.calls).toBe(0)
+
+    const onHook = build({})
+    expect(onHook).toBeDefined()
+    const result = await onHook!('draft a Saturday dinner menu with slow-roasted lamb as the centrepiece')
+    expect(llm.calls).toBe(1)
+    expect(result.conflict).toBe(true)
   })
 })

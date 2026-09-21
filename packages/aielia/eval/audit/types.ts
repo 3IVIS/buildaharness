@@ -25,6 +25,7 @@ import type { ArmName } from '../arms.js'
  *   llm-injection-detect  → ["injectionDetectOff", "flagOn"](the per-output LLM injection check = candidate)
  *   semantic-failure-match→ ["failureMatchOff", "flagOn"]  (the LLM failure-mode-matcher call = candidate)
  *   semantic-criterion-coverage → ["criterionCoverageOff", "flagOn"] (the LLM criterion-coverage call = candidate)
+ *   semantic-change-reviewer    → ["changeReviewOff", "flagOn"] (the LLM change-reviewer call = candidate)
  */
 export const AuditVerdictSchema = z.enum(['KEEP', 'CUT', 'INCONCLUSIVE'])
 export type AuditVerdict = z.infer<typeof AuditVerdictSchema>

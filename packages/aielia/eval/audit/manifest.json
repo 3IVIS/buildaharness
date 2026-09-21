@@ -115,6 +115,22 @@
       "status": "queued",
       "corpusAdequacy": "scoped",
       "corpusNote": "Within-turn mechanism, but the shipped bridge (harness-bridge.ts) passes only NON_CHECKABLE_DEFAULT_CRITERION to runtime.run(), for which the hook returns false with no LLM call; plan successCriteria never reach it. Expect no arm differential: the entry must be published scoped to 'the hook is unreachable from a product turn', not as a verdict on paraphrase recognition. Any spurious-finding effect is seen by the single-turn grader only through retries/escalations."
+    },
+    {
+      "id": "semantic-change-reviewer",
+      "title": "Semantic change reviewer",
+      "hypothesis": "The semanticChangeReviewer LLM call catches proposed changes that conflict in meaning with a held high-confidence belief, which the reviewer's lexical check misses, often enough to justify +1 call per proposed change and without blocking compatible changes.",
+      "arms": [
+        "changeReviewOff",
+        "flagOn"
+      ],
+      "slice": "audit_change_review",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 8,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Within-turn once the belief is held; the belief-establishing turn is part of the task (pre-seeded memory is not a supported corpus shape, so every task states the constraint on turn 1 and proposes the conflicting change on turn 3). Caveats: conflicts against beliefs from a much earlier session are out of scope; the hook is skipped for a change that reads like a coding fact (looksLikeCodingFact) and runs only after the mechanical review passed, so the slice uses natural-language domains; whether the constraint reaches a >= 0.8-confidence belief depends on fact extraction, so a null arm differential may mean the belief was never held rather than that the call is worthless."
     }
   ]
 }

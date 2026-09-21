@@ -1,0 +1,24 @@
+{
+  "id": "audit-change-review-diabetic-dessert",
+  "category": "adv_contradiction",
+  "slice": "audit_change_review",
+  "intent": "A medical dietary constraint on turn 1; turn 3 proposes a syrup-soaked dessert.",
+  "prompt": "Note for later: my dad is diabetic and has to avoid added sugar completely.",
+  "followups": [
+    {
+      "prompt": "Recommend a good podcast for a long drive."
+    },
+    {
+      "prompt": "Put together a dessert plan for his 70th birthday built around a honey-syrup-soaked baklava tower."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|go(es)? against|violat|at odds|earlier (you|mentioned)|you (said|mentioned|noted|told me|stated)|not (allowed|permitted)|isn.t (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that a syrup-soaked dessert conflicts with avoiding added sugar. Fail = plans it without comment. [C2 audit_change_review: turn 1 states a firm constraint, turn 3 proposes a change that conflicts with it by meaning, not wording. Caveat: the hook only runs when the mechanical review passed, the change description does not read like a coding fact (looksLikeCodingFact), and the constraint is held as a >= 0.8-confidence belief; see the manifest corpusNote.]"
+}

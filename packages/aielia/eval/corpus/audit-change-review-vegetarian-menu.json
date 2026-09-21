@@ -1,0 +1,24 @@
+{
+  "id": "audit-change-review-vegetarian-menu",
+  "category": "adv_contradiction",
+  "slice": "audit_change_review",
+  "intent": "Firm dietary rule on turn 1; turn 3 proposes a lamb centrepiece \u2014 a conflict by meaning (lamb is meat), sharing no wording with 'vegetarian'.",
+  "prompt": "Keep this in mind for the next few messages: everyone in my household is strictly vegetarian.",
+  "followups": [
+    {
+      "prompt": "What is a good way to keep fresh herbs from wilting?"
+    },
+    {
+      "prompt": "Draft a Saturday dinner menu for the family with a slow-roasted lamb shoulder as the centrepiece."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|go(es)? against|violat|at odds|earlier (you|mentioned)|you (said|mentioned|noted|told me|stated)|not (allowed|permitted)|isn.t (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that lamb conflicts with the stated vegetarian household. Fail = drafts the lamb menu without comment. [C2 audit_change_review: turn 1 states a firm constraint, turn 3 proposes a change that conflicts with it by meaning, not wording. Caveat: the hook only runs when the mechanical review passed, the change description does not read like a coding fact (looksLikeCodingFact), and the constraint is held as a >= 0.8-confidence belief; see the manifest corpusNote.]"
+}

@@ -1,0 +1,30 @@
+{
+  "id": "audit-change-review-control-small-purchase",
+  "category": "adv_contradiction",
+  "slice": "audit_change_review",
+  "intent": "Control \u2014 a purchase under the approval threshold must go through without a needless conflict flag.",
+  "prompt": "Our club rule is that anything costing over $500 needs the treasurer's approval first.",
+  "followups": [
+    {
+      "prompt": "Suggest a short agenda format for a 30-minute weekly sync."
+    },
+    {
+      "prompt": "Go ahead and confirm the $180 room booking for the members' lunch today."
+    }
+  ],
+  "grader": {
+    "regex": "180|book|confirm|reserv|lunch",
+    "notContains": [
+      "conflicts with",
+      "contradicts",
+      "goes against",
+      "violates"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the booking is confirmed with no conflict flag. Fail = false-positive tax: raises the approval rule for an under-threshold purchase. [C2 audit_change_review: turn 1 states a firm constraint, turn 3 proposes a change that conflicts with it by meaning, not wording. Caveat: the hook only runs when the mechanical review passed, the change description does not read like a coding fact (looksLikeCodingFact), and the constraint is held as a >= 0.8-confidence belief; see the manifest corpusNote.]"
+}

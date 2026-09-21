@@ -29,7 +29,7 @@ import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runti
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate } from './contradiction-checker.js'
-import { checkSemanticReviewConflict } from './review-checker.js'
+import { checkSemanticReviewConflict, semanticChangeReviewEnabled } from './review-checker.js'
 import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, semanticCriterionCoverageEnabled, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { toTaskRiskLevel } from './task-mapping.js'
@@ -316,8 +316,14 @@ export class HarnessBridge {
         // Layered on top of review-proposed-change.ts's lexical isNegation check — same "skip
         // when it reads like a coding fact" gate contradictionChecker uses, since that's the
         // domain the fixed-phrase check already covers reasonably well.
-        semanticChangeReviewer: (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
-          checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage),
+        // AUDIT_SEMANTIC_CHANGE_REVIEW (feature-value audit, Phase C2) gates the whole hook: OFF →
+        // no host semanticChangeReviewer is wired at all, so the harness's mechanical
+        // reviewProposedChange (lexical isNegation) is the only conflict check. Default ON —
+        // unchanged shipped behaviour.
+        semanticChangeReviewer: semanticChangeReviewEnabled()
+          ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
+              checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)
+          : undefined,
         // Layered on top of FailureModeLibrary's own exact-string-overlap match() — see
         // failure-mode-matcher.ts's doc comment for why exact equality against a curated symptom
         // list almost never happens for free-text observations in practice.
