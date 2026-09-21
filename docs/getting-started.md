@@ -18,7 +18,7 @@ found (no key needed), or paste a key. Then talk to it. Try a harmless question,
 then something consequential like *"send an email to my boss saying I quit"* to
 watch the approval gate fire before any model call is made.
 
-Prefer a browser? Open **[buildaharness.com/try](https://buildaharness.com/try)**,
+Prefer a browser? Open **[myaielia.com/try](https://myaielia.com/try)**,
 paste a key in Settings (it stays in your browser), and go.
 
 ---

@@ -28,7 +28,7 @@ export { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL } from './model-defaults
  * raw repo; `X-Title` is the display name shown there.
  */
 export const OPENROUTER_EXTRA_HEADERS: Record<string, string> = {
-  'HTTP-Referer': 'https://buildaharness.com/personal-assistant',
+  'HTTP-Referer': 'https://myaielia.com',
   'X-Title': 'Aielia',
 }
 
