@@ -44,6 +44,8 @@ import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } fr
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
+import { parseCliArgs, cliHelpText } from './cli-args.js'
+import { CLI_VERSION } from './version.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -1583,7 +1585,23 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
  * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
  * at all — `main()` behaves byte-for-byte as it does today in both those cases.
  */
-export async function main(): Promise<void> {
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const parsed = parseCliArgs(argv)
+  if (parsed.command === 'version') {
+    console.log(CLI_VERSION)
+    return
+  }
+  if (parsed.command === 'help') {
+    console.log(cliHelpText(CLI_VERSION))
+    return
+  }
+  if (parsed.command === 'update') {
+    // The self-update module lands in a later stage of the install plan; until then, point at the
+    // channel that already works rather than silently starting the REPL.
+    console.log('Self-update is not available in this build yet. Update with: npm update -g @buildaharness/aielia')
+    return
+  }
+
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
 
