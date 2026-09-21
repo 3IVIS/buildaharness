@@ -4,6 +4,7 @@ import { resolveOneLoopMode } from './one-loop-flag.js'
 import { resolveAskMode } from './ask-mode-flag.js'
 import { resolvePlanMode } from './plan-mode-flag.js'
 import { resolveTuiMode } from './tui-mode-flag.js'
+import { resolveUpdateCheckMode } from './update-check-flag.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -45,6 +46,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   askMode: 'ASSISTANT_ASK_MODE',
   planMode: 'ASSISTANT_PLAN_MODE',
   tuiMode: 'ASSISTANT_TUI',
+  updateCheck: 'ASSISTANT_UPDATE_CHECK',
   activeProject: 'ASSISTANT_ACTIVE_PROJECT',
 }
 
@@ -116,6 +118,8 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   // resolveTuiMode already warns-and-defaults on an unrecognized value, so an explicit
   // ASSISTANT_TUI always resolves to a concrete 'enabled'/'disabled' override here.
   if (env.ASSISTANT_TUI !== undefined) overrides.tuiMode = resolveTuiMode(env)
+  // resolveUpdateCheckMode warns-and-defaults on an unrecognized value, same as the flags above.
+  if (env.ASSISTANT_UPDATE_CHECK !== undefined) overrides.updateCheck = resolveUpdateCheckMode(env)
   if (env.ASSISTANT_ACTIVE_PROJECT !== undefined) overrides.activeProject = env.ASSISTANT_ACTIVE_PROJECT
   return overrides
 }
@@ -173,6 +177,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return raw
     case 'tuiMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('tuiMode must be "enabled" or "disabled"')
+      return raw
+    case 'updateCheck':
+      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('updateCheck must be "enabled" or "disabled"')
       return raw
     default:
       return raw

@@ -45,6 +45,14 @@ import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
 import { parseCliArgs, cliHelpText } from './cli-args.js'
+import {
+  runUpdateCommand,
+  checkForUpdate,
+  cleanupStaleUpdateFiles,
+  isRunningAsSea,
+  shouldRunPassiveUpdateCheck,
+  updateAvailableNotice,
+} from './self-update.js'
 import { CLI_VERSION } from './version.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
@@ -1596,14 +1604,23 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return
   }
   if (parsed.command === 'update') {
-    // The self-update module lands in a later stage of the install plan; until then, point at the
-    // channel that already works rather than silently starting the REPL.
-    console.log('Self-update is not available in this build yet. Update with: npm update -g @buildaharness/aielia')
+    process.exitCode = await runUpdateCommand({ dryRun: parsed.dryRun })
     return
   }
 
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
+
+  // Startup housekeeping + passive update check. Fire-and-forget: never awaited before the prompt
+  // renders, never throws (checkForUpdate resolves null on any failure), and gated off entirely for
+  // non-interactive sessions and when opted out (see shouldRunPassiveUpdateCheck).
+  const isSea = isRunningAsSea()
+  if (isSea) cleanupStaleUpdateFiles()
+  if (shouldRunPassiveUpdateCheck({ updateCheck: config.updateCheck, env: process.env, stdinIsTty: Boolean(process.stdin.isTTY) })) {
+    void checkForUpdate().then((result) => {
+      if (result?.updateAvailable) console.log(updateAvailableNotice(result.latestVersion, CLI_VERSION, isSea))
+    })
+  }
 
   if (shouldLaunchTuiApp(config.tuiMode ?? 'disabled', Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
     const { runTuiApp } = await import('./tui-app.js')

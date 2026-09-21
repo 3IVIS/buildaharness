@@ -13,13 +13,13 @@ export const MCP_SERVER_FILE_NAME = 'file-tools-mcp-server.mjs'
  */
 export const MCP_SERVER_PATTERN_FILES = ['injection-patterns.json', 'fact-markers.json', 'risk-patterns.json'] as const
 
-interface SeaModule {
+export interface SeaModule {
   isSea(): boolean
   getRawAsset(key: string): ArrayBuffer
 }
 
 /** `node:sea` if this process is a Node single executable application, else null. Never throws. */
-function loadSea(): SeaModule | null {
+export function loadSea(): SeaModule | null {
   try {
     // createRequire keeps this out of the bundlers' static import graph — `node:sea` is absent on
     // older Node versions, and only meaningful inside a SEA.
