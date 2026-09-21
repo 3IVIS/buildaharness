@@ -21,8 +21,9 @@ example flow, persona/prompt fixtures, and session-runner tooling), the planner 
 implementation and canonical plan templates, and a deeper pseudo-code/state-model architecture
 write-up (the public [docs/architecture.md](docs/architecture.md) covers the same system at a level
 intended for external contributors). `packages/aielia`'s TypeScript plan templates are self-contained
-and don't need the private copies to build or run; the drift checks in `scripts/` that compare
-against them are skipped when those copies are absent.
+and don't need the private copies to build or run. Optional extension points — a plugin manifest for
+the adapter, an `overlay/` directory of extra example flows, a Compose override, and hook directories
+for the setup and stats scripts — are picked up when present; a plain clone has none of them.
 
 ---
 

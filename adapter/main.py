@@ -130,6 +130,7 @@ from a2a_api import router_tasks as a2a_tasks_router  # noqa: E402
 from a2a_api import router_well_known as a2a_wk_router  # noqa: E402
 from auth import current_user  # noqa: E402
 from auth import router as auth_router  # noqa: E402
+from capability_manifest import missing_capabilities, partial_capability_warnings  # noqa: E402
 from crewai_adapter import compile_crewai  # noqa: E402
 from db import User, init_db  # noqa: E402
 from deploy_api import router_deploy as deploy_router  # noqa: E402
@@ -147,15 +148,7 @@ from mastra_adapter import compile_mastra  # noqa: E402
 from org_context import Org  # noqa: E402
 from org_context import current_org as _current_org_dep  # noqa: E402
 from orgs_api import router as orgs_router  # noqa: E402
-
-try:
-    from planner_api import router as planner_router
-
-    _planner_available = True
-except ImportError:
-    planner_router = None  # type: ignore[assignment]
-    _planner_available = False
-from capability_manifest import missing_capabilities, partial_capability_warnings  # noqa: E402
+from plugin_loader import load_plugin_modules  # noqa: E402
 from prompt_resolver import resolve_prompts  # noqa: E402
 from prompts_api import router as prompts_router  # noqa: E402
 from rate_limit import limiter  # noqa: E402
@@ -163,6 +156,11 @@ from run_api import router as run_router  # noqa: E402
 from sso_auth import router_scim, router_sso, router_token  # noqa: E402
 from teams_api import router as teams_router  # noqa: E402
 from validate import validate_spec as _validate_spec  # noqa: E402
+
+# Routers contributed by optional plugin modules (see plugin_loader); none in a plain clone.
+_plugin_routers = [
+    router for module in load_plugin_modules("routers") if (router := getattr(module, "router", None)) is not None
+]
 
 
 @asynccontextmanager
@@ -250,8 +248,8 @@ app.include_router(deploy_wk_router)
 app.include_router(deploy_share_router)
 app.include_router(deploy_invoke_router)
 app.include_router(marketplace_router)
-if _planner_available:
-    app.include_router(planner_router)
+for _plugin_router in _plugin_routers:
+    app.include_router(_plugin_router)
 app.include_router(orgs_router)
 
 

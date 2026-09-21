@@ -49,6 +49,7 @@ from adapter_logger import (
     log_section,
     log_topo_sort,
 )
+from plugin_loader import load_plugin_modules
 
 _log = get_adapter_logger("maf")
 
@@ -651,13 +652,9 @@ _BUILTIN_TOOL_IMPLS: dict[str, tuple[str | None, list[str]]] = {
     ),
 }
 
-# Load private tool implementations if present (not tracked in public repo).
-try:
-    from private_tool_impls import EXTRA_TOOL_IMPLS as _extra_tool_impls
-
-    _BUILTIN_TOOL_IMPLS.update(_extra_tool_impls)
-except ImportError:
-    pass
+# Extra tool implementations contributed by optional plugin modules (see plugin_loader); none in a plain clone.
+for _plugin in load_plugin_modules("tool_impls"):
+    _BUILTIN_TOOL_IMPLS.update(getattr(_plugin, "EXTRA_TOOL_IMPLS", {}))
 
 
 def gen_tools(spec: dict) -> str:

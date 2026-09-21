@@ -7,16 +7,12 @@ import { debateFlow } from './debate'
 
 type FlowEntry = { label: string; spec: FlowSpec }
 
-// Private flow modules are not tracked in the public repo.
-// import.meta.glob returns {} when no files match, so this degrades gracefully.
-const _privateModule = import.meta.glob<{
-  coachingFlow?: FlowEntry
-  coachingSessionCloseFlow?: FlowEntry
-}>('./coaching.ts', { eager: true })
+// A checkout can carry extra example flows under ./overlay/ — each module exports
+// `overlayFlows: FlowEntry[]`. A plain clone has no such directory; import.meta.glob returns {}
+// when nothing matches, so this degrades gracefully.
+const _overlayModules = import.meta.glob<{ overlayFlows?: FlowEntry[] }>('./overlay/*.ts', { eager: true })
 
-const _privateFlows: FlowEntry[] = Object.values(_privateModule).flatMap(m =>
-  [m.coachingFlow, m.coachingSessionCloseFlow].filter((f): f is FlowEntry => f != null),
-)
+const _overlayFlows: FlowEntry[] = Object.values(_overlayModules).flatMap(m => m.overlayFlows ?? [])
 
 export const EXAMPLE_FLOWS: FlowEntry[] = [
   ragFlow,
@@ -24,5 +20,5 @@ export const EXAMPLE_FLOWS: FlowEntry[] = [
   parallelRiskFlow,
   researchCrewFlow,
   debateFlow,
-  ..._privateFlows,
+  ..._overlayFlows,
 ]
