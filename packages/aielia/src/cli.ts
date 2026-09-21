@@ -44,6 +44,16 @@ import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } fr
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
+import { parseCliArgs, cliHelpText } from './cli-args.js'
+import {
+  runUpdateCommand,
+  checkForUpdate,
+  cleanupStaleUpdateFiles,
+  isRunningAsSea,
+  shouldRunPassiveUpdateCheck,
+  updateAvailableNotice,
+} from './self-update.js'
+import { CLI_VERSION } from './version.js'
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -1583,9 +1593,34 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
  * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
  * at all — `main()` behaves byte-for-byte as it does today in both those cases.
  */
-export async function main(): Promise<void> {
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const parsed = parseCliArgs(argv)
+  if (parsed.command === 'version') {
+    console.log(CLI_VERSION)
+    return
+  }
+  if (parsed.command === 'help') {
+    console.log(cliHelpText(CLI_VERSION))
+    return
+  }
+  if (parsed.command === 'update') {
+    process.exitCode = await runUpdateCommand({ dryRun: parsed.dryRun })
+    return
+  }
+
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
+
+  // Startup housekeeping + passive update check. Fire-and-forget: never awaited before the prompt
+  // renders, never throws (checkForUpdate resolves null on any failure), and gated off entirely for
+  // non-interactive sessions and when opted out (see shouldRunPassiveUpdateCheck).
+  const isSea = isRunningAsSea()
+  if (isSea) cleanupStaleUpdateFiles()
+  if (shouldRunPassiveUpdateCheck({ updateCheck: config.updateCheck, env: process.env, stdinIsTty: Boolean(process.stdin.isTTY) })) {
+    void checkForUpdate().then((result) => {
+      if (result?.updateAvailable) console.log(updateAvailableNotice(result.latestVersion, CLI_VERSION, isSea))
+    })
+  }
 
   if (shouldLaunchTuiApp(config.tuiMode ?? 'disabled', Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
     const { runTuiApp } = await import('./tui-app.js')

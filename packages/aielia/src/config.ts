@@ -10,6 +10,7 @@ import type { OneLoopMode } from './one-loop-flag.js'
 import type { AskMode } from './ask-mode-flag.js'
 import type { PlanRolloutMode } from './plan-mode-flag.js'
 import type { TuiMode } from './tui-mode-flag.js'
+import type { UpdateCheckMode } from './update-check-flag.js'
 
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
@@ -147,6 +148,13 @@ export interface AssistantConfig {
    */
   tuiMode?: TuiMode
   /**
+   * Opt-out for the CLI's passive, 24h-throttled update check (self-update.ts's
+   * `checkForUpdate()` — one plain GET of myaielia.com's `aielia-latest.json`). Undefined means
+   * enabled; 'disabled' (env `ASSISTANT_UPDATE_CHECK`, cli-config.ts) silences only the passive
+   * check, never the explicit `aielia update` command. CLI-only, like `tuiMode`.
+   */
+  updateCheck?: UpdateCheckMode
+  /**
    * The project label newly captured project-scoped facts are tagged with, and the one
    * project-scoped facts are filtered against when building a turn's context (see
    * memory-service.ts's `loadFacts`/`recordFacts` and fact-extraction.ts's `UserFact.project`).
@@ -187,6 +195,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'askMode',
   'planMode',
   'tuiMode',
+  'updateCheck',
   'activeProject',
 ]
 

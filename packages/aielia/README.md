@@ -667,6 +667,26 @@ piped-stdin case an intentional choice instead of an implicit one. An
 unrecognized value is ignored, with a startup warning, rather than silently
 picking one of the two behaviors for you.
 
+#### Updates and the update check
+
+`aielia --version` / `aielia --help` print and exit. `aielia update` replaces the
+**standalone binary** with the latest release (`aielia update --dry-run` only
+reports what it would do): it downloads the binary for your platform, verifies
+its SHA-256 against the hash published in the release manifest at
+`https://myaielia.com/aielia-latest.json` (HTTPS only — anything else is
+refused), and only then swaps it in. A copy installed with npm can't
+self-replace, so there it prints `npm update -g @buildaharness/aielia` instead.
+
+While an interactive session starts, the CLI also does a **passive update
+check**: at most once per 24 hours, one plain `GET` of that manifest (falling
+back to GitHub's Releases API) — no query string, no identifiers, default
+User-Agent only — and, if a newer version exists, a one-line notice. The request
+is visible to GitHub and Cloudflare (which serve myaielia.com). It never runs
+for scripted use (stdin not a TTY, or `ASSISTANT_NON_INTERACTIVE_APPROVAL` set).
+Turn it off with `ASSISTANT_UPDATE_CHECK=disabled` or
+`/config set updateCheck disabled`; the explicit `aielia update` still works
+with it off.
+
 #### Web search needs a Brave Search API key
 
 Brave Search is the only backend `web_search` supports. Enable web tools with

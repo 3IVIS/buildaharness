@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:net'
 import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent, ToolProposalDecision } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
 import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
+import { resolveMcpServerPath } from './mcp-server-asset.js'
 
 /**
  * `--tools ""` only disables Claude Code's own built-in tools (Read/Write/Bash/etc.) — it
@@ -357,13 +357,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
     // (which is routinely reworded to third person, e.g. "I'm allergic to peanuts, please
     // remember that" → "User is allergic to peanuts", dodging a check against `text` alone).
     const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
-    // Deliberately not `new URL('./file-tools-mcp-server.mjs', import.meta.url)` as a
-    // single literal — Vite's asset-URL plugin statically detects that exact pattern
-    // and inlines the whole file as a base64 data: URL at build time, which
-    // fileURLToPath can't turn back into a real path. Building the specifier from a
-    // variable keeps this a plain runtime URL resolution instead.
-    const mcpServerFileName = 'file-tools-mcp-server.mjs'
-    const mcpServerPath = fileURLToPath(new URL(mcpServerFileName, import.meta.url))
+    // See mcp-server-asset.ts — the non-SEA branch keeps the old import.meta.url resolution.
+    const mcpServerPath = resolveMcpServerPath()
     // Phase D0: gates read_file/list_directory/fetch_url/web_search/create_reminder/
     // list_reminders — see startToolGateServer's doc comment. Started before the config is
     // built (its port needs to go into TOOL_GATE_PORT) and always closed once this call

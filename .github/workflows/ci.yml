@@ -35,6 +35,10 @@ jobs:
       - name: Check schema sync
         run: node scripts/check-schema-sync.mjs
 
+      # packages/aielia/src/version.ts's CLI_VERSION must match packages/aielia/package.json.
+      - name: Check CLI version sync
+        run: node scripts/check-cli-version-sync.mjs
+
       # Guards against the independent copies (TS <-> Python) of the harness-core lexical
       # patterns drifting apart — see scripts/check-lexical-patterns-sync.mjs.
       - name: Check lexical patterns sync

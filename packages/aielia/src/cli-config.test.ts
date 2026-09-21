@@ -115,6 +115,17 @@ describe('parseConfigValue', () => {
     expect(() => parseConfigValue('oneLoopMode', 'on')).toThrow(ConfigValueParseError)
   })
 
+  it('accepts "enabled"/"disabled" for updateCheck and rejects anything else', () => {
+    expect(parseConfigValue('updateCheck', 'disabled')).toBe('disabled')
+    expect(parseConfigValue('updateCheck', 'enabled')).toBe('enabled')
+    expect(() => parseConfigValue('updateCheck', 'off')).toThrow(ConfigValueParseError)
+  })
+
+  it('resolves ASSISTANT_UPDATE_CHECK into updateCheck', () => {
+    expect(envOverridesFromProcessEnv({ ASSISTANT_UPDATE_CHECK: 'disabled' })).toEqual({ updateCheck: 'disabled' })
+    expect(envOverridesFromProcessEnv({})).toEqual({})
+  })
+
   it('accepts "enabled"/"disabled" for tuiMode and rejects anything else', () => {
     expect(parseConfigValue('tuiMode', 'enabled')).toBe('enabled')
     expect(parseConfigValue('tuiMode', 'disabled')).toBe('disabled')
