@@ -131,7 +131,7 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 
 ## 3 · 线束在 Aielia 中控制什么
 
-[`/harness-comparison`](https://buildaharness.com/harness-comparison) 页面将三款最常用的开源智能体（Hermes Agent、Kilo Code、OpenClaw）对照这套架构进行了映射。三者都没有同时提供分层的 Control State 解析器 *和* 一个审查员/输出门。Aielia 提供以下能力，全部由代码强制执行，而不是靠提示词：
+[`/harness-comparison`](https://myaielia.com/harness-comparison) 页面将三款最常用的开源智能体（Hermes Agent、Kilo Code、OpenClaw）对照这套架构进行了映射。三者都没有同时提供分层的 Control State 解析器 *和* 一个审查员/输出门。Aielia 提供以下能力，全部由代码强制执行，而不是靠提示词：
 
 - **实时的逐工具调用 ControlState 门** —— 每一次只读工具调用在执行*之前*都会依据本轮的 `ControlState` 进行检查（确定性的 ALLOW / DENY / REQUIRE_APPROVAL，而非仅供参考），因此本轮中逐渐显现的失败模式也能真正触发拒绝。
 - **有界任务** —— 对于明确列出的多个条目，每一项都有各自受限的子搜索（预算在最初几项之后校准）；连续三次死胡同就停止该项；大批量任务会在运行前请求确认；每轮工具调用总数另有硬性上限。每一项最终都是 `found`、`not_found` 或 `truncated_while_productive`，回复绝不会悄悄漏掉任何一项。

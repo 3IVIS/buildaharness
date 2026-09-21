@@ -160,7 +160,7 @@ and native desktop (`@buildaharness/desktop`).
 
 ## 3 · What the harness controls in Aielia
 
-The [`/harness-comparison`](https://buildaharness.com/harness-comparison) page
+The [`/harness-comparison`](https://myaielia.com/harness-comparison) page
 maps the three most-used open agents (Hermes Agent, Kilo Code, OpenClaw) against
 this architecture. None of them ships both a tiered Control State resolver *and*
 a reviewer/output gate. Aielia ships the following, all enforced in code rather than in a prompt:
