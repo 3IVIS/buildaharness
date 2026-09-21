@@ -48,7 +48,7 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 // 已批准 —— 继续执行，正常走完线束
 ```
 
-**[在浏览器中试用 → buildaharness.com/try](https://buildaharness.com/try)** —— 使用你自己的密钥（只保存在你的浏览器里），或在添加密钥之前先看看审批门是如何触发的。
+**[在浏览器中试用 → myaielia.com/try](https://myaielia.com/try)** —— 使用你自己的密钥（只保存在你的浏览器里），或在添加密钥之前先看看审批门是如何触发的。
 
 一套核心，三种前端：终端 CLI、浏览器（`@buildaharness/chat-ui`）、原生桌面应用（`@buildaharness/desktop`）。
 
@@ -147,7 +147,7 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 
 ```bash
 npx @buildaharness/aielia          # 终端
-# 或打开 https://buildaharness.com/try           # 浏览器，使用你自己的密钥
+# 或打开 https://myaielia.com/try           # 浏览器，使用你自己的密钥
 ```
 
 **构建和编译线束**则需要完整技术栈（画布 + 适配器 API + Langfuse）：

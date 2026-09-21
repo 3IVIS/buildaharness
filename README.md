@@ -61,7 +61,7 @@ await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
 // approved — proceeds and runs the harness normally
 ```
 
-**[Try it in your browser → buildaharness.com/try](https://buildaharness.com/try)**
+**[Try it in your browser → myaielia.com/try](https://myaielia.com/try)**
 — bring your own key (stored only in your browser), or see the approval gate
 fire before you add one.
 
@@ -187,7 +187,7 @@ prompts via the Langfuse prompt API (`prompt_ref` on any `llm_call` node).
 
 ```bash
 npx @buildaharness/aielia          # terminal
-# or open https://buildaharness.com/try         # browser, bring your own key
+# or open https://myaielia.com/try         # browser, bring your own key
 ```
 
 **Building and compiling harnesses** needs the full stack (canvas + adapter API

@@ -1,16 +1,16 @@
 name: Deploy chat-ui to /try
 
 # Builds the browser build of the Aielia assistant (packages/chat-ui) and publishes
-# it to the buildaharness-pages repo under /try/, which GitHub Pages serves at
-# https://buildaharness.com/try. Bring-your-own-key for the LLM itself — the page keeps
+# it to the myaielia repo under /try/, which GitHub Pages serves at
+# https://myaielia.com/try. Bring-your-own-key for the LLM itself — the page keeps
 # that API key in the visitor's browser (localStorage), nothing is proxied server-side
 # for it. Web search/fetch are the exception (see the Build chat-ui step below): they
 # default to routing through @buildaharness/proxy's SSRF-guarded /web/* endpoints, since
 # a plain browser tab can't call Brave or an arbitrary URL directly (CORS) — the visitor
 # still supplies their own Brave key, sent fresh per request, never stored on the proxy.
 #
-# Needs secrets.PAGES_DEPLOY_KEY: the private half of an SSH deploy key with write
-# access on 3IVIS/buildaharness-pages (Settings → Deploy keys, "Allow write access").
+# Needs secrets.MYAIELIA_DEPLOY_KEY: the private half of an SSH deploy key with write
+# access on 3IVIS/myaielia (Settings → Deploy keys, "Allow write access").
 # Without it the deploy step fails fast with a clear message.
 
 on:
@@ -70,17 +70,17 @@ jobs:
 
       - name: Check deploy key is present
         run: |
-          if [ -z "${{ secrets.PAGES_DEPLOY_KEY }}" ]; then
-            echo "❌  secrets.PAGES_DEPLOY_KEY is not set — cannot push to 3IVIS/buildaharness-pages."
+          if [ -z "${{ secrets.MYAIELIA_DEPLOY_KEY }}" ]; then
+            echo "❌  secrets.MYAIELIA_DEPLOY_KEY is not set — cannot push to 3IVIS/myaielia."
             echo "    Add the private half of a write-enabled SSH deploy key for that repo as this secret."
             exit 1
           fi
 
-      - name: Checkout buildaharness-pages
+      - name: Checkout myaielia
         uses: actions/checkout@v4
         with:
-          repository: 3IVIS/buildaharness-pages
-          ssh-key: ${{ secrets.PAGES_DEPLOY_KEY }}
+          repository: 3IVIS/myaielia
+          ssh-key: ${{ secrets.MYAIELIA_DEPLOY_KEY }}
           path: pages
 
       - name: Sync build into pages/try

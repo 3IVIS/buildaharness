@@ -1,5 +1,5 @@
 /**
- * First-load demo for the hosted browser trial (buildaharness.com/try).
+ * First-load demo for the hosted browser trial (myaielia.com/try).
  *
  * A visitor lands with no API key configured. Before asking them to paste one,
  * show the single most distinctive thing Aielia does: a consequential request

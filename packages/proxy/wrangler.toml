@@ -9,7 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 # zone_name = "yourdomain.com"
 
 [vars]
-ALLOWED_ORIGIN = "https://buildaharness.com"
+ALLOWED_ORIGIN = "https://myaielia.com"   # the only browser origin that calls this Worker: the hosted Aielia /try build
 PORT = "3001"
 
 # /web/* quota tuning (all optional — see src/rate-limit.ts's DEFAULTS for fallbacks if unset)
