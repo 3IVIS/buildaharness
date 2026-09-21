@@ -188,7 +188,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
 }
 
 /**
- * One choice in a structured multi-option prompt (Phase 7 of `plans/aielia_cli_formatting_plan.html`
+ * One choice in a structured multi-option prompt (Phase 7 of the internal plan
  * — the numbered/arrow-key approval selector). `key` is both the single-character shortcut shown
  * inline next to the option and the value `askSelect` resolves with; callers order options with
  * the safe/fail-closed choice last, matching `askYesNo`'s own "no real answer → treat as declined"

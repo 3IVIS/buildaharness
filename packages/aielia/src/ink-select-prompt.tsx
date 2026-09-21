@@ -13,7 +13,7 @@ export interface SelectPromptProps {
 }
 
 /**
- * Phase 7 of `plans/aielia_cli_formatting_plan.html`: an arrow-key + numbered/shortcut-key
+ * Phase 7 of the internal plan: an arrow-key + numbered/shortcut-key
  * selector, replacing free-text `y`/`N` typed into the same box used for chat (the report's
  * finding — Codex/Claude Code both use a dedicated selector for this). Deliberately a standalone
  * component rather than a mode bolted onto `TuiInput`: `TuiInput` is a general-purpose free-text
