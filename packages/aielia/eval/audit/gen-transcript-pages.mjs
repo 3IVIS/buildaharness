@@ -93,7 +93,7 @@ const ANALYTICS_HEAD = `<!-- Klaro Consent Management -->
     storageMethod: 'cookie', cookieName: 'klaro', cookieExpiresAfterDays: 365,
     privacyPolicy: '/privacy.html', default: false, mustConsent: false, acceptAll: true,
     hideDeclineAll: false, hideLearnMore: false, noticeAsModal: false,
-    translations: { en: { consentModal: { title: 'Build A Harness — We value your privacy', description: 'Here you can see and customize the information that we collect about you.' }, decline: 'Reject all', ok: 'Accept all', analytics: { description: 'Collection of information about how visitors use our website.' }, purposes: { analytics: 'Analytics' } } },
+    translations: { en: { consentModal: { title: 'Aielia — We value your privacy', description: 'Here you can see and customize the information that we collect about you.' }, decline: 'Reject all', ok: 'Accept all', analytics: { description: 'Collection of information about how visitors use our website.' }, purposes: { analytics: 'Analytics' } } },
     services: [ { name: 'analytics', title: 'Analytics & Tracking', purposes: ['analytics'], required: false } ],
   };
 </script>
@@ -574,7 +574,7 @@ function page(title, css, bodyHtml, crumbTail, generatedAt) {
 ${ANALYTICS_HEAD}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} | Build A Harness</title>
+<title>${esc(title)} | Aielia</title>
 <meta name="robots" content="noindex, follow">
 ${FONTS}
 <style>

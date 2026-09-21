@@ -11,7 +11,7 @@
  * advanced past the copy (a "not yet" became true and the pages/README weren't updated).
  *
  * When you change one of these facts in code, update `expected` here in the same commit,
- * and mirror the change into the pages repo's harness-comparison.html.
+ * and mirror the change into the myaielia repo's harness-comparison.html.
  *
  * Run manually:  node scripts/check-comparison-claims.mjs
  * Run in CI:     same command; exits 1 on any claim/code disagreement.

@@ -99,7 +99,7 @@ silently starting over.
 
 Net effect: one real LLM call per ordinary turn, zero for a blocked one, and
 every layer of the harness touched on the ones that do run — matching what
-[buildaharness.com/harness-comparison](https://buildaharness.com/harness-comparison)
+[myaielia.com/harness-comparison](https://myaielia.com/harness-comparison)
 calls out as missing from Hermes Agent, Kilo Code, and OpenClaw: none of them
 ships a formal Control State resolver *and* a Reviewer/output gate together.
 <!--
