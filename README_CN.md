@@ -2,7 +2,7 @@
 
 # Build A Harness 中文版
 
-**一个会先思考再行动、发送前会先停下来的开源 AI 助手。**
+**围绕你的智能体构建线束 —— 让 AI 智能体可靠运行的开源控制层。**
 
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
@@ -18,59 +18,15 @@
 
 ---
 
-大多数 AI 助手在模型一决定调用工具时就立刻执行。**Aielia** —— Build A Harness 的个人助手 —— 会让每一轮对话都经过一套 11 层*线束*：一个控制架构，管理智能体相信什么、被允许做什么、如何捕获自身错误，以及学到什么。一次简单的事实查询保持轻量。发送邮件、支付账单、执行 shell 命令或删除文件，则会**先停下来等待你的批准** —— 而且当分类器出错时，会要求批准，而不是当作安全操作放行。
+线束（harness）是围绕自主智能体的**治理与可靠性控制平面**：智能体拥有智能，线束拥有权威。智能体提出方案；线束决定接下来允许发生什么；由证据决定结果是否被接受。**Build A Harness** 是面向这一层的开源可视化画布与运行时 —— 在画布上绘制 11 层，将同一份 FlowSpec 编译到 LangGraph / CrewAI / Mastra / MS Agent Framework，并在 Langfuse 中追踪每一个决策。
 
-助手是入口。它下面是一整套可视化的**线束构建器** —— 在画布上绘制同样的 11 层，编译到 LangGraph / CrewAI / Mastra / MS Agent Framework，并在 Langfuse 中追踪每一个决策。
+**Aielia** 是参考应用：一个可以交付真实多步骤工作的智能体 —— 对一批条目做调研、处理文件、起草并发送消息 —— 而完整的 11 层线束在每一轮都控制着它能做什么、能相信什么，以及一项任务可以花费多少。任何无法撤销的操作（写入文件、执行命令、发送邮件）都会先暂存，等待你的批准；分类器出错时，会要求批准，而不是当作安全操作放行。
 
----
-
-## 1 · 助手 —— Aielia
-
-```bash
-npx @buildaharness/aielia
-```
-
-首次运行会引导你选择一个模型 —— 复用已登录的 `claude` CLI（无需 API 密钥），或粘贴一个 Anthropic / OpenAI / OpenRouter 密钥。然后直接和它对话即可。
-
-```ts
-import { LLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/aielia'
-
-const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
-
-await aielia.turn('东京在哪个时区？')
-// { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
-
-await aielia.turn('给我老板发一封邮件说我辞职了。')
-// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  —— 未发起任何 LLM 调用
-
-await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: true })
-// 已批准 —— 继续执行，正常走完线束
-```
-
-**[在浏览器中试用 → myaielia.com/try](https://myaielia.com/try)** —— 使用你自己的密钥（只保存在你的浏览器里），或在添加密钥之前先看看审批门是如何触发的。
-
-一套核心，三种前端：终端 CLI、浏览器（`@buildaharness/chat-ui`）、原生桌面应用（`@buildaharness/desktop`）。
+站点：[buildaharness.com](https://buildaharness.com) —— 开发者站点 · [myaielia.com](https://myaielia.com) —— 面向普通用户的 Aielia 站点。
 
 ---
 
-## 2 · 它有何不同
-
-[`/harness-comparison`](https://buildaharness.com/harness-comparison) 页面将三款最常用的开源智能体（Hermes Agent、Kilo Code、OpenClaw）对照这套架构进行了映射。三者都没有同时提供分层的 Control State 解析器 *和* 一个审查员/输出门。Aielia 提供：
-
-- **实时的逐工具调用 ControlState 门** —— 每一次只读工具调用在执行*之前*都会依据本轮的 `ControlState` 进行检查（确定性的 ALLOW / DENY / REQUIRE_APPROVAL，而非仅供参考），因此本轮中逐渐显现的失败模式也能真正触发拒绝。
-- **故障安全风险分类** —— 分类器出错或响应无法解析时返回 `UNKNOWN → 要求批准`，绝不会静默降级为低风险。
-- **审查员通过（Reviewer Pass）** —— 三镜头审查（一致性、对抗性、抽象层级契合度）与输出合约验证会在回复发出前执行。
-- **类型化事实溯源** —— 只有你亲口陈述的事实才会默认提升为持久记忆；模型推断的事实在得到确认前仅限本次会话。
-- **AnswerClaim** —— 回复会区分"有证据支持并已验证"与"找到了但无法独立确认"，并显示在聊天的"Why?"面板中。
-- **崩溃安全的轮内恢复** —— 一轮对话中途崩溃时会从最后一个检查点恢复，而非静默重来；一个在重放中反复崩溃的检查点会在两次尝试后被自动丢弃。
-- **不可信内容边界** —— 网页结果和 shell 输出会被包裹为数据，模型被明确要求绝不将其当作指令执行。
-
-完整说明：[`packages/aielia/README.md`](packages/aielia/README.md)。
-
----
-
-## 3 · 构建你自己的线束
+## 1 · 构建你自己的线束
 
 工作流将提示从节点路由到节点。**线束**管理信念、权限、自我纠错和学习。Build A Harness 以可视化构建器的形式提供完整的 11 层架构。
 
@@ -141,9 +97,58 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 
 ---
 
+## 2 · 参考应用 —— Aielia
+
+一个可以交付真实多步骤工作、并由线束约束其行为的智能体 —— 网站与演示见 [myaielia.com](https://myaielia.com)。
+
+```bash
+npx @buildaharness/aielia
+```
+
+首次运行会引导你选择一个模型 —— 复用已登录的 `claude` CLI（无需 API 密钥），或粘贴一个 Anthropic / OpenAI / OpenRouter 密钥。然后直接和它对话即可。
+
+```ts
+import { LLMClient } from '@buildaharness/runtime'
+import { PersonalAssistant } from '@buildaharness/aielia'
+
+const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
+
+await aielia.turn('东京在哪个时区？')
+// { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
+
+await aielia.turn('给我老板发一封邮件说我辞职了。')
+// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  —— 未发起任何 LLM 调用
+
+await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: true })
+// 已批准 —— 继续执行，正常走完线束
+```
+
+**[在浏览器中试用 → myaielia.com/try](https://myaielia.com/try)** —— 使用你自己的密钥（只保存在你的浏览器里），或在添加密钥之前先看看审批门是如何触发的。
+
+一套核心，三种前端：终端 CLI、浏览器（`@buildaharness/chat-ui`）、原生桌面应用（`@buildaharness/desktop`）。
+
+---
+
+## 3 · 线束在 Aielia 中控制什么
+
+[`/harness-comparison`](https://buildaharness.com/harness-comparison) 页面将三款最常用的开源智能体（Hermes Agent、Kilo Code、OpenClaw）对照这套架构进行了映射。三者都没有同时提供分层的 Control State 解析器 *和* 一个审查员/输出门。Aielia 提供以下能力，全部由代码强制执行，而不是靠提示词：
+
+- **实时的逐工具调用 ControlState 门** —— 每一次只读工具调用在执行*之前*都会依据本轮的 `ControlState` 进行检查（确定性的 ALLOW / DENY / REQUIRE_APPROVAL，而非仅供参考），因此本轮中逐渐显现的失败模式也能真正触发拒绝。
+- **有界任务** —— 对于明确列出的多个条目，每一项都有各自受限的子搜索（预算在最初几项之后校准）；连续三次死胡同就停止该项；大批量任务会在运行前请求确认；每轮工具调用总数另有硬性上限。每一项最终都是 `found`、`not_found` 或 `truncated_while_productive`，回复绝不会悄悄漏掉任何一项。
+- **故障安全风险分类** —— 分类器出错或响应无法解析时返回 `UNKNOWN → 要求批准`，绝不会静默降级为低风险。
+- **审查员通过（Reviewer Pass）** —— 三镜头审查（一致性、对抗性、抽象层级契合度）与输出合约验证会在回复发出前执行。
+- **类型化事实溯源** —— 只有你亲口陈述的事实才会默认提升为持久记忆；模型推断的事实在得到确认前仅限本次会话。
+- **AnswerClaim** —— 回复会区分"有证据支持并已验证"与"找到了但无法独立确认"，并显示在聊天的"Why?"面板中。
+- **崩溃安全的轮内恢复** —— 一轮对话中途崩溃时会从最后一个检查点恢复，而非静默重来；一个在重放中反复崩溃的检查点会在两次尝试后被自动丢弃。
+- **不可信内容边界** —— 网页结果和 shell 输出会被包裹为数据，模型被明确要求绝不将其当作指令执行。
+
+完整说明：[`packages/aielia/README.md`](packages/aielia/README.md)。
+
+---
+
 ## 快速开始
 
-**只想要助手？** 无需克隆：
+**只想试用 Aielia？** 无需克隆：
 
 ```bash
 npx @buildaharness/aielia          # 终端

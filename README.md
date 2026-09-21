@@ -2,7 +2,7 @@
 
 # Build A Harness
 
-**An open-source AI assistant that thinks before it acts — and stops before it sends.**
+**Build the harness around your agent — the open-source control layer that makes AI agents reliable.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
@@ -21,85 +21,25 @@
 A harness is a **governance and reliability control plane** around an
 autonomous agent: the agent has intelligence, the harness has authority. The
 agent proposes; the harness decides what's allowed to happen next; evidence
-decides whether the result is accepted. **Aielia** — the Build A Harness
-personal assistant — routes every turn through an 11-layer implementation of
-that control plane, governing what the agent believes, what it's allowed to
-do, how it catches its own mistakes, and what it learns. A quick fact lookup
-stays light. Sending an email, paying an invoice, running a shell command, or
-deleting a file **stops for your approval first** — and a classifier that
-errors out requires approval rather than sailing through as safe.
+decides whether the result is accepted. **Build A Harness** is an open-source
+visual canvas and runtime for that layer — draw the 11 layers, compile the same
+FlowSpec to LangGraph / CrewAI / Mastra / MS Agent Framework, and trace every
+decision in Langfuse.
 
-The assistant is the front door. Underneath it is a full visual **harness
-builder** — draw the same 11 layers on a canvas, compile to LangGraph / CrewAI /
-Mastra / MS Agent Framework, trace every decision in Langfuse.
+**Aielia** is the reference application: an agent you can hand real, multi-step
+work — research across a list, files to go through, a message to draft and send —
+while the full 11-layer harness controls what it may do, what it may believe, and
+what a job may cost, on every turn. Anything that can't be undone (writing a
+file, running a command, sending an email) is staged for your approval first, and
+a classifier that errors out requires approval rather than sailing through as
+safe.
 
----
-
-## 1 · The assistant — Aielia
-
-```bash
-npx @buildaharness/aielia
-```
-
-First run walks you through picking a model — reuse an existing `claude` CLI
-login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
-talk to it.
-
-```ts
-import { LLMClient } from '@buildaharness/runtime'
-import { PersonalAssistant } from '@buildaharness/aielia'
-
-const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
-
-await aielia.turn('What time zone is Tokyo in?')
-// { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
-
-await aielia.turn('Send an email to my boss saying I quit.')
-// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  — no LLM call made
-
-await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
-// approved — proceeds and runs the harness normally
-```
-
-**[Try it in your browser → myaielia.com/try](https://myaielia.com/try)**
-— bring your own key (stored only in your browser), or see the approval gate
-fire before you add one.
-
-One core, three front ends: terminal CLI, browser (`@buildaharness/chat-ui`),
-and native desktop (`@buildaharness/desktop`).
+Sites: [buildaharness.com](https://buildaharness.com) — the developer site ·
+[myaielia.com](https://myaielia.com) — Aielia, for everyone else.
 
 ---
 
-## 2 · Why it's different
-
-The [`/harness-comparison`](https://buildaharness.com/harness-comparison) page
-maps the three most-used open agents (Hermes Agent, Kilo Code, OpenClaw) against
-this architecture. None of them ships both a tiered Control State resolver *and*
-a reviewer/output gate. Aielia ships:
-
-- **Live per-tool-call ControlState gate** — every read-only tool call is checked
-  against a per-turn `ControlState` *before* it runs (deterministic
-  ALLOW / DENY / REQUIRE_APPROVAL, not advisory), so a developing failure pattern
-  can trip a real deny mid-turn.
-- **Fail-safe risk classification** — a classifier error or unparseable response
-  returns `UNKNOWN → requires approval`, never a silent default to low-risk.
-- **Reviewer Pass** — a 3-lens review (consistency, adversarial, abstraction fit)
-  and output-contract validation run before a reply goes out.
-- **Typed fact provenance** — only facts you actually *state* promote to durable
-  memory by default; model-inferred facts stay session-scoped until confirmed.
-- **AnswerClaim** — replies distinguish "verified against evidence" from "found
-  this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
-- **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
-  last checkpoint instead of silently starting over; a checkpoint that keeps
-  crashing on replay is discarded automatically after two attempts.
-- **Untrusted-content boundary** — web results and shell output are wrapped as
-  data the model is instructed never to follow as commands.
-
-Full write-up: [`packages/aielia/README.md`](packages/aielia/README.md).
-
----
-
-## 3 · Build your own harness
+## 1 · Build your own harness
 
 A workflow routes prompts from node to node. A **harness** governs belief,
 permission, self-correction, and learning. Build A Harness delivers the complete
@@ -181,9 +121,80 @@ prompts via the Langfuse prompt API (`prompt_ref` on any `llm_call` node).
 
 ---
 
+## 2 · The reference application — Aielia
+
+An agent you can hand real, multi-step work to, held in bounds by the harness — website and demo at [myaielia.com](https://myaielia.com).
+
+```bash
+npx @buildaharness/aielia
+```
+
+First run walks you through picking a model — reuse an existing `claude` CLI
+login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
+talk to it.
+
+```ts
+import { LLMClient } from '@buildaharness/runtime'
+import { PersonalAssistant } from '@buildaharness/aielia'
+
+const aielia = new PersonalAssistant({ llmClient: new LLMClient({ proxyUrl, authToken }) })
+
+await aielia.turn('What time zone is Tokyo in?')
+// { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
+
+await aielia.turn('Send an email to my boss saying I quit.')
+// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  — no LLM call made
+
+await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
+// approved — proceeds and runs the harness normally
+```
+
+**[Try it in your browser → myaielia.com/try](https://myaielia.com/try)**
+— bring your own key (stored only in your browser), or see the approval gate
+fire before you add one.
+
+One core, three front ends: terminal CLI, browser (`@buildaharness/chat-ui`),
+and native desktop (`@buildaharness/desktop`).
+
+---
+
+## 3 · What the harness controls in Aielia
+
+The [`/harness-comparison`](https://buildaharness.com/harness-comparison) page
+maps the three most-used open agents (Hermes Agent, Kilo Code, OpenClaw) against
+this architecture. None of them ships both a tiered Control State resolver *and*
+a reviewer/output gate. Aielia ships the following, all enforced in code rather than in a prompt:
+
+- **Live per-tool-call ControlState gate** — every read-only tool call is checked
+  against a per-turn `ControlState` *before* it runs (deterministic
+  ALLOW / DENY / REQUIRE_APPROVAL, not advisory), so a developing failure pattern
+  can trip a real deny mid-turn.
+- **Bounded jobs** — for an explicit list of items, each gets its own bounded
+  sub-search (budget calibrated on the first items), three dead ends in a row stop
+  that item, a large batch asks for confirmation before it runs, and a hard
+  per-turn ceiling caps total tool calls. Every item ends `found`, `not_found`, or
+  `truncated_while_productive`; the reply never silently omits one.
+- **Fail-safe risk classification** — a classifier error or unparseable response
+  returns `UNKNOWN → requires approval`, never a silent default to low-risk.
+- **Reviewer Pass** — a 3-lens review (consistency, adversarial, abstraction fit)
+  and output-contract validation run before a reply goes out.
+- **Typed fact provenance** — only facts you actually *state* promote to durable
+  memory by default; model-inferred facts stay session-scoped until confirmed.
+- **AnswerClaim** — replies distinguish "verified against evidence" from "found
+  this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
+- **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
+  last checkpoint instead of silently starting over; a checkpoint that keeps
+  crashing on replay is discarded automatically after two attempts.
+- **Untrusted-content boundary** — web results and shell output are wrapped as
+  data the model is instructed never to follow as commands.
+
+Full write-up: [`packages/aielia/README.md`](packages/aielia/README.md).
+
+---
+
 ## Quick start
 
-**Just want the assistant?** Nothing to clone:
+**Just want to try Aielia?** Nothing to clone:
 
 ```bash
 npx @buildaharness/aielia          # terminal

@@ -1,8 +1,11 @@
 # @buildaharness/aielia
 
-A general-purpose, everyday-use chat assistant that runs on the full 11-layer
-harness (`@buildaharness/harness`) every turn — light enough for "what's the
-weather" and consequential enough to gate "send that email" behind approval.
+A general-purpose, everyday-use AI agent you can hand real, multi-step work to —
+research across a list, files to go through, a message to draft and send. It runs
+on the full 11-layer harness (`@buildaharness/harness`) every turn, which controls
+what it may do, what it may believe, and what a job may cost — light enough for
+"what's the weather", and it stages anything that can't be undone (`write_file`,
+`run_shell_command`, `send_email`) for your approval. Website: https://myaielia.com.
 
 ## Design
 
