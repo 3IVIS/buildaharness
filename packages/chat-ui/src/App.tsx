@@ -844,7 +844,10 @@ export function App(): React.JSX.Element {
   return (
     <div className="app">
       <header className="app__header">
-        <span className="app__header-title">Aielia</span>
+        <span className="app__header-brand">
+          <span className="app__header-title">Aielia</span>
+          <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
+        </span>
         <div className="app__header-actions">
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
@@ -1012,6 +1015,7 @@ export function App(): React.JSX.Element {
         />
         <button type="submit" disabled={busy || !input.trim()}>Send</button>
       </form>
+      <div className="app__composer-disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</div>
     </div>
   )
 }

@@ -36,6 +36,32 @@ body {
   font-weight: 700;
 }
 
+.app__header-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app__header-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  text-transform: uppercase;
+  cursor: default;
+}
+
+.app__composer-disclaimer {
+  padding: 4px 20px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .app__header-actions {
   display: flex;
   align-items: center;

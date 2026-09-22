@@ -262,6 +262,12 @@ export interface CliInstance {
  * getting exactly today's behavior; every option here has a real-filesystem/real-stdio default.
  */
 export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> {
+  // Printed before anything else — including first-run setup — so it's the very first thing a
+  // new or returning user sees, on every surface runCli() drives (plain REPL, piped/scripted
+  // input, and the Ink TUI shell, which captures this same console.log via startCapture — see
+  // tui-app.ts's own comment on why the banner isn't duplicated there).
+  console.log('Aielia is alpha software — expect rough edges and breaking changes. It uses AI models and can make mistakes; verify anything important.\n')
+
   const dataDir = options.dataDir ?? defaultDataDir
   const configStore = options.configStore ?? defaultConfigStore
   const backend = options.backend ?? defaultBackend
