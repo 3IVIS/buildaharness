@@ -39,7 +39,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "vite build --config vite.config.lib.ts && cp src/file-tools-mcp-server.mjs dist/file-tools-mcp-server.mjs && mkdir -p dist/lexical/patterns && cp src/lexical/patterns/*.json dist/lexical/patterns/ && node -e \"const f='dist/cli.js',s=require('fs'),c=s.readFileSync(f,'utf8');if(!c.startsWith('#!'))s.writeFileSync(f,'#!/usr/bin/env node\\n'+c)\"",
+    "build": "vite build --config vite.config.lib.ts && node scripts/postbuild.mjs",
     "build:sea": "node scripts/build-sea-bundle.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
