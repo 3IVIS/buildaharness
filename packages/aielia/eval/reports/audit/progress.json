@@ -52,7 +52,7 @@
     },
     "model-inferred-facts": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 1.473142,
       "blocked": false
     }

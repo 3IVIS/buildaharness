@@ -146,9 +146,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 10,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "Mechanism is cross-turn; slice covers within-session recall over 3 turns. Cross-session persistence and the /memory confirm queue are not exercised. The flag gates consumption of the classifier's facts (buildTurnFacts), not the classifier call. Caveat: the raw transcript is still in context on turn 3, so a null differential may mean the transcript already carried the fact rather than that recording it adds nothing. Turn-1 phrasings were checked against the lexical pass (extractFactsFromTurn returns nothing), so only the model_inferred path can record them."
+      "corpusNote": "Mechanism is cross-turn; slice covers within-session recall over 3 turns. Cross-session persistence and the /memory confirm queue are not exercised. The flag gates consumption of the classifier's facts (buildTurnFacts), not the classifier call. Caveat: the raw transcript is still in context on turn 3, so a null differential may mean the transcript already carried the fact rather than that recording it adds nothing. Turn-1 phrasings were checked against the lexical pass (extractFactsFromTurn returns nothing), so only the model_inferred path can record them.",
+      "verdict": "CUT"
     },
     {
       "id": "decomposition-reframing",
