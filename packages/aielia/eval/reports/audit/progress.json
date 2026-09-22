@@ -49,6 +49,12 @@
       "finalized": true,
       "spendUsd": 1.272557,
       "blocked": false
+    },
+    "model-inferred-facts": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.496129,
+      "blocked": false
     }
   }
 }
