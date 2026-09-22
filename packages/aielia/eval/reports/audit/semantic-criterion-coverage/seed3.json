@@ -1,0 +1,442 @@
+{
+  "generatedAt": "2026-09-22T09:15:50.784Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.875,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 9244,
+      "meanCostUsd": 0.007593525,
+      "totalTokens": 4065,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 7
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 1,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0.125
+      }
+    },
+    "criterionCoverageOff": {
+      "arm": "criterionCoverageOff",
+      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_CRITERION_COVERAGE=0 \u2014 the semantic success-criterion coverage LLM call disabled, reviewer substring check only",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.875,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 9367,
+      "meanCostUsd": 0.008040175,
+      "totalTokens": 4353,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 7
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 1,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0.125
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-budget-check",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9133,
+      "costUsd": 0.007027,
+      "totalTokens": 471,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"10400\""
+      ],
+      "status": "ok",
+      "replyPreview": "I checked finance/q3.csv.\n\n**Total spend:** $4,200 (servers) + $1,800 (licenses) + $3,500 (contractors) + $900 (travel) = **$10,400**\n\n**Budget status:** The file notes a quarterly limit of $12,000. Since $10,400 < $12,000, you stayed **under budget**, with $1,600 to spare.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-control-missing-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7859,
+      "costUsd": 0.0040746,
+      "totalTokens": 244,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The registry lists the billing service owner as **TBD (unassigned since the reorg)** \u2014 no named owner is currently stated.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-control-tests-failing",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8206,
+      "costUsd": 0.0064828,
+      "totalTokens": 416,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "I read `ci/last-run.log`, and the results show the test run did **not** fully pass:\n\n- **120 tests run**\n- **118 passed, 2 failed**\n\nFailures:\n1. `test_checkout_totals` \u2014 expected 42.00, got 41.99\n2. `test_refund_rounding` \u2014 expected 0.10, got 0.09\n\nBoth failures look like rounding/floating-point discrepancies (off by a cent), likely worth checking how totals are rounded in checkout and refund logic.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-incident-summary",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 15361,
+      "costUsd": 0.0144114,
+      "totalTokens": 1199,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**Incident Summary \u2014 2026-08-30 (for Exec channel)**\n\n- **Customer Impact:** ~12% of checkout requests failed for 47 minutes.\n- **Root Cause:** A config push lowered the connection-pool limit, which was exhausted under peak load, causing the errors.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-migration-plan",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7901,
+      "costUsd": 0.0056208000000000004,
+      "totalTokens": 328,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the migration order from `docs/db-migration.md`:\n\n1. **Snapshot the database**\n2. **Apply schema change 0042**\n3. **Backfill the new column**\n4. **Switch reads to the new column**\n\n**Rollback:** If step 3 (backfill) fails, restore from the snapshot taken in step 1.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-onboarding-steps",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7969,
+      "costUsd": 0.008788599999999999,
+      "totalTokens": 472,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the first-week checklist from `onboarding/new-hire.md`:\n\n**Access requests**\n- Day 1: File tickets for GitHub, VPN, and staging cluster logins\n\n**Meetings**\n- Day 2: 1:1 with your manager\n- Day 3: Architecture walkthrough\n- Day 5: Team retro",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-oncall-handoff",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7248,
+      "costUsd": 0.005392,
+      "totalTokens": 289,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Priya is on call this Saturday. Reach her by phone at 555-0177 or on Slack at @priya.n.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-criterion-coverage-release-checklist",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10277,
+      "costUsd": 0.008951,
+      "totalTokens": 646,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "## Release Summary \u2014 v4.2.0\n\n**Shipped:** 2026-09-01\n\n**Breaking changes:**\n1. Removed the `/v1/users` endpoint\n2. Renamed config key `timeout` to `timeout_ms`\n\n**Other changes:**\n- Added dark mode\n- Fixed pagination bug",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-budget-check",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8263,
+      "costUsd": 0.007351,
+      "totalTokens": 491,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"10400\""
+      ],
+      "status": "ok",
+      "replyPreview": "**Total Q3 spend: $10,400** (servers $4,200 + licenses $1,800 + contractors $3,500 + travel $900)\n\nThe file notes a quarterly limit of $12,000, so **yes, you stayed under budget** \u2014 with $1,600 to spare.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-control-missing-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7638,
+      "costUsd": 0.004424600000000001,
+      "totalTokens": 279,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The registry doesn't list a named owner for billing \u2014 it's marked as **\"TBD (unassigned since the reorg).\"** Auth is owned by Lee and search by Mo, but billing currently has no assigned owner.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-control-tests-failing",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9377,
+      "costUsd": 0.0081908,
+      "totalTokens": 580,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "I read `ci/last-run.log`, and the results show **2 failing tests**, not a clean pass:\n\n- **Total:** 120 tests run\n- **Passed:** 118\n- **Failed:** 2\n  - `test_checkout_totals` \u2014 expected 42.00, got 41.99\n  - `test_refund_rounding` \u2014 expected 0.10, got 0.09\n\nBoth failures look like floating-point rounding discrepancies (off by a cent), likely related to how monetary values are calculated/rounded in checkout and refund logic. So the run is **not** all-green \u2014 you'll want to look at the rounding log",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-incident-summary",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16982,
+      "costUsd": 0.015906,
+      "totalTokens": 1141,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**Incident Summary \u2014 2026-08-30 (for Exec Channel)**\n\n- **Customer Impact:** ~12% of checkout requests failed for 47 minutes.\n- **Root Cause:** A config push lowered the connection-pool limit, which then got exhausted under peak load.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-migration-plan",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7289,
+      "costUsd": 0.006106800000000001,
+      "totalTokens": 363,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the migration order from `docs/db-migration.md`:\n\n1. **Snapshot the database**\n2. **Apply schema change 0042**\n3. **Backfill the new column**\n4. **Switch reads to the new column**\n\n**Rollback:** If step 3 (the backfill) fails, restore from the snapshot taken in step 1.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-onboarding-steps",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8115,
+      "costUsd": 0.0088718,
+      "totalTokens": 482,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what a new engineer must do in their first week, per `onboarding/new-hire.md`:\n\n**Access requests**\n- Day 1: File tickets for GitHub, VPN, and staging cluster logins\n\n**First-week meetings**\n- Day 2: 1:1 with your manager\n- Day 3: Architecture walkthrough\n- Day 5: Team retro",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-oncall-handoff",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7036,
+      "costUsd": 0.004643400000000001,
+      "totalTokens": 299,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "This Saturday (Sept 26), **Priya** is on call.\n\nReach her at **555-0177** or via Slack at **@priya.n**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "criterionCoverageOff",
+      "taskId": "audit-criterion-coverage-release-checklist",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10238,
+      "costUsd": 0.008827000000000002,
+      "totalTokens": 718,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "## Release 4.2.0 Summary\n\n**Version:** 4.2.0 (shipped 2026-09-01)\n\n**Breaking changes:**\n1. Removed the `/v1/users` endpoint\n2. Renamed config key `timeout` to `timeout_ms`\n\n**Other changes:**\n- Added dark mode\n- Fixed pagination bug",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}
