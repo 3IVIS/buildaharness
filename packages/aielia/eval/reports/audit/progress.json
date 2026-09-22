@@ -37,6 +37,12 @@
       "finalized": true,
       "spendUsd": 0.333979,
       "blocked": false
+    },
+    "semantic-criterion-coverage": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.155055,
+      "blocked": false
     }
   }
 }
