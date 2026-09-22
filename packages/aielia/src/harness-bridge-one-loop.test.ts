@@ -107,3 +107,17 @@ describe('verificationEnabled (AUDIT_VERIFICATION gate — Phase C5, eval-only)'
     }
   })
 })
+
+describe('reviewerPassEnabled (AUDIT_REVIEWER_PASS gate — Phase C6, eval-only)', () => {
+  it('defaults ON; only an explicit falsy value turns it OFF', async () => {
+    const { reviewerPassEnabled } = await import('./harness-bridge.js')
+    expect(reviewerPassEnabled({})).toBe(true)
+    expect(reviewerPassEnabled({ AUDIT_REVIEWER_PASS: '' })).toBe(true)
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'garbage']) {
+      expect(reviewerPassEnabled({ AUDIT_REVIEWER_PASS: v }), v).toBe(true)
+    }
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) {
+      expect(reviewerPassEnabled({ AUDIT_REVIEWER_PASS: v }), v).toBe(false)
+    }
+  })
+})

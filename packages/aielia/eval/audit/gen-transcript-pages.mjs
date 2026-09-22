@@ -240,6 +240,7 @@ const ARM_LABELS = {
   modelInferredFactsOff: 'PersonalAssistant with model-inferred facts disabled (only lexically-caught user_asserted facts reach memory)',
   decompositionOff: 'PersonalAssistant with up-front decomposition and task reframing disabled (every turn runs as a single task)',
   verificationOff: 'PersonalAssistant with the mechanical verification layer skipped (eval-only ablation; each iteration is treated as an empty pass)',
+  reviewerPassOff: 'PersonalAssistant with the 3-lens reviewer pass skipped, including its C1/C2 sub-mechanisms (eval-only ablation)',
 }
 export function armLabel(name) {
   return ARM_LABELS[name] || name
@@ -258,6 +259,7 @@ const ARM_ONELINER = {
   'flagOn|modelInferredFactsOff': 'the candidate drops facts the classifier infers from a message (only lexically-caught user_asserted facts are recorded)',
   'flagOn|decompositionOff': 'the candidate drops up-front decomposition and task reframing (the turn runs as one task)',
   'flagOn|verificationOff': 'the candidate drops the always-on mechanical verification layer (results are accepted unchecked)',
+  'flagOn|reviewerPassOff': 'the candidate drops the 3-lens reviewer pass entirely (no implementer/reviewer/adversarial review, no C1/C2 sub-mechanisms)',
 }
 function armOneliner(control, candidate) {
   return (

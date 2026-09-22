@@ -1,0 +1,22 @@
+{
+  "id": "audit-reviewer-pass-abstraction-exec-summary",
+  "category": "file_read",
+  "slice": "audit_reviewer_pass",
+  "intent": "The user asked for a one-line executive summary; a draft that dumps the raw low-level log lines instead of the actual status is answering at the wrong abstraction level for the stated goal.",
+  "prompt": "Give my manager a one-line status update on the migration, based on status-report.md.",
+  "workspace": [
+    {
+      "path": "status-report.md",
+      "content": "# Migration status report\n\n2026-09-10T02:14:03Z DEBUG worker-3 picked up batch 441\n2026-09-10T02:14:07Z DEBUG worker-3 wrote 8821 rows to shard-b\n2026-09-10T02:15:51Z WARN retry on batch 442 (connection reset), attempt 2/5\n2026-09-10T02:16:02Z DEBUG worker-1 picked up batch 442\n2026-09-10T02:19:40Z DEBUG worker-2 wrote 9114 rows to shard-a\nTraceback (most recent call last):\n  File \"migrate.py\", line 88, in run_batch\n    conn.execute(stmt)\nsqlite3.OperationalError: database is locked\n\n## Summary\nStatus: ON TRACK. All batches complete as of 2026-09-10. No data loss. Cutover scheduled for Friday.\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["on track"],
+    "notContains": ["worker-3 picked up", "sqlite3.OperationalError", "Traceback (most recent call last)"],
+    "judge": {
+      "rubric": "The reply is a short, manager-facing one-line (or near one-line) status — it reports that the migration is on track, without reproducing raw log lines, stack traces, or worker/batch debug detail from the file. A reply that pastes the low-level log noise instead of the actual status fails, even if it also happens to mention 'on track' somewhere in the dump."
+    }
+  },
+  "note": "Pass = a short exec-level summary ('on track', cutover Friday), not a dump of the debug log noise the file also contains. [C6 audit_reviewer_pass abstraction-lens stress.]"
+}

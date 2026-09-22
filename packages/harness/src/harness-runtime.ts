@@ -156,6 +156,18 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
    */
   skipVerification?: boolean
+  /**
+   * EVAL-ONLY ablation seam (feature-value audit, Phase C6) — default absent/false = today's
+   * behaviour. When true, `drive()` skips the `reviewerPass()` call (and any `reviewer_pass_2`
+   * re-run) entirely: `'reviewer_pass'`/`'reviewer_pass_2'` are omitted from
+   * `nodeExecutionOrder`, no task is reopened, and `pendingReviewerVerdict` is never set for this
+   * turn's resolveAndStamp(). `semanticCriterionCoverage` (Phase C1) and `semanticChangeReviewer`
+   * (Phase C2) are sub-mechanisms invoked from inside the reviewer pass, so this also disables
+   * them — that is intended, this seam prices the whole pass. No product path sets this: the only
+   * caller is the benchmark arm's env flag in aielia's harness-bridge. The Python twin has no
+   * equivalent — the ablation arm is PA-only.
+   */
+  skipReviewerPass?: boolean
   /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
   onGateDecision?: (event: GateDecisionEvent) => void
   /**
@@ -325,6 +337,7 @@ interface LoopContext {
   onLayerActivity?: (event: LayerActivityEvent) => void
   onVerification?: (result: VerificationResult) => void
   skipVerification?: boolean
+  skipReviewerPass?: boolean
   onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
@@ -407,6 +420,7 @@ function buildInitialContext(
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
+    skipReviewerPass: options.skipReviewerPass,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -477,6 +491,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
+    skipReviewerPass: options.skipReviewerPass,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -1481,40 +1496,50 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
   const sigForReview = ctx.complexitySignal
   const runAdversarialLens = (sigForReview?.riskLevel ?? 'LOW') !== 'LOW' || (sigForReview?.taskCount ?? 1) >= 3
 
-  ctx.nodeExecutionOrder.push('reviewer_pass')
-  const reviewPassResult = await reviewerPass(
-    ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
-    ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-    runAdversarialLens, ctx.semanticCriterionCoverage,
-  )
-  const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
-  reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
-
-  // Phase I / INV-18: hand this pass's verdict to the *next* resolveAndStamp() call —
-  // one-shot, single-slot (overwrites, never accumulates). The only reachable "next
-  // iteration" within one drive() call is the reopened-tasks second main-loop pass below;
-  // if nothing reopened, this just rides along in the final checkpoint unconsumed.
-  ctx.pendingReviewerVerdict = reviewPassResult.pending_verdict
-
-  if (reviewPassResult.reopened_task_ids.length > 0) {
-    for (const taskId of reviewPassResult.reopened_task_ids) {
-      const task = ctx.taskGraph.getTask(taskId)
-      if (task) {
-        task.status = 'PENDING'
-        ctx.taskGraph.changed = true
-      }
-    }
-
-    const second = await runMainLoopWithCheckpoints(ctx, options)
-    if (second.status === 'paused') return second
-
-    ctx.nodeExecutionOrder.push('reviewer_pass_2')
-    const reviewPassResult2 = await reviewerPass(
+  // Eval-only ablation (Phase C6): skipReviewerPass never set outside the benchmark arm. Unlike
+  // C5's skipVerification (a mandatory per-iteration main-loop step, always pushed to
+  // nodeExecutionOrder even when its work is skipped), the reviewer pass is a post-loop step run
+  // at most once (twice if a task reopens) per drive() call — skipping it means it genuinely never
+  // ran this turn, so 'reviewer_pass'/'reviewer_pass_2' are omitted from nodeExecutionOrder
+  // entirely rather than pushed-but-empty.
+  if (!ctx.skipReviewerPass) {
+    ctx.nodeExecutionOrder.push('reviewer_pass')
+    const reviewPassResult = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
       runAdversarialLens, ctx.semanticCriterionCoverage,
     )
-    ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
+    const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
+    reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
+
+    // Phase I / INV-18: hand this pass's verdict to the *next* resolveAndStamp() call —
+    // one-shot, single-slot (overwrites, never accumulates). The only reachable "next
+    // iteration" within one drive() call is the reopened-tasks second main-loop pass below;
+    // if nothing reopened, this just rides along in the final checkpoint unconsumed.
+    ctx.pendingReviewerVerdict = reviewPassResult.pending_verdict
+
+    if (reviewPassResult.reopened_task_ids.length > 0) {
+      for (const taskId of reviewPassResult.reopened_task_ids) {
+        const task = ctx.taskGraph.getTask(taskId)
+        if (task) {
+          task.status = 'PENDING'
+          ctx.taskGraph.changed = true
+        }
+      }
+
+      const second = await runMainLoopWithCheckpoints(ctx, options)
+      if (second.status === 'paused') return second
+
+      ctx.nodeExecutionOrder.push('reviewer_pass_2')
+      const reviewPassResult2 = await reviewerPass(
+        ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
+        ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
+        runAdversarialLens, ctx.semanticCriterionCoverage,
+      )
+      ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
+    }
+  } else {
+    reportLayer(ctx, 'reviewer_pass', false, 'reviewer pass skipped (eval ablation)')
   }
 
   ctx.nodeExecutionOrder.push('output_validation')

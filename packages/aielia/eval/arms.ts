@@ -40,6 +40,7 @@ export type ArmName =
   | 'modelInferredFactsOff'
   | 'decompositionOff'
   | 'verificationOff'
+  | 'reviewerPassOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -65,6 +66,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'modelInferredFactsOff',
   'decompositionOff',
   'verificationOff',
+  'reviewerPassOff',
   'askModeOn',
 ]
 
@@ -400,6 +402,20 @@ export const verificationOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_VERIFICATION: '0' } }),
 }
 
+export const reviewerPassOffArm: Arm = {
+  name: 'reviewerPassOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_REVIEWER_PASS=0 — the 3-lens reviewer pass (implementer/reviewer/adversarial) is skipped entirely, including its C1/C2 sub-mechanisms (eval-only ablation)',
+  // Batch C feature-value audit (the internal plan C6). Same one-loop config as `flagOn`; the only
+  // difference is harness-bridge.ts passing `skipReviewerPass: true` to HarnessRuntime, so
+  // `reviewerPass()`/`reviewer_pass_2` never run and no reopened tasks or pending reviewer verdict
+  // are produced. `semanticCriterionCoverage` (C1) and `semanticChangeReviewer` (C2) live inside this
+  // pass, so this arm also turns both off — this entry prices the whole pass, C1/C2 price their
+  // marginal LLM calls on top of it. Eval-only: the env flag is read at one call site and only this
+  // arm sets it. Baseline is `flagOn`; slice `audit_reviewer_pass`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_REVIEWER_PASS: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -432,6 +448,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   modelInferredFactsOffArm,
   decompositionOffArm,
   verificationOffArm,
+  reviewerPassOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -447,6 +464,7 @@ export const ALL_ARMS: Arm[] = [
   modelInferredFactsOffArm,
   decompositionOffArm,
   verificationOffArm,
+  reviewerPassOffArm,
   askModeOnArm,
   langgraphArm,
 ]

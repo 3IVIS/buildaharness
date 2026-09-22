@@ -1,0 +1,18 @@
+{
+  "id": "audit-reviewer-pass-control-clean-summary",
+  "category": "file_read",
+  "slice": "audit_reviewer_pass",
+  "intent": "A short status doc that already directly answers the question at the right level — control for whether the reviewer pass causes a needless second round on a clean draft.",
+  "prompt": "One-line status: is the search index rebuild finished, per index-status.md?",
+  "workspace": [
+    {
+      "path": "index-status.md",
+      "content": "# Search index rebuild\n\nStatus: COMPLETE. Finished 2026-09-15. No errors.\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\b(yes|complete|finished|done)\\b"
+  },
+  "note": "Pass = a short 'yes, complete' answer. [C6 audit_reviewer_pass control: a clean draft that already matches the stated ask, nothing for consistency/abstraction/adversarial lenses to flag.]"
+}

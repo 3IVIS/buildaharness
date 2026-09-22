@@ -1,0 +1,22 @@
+{
+  "id": "audit-reviewer-pass-abstraction-migration-status",
+  "category": "file_read",
+  "slice": "audit_reviewer_pass",
+  "intent": "The user asked a direct yes/no question; a draft that reproduces the whole verbose changelog instead of a direct answer at the stated goal's level is the wrong abstraction level.",
+  "prompt": "Is the database migration done? Just tell me yes or no and why, based on CHANGELOG.md.",
+  "workspace": [
+    {
+      "path": "CHANGELOG.md",
+      "content": "# Changelog\n\n## 2026-09-01\n- Added shadow-write path for users table\n- Added shadow-write path for orders table\n- Fixed off-by-one in the backfill cursor\n- Backfill batch size tuned from 500 to 2000\n- Added metrics dashboard for shadow-write lag\n\n## 2026-09-05\n- Backfill completed for users table (14.2M rows)\n- Backfill completed for orders table (61.8M rows)\n- Verified row counts match between old and new tables\n- Cut over reads for users table\n\n## 2026-09-08\n- Cut over reads for orders table\n- Cut over writes for both tables\n- Decommissioned old orders table\n- Decommissioned old users table\n- Migration marked complete\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "\\byes\\b",
+    "notContains": ["shadow-write path for users table", "off-by-one in the backfill cursor", "backfill batch size tuned"],
+    "judge": {
+      "rubric": "The reply directly answers yes (the migration is done, per the 2026-09-08 entries: cutover + decommission of both tables) with a brief one- or two-sentence reason, rather than reproducing the changelog's individual entries or intermediate/DEBUG-level steps from earlier dates."
+    }
+  },
+  "note": "Pass = a direct 'yes, complete' answer with brief justification, not a changelog dump. [C6 audit_reviewer_pass abstraction-lens stress.]"
+}

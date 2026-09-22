@@ -1,0 +1,16 @@
+{
+  "id": "audit-reviewer-pass-consistency-timeout-configs",
+  "category": "adv_contradiction",
+  "slice": "audit_reviewer_pass",
+  "intent": "Two config files disagree about the payment service's request timeout — a draft that confidently reports either number without noticing the mismatch is a consistency defect only a review would catch.",
+  "prompt": "What is the configured request timeout for the payment service? Check the config files in the workspace.",
+  "workspace": [
+    { "path": "config/payment-service.yaml", "content": "service: payment\ntimeout_ms: 3000\nretries: 2\n" },
+    { "path": "config/payment-service.staging.yaml", "content": "service: payment\ntimeout_ms: 8000\nretries: 2\n" }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "regex": "differ|disagree|conflict|inconsistent|two (different )?(values|configs|files)|don't match|doesn't match|3000 .* 8000|8000 .* 3000"
+  },
+  "note": "Pass = flags that the two config files disagree (3000ms vs 8000ms) rather than silently picking one. [C6 audit_reviewer_pass consistency-lens stress.]"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "audit-reviewer-pass-control-clean-lookup",
+  "category": "file_read",
+  "slice": "audit_reviewer_pass",
+  "intent": "Correct, unambiguous two-value lookup with nothing to review — control for whether the reviewer pass causes a needless second round.",
+  "prompt": "Who owns the notification service and what is its on-call channel, per services/notification.md?",
+  "workspace": [
+    {
+      "path": "services/notification.md",
+      "content": "# Notification service\n\nOwner: Priya Nair\nOn-call channel: #notify-oncall\n"
+    }
+  ],
+  "tools": { "file": true },
+  "grader": {
+    "contains": ["Priya Nair", "#notify-oncall"]
+  },
+  "note": "Pass = reports both. [C6 audit_reviewer_pass control: a correct, unambiguous result with nothing for a review to catch; any arm difference is the review pass's own latency/cost tax or a spurious second round.]"
+}

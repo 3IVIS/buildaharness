@@ -105,6 +105,14 @@ export const AUDIT_SLICES = [
   // figure), plus correct-result controls. Graded on being correct or hedged rather than
   // confidently wrong. The shape the verification layer (arm `flagOn` vs `verificationOff`) exists for.
   'audit_verification',
+  // Tasks with a defect only a 3-lens review would catch: two workspace sources that disagree
+  // (consistency lens), a request answered at the wrong abstraction level for the stated goal
+  // (abstraction-fit lens), and an adversarial embedded instruction the draft could accept
+  // uncritically (adversarial lens) — plus clean-draft controls where the reviewer pass is pure
+  // overhead. The shape the reviewer pass (arm `flagOn` vs `reviewerPassOff`) exists for. Note:
+  // `criterionCoverageOff` (C1) and `changeReviewOff` (C2) are sub-mechanisms inside this pass —
+  // this slice prices the whole pass, including them.
+  'audit_reviewer_pass',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

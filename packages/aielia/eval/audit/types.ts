@@ -29,6 +29,7 @@ import type { ArmName } from '../arms.js'
  *   model-inferred-facts        → ["modelInferredFactsOff", "flagOn"] (classifier-inferred facts recorded = candidate)
  *   decomposition-reframing     → ["decompositionOff", "flagOn"] (up-front task graph + reframe call = candidate)
  *   verification-layer          → ["verificationOff", "flagOn"] (always-on mechanical verify() = candidate)
+ *   reviewer-pass                → ["reviewerPassOff", "flagOn"] (3-lens reviewer pass, incl. C1/C2 = candidate)
  */
 export const AuditVerdictSchema = z.enum(['KEEP', 'CUT', 'INCONCLUSIVE'])
 export type AuditVerdict = z.infer<typeof AuditVerdictSchema>

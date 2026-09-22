@@ -220,6 +220,18 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('audit_reviewer_pass slice (C6) — >= 6 review-defect stress + >= 2 clean-draft control, workspace-backed, single-turn', () => {
+    const inSlice = tasks.filter((t) => t.slice === 'audit_reviewer_pass')
+    const controls = inSlice.filter((t) => t.id.includes('-control-'))
+    const stress = inSlice.filter((t) => !t.id.includes('-control-'))
+    expect(stress.length, 'expected >= 6 stress tasks').toBeGreaterThanOrEqual(6)
+    expect(controls.length, 'expected >= 2 control tasks').toBeGreaterThanOrEqual(2)
+    for (const t of inSlice) {
+      expect(t.workspace.length, `${t.id}: needs a fixture workspace`).toBeGreaterThanOrEqual(1)
+      expect(t.followups.length, `${t.id}: single-turn`).toBe(0)
+    }
+  })
+
   it('audit_decomposition slice (C4) — >= 6 multi-part stress + >= 2 single-part control, workspace-backed, individually graded', () => {
     const inSlice = tasks.filter((t) => t.slice === 'audit_decomposition')
     const controls = inSlice.filter((t) => t.id.includes('-control-'))
