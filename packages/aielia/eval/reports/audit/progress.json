@@ -63,9 +63,9 @@
       "blocked": false
     },
     "verification-layer": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 0.253468,
+      "spendUsd": 0.348343,
       "blocked": false
     }
   }
