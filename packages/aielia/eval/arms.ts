@@ -39,6 +39,7 @@ export type ArmName =
   | 'changeReviewOff'
   | 'modelInferredFactsOff'
   | 'decompositionOff'
+  | 'verificationOff'
   | 'askModeOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
@@ -63,6 +64,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'changeReviewOff',
   'modelInferredFactsOff',
   'decompositionOff',
+  'verificationOff',
   'askModeOn',
 ]
 
@@ -385,6 +387,19 @@ export const decompositionOffArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_DECOMPOSITION: '0' } }),
 }
 
+export const verificationOffArm: Arm = {
+  name: 'verificationOff',
+  label:
+    'PersonalAssistant (flagOn) with AUDIT_VERIFICATION=0 — HarnessRuntime skips the mechanical verify() call and treats each iteration as an empty pass (eval-only ablation)',
+  // Batch C feature-value audit (the internal plan C5). Same one-loop config as `flagOn`; the only
+  // difference is harness-bridge.ts passing `skipVerification: true` to HarnessRuntime, so verify()
+  // never runs, onVerification never fires and no answerClaim verification_status is derived.
+  // Eval-only: the env flag is read at one call site and only this arm sets it. Baseline is
+  // `flagOn`; slice `audit_verification`. An arm without verification also loses the recovery
+  // cycles verification triggers, so read recovery and cost alongside success.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { AUDIT_VERIFICATION: '0' } }),
+}
+
 export const askModeOnArm: Arm = {
   name: 'askModeOn',
   label:
@@ -416,6 +431,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   changeReviewOffArm,
   modelInferredFactsOffArm,
   decompositionOffArm,
+  verificationOffArm,
   askModeOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
@@ -430,6 +446,7 @@ export const ALL_ARMS: Arm[] = [
   changeReviewOffArm,
   modelInferredFactsOffArm,
   decompositionOffArm,
+  verificationOffArm,
   askModeOnArm,
   langgraphArm,
 ]

@@ -239,6 +239,7 @@ const ARM_LABELS = {
   changeReviewOff: 'PersonalAssistant with the semantic change reviewer disabled (lexical conflict check only)',
   modelInferredFactsOff: 'PersonalAssistant with model-inferred facts disabled (only lexically-caught user_asserted facts reach memory)',
   decompositionOff: 'PersonalAssistant with up-front decomposition and task reframing disabled (every turn runs as a single task)',
+  verificationOff: 'PersonalAssistant with the mechanical verification layer skipped (eval-only ablation; each iteration is treated as an empty pass)',
 }
 export function armLabel(name) {
   return ARM_LABELS[name] || name
@@ -256,6 +257,7 @@ const ARM_ONELINER = {
   'flagOn|changeReviewOff': 'the candidate disables the semantic change reviewer (lexical isNegation conflict check only)',
   'flagOn|modelInferredFactsOff': 'the candidate drops facts the classifier infers from a message (only lexically-caught user_asserted facts are recorded)',
   'flagOn|decompositionOff': 'the candidate drops up-front decomposition and task reframing (the turn runs as one task)',
+  'flagOn|verificationOff': 'the candidate drops the always-on mechanical verification layer (results are accepted unchecked)',
 }
 function armOneliner(control, candidate) {
   return (

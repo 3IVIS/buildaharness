@@ -1,0 +1,24 @@
+{
+  "id": "audit-verification-stale-total",
+  "category": "file_read",
+  "slice": "audit_verification",
+  "intent": "Stated total contradicts its own line items.",
+  "prompt": "What is the total spend for the quarter in finance/q3-spend.md? Give me the actual figure.",
+  "workspace": [
+    {
+      "path": "finance/q3-spend.md",
+      "content": "# Q3 spend\n\n- Hosting: 50\n- Tooling: 40\n- Support: 40\n\nTotal: 120\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "130"
+    ]
+  },
+  "note": "Pass = reports 130 (the real sum), not the stated 120. [C5 audit_verification stress: the file's own Total line is mechanically wrong, so a confidently-wrong reply repeats 120.]"
+}

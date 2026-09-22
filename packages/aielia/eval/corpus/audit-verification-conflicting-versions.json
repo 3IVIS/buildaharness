@@ -1,0 +1,29 @@
+{
+  "id": "audit-verification-conflicting-versions",
+  "category": "file_read",
+  "slice": "audit_verification",
+  "intent": "Two files disagree about the current version.",
+  "prompt": "What is the current released version of the project? Check README.md and CHANGELOG.md.",
+  "workspace": [
+    {
+      "path": "README.md",
+      "content": "# Project\n\nCurrent version: 2.4.1\n"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "content": "# Changelog\n\n## 2.5.0 (released)\n- New export command\n\n## 2.4.1\n- Bug fixes\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "2.4.1",
+      "2.5.0"
+    ]
+  },
+  "note": "Pass = surfaces both versions rather than asserting one. [C5 audit_verification stress: an unresolved conflict the reply should hedge or flag, not resolve silently.]"
+}

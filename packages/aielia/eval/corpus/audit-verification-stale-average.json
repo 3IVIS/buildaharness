@@ -1,0 +1,24 @@
+{
+  "id": "audit-verification-stale-average",
+  "category": "file_read",
+  "slice": "audit_verification",
+  "intent": "Stated average contradicts the raw samples.",
+  "prompt": "What is the average latency in ops/latency.md? I need the real average of the samples.",
+  "workspace": [
+    {
+      "path": "ops/latency.md",
+      "content": "# Latency\n\nSamples (ms): 100, 300, 500\n\nAverage latency: 200ms\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "300"
+    ]
+  },
+  "note": "Pass = reports 300 ms (mean of the samples), not the stated 200. [C5 audit_verification stress: a computed figure that contradicts the fixture's own stated value.]"
+}

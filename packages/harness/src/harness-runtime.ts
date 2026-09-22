@@ -147,6 +147,15 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * honest, instead of re-deriving a weaker proxy from `onLayerActivity`.
    */
   onVerification?: (result: VerificationResult) => void
+  /**
+   * EVAL-ONLY ablation seam (feature-value audit, Phase C5) — default absent/false = today's
+   * behaviour. When true the main loop skips the `verify()` call entirely and treats the
+   * iteration's verification as an empty pass (no layer results, no critical failure);
+   * `onVerification` is not fired, so a caller sees no verification result for the turn. No
+   * product path sets this: the only caller is the benchmark arm's env flag in aielia's
+   * harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
+   */
+  skipVerification?: boolean
   /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
   onGateDecision?: (event: GateDecisionEvent) => void
   /**
@@ -315,6 +324,7 @@ interface LoopContext {
   complexitySignal?: TurnComplexitySignal
   onLayerActivity?: (event: LayerActivityEvent) => void
   onVerification?: (result: VerificationResult) => void
+  skipVerification?: boolean
   onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
@@ -396,6 +406,7 @@ function buildInitialContext(
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
+    skipVerification: options.skipVerification,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -465,6 +476,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     complexitySignal: options.complexitySignal,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
+    skipVerification: options.skipVerification,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -1196,21 +1208,28 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     resolveAndStamp(ctx)
 
     ctx.nodeExecutionOrder.push('verify')
-    const verifyResult = verify(
-      execResult.output,
-      ctx.successCriteria,
-      ctx.worldModel.assumptions,
-      ctx.evidenceStore,
-      currentTask.risk_level,
-      ctx.evidenceStore,
-      ctx.worldModel,
-      ctx.outputContract,
-      ctx.hypothesisSet,
-    )
-    reportLayer(ctx, 'verification', true, verifyResult.has_critical_failure
-      ? `verification failed: ${verifyResult.layer_results.find(lr => lr.status === 'FAIL')?.detail ?? 'unknown'}`
-      : 'all applicable layers passed')
-    ctx.onVerification?.(verifyResult)
+    // Eval-only ablation (Phase C5): skipVerification never set outside the benchmark arm.
+    const verifyResult: VerificationResult = ctx.skipVerification
+      ? { layer_results: [], has_critical_failure: false, adversarial_passed: null, critical_failure_tiers: [] }
+      : verify(
+          execResult.output,
+          ctx.successCriteria,
+          ctx.worldModel.assumptions,
+          ctx.evidenceStore,
+          currentTask.risk_level,
+          ctx.evidenceStore,
+          ctx.worldModel,
+          ctx.outputContract,
+          ctx.hypothesisSet,
+        )
+    if (ctx.skipVerification) {
+      reportLayer(ctx, 'verification', false, 'verification skipped (eval ablation)')
+    } else {
+      reportLayer(ctx, 'verification', true, verifyResult.has_critical_failure
+        ? `verification failed: ${verifyResult.layer_results.find(lr => lr.status === 'FAIL')?.detail ?? 'unknown'}`
+        : 'all applicable layers passed')
+      ctx.onVerification?.(verifyResult)
+    }
 
     ctx.nodeExecutionOrder.push('post_exec_gate')
     const postGatePassed = postExecGate(

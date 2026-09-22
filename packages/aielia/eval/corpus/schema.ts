@@ -100,6 +100,11 @@ export const AUDIT_SLICES = [
   // decomposition is pure overhead. The shape the classifier's `decomposedTasks` graph and
   // `reframeTaskDescriptionWithLLM` (arm `flagOn` vs `decompositionOff`) exist for.
   'audit_decomposition',
+  // Single-turn requests where the tool result or the file's own stated figure is mechanically
+  // checkable and plausibly defective (stale total, conflicting sources, missing file, unaudited
+  // figure), plus correct-result controls. Graded on being correct or hedged rather than
+  // confidently wrong. The shape the verification layer (arm `flagOn` vs `verificationOff`) exists for.
+  'audit_verification',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

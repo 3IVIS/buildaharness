@@ -43,6 +43,20 @@ import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 
 /**
+ * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). EVAL-ONLY:
+ * default **ON** (an unset / empty / truthy value keeps today's always-on verification). Only the
+ * benchmark's `verificationOff` arm sets a falsy value (`0` / `false` / `off` / `no` / `disabled`),
+ * which makes `HarnessBridge.run` pass `skipVerification: true` to HarnessRuntime. Read at exactly
+ * one call site (below); no product path sets it. Same shape as `semanticContradictionEnabled()`.
+ */
+export function verificationEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_VERIFICATION ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
  * P4 of the internal plan (Open Decisions #2, recommended default: yes):
  * once an approved plan's `executingOnPlan` removes the per-MEDIUM/HIGH-risk pacing pause below,
  * auto-advance could otherwise chain arbitrarily many tasks' worth of LLM calls into one turn. This
@@ -266,6 +280,9 @@ export class HarnessBridge {
         onVerification: (result: VerificationResult) => {
           lastVerification = result
         },
+        // AUDIT_VERIFICATION (feature-value audit, Phase C5, eval-only) → skip verify() entirely.
+        // Default ON — unchanged shipped behaviour; skipVerification stays undefined.
+        skipVerification: verificationEnabled() ? undefined : true,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.

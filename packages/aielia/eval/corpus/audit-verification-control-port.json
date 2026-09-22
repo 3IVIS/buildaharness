@@ -1,0 +1,24 @@
+{
+  "id": "audit-verification-control-port",
+  "category": "file_read",
+  "slice": "audit_verification",
+  "intent": "Correct single value, nothing to catch.",
+  "prompt": "What is the cache port in config/cache.md?",
+  "workspace": [
+    {
+      "path": "config/cache.md",
+      "content": "# Cache\n\nHost: cache.internal\nPort: 6380\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "6380"
+    ]
+  },
+  "note": "Pass = reports 6380. [C5 audit_verification control: a correct, unambiguous result where verification is pure overhead; any arm difference is the cost/latency tax or a spurious recovery loop.]"
+}

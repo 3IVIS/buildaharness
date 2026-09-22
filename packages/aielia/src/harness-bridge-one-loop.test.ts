@@ -93,3 +93,17 @@ describe('HarnessBridge one-loop flag wiring (R2)', () => {
     if (outcome.status === 'completed') expect(outcome.result.finalResult).toBe('from the proposer')
   })
 })
+
+describe('verificationEnabled (AUDIT_VERIFICATION gate — Phase C5, eval-only)', () => {
+  it('defaults ON; only an explicit falsy value turns it OFF', async () => {
+    const { verificationEnabled } = await import('./harness-bridge.js')
+    expect(verificationEnabled({})).toBe(true)
+    expect(verificationEnabled({ AUDIT_VERIFICATION: '' })).toBe(true)
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', 'garbage']) {
+      expect(verificationEnabled({ AUDIT_VERIFICATION: v }), v).toBe(true)
+    }
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) {
+      expect(verificationEnabled({ AUDIT_VERIFICATION: v }), v).toBe(false)
+    }
+  })
+})

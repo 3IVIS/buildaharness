@@ -1,0 +1,25 @@
+{
+  "id": "audit-verification-control-owner",
+  "category": "file_read",
+  "slice": "audit_verification",
+  "intent": "Correct two-value lookup, nothing to catch.",
+  "prompt": "Who owns the billing service and what is its on-call channel, per services/billing.md?",
+  "workspace": [
+    {
+      "path": "services/billing.md",
+      "content": "# Billing\n\nOwner: Dana Okafor\nOn-call channel: #billing-oncall\n"
+    }
+  ],
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "grader": {
+    "contains": [
+      "Dana Okafor",
+      "#billing-oncall"
+    ]
+  },
+  "note": "Pass = reports both. [C5 audit_verification control: a correct, unambiguous result where verification is pure overhead; any arm difference is the cost/latency tax or a spurious recovery loop.]"
+}
