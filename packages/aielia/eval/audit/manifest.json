@@ -112,9 +112,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 8,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "scoped",
-      "corpusNote": "Within-turn mechanism, but the shipped bridge (harness-bridge.ts) passes only NON_CHECKABLE_DEFAULT_CRITERION to runtime.run(), for which the hook returns false with no LLM call; plan successCriteria never reach it. Expect no arm differential: the entry must be published scoped to 'the hook is unreachable from a product turn', not as a verdict on paraphrase recognition. Any spurious-finding effect is seen by the single-turn grader only through retries/escalations."
+      "corpusNote": "Within-turn mechanism, but the shipped bridge (harness-bridge.ts) passes only NON_CHECKABLE_DEFAULT_CRITERION to runtime.run(), for which the hook returns false with no LLM call; plan successCriteria never reach it. Expect no arm differential: the entry must be published scoped to 'the hook is unreachable from a product turn', not as a verdict on paraphrase recognition. Any spurious-finding effect is seen by the single-turn grader only through retries/escalations.",
+      "verdict": "CUT"
     },
     {
       "id": "semantic-change-reviewer",
