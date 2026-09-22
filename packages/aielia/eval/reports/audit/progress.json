@@ -43,6 +43,12 @@
       "finalized": true,
       "spendUsd": 0.39291,
       "blocked": false
+    },
+    "semantic-change-reviewer": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.489135,
+      "blocked": false
     }
   }
 }
