@@ -129,9 +129,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 8,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Within-turn once the belief is held; the belief-establishing turn is part of the task (pre-seeded memory is not a supported corpus shape, so every task states the constraint on turn 1 and proposes the conflicting change on turn 3). Caveats: conflicts against beliefs from a much earlier session are out of scope; the hook is skipped for a change that reads like a coding fact (looksLikeCodingFact) and runs only after the mechanical review passed, so the slice uses natural-language domains; whether the constraint reaches a >= 0.8-confidence belief depends on fact extraction, so a null arm differential may mean the belief was never held rather than that the call is worthless."
+      "corpusNote": "Within-turn once the belief is held; the belief-establishing turn is part of the task (pre-seeded memory is not a supported corpus shape, so every task states the constraint on turn 1 and proposes the conflicting change on turn 3). Caveats: conflicts against beliefs from a much earlier session are out of scope; the hook is skipped for a change that reads like a coding fact (looksLikeCodingFact) and runs only after the mechanical review passed, so the slice uses natural-language domains; whether the constraint reaches a >= 0.8-confidence belief depends on fact extraction, so a null arm differential may mean the belief was never held rather than that the call is worthless.",
+      "verdict": "CUT"
     },
     {
       "id": "model-inferred-facts",
