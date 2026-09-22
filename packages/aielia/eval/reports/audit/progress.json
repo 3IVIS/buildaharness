@@ -58,7 +58,7 @@
     },
     "decomposition-reframing": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.46164,
       "blocked": false
     }

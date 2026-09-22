@@ -163,9 +163,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 12,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Within-turn; the harness executes each task against one draft reply, so decomposition changes what is verified more than what is generated, and a null quality differential is a plausible outcome. One flag (AUDIT_DECOMPOSITION) covers both mechanisms: decomposition is the classifier's decomposedTasks output (bundled into the mandatory classifyTurnIntent call, so it adds no LLM call of its own), and the reframe call only ever fires on the single-task path, so they cannot be toggled independently and stay one manifest entry. Caveats: the flag gates consumption of decomposedTasks, not the classifier call; the reframe call additionally requires a non-LOW risk classification and a coding-fact-shaped message, so the read-only fixture tasks mostly exercise decomposition, not reframing; a task the classifier routes into plan mode would bypass this hook."
+      "corpusNote": "Within-turn; the harness executes each task against one draft reply, so decomposition changes what is verified more than what is generated, and a null quality differential is a plausible outcome. One flag (AUDIT_DECOMPOSITION) covers both mechanisms: decomposition is the classifier's decomposedTasks output (bundled into the mandatory classifyTurnIntent call, so it adds no LLM call of its own), and the reframe call only ever fires on the single-task path, so they cannot be toggled independently and stay one manifest entry. Caveats: the flag gates consumption of decomposedTasks, not the classifier call; the reframe call additionally requires a non-LOW risk classification and a coding-fact-shaped message, so the read-only fixture tasks mostly exercise decomposition, not reframing; a task the classifier routes into plan mode would bypass this hook.",
+      "verdict": "CUT"
     },
     {
       "id": "verification-layer",
