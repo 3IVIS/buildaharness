@@ -8,6 +8,11 @@ import {
   createGoalThreadFromPlanRecord,
   loadGoalGraphRecord,
   saveGoalGraphRecord,
+  getActiveThread,
+  tasksForGoal,
+  readyThreads,
+  mintConcurrentReadyThread,
+  abandonThread,
   type GoalGraphFsPersistence,
   type GoalGraphRecord,
 } from './goal-graph-store.js'
@@ -214,5 +219,89 @@ describe('loadGoalGraphRecord / saveGoalGraphRecord', () => {
     const migrated = await loadGoalGraphRecord(memory, 'session-1', fsPersistence)
     expect(migrated?.threads[0].successCriteria).toBe(plan.successCriteria)
     expect(GoalThreadSchema.parse(migrated?.threads[0])).toEqual(migrated?.threads[0])
+  })
+})
+
+// Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html — R2's locatability primitive
+// (getActiveThread/tasksForGoal/readyThreads) and the NEW_GOAL/CANCEL_CURRENT mutation helpers
+// (mintConcurrentReadyThread/abandonThread) becoming live.
+describe('getActiveThread / tasksForGoal / readyThreads', () => {
+  it('returns the thread activeThreadId points at, when its own status is genuinely ACTIVE', () => {
+    const record = makeGoalGraphRecord()
+    expect(getActiveThread(record)?.id).toBe('thread-1')
+  })
+
+  it('returns null when activeThreadId is null', () => {
+    expect(getActiveThread(createEmptyGoalGraphRecord())).toBeNull()
+  })
+
+  it('returns null when the pointed-at thread is no longer ACTIVE (e.g. paused mid-transition, ahead of the Phase 5 Scheduler ever reassigning the pointer)', () => {
+    const record = makeGoalGraphRecord()
+    const paused: GoalGraphRecord = { ...record, threads: record.threads.map((t) => ({ ...t, status: 'PAUSED' })) }
+    expect(getActiveThread(paused)).toBeNull()
+  })
+
+  it('tasksForGoal returns the given thread\'s own tasks by direct id lookup', () => {
+    const record = makeGoalGraphRecord()
+    expect(tasksForGoal(record, 'thread-1')).toEqual(record.threads[0].tasks)
+    expect(tasksForGoal(record, 'no-such-thread')).toEqual([])
+  })
+
+  it('readyThreads filters to READY status only', () => {
+    const record = makeGoalGraphRecord()
+    const withExtra: GoalGraphRecord = { ...record, threads: [...record.threads, { ...record.threads[0], id: 'thread-2', status: 'READY' }] }
+    expect(readyThreads(withExtra).map((t) => t.id)).toEqual(['thread-2'])
+  })
+})
+
+describe('mintConcurrentReadyThread', () => {
+  it('mints a new READY thread and pauses the given active thread, linking them as concurrent siblings', () => {
+    const record = makeGoalGraphRecord()
+    const updated = mintConcurrentReadyThread(record, 'book a flight to Lisbon', 'thread-1')
+
+    expect(updated.threads).toHaveLength(2)
+    const oldThread = updated.threads.find((t) => t.id === 'thread-1')
+    const newThread = updated.threads.find((t) => t.id !== 'thread-1')
+    expect(oldThread?.status).toBe('PAUSED')
+    expect(oldThread?.relationToSiblings).toBe('concurrent')
+    expect(oldThread?.siblingIds).toContain(newThread?.id)
+    expect(newThread?.status).toBe('READY')
+    expect(newThread?.relationToSiblings).toBe('concurrent')
+    expect(newThread?.siblingIds).toEqual(['thread-1'])
+    expect(newThread?.successCriteria).toBe('book a flight to Lisbon')
+    expect(GoalThreadSchema.parse(newThread)).toEqual(newThread)
+    // The old thread's task list/history is preserved, not reset — PAUSED keeps partial state.
+    expect(oldThread?.tasks).toEqual(record.threads[0].tasks)
+  })
+
+  it('mints a standalone READY thread with no sibling linkage when there is nothing to pause', () => {
+    const updated = mintConcurrentReadyThread(createEmptyGoalGraphRecord(), 'a fresh unrelated goal', null)
+    expect(updated.threads).toHaveLength(1)
+    expect(updated.threads[0].status).toBe('READY')
+    expect(updated.threads[0].relationToSiblings).toBeUndefined()
+    expect(updated.threads[0].siblingIds).toBeUndefined()
+  })
+
+  it('never writes activeThreadId — INV-39, Tier-1 is never the ACTIVE-pointer writer', () => {
+    const record = makeGoalGraphRecord()
+    const updated = mintConcurrentReadyThread(record, 'something else entirely', 'thread-1')
+    expect(updated.activeThreadId).toBe(record.activeThreadId)
+  })
+})
+
+describe('abandonThread', () => {
+  it('marks the given thread ABANDONED, keeping it in the array for audit (never deleted)', () => {
+    const record = makeGoalGraphRecord()
+    const updated = abandonThread(record, 'thread-1')
+    expect(updated.threads).toHaveLength(1)
+    expect(updated.threads[0].status).toBe('ABANDONED')
+    expect(updated.threads[0].id).toBe('thread-1')
+  })
+
+  it('leaves other threads untouched', () => {
+    const record = makeGoalGraphRecord()
+    const withExtra: GoalGraphRecord = { ...record, threads: [...record.threads, { ...record.threads[0], id: 'thread-2', status: 'READY' }] }
+    const updated = abandonThread(withExtra, 'thread-1')
+    expect(updated.threads.find((t) => t.id === 'thread-2')?.status).toBe('READY')
   })
 })

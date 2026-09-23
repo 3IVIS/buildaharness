@@ -607,6 +607,11 @@ export function App(): React.JSX.Element {
           toolSteps.push(step)
           setLiveToolSteps((prev) => [...prev, step])
         },
+        // Phase 4 — mirrors cli.ts exactly (per this plan's standing "chat-ui must follow the
+        // same logic/wiring as the CLI" principle): passed unconditionally, since with
+        // goalGraphModeEnabled false the composer stays disabled while busy (see the JSX below)
+        // so nothing ever reaches steeringChannelRef in the first place (INV-43).
+        steeringChannel: steeringChannelRef.current,
       })
       // P7: refresh the persistent plan-mode banner state after every turn (drafting/
       // awaiting_approval/active/none) — independent of which status branch below fires.
@@ -693,12 +698,12 @@ export function App(): React.JSX.Element {
       setProgress(null)
       setStreamingText(null)
       setLiveToolSteps([])
-      // R1 (mid-task steering, Phase 3) — anything submitted while this turn was running went
-      // into steeringChannelRef instead of being blocked by the disabled composer (see
-      // submitMessage below). Drain it now as ordinary follow-up turns, in arrival order, rather
-      // than leaving it queued indefinitely — same inert-by-construction fallback cli.ts's
-      // dispatchOne uses; Phase 4 replaces this with real intra-turn absorption via
-      // checkCallerUpdates.
+      // R1 (mid-task steering, Phase 3) + Phase 4 — assistant.turn() above now absorbs queued
+      // steering messages in real time via checkCallerUpdates, re-enqueueing onto
+      // steeringChannelRef anything it didn't get around to this turn (see
+      // TurnOptions.steeringChannel's doc comment). This drain is the backstop for exactly that
+      // leftover case — same shape as cli.ts's dispatchOne `finally`, dispatched as ordinary
+      // follow-up turns in arrival order rather than left queued indefinitely.
       if (goalGraphModeEnabled) void drainSteeringChannel()
     }
   }

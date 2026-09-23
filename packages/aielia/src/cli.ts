@@ -1136,6 +1136,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         },
         onToken: writeToken,
         onToolStep: writeToolStep,
+        // Phase 4 — real intra-turn absorption via checkCallerUpdates, replacing Phase 3's
+        // drain-as-follow-up-turns fallback in dispatchOne's `finally` below (kept there, but
+        // only as a backstop: turn() re-enqueues anything it didn't get around to classifying
+        // this turn — e.g. a trivial turn that never calls harnessBridge.run() at all — back onto
+        // this same channel, see TurnOptions.steeringChannel's doc comment). Passed unconditionally:
+        // with goalGraphMode off, routeMessage (below) never enqueues into steeringChannel, so it's
+        // always empty and this resolves to exactly today's behavior (INV-43).
+        steeringChannel,
       })
       // Same streamedAnyTokens gate as onProgress above: lastProgressLineLength describes a
       // pre-streaming progress line that a leading "\n" in writeToken already scrolled past,
@@ -1551,12 +1559,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await handleTurn(message)
     } finally {
       turnInProgress = false
-      // Anything the user sent while this turn was running went into steeringChannel instead of
-      // blocking on dispatchQueue (see routeMessage below) — drain it now as ordinary follow-up
-      // turns, in the order it arrived, rather than leaving it queued indefinitely. Phase 4
-      // replaces this with real intra-turn absorption via checkCallerUpdates; until then this is
-      // the inert-by-construction fallback that still satisfies "never silently drop the new ask"
-      // (R4) even though nothing reads the channel mid-turn yet.
+      // Phase 4: assistant.turn() above now absorbs queued steering messages in real time via
+      // checkCallerUpdates (goal-graph-reconcile.ts), and re-enqueues onto steeringChannel
+      // anything it didn't get around to this turn (a trivial turn that skipped harnessBridge.run
+      // entirely, or a run that ended before the queue fully drained). This drain is the backstop
+      // for exactly that leftover case — dispatched as ordinary follow-up turns, in arrival order,
+      // rather than left queued indefinitely. Still satisfies "never silently drop the new ask"
+      // (R4) the same way it always has; it's just no longer the *only* absorption path.
       if (goalGraphMode === 'enabled') {
         for (const event of steeringChannel.poll()) {
           void enqueue(event.message)

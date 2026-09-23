@@ -51,6 +51,8 @@ import { DEFAULT_ASK_MODE, type AskMode } from './ask-mode-flag.js'
 import { DEFAULT_PLAN_MODE, type PlanRolloutMode } from './plan-mode-flag.js'
 import { AskClarificationService } from './ask-clarification-service.js'
 import { ResponseService } from './response-service.js'
+import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
+import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
 import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
@@ -155,6 +157,21 @@ export interface TurnOptions {
    * set by a real caller; ignored unless the one-loop proposer path is active.
    */
   __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number; onInjected?: () => void }
+  /**
+   * Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html (R1/R4) — the session-scoped
+   * LiveSteeringChannel a caller (cli.ts/App.tsx, Phase 3) built for mid-task steering. When
+   * present, `turn()` wraps it in a scope×urgency-classifying UpdateChannel
+   * (goal-graph-reconcile.ts) and threads it into harnessBridge.run() so queued messages are
+   * absorbed at the harness's own checkCallerUpdates iteration boundary instead of waiting for
+   * the turn to finish. PersonalAssistant never reads goalGraphMode itself (same convention as
+   * oneLoopMode/askMode/planMode) — the caller decides whether to pass this at all; when absent,
+   * behavior is exactly today's (INV-43). Whatever this turn's harness run doesn't get around to
+   * classifying (it ends before the queue drains, or never calls harnessBridge.run() at all — a
+   * trivial turn) is pushed back onto this same channel in a `finally`, so the caller's own
+   * post-turn fallback drain (built in Phase 3) still picks it up — R4's "never silently drop"
+   * holds either way.
+   */
+  steeringChannel?: LiveSteeringChannel
 }
 
 export interface PersonalAssistantOptions {
@@ -957,6 +974,21 @@ export class PersonalAssistant {
       oneLoopProposer = wrapProposerWithInjectedFailure(oneLoopProposer, options.__benchmarkInjectedFailure)
     }
 
+    // Phase 4 — see TurnOptions.steeringChannel's doc comment. Built fresh each turn (cheap: no
+    // LLM/IO cost until channel.poll() actually classifies a drained message) rather than reused
+    // across turns, since goal-graph state itself is loaded fresh from `memory` on each poll().
+    const steeringAdapter = options.steeringChannel
+      ? createSteeringReconcileChannel({
+          steeringChannel: options.steeringChannel,
+          sessionId,
+          memory: this.memory,
+          llmClient: this.llmClient,
+          model: this.model,
+          onUsage: accumulateUsage,
+          fsPersistence: this.session.undoWorkspace(),
+        })
+      : undefined
+
     try {
       const outcome = await this.harnessBridge.run({
         sessionId,
@@ -983,6 +1015,7 @@ export class PersonalAssistant {
         runInvestigation: supervisorEnabled()
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
+        updateChannel: steeringAdapter?.channel,
       })
 
       // R3: oneLoopSources is only set on the flag-ON path above, and only gets pushed to once
@@ -1061,6 +1094,16 @@ export class PersonalAssistant {
         return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId)
       }
       throw err
+    } finally {
+      // R4: whatever steeringAdapter's channel never got around to classifying this turn (the
+      // harness run ended — DONE, paused, or escalated — before the queue drained, or this turn's
+      // harness run threw before ever reaching checkCallerUpdates) goes back onto the caller's own
+      // channel, never dropped. See TurnOptions.steeringChannel's doc comment.
+      if (steeringAdapter && options.steeringChannel) {
+        for (const event of steeringAdapter.drainUnconsumed()) {
+          options.steeringChannel.enqueue(event.message)
+        }
+      }
     }
   }
 

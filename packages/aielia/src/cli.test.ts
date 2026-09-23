@@ -317,7 +317,7 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     expect(secondResolved).toBe(true)
   })
 
-  it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel instead of blocking, and is drained as a follow-up turn once the first finishes', async () => {
+  it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel and consumed by the in-flight turn itself via checkCallerUpdates (Phase 4) rather than becoming a separate follow-up turn', async () => {
     const llm = new DeferredReplyLLMClient()
     const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), goalGraphMode: 'enabled' })
     const lines = captureOutput()
@@ -332,14 +332,19 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
 
     llm.release()
     await firstTurn
-    // Flush the drain's fire-and-forget follow-up turn (queued onto dispatchQueue inside
-    // dispatchOne's `finally`) by waiting on one more command behind it in the same queue.
+    // Flush anything dispatchOne's `finally` fallback might still dispatch onto dispatchQueue —
+    // Phase 4 only falls back to that (a separate follow-up turn) for whatever the running turn's
+    // own checkCallerUpdates absorption didn't get to; here it gets to it, so nothing should be
+    // left for the fallback to dispatch.
     await cli.dispatchLine('/status')
 
-    // Both turns' replies eventually rendered — the second one just didn't block the prompt
-    // while the first was still running.
+    // Phase 4: "second message" is absorbed into the first turn's own harness run via
+    // checkCallerUpdates — the scope×urgency classifier's fail-safe default under this mock LLM
+    // (SAME_GOAL_NEW_TASK × DEFERRED, since callChatStructured's non-turn-intent branch returns
+    // plain text, not classifier-shaped JSON) folds it in as a new task on the *same* run, so it
+    // never becomes its own follow-up turn — only one "Noted." reply is printed, not two.
     const output = lines.join('\n')
-    expect((output.match(/Noted\./g) ?? []).length).toBeGreaterThanOrEqual(2)
+    expect((output.match(/Noted\./g) ?? []).length).toBe(1)
   })
 
   it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {

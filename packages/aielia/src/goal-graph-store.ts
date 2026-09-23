@@ -186,6 +186,72 @@ export function createGoalGraphRecordFromPlanRecord(plan: PlanRecord): GoalGraph
   }
 }
 
+/**
+ * R2's O(1) locatability primitive, live as of Phase 4: the currently-focused thread, found by a
+ * direct field lookup (`activeThreadId`), never a graph traversal. Defensive about a transient
+ * inconsistency Phase 4 can produce (see goal-graph-reconcile.ts): a NEW_GOAL/CANCEL_CURRENT
+ * steering message can pause/abandon the thread `activeThreadId` still points at, ahead of Phase
+ * 5's Scheduler ever reassigning that pointer (INV-39 — only the Scheduler writes it) — so this
+ * only returns a thread whose own `status` is still genuinely `ACTIVE`, not just pointed-at.
+ */
+export function getActiveThread(record: GoalGraphRecord): GoalThread | null {
+  if (!record.activeThreadId) return null
+  const thread = record.threads.find((t) => t.id === record.activeThreadId)
+  return thread && thread.status === 'ACTIVE' ? thread : null
+}
+
+/** R2's task→goal parent-link query — every task belonging to `goalId`, a direct field filter, never a traversal. */
+export function tasksForGoal(record: GoalGraphRecord, goalId: string): GoalTaskRecord[] {
+  const thread = record.threads.find((t) => t.id === goalId)
+  return thread ? thread.tasks : []
+}
+
+/** Every thread the Scheduler could hand focus to right now (Phase 5) — READY only, per INV-40 excluding anything mid-Tier-2-drafting is a Phase-5 concern once drafting sets a non-READY mode; Phase 4 just exposes the query. */
+export function readyThreads(record: GoalGraphRecord): GoalThread[] {
+  return record.threads.filter((t) => t.status === 'READY')
+}
+
+/**
+ * R4's NEW_GOAL branch (both IMMEDIATE and DEFERRED collapse to this in Phase 4 — see
+ * check-caller-updates.ts's cancel_current sibling doc comment and the plan's resolved
+ * "ACTIVE-pointer write authority" decision: Tier-1 never writes `activeThreadId` itself, it only
+ * pauses the old thread and mints the new one READY; Phase 5's Scheduler decides what becomes
+ * ACTIVE next). `pauseThreadId`, when given and currently ACTIVE, transitions to PAUSED and is
+ * linked to the new thread as a `concurrent` sibling (R3) — never `alternative`, since a NEW_GOAL
+ * is a genuinely separate objective, not a competing guess at the same one.
+ */
+export function mintConcurrentReadyThread(record: GoalGraphRecord, description: string, pauseThreadId?: string | null): GoalGraphRecord {
+  const now = new Date().toISOString()
+  const newId = crypto.randomUUID()
+  const newThread: GoalThread = {
+    id: newId,
+    status: 'READY',
+    relationToSiblings: pauseThreadId ? 'concurrent' : undefined,
+    siblingIds: pauseThreadId ? [pauseThreadId] : undefined,
+    templateName: null,
+    successCriteria: description,
+    rationale: description,
+    tasks: [],
+    mode: 'drafting',
+    executingOnPlan: false,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const threads = record.threads.map((t) => {
+    if (t.id !== pauseThreadId) return t
+    const siblingIds = [...(t.siblingIds ?? []), newId]
+    return { ...t, status: t.status === 'ACTIVE' ? ('PAUSED' as const) : t.status, relationToSiblings: 'concurrent' as const, siblingIds, updatedAt: now }
+  })
+  return { ...record, threads: [...threads, newThread], updatedAt: now }
+}
+
+/** R4's CANCEL_CURRENT branch — marks a thread ABANDONED. Kept for audit trail, never removed from `threads`. */
+export function abandonThread(record: GoalGraphRecord, threadId: string): GoalGraphRecord {
+  const now = new Date().toISOString()
+  const threads = record.threads.map((t) => (t.id === threadId ? { ...t, status: 'ABANDONED' as const, updatedAt: now } : t))
+  return { ...record, threads, updatedAt: now }
+}
+
 export async function saveGoalGraphRecord(memory: MemoryAdapter, sessionId: string, record: GoalGraphRecord, fsPersistence?: GoalGraphFsPersistence): Promise<void> {
   if (fsPersistence) await writeGoalGraphFile(fsPersistence, sessionId, record)
   await memory.set(goalGraphKey(sessionId), record)

@@ -14,6 +14,7 @@ import { resolveControlState } from './resolve-control-state.js'
 import {
   checkCallerUpdates,
   NoOpUpdateChannel,
+  AsyncFnUpdateChannel,
   RESTART_ITERATION,
   type UpdateChannel,
   type ConstraintPropagationContext,
@@ -223,15 +224,15 @@ describe('resolve_control_state', () => {
 // ─── check_caller_updates ─────────────────────────────────────────────────────
 
 describe('check_caller_updates', () => {
-  it('NoOpUpdateChannel returns empty list (default no-op)', () => {
+  it('NoOpUpdateChannel returns empty list (default no-op)', async () => {
     const cs = new CallerState()
-    const result = checkCallerUpdates(cs, new NoOpUpdateChannel())
+    const result = await checkCallerUpdates(cs, new NoOpUpdateChannel())
 
     expect(result).toBe('NO_UPDATE')
     expect(cs.constraints_changed).toBe(false)
   })
 
-  it('constraint update triggers applyConstraintChangePropagation() — same shared function as escalation path', () => {
+  it('constraint update triggers applyConstraintChangePropagation() — same shared function as escalation path', async () => {
     const cs = new CallerState()
     const wm = new WorldModel({ generation_id: 0 })
     const ctx: ConstraintPropagationContext = {
@@ -245,13 +246,13 @@ describe('check_caller_updates', () => {
       poll: () => ({ pending_update: { timeout: 30 }, constraints_changed: true }),
     }
 
-    checkCallerUpdates(cs, channel, ctx)
+    await checkCallerUpdates(cs, channel, ctx)
 
     // applyConstraintChangePropagation increments worldModel.generation_id (observable side-effect)
     expect(wm.generation_id).toBe(1)
   })
 
-  it('reset_constraints_changed() called after propagation to prevent re-trigger', () => {
+  it('reset_constraints_changed() called after propagation to prevent re-trigger', async () => {
     const cs = new CallerState()
     const wm = new WorldModel({ generation_id: 0 })
     const ctx: ConstraintPropagationContext = {
@@ -265,12 +266,12 @@ describe('check_caller_updates', () => {
       poll: () => ({ pending_update: { key: 'val' }, constraints_changed: true }),
     }
 
-    checkCallerUpdates(cs, channel, ctx)
+    await checkCallerUpdates(cs, channel, ctx)
 
     expect(cs.constraints_changed).toBe(false)
   })
 
-  it('iteration restarts via RESTART_ITERATION signal after constraint propagation', () => {
+  it('iteration restarts via RESTART_ITERATION signal after constraint propagation', async () => {
     const cs = new CallerState()
     const wm = new WorldModel({ generation_id: 0 })
     const ctx: ConstraintPropagationContext = {
@@ -284,9 +285,59 @@ describe('check_caller_updates', () => {
       poll: () => ({ pending_update: { constraint: 'updated' }, constraints_changed: true }),
     }
 
-    const result = checkCallerUpdates(cs, channel, ctx)
+    const result = await checkCallerUpdates(cs, channel, ctx)
 
     expect(result).toBe(RESTART_ITERATION)
+  })
+
+  // Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html — AsyncFnUpdateChannel + the
+  // CANCEL_CURRENT bypass path (cancelTaskGraph, not revalidateTaskGraph).
+  it('AsyncFnUpdateChannel resolves its wrapped promise through poll()', async () => {
+    const cs = new CallerState()
+    const wm = new WorldModel({ generation_id: 0 })
+    const ctx: ConstraintPropagationContext = {
+      worldModel: wm,
+      hypothesisSet: new HypothesisSet(),
+      taskGraph: new TaskGraph(),
+      diagnostics: healthyDiagnostics(),
+      failureDiagnostics: new FailureDiagnostics(),
+    }
+    const channel = new AsyncFnUpdateChannel(async () => ({ pending_update: { add_constraint: 'be concise' }, constraints_changed: true }))
+
+    const result = await checkCallerUpdates(cs, channel, ctx)
+
+    expect(result).toBe(RESTART_ITERATION)
+    expect(cs.current_constraints).toEqual(['be concise'])
+  })
+
+  it('cancel_current bypasses revalidateTaskGraph and blocks every non-terminal task via cancelTaskGraph', async () => {
+    const cs = new CallerState()
+    const wm = new WorldModel({ generation_id: 0 })
+    const tg = new TaskGraph({ tasks: [
+      makeTask({ id: 'a', status: 'RUNNING' }),
+      makeTask({ id: 'b', status: 'PENDING' }),
+      makeTask({ id: 'c', status: 'COMPLETE' }),
+    ] })
+    const ctx: ConstraintPropagationContext = {
+      worldModel: wm,
+      hypothesisSet: new HypothesisSet(),
+      taskGraph: tg,
+      diagnostics: healthyDiagnostics(),
+      failureDiagnostics: new FailureDiagnostics(),
+    }
+    const channel: UpdateChannel = {
+      poll: () => ({ pending_update: { cancel_current: true }, constraints_changed: true }),
+    }
+
+    const result = await checkCallerUpdates(cs, channel, ctx)
+
+    expect(result).toBe(RESTART_ITERATION)
+    expect(tg.tasks.find(t => t.id === 'a')?.status).toBe('BLOCKED')
+    expect(tg.tasks.find(t => t.id === 'a')?.block_reason).toBe('goal_cancelled')
+    expect(tg.tasks.find(t => t.id === 'b')?.status).toBe('BLOCKED')
+    expect(tg.tasks.find(t => t.id === 'b')?.block_reason).toBe('goal_cancelled')
+    // COMPLETE tasks are left alone — cancellation doesn't retroactively undo finished work.
+    expect(tg.tasks.find(t => t.id === 'c')?.status).toBe('COMPLETE')
   })
 })
 

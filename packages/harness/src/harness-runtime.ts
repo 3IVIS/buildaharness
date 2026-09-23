@@ -727,7 +727,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     )
 
     ctx.nodeExecutionOrder.push('check_caller_updates')
-    const updateResult = checkCallerUpdates(ctx.callerState, ctx.updateChannel, {
+    const updateResult = await checkCallerUpdates(ctx.callerState, ctx.updateChannel, {
       worldModel: ctx.worldModel, hypothesisSet: ctx.hypothesisSet, taskGraph: ctx.taskGraph,
       diagnostics: ctx.diagnostics, failureDiagnostics: ctx.failureDiagnostics,
       evidenceStore: ctx.evidenceStore, outputContract: ctx.outputContract,

@@ -18,12 +18,33 @@ export interface CallerUpdate {
 }
 
 export interface UpdateChannel {
-  poll(): CallerUpdate | null
+  /**
+   * Widened in Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html to allow an async
+   * result — the scope×urgency classifier (packages/aielia/src/scope-urgency-classifier.ts) needs
+   * a real LLM call to turn a drained steering message into a CallerUpdate, which a synchronous
+   * poll() can't do. checkCallerUpdates() below awaits this, so a synchronous implementation
+   * (NoOpUpdateChannel, OneShotAnswerChannel) keeps working completely unchanged — `await` on a
+   * non-Promise value just resolves it immediately.
+   */
+  poll(): CallerUpdate | null | Promise<CallerUpdate | null>
 }
 
 export class NoOpUpdateChannel implements UpdateChannel {
   poll(): CallerUpdate | null {
     return null
+  }
+}
+
+/**
+ * Generic async-producer UpdateChannel — wraps any `() => Promise<CallerUpdate | null>` function.
+ * Deliberately free of any goal-graph/steering-specific concept (those live in aielia's
+ * goal-graph-reconcile.ts, Phase 4) so this stays a reusable piece of the harness's own public
+ * UpdateChannel shape, the same way NoOpUpdateChannel is.
+ */
+export class AsyncFnUpdateChannel implements UpdateChannel {
+  constructor(private readonly fn: () => Promise<CallerUpdate | null>) {}
+  poll(): Promise<CallerUpdate | null> {
+    return this.fn()
   }
 }
 
@@ -95,6 +116,23 @@ export function revalidateTaskGraph(taskGraph: TaskGraph, callerState: CallerSta
 }
 
 /**
+ * Phase 4 (R4's CANCEL_CURRENT branch): blocks every non-terminal task rather than revalidating
+ * against success_criteria — a cancellation isn't a scope change to re-derive tasks from, it's an
+ * explicit stop. Mirrors revalidateTaskGraph's BLOCKED/block_reason shape (distinct reason string
+ * so this is never confused with an ordinary scope_eliminated narrowing) so downstream code that
+ * already reads block_reason keeps working unchanged.
+ */
+export function cancelTaskGraph(taskGraph: TaskGraph): void {
+  for (const task of taskGraph.tasks) {
+    if (task.status === 'COMPLETE' || task.status === 'FAILED') continue
+    if (task.status === 'BLOCKED' && task.block_reason === 'goal_cancelled') continue
+    task.status = 'BLOCKED'
+    task.block_reason = 'goal_cancelled'
+    taskGraph.changed = true
+  }
+}
+
+/**
  * Matches adapter/harness/constraint_propagation.py's apply_constraint_change_propagation():
  * the single shared entry point for both checkCallerUpdates() and the escalation response
  * handler whenever a caller constraint update arrives. Runs, in order: stale-belief flagging,
@@ -137,13 +175,13 @@ export function applyConstraintChangePropagation(
   callerState.resetConstraintsChanged()
 }
 
-export function checkCallerUpdates(
+export async function checkCallerUpdates(
   callerState: CallerState,
   updateChannel: UpdateChannel,
   ctx?: ConstraintPropagationContext,
   resolverFn?: ControlStateResolverFn,
-): UpdateCheckResult {
-  const update = updateChannel.poll()
+): Promise<UpdateCheckResult> {
+  const update = await updateChannel.poll()
   if (update === null) return 'NO_UPDATE'
 
   // inject_clarification + caller_state.update()
@@ -151,7 +189,16 @@ export function checkCallerUpdates(
 
   if (callerState.constraints_changed) {
     if (ctx) {
-      applyConstraintChangePropagation(callerState, ctx, resolverFn)
+      // Phase 4 (R4's CANCEL_CURRENT branch): an explicit stop signal, not an ordinary
+      // constraint/criteria update — bypasses revalidateTaskGraph (which reasons about
+      // success_criteria, untouched here) in favor of cancelTaskGraph's blanket block.
+      if (update.pending_update.cancel_current === true) {
+        cancelTaskGraph(ctx.taskGraph)
+        ctx.worldModel.generation_id++
+        callerState.resetConstraintsChanged()
+      } else {
+        applyConstraintChangePropagation(callerState, ctx, resolverFn)
+      }
     } else {
       callerState.resetConstraintsChanged()
     }

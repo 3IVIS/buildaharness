@@ -89,6 +89,16 @@ export class CallerState {
     if ('success_criteria' in update) {
       this.success_criteria = [...(update.success_criteria as string[])]
     }
+    // Phase 4 (R4's SAME_TASK / SAME_GOAL_NEW_TASK branches) — additive counterparts to the
+    // wholesale-replace keys above. A steering message folding into the task in flight, or adding
+    // a new task under the same goal, must never clobber constraints/criteria another mechanism
+    // (or an earlier steering message this same turn) already wrote.
+    if ('add_constraint' in update) {
+      this.current_constraints = [...this.current_constraints, update.add_constraint as string]
+    }
+    if ('add_success_criteria' in update) {
+      this.success_criteria = [...this.success_criteria, ...(update.add_success_criteria as string[])]
+    }
 
     this.last_update = new Date().toISOString()
     this.constraints_changed = true
