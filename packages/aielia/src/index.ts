@@ -86,6 +86,10 @@ export { resolveAskMode, normalizeAskMode, DEFAULT_ASK_MODE } from './ask-mode-f
 export type { AskMode } from './ask-mode-flag.js'
 export { resolvePlanMode, normalizePlanMode, DEFAULT_PLAN_MODE } from './plan-mode-flag.js'
 export type { PlanRolloutMode } from './plan-mode-flag.js'
+export { resolveGoalGraphMode, normalizeGoalGraphMode, DEFAULT_GOAL_GRAPH_MODE } from './goal-graph-flag.js'
+export type { GoalGraphMode } from './goal-graph-flag.js'
+export { LiveSteeringChannel } from './live-steering-channel.js'
+export type { SteeringEvent } from './live-steering-channel.js'
 export { AskClarificationService } from './ask-clarification-service.js'
 export type { AskClarificationPendingState } from './ask-clarification-service.js'
 // Q5 (the internal plan) — chat-ui renders the ask-question batch

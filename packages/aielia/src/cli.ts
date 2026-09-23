@@ -41,6 +41,8 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
+import { resolveGoalGraphMode, type GoalGraphMode } from './goal-graph-flag.js'
+import { LiveSteeringChannel } from './live-steering-channel.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -72,6 +74,13 @@ const defaultRemindersFile = join(defaultDataDir, 'reminders', 'reminders.json')
 const defaultEnvOverrides = envOverridesFromProcessEnv(process.env)
 
 const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
+
+// Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html — deliberately not threaded
+// through AssistantConfig/envOverridesFromProcessEnv yet (that's Phase 8's job); see
+// goal-graph-flag.ts's doc comment for why. Mirrors defaultNonInteractiveApprovalMode's own
+// shape: a RunCliOptions-level default computed once from process.env, overridable per-call for
+// tests via options.goalGraphMode.
+const defaultGoalGraphMode = resolveGoalGraphMode(process.env)
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
@@ -217,6 +226,13 @@ export interface RunCliOptions {
   remindersFile?: string
   envOverrides?: Partial<AssistantConfig>
   nonInteractiveApprovalMode?: NonInteractiveApprovalMode
+  /**
+   * Phase 3 gate for the hierarchical goal-tree mechanism's mid-task steering (R1) — see
+   * goal-graph-flag.ts's doc comment for why this is a RunCliOptions field rather than an
+   * AssistantConfig one for now. Defaults to `process.env.ASSISTANT_GOAL_GRAPH`
+   * ('disabled' when unset), same shape as `nonInteractiveApprovalMode` above.
+   */
+  goalGraphMode?: GoalGraphMode
   input?: NodeJS.ReadableStream
   output?: NodeJS.WritableStream
   /**
@@ -274,6 +290,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   const remindersFile = options.remindersFile ?? defaultRemindersFile
   const envOverrides = options.envOverrides ?? defaultEnvOverrides
   const nonInteractiveApprovalMode = options.nonInteractiveApprovalMode ?? defaultNonInteractiveApprovalMode
+  const goalGraphMode = options.goalGraphMode ?? defaultGoalGraphMode
 
   const inputStream = options.input ?? process.stdin
   const outputStream = options.output ?? process.stdout
@@ -1476,6 +1493,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     await handleConfigCommand(['set', 'activeProject', args.join(' ')])
   }
 
+  // Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering).
+  // `turnInProgress` is true only while dispatchOne is awaiting an actual conversational
+  // handleTurn() call, never while a command handler (e.g. /config) is running — so a /config
+  // dispatch in flight is completely unaffected and keeps its existing dispatchQueue
+  // serialization (the race-avoidance this queue exists for in the first place). `steeringChannel`
+  // has no consumer yet beyond the drain in dispatchOne's `finally` below — Phase 4 replaces that
+  // drain with real intra-turn absorption via checkCallerUpdates.
+  let turnInProgress = false
+  const steeringChannel = new LiveSteeringChannel()
+
   // A lookup keyed by the message's first whitespace-separated token — replaces what used to
   // be a growing `if (message === '/why') ... if (message === '/sources') ...` chain. Each
   // handler receives the remaining tokens as `args` (empty for commands that take none).
@@ -1519,7 +1546,23 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await handler(args)
       return
     }
-    await handleTurn(message)
+    turnInProgress = true
+    try {
+      await handleTurn(message)
+    } finally {
+      turnInProgress = false
+      // Anything the user sent while this turn was running went into steeringChannel instead of
+      // blocking on dispatchQueue (see routeMessage below) — drain it now as ordinary follow-up
+      // turns, in the order it arrived, rather than leaving it queued indefinitely. Phase 4
+      // replaces this with real intra-turn absorption via checkCallerUpdates; until then this is
+      // the inert-by-construction fallback that still satisfies "never silently drop the new ask"
+      // (R4) even though nothing reads the channel mid-turn yet.
+      if (goalGraphMode === 'enabled') {
+        for (const event of steeringChannel.poll()) {
+          void enqueue(event.message)
+        }
+      }
+    }
   }
 
   let dispatchQueue: Promise<void> = Promise.resolve()
@@ -1538,10 +1581,31 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     return result
   }
 
+  function isKnownCommand(message: string): boolean {
+    const [token] = message.split(/\s+/)
+    return token in commands
+  }
+
+  /**
+   * Phase 3's routing split: with goalGraphMode off (the default — INV-43), this is exactly
+   * `enqueue(message)`, byte-identical to before. With it on, a plain-turn message (not a slash
+   * command — those must keep dispatchQueue's strict serialization, see dispatchOne's
+   * turnInProgress comment above) arriving while a turn is already running is absorbed into
+   * steeringChannel instead of waiting in line, so the composer/prompt never blocks on it (R1).
+   */
+  function routeMessage(message: string): Promise<void> {
+    if (goalGraphMode === 'enabled' && turnInProgress && !isKnownCommand(message)) {
+      steeringChannel.enqueue(message)
+      console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
+      return Promise.resolve()
+    }
+    return enqueue(message)
+  }
+
   rl.on('line', (line) => {
     const message = line.trim()
     if (!message) { rl.prompt(); return }
-    void enqueue(message).finally(() => rl.prompt())
+    void routeMessage(message).finally(() => rl.prompt())
   })
   // Safe to resume now — the 'line' listener right above is in place, so anything already
   // buffered on stdin (see the rl.pause() call up top) gets parsed and delivered, not dropped.
@@ -1551,7 +1615,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     dispatchLine: async (line: string) => {
       const message = line.trim()
       if (!message) return
-      await enqueue(message)
+      await routeMessage(message)
     },
     close: () => rl.close(),
     getStatusIndicators: async () => {

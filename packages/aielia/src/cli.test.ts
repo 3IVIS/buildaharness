@@ -102,6 +102,45 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
 }
 
+/**
+ * Phase 3 (hierarchical_goal_tree_and_steering_plan.html) steering tests need a turn that
+ * genuinely stays in flight until the test says so, so a second dispatchLine() can be observed
+ * arriving while `turnInProgress` is still true. `callChat` (the streamed-reply path handleTurn's
+ * writeToken loop consumes) blocks on `replyGate` until `release()` is called; `callChatStructured`
+ * still answers the turn-intent classification immediately, same as FakeLLMClient, since only the
+ * final reply generation needs to hang.
+ */
+class DeferredReplyLLMClient implements ILLMClient {
+  private releaseReply: (() => void) | undefined
+  private readonly replyGate: Promise<void>
+  constructor(private readonly reply: string = 'Noted.') {
+    this.replyGate = new Promise((resolve) => {
+      this.releaseReply = resolve
+    })
+  }
+  release(): void {
+    this.releaseReply?.()
+  }
+  async *callChat(): AsyncIterable<string> {
+    await this.replyGate
+    yield this.reply
+  }
+  async callChatSync(): Promise<string> {
+    await this.replyGate
+    return this.reply
+  }
+  async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+    if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    await this.replyGate
+    return { content: this.reply }
+  }
+}
+
+/** Yields until the microtask queue (and one macrotask tick) has drained — enough for dispatchOne's synchronous `turnInProgress = true` to have run after an un-awaited dispatchLine() call. */
+function flushAsync(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 function makeFakeBackend(): FsBackend {
   const files = new Map<string, string>()
   return {
@@ -250,6 +289,81 @@ describe('/config', () => {
 
     expect(lines.join('\n')).toContain('braveApiKey')
     expect(await configStore.load()).toEqual({})
+  })
+})
+
+describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchical_goal_tree_and_steering_plan.html)', () => {
+  it('goalGraphMode unset (default): a message sent while a turn is running still blocks on dispatchQueue, byte-identical to today (INV-43)', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }) })
+    const lines = captureOutput()
+
+    const firstTurn = cli.dispatchLine('first message')
+    await flushAsync()
+
+    let secondResolved = false
+    const secondTurn = cli.dispatchLine('second message').then(() => {
+      secondResolved = true
+    })
+    await flushAsync()
+    // Not routed to any steering channel — it's still waiting in dispatchQueue behind the
+    // in-flight first turn, exactly like before this mechanism existed.
+    expect(secondResolved).toBe(false)
+    expect(lines.join('\n')).not.toContain('queued')
+
+    llm.release()
+    await firstTurn
+    await secondTurn
+    expect(secondResolved).toBe(true)
+  })
+
+  it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel instead of blocking, and is drained as a follow-up turn once the first finishes', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), goalGraphMode: 'enabled' })
+    const lines = captureOutput()
+
+    const firstTurn = cli.dispatchLine('first message')
+    await flushAsync()
+
+    // Resolves immediately — routeMessage() only enqueues into steeringChannel, it never waits
+    // on dispatchQueue the way the default-off case above does.
+    await cli.dispatchLine('second message')
+    expect(lines.join('\n')).toContain('queued')
+
+    llm.release()
+    await firstTurn
+    // Flush the drain's fire-and-forget follow-up turn (queued onto dispatchQueue inside
+    // dispatchOne's `finally`) by waiting on one more command behind it in the same queue.
+    await cli.dispatchLine('/status')
+
+    // Both turns' replies eventually rendered — the second one just didn't block the prompt
+    // while the first was still running.
+    const output = lines.join('\n')
+    expect((output.match(/Noted\./g) ?? []).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const { cli, configStore } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), goalGraphMode: 'enabled' })
+    captureOutput()
+
+    const firstTurn = cli.dispatchLine('first message')
+    await flushAsync()
+
+    let configResolved = false
+    const configDispatch = cli.dispatchLine('/config set enableShell true').then(() => {
+      configResolved = true
+    })
+    await flushAsync()
+    // A command is never routed to the steering channel, regardless of goalGraphMode — it still
+    // waits behind the running turn in dispatchQueue.
+    expect(configResolved).toBe(false)
+
+    llm.release()
+    await firstTurn
+    await configDispatch
+    expect(configResolved).toBe(true)
+    expect(await configStore.load()).toMatchObject({ enableShell: true })
   })
 })
 

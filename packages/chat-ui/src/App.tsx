@@ -9,6 +9,8 @@ import {
   formatTranscriptMarkdown,
   defaultExportFilename,
   braveSearch,
+  normalizeGoalGraphMode,
+  LiveSteeringChannel,
   type AssistantProgress,
   type AssistantToolStep,
   type AssistantConfig,
@@ -91,6 +93,14 @@ function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): Token
 // config.ts's resolveConfig — so nothing changes for a deployed build that already sets
 // VITE_ASSISTANT_PROXY_URL/_TOKEN/_MODEL and never opens Settings.
 const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
+
+// Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering) —
+// deliberately not threaded through AssistantConfig/envOverridesFromImportMetaEnv yet (that's
+// Phase 8's job — see goal-graph-flag.ts's doc comment for why). Read directly from Vite's
+// build-time env, same "not a config field yet" shape cli.ts's RunCliOptions.goalGraphMode uses
+// for process.env.ASSISTANT_GOAL_GRAPH. Default OFF: the composer/Send button stay disabled while
+// busy, byte-identical to today (INV-43).
+const goalGraphModeEnabled = normalizeGoalGraphMode(import.meta.env.VITE_ASSISTANT_GOAL_GRAPH, 'VITE_ASSISTANT_GOAL_GRAPH') === 'enabled'
 
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
@@ -386,6 +396,10 @@ export function App(): React.JSX.Element {
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  // R1 (mid-task steering) — one channel per session, mirroring cli.ts's own module-scoped
+  // steeringChannel. A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
+  // a re-render when its contents change (submitMessage already re-renders via setEntries).
+  const steeringChannelRef = useRef(new LiveSteeringChannel())
 
   /**
    * claude-cli (via TauriClaudeCliLLMClient, desktop-only) is the only backend that returns a
@@ -679,12 +693,36 @@ export function App(): React.JSX.Element {
       setProgress(null)
       setStreamingText(null)
       setLiveToolSteps([])
+      // R1 (mid-task steering, Phase 3) — anything submitted while this turn was running went
+      // into steeringChannelRef instead of being blocked by the disabled composer (see
+      // submitMessage below). Drain it now as ordinary follow-up turns, in arrival order, rather
+      // than leaving it queued indefinitely — same inert-by-construction fallback cli.ts's
+      // dispatchOne uses; Phase 4 replaces this with real intra-turn absorption via
+      // checkCallerUpdates.
+      if (goalGraphModeEnabled) void drainSteeringChannel()
+    }
+  }
+
+  async function drainSteeringChannel(): Promise<void> {
+    for (const event of steeringChannelRef.current.poll()) {
+      await runTurn(event.message, false)
     }
   }
 
   function submitMessage(): void {
     const message = input.trim()
-    if (!message || busy) return
+    if (!message) return
+    if (busy) {
+      // Composer/Send only stay enabled while busy when goalGraphModeEnabled (see the JSX below)
+      // — this branch can't be reached with the flag off, but guards against a stale disabled
+      // state regardless.
+      if (!goalGraphModeEnabled) return
+      steeringChannelRef.current.enqueue(message)
+      setInput('')
+      if (composerRef.current) composerRef.current.style.height = 'auto'
+      setEntries((prev) => [...prev, { id: newId(), kind: 'user', content: message }])
+      return
+    }
     setShowDemo(false)
     setInput('')
     // The composer's height was grown by handleComposerInput as the user typed multiple
@@ -1011,9 +1049,9 @@ export function App(): React.JSX.Element {
           onKeyDown={handleComposerKeyDown}
           placeholder={planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message the assistant…'}
           rows={1}
-          disabled={busy}
+          disabled={!goalGraphModeEnabled && busy}
         />
-        <button type="submit" disabled={busy || !input.trim()}>Send</button>
+        <button type="submit" disabled={(!goalGraphModeEnabled && busy) || !input.trim()}>Send</button>
       </form>
       <div className="app__composer-disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</div>
     </div>
