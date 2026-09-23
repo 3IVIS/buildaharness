@@ -11,6 +11,7 @@ import {
   abandonThread,
   type GoalGraphFsPersistence,
 } from './goal-graph-store.js'
+import { forceActivateThread } from './goal-thread-scheduler.js'
 
 /**
  * Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html — the Tier-1 reconcile pass that
@@ -80,8 +81,18 @@ export function createSteeringReconcileChannel(params: {
       case 'NEW_GOAL': {
         // Tier-1 never writes the ACTIVE pointer itself (INV-39 — see the plan's resolved
         // "ACTIVE-pointer write authority" decision): both IMMEDIATE and DEFERRED just pause the
-        // current thread and mint a new READY one; Phase 5's Scheduler decides what runs next.
-        const updated = mintConcurrentReadyThread(goalGraph, next.message, activeThread?.id ?? null)
+        // current thread and mint a new READY one; the Scheduler (goal-thread-scheduler.ts)
+        // decides what runs next, via the exact same selection function/exclusion rules either
+        // way (Phase 5). The only difference urgency makes is *when* that selection pass runs:
+        // IMMEDIATE calls it synchronously, right here, so the newly-minted thread gets a chance
+        // to become ACTIVE this same iteration if it's actually eligible (READY, not still
+        // `mode: 'drafting'` — mintConcurrentReadyThread mints every new thread into `drafting`,
+        // so in practice this mostly matters once Tier-2 has decomposed it); DEFERRED leaves the
+        // new thread queued and waits for the next natural pass (assistant.ts's own per-turn
+        // call) rather than jumping the queue.
+        const minted = mintConcurrentReadyThread(goalGraph, next.message, activeThread?.id ?? null)
+        const newThreadId = minted.threads.find((t) => !goalGraph.threads.some((old) => old.id === t.id))?.id
+        const updated = classification.urgency === 'IMMEDIATE' && newThreadId ? forceActivateThread(minted, newThreadId).record : minted
         await saveGoalGraphRecord(memory, sessionId, updated, fsPersistence)
         return null
       }

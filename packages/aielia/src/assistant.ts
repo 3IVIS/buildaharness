@@ -52,6 +52,8 @@ import { DEFAULT_PLAN_MODE, type PlanRolloutMode } from './plan-mode-flag.js'
 import { AskClarificationService } from './ask-clarification-service.js'
 import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
+import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
+import { selectActiveThread } from './goal-thread-scheduler.js'
 import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
@@ -422,7 +424,7 @@ export class PersonalAssistant {
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
       this.planService, this.session, this.onTrace, this.oneLoopMode,
     )
-    this.responseService = new ResponseService(this.memoryService, this.session, this.planService, this.onTrace)
+    this.responseService = new ResponseService(this.memoryService, this.session, this.planService, this.onTrace, this.memory)
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
@@ -698,6 +700,27 @@ export class PersonalAssistant {
   private async runTurn(userMessage: string, options: TurnOptions, sessionId: string): Promise<AssistantTurnResult> {
     const transcriptKey = `transcript:${sessionId}`
 
+    // Phase 5 of plans/hierarchical_goal_tree_and_steering_plan.html — the Scheduler's natural,
+    // turn-scoped selection pass (goal-thread-scheduler.ts's selectActiveThread): the per-turn
+    // analog of "off a control_state BLOCKED trigger" from the plan's resolved "ACTIVE-pointer
+    // write authority" decision, since a GoalThread's TaskGraph is only ever loaded/swapped at
+    // turn boundaries, never hot-swapped mid-iteration. Gated purely on options.steeringChannel
+    // being present — same "caller decides, PersonalAssistant never reads goalGraphMode itself"
+    // convention Phase 4 established (TurnOptions.steeringChannel's own doc comment) — so every
+    // caller that predates goalGraphMode, and every flag-off session, sees zero behavior change
+    // (INV-43): goalThreadId stays undefined and every plan-mode/drafting call below resolves to
+    // its exact original session-global key.
+    let goalThreadId: string | undefined
+    if (options.steeringChannel) {
+      const fsPersistence = this.session.undoWorkspace()
+      const goalGraph = (await loadGoalGraphRecord(this.memory, sessionId, fsPersistence)) ?? createEmptyGoalGraphRecord()
+      const selection = selectActiveThread(goalGraph)
+      if (selection.switched) {
+        await saveGoalGraphRecord(this.memory, sessionId, selection.record, fsPersistence)
+      }
+      goalThreadId = selection.activeThreadId ?? undefined
+    }
+
     // Accumulates usage across every real LLM call this turn makes — a turn can make several
     // (decomposition, plan-building, up to maxSteps tool-loop round trips) — into one turn-level
     // total attached to a successful AssistantTurnResult. Absent (stays undefined) on a turn
@@ -750,7 +773,7 @@ export class PersonalAssistant {
     // decline lets it fall through with no plan at all. Checked before planMode.active (below) —
     // same position pendingActionId/pendingClarificationId already occupy.
     if (options.planApprovalId) {
-      const outcome = await this.planApproval.resolvePendingPlanApproval(sessionId, options.planApprovalId, options.planDecision, options.planEdits)
+      const outcome = await this.planApproval.resolvePendingPlanApproval(sessionId, options.planApprovalId, options.planDecision, options.planEdits, goalThreadId)
       if (!('fallThrough' in outcome)) return outcome
     }
 
@@ -760,13 +783,13 @@ export class PersonalAssistant {
     // classify/tool-loop pipeline below, and no tool loop of any kind runs for this turn (INV-30).
     // No production caller ever sets this today (see PersonalAssistant.enterPlanMode's doc
     // comment) — inert by construction until P3 wires an automatic trigger.
-    const planModeState = await this.session.getPlanModeState(sessionId)
+    const planModeState = await this.session.getPlanModeState(sessionId, goalThreadId)
     if (planModeState?.active) {
       // No `seed` passed here (this is a resumed/manual drafting turn, not a fresh auto-triggered
       // one) — draftTurn's `{ fallThrough: true }` outcome is only ever produced when a `seed` is
       // given, so this is always a real AssistantTurnResult in practice; the `in` check just keeps
       // the return type honest without asserting past PlanDraftOutcome's union.
-      const draftOutcome = await this.planDrafting.draftTurn(sessionId, transcriptKey, userMessage, accumulateUsage)
+      const draftOutcome = await this.planDrafting.draftTurn(sessionId, transcriptKey, userMessage, accumulateUsage, undefined, goalThreadId)
       if (!('fallThrough' in draftOutcome)) return draftOutcome
     }
 
@@ -826,12 +849,19 @@ export class PersonalAssistant {
     // else (manual/test-only enterPlanMode calls are deliberately left ungated — see
     // plan-mode-flag.ts's doc comment).
     if (this.planMode === 'gated' && !planForCancelCheck && (classification.matchedPlanTemplate !== null || classification.needsMultiStepPlan)) {
-      await this.session.enterPlanMode(sessionId)
+      await this.session.enterPlanMode(sessionId, goalThreadId)
       this.onTrace?.({ kind: 'plan_classified', isCandidate: true, matchedTemplate: classification.matchedPlanTemplate })
-      const draftOutcome = await this.planDrafting.draftTurn(sessionId, transcriptKey, userMessage, accumulateUsage, {
-        templateName: classification.matchedPlanTemplate,
-        grounded: classification.matchedPlanTemplate === null,
-      })
+      const draftOutcome = await this.planDrafting.draftTurn(
+        sessionId,
+        transcriptKey,
+        userMessage,
+        accumulateUsage,
+        {
+          templateName: classification.matchedPlanTemplate,
+          grounded: classification.matchedPlanTemplate === null,
+        },
+        goalThreadId,
+      )
       // Validation (P3): a fresh draft that fails outright (malformed/insufficient LLM output)
       // falls back to not entering plan mode at all — draftTurn already exited plan mode and left
       // the transcript untouched, so ordinary turn handling below picks up this same userMessage

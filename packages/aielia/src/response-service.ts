@@ -7,11 +7,13 @@ import {
   type LayerActivityEvent,
   type HarnessRunResult,
 } from '@buildaharness/harness'
-import type { TokenUsage } from '@buildaharness/runtime'
+import type { MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { buildAnswerClaim } from './answer-claim.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { PlanRecord } from './plan-store.js'
 import { PlanService } from './plan-service.js'
+import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
+import { syncThreadFromTaskGraph } from './goal-thread-scheduler.js'
 import type { AssistantSession } from './assistant-session.js'
 import type { MemoryService } from './memory-service.js'
 import type { AssistantSource } from './assistant-source.js'
@@ -32,7 +34,31 @@ export class ResponseService {
     private readonly session: AssistantSession,
     private readonly planService: PlanService,
     private readonly onTrace: ((event: TraceEvent) => void) | undefined,
+    // Phase 5 of plans/hierarchical_goal_tree_and_steering_plan.html — INV-42 ("PAUSED preserves
+    // partial state/evidence — never silently discarded on preemption"): only needed when a
+    // caller resolves a `goalThreadId` (buildPausedResult/buildSuccessResult below), so this
+    // stays undefined for every caller that predates goalGraphMode (same "absent means skip"
+    // convention memory/agentLoop already follow in PlanDraftingService's constructor).
+    private readonly memory?: MemoryAdapter,
   ) {}
+
+  /**
+   * INV-42's concrete mechanism: mirrors the `activePlan`-based `saveAndSummarize` sync just
+   * above/below each call site, but onto `threadId`'s own `GoalThread.tasks` via
+   * `syncThreadFromTaskGraph` — looked up **by id**, not by `getActiveThread`, so this still
+   * lands the run's evidence on a thread the Scheduler has since moved to `PAUSED` (an in-flight
+   * tool call that was already running when a steering message preempted its thread runs to
+   * completion per Q3's "let it finish" default, and its result must still reach the now-PAUSED
+   * thread, not be silently dropped). A no-op when `memory` wasn't wired in, or the caller never
+   * resolved a `threadId` — exactly today's behavior either way (INV-43).
+   */
+  private async syncGoalThreadEvidence(sessionId: string, threadId: string | undefined, taskGraphTasks: { id: string; status: string }[]): Promise<void> {
+    if (!threadId || !this.memory) return
+    const fsPersistence = this.session.undoWorkspace()
+    const goalGraph = (await loadGoalGraphRecord(this.memory, sessionId, fsPersistence)) ?? createEmptyGoalGraphRecord()
+    const updated = syncThreadFromTaskGraph(goalGraph, threadId, taskGraphTasks as { id: string; status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'HUMAN_REQUIRED' }[])
+    await saveGoalGraphRecord(this.memory, sessionId, updated, fsPersistence)
+  }
 
   async buildTrivialResult(params: {
     sessionId: string
@@ -76,8 +102,9 @@ export class ResponseService {
     batchBudgetTrace: BatchBudgetTrace | undefined
     usageTotal: TokenUsage | undefined
     onUsage?: (usage: TokenUsage) => void
+    goalThreadId?: string
   }): Promise<AssistantTurnResult> {
-    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, checkpoint, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage } = params
+    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, checkpoint, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage, goalThreadId } = params
 
     // An intentional plan-pacing stop — not a bug. Persist the plan's current task statuses (same
     // as the success path) so the next turn's pacing/position computations start from up-to-date
@@ -104,6 +131,7 @@ export class ResponseService {
     let pausedNote: string | undefined
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, checkpoint.runState.taskGraph.tasks)
+      await this.syncGoalThreadEvidence(sessionId, goalThreadId, checkpoint.runState.taskGraph.tasks)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
       const next = this.planService.nextPendingTask(updatedPlan)
@@ -176,8 +204,9 @@ export class ResponseService {
     batchBudgetTrace: BatchBudgetTrace | undefined
     usageTotal: TokenUsage | undefined
     onUsage?: (usage: TokenUsage) => void
+    goalThreadId?: string
   }): Promise<AssistantTurnResult> {
-    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, result, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage } = params
+    const { sessionId, transcriptKey, userMessage, draftReply, classification, activePlan, result, lastVerification, layerActivity, sources, batchBudgetTrace, usageTotal, onUsage, goalThreadId } = params
 
     const stepsUsed = result.stepsUsed
     const controlState = {
@@ -206,6 +235,7 @@ export class ResponseService {
     let planStatus: AssistantTurnResult['planStatus']
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, result.initResult.taskGraph.tasks)
+      await this.syncGoalThreadEvidence(sessionId, goalThreadId, result.initResult.taskGraph.tasks)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
     }

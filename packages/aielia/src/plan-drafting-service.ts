@@ -185,9 +185,16 @@ export class PlanDraftingService {
     userMessage: string,
     onUsage: (usage: TokenUsage) => void,
     seed?: PlanDraftSeed,
+    // Phase 5 — the GoalThread this draft belongs to, when the caller (assistant.ts) resolved one
+    // from an active goal graph; forwarded only to the drafting-lock calls below (`exitPlanMode`),
+    // not to plan storage itself (`planService` stays session-global — see goal-thread-scheduler.ts's
+    // header comment for why that's this phase's deliberate scope boundary). Undefined for every
+    // caller that predates goalGraphMode, or that hasn't resolved an active thread yet — exact
+    // session-global behavior either way (INV-43).
+    threadId?: string,
   ): Promise<PlanDraftOutcome> {
     if (isCancelPlanningPhrase(userMessage)) {
-      return this.cancelDrafting(sessionId, transcriptKey, userMessage)
+      return this.cancelDrafting(sessionId, transcriptKey, userMessage, threadId)
     }
 
     const existing = await this.planService.loadPlanRecord(sessionId)
@@ -240,7 +247,7 @@ export class PlanDraftingService {
       // drafting loop they never explicitly asked for (this phase's Validation) — nothing has been
       // appended to the transcript yet, so the ordinary pipeline picks up userMessage cleanly.
       if (isFreshEntry && seed) {
-        await this.session.exitPlanMode(sessionId)
+        await this.session.exitPlanMode(sessionId, threadId)
         return { fallThrough: true }
       }
       const reply = "I couldn't update the plan draft from that — could you rephrase, or say \"cancel plan\" to stop drafting?"
@@ -339,7 +346,7 @@ export class PlanDraftingService {
     return { status: 'needs_clarification', reply: null, riskLevel: 'LOW', pendingClarificationId: id, questions }
   }
 
-  private async cancelDrafting(sessionId: string, transcriptKey: string, userMessage: string): Promise<AssistantTurnResult> {
+  private async cancelDrafting(sessionId: string, transcriptKey: string, userMessage: string, threadId?: string): Promise<AssistantTurnResult> {
     const existing = await this.planService.loadPlanRecord(sessionId)
     // Covers a plan already staged for approval too (P2) — not just 'drafting' — so cancelling
     // out of plan mode never leaves a stale `awaiting_approval` record behind for a later
@@ -347,7 +354,7 @@ export class PlanDraftingService {
     if (existing && (existing.mode === 'drafting' || existing.mode === 'awaiting_approval')) {
       await this.planService.abandonPlan(sessionId, existing)
     }
-    await this.session.exitPlanMode(sessionId)
+    await this.session.exitPlanMode(sessionId, threadId)
     const reply = 'Stopped drafting — the plan was discarded. Nothing was run.'
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })

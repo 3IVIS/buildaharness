@@ -45,8 +45,16 @@ export interface PlanModeState {
   draftId: string
 }
 
-function planModeKey(sessionId: string): string {
-  return `plan-mode:${sessionId}`
+/**
+ * Phase 5 of plans/hierarchical_goal_tree_and_steering_plan.html — per-thread rescoping of the
+ * drafting lock (assistant.ts's INV-30 check), resolved 2026-09-22's "Tier-2 exclusivity scope"
+ * decision: not a session-wide freeze, just don't let two GoalThreads' drafting locks collide on
+ * the same key. `threadId` omitted keeps today's exact session-global key (byte-identical for
+ * every caller that predates goalGraphMode, and for a goalGraphMode session with no resolvable
+ * active thread yet) — only a caller that resolved a real active GoalThread id passes it.
+ */
+function planModeKey(sessionId: string, threadId?: string): string {
+  return threadId ? `plan-mode:${sessionId}:${threadId}` : `plan-mode:${sessionId}`
 }
 
 // A harness checkpoint left behind by a process that died mid-run is normally resumed
@@ -265,9 +273,9 @@ export class AssistantSession {
     } satisfies SpendState)
   }
 
-  /** Read-only — null means plan mode has never been entered (or was already exited/cancelled) for this session. */
-  async getPlanModeState(sessionId: string): Promise<PlanModeState | null> {
-    return ((await this.memory.get(planModeKey(sessionId))) as PlanModeState | undefined) ?? null
+  /** Read-only — null means plan mode has never been entered (or was already exited/cancelled) for this session (or this `threadId`, once Phase 5's per-thread rescoping applies — see `planModeKey`). */
+  async getPlanModeState(sessionId: string, threadId?: string): Promise<PlanModeState | null> {
+    return ((await this.memory.get(planModeKey(sessionId, threadId))) as PlanModeState | undefined) ?? null
   }
 
   /**
@@ -277,15 +285,15 @@ export class AssistantSession {
    * a new state, same as a fresh entry) — callers that only ever call this once per drafting
    * session (P3's future auto-trigger) never observe that.
    */
-  async enterPlanMode(sessionId: string): Promise<PlanModeState> {
+  async enterPlanMode(sessionId: string, threadId?: string): Promise<PlanModeState> {
     const state: PlanModeState = { active: true, draftId: crypto.randomUUID() }
-    await this.memory.set(planModeKey(sessionId), state)
+    await this.memory.set(planModeKey(sessionId, threadId), state)
     return state
   }
 
   /** Clears `planMode.active` — the only two designed callers are an explicit cancel phrase (PlanDraftingService) and P2's future approval resolution. */
-  async exitPlanMode(sessionId: string): Promise<void> {
-    await this.memory.delete(planModeKey(sessionId))
+  async exitPlanMode(sessionId: string, threadId?: string): Promise<void> {
+    await this.memory.delete(planModeKey(sessionId, threadId))
   }
 
   /** The session's conversation transcript, oldest first — same array `turn()` reads/appends to. Used by `/export`. */

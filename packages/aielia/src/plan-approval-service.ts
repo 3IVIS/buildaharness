@@ -85,6 +85,11 @@ export class PlanApprovalService {
     planApprovalId: string,
     decision: PlanDecision | undefined,
     edits: PlanApprovalEdits | undefined,
+    // Phase 5 — the GoalThread this staged plan belongs to, when the caller (assistant.ts)
+    // resolved one from an active goal graph; forwarded only to `exitPlanMode` below, mirroring
+    // PlanDraftingService's own threadId forwarding. Undefined preserves the exact original
+    // session-global key (INV-43).
+    threadId?: string,
   ): Promise<PlanApprovalOutcome> {
     const staged = await this.planService.loadPlanRecord(sessionId)
     if (!staged || staged.mode !== 'awaiting_approval' || staged.planApprovalId !== planApprovalId) {
@@ -103,7 +108,7 @@ export class PlanApprovalService {
 
     if (decision === 'decline') {
       await this.planService.abandonPlan(sessionId, staged)
-      await this.session.exitPlanMode(sessionId)
+      await this.session.exitPlanMode(sessionId, threadId)
       return { fallThrough: true }
     }
 
@@ -140,7 +145,7 @@ export class PlanApprovalService {
       }
     }
 
-    await this.session.exitPlanMode(sessionId)
+    await this.session.exitPlanMode(sessionId, threadId)
     return { fallThrough: true }
   }
 }
