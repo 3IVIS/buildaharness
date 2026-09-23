@@ -1,0 +1,32 @@
+{
+  "id": "gg-new-goal-default-port",
+  "category": "multi_step",
+  "intent": "NEW_GOAL: a different topic sent mid-turn \u2014 must be answered, not dropped.",
+  "prompt": "Tell me the project name in package-info.txt.",
+  "steering": [
+    {
+      "message": "Different topic entirely \u2014 what is the default port in server.conf?",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "package-info.txt",
+      "content": "name: lanternfish\nversion: 0.9.1\n"
+    },
+    {
+      "path": "server.conf",
+      "content": "[server]\nhost = 0.0.0.0\nport = 8443\ntls = on\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "8443"
+    ]
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply answers the new goal (port 8443)."
+}

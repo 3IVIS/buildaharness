@@ -1,0 +1,40 @@
+{
+  "id": "gg-concurrent-two-new-goals",
+  "category": "multi_step",
+  "intent": "Three goals in flight: two unrelated asks arrive mid-turn; the last one is graded and must not carry another goal's content.",
+  "prompt": "Read alpha.txt and tell me the project codename.",
+  "steering": [
+    {
+      "message": "Separate thing: read beta.txt and tell me the release date.",
+      "afterTraceEvents": 1
+    },
+    {
+      "message": "And another separate thing: read gamma.txt and tell me who the owner is.",
+      "afterTraceEvents": 2
+    }
+  ],
+  "workspace": [
+    {
+      "path": "alpha.txt",
+      "content": "Project codename: BLUEHERON\n"
+    },
+    {
+      "path": "beta.txt",
+      "content": "Release date: 2026-11-04\n"
+    },
+    {
+      "path": "gamma.txt",
+      "content": "Owner: Priya Nair\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Priya Nair"
+    ]
+  },
+  "slice": "goal_graph_concurrent",
+  "note": "Pass = the final reply answers the gamma goal (Priya Nair). Three goals were in flight; the last-sent one is graded."
+}

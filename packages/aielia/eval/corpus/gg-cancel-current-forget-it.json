@@ -1,0 +1,32 @@
+{
+  "id": "gg-cancel-current-forget-it",
+  "category": "multi_step",
+  "intent": "CANCEL_CURRENT: 'never mind' plus a replacement ask, sent mid-turn.",
+  "prompt": "Draft a three-paragraph summary of notes.txt.",
+  "steering": [
+    {
+      "message": "Never mind, forget the summary. Who is the author of notes.txt?",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "notes.txt",
+      "content": "Author: Dana Whitfield\nDate: 2026-09-02\n\nThe migration finished ahead of schedule. Two services still need cutover checks. Rollback plan is documented.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Dana Whitfield"
+    ],
+    "notContains": [
+      "cutover",
+      "rollback"
+    ]
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply names Dana Whitfield and does NOT carry the cancelled summary (cutover / rollback only appear in a summary)."
+}

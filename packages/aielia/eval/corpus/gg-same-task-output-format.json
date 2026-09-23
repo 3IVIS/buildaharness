@@ -1,0 +1,26 @@
+{
+  "id": "gg-same-task-output-format",
+  "category": "file_read",
+  "intent": "SAME_TASK: a formatting constraint on the in-flight task, sent mid-turn.",
+  "prompt": "List the service names in services.txt.",
+  "steering": [
+    {
+      "message": "Make that a single comma-separated line.",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "services.txt",
+      "content": "auth-api\nbilling-worker\nsearch-index\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "auth-api, ?billing-worker, ?search-index"
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply is one comma-separated line in file order."
+}

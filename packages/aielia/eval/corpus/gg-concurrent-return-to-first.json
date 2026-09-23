@@ -1,0 +1,37 @@
+{
+  "id": "gg-concurrent-return-to-first",
+  "category": "multi_step",
+  "intent": "A new goal interrupts the first; the user then explicitly returns to the first \u2014 its evidence must survive the detour.",
+  "prompt": "Read alpha.txt and tell me the project codename.",
+  "steering": [
+    {
+      "message": "Separate thing: read beta.txt and tell me the release date.",
+      "afterTraceEvents": 1
+    }
+  ],
+  "followups": [
+    {
+      "prompt": "Now back to the first thing \u2014 what was the project codename?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "alpha.txt",
+      "content": "Project codename: BLUEHERON\n"
+    },
+    {
+      "path": "beta.txt",
+      "content": "Release date: 2026-11-04\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "BLUEHERON"
+    ]
+  },
+  "slice": "goal_graph_concurrent",
+  "note": "Pass = after the detour the final reply still answers the original goal (BLUEHERON)."
+}

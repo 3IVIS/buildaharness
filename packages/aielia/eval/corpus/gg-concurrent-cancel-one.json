@@ -1,0 +1,39 @@
+{
+  "id": "gg-concurrent-cancel-one",
+  "category": "multi_step",
+  "intent": "Two goals in flight, then one is cancelled mid-turn; the survivor must still be finished.",
+  "prompt": "Read alpha.txt and tell me the project codename.",
+  "steering": [
+    {
+      "message": "Separate thing: read beta.txt and tell me the release date.",
+      "afterTraceEvents": 1
+    },
+    {
+      "message": "Cancel the beta thing, I don't need it. Just finish the alpha one and give me its codename.",
+      "afterTraceEvents": 2
+    }
+  ],
+  "workspace": [
+    {
+      "path": "alpha.txt",
+      "content": "Project codename: BLUEHERON\n"
+    },
+    {
+      "path": "beta.txt",
+      "content": "Release date: 2026-11-04\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "BLUEHERON"
+    ],
+    "notContains": [
+      "2026-11-04"
+    ]
+  },
+  "slice": "goal_graph_concurrent",
+  "note": "Pass = the final reply gives alpha's codename and does NOT carry the cancelled beta goal's answer (the release date)."
+}

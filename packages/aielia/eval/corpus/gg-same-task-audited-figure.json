@@ -1,0 +1,28 @@
+{
+  "id": "gg-same-task-audited-figure",
+  "category": "multi_step",
+  "intent": "SAME_TASK: a correction to the task in flight (use the audited figure, not the draft) sent mid-turn.",
+  "prompt": "Read report.txt and tell me the Q3 revenue figure.",
+  "steering": [
+    {
+      "message": "Correction \u2014 use the figure from the Audited section, not the draft one.",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "report.txt",
+      "content": "Quarterly report\n\nDraft (unreviewed):\n  Q3 revenue: $4.2M\n\nAudited (final):\n  Q3 revenue: $3.9M\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "3.9"
+    ]
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply gives the audited $3.9M. Steering message refines the in-flight task (SAME_TASK, collapses to IMMEDIATE)."
+}

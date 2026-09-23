@@ -138,9 +138,27 @@ export const ASK_QUESTION_SLICES = [
 
 export type AskQuestionSlice = (typeof ASK_QUESTION_SLICES)[number]
 
-/** Every valid `slice` value — the supervisor S7 slices, the feature-value-audit slices, and the ask-question slices. */
-export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES] as const
-export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice
+/**
+ * Goal-graph / mid-task steering slices (Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html).
+ * Gates the default-flip of `DEFAULT_GOAL_GRAPH_MODE`: `goalGraphOn` (arms.ts) vs. `flagOn` baseline
+ * over these tasks measures whether absorbing a message that arrives *while a turn is running*
+ * (LiveSteeringChannel + scope×urgency classifier) beats the status quo of queueing it as the next
+ * turn. Every task carries `steering` messages — see `TaskSpecSchema.steering`.
+ */
+export const GOAL_GRAPH_SLICES = [
+  // One task per scope×urgency classification branch: SAME_TASK, SAME_GOAL_NEW_TASK, NEW_GOAL,
+  // CANCEL_CURRENT (scope-urgency-classifier.ts).
+  'goal_graph_steering',
+  // Two or more goals in flight at once: the steering messages open new goals, and the graded
+  // (final) reply must answer the right goal without leaking another goal's content.
+  'goal_graph_concurrent',
+] as const
+
+export type GoalGraphSlice = (typeof GOAL_GRAPH_SLICES)[number]
+
+/** Every valid `slice` value — the supervisor S7 slices, the feature-value-audit slices, the ask-question slices, and the goal-graph slices. */
+export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES] as const
+export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice | GoalGraphSlice
 
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({
@@ -162,6 +180,22 @@ const FollowupSchema = z.object({
    * Same semantics as the task-level `injectedFailure`. */
   injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
   injectedFailureCount: z.number().int().min(1).max(6).optional(),
+})
+
+/**
+ * A message the user sends *while turn 1 is still running* — the situation `goalGraphMode` exists
+ * for, which `FollowupSchema` (a turn sent only after the previous one resolves) cannot express.
+ * Arms that can absorb it live (`goalGraphOn`) hand it to a `LiveSteeringChannel` once
+ * `afterTraceEvents` trace events have fired in the running turn; every other arm gets today's
+ * behavior — the message waits in the CLI's `dispatchQueue` and runs as the next turn after turn 1
+ * resolves (see `steeringAsFollowups`).
+ */
+const SteeringMessageSchema = z.object({
+  message: z.string().min(1),
+  /** Trace events that must have fired in the running turn before this message is sent. Default 1
+   * (as early as the turn is demonstrably in flight). If the turn ends first, the message is
+   * delivered right after it, exactly as the CLI's post-turn steering drain does. */
+  afterTraceEvents: z.number().int().min(1).max(50).default(1),
 })
 
 /** The mechanical grader. All present checks must pass for `success`. */
@@ -200,6 +234,12 @@ export const TaskSpecSchema = z.object({
    * the final workspace snapshot; cost / latency / tokens are summed across turns.
    */
   followups: z.array(FollowupSchema).default([]),
+  /**
+   * Messages sent while turn 1 is running — see `SteeringMessageSchema`. The grader still scores
+   * the *last* turn's reply, whichever turn that turns out to be per arm, so a steering task's
+   * grader must be satisfiable by the final reply under both live absorption and queued delivery.
+   */
+  steering: z.array(SteeringMessageSchema).default([]),
   /** Files present in the workspace before the turn. */
   workspace: z.array(WorkspaceFileSchema).default([]),
   /** Which tool contexts the arm should wire up for this task. */
@@ -238,6 +278,19 @@ export const TaskSpecSchema = z.object({
 export type TaskSpec = z.infer<typeof TaskSpecSchema>
 export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>
 export type Followup = z.infer<typeof FollowupSchema>
+export type SteeringMessage = z.infer<typeof SteeringMessageSchema>
+
+/**
+ * The task as an arm that cannot absorb mid-turn messages sees it: each `steering` message becomes
+ * an ordinary followup turn, in arrival order, ahead of any declared followups. This is exactly
+ * what the CLI's `dispatchQueue` does with a line typed while a turn is running when
+ * `goalGraphMode` is off (INV-43), so it is the honest baseline for `goalGraphOn` to be compared to.
+ */
+export function steeringAsFollowups(task: TaskSpec): TaskSpec {
+  if (task.steering.length === 0) return task
+  const queued: Followup[] = task.steering.map((s) => ({ prompt: s.message, addWorkspace: [] }))
+  return { ...task, steering: [], followups: [...queued, ...task.followups] }
+}
 
 /** Parse + validate one task JSON blob. Throws `ZodError` on a malformed task. */
 export function parseTaskSpec(raw: unknown, sourceLabel: string): TaskSpec {

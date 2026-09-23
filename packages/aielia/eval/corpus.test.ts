@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { loadCorpus } from './corpus/index.js'
-import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES, ASK_QUESTION_SLICES } from './corpus/schema.js'
+import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES, ASK_QUESTION_SLICES, GOAL_GRAPH_SLICES } from './corpus/schema.js'
 
 describe('benchmark corpus', () => {
   const tasks = loadCorpus()
@@ -73,10 +73,10 @@ describe('benchmark corpus', () => {
   })
 
   it('feature-value-audit / ask-question slices — every sliced task carries a known tag', () => {
-    const knownSlices: readonly string[] = [...AUDIT_SLICES, ...ASK_QUESTION_SLICES]
+    const knownSlices: readonly string[] = [...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES]
     for (const t of tasks) {
       if (!t.slice || (SUPERVISOR_SLICES as readonly string[]).includes(t.slice)) continue
-      expect(knownSlices, `${t.id}: slice "${t.slice}" is not a known AUDIT_SLICES/ASK_QUESTION_SLICES value`).toContain(t.slice)
+      expect(knownSlices, `${t.id}: slice "${t.slice}" is not a known AUDIT_SLICES/ASK_QUESTION_SLICES/GOAL_GRAPH_SLICES value`).toContain(t.slice)
     }
   })
 
@@ -90,6 +90,28 @@ describe('benchmark corpus', () => {
     expect(conversation.length, 'expected >= 1 ask_resolution_conversation task').toBeGreaterThanOrEqual(1)
     for (const t of conversation) {
       expect(t.followups.length, `${t.id}: should have at least one follow-up turn`).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('goal-graph slices (Phase 8) — every task carries steering + file tools; steering slice covers every scope×urgency branch', () => {
+    const inSlices = tasks.filter((t) => t.slice === 'goal_graph_steering' || t.slice === 'goal_graph_concurrent')
+    for (const t of inSlices) {
+      expect(t.steering.length, `${t.id} must declare at least one mid-turn steering message`).toBeGreaterThanOrEqual(1)
+      expect(t.tools.file, `${t.id} must declare file tools`).toBe(true)
+    }
+    // Every steering task belongs to a goal-graph slice — a stray `steering` on an unsliced task
+    // would silently change what the full-corpus (harness-vs-bare) runs measure.
+    for (const t of tasks.filter((t) => t.steering.length > 0)) {
+      expect(inSlices.map((x) => x.id), `${t.id} declares steering but no goal_graph_* slice`).toContain(t.id)
+    }
+    const steering = tasks.filter((t) => t.slice === 'goal_graph_steering')
+    for (const branch of ['same-task', 'new-task', 'new-goal', 'cancel-current']) {
+      expect(steering.filter((t) => t.id.startsWith(`gg-${branch}-`)).length, `expected >= 2 ${branch} tasks`).toBeGreaterThanOrEqual(2)
+    }
+    expect(tasks.filter((t) => t.slice === 'goal_graph_concurrent').length, 'expected >= 3 concurrent-goal tasks').toBeGreaterThanOrEqual(3)
+    // Concurrent scenarios need more than one goal in flight: >= 1 steering message that is a new goal.
+    for (const t of tasks.filter((t) => t.slice === 'goal_graph_concurrent')) {
+      expect(t.steering.length + t.followups.length, `${t.id} needs >= 2 extra user messages`).toBeGreaterThanOrEqual(1)
     }
   })
 

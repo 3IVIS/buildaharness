@@ -25,7 +25,7 @@ import {
 import { SHELL_TOOLS } from '../src/shell-tools.js'
 import { runApprovedShellCommand } from '../src/shell-executor.js'
 import { ALREADY_STAGED_ACTION_TOOL } from '../src/claude-cli-prompt.js'
-import type { TaskSpec } from './corpus/schema.js'
+import { steeringAsFollowups, type TaskSpec } from './corpus/schema.js'
 import type { Arm, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
@@ -106,7 +106,9 @@ async function executeBareToolCall(
   }
 }
 
-async function runBare(task: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null> {
+async function runBare(taskIn: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null> {
+  // The bare loop has no mid-turn channel: a steering message is just the next user turn.
+  const task = steeringAsFollowups(taskIn)
   if (task.tools.web) return null // web arm not wired — same as runAssistant, see eval/README.md
 
   const ws = makeWorkspace(task)

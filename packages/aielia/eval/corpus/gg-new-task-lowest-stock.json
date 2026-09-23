@@ -1,0 +1,26 @@
+{
+  "id": "gg-new-task-lowest-stock",
+  "category": "multi_step",
+  "intent": "SAME_GOAL_NEW_TASK: a further question about the same file, sent mid-turn.",
+  "prompt": "Read inventory.csv and tell me the total units in stock.",
+  "steering": [
+    {
+      "message": "Also tell me which SKU has the fewest units.",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "inventory.csv",
+      "content": "sku,units\nSKU-101,40\nSKU-204,3\nSKU-330,25\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "(fewest|lowest|least|smallest|only 3)[^\\n]*SKU-204|SKU-204[^\\n]*(fewest|lowest|least|smallest|only 3|\\b3 units)"
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply ties SKU-204 (3 units) to the fewest-units question \u2014 merely listing SKU-204 among the rows does not count. Total in stock is 68."
+}

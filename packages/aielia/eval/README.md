@@ -151,6 +151,21 @@ the reply.
 New slices: add the name to `AUDIT_SLICES` in `corpus/schema.ts` (with a comment saying what the
 slice stresses) — `corpus.test.ts` and `audit/manifest.test.ts` reject an unknown slice or an empty one.
 
+## Goal-graph / mid-task steering slices (Phase 8)
+
+`goal_graph_steering` (one pair of tasks per scope×urgency branch) and `goal_graph_concurrent` gate the
+`goalGraphMode` default flip (`plans/hierarchical_goal_tree_and_steering_plan.html`). Their tasks carry
+`steering: [{ message, afterTraceEvents }]` — a message sent *while turn 1 is still running*, which
+`followups` (sent only after the previous turn resolves) cannot express. The `goalGraphOn` arm hands the
+messages to a `LiveSteeringChannel` and passes it to `turn()` (leftovers become follow-up turns); every other
+arm, `bare` included, sees them via `steeringAsFollowups()` as ordinary queued turns — today's flag-off CLI
+behavior. The grader scores the last turn's reply, so a steering task's grader must be satisfiable by the
+final reply under both delivery modes and must not match text that appears incidentally in an earlier answer.
+
+    npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,goalGraphOn --slice=goal_graph_steering,goal_graph_concurrent --seeds=3
+
+2026-09-23 result: REGRESSED (success 90.9% → 21.2%); the flag stays off — see the plan's Phase 8 note.
+
 ## Trajectory-supervisor slice (S7)
 
 > the internal plan phase S7 · ADR-005

@@ -1,0 +1,26 @@
+{
+  "id": "gg-new-task-earliest-feature",
+  "category": "multi_step",
+  "intent": "SAME_GOAL_NEW_TASK: a further question about the same changelog, sent mid-turn.",
+  "prompt": "Read changelog.txt and tell me the latest version released.",
+  "steering": [
+    {
+      "message": "Then also tell me which version introduced the export feature.",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "changelog.txt",
+      "content": "3.0.0 (2026-08-12) rewrite the settings UI\n2.1.0 (2026-05-30) add export to CSV\n2.0.0 (2026-01-15) new storage engine\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "export[^\\n]*2\\.1\\.0|2\\.1\\.0[^\\n]*export"
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply ties the export feature to 2.1.0 \u2014 merely listing 2.1.0 does not count. Latest version is 3.0.0."
+}

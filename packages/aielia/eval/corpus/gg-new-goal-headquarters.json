@@ -1,0 +1,32 @@
+{
+  "id": "gg-new-goal-headquarters",
+  "category": "multi_step",
+  "intent": "NEW_GOAL: an unrelated objective sent mid-turn \u2014 must be answered, not dropped.",
+  "prompt": "Summarize meeting-notes.txt in one sentence.",
+  "steering": [
+    {
+      "message": "Unrelated question: which city is listed as the headquarters in company.txt?",
+      "afterTraceEvents": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "meeting-notes.txt",
+      "content": "Weekly sync\n- Agreed to move the launch review to Thursday.\n- Design freeze stays on the 14th.\n"
+    },
+    {
+      "path": "company.txt",
+      "content": "Company profile\nName: Northwind Traders\nHeadquarters: Rotterdam\nFounded: 1998\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Rotterdam"
+    ]
+  },
+  "slice": "goal_graph_steering",
+  "note": "Pass = the final reply answers the unrelated new goal (Rotterdam). Fail = the new ask was absorbed into a thread that never ran."
+}

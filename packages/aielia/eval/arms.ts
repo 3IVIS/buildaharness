@@ -18,7 +18,8 @@ import type { ILLMClient } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from '../src/assistant.js'
 import type { AskMode } from '../src/ask-mode-flag.js'
-import type { TaskSpec } from './corpus/schema.js'
+import { steeringAsFollowups, type TaskSpec } from './corpus/schema.js'
+import { LiveSteeringChannel } from '../src/live-steering-channel.js'
 import type { ArmTurnOutput } from './graders.js'
 import { buildToolContexts, makeWorkspace, withFirstReadFailure } from './fixtures.js'
 import { bareArm } from './bare-arm.js'
@@ -42,6 +43,7 @@ export type ArmName =
   | 'verificationOff'
   | 'reviewerPassOff'
   | 'askModeOn'
+  | 'goalGraphOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -68,6 +70,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'verificationOff',
   'reviewerPassOff',
   'askModeOn',
+  'goalGraphOn',
 ]
 
 /**
@@ -108,6 +111,15 @@ interface RunArmOpts {
    * straight through to the constructor call in `runAssistantInner` rather than via `overrides`.
    */
   askMode?: AskMode
+  /**
+   * Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html — the `goalGraphOn` differential
+   * arm. Like `askMode`, `goalGraphMode` is a caller-side decision (PersonalAssistant never reads
+   * it), so it is threaded straight into `runAssistantInner`: when set, the task's `steering`
+   * messages are handed to a `LiveSteeringChannel` while turn 1 runs and `turn()` is given that
+   * channel, exactly what cli.ts does with `goalGraphMode === 'enabled'`. Unset, `steering` is
+   * queued as ordinary followups (`steeringAsFollowups`) — the flag-off CLI behavior.
+   */
+  goalGraph?: boolean
 }
 
 async function runAssistant(
@@ -132,7 +144,7 @@ async function runAssistant(
     process.env[key] = overrides[key]
   }
   try {
-    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode)
+    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode, opts.goalGraph)
   } finally {
     for (const key of Object.keys(overrides)) {
       if (prior[key] === undefined) delete process.env[key]
@@ -146,7 +158,10 @@ async function runAssistantInner(
   makeLlm: MakeLlm,
   oneLoopMode: 'enabled' | 'disabled',
   askMode?: AskMode,
+  goalGraph = false,
 ): Promise<ArmTurnOutput | null> {
+  // Any arm that can't absorb a mid-turn message live gets it as the next queued turn instead.
+  if (!goalGraph) task = steeringAsFollowups(task)
 
   const ws = makeWorkspace(task)
   const declaredPaths = [
@@ -174,6 +189,23 @@ async function runAssistantInner(
   const recording = wrapRecordingClient(makeLlm({ workspaceRoot: ws.root, task }))
   const sideEvents: TranscriptEvent[] = []
 
+  // goalGraphOn — mid-turn steering. `unsent` messages are released into the channel once turn 1
+  // has fired their `afterTraceEvents` trace events; anything still unsent when turn 1 returns is
+  // released right after it (the CLI's post-turn steering drain). See runTurns below.
+  const steeringChannel = goalGraph ? new LiveSteeringChannel() : undefined
+  const unsent = goalGraph ? [...task.steering] : []
+  let inFirstTurn = false
+  let firstTurnTraceEvents = 0
+  const releaseDueSteering = (): void => {
+    while (unsent.length > 0 && firstTurnTraceEvents >= unsent[0].afterTraceEvents) {
+      const next = unsent.shift()
+      if (next) {
+        steeringChannel?.enqueue(next.message)
+        sideEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'steering_message_sent', prompt: next.message } })
+      }
+    }
+  }
+
   const assistant = new PersonalAssistant({
     llmClient: recording.client,
     memory: new InMemoryAdapter({ scope: 'thread', namespace: `eval-mem-${task.id}` }),
@@ -184,6 +216,10 @@ async function runAssistantInner(
     askMode,
     onTrace: (e) => {
       sideEvents.push({ t: Date.now(), kind: 'trace', detail: e })
+      if (inFirstTurn) {
+        firstTurnTraceEvents += 1
+        releaseDueSteering()
+      }
       if (e.kind === 'layer_activity' && e.layer === 'supervisor') {
         supervisorConsults += 1
         supervisorDirectives.push((e.reason ?? '').split(':')[0].trim())
@@ -205,6 +241,7 @@ async function runAssistantInner(
     count: number | undefined,
   ): Parameters<typeof assistant.turn>[1] => {
     const o: Parameters<typeof assistant.turn>[1] = { sessionId }
+    if (steeringChannel) o.steeringChannel = steeringChannel
     if (inj === 'persistent_tool_failure') {
       o.__benchmarkInjectedFailure = {
         failIterations: count ?? 1,
@@ -234,7 +271,22 @@ async function runAssistantInner(
         for (const f of t.addWorkspace) ws.addFile(f.path, f.content)
         sideEvents.push({ t: Date.now(), kind: 'trace', detail: { kind: 'turn_boundary', turn: i + 1, prompt: t.prompt } })
       }
-      result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount))
+      inFirstTurn = i === 0
+      try {
+        result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount))
+      } finally {
+        inFirstTurn = false
+      }
+      if (steeringChannel) {
+        if (i === 0) {
+          // Turn 1 ended before some messages' trace-event threshold — deliver them now.
+          firstTurnTraceEvents = Number.POSITIVE_INFINITY
+          releaseDueSteering()
+        }
+        // Whatever the turn's own checkCallerUpdates didn't absorb (re-enqueued by turn()) plus
+        // anything just released becomes an ordinary follow-up turn, in arrival order.
+        for (const ev of steeringChannel.poll()) turns.push({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined })
+      }
       if (result.usage) {
         sawUsage = true
         usage.inputTokens += result.usage.inputTokens ?? 0
@@ -427,6 +479,17 @@ export const askModeOnArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { askMode: 'enabled' }),
 }
 
+export const goalGraphOnArm: Arm = {
+  name: 'goalGraphOn',
+  label:
+    'PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn',
+  // Phase 8's default-flip gate: baseline for this feature is `flagOn` (goalGraphMode stays at
+  // DEFAULT_GOAL_GRAPH_MODE = 'disabled', so `steering` messages run as queued followups); this arm
+  // isolates the one differential on the `goal_graph_*` corpus slices — final-reply correctness,
+  // turns to resolution, and the cost/latency of the extra classifier call per absorbed message.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { goalGraph: true }),
+}
+
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -450,6 +513,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   verificationOffArm,
   reviewerPassOffArm,
   askModeOnArm,
+  goalGraphOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
   baselineArm,
@@ -466,5 +530,6 @@ export const ALL_ARMS: Arm[] = [
   verificationOffArm,
   reviewerPassOffArm,
   askModeOnArm,
+  goalGraphOnArm,
   langgraphArm,
 ]
