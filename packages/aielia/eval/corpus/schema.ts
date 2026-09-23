@@ -113,6 +113,20 @@ export const AUDIT_SLICES = [
   // `criterionCoverageOff` (C1) and `changeReviewOff` (C2) are sub-mechanisms inside this pass —
   // this slice prices the whole pass, including them.
   'audit_reviewer_pass',
+  // Multi-turn (3-4 turns) counterpart to `audit_decomposition`. `audit_decomposition` is
+  // deliberately single-turn (one prompt names 3+ deliverables, graded off one draft reply) — its
+  // own corpusNote flags that this can't show decomposition's value, since "every task in a
+  // decomposed graph executes against the same single draft reply, so decomposition changes what
+  // is verified more than what is generated." This slice spreads the deliverables across turns
+  // instead — named up front, added mid-conversation, re-prioritized, or issued as separate
+  // requests later merged into one status ask — so *tracking* which sub-goals are open/done/blocked
+  // across turns and distractors is what's graded, not just synthesis within one reply. This is the
+  // harder predecessor shape to the hierarchical goal tree / mid-task steering work: if flat
+  // decomposition can't reliably carry sub-goal state across turns, a persistent goal graph is
+  // solving a real gap; if it can, the graph's marginal value needs to come from elsewhere (see the
+  // manifest corpusNote). Plus single-deliverable controls (recall alone should suffice here;
+  // decomposition/goal-tracking is pure overhead).
+  'audit_decomposition_multistep',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

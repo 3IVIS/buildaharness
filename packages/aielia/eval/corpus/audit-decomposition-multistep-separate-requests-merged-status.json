@@ -1,0 +1,22 @@
+{
+  "id": "audit-decomposition-multistep-separate-requests-merged-status",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "No up-front decomposition at all — three deliverables arrive as three separate single-item requests, one per turn — then a final turn asks to unify them. Tests cross-turn goal-identity matching, not just decomposition of one prompt.",
+  "prompt": "Can you get me the database port from config/db.md?",
+  "workspace": [
+    { "path": "config/db.md", "content": "# Database\n\nHost: db.internal\nPort: 5433\n" },
+    { "path": "config/cache.md", "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n" },
+    { "path": "config/queue.md", "content": "# Queue\n\nBroker: rabbitmq\nRetry limit: 6\n" }
+  ],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "Also, separately — what's the cache TTL in config/cache.md?" },
+    { "prompt": "And the queue retry limit in config/queue.md?" },
+    { "prompt": "Sum up everything I've asked for in this conversation so far." }
+  ],
+  "grader": {
+    "contains": ["5433", "900", "6"]
+  },
+  "note": "Pass = all three values on the final summary turn, correctly unified as one thread of related asks despite arriving as three separate requests rather than one decomposed prompt. Fail = any dropped, or the summary treats only the most recent request as in scope."
+}

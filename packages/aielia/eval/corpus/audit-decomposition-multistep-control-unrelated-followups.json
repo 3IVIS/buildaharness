@@ -1,0 +1,18 @@
+{
+  "id": "audit-decomposition-multistep-control-unrelated-followups",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Single deliverable, three unrelated distractor turns in a row — a harder version of the single-item control.",
+  "prompt": "What's the cache TTL in config/cache.md?",
+  "workspace": [{ "path": "config/cache.md", "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n" }],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "Unrelated: recommend one good book about distributed systems." },
+    { "prompt": "One more unrelated thing — what's 100 divided by 4?" },
+    { "prompt": "Back to my original question — what was the TTL again?" }
+  ],
+  "grader": {
+    "contains": ["900"]
+  },
+  "note": "Control: single tracked item surviving three distractor turns. Should pass via plain memory recall; no decomposition/goal-tracking machinery should be needed."
+}

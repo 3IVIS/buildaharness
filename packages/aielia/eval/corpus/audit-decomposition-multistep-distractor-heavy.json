@@ -1,0 +1,22 @@
+{
+  "id": "audit-decomposition-multistep-distractor-heavy",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Three deliverables named up front, then two unrelated distractor turns, before the status ask — stresses how long sub-goal state survives real conversational drift.",
+  "prompt": "Three things please: the database port in config/db.md, the cache TTL in config/cache.md, and the queue retry limit in config/queue.md.",
+  "workspace": [
+    { "path": "config/db.md", "content": "# Database\n\nHost: db.internal\nPort: 5433\n" },
+    { "path": "config/cache.md", "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n" },
+    { "path": "config/queue.md", "content": "# Queue\n\nBroker: rabbitmq\nRetry limit: 6\n" }
+  ],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "What's 8 times 7?" },
+    { "prompt": "In one sentence, what does TTL stand for?" },
+    { "prompt": "OK, give me the status of the three things I asked for at the start." }
+  ],
+  "grader": {
+    "contains": ["5433", "900", "6"]
+  },
+  "note": "Pass = all three values survive two unrelated distractor turns. Fail = any value dropped, or the final turn answers only the most recent distractor instead of the original three-part status ask."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "audit-decomposition-multistep-priority-shift",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Three deliverables named up front; the user re-prioritizes one mid-conversation; the other two must not be dropped because attention shifted.",
+  "prompt": "Three things: the rate limit in config/api-limits.md, the read timeout in config/timeouts.md, and max retries in config/retries.md.",
+  "workspace": [
+    { "path": "config/api-limits.md", "content": "# API limits\n\nRate limit: 500 requests/min\n" },
+    { "path": "config/timeouts.md", "content": "# Timeouts\n\nRead timeout: 45 seconds\n" },
+    { "path": "config/retries.md", "content": "# Retries\n\nMax retries: 7\n" }
+  ],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "Actually the rate limit is the urgent one — confirm that value for me first." },
+    { "prompt": "Thanks. Now give me all three values together in one message." }
+  ],
+  "grader": {
+    "contains": ["500", "45", "7"]
+  },
+  "note": "Pass = all three values reported on the final turn. Fail = the timeout or retries value dropped because the mid-conversation re-prioritization narrowed focus to the rate limit and never widened back out."
+}
