@@ -11,6 +11,8 @@ import type { AskMode } from './ask-mode-flag.js'
 import type { PlanRolloutMode } from './plan-mode-flag.js'
 import type { TuiMode } from './tui-mode-flag.js'
 import type { UpdateCheckMode } from './update-check-flag.js'
+import type { GoalGraphMode } from './goal-graph-flag.js'
+import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
@@ -164,6 +166,26 @@ export interface AssistantConfig {
    * `/config reset activeProject`, mirroring `/model`'s relationship to `/config set model`.
    */
   activeProject?: string
+  /**
+   * Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html — the shared config seam for
+   * the hierarchical goal-tree mechanism's Tier 0/1 gate (R1's mid-task steering, R4's scope×
+   * urgency classifier). Undefined (the default, for the whole rollout window) means every
+   * surface falls back to `DEFAULT_GOAL_GRAPH_MODE` ('disabled') — today's behavior, byte-for-byte
+   * (INV-43). Mirrors `oneLoopMode`/`askMode`/`planMode`'s exact chain: env override
+   * (`ASSISTANT_GOAL_GRAPH`, cli-config.ts), build-time override (`VITE_ASSISTANT_GOAL_GRAPH`,
+   * chat-ui's browser-config.ts), and a package-owned default kept out of DEFAULT_CONFIG so an
+   * unset value stays undefined. Before this phase, cli.ts/App.tsx read this straight off
+   * process.env/import.meta.env instead of through this field — see goal-graph-flag.ts's doc
+   * comment for why that was deliberate up to now.
+   */
+  goalGraphMode?: GoalGraphMode
+  /**
+   * Phase 8 — the same shared config seam as `goalGraphMode` above, for the next-step proposer's
+   * (Tier 1.5) independent gate (Q8: a regression there shouldn't block Tier 0/1). Undefined
+   * falls back to `DEFAULT_GOAL_GRAPH_SUGGEST_MODE` ('disabled'). Same env/build-time/`/config
+   * set` chain, via `ASSISTANT_GOAL_GRAPH_SUGGEST`/`VITE_ASSISTANT_GOAL_GRAPH_SUGGEST`.
+   */
+  goalGraphSuggestMode?: GoalGraphSuggestMode
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -197,6 +219,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'tuiMode',
   'updateCheck',
   'activeProject',
+  'goalGraphMode',
+  'goalGraphSuggestMode',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, web/shell off) — this plan changes nothing for a caller that never touches config. */

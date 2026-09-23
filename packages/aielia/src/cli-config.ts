@@ -5,6 +5,8 @@ import { resolveAskMode } from './ask-mode-flag.js'
 import { resolvePlanMode } from './plan-mode-flag.js'
 import { resolveTuiMode } from './tui-mode-flag.js'
 import { resolveUpdateCheckMode } from './update-check-flag.js'
+import { resolveGoalGraphMode } from './goal-graph-flag.js'
+import { resolveGoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -48,6 +50,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   tuiMode: 'ASSISTANT_TUI',
   updateCheck: 'ASSISTANT_UPDATE_CHECK',
   activeProject: 'ASSISTANT_ACTIVE_PROJECT',
+  goalGraphMode: 'ASSISTANT_GOAL_GRAPH',
+  goalGraphSuggestMode: 'ASSISTANT_GOAL_GRAPH_SUGGEST',
 }
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
@@ -121,6 +125,11 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   // resolveUpdateCheckMode warns-and-defaults on an unrecognized value, same as the flags above.
   if (env.ASSISTANT_UPDATE_CHECK !== undefined) overrides.updateCheck = resolveUpdateCheckMode(env)
   if (env.ASSISTANT_ACTIVE_PROJECT !== undefined) overrides.activeProject = env.ASSISTANT_ACTIVE_PROJECT
+  // resolveGoalGraphMode/resolveGoalGraphSuggestMode already warn-and-default on an unrecognized
+  // value, so an explicit ASSISTANT_GOAL_GRAPH(_SUGGEST) always resolves to a concrete
+  // 'enabled'/'disabled' override here — same pattern as ASSISTANT_ONE_LOOP/ASSISTANT_ASK_MODE above.
+  if (env.ASSISTANT_GOAL_GRAPH !== undefined) overrides.goalGraphMode = resolveGoalGraphMode(env)
+  if (env.ASSISTANT_GOAL_GRAPH_SUGGEST !== undefined) overrides.goalGraphSuggestMode = resolveGoalGraphSuggestMode(env)
   return overrides
 }
 
@@ -180,6 +189,12 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return raw
     case 'updateCheck':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('updateCheck must be "enabled" or "disabled"')
+      return raw
+    case 'goalGraphMode':
+      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphMode must be "enabled" or "disabled"')
+      return raw
+    case 'goalGraphSuggestMode':
+      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphSuggestMode must be "enabled" or "disabled"')
       return raw
     default:
       return raw

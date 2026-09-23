@@ -41,7 +41,6 @@ import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
-import { resolveGoalGraphMode, type GoalGraphMode } from './goal-graph-flag.js'
 import { LiveSteeringChannel } from './live-steering-channel.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
@@ -74,13 +73,6 @@ const defaultRemindersFile = join(defaultDataDir, 'reminders', 'reminders.json')
 const defaultEnvOverrides = envOverridesFromProcessEnv(process.env)
 
 const defaultNonInteractiveApprovalMode = resolveNonInteractiveApprovalMode(process.env)
-
-// Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html — deliberately not threaded
-// through AssistantConfig/envOverridesFromProcessEnv yet (that's Phase 8's job); see
-// goal-graph-flag.ts's doc comment for why. Mirrors defaultNonInteractiveApprovalMode's own
-// shape: a RunCliOptions-level default computed once from process.env, overridable per-call for
-// tests via options.goalGraphMode.
-const defaultGoalGraphMode = resolveGoalGraphMode(process.env)
 
 // create() only supplies a default for storage the caller didn't already pass in (and falls
 // back to in-memory outside a browser) — passing this explicit, filesystem-backed store is
@@ -226,13 +218,6 @@ export interface RunCliOptions {
   remindersFile?: string
   envOverrides?: Partial<AssistantConfig>
   nonInteractiveApprovalMode?: NonInteractiveApprovalMode
-  /**
-   * Phase 3 gate for the hierarchical goal-tree mechanism's mid-task steering (R1) — see
-   * goal-graph-flag.ts's doc comment for why this is a RunCliOptions field rather than an
-   * AssistantConfig one for now. Defaults to `process.env.ASSISTANT_GOAL_GRAPH`
-   * ('disabled' when unset), same shape as `nonInteractiveApprovalMode` above.
-   */
-  goalGraphMode?: GoalGraphMode
   input?: NodeJS.ReadableStream
   output?: NodeJS.WritableStream
   /**
@@ -290,7 +275,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   const remindersFile = options.remindersFile ?? defaultRemindersFile
   const envOverrides = options.envOverrides ?? defaultEnvOverrides
   const nonInteractiveApprovalMode = options.nonInteractiveApprovalMode ?? defaultNonInteractiveApprovalMode
-  const goalGraphMode = options.goalGraphMode ?? defaultGoalGraphMode
 
   const inputStream = options.input ?? process.stdin
   const outputStream = options.output ?? process.stdout
@@ -1573,7 +1557,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // for exactly that leftover case — dispatched as ordinary follow-up turns, in arrival order,
       // rather than left queued indefinitely. Still satisfies "never silently drop the new ask"
       // (R4) the same way it always has; it's just no longer the *only* absorption path.
-      if (goalGraphMode === 'enabled') {
+      if (config.goalGraphMode === 'enabled') {
         for (const event of steeringChannel.poll()) {
           void enqueue(event.message)
         }
@@ -1610,7 +1594,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * steeringChannel instead of waiting in line, so the composer/prompt never blocks on it (R1).
    */
   function routeMessage(message: string): Promise<void> {
-    if (goalGraphMode === 'enabled' && turnInProgress && !isKnownCommand(message)) {
+    if (config.goalGraphMode === 'enabled' && turnInProgress && !isKnownCommand(message)) {
       steeringChannel.enqueue(message)
       console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
       return Promise.resolve()

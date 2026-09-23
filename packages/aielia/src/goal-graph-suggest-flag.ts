@@ -8,12 +8,15 @@
  * regression in the next-step proposer shouldn't block Tier 0/1 (the steering channel, classifier,
  * persistent `GoalGraphRecord`).
  *
- * Same S0 discipline as `goal-graph-flag.ts`: deliberately **not** threaded through
- * `AssistantConfig` yet — the plan's own Phase 8 is where `goalGraphSuggestMode` becomes a real
- * config field with `/config set` support, a `VITE_ASSISTANT_GOAL_GRAPH_SUGGEST` build-time line
- * in chat-ui's browser-config.ts, and flag-chain resolution tests. Until then, any caller reads it
- * directly from `process.env.ASSISTANT_GOAL_GRAPH_SUGGEST` / `import.meta.env` via
- * `normalizeGoalGraphSuggestMode` below — mirroring `normalizeGoalGraphMode` exactly.
+ * As of Phase 8, threaded through `AssistantConfig` exactly like `goal-graph-flag.ts`:
+ * `goalGraphSuggestMode` is a real config field with `/config set` support, a
+ * `VITE_ASSISTANT_GOAL_GRAPH_SUGGEST` build-time line in chat-ui's browser-config.ts, and
+ * flag-chain resolution tests (cli-config.test.ts, browser-config.test.ts) — resolved via
+ * `normalizeGoalGraphSuggestMode` below, mirroring `normalizeGoalGraphMode` exactly. No production
+ * call site reads `config.goalGraphSuggestMode` yet (`next-step-proposer.ts`'s
+ * `proposeNextSteps()` still takes its `suggestMode` argument directly from whichever caller wires
+ * it in, and no caller does that yet — see that file's own notes), so this remains inert beyond
+ * the config seam itself.
  *
  * Default OFF ('disabled'): `next-step-proposer.ts`'s `proposeNextSteps()` returns `[]` without
  * making any LLM call, so a flag-off session sees zero behavior change (INV-43).

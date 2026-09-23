@@ -1,5 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/aielia'
-import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode } from '@buildaharness/aielia'
+import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode } from '@buildaharness/aielia'
 
 /**
  * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
@@ -18,6 +18,8 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   planMode: 'VITE_ASSISTANT_PLAN_MODE',
   enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
   webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
+  goalGraphMode: 'VITE_ASSISTANT_GOAL_GRAPH',
+  goalGraphSuggestMode: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST',
 }
 
 /**
@@ -51,6 +53,14 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
     overrides.webBackend = env.VITE_ASSISTANT_WEB_BACKEND
   } else if (env.VITE_ASSISTANT_WEB_BACKEND) {
     console.warn(`Unrecognized VITE_ASSISTANT_WEB_BACKEND "${env.VITE_ASSISTANT_WEB_BACKEND}" — ignoring, falling back to the default.`)
+  }
+  // Phase 8 of the hierarchical-goal-tree plan — the browser/desktop counterpart of the CLI's
+  // ASSISTANT_GOAL_GRAPH(_SUGGEST). normalizeGoalGraphMode/normalizeGoalGraphSuggestMode warn-and-
+  // default on a typo, so a build that sets either at all always resolves to a concrete
+  // 'enabled'/'disabled'.
+  if (env.VITE_ASSISTANT_GOAL_GRAPH) overrides.goalGraphMode = normalizeGoalGraphMode(env.VITE_ASSISTANT_GOAL_GRAPH, 'VITE_ASSISTANT_GOAL_GRAPH')
+  if (env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST) {
+    overrides.goalGraphSuggestMode = normalizeGoalGraphSuggestMode(env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST, 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST')
   }
   return overrides
 }

@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { DEFAULT_CONFIG } from './config.js'
 import { DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 import { DEFAULT_TUI_MODE } from './tui-mode-flag.js'
+import { DEFAULT_GOAL_GRAPH_MODE } from './goal-graph-flag.js'
+import { DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
 import {
   isConfigKey,
   envOverridesFromProcessEnv,
@@ -79,6 +81,24 @@ describe('envOverridesFromProcessEnv', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     warn.mockRestore()
   })
+
+  it('resolves ASSISTANT_GOAL_GRAPH into goalGraphMode, defaulting a typo to the current default', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH: 'enabled' })).toEqual({ goalGraphMode: 'enabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH: 'disabled' })).toEqual({ goalGraphMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH: 'on' })).toEqual({ goalGraphMode: DEFAULT_GOAL_GRAPH_MODE })
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it('resolves ASSISTANT_GOAL_GRAPH_SUGGEST into goalGraphSuggestMode, defaulting a typo to the current default', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH_SUGGEST: 'enabled' })).toEqual({ goalGraphSuggestMode: 'enabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH_SUGGEST: 'disabled' })).toEqual({ goalGraphSuggestMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH_SUGGEST: 'on' })).toEqual({ goalGraphSuggestMode: DEFAULT_GOAL_GRAPH_SUGGEST_MODE })
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
 })
 
 describe('parseConfigValue', () => {
@@ -130,6 +150,15 @@ describe('parseConfigValue', () => {
     expect(parseConfigValue('tuiMode', 'enabled')).toBe('enabled')
     expect(parseConfigValue('tuiMode', 'disabled')).toBe('disabled')
     expect(() => parseConfigValue('tuiMode', 'on')).toThrow(ConfigValueParseError)
+  })
+
+  it('accepts "enabled"/"disabled" for goalGraphMode and goalGraphSuggestMode, and rejects anything else', () => {
+    expect(parseConfigValue('goalGraphMode', 'enabled')).toBe('enabled')
+    expect(parseConfigValue('goalGraphMode', 'disabled')).toBe('disabled')
+    expect(() => parseConfigValue('goalGraphMode', 'on')).toThrow(ConfigValueParseError)
+    expect(parseConfigValue('goalGraphSuggestMode', 'enabled')).toBe('enabled')
+    expect(parseConfigValue('goalGraphSuggestMode', 'disabled')).toBe('disabled')
+    expect(() => parseConfigValue('goalGraphSuggestMode', 'on')).toThrow(ConfigValueParseError)
   })
 
   it.each(['anthropic', 'openai', 'openrouter'] as const)('accepts llmBackend "%s"', (backend) => {

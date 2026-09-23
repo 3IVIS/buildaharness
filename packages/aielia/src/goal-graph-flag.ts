@@ -5,21 +5,24 @@
  * plans/hierarchical_goal_tree_and_steering_plan.html. Split out so it's unit-testable in
  * isolation, the same pattern as one-loop-flag.ts/ask-mode-flag.ts/plan-mode-flag.ts.
  *
- * Unlike those three, this is deliberately **not** threaded through `AssistantConfig` yet — the
- * plan's own Phase 8 is where `goalGraphMode` becomes a real config field with `/config set`
- * support, a `VITE_ASSISTANT_GOAL_GRAPH` build-time line in chat-ui's browser-config.ts, and
- * flag-chain resolution tests. Until then this mirrors the Trajectory Supervisor's own S0
+ * As of Phase 8, threaded through `AssistantConfig` exactly like those three: `goalGraphMode` is a
+ * real config field with `/config set` support, a `VITE_ASSISTANT_GOAL_GRAPH` build-time line in
+ * chat-ui's browser-config.ts, and flag-chain resolution tests (cli-config.test.ts,
+ * browser-config.test.ts). Before Phase 8 this mirrored the Trajectory Supervisor's own S0
  * discipline ("flag defined, default OFF, read nowhere yet except a single guard stub"): cli.ts
- * reads it directly from `process.env.ASSISTANT_GOAL_GRAPH` (via `RunCliOptions.goalGraphMode`,
- * not `AssistantConfig`) and chat-ui's App.tsx reads it directly from
- * `import.meta.env.VITE_ASSISTANT_GOAL_GRAPH`, both via `normalizeGoalGraphMode` below.
+ * read it directly from `process.env.ASSISTANT_GOAL_GRAPH` via a `RunCliOptions.goalGraphMode`
+ * field (not `AssistantConfig`) and chat-ui's App.tsx read it directly from a module-level
+ * `import.meta.env.VITE_ASSISTANT_GOAL_GRAPH` constant — both now resolve through
+ * `config.goalGraphMode` instead, via `cli-config.ts`'s `envOverridesFromProcessEnv` /
+ * `browser-config.ts`'s `envOverridesFromImportMetaEnv`, both still ultimately calling
+ * `normalizeGoalGraphMode` below.
  *
  * Default OFF ('disabled'): the CLI's `dispatchQueue` and chat-ui's busy-disables-composer
  * behavior stay byte-identical to today (INV-43) — a message sent while a turn is running keeps
  * waiting on `dispatchQueue` / the disabled composer, exactly as before. 'enabled' routes an
- * in-flight message into a `LiveSteeringChannel` instead, but Phase 3 alone has no consumer for
- * it inside the harness's iteration loop yet (Phase 4 wires that in) — so even with the flag on,
- * this is inert-by-construction beyond the CLI/chat-ui routing split itself.
+ * in-flight message into a `LiveSteeringChannel` instead. This flag alone still has no consumer
+ * for it inside the harness's iteration loop (Phase 4 wires that in via the scope×urgency
+ * classifier) — see that phase's own notes for the actual reconciliation behavior.
  */
 export type GoalGraphMode = 'enabled' | 'disabled'
 

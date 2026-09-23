@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event'
 
 /**
  * Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering) —
- * `goalGraphModeEnabled` is a module-level constant in App.tsx computed once from
- * `import.meta.env.VITE_ASSISTANT_GOAL_GRAPH` at import time (see that file's doc comment for why
- * this isn't threaded through AssistantConfig yet, unlike oneLoopMode/askMode/planMode). Testing
- * the "enabled" branch therefore needs the env var stubbed *before* App.tsx is first evaluated —
+ * `goalGraphModeEnabled` in App.tsx is derived from `config.goalGraphMode`, resolved (as of Phase
+ * 8) through the same `envOverridesFromImportMetaEnv`/`resolveConfig` chain as
+ * oneLoopMode/askMode/planMode: `import.meta.env.VITE_ASSISTANT_GOAL_GRAPH` is read once into a
+ * module-level `envOverrides` constant when App.tsx is first evaluated. Testing the "enabled"
+ * branch therefore still needs the env var stubbed *before* App.tsx is first evaluated —
  * `vi.stubEnv` + `vi.resetModules()` + a fresh dynamic `import('./App')` per test, rather than
  * App.test.tsx's plain top-level `import { App } from './App'`.
  */

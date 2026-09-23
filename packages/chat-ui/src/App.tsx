@@ -9,7 +9,6 @@ import {
   formatTranscriptMarkdown,
   defaultExportFilename,
   braveSearch,
-  normalizeGoalGraphMode,
   LiveSteeringChannel,
   type AssistantProgress,
   type AssistantToolStep,
@@ -95,14 +94,6 @@ function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): Token
 // config.ts's resolveConfig — so nothing changes for a deployed build that already sets
 // VITE_ASSISTANT_PROXY_URL/_TOKEN/_MODEL and never opens Settings.
 const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
-
-// Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering) —
-// deliberately not threaded through AssistantConfig/envOverridesFromImportMetaEnv yet (that's
-// Phase 8's job — see goal-graph-flag.ts's doc comment for why). Read directly from Vite's
-// build-time env, same "not a config field yet" shape cli.ts's RunCliOptions.goalGraphMode uses
-// for process.env.ASSISTANT_GOAL_GRAPH. Default OFF: the composer/Send button stay disabled while
-// busy, byte-identical to today (INV-43).
-const goalGraphModeEnabled = normalizeGoalGraphMode(import.meta.env.VITE_ASSISTANT_GOAL_GRAPH, 'VITE_ASSISTANT_GOAL_GRAPH') === 'enabled'
 
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
@@ -368,6 +359,14 @@ export function App(): React.JSX.Element {
   const initialResolved = resolveConfig({}, envOverrides)
   const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
   const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
+  // Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html — now derived from the same
+  // resolved AssistantConfig every other flag reads (env override > persisted > default), so
+  // `/config set goalGraphMode enabled` (via SettingsScreen) takes effect without a rebuild, same
+  // as oneLoopMode/askMode/planMode. Before this phase this was a module-level constant read
+  // straight off import.meta.env (Phase 3's deliberate S0 shape — see goal-graph-flag.ts's doc
+  // comment). Default OFF: the composer/Send button stay disabled while busy, byte-identical to
+  // today (INV-43).
+  const goalGraphModeEnabled = config.goalGraphMode === 'enabled'
   // T7: true for one Settings-screen render right after TauriConfigStore.load() has just
   // migrated a pre-existing plaintext apiKey into the OS keychain — see that class's
   // consumeMigrationNotice() doc comment. Always false on a plain-browser build (BrowserConfigStore

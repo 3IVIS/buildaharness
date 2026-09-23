@@ -319,7 +319,7 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
 
   it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel and consumed by the in-flight turn itself via checkCallerUpdates (Phase 4) rather than becoming a separate follow-up turn', async () => {
     const llm = new DeferredReplyLLMClient()
-    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), goalGraphMode: 'enabled' })
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'enabled' } })
     const lines = captureOutput()
 
     const firstTurn = cli.dispatchLine('first message')
@@ -349,7 +349,7 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
 
   it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {
     const llm = new DeferredReplyLLMClient()
-    const { cli, configStore } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), goalGraphMode: 'enabled' })
+    const { cli, configStore } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'enabled' } })
     captureOutput()
 
     const firstTurn = cli.dispatchLine('first message')
