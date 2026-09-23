@@ -291,6 +291,14 @@ export class AgentLoop {
     onToolStep?: (step: AssistantToolStep) => void
     onUsage?: (usage: TokenUsage) => void
     riskHint?: TurnIntentClassification['riskLevel']
+    /**
+     * Mid-turn steering (goalGraphMode): messages the user sent while this turn runs that the
+     * scope×urgency classifier judged apply to the answer being produced right now. Called once
+     * per iteration, immediately before the LLM call; anything returned is spliced in as a user
+     * turn so the model itself applies it — no lexical matching, unlike the harness's
+     * caller-constraint output contract.
+     */
+    takeSteeringNotes?: () => string[]
   }): (toolCtx: ToolExecutorContext) => Promise<unknown> {
     let dispatchedAnyToolCall = false
     let iteration = 0
@@ -319,6 +327,14 @@ export class AgentLoop {
         input.messages.push({
           role: 'user',
           content: `[trajectory-supervisor investigation findings — read-only evidence gathered because the run had stalled]\n${freshFindings.map((o) => o.content).join('\n\n')}`,
+        })
+      }
+
+      const steeringNotes = input.takeSteeringNotes?.() ?? []
+      if (steeringNotes.length > 0) {
+        input.messages.push({
+          role: 'user',
+          content: `[the user sent the following while you were working on the request above — apply it to your answer]\n${steeringNotes.map((n) => `- ${n}`).join('\n')}`,
         })
       }
 
@@ -370,6 +386,7 @@ export class AgentLoop {
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
+    takeSteeringNotes?: () => string[],
   ): { proposer: (toolCtx: ToolExecutorContext) => Promise<unknown>; sources: AssistantSource[] } {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -385,7 +402,7 @@ export class AgentLoop {
     ]
     const sources: AssistantSource[] = []
     const proposer = this.createHarnessProposer({
-      messages, tools, sessionId, userMessage, maxIterations: this.maxSteps, sources, onToken, onToolStep, onUsage, riskHint,
+      messages, tools, sessionId, userMessage, maxIterations: this.maxSteps, sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes,
     })
     return { proposer, sources }
   }

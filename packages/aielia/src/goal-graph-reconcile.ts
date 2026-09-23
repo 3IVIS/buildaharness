@@ -15,22 +15,43 @@ import { forceActivateThread } from './goal-thread-scheduler.js'
 
 /**
  * Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html — the Tier-1 reconcile pass that
- * turns a drained LiveSteeringChannel (Phase 3) into real CallerUpdates via the scope×urgency
- * classifier, at the harness's own checkCallerUpdates iteration boundary
- * (check-caller-updates.ts's AsyncFnUpdateChannel). One message is classified and emitted per
- * poll() — checkCallerUpdates's RESTART_ITERATION naturally drives one poll per harness iteration,
- * so a backlog of several queued messages drains one per iteration rather than all at once.
+ * turns a drained LiveSteeringChannel (Phase 3) into a handled ask via the scope×urgency
+ * classifier. One message is classified per poll() — checkCallerUpdates polls once per harness
+ * iteration, so a backlog of several queued messages drains one per iteration rather than all at
+ * once.
+ *
+ * Every classified message ends in exactly one of two places — never dropped (R4):
+ *
+ *  - **Applied in place** — a *steering note* the running turn's proposer reads before its next
+ *    LLM call (`takeNotes()`): SAME_TASK always, SAME_GOAL_NEW_TASK when IMMEDIATE. The model
+ *    itself interprets the note. Earlier revisions instead pushed the raw message text into the
+ *    harness's `add_constraint` / `add_success_criteria`, which are enforced *lexically*
+ *    (output-validation.ts's negation-word rule, criterionCovered's token overlap): a correction
+ *    like "use the audited figure, not the draft one" then made the reply's own words a
+ *    "violation" and threw the whole turn, and a criterion no proposer ever read was never acted
+ *    on. Neither field is read by the one-loop proposer's LLM call, so neither can carry a
+ *    natural-language ask.
+ *  - **Deferred to a follow-up turn** — everything else (NEW_GOAL, SAME_GOAL_NEW_TASK×DEFERRED,
+ *    CANCEL_CURRENT's replacement ask) plus any note the proposer never got to read (classified
+ *    after its last LLM call). `drainUnconsumed()` returns these so the caller re-enqueues them on
+ *    the LiveSteeringChannel, where the caller's post-turn drain (cli.ts / App.tsx) runs each as
+ *    an ordinary turn, in arrival order.
+ *
+ * Goal-graph bookkeeping (NEW_GOAL mints a thread, CANCEL_CURRENT abandons the active one and
+ * blocks the task graph via `cancel_current`) is unchanged — INV-39: never writes the ACTIVE
+ * pointer except through the Scheduler's own forceActivateThread.
  */
 export interface SteeringReconcileChannel {
   channel: UpdateChannel
   /**
-   * Whatever never got classified/absorbed this turn (the harness run ended — reached DONE, or
-   * escalated — before the queue drained) — R4's "never silently drop the new ask" still has to
-   * hold once this channel's own closure state is gone. The caller re-enqueues these onto the
-   * original LiveSteeringChannel so the existing post-turn fallback drain (cli.ts's dispatchOne
-   * `finally`, App.tsx's drainSteeringChannel — both built in Phase 3) picks them up as ordinary
-   * follow-up turns, exactly like a steering message sent during a trivial turn that never even
-   * calls harnessBridge.run() (and so never reaches this channel's poll() at all).
+   * Steering notes classified since the last call, for the proposer to fold into its next LLM
+   * call. Each is returned once and counted as applied — call it only when about to make that call.
+   */
+  takeNotes(): string[]
+  /**
+   * Everything that must still be run as a follow-up turn: deferred asks, notes the proposer never
+   * took, and messages never classified at all (the harness run ended before its next poll). The
+   * caller re-enqueues these onto the original LiveSteeringChannel (R4).
    */
   drainUnconsumed(): SteeringEvent[]
 }
@@ -46,6 +67,8 @@ export function createSteeringReconcileChannel(params: {
 }): SteeringReconcileChannel {
   const { steeringChannel, sessionId, memory, llmClient, model, onUsage, fsPersistence } = params
   let buffer: SteeringEvent[] = []
+  let pendingNotes: SteeringEvent[] = []
+  const deferred: SteeringEvent[] = []
 
   const channel = new AsyncFnUpdateChannel(async () => {
     buffer.push(...steeringChannel.poll())
@@ -65,35 +88,30 @@ export function createSteeringReconcileChannel(params: {
 
     switch (classification.scopeRelation) {
       case 'SAME_TASK':
-        // Fold into current context — collapses to IMMEDIATE regardless of the classifier's
-        // urgency verdict (see scope-urgency-classifier.ts), no task-graph shape change.
-        return { pending_update: { add_constraint: next.message }, constraints_changed: true }
+        // Corrects/refines what's in flight (always IMMEDIATE — see scope-urgency-classifier.ts):
+        // the proposer applies it to this turn's own answer.
+        pendingNotes.push(next)
+        return null
 
       case 'SAME_GOAL_NEW_TASK':
-        // Both IMMEDIATE and DEFERRED append a new success criterion here — revalidateTaskGraph
-        // (reused as-is) turns an uncovered criterion into a new PENDING task without touching
-        // anything already in scope. The IMMEDIATE row's parallel_write_domains conflict check
-        // (ordering the new task via depends_on when it actually conflicts) is deferred to Phase
-        // 5, which owns the Scheduler/in-flight tool call policy this ordering decision belongs
-        // next to — Phase 4 lays the criterion down, Phase 5 decides how it interleaves.
-        return { pending_update: { add_success_criteria: [next.message] }, constraints_changed: true }
+        // IMMEDIATE: fold into the answer being produced now. DEFERRED (also the INV-41 fail-safe
+        // default): wait for the current task to finish, then run as its own turn.
+        if (classification.urgency === 'IMMEDIATE') pendingNotes.push(next)
+        else deferred.push(next)
+        return null
 
       case 'NEW_GOAL': {
-        // Tier-1 never writes the ACTIVE pointer itself (INV-39 — see the plan's resolved
-        // "ACTIVE-pointer write authority" decision): both IMMEDIATE and DEFERRED just pause the
-        // current thread and mint a new READY one; the Scheduler (goal-thread-scheduler.ts)
-        // decides what runs next, via the exact same selection function/exclusion rules either
-        // way (Phase 5). The only difference urgency makes is *when* that selection pass runs:
-        // IMMEDIATE calls it synchronously, right here, so the newly-minted thread gets a chance
-        // to become ACTIVE this same iteration if it's actually eligible (READY, not still
-        // `mode: 'drafting'` — mintConcurrentReadyThread mints every new thread into `drafting`,
-        // so in practice this mostly matters once Tier-2 has decomposed it); DEFERRED leaves the
-        // new thread queued and waits for the next natural pass (assistant.ts's own per-turn
-        // call) rather than jumping the queue.
+        // Tier-1 never writes the ACTIVE pointer itself (INV-39): both urgencies pause the current
+        // thread and mint a new READY one; the Scheduler decides what runs next. IMMEDIATE calls
+        // its selection pass synchronously so the new thread can become ACTIVE this iteration if
+        // eligible; DEFERRED leaves it queued. Either way the ask itself is also deferred to a
+        // follow-up turn — the minted thread is bookkeeping, and a `drafting` thread is never
+        // Scheduler-selectable (INV-40), so nothing else would ever run it.
         const minted = mintConcurrentReadyThread(goalGraph, next.message, activeThread?.id ?? null)
         const newThreadId = minted.threads.find((t) => !goalGraph.threads.some((old) => old.id === t.id))?.id
         const updated = classification.urgency === 'IMMEDIATE' && newThreadId ? forceActivateThread(minted, newThreadId).record : minted
         await saveGoalGraphRecord(memory, sessionId, updated, fsPersistence)
+        deferred.push(next)
         return null
       }
 
@@ -102,6 +120,9 @@ export function createSteeringReconcileChannel(params: {
           const updated = abandonThread(goalGraph, activeThread.id)
           await saveGoalGraphRecord(memory, sessionId, updated, fsPersistence)
         }
+        // The message usually also carries what the user wants instead ("never mind — just tell me
+        // the title"), so it runs as the next turn once the cancelled one stops.
+        deferred.push(next)
         return { pending_update: { cancel_current: true }, constraints_changed: true }
       }
     }
@@ -109,8 +130,15 @@ export function createSteeringReconcileChannel(params: {
 
   return {
     channel,
+    takeNotes: () => {
+      const taken = pendingNotes
+      pendingNotes = []
+      return taken.map((e) => e.message)
+    },
     drainUnconsumed: () => {
-      const remaining = buffer
+      const remaining = [...pendingNotes, ...deferred, ...buffer].sort((a, b) => a.enqueuedAt - b.enqueuedAt)
+      pendingNotes = []
+      deferred.length = 0
       buffer = []
       return remaining
     },

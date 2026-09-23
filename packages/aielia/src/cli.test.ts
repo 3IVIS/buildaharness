@@ -317,7 +317,7 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     expect(secondResolved).toBe(true)
   })
 
-  it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel and consumed by the in-flight turn itself via checkCallerUpdates (Phase 4) rather than becoming a separate follow-up turn', async () => {
+  it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel, classified by the in-flight turn, and — when deferred — answered as its own follow-up turn, never dropped (R4)', async () => {
     const llm = new DeferredReplyLLMClient()
     const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'enabled' } })
     const lines = captureOutput()
@@ -332,19 +332,18 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
 
     llm.release()
     await firstTurn
-    // Flush anything dispatchOne's `finally` fallback might still dispatch onto dispatchQueue —
-    // Phase 4 only falls back to that (a separate follow-up turn) for whatever the running turn's
-    // own checkCallerUpdates absorption didn't get to; here it gets to it, so nothing should be
-    // left for the fallback to dispatch.
+    // The running turn's own checkCallerUpdates classifies "second message"; the fail-safe default
+    // under this mock LLM (SAME_GOAL_NEW_TASK × DEFERRED, since callChatStructured's non-turn-intent
+    // branch returns plain text, not classifier-shaped JSON) means "wait until the current task
+    // finishes" — so the reconcile channel hands it back and dispatchOne's post-turn drain runs it
+    // as its own follow-up turn. (An earlier revision folded it into the run as a harness
+    // criterion nothing ever acted on, and this test asserted the resulting single reply — i.e. it
+    // enshrined the ask being silently dropped.) Flushing /status lets that queued turn finish.
     await cli.dispatchLine('/status')
+    await flushAsync()
 
-    // Phase 4: "second message" is absorbed into the first turn's own harness run via
-    // checkCallerUpdates — the scope×urgency classifier's fail-safe default under this mock LLM
-    // (SAME_GOAL_NEW_TASK × DEFERRED, since callChatStructured's non-turn-intent branch returns
-    // plain text, not classifier-shaped JSON) folds it in as a new task on the *same* run, so it
-    // never becomes its own follow-up turn — only one "Noted." reply is printed, not two.
     const output = lines.join('\n')
-    expect((output.match(/Noted\./g) ?? []).length).toBe(1)
+    expect((output.match(/Noted\./g) ?? []).length).toBe(2)
   })
 
   it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {

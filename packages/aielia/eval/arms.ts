@@ -285,7 +285,10 @@ async function runAssistantInner(
         }
         // Whatever the turn's own checkCallerUpdates didn't absorb (re-enqueued by turn()) plus
         // anything just released becomes an ordinary follow-up turn, in arrival order.
-        for (const ev of steeringChannel.poll()) turns.push({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined })
+        // Spliced in right after this turn — where the CLI's post-turn drain runs them — not at the
+        // end, so they precede any declared followup the user only sends afterwards.
+        const drained = steeringChannel.poll().map((ev) => ({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined }))
+        turns.splice(i + 1, 0, ...drained)
       }
       if (result.usage) {
         sawUsage = true

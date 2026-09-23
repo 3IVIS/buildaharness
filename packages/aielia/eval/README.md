@@ -164,7 +164,7 @@ final reply under both delivery modes and must not match text that appears incid
 
     npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,goalGraphOn --slice=goal_graph_steering,goal_graph_concurrent --seeds=3
 
-2026-09-23 result: REGRESSED (success 90.9% → 21.2%); the flag stays off — see the plan's Phase 8 note.
+2026-09-23 results: first run REGRESSED (success 90.9% → 21.2%), which exposed real downstream defects that were then fixed; re-run NEUTRAL (100% vs 100%, −21% cost). The flag stays off — see the plan's Phase 8 note. The slice is at its success ceiling; a flip needs harder mid-turn scenarios.
 
 ## Trajectory-supervisor slice (S7)
 

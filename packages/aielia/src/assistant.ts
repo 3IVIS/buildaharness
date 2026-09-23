@@ -901,6 +901,21 @@ export class PersonalAssistant {
     // though the batch loop itself finishes long before the harness run that ultimately builds
     // `trace`.
     let batchBudgetTrace: BatchBudgetTrace | undefined
+    // Phase 4 — see TurnOptions.steeringChannel's doc comment. Built fresh each turn (cheap: no
+    // LLM/IO cost until channel.poll() actually classifies a drained message) rather than reused
+    // across turns, since goal-graph state itself is loaded fresh from `memory` on each poll().
+    const steeringAdapter = options.steeringChannel
+      ? createSteeringReconcileChannel({
+          steeringChannel: options.steeringChannel,
+          sessionId,
+          memory: this.memory,
+          llmClient: this.llmClient,
+          model: this.model,
+          onUsage: accumulateUsage,
+          fsPersistence: this.session.undoWorkspace(),
+        })
+      : undefined
+
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
@@ -944,6 +959,7 @@ export class PersonalAssistant {
         this.lastProposerKind = 'flat-oneloop'
         const built = this.agentLoop.createOneLoopProposer(
           sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
+          steeringAdapter?.takeNotes,
         )
         oneLoopProposer = built.proposer
         oneLoopSources = built.sources
@@ -1016,21 +1032,6 @@ export class PersonalAssistant {
     if (options.__benchmarkInjectedFailure && oneLoopProposer) {
       oneLoopProposer = wrapProposerWithInjectedFailure(oneLoopProposer, options.__benchmarkInjectedFailure)
     }
-
-    // Phase 4 — see TurnOptions.steeringChannel's doc comment. Built fresh each turn (cheap: no
-    // LLM/IO cost until channel.poll() actually classifies a drained message) rather than reused
-    // across turns, since goal-graph state itself is loaded fresh from `memory` on each poll().
-    const steeringAdapter = options.steeringChannel
-      ? createSteeringReconcileChannel({
-          steeringChannel: options.steeringChannel,
-          sessionId,
-          memory: this.memory,
-          llmClient: this.llmClient,
-          model: this.model,
-          onUsage: accumulateUsage,
-          fsPersistence: this.session.undoWorkspace(),
-        })
-      : undefined
 
     try {
       const outcome = await this.harnessBridge.run({

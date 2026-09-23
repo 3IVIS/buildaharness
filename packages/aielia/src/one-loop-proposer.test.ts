@@ -195,6 +195,45 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     expect(spliced!.content).not.toContain('unrelated')
   })
 
+  it('splices mid-turn steering notes in as a user turn before the LLM call, so the model — not a lexical rule — applies them', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'the audited figure is 3.9M' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const notes = [['use the audited figure, not the draft one']]
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'what is the Q3 revenue?' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'what is the Q3 revenue?',
+      maxIterations: 5,
+      sources: [],
+      takeSteeringNotes: () => notes.shift() ?? [],
+    })
+
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+
+    const spliced = llmClient.seenMessages[0].find((m) => m.content.includes('while you were working'))
+    expect(spliced?.role).toBe('user')
+    expect(spliced?.content).toContain('- use the audited figure, not the draft one')
+  })
+
+  it('adds nothing when there are no steering notes (flag-off stays byte-identical, INV-43)', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'ok' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'hi',
+      maxIterations: 5,
+      sources: [],
+      takeSteeringNotes: () => [],
+    })
+
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+
+    expect(llmClient.seenMessages[0]).toEqual([{ role: 'user', content: 'hi' }])
+  })
+
   it('only splices each investigation observation once, across iterations', async () => {
     const llmClient = new ScriptedLLMClient([{ content: '<tool_call>' }, { content: 'done' }])
     const agentLoop = buildAgentLoop(llmClient)
