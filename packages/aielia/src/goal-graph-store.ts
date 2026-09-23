@@ -32,6 +32,24 @@ const GoalTaskRecordSchema = z.object({
 })
 export type GoalTaskRecord = z.infer<typeof GoalTaskRecordSchema>
 
+/**
+ * A persisted next-step suggestion (R7) — what next-step-proposer.ts's `proposeNextSteps()` yields
+ * for a thread that just reached DONE, minus `goalThreadId` (it lives on the thread that owns it).
+ * Advisory only: a suggestion is never a task on the thread and is never executed; the user acts on
+ * it, if at all, by simply asking. `promotion` records the confidence policy that admitted it
+ * (`auto` = high confidence, `pending_confirm` = medium); `session_only` (low confidence)
+ * suggestions are never persisted, so they don't appear here.
+ */
+export const ThreadSuggestionSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  rationale: z.string(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  promotion: z.enum(['auto', 'pending_confirm', 'session_only']),
+  createdAt: z.string(),
+})
+export type ThreadSuggestion = z.infer<typeof ThreadSuggestionSchema>
+
 const GoalThreadModeSchema = z.enum(['drafting', 'awaiting_approval', 'active', 'done', 'abandoned'])
 
 /**
@@ -58,6 +76,8 @@ export const GoalThreadSchema = z.object({
   reviewNotes: z.array(z.string()).optional(),
   verifiedAt: z.string().optional(),
   executingOnPlan: z.boolean(),
+  /** Advisory next steps proposed when this thread reached DONE — see ThreadSuggestionSchema. */
+  suggestions: z.array(ThreadSuggestionSchema).optional(),
   trustApprovedSteps: z.boolean().optional(),
   planApprovalId: z.string().optional(),
   createdAt: z.string(),
@@ -285,4 +305,29 @@ export async function loadGoalGraphRecord(memory: MemoryAdapter, sessionId: stri
   const migrated = createGoalGraphRecordFromPlanRecord(legacyPlan)
   await saveGoalGraphRecord(memory, sessionId, migrated, fsPersistence)
   return migrated
+}
+
+/**
+ * Appends advisory `suggestions` to `threadId`, skipping any whose description (case-insensitive,
+ * trimmed) the thread already carries — proposing again for the same DONE thread must not stack
+ * duplicates. `session_only` suggestions are dropped here (low confidence is advisory for the turn
+ * that produced it, never persisted). A `threadId` not present in `record.threads` is a no-op.
+ */
+export function addThreadSuggestions(record: GoalGraphRecord, threadId: string, suggestions: ThreadSuggestion[]): GoalGraphRecord {
+  const persistable = suggestions.filter((sg) => sg.promotion !== 'session_only')
+  if (persistable.length === 0) return record
+  const stamp = new Date().toISOString()
+  const threads = record.threads.map((t) => {
+    if (t.id !== threadId) return t
+    const existing = t.suggestions ?? []
+    const seen = new Set(existing.map((sg) => sg.description.trim().toLowerCase()))
+    const fresh = persistable.filter((sg) => {
+      const key = sg.description.trim().toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return fresh.length === 0 ? t : { ...t, suggestions: [...existing, ...fresh], updatedAt: stamp }
+  })
+  return { ...record, threads, updatedAt: stamp }
 }

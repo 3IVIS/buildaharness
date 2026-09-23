@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage } from '@buildaharness/runtime'
 import { DEFAULT_CONFIG } from './config.js'
-import { formatHelp, formatStatus, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
+import { formatHelp, formatStatus, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
 import type { GoalGraphState, GoalThreadView } from './goal-graph-service.js'
 import type { MemorySummary, MemoryExport, TranscriptSearchHit } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
@@ -242,6 +242,19 @@ function makeThreadView(overrides: Partial<GoalThreadView> = {}): GoalThreadView
   }
 }
 
+describe('formatNextSteps', () => {
+  it('numbers each option and says both that 1/2/3 runs one and that typing your own message works', () => {
+    const out = formatNextSteps([
+      { description: 'add tests', confidence: 'high', rationale: 'r' },
+      { description: 'deploy it', confidence: 'medium', rationale: 'r' },
+    ])
+    expect(out).toContain('1. add tests')
+    expect(out).toContain('2. deploy it')
+    expect(out).toContain('type 1, 2 or 3 to run one')
+    expect(out).toContain('just type your own message')
+  })
+})
+
 describe('formatGoalGraphState', () => {
   it('returns an explicit "no goal threads" message for an empty graph, never a blank output', () => {
     const state: GoalGraphState = { activeThreadId: null, threads: [] }
@@ -256,6 +269,15 @@ describe('formatGoalGraphState', () => {
     expect(output).toContain('carried over')
     expect(output).toContain('1/3 complete')
     expect(output).toContain('2 pending')
+  })
+
+  it('lists a DONE thread\'s persisted next-step suggestions under it, marked as not committed', () => {
+    const state: GoalGraphState = {
+      activeThreadId: null,
+      threads: [makeThreadView({ status: 'DONE', visibility: 'done', isActive: false, suggestions: [{ description: 'add tests for the login page', rationale: 'r', confidence: 'high' }] })],
+    }
+    const output = formatGoalGraphState(state)
+    expect(output).toContain('next step (suggested, not committed) [high]: add tests for the login page')
   })
 
   it('distinguishes all four R5 visibility buckets in the rendered output', () => {

@@ -36,12 +36,15 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { LiveSteeringChannel } from './live-steering-channel.js'
+import { isGoalGraphEnabled } from './goal-graph-flag.js'
+import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
+import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -191,6 +194,10 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
     // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // R7: turn-end next-step options and DONE-thread suggestions. Undefined config means the
+    // package default (enabled); PersonalAssistant itself defaults to disabled, so this is where
+    // the front end opts in.
+    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
     // P11 of the internal plan — resolved through the same shared config
     // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
     // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
@@ -1271,14 +1278,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // is only known once HarnessRuntime.run() finishes, well after writeToken already streamed
       // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
       const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
+      // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
+      // the very next input runs that option (see dispatchOne); any other input clears them.
+      lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined
+      const nextStepsBlock = lastNextSteps ? `\n\n${formatNextSteps(lastNextSteps)}` : ''
       if (streamedAnyTokens) {
         // The reply text is already on screen, printed token-by-token as it streamed in — but
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
-        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}\n\n`)
+        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${nextStepsBlock}\n\n`)
       } else {
-        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}\n`)
+        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${nextStepsBlock}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
@@ -1499,6 +1510,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // has no consumer yet beyond the drain in dispatchOne's `finally` below — Phase 4 replaces that
   // drain with real intra-turn absorption via checkCallerUpdates.
   let turnInProgress = false
+  // The next-step options the last full turn offered — consumed by the next input (see dispatchOne).
+  let lastNextSteps: NextStepSuggestion[] | undefined
   const steeringChannel = new LiveSteeringChannel()
 
   // A lookup keyed by the message's first whitespace-separated token — replaces what used to
@@ -1539,6 +1552,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // resolves before the next begins — matching what a human typing into the prompt would
   // experience anyway.
   async function dispatchOne(message: string): Promise<void> {
+    // A bare 1/2/3 right after a turn's next-step options runs that option; anything else drops them.
+    const pick = /^[1-3]$/.test(message) && lastNextSteps ? lastNextSteps[Number(message) - 1] : undefined
+    lastNextSteps = undefined
+    if (pick) {
+      console.log(`  → ${pick.description}`)
+      message = pick.description
+    }
     const [token, ...args] = message.split(/\s+/)
     const handler = commands[token]
     if (handler) {
@@ -1557,7 +1577,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // for exactly that leftover case — dispatched as ordinary follow-up turns, in arrival order,
       // rather than left queued indefinitely. Still satisfies "never silently drop the new ask"
       // (R4) the same way it always has; it's just no longer the *only* absorption path.
-      if (config.goalGraphMode === 'enabled') {
+      if (isGoalGraphEnabled(config.goalGraphMode)) {
         for (const event of steeringChannel.poll()) {
           void enqueue(event.message)
         }
@@ -1594,7 +1614,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * steeringChannel instead of waiting in line, so the composer/prompt never blocks on it (R1).
    */
   function routeMessage(message: string): Promise<void> {
-    if (config.goalGraphMode === 'enabled' && turnInProgress && !isKnownCommand(message)) {
+    if (isGoalGraphEnabled(config.goalGraphMode) && turnInProgress && !isKnownCommand(message)) {
       steeringChannel.enqueue(message)
       console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
       return Promise.resolve()

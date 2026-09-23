@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { proposeNextSteps, classifySuggestionPromotion } from './next-step-proposer.js'
+import { proposeNextSteps, proposeTurnNextSteps, classifySuggestionPromotion } from './next-step-proposer.js'
 import type { GoalThread } from './goal-graph-store.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
@@ -119,5 +119,54 @@ describe('proposeNextSteps', () => {
     const result = await proposeNextSteps(makeThread(), llm, 'enabled')
     expect(result).toHaveLength(1)
     expect(result[0].description).toBe('add tests')
+  })
+})
+
+describe('proposeTurnNextSteps — options shown after a full turn', () => {
+  const turn = { userMessage: 'Add a login page', reply: 'Done — I added login.tsx.' }
+  const payload = JSON.stringify({
+    suggestions: [
+      { description: 'speculative refactor', confidence: 'low', rationale: 'r' },
+      { description: 'add tests for the login page', confidence: 'high', rationale: 'r' },
+      { description: 'wire it into the router', confidence: 'medium', rationale: 'r' },
+      { description: 'a fourth option', confidence: 'medium', rationale: 'r' },
+    ],
+  })
+
+  it('returns [] with no LLM call when the mode is not enabled', async () => {
+    const llm = new StructuredOnlyLLMClient(payload)
+    expect(await proposeTurnNextSteps(turn, llm, 'disabled')).toEqual([])
+    expect(llm.calls).toBe(0)
+  })
+
+  it('returns [] with no LLM call when there is no request or no reply to follow up on', async () => {
+    const llm = new StructuredOnlyLLMClient(payload)
+    expect(await proposeTurnNextSteps({ userMessage: 'hi', reply: '  ' }, llm, 'enabled')).toEqual([])
+    expect(await proposeTurnNextSteps({ userMessage: '', reply: 'x' }, llm, 'enabled')).toEqual([])
+    expect(llm.calls).toBe(0)
+  })
+
+  it('orders most-confident first and caps at three', async () => {
+    const out = await proposeTurnNextSteps(turn, new StructuredOnlyLLMClient(payload), 'enabled')
+    expect(out.map((s) => s.description)).toEqual(['add tests for the login page', 'wire it into the router', 'a fourth option'])
+  })
+
+  it('sends the turn (request + reply) as the context, in one call', async () => {
+    const seen: string[] = []
+    const llm = new StructuredOnlyLLMClient(payload)
+    const orig = llm.callChatStructured.bind(llm)
+    llm.callChatStructured = async (m, t, o) => {
+      seen.push(String(m[m.length - 1].content))
+      return orig(m, t, o)
+    }
+    await proposeTurnNextSteps(turn, llm, 'enabled')
+    expect(llm.calls).toBe(1)
+    expect(seen[0]).toContain('Add a login page')
+    expect(seen[0]).toContain('I added login.tsx')
+  })
+
+  it('falls back to [] on an LLM error or malformed output, never throwing', async () => {
+    expect(await proposeTurnNextSteps(turn, new ThrowingLLMClient(), 'enabled')).toEqual([])
+    expect(await proposeTurnNextSteps(turn, new StructuredOnlyLLMClient('not json'), 'enabled')).toEqual([])
   })
 })

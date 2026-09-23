@@ -5,6 +5,28 @@ import type { GoalGraphState } from '@buildaharness/aielia'
 import { GoalsPanel } from './GoalsPanel'
 
 describe('GoalsPanel', () => {
+  it("lists a DONE thread's suggested next steps under it, with their confidence", () => {
+    const state: GoalGraphState = {
+      activeThreadId: null,
+      threads: [
+        {
+          id: 't1',
+          status: 'DONE',
+          visibility: 'done',
+          successCriteria: 'Ship the launch.',
+          tasks: { total: 2, complete: 2, failed: 0, pending: 0 },
+          isActive: false,
+          suggestions: [{ description: 'announce it to the team', rationale: 'launch is done', confidence: 'high' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    }
+    render(<GoalsPanel state={state} onCancel={vi.fn()} />)
+    expect(screen.getByLabelText('Suggested next steps')).toHaveTextContent('announce it to the team')
+    expect(screen.getByText('high')).toBeInTheDocument()
+  })
+
   it('shows a loading state while state is null', () => {
     render(<GoalsPanel state={null} onCancel={vi.fn()} />)
     expect(screen.getByText('Loading…')).toBeInTheDocument()

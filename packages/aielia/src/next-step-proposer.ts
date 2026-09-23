@@ -94,7 +94,7 @@ function isSuggestion(value: unknown): value is NextStepSuggestion {
  * not being proactively reminded, never a wrong or fabricated next step.
  */
 async function generateNextStepSuggestions(
-  thread: GoalThread,
+  context: { successCriteria: string; rationale: string; tasks: string[] },
   llmClient: ILLMClient,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
@@ -105,11 +105,7 @@ async function generateNextStepSuggestions(
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
-          content: JSON.stringify({
-            successCriteria: thread.successCriteria,
-            rationale: thread.rationale,
-            tasks: thread.tasks.map((t) => t.description),
-          }),
+          content: JSON.stringify(context),
         },
       ],
       undefined,
@@ -146,7 +142,12 @@ export async function proposeNextSteps(
   if (suggestMode !== 'enabled') return []
   if (thread.status !== 'DONE') return []
 
-  const suggestions = await generateNextStepSuggestions(thread, llmClient, model, onUsage)
+  const suggestions = await generateNextStepSuggestions(
+    { successCriteria: thread.successCriteria, rationale: thread.rationale, tasks: thread.tasks.map((t) => t.description) },
+    llmClient,
+    model,
+    onUsage,
+  )
   const now = new Date().toISOString()
   return suggestions.map((s) => ({
     id: crypto.randomUUID(),
@@ -157,4 +158,34 @@ export async function proposeNextSteps(
     promotion: classifySuggestionPromotion(s.confidence),
     createdAt: now,
   }))
+}
+
+const CONFIDENCE_ORDER: Record<SuggestionConfidence, number> = { high: 0, medium: 1, low: 2 }
+
+/**
+ * The turn-end entry point: after a full (non-trivial) turn completes, propose up to three
+ * concrete next steps for the user to pick from — shown under the reply, like Claude Code's prompt
+ * suggestions. Same bounded call and confidence rubric as `proposeNextSteps` (the turn's request
+ * stands in for the thread's success criteria, the reply for its rationale), gated by
+ * `goalGraphSuggestMode`. Returns `[]` without any LLM call when the mode isn't 'enabled' or there
+ * is nothing to follow up on. Ordered most-confident first and capped at three; unlike thread
+ * suggestions nothing here is persisted — a turn-end option is advisory for the turn that produced
+ * it, so every confidence tier (including `low`, `session_only` in the thread policy) is shown.
+ */
+export async function proposeTurnNextSteps(
+  turn: { userMessage: string; reply: string },
+  llmClient: ILLMClient,
+  suggestMode: GoalGraphSuggestMode,
+  model?: string,
+  onUsage?: (usage: TokenUsage) => void,
+): Promise<NextStepSuggestion[]> {
+  if (suggestMode !== 'enabled') return []
+  if (turn.userMessage.trim() === '' || turn.reply.trim() === '') return []
+  const suggestions = await generateNextStepSuggestions(
+    { successCriteria: turn.userMessage, rationale: turn.reply.slice(0, 1500), tasks: [] },
+    llmClient,
+    model,
+    onUsage,
+  )
+  return [...suggestions].sort((a, b) => CONFIDENCE_ORDER[a.confidence] - CONFIDENCE_ORDER[b.confidence]).slice(0, 3)
 }

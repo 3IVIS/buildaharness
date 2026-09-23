@@ -104,3 +104,22 @@ describe('getGoalGraphState', () => {
     expect(orig?.siblingIds?.length).toBe(1)
   })
 })
+
+describe('getGoalGraphState — persisted next-step suggestions', () => {
+  it('carries a DONE thread\'s suggestions into its view (description, rationale, confidence only) and omits the field when there are none', async () => {
+    const memory = new InMemoryAdapter()
+    const done = makeThread({
+      id: 'done-1',
+      status: 'DONE',
+      mode: 'done',
+      suggestions: [{ id: 's1', description: 'announce it', rationale: 'launch done', confidence: 'high', promotion: 'auto', createdAt: new Date().toISOString() }],
+    })
+    const plain = makeThread({ id: 'plain-1' })
+    await saveGoalGraphRecord(memory, 's1', { threads: [done, plain], activeThreadId: null, createdAt: done.createdAt, updatedAt: done.updatedAt })
+
+    const state = await getGoalGraphState(memory, 's1')
+
+    expect(state.threads.find((t) => t.id === 'done-1')?.suggestions).toEqual([{ description: 'announce it', rationale: 'launch done', confidence: 'high' }])
+    expect(state.threads.find((t) => t.id === 'plain-1')?.suggestions).toBeUndefined()
+  })
+})

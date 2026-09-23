@@ -1,14 +1,24 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { DEFAULT_GOAL_GRAPH_MODE, resolveGoalGraphMode, normalizeGoalGraphMode } from './goal-graph-flag.js'
+import { DEFAULT_GOAL_GRAPH_MODE, resolveGoalGraphMode, normalizeGoalGraphMode, isGoalGraphEnabled } from './goal-graph-flag.js'
 
 describe('resolveGoalGraphMode', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('defaults to disabled when ASSISTANT_GOAL_GRAPH is unset', () => {
-    expect(resolveGoalGraphMode({})).toBe('disabled')
-    expect(DEFAULT_GOAL_GRAPH_MODE).toBe('disabled')
+  it('defaults to enabled (as of 2026-09-23) when ASSISTANT_GOAL_GRAPH is unset', () => {
+    expect(resolveGoalGraphMode({})).toBe('enabled')
+    expect(DEFAULT_GOAL_GRAPH_MODE).toBe('enabled')
+  })
+
+  it('isGoalGraphEnabled: undefined falls back to the package default; an explicit "disabled" is the escape hatch', () => {
+    expect(isGoalGraphEnabled(undefined)).toBe(true)
+    expect(isGoalGraphEnabled('enabled')).toBe(true)
+    expect(isGoalGraphEnabled('disabled')).toBe(false)
+  })
+
+  it('an explicit "disabled" is honored', () => {
+    expect(resolveGoalGraphMode({ ASSISTANT_GOAL_GRAPH: 'disabled' })).toBe('disabled')
   })
 
   it('honors an explicit "enabled"', () => {

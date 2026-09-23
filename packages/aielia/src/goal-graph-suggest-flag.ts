@@ -23,7 +23,12 @@
  */
 export type GoalGraphSuggestMode = 'enabled' | 'disabled'
 
-export const DEFAULT_GOAL_GRAPH_SUGGEST_MODE: GoalGraphSuggestMode = 'disabled'
+export const DEFAULT_GOAL_GRAPH_SUGGEST_MODE: GoalGraphSuggestMode = 'enabled'
+
+/** See isGoalGraphEnabled (goal-graph-flag.ts) — same undefined-means-package-default rule. */
+export function isGoalGraphSuggestEnabled(mode: GoalGraphSuggestMode | undefined): boolean {
+  return (mode ?? DEFAULT_GOAL_GRAPH_SUGGEST_MODE) === 'enabled'
+}
 
 /**
  * Same signature/typo-tolerance-with-a-warning convention as `normalizeGoalGraphMode`: an unset or

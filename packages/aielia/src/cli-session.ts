@@ -1,3 +1,4 @@
+import type { NextStepSuggestion } from './next-step-proposer.js'
 import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
@@ -232,10 +233,17 @@ function formatGoalThreadLine(thread: GoalThreadView): string {
   const sibling = thread.relationToSiblings ? ` (${thread.relationToSiblings} sibling${thread.siblingIds && thread.siblingIds.length > 1 ? 's' : ''})` : ''
   const { total, complete, failed, pending } = thread.tasks
   const taskLine = total > 0 ? `tasks: ${complete}/${total} complete${failed > 0 ? `, ${failed} failed` : ''}${pending > 0 ? `, ${pending} pending` : ''}` : 'no tasks yet'
+  const suggestions = (thread.suggestions ?? []).map((sg) => `    next step (suggested, not committed) [${sg.confidence}]: ${sg.description}`)
   return [
     `  [${thread.status}]${focus} ${thread.successCriteria}${sibling}`,
     `    visibility: ${VISIBILITY_LABEL[thread.visibility]}  ·  ${taskLine}  ·  updated ${thread.updatedAt}`,
+    ...suggestions,
   ].join('\n')
+}
+
+/** Renders the turn-end next-step options shown under a full turn's reply — numbered so the CLI can accept a bare `1`/`2`/`3` as "run that one" (see cli.ts's dispatchOne). Only the description is shown; the rationale and confidence stay in the structured result for richer front ends. */
+export function formatNextSteps(steps: NextStepSuggestion[]): string {
+  return ['Next steps you could take (type 1, 2 or 3 to run one — or just type your own message):', ...steps.map((s, i) => `  ${i + 1}. ${s.description}`)].join('\n')
 }
 
 /**

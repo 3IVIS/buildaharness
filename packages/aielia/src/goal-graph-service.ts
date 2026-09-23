@@ -47,6 +47,8 @@ export interface GoalThreadView {
   relationToSiblings?: SiblingRelation
   siblingIds?: string[]
   isActive: boolean
+  /** Advisory next steps proposed when the thread reached DONE (high/medium confidence only — low is never persisted). Absent when there are none. */
+  suggestions?: { description: string; rationale: string; confidence: 'high' | 'medium' | 'low' }[]
   createdAt: string
   updatedAt: string
 }
@@ -68,6 +70,7 @@ function toThreadView(thread: GoalThread, activeThreadId: string | null): GoalTh
     relationToSiblings: thread.relationToSiblings,
     siblingIds: thread.siblingIds,
     isActive: thread.id === activeThreadId && thread.status === 'ACTIVE',
+    suggestions: thread.suggestions && thread.suggestions.length > 0 ? thread.suggestions.map(({ description, rationale, confidence }) => ({ description, rationale, confidence })) : undefined,
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
   }

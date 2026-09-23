@@ -33,6 +33,15 @@ function ThreadRow({ thread }: { thread: GoalThreadView }): React.JSX.Element {
         <span className="goals-panel__visibility" data-visibility={thread.visibility}>{VISIBILITY_LABEL[thread.visibility]}</span>
       </div>
       <div className="goals-panel__success-criteria">{thread.successCriteria}</div>
+      {thread.suggestions && thread.suggestions.length > 0 && (
+        <ul className="goals-panel__suggestions" aria-label="Suggested next steps">
+          {thread.suggestions.map((sg) => (
+            <li key={sg.description} title={sg.rationale}>
+              <span className="goals-panel__suggestion-confidence" data-confidence={sg.confidence}>{sg.confidence}</span> {sg.description}
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="goals-panel__thread-footer">
         <TaskSummary tasks={thread.tasks} />
         {thread.relationToSiblings && (

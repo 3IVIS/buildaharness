@@ -293,9 +293,9 @@ describe('/config', () => {
 })
 
 describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchical_goal_tree_and_steering_plan.html)', () => {
-  it('goalGraphMode unset (default): a message sent while a turn is running still blocks on dispatchQueue, byte-identical to today (INV-43)', async () => {
+  it('goalGraphMode explicitly disabled: a message sent while a turn is running still blocks on dispatchQueue, byte-identical to before the mechanism existed (INV-43)', async () => {
     const llm = new DeferredReplyLLMClient()
-    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }) })
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'disabled' } })
     const lines = captureOutput()
 
     const firstTurn = cli.dispatchLine('first message')
@@ -315,6 +315,20 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     await firstTurn
     await secondTurn
     expect(secondResolved).toBe(true)
+  })
+
+  it('goalGraphMode unset (the default is now enabled): a message sent while a turn is running is absorbed into the steering channel instead of blocking', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }) })
+    const lines = captureOutput()
+
+    const firstTurn = cli.dispatchLine('first message')
+    await flushAsync()
+    await cli.dispatchLine('second message') // resolves immediately — not waiting behind the turn
+    expect(lines.join('\n')).toContain('queued')
+
+    llm.release()
+    await firstTurn
   })
 
   it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel, classified by the in-flight turn, and — when deferred — answered as its own follow-up turn, never dropped (R4)', async () => {
@@ -368,6 +382,95 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     await configDispatch
     expect(configResolved).toBe(true)
     expect(await configStore.load()).toMatchObject({ enableShell: true })
+  })
+})
+
+describe('turn-end next steps (R7)', () => {
+  /** Answers turn-intent, the next-step proposer (JSON), and plain replies; records every plain user turn it was asked to answer. */
+  class NextStepLLMClient implements ILLMClient {
+    answered: string[] = []
+    async *callChat(messages: ChatMessage[]): AsyncIterable<string> {
+      this.answered.push(String(messages.filter((m) => m.role === 'user').at(-1)?.content))
+      yield 'Here you go.'
+    }
+    async callChatSync(messages: ChatMessage[]): Promise<string> {
+      this.answered.push(String(messages.filter((m) => m.role === 'user').at(-1)?.content))
+      return 'Here you go.'
+    }
+    async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+      if (String(messages[0]?.content).includes('propose 0-3 concrete, actionable')) {
+        return {
+          content: JSON.stringify({
+            suggestions: [
+              { description: 'add tests for the login page', confidence: 'high', rationale: 'r' },
+              { description: 'wire it into the router', confidence: 'medium', rationale: 'r' },
+            ],
+          }),
+        }
+      }
+      if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+      return { content: 'Here you go.' }
+    }
+  }
+  const fullTurn = 'Can you summarize what the login page does in this project?'
+
+  it('prints the options under the reply, with the hint that typing your own message also works', async () => {
+    const llm = new NextStepLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }) })
+    const lines = captureOutput()
+
+    await cli.dispatchLine(fullTurn)
+
+    const output = lines.join('\n')
+    expect(output).toContain('Next steps you could take')
+    expect(output).toContain('1. add tests for the login page')
+    expect(output).toContain('2. wire it into the router')
+    expect(output).toContain('just type your own message')
+  })
+
+  it('a bare 1 right after the options runs that option as the next message', async () => {
+    const llm = new NextStepLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }) })
+    const lines = captureOutput()
+
+    await cli.dispatchLine(fullTurn)
+    await cli.dispatchLine('1')
+
+    expect(llm.answered.at(-1)).toContain('add tests for the login page')
+    expect(lines.join('\n')).toContain('→ add tests for the login page')
+  })
+
+  it('typing your own message instead just works — options are only shortcuts, never a required choice', async () => {
+    const llm = new NextStepLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }) })
+    captureOutput()
+
+    await cli.dispatchLine(fullTurn)
+    await cli.dispatchLine('Actually, explain how the router picks a page in this project instead please')
+
+    expect(llm.answered.at(-1)).toContain('explain how the router picks a page')
+  })
+
+  it('any other input drops the options: after a command, a bare 1 is just a plain message', async () => {
+    const llm = new NextStepLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }) })
+    captureOutput()
+
+    await cli.dispatchLine(fullTurn)
+    await cli.dispatchLine('/status')
+    await cli.dispatchLine('1')
+
+    expect(llm.answered.at(-1)).not.toContain('add tests for the login page')
+  })
+
+  it('shows nothing when suggestions are disabled', async () => {
+    const llm = new NextStepLLMClient()
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'disabled' }) })
+    const lines = captureOutput()
+
+    await cli.dispatchLine(fullTurn)
+
+    expect(lines.join('\n')).not.toContain('Next steps you could take')
   })
 })
 

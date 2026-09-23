@@ -105,7 +105,32 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     await waitFor(() => expect(screen.getByText('echo: second message')).toBeInTheDocument())
   })
 
-  it('goalGraphMode unset (default): composer and Send stay disabled while a turn is running, byte-identical to today (INV-43)', async () => {
+  it('goalGraphMode unset (the default is now enabled): composer and Send stay enabled while a turn is running', async () => {
+    vi.resetModules()
+
+    const deferred = createDeferredAssistant()
+    vi.doMock('@buildaharness/aielia', async () => {
+      const actual = await vi.importActual<typeof import('@buildaharness/aielia')>('@buildaharness/aielia')
+      return { ...actual, PersonalAssistant: { create: vi.fn(async () => deferred.assistant) } }
+    })
+
+    const { App } = await import('./App')
+    const user = userEvent.setup()
+    render(<App />)
+
+    const input = screen.getByPlaceholderText('Message the assistant…')
+    await user.type(input, 'first message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.getByText('first message')).toBeInTheDocument())
+    expect(input).not.toBeDisabled()
+
+    deferred.release()
+    await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())
+  })
+
+  it('goalGraphMode explicitly disabled: composer and Send stay disabled while a turn is running, byte-identical to before the mechanism existed (INV-43)', async () => {
+    vi.stubEnv('VITE_ASSISTANT_GOAL_GRAPH', 'disabled')
     vi.resetModules()
 
     const deferred = createDeferredAssistant()

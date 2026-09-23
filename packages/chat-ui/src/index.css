@@ -1305,3 +1305,16 @@ body {
   color: var(--muted);
   flex-wrap: wrap;
 }
+
+/* R7: turn-end next-step options under the latest reply, and DONE-thread suggestions in /goals */
+.next-steps { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px 4px; max-width: 720px; }
+.next-steps__label { font-size: 11.5px; color: var(--muted, #6b7280); }
+.next-steps__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.next-steps__chip {
+  text-align: left; cursor: pointer; font: inherit; font-size: 13px; line-height: 1.35;
+  padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface); color: inherit;
+}
+.next-steps__chip:hover { border-color: currentColor; }
+.next-steps__chip:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.goals-panel__suggestions { list-style: none; margin: 0; padding: 0 0 0 4px; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.goals-panel__suggestion-confidence { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }

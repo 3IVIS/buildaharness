@@ -17,7 +17,7 @@
  * `browser-config.ts`'s `envOverridesFromImportMetaEnv`, both still ultimately calling
  * `normalizeGoalGraphMode` below.
  *
- * Default OFF ('disabled'): the CLI's `dispatchQueue` and chat-ui's busy-disables-composer
+ * Default ON ('enabled') as of 2026-09-23 (before that OFF; the 3-seed benchmark vs the queue-behind-the-turn baseline was neutral on success at lower cost). 'disabled' is the escape hatch: the CLI's `dispatchQueue` and chat-ui's busy-disables-composer
  * behavior stay byte-identical to today (INV-43) — a message sent while a turn is running keeps
  * waiting on `dispatchQueue` / the disabled composer, exactly as before. 'enabled' routes an
  * in-flight message into a `LiveSteeringChannel` instead. This flag alone still has no consumer
@@ -26,7 +26,16 @@
  */
 export type GoalGraphMode = 'enabled' | 'disabled'
 
-export const DEFAULT_GOAL_GRAPH_MODE: GoalGraphMode = 'disabled'
+export const DEFAULT_GOAL_GRAPH_MODE: GoalGraphMode = 'enabled'
+
+/**
+ * The single place a resolved `config.goalGraphMode` becomes a boolean. `AssistantConfig.goalGraphMode`
+ * stays out of DEFAULT_CONFIG (undefined = "the package owns the default"), so every consumer must
+ * fall back to DEFAULT_GOAL_GRAPH_MODE rather than compare `=== 'enabled'` against a possibly-undefined value.
+ */
+export function isGoalGraphEnabled(mode: GoalGraphMode | undefined): boolean {
+  return (mode ?? DEFAULT_GOAL_GRAPH_MODE) === 'enabled'
+}
 
 /**
  * Shared by cli.ts (reads `process.env.ASSISTANT_GOAL_GRAPH`) and chat-ui's App.tsx (reads Vite's

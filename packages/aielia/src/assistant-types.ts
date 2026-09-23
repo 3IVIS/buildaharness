@@ -1,3 +1,4 @@
+import type { NextStepSuggestion } from './next-step-proposer.js'
 import type { RiskState, LayerActivityEvent, AskQuestion } from '@buildaharness/harness'
 import type { TokenUsage } from '@buildaharness/runtime'
 import type { AnswerClaim } from './answer-claim.js'
@@ -63,6 +64,13 @@ export interface AssistantTurnResult {
    */
   status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval'
   reply: string | null
+  /**
+   * Up to three concrete next steps proposed after a full (non-trivial, `ok`) turn, most confident
+   * first — for the front end to show under the reply. Advisory only: never executed, never
+   * persisted from here. Present only when the caller enabled `goalGraphSuggestMode`
+   * (PersonalAssistantOptions) and the proposer returned at least one; absent otherwise.
+   */
+  nextSteps?: NextStepSuggestion[]
   reason?: string
   /** See ProposerKind. Always set (defaults to 'posthoc'), on every status. */
   proposerKind?: ProposerKind

@@ -478,6 +478,70 @@ describe('PersonalAssistant', () => {
     expect(await loadHarnessCheckpoint(checkpointStore, 'turn:trivial-test')).toBeUndefined()
   })
 
+  describe('turn-end next-step options (R7, goalGraphSuggestMode)', () => {
+    /** FakeLLMClient that also answers the next-step proposer's structured call, and counts those calls. */
+    class NextStepAwareLLMClient extends FakeLLMClient {
+      nextStepCalls = 0
+      async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+        if (String(messages[0]?.content).includes('propose 0-3 concrete, actionable')) {
+          this.nextStepCalls++
+          options?.onUsage?.({ inputTokens: 7, outputTokens: 3, costUsd: 0.001 })
+          return {
+            content: JSON.stringify({
+              suggestions: [
+                { description: 'check the time in Osaka too', confidence: 'medium', rationale: 'same trip' },
+                { description: 'convert it to your timezone', confidence: 'high', rationale: 'asked about a foreign time' },
+              ],
+            }),
+          }
+        }
+        return super.callChatStructured(messages, tools, options)
+      }
+    }
+    const fullTurn = 'Can you tell me what time it is in Tokyo right now?'
+
+    it('attaches up to three options, most confident first, after a full ok turn when enabled', async () => {
+      const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
+      const assistant = new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' })
+
+      const result = await assistant.turn(fullTurn, { sessionId: 'ns-on' })
+
+      expect(result.status).toBe('ok')
+      expect(result.nextSteps?.map((s) => s.description)).toEqual(['convert it to your timezone', 'check the time in Osaka too'])
+      expect(llm.nextStepCalls).toBe(1)
+    })
+
+    it('folds the proposer call into the turn usage', async () => {
+      const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
+      const off = await new PersonalAssistant({ llmClient: new NextStepAwareLLMClient('It is 3pm in Tokyo.') }).turn(fullTurn, { sessionId: 'ns-usage-off' })
+      const on = await new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }).turn(fullTurn, { sessionId: 'ns-usage-on' })
+      expect((on.usage?.inputTokens ?? 0) - (off.usage?.inputTokens ?? 0)).toBe(7)
+    })
+
+    it('makes no extra call and adds no field by default (INV-43: library callers are unchanged)', async () => {
+      const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
+      const result = await new PersonalAssistant({ llmClient: llm }).turn(fullTurn, { sessionId: 'ns-default' })
+      expect(result.status).toBe('ok')
+      expect(result.nextSteps).toBeUndefined()
+      expect(llm.nextStepCalls).toBe(0)
+    })
+
+    it('makes no extra call and adds no field when explicitly disabled', async () => {
+      const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
+      const result = await new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'disabled' }).turn(fullTurn, { sessionId: 'ns-off' })
+      expect(result.nextSteps).toBeUndefined()
+      expect(llm.nextStepCalls).toBe(0)
+    })
+
+    it('does not propose after a trivial fast-path turn', async () => {
+      const llm = new NextStepAwareLLMClient('Paris.')
+      const result = await new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' }).turn('What is the capital of France?', { sessionId: 'ns-trivial' })
+      expect(result.harnessSkipped).toBe(true)
+      expect(result.nextSteps).toBeUndefined()
+      expect(llm.nextStepCalls).toBe(0)
+    })
+  })
+
   it('cleans up its harness checkpoint once a turn completes normally', async () => {
     const llm = new FakeLLMClient('All done.')
     const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'test-checkpoints' })

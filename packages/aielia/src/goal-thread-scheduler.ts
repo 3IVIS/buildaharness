@@ -109,6 +109,16 @@ export function syncThreadFromTaskGraph(
   const threads = record.threads.map((t) => {
     if (t.id !== threadId) return t
     const tasks = t.tasks.map((task) => ({ ...task, status: statusById.get(task.id) ?? task.status }))
+    // A thread is DONE once every task that still counts (not cancelled) is COMPLETE. Nothing else
+    // ever moved a thread to DONE at runtime, so without this a thread could finish all its work
+    // and stay ACTIVE/PAUSED forever — and the next-step proposer (which only fires on the
+    // transition to DONE) could never run. An empty task list is *not* done (nothing was done),
+    // and an already-DONE/ABANDONED thread is left exactly as it is.
+    const counted = tasks.filter((task) => !task.cancelled)
+    const finished = counted.length > 0 && counted.every((task) => task.status === 'COMPLETE')
+    if (finished && t.status !== 'DONE' && t.status !== 'ABANDONED') {
+      return { ...t, tasks, status: 'DONE' as const, mode: 'done' as const, updatedAt: stamp }
+    }
     return { ...t, tasks, updatedAt: stamp }
   })
   return { ...record, threads, updatedAt: stamp }

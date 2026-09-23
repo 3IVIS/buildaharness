@@ -18,6 +18,8 @@ export type ChatEntry =
       answerClaim?: AnswerClaim
       /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (the internal plan phase B1), rendered as a hidden data-testid element. */
       proposerKind?: AssistantTurnResult['proposerKind']
+      /** Turn-end next-step options — see AssistantTurnResult.nextSteps. Shown as chips under the latest reply only; picking one fills the composer as an editable draft, it never sends. */
+      nextSteps?: AssistantTurnResult['nextSteps']
     }
   | {
       id: string

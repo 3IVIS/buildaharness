@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { isTauri, invoke } from '@tauri-apps/api/core'
 import {
   PersonalAssistant,
@@ -26,6 +26,8 @@ import {
   type PlanDecision,
   type PlanApprovalEdits,
   type GoalGraphState,
+  isGoalGraphEnabled,
+  isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
 import {
   LLMClient,
@@ -53,6 +55,7 @@ import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
+import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
@@ -310,6 +313,9 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
     // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
     // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
+    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
+    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
     // P11 of the internal plan — same seam, from VITE_ASSISTANT_PLAN_MODE
     // via browser-config.ts, or a persisted planMode. Undefined → falls back to DEFAULT_PLAN_MODE.
     planMode: config.planMode,
@@ -334,6 +340,9 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // R5 of the internal plan — same AssistantConfig seam as the desktop
     // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
+    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
+    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
     // P11 of the internal plan — same seam. Undefined → falls back to
     // DEFAULT_PLAN_MODE.
     planMode: config.planMode,
@@ -366,7 +375,7 @@ export function App(): React.JSX.Element {
   // straight off import.meta.env (Phase 3's deliberate S0 shape — see goal-graph-flag.ts's doc
   // comment). Default OFF: the composer/Send button stay disabled while busy, byte-identical to
   // today (INV-43).
-  const goalGraphModeEnabled = config.goalGraphMode === 'enabled'
+  const goalGraphModeEnabled = isGoalGraphEnabled(config.goalGraphMode)
   // T7: true for one Settings-screen render right after TauriConfigStore.load() has just
   // migrated a pre-existing plaintext apiKey into the OS keychain — see that class's
   // consumeMigrationNotice() doc comment. Always false on a plain-browser build (BrowserConfigStore
@@ -645,6 +654,7 @@ export function App(): React.JSX.Element {
             sources: result.sources,
             toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
             planStatus: result.planStatus,
+            nextSteps: result.nextSteps,
             answerClaim: result.answerClaim,
             proposerKind: result.proposerKind,
           },
@@ -943,14 +953,14 @@ export function App(): React.JSX.Element {
             />
           </div>
         )}
-        {entries.map((entry) => {
+        {entries.map((entry, entryIndex) => {
           switch (entry.kind) {
             case 'user':
               return <ChatMessageBubble key={entry.id} role="user" content={entry.content} />
             case 'assistant':
               return (
+                <Fragment key={entry.id}>
                 <ChatMessageBubble
-                  key={entry.id}
                   role="assistant"
                   content={entry.content}
                   riskLevel={entry.riskLevel}
@@ -962,6 +972,17 @@ export function App(): React.JSX.Element {
                   answerClaim={entry.answerClaim}
                   proposerKind={entry.proposerKind}
                 />
+                {/* R7: next-step options only under the newest reply, and only while nothing is in flight — picking one fills the composer as an editable draft, it never sends. */}
+                {entryIndex === entries.length - 1 && !busy && entry.nextSteps && entry.nextSteps.length > 0 && (
+                  <NextStepChips
+                    steps={entry.nextSteps}
+                    onPick={(description) => {
+                      setInput(description)
+                      composerRef.current?.focus()
+                    }}
+                  />
+                )}
+                </Fragment>
               )
             case 'error':
               return (

@@ -52,6 +52,8 @@ import { AskClarificationService } from './ask-clarification-service.js'
 import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
+import { proposeNextSteps, proposeTurnNextSteps } from './next-step-proposer.js'
+import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
 import { getGoalGraphState, type GoalGraphState } from './goal-graph-service.js'
 import type { LiveSteeringChannel } from './live-steering-channel.js'
@@ -280,6 +282,16 @@ export interface PersonalAssistantOptions {
    */
   oneLoopMode?: OneLoopMode
   /**
+   * R7 (Tier 1.5) — next-step suggestions, one bounded LLM call each: after every full
+   * (non-trivial, `ok`) turn, up to three options are attached to the result as `nextSteps` for
+   * the front end to show under the reply; and when a GoalThread finishes its last task, its own
+   * suggestions are persisted on the thread for `/goals`. Defaults to 'disabled' — like
+   * oneLoopMode/askMode/planMode, the front end resolves the flag (cli.ts / App.tsx pass
+   * `config.goalGraphSuggestMode`, which defaults to enabled), so a library or benchmark caller
+   * that never asks for suggestions makes no extra call and sees no new field (INV-43).
+   */
+  goalGraphSuggestMode?: GoalGraphSuggestMode
+  /**
    * Q2 of the internal plan — global-flag control point (tier 1 of
    * INV-29) for the ask-question mechanism. Undefined (the default) falls back to
    * `DEFAULT_ASK_MODE` ('disabled') — today's behavior, byte-for-byte: every escalation stays on
@@ -342,6 +354,8 @@ export class PersonalAssistant {
    * the internal plan phase B1.
    */
   private lastProposerKind: ProposerKind = 'posthoc'
+  /** See PersonalAssistantOptions.goalGraphSuggestMode. */
+  private readonly goalGraphSuggestMode: GoalGraphSuggestMode
 
   private readonly memoryService: MemoryService
   private readonly session: AssistantSession
@@ -426,7 +440,14 @@ export class PersonalAssistant {
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
       this.planService, this.session, this.onTrace, this.oneLoopMode,
     )
-    this.responseService = new ResponseService(this.memoryService, this.session, this.planService, this.onTrace, this.memory)
+    this.goalGraphSuggestMode = options.goalGraphSuggestMode ?? 'disabled'
+    const goalGraphSuggestMode = this.goalGraphSuggestMode
+    this.responseService = new ResponseService(
+      this.memoryService, this.session, this.planService, this.onTrace, this.memory,
+      goalGraphSuggestMode === 'enabled'
+        ? async (thread, onUsage) => (await proposeNextSteps(thread, this.llmClient, goalGraphSuggestMode, this.model, onUsage)).map(({ goalThreadId: _goalThreadId, ...suggestion }) => suggestion)
+        : undefined,
+    )
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
@@ -489,6 +510,22 @@ export class PersonalAssistant {
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
       result.proposerKind = this.lastProposerKind
+      // R7: after a full turn (ok, and not the triviality fast path), propose next steps for the
+      // user. Best-effort — proposeTurnNextSteps never throws — and its one LLM call is folded into
+      // this turn's usage/spend like every other call the turn made.
+      if (result.status === 'ok' && !result.harnessSkipped && result.reply && this.goalGraphSuggestMode === 'enabled') {
+        const extra: TokenUsage[] = []
+        const nextSteps = await proposeTurnNextSteps({ userMessage, reply: result.reply }, this.llmClient, this.goalGraphSuggestMode, this.model, (u) => extra.push(u))
+        if (nextSteps.length > 0) result.nextSteps = nextSteps
+        for (const u of extra) {
+          result.usage = {
+            inputTokens: (result.usage?.inputTokens ?? 0) + u.inputTokens,
+            outputTokens: (result.usage?.outputTokens ?? 0) + u.outputTokens,
+            costUsd: u.costUsd !== undefined ? (result.usage?.costUsd ?? 0) + u.costUsd : result.usage?.costUsd,
+            cachedInputTokens: u.cachedInputTokens !== undefined ? (result.usage?.cachedInputTokens ?? 0) + u.cachedInputTokens : result.usage?.cachedInputTokens,
+          }
+        }
+      }
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
       // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's

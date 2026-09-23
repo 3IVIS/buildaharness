@@ -12,7 +12,7 @@ import { buildAnswerClaim } from './answer-claim.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { PlanRecord } from './plan-store.js'
 import { PlanService } from './plan-service.js'
-import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
+import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord, addThreadSuggestions, type GoalThread, type ThreadSuggestion } from './goal-graph-store.js'
 import { syncThreadFromTaskGraph } from './goal-thread-scheduler.js'
 import type { AssistantSession } from './assistant-session.js'
 import type { MemoryService } from './memory-service.js'
@@ -40,6 +40,11 @@ export class ResponseService {
     // stays undefined for every caller that predates goalGraphMode (same "absent means skip"
     // convention memory/agentLoop already follow in PlanDraftingService's constructor).
     private readonly memory?: MemoryAdapter,
+    // R7 (Tier 1.5, plans/hierarchical_goal_tree_and_steering_plan.html) — proposes next steps for
+    // a GoalThread the moment its own task evidence shows it just finished. Absent (the default for
+    // every caller that never opted in, and whenever goalGraphSuggestMode is 'disabled') means no
+    // proposal and no extra LLM call. Best-effort by construction: see syncGoalThreadEvidence.
+    private readonly nextStepProposer?: (thread: GoalThread, onUsage?: (usage: TokenUsage) => void) => Promise<ThreadSuggestion[]>,
   ) {}
 
   /**
@@ -52,11 +57,31 @@ export class ResponseService {
    * thread, not be silently dropped). A no-op when `memory` wasn't wired in, or the caller never
    * resolved a `threadId` — exactly today's behavior either way (INV-43).
    */
-  private async syncGoalThreadEvidence(sessionId: string, threadId: string | undefined, taskGraphTasks: { id: string; status: string }[]): Promise<void> {
+  private async syncGoalThreadEvidence(
+    sessionId: string,
+    threadId: string | undefined,
+    taskGraphTasks: { id: string; status: string }[],
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<void> {
     if (!threadId || !this.memory) return
     const fsPersistence = this.session.undoWorkspace()
     const goalGraph = (await loadGoalGraphRecord(this.memory, sessionId, fsPersistence)) ?? createEmptyGoalGraphRecord()
-    const updated = syncThreadFromTaskGraph(goalGraph, threadId, taskGraphTasks as { id: string; status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'HUMAN_REQUIRED' }[])
+    let updated = syncThreadFromTaskGraph(goalGraph, threadId, taskGraphTasks as { id: string; status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'HUMAN_REQUIRED' }[])
+
+    // R7: propose next steps exactly once, on the sync that carries this thread to DONE (the
+    // before/after status comparison — a thread that was already DONE never re-proposes). One
+    // bounded LLM call; any failure just means no suggestions, never a failed turn. High and
+    // medium confidence suggestions are persisted on the thread as advisory nodes; low confidence
+    // ones are advisory for this turn only and are dropped by addThreadSuggestions.
+    const before = goalGraph.threads.find((t) => t.id === threadId)
+    const after = updated.threads.find((t) => t.id === threadId)
+    if (this.nextStepProposer && before && after && before.status !== 'DONE' && after.status === 'DONE') {
+      try {
+        updated = addThreadSuggestions(updated, threadId, await this.nextStepProposer(after, onUsage))
+      } catch {
+        // best-effort — the thread is still correctly DONE
+      }
+    }
     await saveGoalGraphRecord(this.memory, sessionId, updated, fsPersistence)
   }
 
@@ -131,7 +156,7 @@ export class ResponseService {
     let pausedNote: string | undefined
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, checkpoint.runState.taskGraph.tasks)
-      await this.syncGoalThreadEvidence(sessionId, goalThreadId, checkpoint.runState.taskGraph.tasks)
+      await this.syncGoalThreadEvidence(sessionId, goalThreadId, checkpoint.runState.taskGraph.tasks, onUsage)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
       const next = this.planService.nextPendingTask(updatedPlan)
@@ -235,7 +260,7 @@ export class ResponseService {
     let planStatus: AssistantTurnResult['planStatus']
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, result.initResult.taskGraph.tasks)
-      await this.syncGoalThreadEvidence(sessionId, goalThreadId, result.initResult.taskGraph.tasks)
+      await this.syncGoalThreadEvidence(sessionId, goalThreadId, result.initResult.taskGraph.tasks, onUsage)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
     }
