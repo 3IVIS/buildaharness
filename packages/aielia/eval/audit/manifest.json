@@ -197,9 +197,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 12,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Within-turn. Sub-mechanisms C1 (criterion coverage) and C2 (change reviewer) live inside this pass, so this arm prices the whole pass including them. Eval-only ablation: AUDIT_REVIEWER_PASS=0 makes HarnessRuntime skip reviewerPass() (and any reviewer_pass_2 re-run) entirely; the shipped default cannot disable it and the Python twin is untouched. Eight single-turn, workspace-backed tasks: two stress each for the consistency lens (disagreeing sources), the abstraction-fit lens (wrong level of detail for the stated goal), and the adversarial lens (an embedded instruction the draft could accept uncritically), plus two clean-draft controls. Caveat: this entry stays last in the manifest so C1/C2's marginal results land before the whole-pass result that subsumes them."
+      "corpusNote": "Within-turn. Sub-mechanisms C1 (criterion coverage) and C2 (change reviewer) live inside this pass, so this arm prices the whole pass including them. Eval-only ablation: AUDIT_REVIEWER_PASS=0 makes HarnessRuntime skip reviewerPass() (and any reviewer_pass_2 re-run) entirely; the shipped default cannot disable it and the Python twin is untouched. Eight single-turn, workspace-backed tasks: two stress each for the consistency lens (disagreeing sources), the abstraction-fit lens (wrong level of detail for the stated goal), and the adversarial lens (an embedded instruction the draft could accept uncritically), plus two clean-draft controls. Caveat: this entry stays last in the manifest so C1/C2's marginal results land before the whole-pass result that subsumes them.",
+      "verdict": "CUT"
     }
   ]
 }

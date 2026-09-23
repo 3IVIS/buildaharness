@@ -70,7 +70,7 @@
     },
     "reviewer-pass": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.332638,
       "blocked": false
     }
