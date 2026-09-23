@@ -1,7 +1,6 @@
 import {
   EscalationHalt,
   InMemoryExperienceStore,
-  supervisorEnabled,
   resolveAskMode as resolveEffectiveAskMode,
   type ExperienceStore,
   type CheckpointStore,
@@ -59,6 +58,7 @@ import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
 import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
+import { resolveSupervisorEnabled } from './supervisor-flag.js'
 
 // Re-exported for full backward compatibility — every one of these used to be defined directly
 // in this file; they now live in the module that owns their logic (see each module's own doc
@@ -1054,9 +1054,9 @@ export class PersonalAssistant {
         oneLoopProposer,
         askModeEnabled,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Bound to this turn's read-only
-        // tools + risk hint; inert unless supervisorEnabled() also wires a supervisorDecider
+        // tools + risk hint; inert unless resolveSupervisorEnabled() also wires a supervisorDecider
         // (harness-bridge.ts), and then only reached on a real stall edge.
-        runInvestigation: supervisorEnabled()
+        runInvestigation: resolveSupervisorEnabled()
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
         updateChannel: steeringAdapter?.channel,

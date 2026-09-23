@@ -21,7 +21,6 @@ import {
   type SupervisorDirective,
   type UserQuestionData,
   type UpdateChannel,
-  supervisorEnabled,
   Budget,
 } from '@buildaharness/harness'
 import { decideSupervisorDirective } from './supervisor-decider.js'
@@ -41,6 +40,7 @@ import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
+import { resolveSupervisorEnabled } from './supervisor-flag.js'
 
 /**
  * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). EVAL-ONLY:
@@ -307,10 +307,10 @@ export class HarnessBridge {
         // harness degrades GATHER_EVIDENCE to CONTINUE.
         runInvestigation,
         // Trajectory Supervisor decider (S5) — the single stall-edge LLM call. Flag-gated on
-        // HARNESS_TRAJECTORY_SUPERVISOR (default OFF); when off, the harness never consults it
+        // HARNESS_TRAJECTORY_SUPERVISOR (aielia default ON since 2026-09-23 — supervisor-flag.ts); when off, the harness never consults it
         // and the whole supervisor path stays inert (INV-22). The harness itself only calls this
         // inside its own cannotMakeProgress() branch. Twin of the planner driver's _run_planner gate.
-        supervisorDecider: supervisorEnabled()
+        supervisorDecider: resolveSupervisorEnabled()
           ? (digest: TrajectoryDigestData) => decideSupervisorDirective(digest, this.llmClient, this.model(), onUsage)
           : undefined,
         onSupervisorDirective: (directive: SupervisorDirective) => {
@@ -320,7 +320,7 @@ export class HarnessBridge {
         // directive surface as a structured supervisor_question escalation instead of degrading
         // to a plain one. The escalation itself is carried out of run() as an EscalationHalt and
         // surfaced to the user by the sequencer; this hook is observability only.
-        askUser: supervisorEnabled()
+        askUser: resolveSupervisorEnabled()
           ? (q: UserQuestionData) => {
               this.onTrace?.({ kind: 'layer_activity', layer: 'supervisor', fired: true, reason: `ASK_USER: ${q.question}`.slice(0, 200) })
             }

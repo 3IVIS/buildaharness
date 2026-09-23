@@ -33,6 +33,7 @@ export type ArmName =
   | 'langgraph'
   | 'flagOn'
   | 'supervisorOn'
+  | 'supervisorOff'
   | 'contradictionOff'
   | 'injectionDetectOff'
   | 'failureMatchOff'
@@ -60,6 +61,7 @@ export type InjectedFailureKind = NonNullable<TaskSpec['injectedFailure']>
 const ONE_LOOP_ARMS: readonly ArmName[] = [
   'flagOn',
   'supervisorOn',
+  'supervisorOff',
   'contradictionOff',
   'injectionDetectOff',
   'failureMatchOff',
@@ -360,9 +362,20 @@ export const supervisorOnArm: Arm = {
     'PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled — the S7 supervisor-vs-no-supervisor differential arm',
   // Same one-loop config as `flagOn`; the only difference is the trajectory supervisor being
   // consulted on the cannotMakeProgress() stall edge. The Rule 6 comparison for the flag
-  // default-on flip is `flagOn` vs `supervisorOn` (isolates the supervisor), run over the S7
-  // `--slice=` corpus multi-seed — see eval/README.md.
+  // default-on flip was `flagOn` vs `supervisorOn` (isolates the supervisor), run over the S7
+  // `--slice=` corpus multi-seed — see eval/README.md. Since aielia defaulted the supervisor ON
+  // (2026-09-23) this arm is equivalent to `flagOn`; use `supervisorOff` as the differential.
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { supervisor: true }),
+}
+
+export const supervisorOffArm: Arm = {
+  name: 'supervisorOff',
+  label:
+    'PersonalAssistant (flagOn) with HARNESS_TRAJECTORY_SUPERVISOR=0 — the Trajectory Supervisor disabled (the pre-2026-09-23 aielia default)',
+  // aielia now defaults the supervisor ON (supervisor-flag.ts), so `flagOn` already includes it and
+  // `supervisorOn` is equivalent to `flagOn`. The supervisor's differential is `supervisorOff` vs
+  // `flagOn`: same one-loop config, the only difference being no stall-edge consult.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { env: { HARNESS_TRAJECTORY_SUPERVISOR: '0' } }),
 }
 
 export const contradictionOffArm: Arm = {
@@ -486,8 +499,9 @@ export const goalGraphOnArm: Arm = {
   name: 'goalGraphOn',
   label:
     'PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn',
-  // Phase 8's default-flip gate: baseline for this feature is `flagOn` (goalGraphMode stays at
-  // DEFAULT_GOAL_GRAPH_MODE = 'disabled', so `steering` messages run as queued followups); this arm
+  // Phase 8's default-flip gate: baseline for this feature is `flagOn`, which models goalGraphMode='disabled'
+  // (`steering` messages run as queued followups, the pre-2026-09-23 default — the product default is
+  // now 'enabled', but PersonalAssistant never reads the flag, so `flagOn` stays the flag-off baseline); this arm
   // isolates the one differential on the `goal_graph_*` corpus slices — final-reply correctness,
   // turns to resolution, and the cost/latency of the extra classifier call per absorbed message.
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { goalGraph: true }),
@@ -506,6 +520,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   flagOnArm,
   bareArm,
   supervisorOnArm,
+  supervisorOffArm,
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
@@ -523,6 +538,7 @@ export const ALL_ARMS: Arm[] = [
   flagOnArm,
   bareArm,
   supervisorOnArm,
+  supervisorOffArm,
   contradictionOffArm,
   injectionDetectOffArm,
   failureMatchOffArm,
