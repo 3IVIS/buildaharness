@@ -4,6 +4,7 @@ import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, InMemoryExperienceStore, type Task } from '@buildaharness/harness'
+import { LiveSteeringChannel } from './live-steering-channel.js'
 import { PersonalAssistant, trimmedAverage, nextItemBudget, type BatchBudgetState, type IndexedMessage } from './assistant.js'
 import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import type { SendEmail } from './email.js'
@@ -539,6 +540,92 @@ describe('PersonalAssistant', () => {
       expect(result.harnessSkipped).toBe(true)
       expect(result.nextSteps).toBeUndefined()
       expect(llm.nextStepCalls).toBe(0)
+    })
+  })
+
+  describe('cross-turn goal identity (goal graph on, i.e. a steeringChannel is passed)', () => {
+    /** Answers the identity matcher and the next-step proposer; everything else falls through to FakeLLMClient. */
+    class GoalAwareLLMClient extends FakeLLMClient {
+      matcherCalls = 0
+      matchTo: string | null = null
+      async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+        const system = String(messages[0]?.content)
+        if (system.includes('existing goal threads')) {
+          this.matcherCalls++
+          return { content: JSON.stringify({ matchedGoalId: this.matchTo, ambiguous: false }) }
+        }
+        if (system.includes('propose 0-3 concrete, actionable')) {
+          return { content: JSON.stringify({ suggestions: [{ description: 'check the time in Osaka too', confidence: 'high', rationale: 'same trip' }, { description: 'a speculative idea', confidence: 'low', rationale: 'r' }] }) }
+        }
+        return super.callChatStructured(messages, tools, options)
+      }
+    }
+    const fullTurn = 'Can you tell me what time it is in Tokyo right now?'
+
+    it('a full turn starts a thread, adopts the harness tasks, reaches DONE, and persists high-confidence suggestions (not low)', async () => {
+      const llm = new GoalAwareLLMClient('It is 3pm in Tokyo.')
+      const assistant = new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled' })
+
+      await assistant.turn(fullTurn, { sessionId: 'gid-1', steeringChannel: new LiveSteeringChannel() })
+
+      const state = await assistant.getGoalGraphState('gid-1')
+      expect(state.threads).toHaveLength(1)
+      expect(state.threads[0]).toMatchObject({ status: 'DONE', successCriteria: fullTurn })
+      expect(state.threads[0].tasks.total).toBeGreaterThan(0)
+      expect(state.threads[0].suggestions?.map((s) => s.description)).toEqual(['check the time in Osaka too'])
+      expect(llm.matcherCalls).toBe(0) // nothing open to match against, so no matcher call
+    })
+
+    it('a follow-up that matches an open thread lands on that thread instead of starting another', async () => {
+      const llm = new GoalAwareLLMClient('It is 3pm in Tokyo.')
+      const memory = new InMemoryAdapter()
+      const assistant = new PersonalAssistant({ llmClient: llm, memory })
+      const { startThread } = await import('./goal-thread-scheduler.js')
+      const { saveGoalGraphRecord } = await import('./goal-graph-store.js')
+      const seeded = startThread({ threads: [], activeThreadId: null, createdAt: 'x', updatedAt: 'x' }, 'find out the time in Tokyo')
+      await saveGoalGraphRecord(memory, 'gid-2', seeded.record)
+      llm.matchTo = seeded.activeThreadId
+
+      await assistant.turn(fullTurn, { sessionId: 'gid-2', steeringChannel: new LiveSteeringChannel() })
+
+      const state = await assistant.getGoalGraphState('gid-2')
+      expect(llm.matcherCalls).toBe(1)
+      expect(state.threads).toHaveLength(1)
+      expect(state.threads[0].id).toBe(seeded.activeThreadId)
+      expect(state.threads[0].tasks.total).toBeGreaterThan(0) // the open thread took this turn's evidence
+    })
+
+    it('an unrelated message next to an open thread starts a second thread and pauses the first', async () => {
+      const llm = new GoalAwareLLMClient('Done.')
+      const memory = new InMemoryAdapter()
+      const assistant = new PersonalAssistant({ llmClient: llm, memory })
+      const { startThread } = await import('./goal-thread-scheduler.js')
+      const { saveGoalGraphRecord } = await import('./goal-graph-store.js')
+      const seeded = startThread({ threads: [], activeThreadId: null, createdAt: 'x', updatedAt: 'x' }, 'plan a birthday party')
+      await saveGoalGraphRecord(memory, 'gid-3', seeded.record)
+      llm.matchTo = null
+
+      await assistant.turn(fullTurn, { sessionId: 'gid-3', steeringChannel: new LiveSteeringChannel() })
+
+      const state = await assistant.getGoalGraphState('gid-3')
+      expect(state.threads).toHaveLength(2)
+      expect(state.threads.find((t) => t.id === seeded.activeThreadId)?.status).toBe('PAUSED')
+    })
+
+    it('makes no thread and no matcher call when the goal graph is off (no steeringChannel — INV-43)', async () => {
+      const llm = new GoalAwareLLMClient('It is 3pm in Tokyo.')
+      const assistant = new PersonalAssistant({ llmClient: llm })
+      await assistant.turn(fullTurn, { sessionId: 'gid-4' })
+      expect((await assistant.getGoalGraphState('gid-4')).threads).toHaveLength(0)
+      expect(llm.matcherCalls).toBe(0)
+    })
+
+    it('makes no thread for a trivial fast-path turn', async () => {
+      const llm = new GoalAwareLLMClient('Paris.')
+      const assistant = new PersonalAssistant({ llmClient: llm })
+      const result = await assistant.turn('What is the capital of France?', { sessionId: 'gid-5', steeringChannel: new LiveSteeringChannel() })
+      expect(result.harnessSkipped).toBe(true)
+      expect((await assistant.getGoalGraphState('gid-5')).threads).toHaveLength(0)
     })
   })
 

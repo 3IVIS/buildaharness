@@ -55,6 +55,7 @@ import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } 
 import { proposeNextSteps, proposeTurnNextSteps } from './next-step-proposer.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
+import { resolveTurnGoalThread } from './goal-thread-identity.js'
 import { getGoalGraphState, type GoalGraphState } from './goal-graph-service.js'
 import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
@@ -1056,6 +1057,27 @@ export class PersonalAssistant {
       return this.responseService.buildTrivialResult({ sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal, onUsage: accumulateUsage })
     }
 
+    // Cross-turn goal identity (goal-thread-identity.ts): which goal thread does this full turn
+    // belong to? A continuation of an earlier goal brings that thread back into focus; anything
+    // else starts its own. Same gate as the Scheduler pass above (the caller passed
+    // `steeringChannel`, i.e. goalGraphMode is on), and never for a resumed turn — a staged-action
+    // approval, clarification answer or plan decision continues the thread the previous turn already
+    // resolved. (`approved` alone is not a resume marker: front ends pass `approved: false` on every
+    // ordinary turn, and a message-level approval re-runs a message that never got a thread.)
+    // Trivial one-liners returned just above, so they never create a thread or make this call.
+    const isContinuation = options.pendingActionId !== undefined || options.pendingClarificationId !== undefined || options.planApprovalId !== undefined
+    if (options.steeringChannel && this.memory && !isContinuation) {
+      goalThreadId = (await resolveTurnGoalThread({
+        userMessage,
+        sessionId,
+        memory: this.memory,
+        llmClient: this.llmClient,
+        model: this.model,
+        onUsage: accumulateUsage,
+        fsPersistence: this.session.undoWorkspace(),
+      })) ?? goalThreadId
+    }
+
     // A compound-looking request decomposes into multiple tasks, and/or an active/matched
     // durable plan drives this turn's task graph instead — see TurnInterpreter.resolveTasks.
     const { initialTasks, activePlan, planClassifiedTrace } =
@@ -1123,6 +1145,7 @@ export class PersonalAssistant {
           batchBudgetTrace,
           usageTotal,
           onUsage: accumulateUsage,
+          goalThreadId,
         })
       }
 
@@ -1140,6 +1163,7 @@ export class PersonalAssistant {
         batchBudgetTrace,
         usageTotal,
         onUsage: accumulateUsage,
+        goalThreadId,
       })
     } catch (err) {
       if (err instanceof EscalationHalt) {

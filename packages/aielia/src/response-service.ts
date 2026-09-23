@@ -60,13 +60,13 @@ export class ResponseService {
   private async syncGoalThreadEvidence(
     sessionId: string,
     threadId: string | undefined,
-    taskGraphTasks: { id: string; status: string }[],
+    taskGraphTasks: { id: string; status: string; description?: string; depends_on?: string[]; risk_level?: string }[],
     onUsage?: (usage: TokenUsage) => void,
   ): Promise<void> {
     if (!threadId || !this.memory) return
     const fsPersistence = this.session.undoWorkspace()
     const goalGraph = (await loadGoalGraphRecord(this.memory, sessionId, fsPersistence)) ?? createEmptyGoalGraphRecord()
-    let updated = syncThreadFromTaskGraph(goalGraph, threadId, taskGraphTasks as { id: string; status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'HUMAN_REQUIRED' }[])
+    let updated = syncThreadFromTaskGraph(goalGraph, threadId, taskGraphTasks as { id: string; status: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED' | 'BLOCKED' | 'HUMAN_REQUIRED'; description?: string; depends_on?: string[]; risk_level?: 'LOW' | 'MEDIUM' | 'HIGH' }[])
 
     // R7: propose next steps exactly once, on the sync that carries this thread to DONE (the
     // before/after status comparison — a thread that was already DONE never re-proposes). One
@@ -156,7 +156,6 @@ export class ResponseService {
     let pausedNote: string | undefined
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, checkpoint.runState.taskGraph.tasks)
-      await this.syncGoalThreadEvidence(sessionId, goalThreadId, checkpoint.runState.taskGraph.tasks, onUsage)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
       const next = this.planService.nextPendingTask(updatedPlan)
@@ -173,6 +172,10 @@ export class ResponseService {
       reply = reportedReply.trim() ? `${reportedReply}\n\n${pacingNote}` : pacingNote
       pausedNote = pacingNote
     }
+    // Land this run's task evidence on the goal thread the turn was resolved to — for every turn,
+    // not only a plan-driven one. This used to sit inside the `if (activePlan)` block above, so an
+    // ordinary turn never synced to its thread (and no thread could ever reach DONE).
+    await this.syncGoalThreadEvidence(sessionId, goalThreadId, checkpoint.runState.taskGraph.tasks, onUsage)
 
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
@@ -260,10 +263,11 @@ export class ResponseService {
     let planStatus: AssistantTurnResult['planStatus']
     if (activePlan) {
       const { plan: updatedPlan, planStatus: ps } = await this.planService.saveAndSummarize(sessionId, activePlan, result.initResult.taskGraph.tasks)
-      await this.syncGoalThreadEvidence(sessionId, goalThreadId, result.initResult.taskGraph.tasks, onUsage)
       planStatus = ps
       this.onTrace?.({ kind: 'plan_updated', templateName: updatedPlan.templateName, completionPct: ps.completionPct })
     }
+    // See the paused path: the thread sync applies to every turn, not only a plan-driven one.
+    await this.syncGoalThreadEvidence(sessionId, goalThreadId, result.initResult.taskGraph.tasks, onUsage)
 
     const answerClaim = buildAnswerClaim({
       evidence: result.initResult.evidenceStore.observations,

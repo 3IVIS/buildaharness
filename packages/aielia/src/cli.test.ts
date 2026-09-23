@@ -96,6 +96,11 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    // Auxiliary structured calls the goal graph makes around a turn (identity matcher, next-step
+    // proposer) must not consume a scripted tool call meant for the turn itself.
+    const system = String(messages[0]?.content ?? '')
+    if (system.includes('existing goal threads')) return { content: '{"matchedGoalId":null,"ambiguous":false}' }
+    if (system.includes('propose 0-3 concrete, actionable')) return { content: '{"suggestions":[]}' }
     const next = this.toolCalls.shift()
     if (next) return { content: '', toolCalls: [next] }
     return { content: 'Done.' }

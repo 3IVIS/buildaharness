@@ -226,9 +226,17 @@ export function tasksForGoal(record: GoalGraphRecord, goalId: string): GoalTaskR
   return thread ? thread.tasks : []
 }
 
-/** Every thread the Scheduler could hand focus to right now (Phase 5) — READY only, per INV-40 excluding anything mid-Tier-2-drafting is a Phase-5 concern once drafting sets a non-READY mode; Phase 4 just exposes the query. */
+/**
+ * Every thread the Scheduler could hand focus to right now (Phase 5): READY, and not mid-Tier-2
+ * drafting or awaiting approval (INV-40). A drafting thread's `status` is READY (see
+ * createGoalThreadFromPlanRecord / mintConcurrentReadyThread), so the exclusion has to look at
+ * `mode`, not just `status` — until 2026-09-23 this filtered on status alone, which quietly made
+ * INV-40 false: a thread minted by a NEW_GOAL steering message (mode 'drafting') was eligible for
+ * focus. The identity matcher (goal-thread-identity.ts) is what adopts such a thread, by matching
+ * a real turn to it and promoting its mode to 'active'.
+ */
 export function readyThreads(record: GoalGraphRecord): GoalThread[] {
-  return record.threads.filter((t) => t.status === 'READY')
+  return record.threads.filter((t) => t.status === 'READY' && t.mode !== 'drafting' && t.mode !== 'awaiting_approval')
 }
 
 /**
