@@ -1,0 +1,21 @@
+{
+  "id": "audit-decomposition-multistep-status-roundup-three-files",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Three deliverables named up front; a distractor turn intervenes; the last turn asks for a roundup, not a restatement of the request.",
+  "prompt": "I need three separate things checked before I ship this: the database port in config/db.md, the cache TTL in config/cache.md, and the queue's retry limit in config/queue.md. Can you get all three?",
+  "workspace": [
+    { "path": "config/db.md", "content": "# Database\n\nHost: db.internal\nPort: 5433\n" },
+    { "path": "config/cache.md", "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n" },
+    { "path": "config/queue.md", "content": "# Queue\n\nBroker: rabbitmq\nRetry limit: 6\n" }
+  ],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "Quick unrelated thing while you're on it — what's 15% of 200?" },
+    { "prompt": "Ok — give me a status roundup. Did you get all three, and what were the values?" }
+  ],
+  "grader": {
+    "contains": ["5433", "900", "6"]
+  },
+  "note": "Pass = all three values survive to the roundup turn despite the distractor. Fail = any of the three dropped after the distractor, or the roundup only reports the distractor's answer."
+}

@@ -1,0 +1,17 @@
+{
+  "id": "audit-decomposition-multistep-control-single-value-recap",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Single deliverable across turns, with one distractor — plain recall should suffice; decomposition/goal-tracking machinery is pure overhead.",
+  "prompt": "What's the database port in config/db.md?",
+  "workspace": [{ "path": "config/db.md", "content": "# Database\n\nHost: db.internal\nPort: 5433\n" }],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    { "prompt": "Random one — what's 9 plus 10?" },
+    { "prompt": "Can you remind me what the port was?" }
+  ],
+  "grader": {
+    "contains": ["5433"]
+  },
+  "note": "Control: single tracked item, no decomposition benefit possible. Should pass via plain memory recall alone — any regression here (vs. the un-decomposed baseline) is pure overhead cost, not a capability gain."
+}

@@ -1,0 +1,23 @@
+{
+  "id": "audit-decomposition-multistep-deliverable-added-midway",
+  "category": "multi_step",
+  "slice": "audit_decomposition_multistep",
+  "intent": "Only two deliverables named on turn 1; a third is added on the next turn (new workspace file arrives with it) — tracking must accept additions, not just an up-front decomposition.",
+  "prompt": "Please check config/db.md for the database port and config/cache.md for the cache TTL.",
+  "workspace": [
+    { "path": "config/db.md", "content": "# Database\n\nHost: db.internal\nPort: 5433\n" },
+    { "path": "config/cache.md", "content": "# Cache\n\nBackend: redis\nTTL: 900 seconds\n" }
+  ],
+  "tools": { "file": true, "web": false, "shell": false },
+  "followups": [
+    {
+      "prompt": "Also, can you check config/queue.md for the retry limit while you're at it?",
+      "addWorkspace": [{ "path": "config/queue.md", "content": "# Queue\n\nBroker: rabbitmq\nRetry limit: 6\n" }]
+    },
+    { "prompt": "Recap all three values for me now." }
+  ],
+  "grader": {
+    "contains": ["5433", "900", "6"]
+  },
+  "note": "Pass = all three values on the recap turn, including the one added after turn 1. Fail = the third deliverable (added mid-conversation, not in the original decomposition) is missing from the recap."
+}

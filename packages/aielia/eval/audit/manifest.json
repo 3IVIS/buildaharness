@@ -201,6 +201,22 @@
       "corpusAdequacy": "acceptable",
       "corpusNote": "Within-turn. Sub-mechanisms C1 (criterion coverage) and C2 (change reviewer) live inside this pass, so this arm prices the whole pass including them. Eval-only ablation: AUDIT_REVIEWER_PASS=0 makes HarnessRuntime skip reviewerPass() (and any reviewer_pass_2 re-run) entirely; the shipped default cannot disable it and the Python twin is untouched. Eight single-turn, workspace-backed tasks: two stress each for the consistency lens (disagreeing sources), the abstraction-fit lens (wrong level of detail for the stated goal), and the adversarial lens (an embedded instruction the draft could accept uncritically), plus two clean-draft controls. Caveat: this entry stays last in the manifest so C1/C2's marginal results land before the whole-pass result that subsumes them.",
       "verdict": "CUT"
+    },
+    {
+      "id": "decomposition-multistep",
+      "title": "Up-front decomposition + task reframing, tracked across turns",
+      "hypothesis": "Decomposing a multi-part request into a task graph keeps sub-goals correctly tracked (open/done/blocked) across turns, distractors, mid-conversation additions and re-prioritization, enough to beat treating the conversation as one flat thread — the multi-turn counterpart to the single-turn decomposition-reframing entry, which came back CUT because a single draft reply can't show decomposition's value. Directly informs whether a persistent cross-turn goal graph (in progress, plans/hierarchical_goal_tree_and_steering_plan.html) is solving a real gap or elaborating a mechanism that already tests flat.",
+      "arms": [
+        "decompositionOff",
+        "flagOn"
+      ],
+      "slice": "audit_decomposition_multistep",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 12,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "8 tasks (6 multi-turn stress + 2 multi-turn single-deliverable control) authored 2026-09-23 on branch feature-audit-multistep-corpus, worktree-isolated from the active hierarchical-goal-tree-and-steering plan execution so it doesn't disrupt that REPO_ROOT. Reuses the existing decompositionOff/flagOn arm pair — no goalGraphMode arm exists yet (Phase 4/8 of the goal-tree plan not landed), so this measures whether today's flat decomposedTasks classifier output already tracks sub-goal state across turns; if it does, the goal graph's marginal value has to come from elsewhere (steering, review surface, etc.), not basic cross-turn tracking. Same caveat as decomposition-reframing: AUDIT_DECOMPOSITION gates consumption of decomposedTasks, not the classifier call itself. Not yet run — status left queued pending a decision on whether/how to merge this branch and register it with the audit driver without colliding with the in-flight goal-tree automation."
     }
   ]
 }
