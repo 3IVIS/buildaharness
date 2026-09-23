@@ -180,9 +180,10 @@
       "seeds": 3,
       "fullPages": "all",
       "maxSpendUsd": 10,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Mechanical layer; single-turn covers within-turn defects (a stated total or average contradicting its own samples, conflicting sources, a missing file, an empty search, a pending figure) plus 2 correct-result controls. Eval-only ablation: AUDIT_VERIFICATION=0 makes HarnessRuntime skip verify() and treat each iteration as an empty pass; the shipped default cannot disable it and the Python twin is untouched. Caveats: an arm without verification also loses the recovery cycles verification triggers, so the entry must report recovery and cost alongside success; verification checks against the turn's own evidence, not ground truth, so a defect the model copies verbatim from a file may pass in both arms; the ablated arm also has no answerClaim verification_status (no_evidence/unverified_attempted)."
+      "corpusNote": "Mechanical layer; single-turn covers within-turn defects (a stated total or average contradicting its own samples, conflicting sources, a missing file, an empty search, a pending figure) plus 2 correct-result controls. Eval-only ablation: AUDIT_VERIFICATION=0 makes HarnessRuntime skip verify() and treat each iteration as an empty pass; the shipped default cannot disable it and the Python twin is untouched. Caveats: an arm without verification also loses the recovery cycles verification triggers, so the entry must report recovery and cost alongside success; verification checks against the turn's own evidence, not ground truth, so a defect the model copies verbatim from a file may pass in both arms; the ablated arm also has no answerClaim verification_status (no_evidence/unverified_attempted).",
+      "verdict": "CUT"
     },
     {
       "id": "reviewer-pass",

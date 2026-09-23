@@ -64,7 +64,7 @@
     },
     "verification-layer": {
       "seedsDone": 3,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.348343,
       "blocked": false
     }
