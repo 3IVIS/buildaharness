@@ -36,7 +36,7 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
+import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
@@ -844,6 +844,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log(`\n${formatSearchResults(hits, query)}\n`)
   }
 
+  /** `/goals` — R5's review surface (see plans/hierarchical_goal_tree_and_steering_plan.html Phase 7): every known goal thread this session, tagged with its visibility bucket. A pure read, same "never an LLM call" discipline as /search — works whether or not goalGraphMode is enabled, since it just shows whatever the session's GoalGraphRecord already holds (empty for a session that never touched goal-thread machinery). */
+  async function handleGoals(): Promise<void> {
+    const state = await assistant.getGoalGraphState('cli')
+    console.log(`\n${formatGoalGraphState(state)}\n`)
+  }
+
   async function printCost(): Promise<void> {
     const spendCapLine = await spendCapStatusLine()
     // Source "This session" from the persisted spend ledger (assistant.getSpendState) — the same
@@ -1530,6 +1536,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     '/undo-action': (args) => handleUndoAction(args),
     '/memory': (args) => handleMemory(args),
     '/search': (args) => handleSearch(args),
+    '/goals': () => handleGoals(),
     '/model': (args) => handleModel(args),
     '/project': (args) => handleProject(args),
     '/cost': () => printCost(),

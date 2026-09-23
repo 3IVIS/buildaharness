@@ -2,6 +2,7 @@ import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
 import type { MemorySummary, MemoryExport, TranscriptSearchHit, PendingFact, FactCategory, MemoryPendingOutcome } from './assistant.js'
+import type { GoalGraphState, GoalThreadView, GoalThreadVisibility } from './goal-graph-service.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import { certaintyLabel, type UserFact } from './fact-extraction.js'
 
@@ -40,6 +41,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/sources', description: 'List files/URLs the last turn actually consulted' },
   { command: '/plan', description: "Show the active structured plan's task status" },
   { command: '/plan sketch <request>', description: 'One-shot, advisory plan sketch — no PlanRecord, nothing staged, cannot execute' },
+  { command: '/goals', description: 'Review every known goal thread this session — status, tasks, and visibility (freshly computed / carried over / done / suggested)' },
   { command: '/config ...', description: 'View or change persisted settings' },
   { command: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint' },
 ]
@@ -216,6 +218,36 @@ export function formatSearchResults(hits: TranscriptSearchHit[], query: string):
       return `  [${shortSession}] ${h.at}  ${h.role.padEnd(9)} ${snippet(h.content, query)}`
     })
     .join('\n')
+}
+
+const VISIBILITY_LABEL: Record<GoalThreadVisibility, string> = {
+  suggested_not_committed: 'suggested, not committed',
+  done: 'done',
+  freshly_computed: 'freshly computed',
+  carried_over: 'carried over',
+}
+
+function formatGoalThreadLine(thread: GoalThreadView): string {
+  const focus = thread.isActive ? ' [ACTIVE]' : ''
+  const sibling = thread.relationToSiblings ? ` (${thread.relationToSiblings} sibling${thread.siblingIds && thread.siblingIds.length > 1 ? 's' : ''})` : ''
+  const { total, complete, failed, pending } = thread.tasks
+  const taskLine = total > 0 ? `tasks: ${complete}/${total} complete${failed > 0 ? `, ${failed} failed` : ''}${pending > 0 ? `, ${pending} pending` : ''}` : 'no tasks yet'
+  return [
+    `  [${thread.status}]${focus} ${thread.successCriteria}${sibling}`,
+    `    visibility: ${VISIBILITY_LABEL[thread.visibility]}  ·  ${taskLine}  ·  updated ${thread.updatedAt}`,
+  ].join('\n')
+}
+
+/**
+ * Renders `/goals`' review surface (R5, "Visibility") — every known GoalThread this session, each
+ * tagged with which of R5's four visibility buckets it falls in
+ * (freshly-computed/carried-over/done/suggested-but-not-committed), so a user can tell live state
+ * apart from stale carryover without re-deriving it from raw JSON. An empty graph is an explicit
+ * line, same convention `formatSearchResults` follows for zero hits.
+ */
+export function formatGoalGraphState(state: GoalGraphState): string {
+  if (state.threads.length === 0) return 'No goal threads yet.'
+  return state.threads.map((t) => formatGoalThreadLine(t)).join('\n\n')
 }
 
 function undoLogEntryLabel(entry: UndoLogEntry): string {

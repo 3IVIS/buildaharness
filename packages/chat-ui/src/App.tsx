@@ -26,6 +26,7 @@ import {
   type PlanRecord,
   type PlanDecision,
   type PlanApprovalEdits,
+  type GoalGraphState,
 } from '@buildaharness/aielia'
 import {
   LLMClient,
@@ -52,6 +53,7 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SearchPanel } from './components/SearchPanel'
+import { GoalsPanel } from './components/GoalsPanel'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
@@ -360,7 +362,7 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings' | 'search'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals'>('chat')
   // Optimistic default so Settings is usable immediately — refreshed to the real persisted
   // value once createConfigStore().load() resolves, a moment later (see the mount effect).
   const initialResolved = resolveConfig({}, envOverrides)
@@ -391,6 +393,11 @@ export function App(): React.JSX.Element {
   // reply's `planStatus` looks the same shape as an executing plan's). Refreshed after every
   // turn via `assistant.getPlanState()` rather than derived from the turn result alone.
   const [planState, setPlanState] = useState<PlanRecord | null>(null)
+  // Phase 7 of plans/hierarchical_goal_tree_and_steering_plan.html (R5, "Visibility") — populated
+  // when the Goals panel opens (see handleOpenGoals), same "compute when asked for" convention
+  // memorySummary/healthChecks above follow. `null` means "still loading", distinct from an
+  // empty-but-loaded graph (state.threads.length === 0).
+  const [goalGraphState, setGoalGraphState] = useState<GoalGraphState | null>(null)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
   const sessionIdRef = useRef(newId())
@@ -459,6 +466,15 @@ export function App(): React.JSX.Element {
     const assistant = assistantRef.current
     if (!assistant) return []
     return assistant.searchTranscript(query)
+  }
+
+  /** GUI equivalent of the CLI's /goals (R5, "Visibility") — see GoalsPanel.tsx's doc comment. Resets to the loading state on every open rather than showing stale data from a prior open, then populates from the same getGoalGraphState() query layer the CLI reads through. */
+  async function handleOpenGoals(): Promise<void> {
+    setView('goals')
+    setGoalGraphState(null)
+    const assistant = assistantRef.current
+    if (!assistant) return
+    setGoalGraphState(await assistant.getGoalGraphState(sessionIdRef.current))
   }
 
   /** GUI equivalent of /clear — ends the conversation and resets every piece of derived UI state alongside it, so nothing shows stale data for the fresh session. */
@@ -864,6 +880,10 @@ export function App(): React.JSX.Element {
     return <SearchPanel search={handleSearchTranscript} onCancel={() => setView('chat')} />
   }
 
+  if (view === 'goals') {
+    return <GoalsPanel state={goalGraphState} onCancel={() => setView('chat')} />
+  }
+
   if (view === 'settings') {
     return (
       <SettingsScreen
@@ -896,6 +916,7 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
           <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
+          <button type="button" aria-label="Goals" title="Review goal threads for this session" onClick={() => void handleOpenGoals()}>Goals</button>
           <button
             type="button"
             aria-label="Sketch a plan"

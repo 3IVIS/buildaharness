@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage } from '@buildaharness/runtime'
 import { DEFAULT_CONFIG } from './config.js'
-import { formatHelp, formatStatus, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
+import { formatHelp, formatStatus, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatTranscriptMarkdown, defaultExportFilename, formatCostSummary, formatDoctorReport, CLI_COMMANDS_HELP } from './cli-session.js'
+import type { GoalGraphState, GoalThreadView } from './goal-graph-service.js'
 import type { MemorySummary, MemoryExport, TranscriptSearchHit } from './assistant.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 
@@ -13,12 +14,12 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 23 commands documented for this plan', () => {
+  it('includes all 24 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
       '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/memory forget <n>', '/search <query>',
       '/model [name]', '/project [name]', '/cost', '/doctor', '/why', '/layers',
-      '/sources', '/plan', '/plan sketch <request>', '/config ...', '/checkpoint [clear]',
+      '/sources', '/plan', '/plan sketch <request>', '/goals', '/config ...', '/checkpoint [clear]',
     ])
   })
 })
@@ -224,6 +225,59 @@ describe('formatSearchResults', () => {
     const output = formatSearchResults(hits, 'dentist appointment')
     expect(output.length).toBeLessThan(longContent.length)
     expect(output).toContain('dentist appointment')
+  })
+})
+
+function makeThreadView(overrides: Partial<GoalThreadView> = {}): GoalThreadView {
+  return {
+    id: 't1',
+    status: 'ACTIVE',
+    visibility: 'carried_over',
+    successCriteria: 'Ship the launch.',
+    tasks: { total: 3, complete: 1, failed: 0, pending: 2 },
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+describe('formatGoalGraphState', () => {
+  it('returns an explicit "no goal threads" message for an empty graph, never a blank output', () => {
+    const state: GoalGraphState = { activeThreadId: null, threads: [] }
+    expect(formatGoalGraphState(state)).toContain('No goal threads')
+  })
+
+  it('renders each thread with status, success criteria, visibility label, and task counts', () => {
+    const state: GoalGraphState = { activeThreadId: 't1', threads: [makeThreadView()] }
+    const output = formatGoalGraphState(state)
+    expect(output).toContain('[ACTIVE]')
+    expect(output).toContain('Ship the launch.')
+    expect(output).toContain('carried over')
+    expect(output).toContain('1/3 complete')
+    expect(output).toContain('2 pending')
+  })
+
+  it('distinguishes all four R5 visibility buckets in the rendered output', () => {
+    const state: GoalGraphState = {
+      activeThreadId: 't-active',
+      threads: [
+        makeThreadView({ id: 't-active', visibility: 'freshly_computed', isActive: true }),
+        makeThreadView({ id: 't-carried', visibility: 'carried_over', isActive: false, status: 'READY' }),
+        makeThreadView({ id: 't-done', visibility: 'done', isActive: false, status: 'DONE' }),
+        makeThreadView({ id: 't-suggested', visibility: 'suggested_not_committed', isActive: false, status: 'READY' }),
+      ],
+    }
+    const output = formatGoalGraphState(state)
+    expect(output).toContain('freshly computed')
+    expect(output).toContain('carried over')
+    expect(output).toContain('done')
+    expect(output).toContain('suggested, not committed')
+  })
+
+  it('does not mark a non-active thread as [ACTIVE]', () => {
+    const state: GoalGraphState = { activeThreadId: null, threads: [makeThreadView({ isActive: false, status: 'PAUSED' })] }
+    expect(formatGoalGraphState(state)).not.toContain('[ACTIVE]')
   })
 })
 

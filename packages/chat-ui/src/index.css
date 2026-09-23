@@ -1207,3 +1207,101 @@ body {
   border-radius: 3px;
   padding: 0 1px;
 }
+
+.goals-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: min(1100px, 92vw);
+  margin: 0 auto;
+}
+
+.goals-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.goals-panel__back {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.goals-panel__title {
+  font-weight: 700;
+}
+
+.goals-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.goals-panel__empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.goals-panel__threads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.goals-panel__thread {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goals-panel__thread-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.goals-panel__status {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.goals-panel__active-badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-weight: 700;
+}
+
+.goals-panel__visibility {
+  margin-left: auto;
+}
+
+.goals-panel__success-criteria {
+  font-size: 14px;
+}
+
+.goals-panel__thread-footer {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}

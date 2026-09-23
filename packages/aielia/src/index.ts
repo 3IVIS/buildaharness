@@ -1,5 +1,6 @@
 export { PersonalAssistant } from './assistant.js'
 export type { AssistantTurnResult, ProposerKind, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
+export type { GoalGraphState, GoalThreadView, GoalThreadVisibility, GoalTaskSummary } from './goal-graph-service.js'
 export type { AnswerClaim, AnswerClaimSourceType, AnswerClaimVerificationStatus } from './answer-claim.js'
 export { classifyRisk } from './risk-classifier.js'
 export type { RiskClassification } from './risk-classifier.js'
@@ -109,6 +110,6 @@ export type { ScriptedLLMClientScript } from './scripted-llm-client.js'
 // formatters with no Node-only imports, reused as-is by chat-ui's header Export button and
 // Settings > Diagnostics section so the CLI and GUI never drift into two descriptions of the
 // same facts.
-export { formatMemorySummary, formatSearchResults, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
+export { formatMemorySummary, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
 export type { CostSummaryInfo, DoctorCheck } from './cli-session.js'
 export { estimateCostUsd } from './model-pricing.js'

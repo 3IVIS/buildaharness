@@ -54,6 +54,7 @@ import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
+import { getGoalGraphState, type GoalGraphState } from './goal-graph-service.js'
 import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
@@ -66,6 +67,7 @@ import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKi
 export type { MemorySummary, MemoryExport, PendingFact } from './memory-service.js'
 export type { FactCategory } from './turn-intent-classifier.js'
 export type { IndexedMessage, TranscriptSearchHit } from './assistant-session.js'
+export type { GoalGraphState, GoalThreadView, GoalThreadVisibility, GoalTaskSummary } from './goal-graph-service.js'
 export type { BatchBudgetState } from './agent-loop.js'
 export { trimmedAverage, nextItemBudget } from './agent-loop.js'
 export type { AssistantSource } from './assistant-source.js'
@@ -556,6 +558,17 @@ export class PersonalAssistant {
    */
   async getPlanState(sessionId: string): Promise<PlanRecord | null> {
     return this.planService.loadPlanRecord(sessionId)
+  }
+
+  /**
+   * Phase 7 of plans/hierarchical_goal_tree_and_steering_plan.html (R5, "Visibility") — the shared
+   * read surface behind the CLI's `/goals` and chat-ui's GoalsPanel, analogous to `searchTranscript`
+   * above. A pure query over whatever Phases 4-5 already populate in this session's
+   * `GoalGraphRecord`; never mints or mutates one. Returns the empty state for a session with no
+   * goal graph yet, same "nothing to show" convention `getGoalGraphState` itself documents.
+   */
+  async getGoalGraphState(sessionId: string): Promise<GoalGraphState> {
+    return getGoalGraphState(this.memory, sessionId, this.session.undoWorkspace())
   }
 
   /**

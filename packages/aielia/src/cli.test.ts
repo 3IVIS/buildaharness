@@ -830,7 +830,7 @@ describe('clarification-prompt handling (Q6)', () => {
 })
 
 describe('command dispatch table', () => {
-  const NO_ARG_COMMANDS = ['/why', '/layers', '/sources', '/plan', '/help', '/status', '/cost']
+  const NO_ARG_COMMANDS = ['/why', '/layers', '/sources', '/plan', '/help', '/status', '/cost', '/goals']
 
   it.each(NO_ARG_COMMANDS)('%s routes to its handler without throwing and without invoking the LLM', async (command) => {
     const llm = new FakeLLMClient()
@@ -850,6 +850,15 @@ describe('command dispatch table', () => {
     await cli.dispatchLine('/search')
 
     expect(lines.join('\n')).toContain('Usage: /search')
+  })
+
+  it('/goals prints the empty-graph message for a session that never touched goal-thread machinery', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/goals')
+
+    expect(lines.join('\n')).toContain('No goal threads')
   })
 
   it('/model with no argument shows the current value without changing config', async () => {
