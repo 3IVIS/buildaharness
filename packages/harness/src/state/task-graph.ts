@@ -13,8 +13,25 @@ export const TaskSchema = z.object({
   abstraction_level: z.number().int().nonnegative(),
   assigned_strategy: z.string().nullable(),
   block_reason: z.string().optional(),
+  /**
+   * Hierarchical goal tree fields (Phase 1 of plans/hierarchical_goal_tree_and_steering_plan.html)
+   * — schema-only in this phase: nothing produces or consumes these yet (wiring lands Phase 4+),
+   * so they're all optional and every existing Task literal/persisted record round-trips unchanged.
+   * `node_kind` distinguishes an ordinary work item from a `goal_hypothesis` node — a competing
+   * guess at the user's actual intent, per R3. `goal_id` is the stable task→goal parent link (R2)
+   * so "which goal does this task belong to" is an O(1) field read, not a graph traversal.
+   * `hypothesis_ids` groups a `goal_hypothesis` node with its sibling hypotheses, and
+   * `relation_to_siblings` says whether those siblings are competing guesses where resolving one
+   * abandons the others (`alternative`), or genuinely separate goals that coexist (`concurrent`).
+   */
+  node_kind: z.enum(['task', 'goal_hypothesis']).optional(),
+  goal_id: z.string().nullable().optional(),
+  hypothesis_ids: z.array(z.string()).optional(),
+  relation_to_siblings: z.enum(['alternative', 'concurrent']).optional(),
 })
 export type Task = z.infer<typeof TaskSchema>
+export type TaskNodeKind = NonNullable<Task['node_kind']>
+export type SiblingRelation = NonNullable<Task['relation_to_siblings']>
 
 export const TaskGraphSchema = z.object({
   tasks: z.array(TaskSchema),

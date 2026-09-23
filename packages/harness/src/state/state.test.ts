@@ -5,7 +5,7 @@ import {
 } from './world-model.js'
 import { CallerState } from './caller-state.js'
 import { ControlState } from './control-state.js'
-import { TaskGraph, makeConflictKey } from './task-graph.js'
+import { TaskGraph, TaskSchema, makeConflictKey } from './task-graph.js'
 import { EvidenceStore } from './evidence-store.js'
 import { MemoryState } from './memory-state.js'
 import { StrategyState, DEFAULT_STRATEGY_ORDER } from './strategy-state.js'
@@ -129,6 +129,45 @@ describe('TaskGraph', () => {
     expect(makeConflictKey('domain_a', 'domain_b')).toBe(makeConflictKey('domain_b', 'domain_a'))
     expect(makeConflictKey('x', 'y')).toBe('x::y')
     expect(makeConflictKey('y', 'x')).toBe('x::y')
+  })
+
+  it('TaskSchema parses a pre-existing task with no goal-tree fields (INV-43: byte-identical when unused)', () => {
+    const legacy = {
+      id: 't1', description: 'task', status: 'PENDING',
+      risk_level: 'LOW', depends_on: [], parallel_write_domains: [],
+      abstraction_level: 0, assigned_strategy: null,
+    }
+    const parsed = TaskSchema.parse(legacy)
+    expect(parsed.node_kind).toBeUndefined()
+    expect(parsed.goal_id).toBeUndefined()
+    expect(parsed.hypothesis_ids).toBeUndefined()
+    expect(parsed.relation_to_siblings).toBeUndefined()
+  })
+
+  it('TaskSchema round-trips a goal_hypothesis node with hypothesis_ids/relation_to_siblings/goal_id', () => {
+    const hypothesisNode = {
+      id: 'h1', description: 'maybe the user wants to plan a trip', status: 'PENDING',
+      risk_level: 'LOW', depends_on: [], parallel_write_domains: [],
+      abstraction_level: 0, assigned_strategy: null,
+      node_kind: 'goal_hypothesis', goal_id: null,
+      hypothesis_ids: ['h1', 'h2'], relation_to_siblings: 'alternative',
+    }
+    const parsed = TaskSchema.parse(hypothesisNode)
+    expect(parsed.node_kind).toBe('goal_hypothesis')
+    expect(parsed.hypothesis_ids).toEqual(['h1', 'h2'])
+    expect(parsed.relation_to_siblings).toBe('alternative')
+    expect(TaskSchema.parse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed)
+  })
+
+  it('TaskSchema accepts a plain task with only a goal_id parent link (R2)', () => {
+    const parsed = TaskSchema.parse({
+      id: 't2', description: 'book the flight', status: 'PENDING',
+      risk_level: 'LOW', depends_on: [], parallel_write_domains: [],
+      abstraction_level: 0, assigned_strategy: null,
+      node_kind: 'task', goal_id: 'h1',
+    })
+    expect(parsed.goal_id).toBe('h1')
+    expect(parsed.hypothesis_ids).toBeUndefined()
   })
 })
 
