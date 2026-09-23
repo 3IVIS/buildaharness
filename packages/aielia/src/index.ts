@@ -88,6 +88,8 @@ export { resolvePlanMode, normalizePlanMode, DEFAULT_PLAN_MODE } from './plan-mo
 export type { PlanRolloutMode } from './plan-mode-flag.js'
 export { resolveGoalGraphMode, normalizeGoalGraphMode, DEFAULT_GOAL_GRAPH_MODE } from './goal-graph-flag.js'
 export type { GoalGraphMode } from './goal-graph-flag.js'
+export { resolveGoalGraphSuggestMode, normalizeGoalGraphSuggestMode, DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
+export type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 export { LiveSteeringChannel } from './live-steering-channel.js'
 export type { SteeringEvent } from './live-steering-channel.js'
 export { AskClarificationService } from './ask-clarification-service.js'
