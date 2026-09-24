@@ -31,6 +31,8 @@ function fakeAssistant(nextSteps: { description: string; rationale: string; conf
 
 describe('App — turn-end next-step options', () => {
   beforeEach(() => {
+    // Already-configured user: skips the first-launch SetupWizard (covered in its own tests below).
+    localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'proxy' }))
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
   })
   afterEach(() => {

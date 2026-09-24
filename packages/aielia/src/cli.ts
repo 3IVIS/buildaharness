@@ -46,6 +46,7 @@ import { isGoalGraphEnabled } from './goal-graph-flag.js'
 import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
+import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
 import { shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
 import { parseCliArgs, cliHelpText } from './cli-args.js'
@@ -246,6 +247,8 @@ export interface RunCliOptions {
   detectClaudeCli?: () => Promise<boolean>
   /** Test seam: script the first-run setup's line reads. */
   firstRunAsk?: (question: string) => Promise<string>
+  /** Test seam: stub the live API-key check in the first-run setup (defaults to a real call to the provider). */
+  firstRunTestKey?: (backend: KeyedBackend, key: string) => Promise<KeyTestResult>
 }
 
 export interface CliInstance {
@@ -313,6 +316,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           options.detectClaudeCli ??
           (async () => (await checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')).ok),
         log: (line) => outputStream.write(`${line}\n`),
+        testKey: options.firstRunTestKey ?? ((backend, key) => testApiKey(backend, key)),
       })
     } finally {
       setupRl?.close()

@@ -43,6 +43,19 @@ Renders each `AssistantTurnResult` status distinctly:
 - `escalated` — a halt banner; the harness needs more information than the
   turn provided and there's nothing to approve.
 
+## First-launch setup
+
+On the first launch with nothing configured (no persisted backend/key and no
+`VITE_ASSISTANT_*` var pinning one — so hosted/self-hosted builds skip it),
+`App.tsx` shows `SetupWizard.tsx` instead of the chat. It is the GUI twin of the CLI's
+`first-run.ts` and shares its provider names, key-format checks and live key test
+(`provider-setup.ts` in `@buildaharness/aielia`). On desktop it detects a signed-in
+`claude` CLI (`check_claude_available`) and offers "Use my Claude login" first — no key
+needed; otherwise the user picks a provider, follows the "where do I get a key" steps,
+pastes the key (hidden by default, cleaned and format-checked, then verified with a free
+read-only call to the provider) and is dropped into chat. "Set up later" skips it for
+that launch; the wizard returns until something is configured.
+
 ## Settings
 
 The gear icon in the header swaps the whole screen for `SettingsScreen.tsx` —
