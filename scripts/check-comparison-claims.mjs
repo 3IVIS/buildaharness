@@ -126,6 +126,60 @@ export const CLAIMS = [
     expected: false, // explicitly a non-goal — see docs/threat-model.md
     resolve: () => sourceHas('seccomp|landlock|sandbox-exec|firejail|bwrap'),
   },
+  {
+    id: 'verification_mechanical_layers_skip',
+    description: 'Verification: syntax / unit / integration / goal_correctness report SKIPPED in packages/harness (only consistency, evidence_sufficiency and output_contract can pass) — the site must not claim "9-layer verification" at full coverage.',
+    expected: true,
+    resolve: () =>
+      fileHas('packages/harness/src/nodes/verify.ts', /layer: 'syntax', status: 'SKIPPED'/) &&
+      fileHas('packages/harness/src/nodes/verify.ts', /layer: 'unit', status: 'SKIPPED'/) &&
+      fileHas('packages/harness/src/nodes/verify.ts', /layer: 'integration', status: 'SKIPPED'/) &&
+      fileHas('packages/harness/src/nodes/verify.ts', /layer: 'goal_correctness',\s*status: 'SKIPPED'/),
+  },
+  {
+    id: 'reviewer_three_lenses',
+    description: 'The Reviewer Pass has three lenses — implementer, reviewer, adversarial — plus a separate abstraction-fit recompute.',
+    expected: true,
+    resolve: () =>
+      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function implementerLens\b/) &&
+      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function reviewerLens\b/) &&
+      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function adversarialLens\b/) &&
+      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /recomputeAbstractionFit/),
+  },
+  {
+    id: 'control_state_five_tiers',
+    description: 'The Control State resolver applies five tiers in strict order (the NORMAL / CAUTIOUS / BLOCKED reading is derived from split fields).',
+    expected: true,
+    resolve: () =>
+      fileHas('adapter/harness/control_state.py', /five tiers/i) &&
+      fileHas('packages/harness/src/state/control-state.ts', /NORMAL' \| 'CAUTIOUS' \| 'BLOCKED'/),
+  },
+  {
+    id: 'goal_graph_and_steering_default_on',
+    description: 'Aielia ships the hierarchical goal graph, mid-turn steering and next-step options ON by default.',
+    expected: true,
+    resolve: () =>
+      fileHas('packages/aielia/src/goal-graph-flag.ts', /DEFAULT_GOAL_GRAPH_MODE: GoalGraphMode = 'enabled'/) &&
+      fileHas('packages/aielia/src/goal-graph-suggest-flag.ts', /DEFAULT_GOAL_GRAPH_SUGGEST_MODE: GoalGraphSuggestMode = 'enabled'/),
+  },
+  {
+    id: 'one_loop_default_on',
+    description: 'The harness drives the tool-calling loop (ASSISTANT_ONE_LOOP) by default.',
+    expected: true,
+    resolve: () => fileHas('packages/aielia/src/one-loop-flag.ts', /DEFAULT_ONE_LOOP_MODE: OneLoopMode = 'enabled'/),
+  },
+  {
+    id: 'plan_mode_default_off',
+    description: 'The durable, approval-gated plan mode is opt-in (default "legacy"), not on by default.',
+    expected: true,
+    resolve: () => fileHas('packages/aielia/src/plan-mode-flag.ts', /DEFAULT_PLAN_MODE: PlanRolloutMode = 'legacy'/),
+  },
+  {
+    id: 'reminder_tools_shipped',
+    description: 'Aielia ships create_reminder / list_reminders (9 tools total with read/list/write/shell/web_search/fetch_url/send_email).',
+    expected: true,
+    resolve: () => sourceHas("name:\\s*['\\\"]create_reminder['\\\"]") && sourceHas("name:\\s*['\\\"]list_reminders['\\\"]"),
+  },
 ]
 
 export function evaluateClaims() {
