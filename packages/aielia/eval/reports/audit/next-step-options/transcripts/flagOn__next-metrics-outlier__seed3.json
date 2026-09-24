@@ -6,7 +6,7 @@
   "prompt": "What is the average latency in metrics.csv?",
   "events": [
     {
-      "t": 1790234683820,
+      "t": 1790247602556,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -21,7 +21,7 @@
       ]
     },
     {
-      "t": 1790234683820,
+      "t": 1790247602556,
       "kind": "trace",
       "detail": {
         "kind": "turn_start",
@@ -30,24 +30,24 @@
       }
     },
     {
-      "t": 1790234683820,
+      "t": 1790247602556,
       "kind": "debug",
       "tool": "user_message",
       "result": "What is the average latency in metrics.csv?"
     },
     {
-      "t": 1790234688865,
+      "t": 1790247608350,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Read-only informational question about computing an average from a local file; no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
+      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Read-only informational question about a file's contents; no side effects.\",\"isTrivial\":true,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
       "usage": {
         "inputTokens": 2,
-        "outputTokens": 386,
-        "costUsd": 0.004373800000000001
+        "outputTokens": 413,
+        "costUsd": 0.0062588
       }
     },
     {
-      "t": 1790234688866,
+      "t": 1790247608350,
       "kind": "trace",
       "detail": {
         "kind": "risk_classified",
@@ -56,90 +56,7 @@
       }
     },
     {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "proposer_selected",
-        "proposerKind": "flat-oneloop"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "triviality_classified",
-        "isTrivial": false
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "execution_mode_classified",
-        "mode": "TOOL"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "plan_classified",
-        "isCandidate": false,
-        "matchedTemplate": null
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "contradiction",
-        "fired": false,
-        "reason": "fewer than 2 beliefs — nothing to compare"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "hypothesis",
-        "fired": false,
-        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "diagnostics",
-        "fired": true,
-        "reason": "Health: nominal"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "control_state",
-        "fired": false,
-        "reason": "NORMAL"
-      }
-    },
-    {
-      "t": 1790234688866,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "execution",
-        "fired": true,
-        "reason": "module_type=business_logic"
-      }
-    },
-    {
-      "t": 1790234688867,
+      "t": 1790247608351,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -154,16 +71,7 @@
       ]
     },
     {
-      "t": 1790234688867,
-      "kind": "trace",
-      "detail": {
-        "kind": "harness_node",
-        "node": "action_gate",
-        "stepsUsed": 1
-      }
-    },
-    {
-      "t": 1790234690437,
+      "t": 1790247609894,
       "kind": "trace",
       "detail": {
         "kind": "tool_policy_decision",
@@ -173,136 +81,42 @@
       }
     },
     {
-      "t": 1790234693126,
+      "t": 1790247612701,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "The average latency in metrics.csv is **about 492.8 ms**. That's 2957 ms across 6 runs.\n\nRun 5 is an outlier at 2450 ms, and its note says \"probable timeout\". Without it, the average of the other 5 runs is **101.4 ms**.",
+      "reply": "The average latency in metrics.csv is about **492.8 ms**. That is 2957 ms across 6 runs.\n\nRun 5 (2450 ms) is flagged in the file as a probable timeout, and it skews the result. Without it, the average of the other 5 runs is **101.4 ms**.",
       "usage": {
         "inputTokens": 4,
-        "outputTokens": 227,
-        "costUsd": 0.0034130000000000002
+        "outputTokens": 231,
+        "costUsd": 0.0034530000000000003
       }
     },
     {
-      "t": 1790234693126,
+      "t": 1790247612701,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "planning",
-        "fired": false,
-        "reason": "one eligible task — serial execution"
+        "kind": "proposer_selected",
+        "proposerKind": "posthoc"
       }
     },
     {
-      "t": 1790234693126,
+      "t": 1790247612701,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "evidence_reasoning",
-        "fired": false,
-        "reason": "single low-stakes observation is sufficient"
+        "kind": "triviality_classified",
+        "isTrivial": true
       }
     },
     {
-      "t": 1790234693126,
+      "t": 1790247612701,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "world_model",
-        "fired": false,
-        "reason": "single LOW-risk task, no durable fact stated — observation only"
+        "kind": "execution_mode_classified",
+        "mode": "FAST"
       }
     },
     {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "verification",
-        "fired": true,
-        "reason": "all applicable layers passed"
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "recovery",
-        "fired": false,
-        "reason": "task completed — nothing to recover from"
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "harness_node",
-        "node": "update_task_state",
-        "stepsUsed": 1
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "contradiction",
-        "fired": false,
-        "reason": "fewer than 2 beliefs — nothing to compare"
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "hypothesis",
-        "fired": false,
-        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "diagnostics",
-        "fired": true,
-        "reason": "Health: nominal"
-      }
-    },
-    {
-      "t": 1790234693126,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "control_state",
-        "fired": false,
-        "reason": "NORMAL"
-      }
-    },
-    {
-      "t": 1790234693127,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "reviewer_pass",
-        "fired": true,
-        "reason": "Success criterion not covered by any belief: \"Respond helpfully, accurately, and safely to the user request.\""
-      }
-    },
-    {
-      "t": 1790234693127,
-      "kind": "trace",
-      "detail": {
-        "kind": "harness_node",
-        "node": "output_validation",
-        "stepsUsed": 2
-      }
-    },
-    {
-      "t": 1790234693127,
+      "t": 1790247612701,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -311,10 +125,10 @@
       }
     },
     {
-      "t": 1790234693127,
+      "t": 1790247612701,
       "kind": "debug",
       "tool": "assistant_reply",
-      "result": "[ok] (LOW) The average latency in metrics.csv is **about 492.8 ms**. That's 2957 ms across 6 runs.\n\nRun 5 is an outlier at 2450 ms, and its note says \"probable timeout\". Without it, the average of the other 5 runs is **101.4 ms**."
+      "result": "[ok] (LOW) The average latency in metrics.csv is about **492.8 ms**. That is 2957 ms across 6 runs.\n\nRun 5 (2450 ms) is flagged in the file as a probable timeout, and it skews the result. Without it, the average of the other 5 runs is **101.4 ms**."
     }
   ],
   "grade": {
@@ -335,10 +149,10 @@
     "failedChecks": []
   },
   "metrics": {
-    "latencyMs": 9307,
-    "costUsd": 0.007786800000000001,
-    "totalTokens": 619,
+    "latencyMs": 10145,
+    "costUsd": 0.0097118,
+    "totalTokens": 650,
     "supervisorConsults": 0
   },
-  "replyPreview": "The average latency in metrics.csv is **about 492.8 ms**. That's 2957 ms across 6 runs.\n\nRun 5 is an outlier at 2450 ms, and its note says \"probable timeout\". Without it, the average of the other 5 runs is **101.4 ms**."
+  "replyPreview": "The average latency in metrics.csv is about **492.8 ms**. That is 2957 ms across 6 runs.\n\nRun 5 (2450 ms) is flagged in the file as a probable timeout, and it skews the result. Without it, the average of the other 5 runs is **101.4 ms**."
 }

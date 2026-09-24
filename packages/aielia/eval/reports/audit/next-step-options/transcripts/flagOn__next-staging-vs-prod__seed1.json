@@ -6,7 +6,7 @@
   "prompt": "Read config/staging.yaml and tell me the cache TTL.",
   "events": [
     {
-      "t": 1790234713567,
+      "t": 1790247620678,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -21,7 +21,7 @@
       ]
     },
     {
-      "t": 1790234713567,
+      "t": 1790247620678,
       "kind": "trace",
       "detail": {
         "kind": "turn_start",
@@ -30,24 +30,24 @@
       }
     },
     {
-      "t": 1790234713567,
+      "t": 1790247620678,
       "kind": "debug",
       "tool": "user_message",
       "result": "Read config/staging.yaml and tell me the cache TTL."
     },
     {
-      "t": 1790234716437,
+      "t": 1790247623522,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Read-only request to look up a value in a local config file; no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
+      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Reading a config file and reporting a value is a read-only informational request with no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
       "usage": {
         "inputTokens": 2,
-        "outputTokens": 140,
-        "costUsd": 0.0019152
+        "outputTokens": 145,
+        "costUsd": 0.0036068
       }
     },
     {
-      "t": 1790234716437,
+      "t": 1790247623522,
       "kind": "trace",
       "detail": {
         "kind": "risk_classified",
@@ -56,7 +56,80 @@
       }
     },
     {
-      "t": 1790234716438,
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "proposer_selected",
+        "proposerKind": "flat-oneloop"
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "triviality_classified",
+        "isTrivial": false
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "execution_mode_classified",
+        "mode": "TOOL"
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "plan_classified",
+        "isCandidate": false,
+        "matchedTemplate": null
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "contradiction",
+        "fired": false,
+        "reason": "fewer than 2 beliefs — nothing to compare"
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "hypothesis",
+        "fired": false,
+        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "diagnostics",
+        "fired": true,
+        "reason": "Health: nominal"
+      }
+    },
+    {
+      "t": 1790247623522,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "control_state",
+        "fired": false,
+        "reason": "NORMAL"
+      }
+    },
+    {
+      "t": 1790247623523,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -71,80 +144,7 @@
       ]
     },
     {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "proposer_selected",
-        "proposerKind": "flat-oneloop"
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "triviality_classified",
-        "isTrivial": false
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "execution_mode_classified",
-        "mode": "TOOL"
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "plan_classified",
-        "isCandidate": false,
-        "matchedTemplate": null
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "contradiction",
-        "fired": false,
-        "reason": "fewer than 2 beliefs — nothing to compare"
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "hypothesis",
-        "fired": false,
-        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "diagnostics",
-        "fired": true,
-        "reason": "Health: nominal"
-      }
-    },
-    {
-      "t": 1790234716438,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "control_state",
-        "fired": false,
-        "reason": "NORMAL"
-      }
-    },
-    {
-      "t": 1790234716438,
+      "t": 1790247623523,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -154,7 +154,7 @@
       }
     },
     {
-      "t": 1790234716438,
+      "t": 1790247623523,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -163,7 +163,7 @@
       }
     },
     {
-      "t": 1790234717938,
+      "t": 1790247625032,
       "kind": "trace",
       "detail": {
         "kind": "tool_policy_decision",
@@ -173,18 +173,18 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626952,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "The cache TTL in `config/staging.yaml` is `cache_ttl: 300`. That's 300 seconds (5 minutes), assuming the file uses seconds, which the file doesn't state.",
+      "reply": "The cache TTL in `config/staging.yaml` is `300`. The file doesn't give a unit, but this is probably seconds, so 5 minutes.",
       "usage": {
         "inputTokens": 4,
-        "outputTokens": 130,
-        "costUsd": 0.0024392
+        "outputTokens": 115,
+        "costUsd": 0.004668
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -194,7 +194,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -204,7 +204,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -214,7 +214,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -224,7 +224,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -234,7 +234,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -243,7 +243,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -253,7 +253,7 @@
       }
     },
     {
-      "t": 1790234719821,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -263,7 +263,7 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -273,7 +273,7 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -283,7 +283,7 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -293,7 +293,7 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -302,7 +302,7 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -311,37 +311,13 @@
       }
     },
     {
-      "t": 1790234719822,
+      "t": 1790247626953,
       "kind": "debug",
       "tool": "assistant_reply",
-      "result": "[ok] (LOW) The cache TTL in `config/staging.yaml` is `cache_ttl: 300`. That's 300 seconds (5 minutes), assuming the file uses seconds, which the file doesn't state."
+      "result": "[ok] (LOW) The cache TTL in `config/staging.yaml` is `300`. The file doesn't give a unit, but this is probably seconds, so 5 minutes."
     },
     {
-      "t": 1790234719822,
-      "kind": "trace",
-      "detail": {
-        "kind": "turn_boundary",
-        "turn": 2,
-        "prompt": "Good, that's the staging setup. How many workers does staging run?"
-      }
-    },
-    {
-      "t": 1790234719822,
-      "kind": "trace",
-      "detail": {
-        "kind": "turn_start",
-        "sessionId": "eval-next-staging-vs-prod",
-        "message": "Good, that's the staging setup. How many workers does staging run?"
-      }
-    },
-    {
-      "t": 1790234719822,
-      "kind": "debug",
-      "tool": "user_message",
-      "result": "Good, that's the staging setup. How many workers does staging run?"
-    },
-    {
-      "t": 1790234719823,
+      "t": 1790247626954,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -356,18 +332,42 @@
       ]
     },
     {
-      "t": 1790234722503,
-      "kind": "llm_response",
-      "dir": "res",
-      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Informational question about the number of workers in the staging setup; no real-world side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
-      "usage": {
-        "inputTokens": 2,
-        "outputTokens": 144,
-        "costUsd": 0.001955
+      "t": 1790247626954,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_boundary",
+        "turn": 2,
+        "prompt": "Good, that's the staging setup. How many workers does staging run?"
       }
     },
     {
-      "t": 1790234722503,
+      "t": 1790247626954,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_start",
+        "sessionId": "eval-next-staging-vs-prod",
+        "message": "Good, that's the staging setup. How many workers does staging run?"
+      }
+    },
+    {
+      "t": 1790247626954,
+      "kind": "debug",
+      "tool": "user_message",
+      "result": "Good, that's the staging setup. How many workers does staging run?"
+    },
+    {
+      "t": 1790247629928,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"A read-only informational question about the number of workers in the staging setup; no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
+      "usage": {
+        "inputTokens": 2,
+        "outputTokens": 144,
+        "costUsd": 0.0035928
+      }
+    },
+    {
+      "t": 1790247629928,
       "kind": "trace",
       "detail": {
         "kind": "risk_classified",
@@ -376,7 +376,7 @@
       }
     },
     {
-      "t": 1790234722503,
+      "t": 1790247629928,
       "kind": "trace",
       "detail": {
         "kind": "proposer_selected",
@@ -384,7 +384,7 @@
       }
     },
     {
-      "t": 1790234722503,
+      "t": 1790247629928,
       "kind": "trace",
       "detail": {
         "kind": "triviality_classified",
@@ -392,7 +392,7 @@
       }
     },
     {
-      "t": 1790234722503,
+      "t": 1790247629928,
       "kind": "trace",
       "detail": {
         "kind": "execution_mode_classified",
@@ -400,7 +400,7 @@
       }
     },
     {
-      "t": 1790234722503,
+      "t": 1790247629928,
       "kind": "trace",
       "detail": {
         "kind": "plan_classified",
@@ -409,7 +409,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -423,7 +423,7 @@
         },
         {
           "role": "assistant",
-          "content": "The cache TTL in `config/staging.yaml` is `cache_ttl: 300`. That's 300 seconds (5 minutes), assuming the file uses seconds, which the file doesn't state."
+          "content": "The cache TTL in `config/staging.yaml` is `300`. The file doesn't give a unit, but this is probably seconds, so 5 minutes."
         },
         {
           "role": "user",
@@ -432,7 +432,7 @@
       ]
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -442,7 +442,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -452,7 +452,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -462,7 +462,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -472,7 +472,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -482,7 +482,7 @@
       }
     },
     {
-      "t": 1790234722504,
+      "t": 1790247629929,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -491,7 +491,7 @@
       }
     },
     {
-      "t": 1790234724597,
+      "t": 1790247632288,
       "kind": "trace",
       "detail": {
         "kind": "tool_policy_decision",
@@ -501,18 +501,18 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "Staging runs 6 workers (`workers: 6` in `config/staging.yaml`).",
+      "reply": "Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`.",
       "usage": {
         "inputTokens": 4,
-        "outputTokens": 146,
-        "costUsd": 0.0033736
+        "outputTokens": 166,
+        "costUsd": 0.0108824
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -522,7 +522,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -532,7 +532,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -542,7 +542,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -552,7 +552,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -562,7 +562,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -571,7 +571,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -581,7 +581,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -591,7 +591,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -601,7 +601,7 @@
       }
     },
     {
-      "t": 1790234726221,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -611,7 +611,7 @@
       }
     },
     {
-      "t": 1790234726222,
+      "t": 1790247633964,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -621,7 +621,7 @@
       }
     },
     {
-      "t": 1790234726222,
+      "t": 1790247633965,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -630,7 +630,7 @@
       }
     },
     {
-      "t": 1790234726222,
+      "t": 1790247633965,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -639,10 +639,10 @@
       }
     },
     {
-      "t": 1790234726222,
+      "t": 1790247633965,
       "kind": "debug",
       "tool": "assistant_reply",
-      "result": "[ok] (LOW) Staging runs 6 workers (`workers: 6` in `config/staging.yaml`)."
+      "result": "[ok] (LOW) Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`."
     }
   ],
   "grade": {
@@ -663,10 +663,10 @@
     "failedChecks": []
   },
   "metrics": {
-    "latencyMs": 12655,
-    "costUsd": 0.009683,
-    "totalTokens": 572,
+    "latencyMs": 13287,
+    "costUsd": 0.02275,
+    "totalTokens": 582,
     "supervisorConsults": 0
   },
-  "replyPreview": "Staging runs 6 workers (`workers: 6` in `config/staging.yaml`)."
+  "replyPreview": "Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`."
 }

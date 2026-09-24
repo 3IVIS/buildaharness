@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { GoalThread } from './goal-graph-store.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
+import type { NextStepContext } from './next-step-context.js'
 
 // Phase 6 of plans/hierarchical_goal_tree_and_steering_plan.html — Tier 1.5's "next-step
 // proposer" (R7): when a GoalThread reaches DONE, propose plausible next steps as persistent
@@ -65,7 +66,12 @@ const SYSTEM_PROMPT =
   'stated success criteria, rationale, and its finished tasks, propose 0-3 concrete, actionable ' +
   'next steps a reasonable person would plausibly want to do next as a direct continuation of this ' +
   'specific completed work — not generic advice applicable to any project. Return an empty list if ' +
-  'nothing concrete and specific follows from this particular goal. For each suggestion, judge ' +
+  'nothing concrete and specific follows from this particular goal. The input may also carry the ' +
+  'bigger picture: `earlierConversation` (what was discussed before), `stepsTaken` (files read or ' +
+  'searches made) and `goalGraph` (every goal the session tracks, with task statuses; the entry ' +
+  'marked `focus` is the one just finished). Use it: prefer a next step that follows from ' +
+  'something raised earlier or from a goal that is still open, and do not propose work that an ' +
+  'earlier turn or a finished goal already covers. For each suggestion, judge ' +
   '`confidence` against an observable criterion, not a vague guess: `high` if the next step was ' +
   'explicitly mentioned or clearly implied as follow-up work by the user or the goal\'s own success ' +
   'criteria/rationale (e.g. tests were named as pending, a stated multi-part request\'s remaining ' +
@@ -95,6 +101,7 @@ function isSuggestion(value: unknown): value is NextStepSuggestion {
  */
 async function generateNextStepSuggestions(
   context: { successCriteria: string; rationale: string; tasks: string[] },
+  bigPicture: NextStepContext | undefined,
   llmClient: ILLMClient,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
@@ -105,7 +112,12 @@ async function generateNextStepSuggestions(
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
-          content: JSON.stringify(context),
+          content: JSON.stringify({
+            ...context,
+            ...(bigPicture?.conversation ? { earlierConversation: bigPicture.conversation } : {}),
+            ...(bigPicture?.stepsThisTurn ? { stepsTaken: bigPicture.stepsThisTurn } : {}),
+            ...(bigPicture?.goals ? { goalGraph: bigPicture.goals } : {}),
+          }),
         },
       ],
       undefined,
@@ -138,12 +150,14 @@ export async function proposeNextSteps(
   suggestMode: GoalGraphSuggestMode,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
+  bigPicture?: NextStepContext,
 ): Promise<SuggestedNextStepNode[]> {
   if (suggestMode !== 'enabled') return []
   if (thread.status !== 'DONE') return []
 
   const suggestions = await generateNextStepSuggestions(
     { successCriteria: thread.successCriteria, rationale: thread.rationale, tasks: thread.tasks.map((t) => t.description) },
+    bigPicture,
     llmClient,
     model,
     onUsage,
@@ -178,11 +192,13 @@ export async function proposeTurnNextSteps(
   suggestMode: GoalGraphSuggestMode,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
+  bigPicture?: NextStepContext,
 ): Promise<NextStepSuggestion[]> {
   if (suggestMode !== 'enabled') return []
   if (turn.userMessage.trim() === '' || turn.reply.trim() === '') return []
   const suggestions = await generateNextStepSuggestions(
     { successCriteria: turn.userMessage, rationale: turn.reply.slice(0, 1500), tasks: [] },
+    bigPicture,
     llmClient,
     model,
     onUsage,

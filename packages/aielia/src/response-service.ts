@@ -44,7 +44,7 @@ export class ResponseService {
     // a GoalThread the moment its own task evidence shows it just finished. Absent (the default for
     // every caller that never opted in, and whenever goalGraphSuggestMode is 'disabled') means no
     // proposal and no extra LLM call. Best-effort by construction: see syncGoalThreadEvidence.
-    private readonly nextStepProposer?: (thread: GoalThread, onUsage?: (usage: TokenUsage) => void) => Promise<ThreadSuggestion[]>,
+    private readonly nextStepProposer?: (thread: GoalThread, onUsage: ((usage: TokenUsage) => void) | undefined, sessionId: string) => Promise<ThreadSuggestion[]>,
   ) {}
 
   /**
@@ -77,7 +77,7 @@ export class ResponseService {
     const after = updated.threads.find((t) => t.id === threadId)
     if (this.nextStepProposer && before && after && before.status !== 'DONE' && after.status === 'DONE') {
       try {
-        updated = addThreadSuggestions(updated, threadId, await this.nextStepProposer(after, onUsage))
+        updated = addThreadSuggestions(updated, threadId, await this.nextStepProposer(after, onUsage, sessionId))
       } catch {
         // best-effort — the thread is still correctly DONE
       }
