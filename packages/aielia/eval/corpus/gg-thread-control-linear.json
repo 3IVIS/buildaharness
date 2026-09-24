@@ -1,0 +1,30 @@
+{
+  "id": "gg-thread-control-linear",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "Control: one goal, linear turns, no interleaving. Goal tracking should be neutral.",
+  "prompt": "Read team.txt and tell me who leads the platform team.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "And who leads the data team?"
+    },
+    {
+      "prompt": "Which of the two has the bigger headcount?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "team.txt",
+      "content": "platform: lead Ines Duarte, headcount 9\ndata: lead Tomas Weiss, headcount 6\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "platform"
+    ]
+  }
+}

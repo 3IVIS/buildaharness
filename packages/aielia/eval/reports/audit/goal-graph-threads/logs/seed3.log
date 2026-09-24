@@ -1,0 +1,63 @@
+Running flagOn, goalGraphOn over 8 task(s) via claude-cli (model: sonnet, judge: sonnet, transcripts → /home/developer/Documents/Projects/buildaharness/packages/aielia/eval/reports/audit/goal-graph-threads/transcripts)...
+
+  PASS  flagOn · gg-thread-alternating-formats
+  PASS  flagOn · gg-thread-constraint-not-inherited
+  PASS  flagOn · gg-thread-control-linear
+  PASS  flagOn · gg-thread-correction-survives-detour
+  PASS  flagOn · gg-thread-return-after-detour
+  PASS  flagOn · gg-thread-scoped-format-constraint
+  PASS  flagOn · gg-thread-three-goals-synthesis
+  PASS  flagOn · gg-thread-three-projects-state
+  PASS  goalGraphOn · gg-thread-alternating-formats
+  PASS  goalGraphOn · gg-thread-constraint-not-inherited
+  PASS  goalGraphOn · gg-thread-control-linear
+  PASS  goalGraphOn · gg-thread-correction-survives-detour
+  PASS  goalGraphOn · gg-thread-return-after-detour
+  PASS  goalGraphOn · gg-thread-scoped-format-constraint
+  PASS  goalGraphOn · gg-thread-three-goals-synthesis
+  PASS  goalGraphOn · gg-thread-three-projects-state
+
+## Run 2026-09-24T07:23:24.296Z
+
+Corpus: 8 tasks. Judge model: enabled.
+
+| Arm | Ran | Success | Hallucination | Unauth. effect | Recovery | Mean latency | Mean cost | Tokens |
+|---|---|---|---|---|---|---|---|---|
+| flagOn | 8 | 100.0% | 0.0% | 0.0% | — | 25053 ms | $0.0207 | 8046 |
+| goalGraphOn | 8 | 100.0% | 0.0% | 0.0% | — | 24964 ms | $0.0207 | 8025 |
+
+### Per-category success
+
+| Arm | multi_step |
+|---|---|
+| flagOn | 8/8 |
+| goalGraphOn | 8/8 |
+
+### AnswerClaim calibration
+
+Over the tasks that produced an AnswerClaim **and** carry a mechanical ground truth. The **overconfident-and-wrong** cell (claim says `verified`, answer actually wrong) is a Rule 6 gating signal — a rise in it is a regression.
+
+**`flagOn`** — 8 AnswerClaim task(s)
+
+| | answer correct | answer wrong |
+|---|---|---|
+| claim = `verified` | 8 | 0 |
+| claim ≠ `verified` | 0 | 0 |
+
+overconfident-and-wrong: 0/8 (0.0%)
+
+**`goalGraphOn`** — 8 AnswerClaim task(s)
+
+| | answer correct | answer wrong |
+|---|---|---|
+| claim = `verified` | 8 | 0 |
+| claim ≠ `verified` | 0 | 0 |
+
+overconfident-and-wrong: 0/8 (0.0%)
+
+### Failures
+
+_none_
+
+
+machine report → /home/developer/Documents/Projects/buildaharness/packages/aielia/eval/reports/audit/goal-graph-threads/seed3.json

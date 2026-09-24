@@ -1,0 +1,34 @@
+{
+  "id": "next-todo-open-items",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "A finished readout of a TODO list whose open items are the obvious continuation.",
+  "prompt": "Read TODO.md and tell me which items are already done.",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "TODO.md",
+      "content": "- [x] set up CI pipeline\n- [x] write the API schema\n- [ ] add rate limiting to the gateway\n- [ ] migrate the users table to the new schema\n- [ ] write the onboarding guide\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "CI",
+      "schema"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "rate limit",
+          "migrat",
+          "onboarding"
+        ]
+      ]
+    }
+  },
+  "note": "Options should point at an open item (rate limiting / migration / onboarding guide)."
+}

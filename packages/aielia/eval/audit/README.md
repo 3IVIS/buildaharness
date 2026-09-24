@@ -39,6 +39,14 @@ Seed reports and transcripts land under `../reports/audit/<feature>/` and are **
 exception to `../reports/.gitignore`) — they are the published evidence trail, not throwaway local
 runs. Runtime progress is `../reports/audit/progress.json`, written by the driver, not the manifest.
 
+## Running cells in parallel
+
+`node scripts/run-audit-parallel.mjs --features=<id,id|all-queued> --seeds=3 --concurrency=6` runs one child
+process per `(feature, seed)` cell and writes `reports/audit/<feature>/seed<N>.json`, transcripts and a per-cell
+log. It is process-level on purpose: an arm's feature toggle is set on `process.env` around its turn, so two arms
+in one process would corrupt each other's flags. Cells whose `seed<N>.json` exists are skipped (resumable);
+`--force` re-runs them. Then `cli.ts build-multiseed` folds the seeds into `<feature>.multiseed.json`.
+
 ## Two drivers — do not conflate
 
 | Driver | Runs | Reads |

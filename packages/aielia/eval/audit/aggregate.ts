@@ -9,7 +9,7 @@
  * `b` as the candidate — so we diff `(control, candidate)` and a `positive` verdict means the
  * candidate (feature present) beat the control (feature absent) on task success.
  */
-import type { BenchmarkReport } from '../runner.js'
+import type { BenchmarkReport, BenchmarkRow } from '../runner.js'
 import { aggregateSeeds, diffSeeds, type SeedDiff } from '../report.js'
 import type { AuditVerdict } from './types.js'
 
@@ -123,6 +123,76 @@ export function injectionAuditSignals(seedReports: BenchmarkReport[], candidate:
   }
 }
 
+/**
+ * The numbers the `next-step-options` feature is judged on. There is no arm that produces options
+ * to compare against, so task success (which the control arm passes on the reply alone) cannot
+ * price the feature; instead the candidate's option sets are graded directly:
+ *   - hit rate: on `next-*` (followable) tasks, the share of runs whose options name every expected
+ *     continuation (no failed `nextSteps names …` check);
+ *   - false-positive rate: on `next-control-*` tasks, the share of runs that offered options where
+ *     none were warranted (failed `nextSteps == none`);
+ *   - the cost/latency overhead vs the control arm comes from the usual deltas.
+ * Thresholds are fixed here, before any run, so the verdict is not fitted to the data:
+ * KEEP needs hit >= 70% and false positives <= 25% with no regression in reply success; CUT below
+ * 40% hits (or a reply-success regression); anything between is INCONCLUSIVE.
+ */
+export const NEXT_STEP_KEEP_HIT_RATE = 0.7
+export const NEXT_STEP_CUT_HIT_RATE = 0.4
+export const NEXT_STEP_MAX_FALSE_POSITIVE_RATE = 0.25
+/** Reply correctness may drop by at most this many points (vs the assistant without options) before the verdict is CUT. */
+const MATERIAL_REPLY_REGRESSION = 0.05
+
+export interface NextStepAuditSignals {
+  candidate: string
+  hitRate: number | null
+  followableRuns: number
+  falsePositiveRate: number | null
+  controlRuns: number
+  /** Share of runs whose reply-side checks all passed, ignoring the `nextSteps` checks — candidate arm. */
+  replySuccessRate: number | null
+  /** Same, for the control arm (the assistant without options). */
+  controlReplySuccessRate: number | null
+}
+
+/** A run's reply-side outcome: every failed check that is not a `nextSteps` check counts against it. */
+const replyOk = (row: BenchmarkRow) => row.status !== 'error' && row.failedChecks.every((c) => c.startsWith('nextSteps'))
+
+export function nextStepAuditSignals(seedReports: BenchmarkReport[], candidate: string, controlArm?: string): NextStepAuditSignals {
+  const allRows = seedReports.flatMap((r) => r.rows)
+  const rate = (arm: string | undefined) => {
+    const rs = arm === undefined ? [] : allRows.filter((row) => row.arm === arm && row.ran)
+    return rs.length ? rs.filter(replyOk).length / rs.length : null
+  }
+  const rows = allRows.filter((row) => row.arm === candidate && row.ran)
+  const control = rows.filter((row) => row.taskId.startsWith('next-control-'))
+  const followable = rows.filter((row) => row.taskId.startsWith('next-') && !row.taskId.startsWith('next-control-'))
+  const missed = (row: BenchmarkRow) => row.failedChecks.some((c) => c.startsWith('nextSteps'))
+  return {
+    candidate,
+    hitRate: followable.length ? followable.filter((row) => !missed(row)).length / followable.length : null,
+    followableRuns: followable.length,
+    falsePositiveRate: control.length ? control.filter(missed).length / control.length : null,
+    controlRuns: control.length,
+    replySuccessRate: rate(candidate),
+    controlReplySuccessRate: rate(controlArm),
+  }
+}
+
+/** Verdict for `next-step-options` from its own signals (see `nextStepAuditSignals`). */
+export function nextStepVerdict(signals: NextStepAuditSignals): { verdict: AuditVerdict; rationale: string } {
+  const pct = (x: number | null) => (x === null ? 'n/a' : `${(x * 100).toFixed(0)}%`)
+  const summary = `Options named the expected continuation in ${pct(signals.hitRate)} of ${signals.followableRuns} followable run(s) and appeared where none were warranted in ${pct(signals.falsePositiveRate)} of ${signals.controlRuns} control run(s).`
+  if (signals.hitRate === null) return { verdict: 'INCONCLUSIVE', rationale: 'No followable runs were graded — nothing to judge the options on.' }
+  const replySuccessRegressed =
+    signals.replySuccessRate !== null && signals.controlReplySuccessRate !== null && signals.replySuccessRate < signals.controlReplySuccessRate - MATERIAL_REPLY_REGRESSION
+  if (replySuccessRegressed) return { verdict: 'CUT', rationale: `${summary} Reply correctness regressed with options on.` }
+  if (signals.hitRate < NEXT_STEP_CUT_HIT_RATE) return { verdict: 'CUT', rationale: `${summary} Below the ${pct(NEXT_STEP_CUT_HIT_RATE)} hit-rate floor.` }
+  if (signals.hitRate >= NEXT_STEP_KEEP_HIT_RATE && (signals.falsePositiveRate ?? 0) <= NEXT_STEP_MAX_FALSE_POSITIVE_RATE) {
+    return { verdict: 'KEEP', rationale: `${summary} Clears the ${pct(NEXT_STEP_KEEP_HIT_RATE)} hit-rate bar with false positives within ${pct(NEXT_STEP_MAX_FALSE_POSITIVE_RATE)}.` }
+  }
+  return { verdict: 'INCONCLUSIVE', rationale: `${summary} Between the CUT floor and the KEEP bar (or too many false positives).` }
+}
+
 function fmtPct(x: number | null): string {
   if (x === null) return '—'
   return `${x > 0 ? '+' : ''}${(x * 100).toFixed(0)}%`
@@ -166,6 +236,8 @@ export interface AuditMultiSeedReport {
    * per-output latency, which task success alone doesn't separate. `null` for every other feature.
    */
   injectionSignals?: InjectionAuditSignals | null
+  /** Only for the `next-step-options` feature — hit / false-positive rates (no comparable control arm). */
+  nextStepSignals?: NextStepAuditSignals | null
 }
 
 export function buildMultiSeedReport(
@@ -175,6 +247,12 @@ export function buildMultiSeedReport(
   candidate: string,
 ): AuditMultiSeedReport {
   const result = auditVerdict(seedReports, control, candidate, feature.id)
+  const nextStepSignals = feature.id === 'next-step-options' ? nextStepAuditSignals(seedReports, candidate, control) : null
+  if (nextStepSignals) {
+    const v = nextStepVerdict(nextStepSignals)
+    result.verdict = v.verdict
+    result.rationale = v.rationale
+  }
   const modelId = seedReports.map((r) => r.modelId).find((m) => m != null) ?? null
   const judgeModelId = seedReports.map((r) => r.judgeModelId).find((m) => m != null) ?? null
   const generatedAt = seedReports.map((r) => r.generatedAt).sort().at(-1) ?? ''
@@ -203,6 +281,7 @@ export function buildMultiSeedReport(
     latencyDeltaPct: result.latencyDeltaPct,
     tokenDeltaPct: result.tokenDeltaPct,
     injectionSignals: feature.id === 'llm-injection-detect' ? injectionAuditSignals(seedReports, candidate) : null,
+    nextStepSignals,
   }
 }
 

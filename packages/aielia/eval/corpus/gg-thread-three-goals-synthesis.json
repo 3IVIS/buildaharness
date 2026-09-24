@@ -1,0 +1,47 @@
+{
+  "id": "gg-thread-three-goals-synthesis",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "Three interleaved goals, then a request for one line per goal in order.",
+  "prompt": "Read a.txt and tell me the vendor name.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Read b.txt and tell me the shipping date."
+    },
+    {
+      "prompt": "Read c.txt and tell me the support email."
+    },
+    {
+      "prompt": "Read a.txt again for its contract term."
+    },
+    {
+      "prompt": "Give me one line for each thing I asked about: the vendor, the shipping date, the support email, and the contract term."
+    }
+  ],
+  "workspace": [
+    {
+      "path": "a.txt",
+      "content": "Vendor: Nordwind Freight\nContract term: 24 months\n"
+    },
+    {
+      "path": "b.txt",
+      "content": "Shipping date: 2026-10-14\n"
+    },
+    {
+      "path": "c.txt",
+      "content": "Support email: help@nordwind.example\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Nordwind Freight",
+      "2026-10-14",
+      "help@nordwind.example",
+      "24"
+    ]
+  }
+}

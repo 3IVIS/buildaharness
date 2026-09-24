@@ -1,0 +1,101 @@
+{
+  "feature": "steering-live",
+  "title": "Mid-turn steering",
+  "hypothesis": "Absorbing a message sent while a long turn is still running (correction, extra ask, new goal, cancel) gives a result at least as good as queueing it as the next turn, in fewer wasted steps and less time.",
+  "control": "flagOn",
+  "candidate": "goalGraphOn",
+  "seeds": 3,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-24T07:49:35.640Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.9166666666666666,
+      "candidate": 0.7916666666666666,
+      "deltaMean": -0.125,
+      "deltaCi95": 0.18261221816248285,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.08333333333333333,
+      "candidate": 0.20833333333333334,
+      "deltaMean": 0.125,
+      "deltaCi95": 0.18261221816248285,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 45099,
+      "candidate": 35259.333333333336,
+      "deltaMean": -9839.666666666664,
+      "deltaCi95": 3982.91248003825,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.047512124999999995,
+      "candidate": 0.036753625000000005,
+      "deltaMean": -0.01075849999999999,
+      "deltaCi95": 0.004048817672113341,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 19885.666666666668,
+      "candidate": 15131.666666666666,
+      "deltaMean": -4754.000000000002,
+      "deltaCi95": 1606.987519829849,
+      "positive": true,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": -0.22643693583479987,
+  "latencyDeltaPct": -0.21817926487653083,
+  "tokenDeltaPct": -0.23906666443166777,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

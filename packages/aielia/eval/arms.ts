@@ -45,6 +45,7 @@ export type ArmName =
   | 'reviewerPassOff'
   | 'askModeOn'
   | 'goalGraphOn'
+  | 'nextStepsOn'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -73,6 +74,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'reviewerPassOff',
   'askModeOn',
   'goalGraphOn',
+  'nextStepsOn',
 ]
 
 /**
@@ -122,6 +124,12 @@ interface RunArmOpts {
    * queued as ordinary followups (`steeringAsFollowups`) — the flag-off CLI behavior.
    */
   goalGraph?: boolean
+  /**
+   * The `nextStepsOn` differential arm — `goalGraphSuggestMode: 'enabled'` on the constructor, so a
+   * full non-trivial turn gets up to three next-step options attached (`proposeTurnNextSteps`).
+   * `PersonalAssistant` itself defaults it to 'disabled' (the CLI/desktop default it on).
+   */
+  suggest?: boolean
 }
 
 async function runAssistant(
@@ -146,7 +154,7 @@ async function runAssistant(
     process.env[key] = overrides[key]
   }
   try {
-    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode, opts.goalGraph)
+    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode, opts.goalGraph, opts.suggest)
   } finally {
     for (const key of Object.keys(overrides)) {
       if (prior[key] === undefined) delete process.env[key]
@@ -161,6 +169,7 @@ async function runAssistantInner(
   oneLoopMode: 'enabled' | 'disabled',
   askMode?: AskMode,
   goalGraph = false,
+  suggest = false,
 ): Promise<ArmTurnOutput | null> {
   // Any arm that can't absorb a mid-turn message live gets it as the next queued turn instead.
   if (!goalGraph) task = steeringAsFollowups(task)
@@ -216,6 +225,7 @@ async function runAssistantInner(
     shellTools: ctx.shellTools,
     oneLoopMode,
     askMode,
+    goalGraphSuggestMode: suggest ? 'enabled' : 'disabled',
     onTrace: (e) => {
       sideEvents.push({ t: Date.now(), kind: 'trace', detail: e })
       if (inFirstTurn) {
@@ -323,6 +333,7 @@ async function runAssistantInner(
       injectedFailureFired: firedProbe ? firedProbe() : persistentFailureFired ? true : undefined,
       supervisorConsults,
       supervisorDirectives: supervisorDirectives.length > 0 ? supervisorDirectives : undefined,
+      nextSteps: suggest ? (result.nextSteps ?? []).map((n) => n.description) : undefined,
       transcript: drainTranscript(),
     }
     return out
@@ -507,6 +518,13 @@ export const goalGraphOnArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { goalGraph: true }),
 }
 
+export const nextStepsOnArm: Arm = {
+  name: 'nextStepsOn',
+  label:
+    'PersonalAssistant (flagOn) with goalGraphSuggestMode=enabled — a completed non-trivial turn gets up to three next-step options attached (the option set is graded directly; there is no arm that produces options to compare against)',
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { suggest: true }),
+}
+
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -532,6 +550,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   reviewerPassOffArm,
   askModeOnArm,
   goalGraphOnArm,
+  nextStepsOnArm,
 ]
 export const ALL_ARMS: Arm[] = [
   baselineArm,
@@ -550,5 +569,6 @@ export const ALL_ARMS: Arm[] = [
   reviewerPassOffArm,
   askModeOnArm,
   goalGraphOnArm,
+  nextStepsOnArm,
   langgraphArm,
 ]

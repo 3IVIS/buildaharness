@@ -1,0 +1,31 @@
+{
+  "id": "sup-mid-control-clean-a",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "Control: a clean three-turn lookup session with no stall. The supervisor should never fire.",
+  "prompt": "What is the default region in config/app.yaml?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "What is the log level?"
+    },
+    {
+      "prompt": "And which region did you say was the default? Answer in one word."
+    }
+  ],
+  "workspace": [
+    {
+      "path": "config/app.yaml",
+      "content": "default_region: ap-south-9\nlog_level: warn\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "ap-south-9"
+    ]
+  },
+  "note": "Control: parity expected; extra cost of the supervisor should be ~0 when nothing stalls."
+}

@@ -1,0 +1,33 @@
+{
+  "id": "sup-mid-ask-user",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "Turn 2 stalls on a lookup that needs a detail only the user has; turn 3 supplies it.",
+  "prompt": "What is the timeout for the search flow in config/timeouts.yaml?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Now what is the timeout for the export flow?",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 3
+    },
+    {
+      "prompt": "The section you want is called 'export_v2'."
+    }
+  ],
+  "workspace": [
+    {
+      "path": "config/timeouts.yaml",
+      "content": "search: 5s\nexport_v1: 90s\nexport_v2: 210s\nlogin: 15s\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "210"
+    ]
+  },
+  "note": "Pass = after the user names the section, the run reports 210s (not the v1 figure 90s)."
+}

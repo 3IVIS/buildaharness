@@ -1,0 +1,36 @@
+{
+  "id": "next-failing-tests",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "A test-report summary: rerunning or fixing the named failures follows.",
+  "prompt": "Summarise test-report.txt for me: how many tests failed and which ones?",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "test-report.txt",
+      "content": "Suite: payments\n42 passed, 2 failed\nFAILED: test_refund_partial (AssertionError: expected 12.50, got 12.00)\nFAILED: test_currency_rounding (expected 0.05, got 0.04)\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "2",
+      "refund"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "refund",
+          "rounding",
+          "rerun",
+          "re-run",
+          "fix"
+        ]
+      ]
+    }
+  },
+  "note": "Options should target the failing tests (fix or rerun)."
+}

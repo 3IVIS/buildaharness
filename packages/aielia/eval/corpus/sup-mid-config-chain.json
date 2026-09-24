@@ -1,0 +1,38 @@
+{
+  "id": "sup-mid-config-chain",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "Turn 2 stalls following a pointer chain after a productive turn 1.",
+  "prompt": "What is the default region in config/app.yaml?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Now find the retry limit the checkout worker uses. The worker file points to another file for it.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 2
+    }
+  ],
+  "workspace": [
+    {
+      "path": "config/app.yaml",
+      "content": "default_region: eu-north-3\nlog_level: info\n"
+    },
+    {
+      "path": "workers/checkout.yaml",
+      "content": "worker: checkout\nretries: see limits.yaml, key checkout_retries\n"
+    },
+    {
+      "path": "limits.yaml",
+      "content": "checkout_retries: 17\nsearch_retries: 3\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "17"
+    ]
+  },
+  "note": "Pass = the stalled second turn still recovers and reports 17."
+}

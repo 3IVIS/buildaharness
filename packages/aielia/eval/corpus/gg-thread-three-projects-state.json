@@ -1,0 +1,53 @@
+{
+  "id": "gg-thread-three-projects-state",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "Three similar projects tracked over eight turns with corrections applied out of order; the final answer needs every current figure.",
+  "prompt": "Read plan-a.txt and tell me the budget for project Alder.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Different project: read plan-b.txt and tell me the budget for project Birch."
+    },
+    {
+      "prompt": "Another one: read plan-c.txt and tell me the budget for project Cedar."
+    },
+    {
+      "prompt": "Update on Alder: its budget was cut by 50."
+    },
+    {
+      "prompt": "Update on Cedar: finance approved 20 more."
+    },
+    {
+      "prompt": "What is the deadline for Birch in plan-b.txt?"
+    },
+    {
+      "prompt": "Birch is unchanged. Now give me the current budgets for Alder, Birch and Cedar, one per line as name: number."
+    }
+  ],
+  "workspace": [
+    {
+      "path": "plan-a.txt",
+      "content": "Project Alder\nBudget: 400\n"
+    },
+    {
+      "path": "plan-b.txt",
+      "content": "Project Birch\nBudget: 250\nDeadline: 2026-12-01\n"
+    },
+    {
+      "path": "plan-c.txt",
+      "content": "Project Cedar\nBudget: 180\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "350",
+      "250",
+      "200"
+    ],
+    "regex": "alder[^\\n]*350"
+  }
+}

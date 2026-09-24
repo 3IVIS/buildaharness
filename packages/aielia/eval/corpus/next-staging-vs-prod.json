@@ -1,0 +1,39 @@
+{
+  "id": "next-staging-vs-prod",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "Two-turn session: staging config confirmed, a differing prod config is the obvious next comparison.",
+  "prompt": "Read config/staging.yaml and tell me the cache TTL.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Good, that's the staging setup. How many workers does staging run?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "config/staging.yaml",
+      "content": "cache_ttl: 300\nworkers: 6\n"
+    },
+    {
+      "path": "config/prod.yaml",
+      "content": "cache_ttl: 900\nworkers: 8\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "6"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "prod"
+        ]
+      ]
+    }
+  },
+  "note": "Options should point at config/prod.yaml."
+}

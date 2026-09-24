@@ -1,0 +1,14 @@
+/**
+ * Case-study prose for the next-step-options transcript page. Runs: 3 seeds, claude-sonnet-5, LLM judge on.
+ */
+export default {
+  mechanism: `<p>After a full, non-trivial turn, one extra model call proposes up to three concrete next steps and shows them under the reply. Typing 1, 2 or 3 runs one; typing anything else ignores them. The call is told to return nothing when no concrete step follows from the work.</p>`,
+
+  hypothesis: `<p>The options are worth their extra call if they name the continuation a person would actually want, and stay quiet when nothing follows. Options that are generic or that appear after a closed question would just be noise under every reply.</p>`,
+
+  testDesign: `<p>No arm produces options without the feature, so there is nothing to compare options against, and comparing task success would be meaningless. Instead the option sets themselves are graded. Six tasks finish real work with an obvious continuation (open TODO items, failing tests, pending release steps, a missing attachment, a flagged outlier, the prod config next to staging). Each names keywords the options must cover. Two controls are closed questions where any option is a false positive. The thresholds for the verdict were fixed before the runs: KEEP needs at least 70% of followable runs hit and at most 25% false positives on the controls, CUT is under 40% hits, and anything in between is inconclusive. Reply correctness is also checked against the same assistant without options, and the extra cost per turn is reported.</p>`,
+
+  findings: `<p>Inconclusive under the thresholds we fixed in advance. Options named the expected continuation in 11 of 18 followable runs (61%), short of the 70% needed for KEEP and above the 40% floor for CUT. They appeared in none of the 6 control runs where nothing should follow, and reply correctness was unchanged (100% with and without options).</p>
+<p>By task: the TODO readout, the failing-tests summary and the release checklist were hit in all three seeds (the checklist options covered both the changelog and the tag), the metrics outlier in two of three. Two tasks were missed every time. On the draft check, the options offered the typo fix and never the missing attachment. On the staging config session the options were empty: the option call sees only the last request and its reply, and the last request was a closed question about the worker count, so the natural next step (compare with prod, visible from turn one) was out of view. That is how the feature is built rather than a fluke, but it means a follow-up that depends on earlier turns will often be missed.</p>
+<p>The cost of the extra call was +76% per turn ($0.0057 to $0.0100), +38% latency (7.9 s to 10.9 s) and +45% tokens. In absolute terms that is under half a cent and about three seconds per turn.</p>`,
+}

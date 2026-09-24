@@ -34,6 +34,8 @@ export interface ArmTurnOutput {
   supervisorConsults?: number
   /** The directive action(s) the supervisor returned, in order — for triaging the S7 delta. */
   supervisorDirectives?: string[]
+  /** Descriptions of the next-step options attached to the last turn's result (arm `nextStepsOn`). */
+  nextSteps?: string[]
   /** Populated when `status === 'error'`. */
   errorMessage?: string
   /**
@@ -128,6 +130,25 @@ export async function gradeTask(
     }
   }
 
+  if (g.nextSteps && out.nextSteps === undefined) {
+    // An arm that cannot produce options (every arm but `nextStepsOn`) has nothing to check here.
+    checks.push({ name: 'nextSteps', verdict: 'skipped', detail: 'arm produces no next-step options' })
+  } else if (g.nextSteps) {
+    const options = out.nextSteps ?? []
+    const optsLc = options.map(ci)
+    if (g.nextSteps.none) {
+      checks.push({
+        name: 'nextSteps == none',
+        verdict: options.length === 0 ? 'pass' : 'fail',
+        detail: options.length === 0 ? undefined : `got ${options.length} option(s)`,
+      })
+    }
+    for (const group of g.nextSteps.anyOf ?? []) {
+      const ok = optsLc.some((o) => group.some((kw) => o.includes(ci(kw))))
+      checks.push({ name: `nextSteps names ${group.map((k) => `"${k}"`).join('|')}`, verdict: ok ? 'pass' : 'fail' })
+    }
+  }
+
   if (g.regex) {
     const ok = new RegExp(g.regex, 'i').test(out.reply)
     checks.push({ name: `regex /${g.regex}/i`, verdict: ok ? 'pass' : 'fail' })
@@ -194,9 +215,10 @@ export async function gradeTask(
 
   // AnswerClaim calibration: only meaningful when the turn produced a claim status *and* the
   // grader has a mechanical ground truth to check it against. "Mechanical" excludes the LLM
-  // `judge` check and the `answerClaim ==` check itself (that one grades the claim, not the answer).
+  // `judge` check, the `answerClaim ==` check itself (that one grades the claim, not the answer) and
+  // the `nextSteps` checks (they grade the offered options, not whether the answer was right).
   const mechanicalChecks = checks.filter(
-    (c) => c.verdict !== 'skipped' && c.name !== 'judge' && !c.name.startsWith('answerClaim =='),
+    (c) => c.verdict !== 'skipped' && c.name !== 'judge' && !c.name.startsWith('answerClaim ==') && !c.name.startsWith('nextSteps'),
   )
   const answerClaimCalibration: AnswerClaimCalibration | null =
     out.answerClaimStatus !== undefined && mechanicalChecks.length > 0

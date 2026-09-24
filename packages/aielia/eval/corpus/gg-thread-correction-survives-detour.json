@@ -1,0 +1,40 @@
+{
+  "id": "gg-thread-correction-survives-detour",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "A correction inside goal A must still hold after a detour.",
+  "prompt": "Read price.txt and tell me the unit price.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Correction: the unit price is actually 45, not what the file says. Use 45 from now on for this order."
+    },
+    {
+      "prompt": "Unrelated: read hours.txt and tell me when the shop opens."
+    },
+    {
+      "prompt": "Back to the order: what is the total for 3 units?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "price.txt",
+      "content": "Unit price: 40\n"
+    },
+    {
+      "path": "hours.txt",
+      "content": "Opens 08:30, closes 17:00\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "135"
+    ],
+    "notContains": [
+      "120"
+    ]
+  }
+}

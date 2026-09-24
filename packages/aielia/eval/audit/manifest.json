@@ -205,7 +205,7 @@
     {
       "id": "decomposition-multistep",
       "title": "Up-front decomposition + task reframing, tracked across turns",
-      "hypothesis": "Decomposing a multi-part request into a task graph keeps sub-goals correctly tracked (open/done/blocked) across turns, distractors, mid-conversation additions and re-prioritization, enough to beat treating the conversation as one flat thread — the multi-turn counterpart to the single-turn decomposition-reframing entry, which came back CUT because a single draft reply can't show decomposition's value. Directly informs whether a persistent cross-turn goal graph (in progress, plans/hierarchical_goal_tree_and_steering_plan.html) is solving a real gap or elaborating a mechanism that already tests flat.",
+      "hypothesis": "Decomposing a multi-part request into a task graph keeps sub-goals correctly tracked (open/done/blocked) across turns, distractors, mid-conversation additions and re-prioritization, enough to beat treating the conversation as one flat thread \u2014 the multi-turn counterpart to the single-turn decomposition-reframing entry, which came back CUT because a single draft reply can't show decomposition's value. Directly informs whether a persistent cross-turn goal graph (in progress, plans/hierarchical_goal_tree_and_steering_plan.html) is solving a real gap or elaborating a mechanism that already tests flat.",
       "arms": [
         "decompositionOff",
         "flagOn"
@@ -216,7 +216,71 @@
       "maxSpendUsd": 12,
       "status": "queued",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "8 tasks (6 multi-turn stress + 2 multi-turn single-deliverable control) authored 2026-09-23 on branch feature-audit-multistep-corpus, worktree-isolated from the active hierarchical-goal-tree-and-steering plan execution so it doesn't disrupt that REPO_ROOT. Reuses the existing decompositionOff/flagOn arm pair — this measures whether today's flat decomposedTasks classifier output already tracks sub-goal state across turns (the goalGraphOn arm has since landed with the goal-tree plan's Phase 8 and could be added as a third arm, but its steering mechanism is mid-turn messages, not this slice's turn-by-turn tracking); if it does, the goal graph's marginal value has to come from elsewhere (steering, review surface, etc.), not basic cross-turn tracking. Same caveat as decomposition-reframing: AUDIT_DECOMPOSITION gates consumption of decomposedTasks, not the classifier call itself. Not yet run — status left queued pending registration with the audit driver (the goal-tree automation it was isolated from has since finished and merged)."
+      "corpusNote": "8 tasks (6 multi-turn stress + 2 multi-turn single-deliverable control) authored 2026-09-23 on branch feature-audit-multistep-corpus, worktree-isolated from the active hierarchical-goal-tree-and-steering plan execution so it doesn't disrupt that REPO_ROOT. Reuses the existing decompositionOff/flagOn arm pair \u2014 this measures whether today's flat decomposedTasks classifier output already tracks sub-goal state across turns (the goalGraphOn arm has since landed with the goal-tree plan's Phase 8 and could be added as a third arm, but its steering mechanism is mid-turn messages, not this slice's turn-by-turn tracking); if it does, the goal graph's marginal value has to come from elsewhere (steering, review surface, etc.), not basic cross-turn tracking. Same caveat as decomposition-reframing: AUDIT_DECOMPOSITION gates consumption of decomposedTasks, not the classifier call itself. Not yet run \u2014 status left queued pending registration with the audit driver (the goal-tree automation it was isolated from has since finished and merged)."
+    },
+    {
+      "id": "steering-live",
+      "title": "Mid-turn steering",
+      "hypothesis": "Absorbing a message sent while a long turn is still running (correction, extra ask, new goal, cancel) gives a result at least as good as queueing it as the next turn, in fewer wasted steps and less time.",
+      "arms": [
+        "flagOn",
+        "goalGraphOn"
+      ],
+      "slice": "steering_longrun",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 20,
+      "status": "queued",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "Eight pointer-chain tasks (each file names the next, so the reads cannot be batched and the turn runs for several iterations): two corrections, two extra asks, two new goals, two cancels. Graded on the final reply; effort (turns, latency, cost, steps) is reported alongside."
+    },
+    {
+      "id": "trajectory-supervisor-midtask",
+      "title": "Trajectory Supervisor (mid-task stalls)",
+      "hypothesis": "When a multi-turn task stalls after context has built up, the supervisor redirects, reframes or asks the user and the run recovers, at a cost that is negligible on tasks that never stall.",
+      "arms": [
+        "supervisorOff",
+        "flagOn"
+      ],
+      "slice": "supervisor_midtask",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 20,
+      "status": "queued",
+      "corpusAdequacy": "sufficient",
+      "corpusNote": "Six multi-turn tasks with a stall injected on a later turn (pointer chains, wrong-file pivots, nested lookups, a user-clarification turn) plus two clean controls. Replaces the earlier single-turn verdict."
+    },
+    {
+      "id": "next-step-options",
+      "title": "Next-step options",
+      "hypothesis": "The options shown under a finished turn name the concrete continuation a user would want, and stay silent when nothing follows.",
+      "arms": [
+        "flagOn",
+        "nextStepsOn"
+      ],
+      "slice": "next_steps_followable,next_steps_nothing_to_suggest",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 12,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "No arm produces options without the feature, so the verdict comes from graded option quality (hit rate on six followable tasks, false-positive rate on two closed-question controls) against thresholds fixed in advance, plus the overhead vs the control arm."
+    },
+    {
+      "id": "goal-graph-threads",
+      "title": "Hierarchical goal graph",
+      "hypothesis": "Tracking each goal as its own thread across turns keeps the right evidence and constraints attached to the right goal when several goals interleave.",
+      "arms": [
+        "flagOn",
+        "goalGraphOn"
+      ],
+      "slice": "goal_graph_threads",
+      "seeds": 3,
+      "fullPages": "all",
+      "maxSpendUsd": 20,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Seven interleaved-goal sessions (return after a detour, three similar projects updated out of order over eight turns, scoped and alternating format constraints, a constraint that must not leak into a new topic, a correction that survives a detour, three-goal synthesis) plus a linear control. No mid-turn messages, so this isolates thread tracking from steering. Both arms keep the raw conversation history, so plain recall is not expected to separate them."
     }
   ]
 }

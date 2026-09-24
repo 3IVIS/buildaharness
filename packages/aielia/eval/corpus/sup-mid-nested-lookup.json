@@ -1,0 +1,41 @@
+{
+  "id": "sup-mid-nested-lookup",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "Turn 3 stall after two clean turns: the fact lives in a nested directory.",
+  "prompt": "What is the project codename in README.txt?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "And who is listed as maintainer in README.txt?"
+    },
+    {
+      "prompt": "Now look up the licence identifier. It is not in the README; check the packaging metadata somewhere under pkg/.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 2
+    }
+  ],
+  "workspace": [
+    {
+      "path": "README.txt",
+      "content": "Project codename: MERIDIAN\nMaintainer: Odile Brandt\nSee pkg/ for packaging.\n"
+    },
+    {
+      "path": "pkg/meta/legal/licence.txt",
+      "content": "SPDX-License-Identifier: MPL-2.0-only\n"
+    },
+    {
+      "path": "pkg/meta/readme.txt",
+      "content": "Packaging metadata lives in subfolders.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "MPL-2.0"
+    ]
+  },
+  "note": "Pass = the late stalled turn recovers (MPL-2.0)."
+}

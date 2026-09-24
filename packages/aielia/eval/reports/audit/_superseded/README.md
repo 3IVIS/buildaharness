@@ -19,3 +19,10 @@ the manifest + the runner skip-guard), on Sonnet, 5 seeds, with F3/F4 landed —
 writes fresh reports to `harness-vs-bare/` and `one-loop/`.
 
 See the internal plan.
+
+## steering-live-draft1 (2026-09-24)
+
+First draft of the mid-turn steering corpus: eight tasks that read eight *independent* files. The assistant
+batched all the reads into one step, so nothing was still running when the steering message arrived (one live
+absorption in 24 runs, INCONCLUSIVE). Superseded by the pointer-chain corpus (each file names the next). Seed
+reports and the multiseed summary only; the transcripts were not kept. Model: `claude-sonnet-5`.

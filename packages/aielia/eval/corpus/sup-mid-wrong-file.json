@@ -1,0 +1,38 @@
+{
+  "id": "sup-mid-wrong-file",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "A late pivot task: the named file only points elsewhere; a stall hits on turn 2.",
+  "prompt": "Which environment does deploy/notes.txt say is frozen right now?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "What port does the billing API listen on? Start with billing/server.js.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "deploy/notes.txt",
+      "content": "Frozen environment: staging-2\nFreeze ends Friday.\n"
+    },
+    {
+      "path": "billing/server.js",
+      "content": "// port is not hardcoded; loaded from config/ports.json\nconst port = require('../config/ports.json').billing;\n"
+    },
+    {
+      "path": "config/ports.json",
+      "content": "{ \"billing\": 9271, \"reports\": 9272 }\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "9271"
+    ]
+  },
+  "note": "Pass = follows the pointer to config/ports.json after the stall (9271)."
+}

@@ -1,0 +1,38 @@
+{
+  "id": "next-release-checklist",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "The user states pending release steps after a version check.",
+  "prompt": "I'm releasing v2.4. I've already bumped the version in package.json. Please confirm package.json really says 2.4.0. Still to do afterwards: update the changelog and tag the release.",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "package.json",
+      "content": "{ \"name\": \"tool\", \"version\": \"2.4.0\" }\n"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "content": "## 2.3.1\n- fix crash on empty input\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "2.4.0"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "changelog"
+        ],
+        [
+          "tag"
+        ]
+      ]
+    }
+  },
+  "note": "Options should cover both stated pending steps: the changelog and the tag."
+}

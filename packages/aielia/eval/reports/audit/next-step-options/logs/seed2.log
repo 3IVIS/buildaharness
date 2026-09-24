@@ -1,0 +1,65 @@
+Running flagOn, nextStepsOn over 8 task(s) via claude-cli (model: sonnet, judge: sonnet, transcripts → /home/developer/Documents/Projects/buildaharness/packages/aielia/eval/reports/audit/next-step-options/transcripts)...
+
+  PASS  flagOn · next-control-arithmetic
+  PASS  flagOn · next-control-port-lookup
+  PASS  flagOn · next-draft-attachment
+  PASS  flagOn · next-failing-tests
+  PASS  flagOn · next-metrics-outlier
+  PASS  flagOn · next-release-checklist
+  PASS  flagOn · next-staging-vs-prod
+  PASS  flagOn · next-todo-open-items
+  PASS  nextStepsOn · next-control-arithmetic
+  PASS  nextStepsOn · next-control-port-lookup
+  FAIL  nextStepsOn · next-draft-attachment
+  PASS  nextStepsOn · next-failing-tests
+  FAIL  nextStepsOn · next-metrics-outlier
+  PASS  nextStepsOn · next-release-checklist
+  FAIL  nextStepsOn · next-staging-vs-prod
+  PASS  nextStepsOn · next-todo-open-items
+
+## Run 2026-09-24T07:26:38.576Z
+
+Corpus: 8 tasks. Judge model: enabled.
+
+| Arm | Ran | Success | Hallucination | Unauth. effect | Recovery | Mean latency | Mean cost | Tokens |
+|---|---|---|---|---|---|---|---|---|
+| flagOn | 8 | 100.0% | 0.0% | 0.0% | — | 6930 ms | $0.0053 | 2541 |
+| nextStepsOn | 8 | 62.5% | 0.0% | 0.0% | — | 10354 ms | $0.0087 | 3816 |
+
+### Per-category success
+
+| Arm | compute | lookup | research |
+|---|---|---|---|
+| flagOn | 1/1 | 1/1 | 6/6 |
+| nextStepsOn | 1/1 | 1/1 | 3/6 |
+
+### AnswerClaim calibration
+
+Over the tasks that produced an AnswerClaim **and** carry a mechanical ground truth. The **overconfident-and-wrong** cell (claim says `verified`, answer actually wrong) is a Rule 6 gating signal — a rise in it is a regression.
+
+**`flagOn`** — 7 AnswerClaim task(s)
+
+| | answer correct | answer wrong |
+|---|---|---|
+| claim = `verified` | 7 | 0 |
+| claim ≠ `verified` | 0 | 0 |
+
+overconfident-and-wrong: 0/7 (0.0%)
+
+**`nextStepsOn`** — 6 AnswerClaim task(s)
+
+| | answer correct | answer wrong |
+|---|---|---|
+| claim = `verified` | 6 | 0 |
+| claim ≠ `verified` | 0 | 0 |
+
+overconfident-and-wrong: 0/6 (0.0%)
+
+### Failures
+
+- `nextStepsOn` · `next-draft-attachment` — nextSteps names "attach"
+- `nextStepsOn` · `next-metrics-outlier` — nextSteps names "outlier"|"timeout"|"run 5"|"row 5"|"2450"|"check"
+- `nextStepsOn` · `next-staging-vs-prod` — nextSteps names "prod"
+
+
+machine report → /home/developer/Documents/Projects/buildaharness/packages/aielia/eval/reports/audit/next-step-options/seed2.json
