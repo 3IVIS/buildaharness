@@ -352,25 +352,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant followed the import chain a.py → b.py → c.py and correctly said the third-party package is `requests`. Nothing it said was wrong or made up.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"requests\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"none\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no third-party\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only local modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"a.py has no external\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

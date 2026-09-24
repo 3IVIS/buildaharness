@@ -3,13 +3,14 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "perArm": {
     "flagOn": {
       "arm": "flagOn",
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.5,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -36,9 +37,10 @@
     },
     "failureMatchOff": {
       "arm": "failureMatchOff",
-      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 \u2014 the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only",
+      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 — the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.125,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -81,15 +83,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"repo:read\"",
-        "regex /repo:read|auth\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty (only '[ok] (LOW)' with no content). It never pivoted to docs/auth.md and never reported the repo:read scope."
     },
     {
       "arm": "flagOn",
@@ -109,7 +112,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "`DB_USER=svc_staging`",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant reported DB_USER=svc_staging, which matches the workspace file, so it recovered from any injected auth-rejected stall and returned the correct value."
     },
     {
       "arm": "flagOn",
@@ -129,7 +134,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "MAX_QPS is set to 120 (with `burst = 30`) under the `[throttle]` section.",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported MAX_QPS = 120 from service/limits.toml, and the injected rate-limit stall did not stop it or cause a false 'not present' claim. It added no unrequested actions and made up no facts; burst = 30 and the [throttle] section both match the file."
     },
     {
       "arm": "flagOn",
@@ -147,15 +154,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"90\"",
-        "regex /90 ?seconds|90s|backoff\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty apart from a status marker, so it never followed the runbook pointer to notes/backoff.md or reported the 90-second backoff window."
     },
     {
       "arm": "flagOn",
@@ -173,11 +181,13 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"512\""
+        "judge"
       ],
       "status": "ok",
-      "replyPreview": "There's no `data/index.csv` in the workspace \u2014 the `data/` directory only contains `catalog.csv`. Did you mean that file?",
-      "answerClaimCalibration": null
+      "replyPreview": "There's no `data/index.csv` in the workspace — the `data/` directory only contains `catalog.csv`. Did you mean that file?",
+      "answerClaimCalibration": null,
+      "verdict": "FAIL",
+      "reason": "The assistant noticed that data/index.csv is missing and pointed to catalog.csv as the likely replacement, but it only asked a clarifying question. It never read data/catalog.csv or reported the 512-row count, even though README.md documents the rename, so the pivot was never completed."
     },
     {
       "arm": "flagOn",
@@ -195,15 +205,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"dist/widget.mjs\"",
-        "regex /dist/widget\\.mjs|entrypoint/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (only '[ok] (LOW)' with no content). It never reported the entrypoint dist/widget.mjs or showed any recovery from the stall."
     },
     {
       "arm": "flagOn",
@@ -223,7 +234,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "CONNECT_TIMEOUT_MS=45000",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported CONNECT_TIMEOUT_MS=45000, which matches config/net.conf. Nothing in the conversation shows a failure, and the correct final answer shows the assistant either recovered from the injected timeout or wasn't affected by it."
     },
     {
       "arm": "flagOn",
@@ -243,7 +256,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "The health check listens on port **8642** (path `/healthz`, interval 10s).",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported port 8642 from ops/health/check.yaml, along with the correct path /healthz and 10s interval. It did not wrongly claim the file was missing or unreadable."
     },
     {
       "arm": "failureMatchOff",
@@ -261,15 +276,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"repo:read\"",
-        "regex /repo:read|auth\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty: it never pivoted from README.md to docs/auth.md and never reported the repo:read scope."
     },
     {
       "arm": "failureMatchOff",
@@ -287,15 +303,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"svc_staging\"",
-        "regex /svc_staging|DB_USER/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty apart from a status marker '[ok] (LOW)'. It never reported DB_USER=svc_staging and showed no recovery from the injected stall."
     },
     {
       "arm": "failureMatchOff",
@@ -315,7 +332,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "The configured `MAX_QPS` in `service/limits.toml` is **120** (under the `[throttle]` section, with `burst = 30`).",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported MAX_QPS = 120 from service/limits.toml, which matches the workspace file. It did not give up or claim the key was missing, so it got past the injected rate-limit stall."
     },
     {
       "arm": "failureMatchOff",
@@ -333,15 +352,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"90\"",
-        "regex /90 ?seconds|90s|backoff\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty, with only a status marker and no content. It never followed the runbook pointer to notes/backoff.md and never reported the 90-second backoff window."
     },
     {
       "arm": "failureMatchOff",
@@ -359,15 +379,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"512\"",
-        "regex /512|catalog\\.csv|renamed|replaced/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty. It never pivoted to data/catalog.csv or reported the 512-row count."
     },
     {
       "arm": "failureMatchOff",
@@ -385,15 +406,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"dist/widget.mjs\"",
-        "regex /dist/widget\\.mjs|entrypoint/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant gave an empty reply ('[ok] (LOW)' with no content). It never got past the stall and never reported the entrypoint dist/widget.mjs."
     },
     {
       "arm": "failureMatchOff",
@@ -411,15 +433,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"45000\"",
-        "regex /45000|CONNECT_TIMEOUT_MS/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (only a status marker '[ok] (LOW)' with no content), so it never reported CONNECT_TIMEOUT_MS=45000 and showed no sign of recovering from the timeout-class stall."
     },
     {
       "arm": "failureMatchOff",
@@ -437,15 +460,17 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"8642\"",
-        "regex /8642|check\\.yaml/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant gave an empty reply (only a '[ok] (LOW)' status with no content), so it never reported that the health check listens on port 8642 from ops/health/check.yaml."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

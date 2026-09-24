@@ -8,7 +8,7 @@
   "verdict": "CUT",
   "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+82% $/turn, +23% latency). Neutral with real cost — it does not earn its keep.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-22T21:33:10.592Z",
   "metrics": [
     {
@@ -96,5 +96,6 @@
   "costDeltaPct": 0.8165795205642431,
   "latencyDeltaPct": 0.2326322498406629,
   "tokenDeltaPct": 0.2098381070983811,
-  "injectionSignals": null
+  "injectionSignals": null,
+  "nextStepSignals": null
 }

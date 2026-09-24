@@ -941,21 +941,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant updated the note to us-east-1, said it replaces eu-west-1 because of the migration, and kept the Postgres 15 detail. It did not call the change a contradiction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /updated|changed|us-east-1|done|noted/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -702,18 +702,21 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly answered 6 workers, but it offered no next-step options at all, so there was no follow-up pointing to config/prod.yaml as the pass criteria require.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"6\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"prod\"",
+        "name": "nextSteps (judge)",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "nextSteps names \"prod\""
+      "nextSteps (judge)"
     ]
   },
   "metrics": {

@@ -1322,21 +1322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said the dashboard should read from BigQuery, the analytics warehouse, and treated it as complementary to the production PostgreSQL database. It gave sensible reasons and did not flag a false contradiction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /BigQuery|warehouse|analytics/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

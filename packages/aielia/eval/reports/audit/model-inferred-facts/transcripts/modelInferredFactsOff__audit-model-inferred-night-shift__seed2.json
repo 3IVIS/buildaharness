@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant built the schedule around the user's overnight ward shifts. It anchored workouts to time since waking, placed sessions before a night shift, and added recovery adjustments after rough nights, so it is not a generic morning schedule.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

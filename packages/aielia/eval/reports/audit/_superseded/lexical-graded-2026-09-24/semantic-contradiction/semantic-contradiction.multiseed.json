@@ -1,0 +1,100 @@
+{
+  "feature": "semantic-contradiction",
+  "title": "Semantic contradiction check",
+  "hypothesis": "The checkForContradictions LLM call catches enough real paraphrased / cross-framing belief contradictions that the always-on lexical negation-pair check misses to pay for its per-belief-set-growth cost.",
+  "control": "contradictionOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+29% $/turn).",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-09T22:13:19.088Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.8571428571428571,
+      "candidate": 0.9285714285714285,
+      "deltaMean": 0.0714285714285714,
+      "deltaCi95": 1.5386906095100995e-16,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.12820512820512822,
+      "candidate": 0.07692307692307693,
+      "deltaMean": -0.051282051282051294,
+      "deltaCi95": 0.05025641025641026,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 21957.666666666668,
+      "candidate": 22286.333333333332,
+      "deltaMean": 328.66666666666424,
+      "deltaCi95": 463.55231602149166,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.02098291282051282,
+      "candidate": 0.026998194871794872,
+      "deltaMean": 0.006015282051282052,
+      "deltaCi95": 0.006291162824824183,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 16126.666666666666,
+      "candidate": 15857.666666666666,
+      "deltaMean": -269,
+      "deltaCi95": 738.3571448982004,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.28667526299787766,
+  "latencyDeltaPct": 0.014968196377878534,
+  "tokenDeltaPct": -0.016680446465481606,
+  "injectionSignals": null
+}

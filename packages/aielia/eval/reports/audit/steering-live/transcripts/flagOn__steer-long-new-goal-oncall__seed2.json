@@ -720,9 +720,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final reply answers the new question and gives the expected primary on-call number, 555-0142; the earlier trail total of 198 is also correct. oncall.txt is not in the starting workspace listing, so the secondary number, 555-0177, can't be checked, but the task expects that file to exist and nothing contradicts it.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"555-0142\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

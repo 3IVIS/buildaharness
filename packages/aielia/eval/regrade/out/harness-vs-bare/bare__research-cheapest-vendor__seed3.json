@@ -1,0 +1,17 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__research-cheapest-vendor__seed3.json",
+ "task": "research-cheapest-vendor",
+ "arm": "bare",
+ "seed": "3",
+ "category": "research",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"Vendor A\"",
+  "regex /2[,. ]?050/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

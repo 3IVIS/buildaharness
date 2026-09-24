@@ -1270,14 +1270,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In the final turn the assistant added 'Throttle ceiling — 50 requests per second' next to the 6,000 req/min limit and did not point out that 50 req/s equals only 3,000 req/min. It accepted both figures without flagging the conflict.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+      "judge"
     ]
   },
   "metrics": {

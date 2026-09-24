@@ -332,25 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said version 1.4.0 was released on 2026-03-11 and cited the CHANGELOG heading. That is the pivot from package.json to the CHANGELOG that the task requires.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2026-03-11\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not recorded\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no date\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find a date\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

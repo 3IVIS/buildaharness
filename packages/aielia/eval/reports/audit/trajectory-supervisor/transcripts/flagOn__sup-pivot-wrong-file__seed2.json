@@ -332,29 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant followed the pointer from server.js into config/ports.json and correctly said the API listens on port 9443. It also correctly noted that admin is on 9444.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9443\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"8080\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3000\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"port is not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot determine\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"don't know\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

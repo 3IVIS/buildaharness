@@ -1,0 +1,438 @@
+{
+  "generatedAt": "2026-09-24T07:23:14.900Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 25027,
+      "meanCostUsd": 0.020842700000000002,
+      "totalTokens": 8021,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "goalGraphOn": {
+      "arm": "goalGraphOn",
+      "label": "PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 24824,
+      "meanCostUsd": 0.020732950000000003,
+      "totalTokens": 8072,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-alternating-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 37715,
+      "costUsd": 0.0271646,
+      "totalTokens": 1492,
+      "turns": 6,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "{\"value\": 44}",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-constraint-not-inherited",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17395,
+      "costUsd": 0.01277,
+      "totalTokens": 716,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Marta Ilves chairs the Thursday meeting.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-control-linear",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17220,
+      "costUsd": 0.012043600000000002,
+      "totalTokens": 698,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The platform team has the bigger headcount: 9, compared with 6 for the data team.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-correction-survives-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22259,
+      "costUsd": 0.0256752,
+      "totalTokens": 903,
+      "turns": 4,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total for 3 units is 135, at 45 each. That uses your corrected price, not the 40 in price.txt.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-return-after-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17455,
+      "costUsd": 0.0123222,
+      "totalTokens": 738,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes, it matches. gamma.txt lists the codename as **BLUEHERON**, the same as alpha.txt. In gamma.txt it's labeled \"(draft)\".",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-scoped-format-constraint",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17815,
+      "costUsd": 0.012688000000000001,
+      "totalTokens": 708,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "57",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-three-goals-synthesis",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 28671,
+      "costUsd": 0.0190396,
+      "totalTokens": 1134,
+      "turns": 5,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "- **Vendor:** Nordwind Freight\n- **Shipping date:** 2026-10-14\n- **Support email:** help@nordwind.example\n- **Contract term:** 24 months",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-three-projects-state",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 41688,
+      "costUsd": 0.0450384,
+      "totalTokens": 1632,
+      "turns": 7,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Alder: 350\nBirch: 250\nCedar: 200\n\nThese figures include your updates. The plan files themselves still show the original numbers.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-alternating-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 36886,
+      "costUsd": 0.027624600000000006,
+      "totalTokens": 1526,
+      "turns": 6,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "{\"value\": 44}",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-constraint-not-inherited",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17612,
+      "costUsd": 0.012804000000000001,
+      "totalTokens": 719,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Marta Ilves chairs the Thursday meeting.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-control-linear",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16951,
+      "costUsd": 0.0120192,
+      "totalTokens": 697,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The platform team has the bigger headcount, with 9 people against 6 on the data team, a difference of 3.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-correction-survives-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22294,
+      "costUsd": 0.020618200000000003,
+      "totalTokens": 866,
+      "turns": 4,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total for 3 units is 135 (3 × 45).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-return-after-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18076,
+      "costUsd": 0.0122822,
+      "totalTokens": 734,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes, it matches. gamma.txt lists the codename as **BLUEHERON**, the same as alpha.txt. It's marked \"(draft)\" in gamma.txt.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-scoped-format-constraint",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17843,
+      "costUsd": 0.012686000000000001,
+      "totalTokens": 705,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "57",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-three-goals-synthesis",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 28549,
+      "costUsd": 0.019267600000000003,
+      "totalTokens": 1156,
+      "turns": 5,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "- **Vendor:** Nordwind Freight\n- **Shipping date:** October 14, 2026 (2026-10-14)\n- **Support email:** help@nordwind.example\n- **Contract term:** 24 months",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-three-projects-state",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 40383,
+      "costUsd": 0.04856180000000001,
+      "totalTokens": 1669,
+      "turns": 7,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Alder: 350\nBirch: 250\nCedar: 200",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

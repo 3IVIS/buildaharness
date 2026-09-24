@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered all three turns correctly from config/app.yaml: default region ap-south-9, log level warn, and a one-word ap-south-9 in the last turn. It did not stall or add anything unneeded.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"ap-south-9\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

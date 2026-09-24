@@ -156,30 +156,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant noticed that data/index.csv is missing and pointed to catalog.csv as the likely replacement, but it only asked a clarifying question. It never read data/catalog.csv or reported the 512-row count, even though README.md documents the rename, so the pivot was never completed.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"512\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no such file\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot determine\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"file is empty\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /512|catalog\\.csv|renamed|replaced/i",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"512\""
+      "judge"
     ]
   },
   "metrics": {

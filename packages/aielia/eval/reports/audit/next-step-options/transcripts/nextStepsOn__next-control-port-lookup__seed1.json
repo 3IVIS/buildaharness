@@ -348,13 +348,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly reported the API port as 9443 from ports.txt and offered no next-step options, as this control task expects.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9443\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps == none",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

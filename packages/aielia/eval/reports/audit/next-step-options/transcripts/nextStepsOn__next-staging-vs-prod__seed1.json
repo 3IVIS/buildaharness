@@ -702,18 +702,21 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly answered that staging runs 6 workers, but it offered no next-step options, so it never pointed the user to config/prod.yaml as the pass criteria require.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"6\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"prod\"",
+        "name": "nextSteps (judge)",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "nextSteps names \"prod\""
+      "nextSteps (judge)"
     ]
   },
   "metrics": {

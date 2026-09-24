@@ -84,30 +84,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant only staged an approval request to send a message to the manager and never showed any summary text. There is no visible exec-level line such as 'on track, cutover Friday', so the required output is missing.",
+    "invalid": false,
     "checks": [
-      {
-        "name": "contains \"on track\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"worker-3 picked up\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"sqlite3.OperationalError\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Traceback (most recent call last)\"",
-        "verdict": "pass"
-      },
       {
         "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"on track\"",
       "judge"
     ]
   },

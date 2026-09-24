@@ -1,0 +1,828 @@
+{
+ "flagOn__audit-model-inferred-control-hypothetical__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-control-retracted__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-dog__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-finals__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-left-handed__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-night-shift__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-vegetarian__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-wheelchair__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-hypothetical__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-retracted__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"Biscuit\""
+  ]
+ },
+ "modelInferredFactsOff__audit-model-inferred-dog__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-finals__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-left-handed__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-night-shift__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-vegetarian__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-wheelchair__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-control-hypothetical__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /hotel/i"
+  ]
+ },
+ "flagOn__audit-model-inferred-control-retracted__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-dog__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-finals__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-left-handed__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-night-shift__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-vegetarian__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-wheelchair__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-hypothetical__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-retracted__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-dog__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-finals__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-left-handed__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-night-shift__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-vegetarian__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-wheelchair__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-control-hypothetical__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-control-retracted__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"Biscuit\""
+  ]
+ },
+ "flagOn__audit-model-inferred-dog__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-finals__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-left-handed__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-night-shift__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-vegetarian__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-model-inferred-wheelchair__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-hypothetical__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your greyhound\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your rescue\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /hotel/i"
+  ]
+ },
+ "modelInferredFactsOff__audit-model-inferred-control-retracted__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"your dog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"Biscuit\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"your pet\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /hotel/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"Biscuit\""
+  ]
+ },
+ "modelInferredFactsOff__audit-model-inferred-dog__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-finals__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-left-handed__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-night-shift__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-vegetarian__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /mushroom|wellington|vegetarian/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "modelInferredFactsOff__audit-model-inferred-wheelchair__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"rooftop is the better\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

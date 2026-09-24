@@ -1158,14 +1158,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant excluded the right outliers (S03 and S06) but reported the total as 118. The correct sum of 14+9+21+7+18+12 is 81, so the final answer is wrong.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"81\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"81\""
+      "judge"
     ]
   },
   "metrics": {

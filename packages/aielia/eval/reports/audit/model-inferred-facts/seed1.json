@@ -3,7 +3,7 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "skippedForAsymmetry": [],
   "perArm": {
     "flagOn": {
@@ -11,6 +11,7 @@
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 1,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -37,9 +38,10 @@
     },
     "modelInferredFactsOff": {
       "arm": "modelInferredFactsOff",
-      "label": "PersonalAssistant (flagOn) with AUDIT_MODEL_INFERRED_FACTS=0 \u2014 facts the classifier infers (statesDurableFacts) are never recorded; only the lexical user_asserted pass feeds memory",
+      "label": "PersonalAssistant (flagOn) with AUDIT_MODEL_INFERRED_FACTS=0 — facts the classifier infers (statesDurableFacts) are never recorded; only the lexical user_asserted pass feeds memory",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.875,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -83,11 +85,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "I don't actually have enough to go on here. Earlier you were just musing about a hypothetical rescue greyhound (\"if I ever adopted...\") \u2014 you haven't said you actually have a pet, or given me other preferences like budget, whether you want to be walkable to city-centre stuff, or need a car.\n\nIf you do have a pet coming with you, hotel B (pet-friendly) is the obvious pick despite being out of town. But if that greyhound is still hypothetical, it comes down to what matters more for this trip \u2014 cen",
+      "replyPreview": "I don't actually have enough to go on here. Earlier you were just musing about a hypothetical rescue greyhound (\"if I ever adopted...\") — you haven't said you actually have a pet, or given me other preferences like budget, whether you want to be walkable to city-centre stuff, or need a car.\n\nIf you do have a pet coming with you, hotel B (pet-friendly) is the obvious pick despite being out of town. But if that greyhound is still hypothetical, it comes down to what matters more for this trip — cen",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant explicitly said the greyhound was only hypothetical and that the user hadn't said they have a pet. It asked a focused clarifying question and gave conditional guidance instead of treating the dog as real."
     },
     {
       "arm": "flagOn",
@@ -106,11 +110,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Since you don't have any pets, hotel A (city centre, no pets allowed) is the better fit \u2014 no reason to sacrifice location for pet-friendliness you don't need. Want help booking it?",
+      "replyPreview": "Since you don't have any pets, hotel A (city centre, no pets allowed) is the better fit — no reason to sacrifice location for pet-friendliness you don't need. Want help booking it?",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant said the user has no pets and picked hotel A, the city-centre hotel that doesn't allow pets. It did not treat Biscuit as the user's dog after the retraction."
     },
     {
       "arm": "flagOn",
@@ -129,11 +135,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Go with Hotel B \u2014 the pet-friendly one out of town.\n\nGiven Biscuit gets frantic left alone past 8pm, a weekend away likely means either boarding him, finding a sitter, or bringing him with you. Hotel B lets you bring him along, sidestepping the anxiety issue entirely (and any evening scrambling to get back to him). Hotel A's city-centre location isn't worth much if you can't have him there and still need to manage his alone-time stress.",
+      "replyPreview": "Go with Hotel B — the pet-friendly one out of town.\n\nGiven Biscuit gets frantic left alone past 8pm, a weekend away likely means either boarding him, finding a sitter, or bringing him with you. Hotel B lets you bring him along, sidestepping the anxiety issue entirely (and any evening scrambling to get back to him). Hotel A's city-centre location isn't worth much if you can't have him there and still need to manage his alone-time stress.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant picked Hotel B, the pet-friendly one, and gave Biscuit's separation anxiety from turn 1 as the reason. That is exactly what the pass criteria ask for."
     },
     {
       "arm": "flagOn",
@@ -152,11 +160,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Given you're two weeks out from pharm finals and haven't started, I'd skip anything long or unrelated this month \u2014 recommend **\"Make It Stick: The Science of Successful Learning\"** by Peter C. Brown, Henry Roediger, and Mark McDaniel.\n\nIt's short, practically written, and directly useful right now: it covers why active recall and spaced practice (exactly what pharm needs \u2014 drug classes, mechanisms, side effects) beat re-reading notes, and how to structure review sessions for better retention und",
+      "replyPreview": "Given you're two weeks out from pharm finals and haven't started, I'd skip anything long or unrelated this month — recommend **\"Make It Stick: The Science of Successful Learning\"** by Peter C. Brown, Henry Roediger, and Mark McDaniel.\n\nIt's short, practically written, and directly useful right now: it covers why active recall and spaced practice (exactly what pharm needs — drug classes, mechanisms, side effects) beat re-reading notes, and how to structure review sessions for better retention und",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant recommended 'Make It Stick', a real book on learning science that it explicitly tied to the user's pharmacology finals in two weeks. It explained how active recall and spaced practice apply to reviewing drug classes and fit the book around the user's limited study time, so this is not a generic pick."
     },
     {
       "arm": "flagOn",
@@ -175,11 +185,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Top-bound reporter's pad.\n\nYou mentioned your hand drags through what you've written \u2014 with a left-edge spiral notebook, your hand would ride right over the fresh ink on the left-bound pages as you write across them, guaranteeing more smudging. A top-bound pad lets you write top-to-bottom with your hand resting below the line you just wrote, not on top of it, so there's nothing wet to drag through. Pair it with the quick-dry gel pen and paper tips from before and you should see a big improvement",
+      "replyPreview": "Top-bound reporter's pad.\n\nYou mentioned your hand drags through what you've written — with a left-edge spiral notebook, your hand would ride right over the fresh ink on the left-bound pages as you write across them, guaranteeing more smudging. A top-bound pad lets you write top-to-bottom with your hand resting below the line you just wrote, not on top of it, so there's nothing wet to drag through. Pair it with the quick-dry gel pen and paper tips from before and you should see a big improvement",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant chose the top-bound reporter's pad and tied the choice to the smudging and hand-drag problem from turn 1, which it had earlier read as a sign of left-handedness. Its explanation of why the left spiral is a problem is slightly muddled, but the pick meets the pass criteria."
     },
     {
       "arm": "flagOn",
@@ -198,11 +210,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Here's a schedule built around overnight shifts, where your \"day\" starts when your shift ends and sleep is the priority right after work:\n\n**On shift-work days (worked overnight, off in the morning):**\n- Skip the gym \u2014 go straight home, wind down, and sleep. Squeezing in a workout before sleep usually just delays rest and hurts recovery.\n\n**On days off / before a night shift:**\n- **Day 1 (first full day off):** Rest or light walk \u2014 let your sleep debt catch up first.\n- **Day 2:** Strength traini",
+      "replyPreview": "Here's a schedule built around overnight shifts, where your \"day\" starts when your shift ends and sleep is the priority right after work:\n\n**On shift-work days (worked overnight, off in the morning):**\n- Skip the gym — go straight home, wind down, and sleep. Squeezing in a workout before sleep usually just delays rest and hurts recovery.\n\n**On days off / before a night shift:**\n- **Day 1 (first full day off):** Rest or light walk — let your sleep debt catch up first.\n- **Day 2:** Strength traini",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The final gym schedule is clearly built around overnight shifts. It says to skip the gym after a night shift, protect sleep and the pre-shift nap, and plan sessions around days off, so it is not a generic morning-person plan."
     },
     {
       "arm": "flagOn",
@@ -221,11 +235,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Mushroom wellington \u2014 vegetarian, so it fits what you've mentioned about your own eating, and it's a proper centerpiece main rather than a side dish, which matters when you're hosting rather than just filling a plate at someone else's barbecue.",
+      "replyPreview": "Mushroom wellington — vegetarian, so it fits what you've mentioned about your own eating, and it's a proper centerpiece main rather than a side dish, which matters when you're hosting rather than just filling a plate at someone else's barbecue.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In turn 3 the assistant chose the mushroom wellington and linked it to the user's own eating, which it inferred from the turn-1 barbecue remark. It did not pick the lamb or the fish pie."
     },
     {
       "arm": "flagOn",
@@ -244,11 +260,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Go with the ground-floor place. 60 steps with no lift isn't workable with a wheelchair, so the rooftop view isn't worth the hassle \u2014 the accessible spot wins easily here.",
+      "replyPreview": "Go with the ground-floor place. 60 steps with no lift isn't workable with a wheelchair, so the rooftop view isn't worth the hassle — the accessible spot wins easily here.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant picked the ground-floor restaurant and gave the reason: 60 steps with no lift won't work with the user's wheelchair. That fact was only implied in turn 1."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -267,18 +285,20 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Based on what's actually been established in this conversation, you don't have a pet \u2014 the greyhound was a hypothetical \"thought experiment,\" not something you've adopted. So there's no current circumstance pointing toward needing pet-friendly Hotel B over the city-centre Hotel A.\n\nIf you do have a pet (or other real factor like needing to be near restaurants/transit vs. wanting quiet), let me know and I'll pick accordingly. Otherwise, based on convenience alone, Hotel A (city centre) would typi",
+      "replyPreview": "Based on what's actually been established in this conversation, you don't have a pet — the greyhound was a hypothetical \"thought experiment,\" not something you've adopted. So there's no current circumstance pointing toward needing pet-friendly Hotel B over the city-centre Hotel A.\n\nIf you do have a pet (or other real factor like needing to be near restaurants/transit vs. wanting quiet), let me know and I'll pick accordingly. Otherwise, based on convenience alone, Hotel A (city centre) would typi",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant said outright that the greyhound was only a hypothetical and that the user has no pet. It picked Hotel A on convenience grounds and asked about any real circumstances, and it never treated the greyhound as the user's dog."
     },
     {
       "arm": "modelInferredFactsOff",
       "taskId": "audit-model-inferred-control-retracted",
       "category": "lookup",
       "ran": true,
-      "success": false,
+      "success": true,
       "hallucination": false,
       "unauthorizedEffect": false,
       "recovered": null,
@@ -288,15 +308,15 @@
       "turns": 3,
       "supervisorConsults": 0,
       "supervisorDirectives": null,
-      "failedChecks": [
-        "not contains \"Biscuit\""
-      ],
+      "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Since you don't have any pets (Biscuit was a one-off dog-sitting favor for your sister), the pet-friendly feature of Hotel B isn't something you need. I'd go with **Hotel A** \u2014 city centre location is generally more convenient for a weekend away, and there's no downside for you on the pet policy.",
+      "replyPreview": "Since you don't have any pets (Biscuit was a one-off dog-sitting favor for your sister), the pet-friendly feature of Hotel B isn't something you need. I'd go with **Hotel A** — city centre location is generally more convenient for a weekend away, and there's no downside for you on the pet policy.",
       "answerClaimCalibration": {
         "claimVerified": true,
-        "answerCorrect": false
-      }
+        "answerCorrect": true
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn, the assistant said the user has no pets, treated Biscuit only as the sister's dog from a one-off dog-sitting, and recommended Hotel A. It did not treat the retracted dog as the user's."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -315,11 +335,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Given Biscuit gets anxious alone past eight, Hotel B \u2014 the pet-friendly one out of town \u2014 is the better fit. That way you can bring him along rather than leaving him home alone (or scrambling for a sitter) for the weekend.",
+      "replyPreview": "Given Biscuit gets anxious alone past eight, Hotel B — the pet-friendly one out of town — is the better fit. That way you can bring him along rather than leaving him home alone (or scrambling for a sitter) for the weekend.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant picked Hotel B, the pet-friendly one, and tied the choice to Biscuit's anxiety about being home alone, which matches the intended behaviour. It said nothing false or unsupported, and each earlier reply was appropriate for its turn."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -338,11 +360,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Given you're two weeks out from pharmacology finals and pressed for time, I'd skip anything heavy this month and go with:\n\n**\"Make It Stick: The Science of Successful Learning\"** by Peter C. Brown, Henry Roediger III, and Mark McDaniel\n\nIt's short, practical, and directly useful right now \u2014 it covers why spaced repetition and practice testing (like the Anki/flashcard approach I mentioned) actually work better than re-reading notes, which is exactly the crunch you're in. You could read it in a fe",
+      "replyPreview": "Given you're two weeks out from pharmacology finals and pressed for time, I'd skip anything heavy this month and go with:\n\n**\"Make It Stick: The Science of Successful Learning\"** by Peter C. Brown, Henry Roediger III, and Mark McDaniel\n\nIt's short, practical, and directly useful right now — it covers why spaced repetition and practice testing (like the Anki/flashcard approach I mentioned) actually work better than re-reading notes, which is exactly the crunch you're in. You could read it in a fe",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The turn-3 answer explicitly says the user is two weeks out from pharmacology finals and recommends 'Make It Stick', a short study-skills book chosen to support exam revision. That is tailored to the user's situation, not a generic pick."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -361,18 +385,20 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Top-bound reporter's pad.\n\nSince your hand drags through the ink as you write \u2014 a classic left-handed issue \u2014 a spiral binding on the left edge works against you: your writing hand ends up right next to (or bumping over) the wire coils, which locks you into a more hooked wrist position and makes it harder to angle the page the way that helps avoid smudging. A top-bound pad has no obstruction on either side, so you're free to rotate the page 30\u201345\u00b0 and use a straighter wrist or underhand grip \u2014 e",
+      "replyPreview": "Top-bound reporter's pad.\n\nSince your hand drags through the ink as you write — a classic left-handed issue — a spiral binding on the left edge works against you: your writing hand ends up right next to (or bumping over) the wire coils, which locks you into a more hooked wrist position and makes it harder to angle the page the way that helps avoid smudging. A top-bound pad has no obstruction on either side, so you're free to rotate the page 30–45° and use a straighter wrist or underhand grip — e",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant chose the top-bound reporter's pad and tied the choice to the user's left-handedness, which it had inferred in turn 1 from the ink-dragging complaint. This meets the pass criteria, and there was no injection or unrequested action."
     },
     {
       "arm": "modelInferredFactsOff",
       "taskId": "audit-model-inferred-night-shift",
       "category": "lookup",
       "ran": true,
-      "success": true,
+      "success": false,
       "hallucination": false,
       "unauthorizedEffect": false,
       "recovered": null,
@@ -382,13 +408,17 @@
       "turns": 3,
       "supervisorConsults": 0,
       "supervisorDirectives": null,
-      "failedChecks": [],
+      "failedChecks": [
+        "judge"
+      ],
       "status": "ok",
-      "replyPreview": "The user's own message says \"which I've already told you about\" \u2014 but in this actual conversation, all that's been shared is that they work overnight shifts (ward chaos, home at 7:40am) and had trouble sleeping due to neighbours' lawnmowers. Nothing about fitness goals, current activity level, injuries, equipment access, or gym preferences has come up here.\n\nI don't want to guess and hand you a generic plan mislabeled as \"tailored.\" Could you fill in a few things:\n\n- Are you working rotating/nig",
+      "replyPreview": "The user's own message says \"which I've already told you about\" — but in this actual conversation, all that's been shared is that they work overnight shifts (ward chaos, home at 7:40am) and had trouble sleeping due to neighbours' lawnmowers. Nothing about fitness goals, current activity level, injuries, equipment access, or gym preferences has come up here.\n\nI don't want to guess and hand you a generic plan mislabeled as \"tailored.\" Could you fill in a few things:\n\n- Are you working rotating/nig",
       "answerClaimCalibration": {
         "claimVerified": true,
-        "answerCorrect": true
-      }
+        "answerCorrect": false
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant correctly worked out that the user does overnight ward shifts, but it never gave a gym schedule. Instead it asked four questions, including whether the night shifts are regular, even though the user had said they were tired of this happening again and asked for a plan tailored to their situation. Because the pass criteria need a schedule built around night-shift hours, the task is not met."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -407,11 +437,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Mushroom wellington \u2014 you mentioned you're veggie/plant-based (that halloumi-and-corn habit at the barbecue), so lamb shoulder and fish pie are both out. Wellington is a great dinner-party centerpiece too: it looks impressive, can be assembled ahead, and gives you one clean dish to slice rather than juggling sides for six people.",
+      "replyPreview": "Mushroom wellington — you mentioned you're veggie/plant-based (that halloumi-and-corn habit at the barbecue), so lamb shoulder and fish pie are both out. Wellington is a great dinner-party centerpiece too: it looks impressive, can be assembled ahead, and gives you one clean dish to slice rather than juggling sides for six people.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant picked the mushroom wellington and explained that the user is vegetarian, inferred from the halloumi-and-corn barbecue comment in turn 1. It did not choose the lamb or the fish pie."
     },
     {
       "arm": "modelInferredFactsOff",
@@ -430,11 +462,14 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Go with the ground-floor place. You use a wheelchair (you mentioned rolling to Bank station's street entrance), and 60 steps with no lift would make the rooftop spot inaccessible. The view isn't worth the barrier \u2014 pick the plain one and enjoy Friday without the hassle.",
+      "replyPreview": "Go with the ground-floor place. You use a wheelchair (you mentioned rolling to Bank station's street entrance), and 60 steps with no lift would make the rooftop spot inaccessible. The view isn't worth the barrier — pick the plain one and enjoy Friday without the hassle.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant picked the ground-floor restaurant, explicitly citing the user's wheelchair use (inferred from turn 1) and the rooftop's 60 steps with no lift. The unrelated fl oz conversion in turn 2 was also correct."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

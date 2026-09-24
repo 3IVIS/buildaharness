@@ -332,23 +332,10 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 'Yes' directly and gave one short sentence of justification based on the 2026-09-08 entries (cutover, decommission, 'Migration marked complete'). It did not dump the changelog or repeat earlier intermediate steps.",
+    "invalid": false,
     "checks": [
-      {
-        "name": "not contains \"shadow-write path for users table\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"off-by-one in the backfill cursor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"backfill batch size tuned\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\byes\\b/i",
-        "verdict": "pass"
-      },
       {
         "name": "judge",
         "verdict": "pass"

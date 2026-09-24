@@ -2042,9 +2042,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "On the last turn the question was about shipping, and the assistant replied with just the JSON object {\"value\": 44}, which is the right format and the right Tuesday count from shipping.txt. Earlier turns also used the correct format for each topic: bare numbers for stock, JSON for shipping and DONE at the end of vendor answers, all with values that match the files.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

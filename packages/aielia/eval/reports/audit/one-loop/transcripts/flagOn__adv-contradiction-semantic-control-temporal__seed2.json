@@ -307,37 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the Free-to-Pro change as a normal update and did not flag any contradiction. It engaged with the support question, explaining that it can't see account status and how the user can confirm that their Pro plan is active and includes priority support; the hedging is cautious but reasonable.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not consistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"can't both be true\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /pro|priority support|yes/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

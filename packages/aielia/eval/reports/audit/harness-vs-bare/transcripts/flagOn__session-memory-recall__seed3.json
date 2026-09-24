@@ -972,27 +972,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final reply applied the turn-1 $500/month ceiling to vendors.csv, listing Acme ($420) and Cedar ($480) as affordable and excluding Bolt ($610, $110 over). All figures match the file, and the earlier Acme-region reply avoided inventing facts.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Acme\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"Cedar\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Bolt\"",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "not contains \"Bolt\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 36882,

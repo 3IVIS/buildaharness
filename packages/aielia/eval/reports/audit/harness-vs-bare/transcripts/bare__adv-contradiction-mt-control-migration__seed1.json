@@ -131,21 +131,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant saw the migration as a normal change: it moved the staging region to us-east-1, kept Postgres 15, and did not call the update a contradiction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /updated|changed|us-east-1|done|noted/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

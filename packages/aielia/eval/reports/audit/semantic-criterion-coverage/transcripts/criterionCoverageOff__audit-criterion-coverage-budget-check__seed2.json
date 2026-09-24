@@ -328,23 +328,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant stated the total spend as $10,400 with a correct breakdown and said it was under the $12,000 limit by $1,600, which meets both success criteria.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"10400\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "contains \"10400\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 8618,

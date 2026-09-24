@@ -536,21 +536,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly combined services.md (billing → payments-core), teams.md (6 engineers, Berlin) and managers.csv (payments-core → Sam Okafor) into one accurate answer. It did not attach the wrong manager to the team.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"payments-core\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Sam Okafor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Priya Raman\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Lena Vogt\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -26,31 +26,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "INVALID_RUN",
+    "reason": "claude exited with code 1",
+    "invalid": true,
     "checks": [
       {
         "name": "arm",
         "verdict": "fail"
-      },
-      {
-        "name": "contains \"redis\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"memcached is the\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"use memcached\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in-process\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "arm",
-      "contains \"redis\""
+      "arm"
     ]
   },
   "metrics": {

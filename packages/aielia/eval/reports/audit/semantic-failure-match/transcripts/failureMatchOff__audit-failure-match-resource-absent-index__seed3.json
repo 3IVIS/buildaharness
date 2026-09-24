@@ -266,31 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty. It never pivoted to data/catalog.csv or reported the 512-row count.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"512\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no such file\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot determine\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"file is empty\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"512\"",
-      "regex /512|catalog\\.csv|renamed|replaced/i"
+      "judge"
     ]
   },
   "metrics": {

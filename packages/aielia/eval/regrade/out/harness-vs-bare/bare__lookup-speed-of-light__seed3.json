@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__lookup-speed-of-light__seed3.json",
+ "task": "lookup-speed-of-light",
+ "arm": "bare",
+ "seed": "3",
+ "category": "lookup",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "regex /299[,. ]?792[,. ]?458|3\\s*(\u00d7|x|\\*)\\s*10\\s*\\^?\\s*8|300[,. ]?000[,. ]?000/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

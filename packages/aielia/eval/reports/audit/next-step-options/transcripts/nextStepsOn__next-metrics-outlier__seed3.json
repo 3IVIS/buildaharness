@@ -132,23 +132,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly computed the 6-run average (2957/6 ≈ 492.8 ms). It also pointed out that run 5 (2450 ms) is flagged as a probable timeout and gave the average without it (101.4 ms), which meets the intent of surfacing the outlier.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 10027,

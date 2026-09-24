@@ -322,14 +322,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly computed the all-run average (2957/6 ≈ 492.8 ms) and the average excluding run 5 (507/5 = 101.4 ms). It explicitly flagged run 5's 2450 ms latency and its 'probable timeout' note as an outlier; no next-step options section was shown, so options were not judged.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

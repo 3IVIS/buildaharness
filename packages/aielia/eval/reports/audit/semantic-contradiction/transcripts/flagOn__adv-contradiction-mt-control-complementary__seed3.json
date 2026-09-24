@@ -1322,21 +1322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said BigQuery, the analytics warehouse, and explained that it complements the PostgreSQL OLTP database, with no false contradiction flag. It also added an accurate note that the data is only as fresh as the 02:00 UTC ETL run.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /BigQuery|warehouse|analytics/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

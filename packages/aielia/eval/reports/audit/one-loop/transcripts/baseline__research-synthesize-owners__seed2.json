@@ -470,21 +470,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly identified from the workspace files that billing is owned by payments-core (6 engineers, Berlin) and that the team's manager is Sam Okafor. It drew on all three files and added no incorrect details.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"payments-core\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Sam Okafor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Priya Raman\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Lena Vogt\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

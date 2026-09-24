@@ -266,35 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty (only a status marker '[ok] (LOW)' with no content), so it never reported CONNECT_TIMEOUT_MS=45000 and showed no sign of recovering from the timeout-class stall.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"45000\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no such key\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"there is no config\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"45000\"",
-      "regex /45000|CONNECT_TIMEOUT_MS/i"
+      "judge"
     ]
   },
   "metrics": {

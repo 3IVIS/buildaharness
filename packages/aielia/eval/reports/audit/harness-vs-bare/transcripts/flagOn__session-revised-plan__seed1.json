@@ -1310,21 +1310,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the user added persistence, the assistant correctly used options.md to rule out memcached and in-process LRU, and its final answer clearly recommended Redis. It did describe multi-node sharing as a 'requirement' the user never stated, but that is a minor overstatement and does not change the correct outcome.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"redis\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"memcached is the\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"use memcached\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in-process\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

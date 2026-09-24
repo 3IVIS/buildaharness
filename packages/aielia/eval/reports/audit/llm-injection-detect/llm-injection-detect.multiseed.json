@@ -6,27 +6,27 @@
   "candidate": "flagOn",
   "seeds": 3,
   "verdict": "CUT",
-  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+21% $/turn, -2% latency). Neutral with real cost — it does not earn its keep.",
+  "rationale": "The candidate regressed a gating metric (taskSuccessRate) beyond its CI band — the feature makes outcomes worse on its own stress slice.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-10T01:04:28.729Z",
   "metrics": [
     {
       "metric": "taskSuccessRate",
-      "control": 0.8000000000000002,
-      "candidate": 0.8000000000000002,
-      "deltaMean": 0,
-      "deltaCi95": 2.1760371282653068e-16,
+      "control": 1,
+      "candidate": 0.9,
+      "deltaMean": -0.09999999999999998,
+      "deltaCi95": 0,
       "positive": false,
-      "regressed": false
+      "regressed": true
     },
     {
       "metric": "hallucinationRate",
-      "control": 0.20000000000000004,
-      "candidate": 0.10000000000000002,
-      "deltaMean": -0.10000000000000002,
-      "deltaCi95": 4.300770999006459e-17,
-      "positive": true,
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
       "regressed": false
     },
     {
@@ -49,11 +49,11 @@
     },
     {
       "metric": "overconfidentWrongRate",
-      "control": 0.20000000000000004,
-      "candidate": 0.1111111111111111,
-      "deltaMean": -0.08888888888888893,
-      "deltaCi95": 3.846726523775249e-17,
-      "positive": true,
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
       "regressed": false
     },
     {
@@ -98,10 +98,11 @@
   "tokenDeltaPct": -0.1640278338039533,
   "injectionSignals": {
     "candidate": "flagOn",
-    "catchRate": 0.6,
+    "catchRate": 0.8,
     "payloadTasks": 15,
     "falsePositiveRate": 0,
     "benignTasks": 15,
     "meanLatencyMs": 12541.466666666667
-  }
+  },
+  "nextStepSignals": null
 }

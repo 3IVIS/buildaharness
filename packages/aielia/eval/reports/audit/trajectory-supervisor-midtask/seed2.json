@@ -3,7 +3,7 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "skippedForAsymmetry": [],
   "perArm": {
     "flagOn": {
@@ -11,6 +11,7 @@
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.625,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -40,6 +41,7 @@
       "label": "PersonalAssistant (flagOn) with HARNESS_TRAJECTORY_SUPERVISOR=0 — the Trajectory Supervisor disabled (the pre-2026-09-23 aielia default)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.375,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -89,7 +91,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "Once the user named 'export_v2', the assistant gave 210s, which is correct, and it did not use the v1 value of 90s. On turn 2 it gave a generic failure message instead of a clarifying question, but the pass criteria only concern the final answer after the user supplies the section name."
     },
     {
       "arm": "flagOn",
@@ -109,14 +113,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"17\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Now find the retry limit the checkout worker uses. The worker file points to another file for it.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On turn 2 the assistant gave only a generic could-not-complete message and never followed the pointer from workers/checkout.yaml to limits.yaml. It did not report the checkout retry limit of 17."
     },
     {
       "arm": "flagOn",
@@ -139,7 +145,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported the default region ap-south-9 and the log level warn from config/app.yaml. In the final turn it restated the default region in one word, as asked."
     },
     {
       "arm": "flagOn",
@@ -162,7 +170,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant read prices.txt correctly, said B is 31 and C is 44, and gave B plus C as 75, which matches the file. There was no stall, and it did not add anything unsupported beyond noting that the file lists no currency."
     },
     {
       "arm": "flagOn",
@@ -182,14 +192,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"MPL-2.0\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Now look up the licence identifier. It is not in the README; check the packaging metadata somewhere under pkg/.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On the third turn the assistant only returned a generic could-not-complete message and never gave the licence identifier. The identifier (MPL-2.0, in pkg/meta/legal/licence.txt) was never recovered."
     },
     {
       "arm": "flagOn",
@@ -214,7 +226,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "In the final turn the assistant named Ines Duarte from the newer oncall/2026-09.txt (updated 2026-09-18) and said the August file listing Tomas Weiss is out of date. Its first-turn answer, Tomas Weiss, was also correct because that question asked only about the August file."
     },
     {
       "arm": "flagOn",
@@ -234,14 +248,16 @@
         "REDIRECT_STRATEGY"
       ],
       "failedChecks": [
-        "contains \"4300\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Trace where the exported constant TIMEOUT_MS is finally defined and give me its value.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant gave only a generic could-not-complete message. It never traced index.js -> lib/reexport.js -> lib/defaults.js and never reported TIMEOUT_MS = 4300."
     },
     {
       "arm": "flagOn",
@@ -266,7 +282,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "On turn 2 the assistant followed billing/server.js's pointer to config/ports.json and correctly reported the billing port as 9271. Turn 1 was also correct (staging-2, and the freeze ends Friday)."
     },
     {
       "arm": "supervisorOff",
@@ -289,7 +307,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "Once the user named the 'export_v2' section in turn 3, the assistant correctly reported 210s rather than the v1 figure of 90s. Its turn-2 reply was a generic could-not-complete message instead of a clarifying question, but it didn't guess or give a wrong value, and the pass criterion only covers the final answer."
     },
     {
       "arm": "supervisorOff",
@@ -307,14 +327,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"17\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Now find the retry limit the checkout worker uses. The worker file points to another file for it.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "In turn 2 the assistant only returned a generic could-not-complete message and never followed workers/checkout.yaml to limits.yaml. It therefore never reported the checkout retry limit of 17."
     },
     {
       "arm": "supervisorOff",
@@ -337,7 +359,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant gave the correct answers on all three turns: ap-south-9, then warn, then ap-south-9 in one word as asked. The session ran cleanly with no stall."
     },
     {
       "arm": "supervisorOff",
@@ -360,7 +384,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly read B=31 and C=44 from prices.txt and computed B plus C as 31 + 44 = 75, with no stall at any turn."
     },
     {
       "arm": "supervisorOff",
@@ -378,14 +404,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"MPL-2.0\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Now look up the licence identifier. It is not in the README; check the packaging metadata somewhere under pkg/.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On the third turn the assistant only gave a generic could-not-complete message. It never found or reported the MPL-2.0 licence identifier from pkg/meta/legal/licence.txt, so the stalled turn did not recover."
     },
     {
       "arm": "supervisorOff",
@@ -403,14 +431,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"Ines Duarte\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Who is on call right now? The August file may be out of date; look for anything newer in oncall/.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "In the final turn the assistant gave only a generic could-not-complete message and never reported the newer on-call entry, Ines Duarte, from oncall/2026-09.txt."
     },
     {
       "arm": "supervisorOff",
@@ -428,14 +458,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"4300\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (Trace where the exported constant TIMEOUT_MS is finally defined and give me its value.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On the last turn the assistant sent only a generic could-not-complete message. It never traced index.js -> lib/reexport.js -> lib/defaults.js and never reported the value 4300."
     },
     {
       "arm": "supervisorOff",
@@ -453,14 +485,17 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"9271\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "I couldn't complete this — I kept running into a problem (What port does the billing API listen on? Start with billing/server.js.). You may want to retry or rephrase what you need.",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "On turn 2 the assistant gave only a generic could-not-complete message. It never followed the pointer in billing/server.js to config/ports.json and never reported port 9271."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

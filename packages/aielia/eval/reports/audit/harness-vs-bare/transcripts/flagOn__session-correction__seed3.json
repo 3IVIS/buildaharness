@@ -670,13 +670,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the user's correction, the final reply gives https://api.example.com/v2 and cites docs/api-v2.md as its source. It does not fall back to the outdated v1 URL.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"v2\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"/v1\n\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

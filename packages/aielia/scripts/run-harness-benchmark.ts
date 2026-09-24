@@ -21,8 +21,7 @@
  *   npx tsx scripts/run-harness-benchmark.ts --exclude-slice=supervisor_pivot,supervisor_lookup,...  # full corpus MINUS these slices (mutually exclusive with --slice)
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
  *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
- *   npx tsx scripts/run-harness-benchmark.ts --no-judge                          # skip the LLM-as-judge pass
- *   npx tsx scripts/run-harness-benchmark.ts --model=sonnet --judge-model=sonnet # Plan A1: pin the model (default sonnet), recorded as report.modelId / report.judgeModelId
+ *   npx tsx scripts/run-harness-benchmark.ts --model=sonnet --judge-model=claude-opus-5-5 # Plan A1: pin the model (default sonnet) and the judge (default claude-opus-5-5), recorded as report.modelId / report.judgeModelId
  *   npx tsx scripts/run-harness-benchmark.ts --transcripts=<dir> --seed-tag=1    # Plan A1: write <arm>__<task>__seed<n>.json full-conversation captures
  *   npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot --seeds=3
  *   npx tsx scripts/run-harness-benchmark.ts ... --no-md --out=<path.json>   # parallel-safe: skip the shared docs/*.md prepend, write the report to <path.json> (scripts/run-audit-parallel.mjs uses this)
@@ -30,10 +29,11 @@
  *       # writes <stamp>.seedK.json per run + <stamp>.multiseed.json with per-metric
  *       # mean/stddev/CI95 and, for exactly two arms, a diffSeeds verdict (positive/neutral/regressed).
  *
- * The LLM-as-judge (`eval/judge.ts`, a tool-free `ClaudeCliLLMClient`) is **on by default** for a
- * real run — a `grader.judge` rubric that would otherwise score `skipped` gets classified YES/NO.
- * Pass `--no-judge` to turn it off. The machinery `eval/*.test.ts` never invoke this script and
- * stay judge-less (their `judge` checks keep scoring `skipped`).
+ * Grading is done by a SEMANTIC LLM judge (`eval/judge.ts`, a tool-free `ClaudeCliLLMClient`,
+ * default `claude-opus-5-5`) reasoning about behaviour and meaning against each task's written pass
+ * criteria — there is no mechanical text-matching fallback and no `--no-judge`. An errored arm or a
+ * judge that cannot answer leaves that row unscored (excluded from every rate), never a failure.
+ * The machinery `eval/*.test.ts` never invoke this script; they inject a fake `JudgeModel`.
  *
  * The `langgraph` arm is not implemented yet — see eval/README.md.
  */
@@ -71,9 +71,10 @@ async function main(): Promise<void> {
   const sliceFilter = arg('slice')?.split(',').map((s) => s.trim())
   const excludeSliceFilter = arg('exclude-slice')?.split(',').map((s) => s.trim())
   const gatePath = arg('gate')
-  // Plan A1 — pin the model, on the record. Default sonnet for both the arms and the judge.
+  // Plan A1 — pin the model, on the record. Arms default to sonnet; the judge is pinned separately below.
   const modelAlias = arg('model') ?? 'sonnet'
-  const judgeModelAlias = arg('judge-model') ?? 'sonnet'
+  // The judge is a different, stronger model than the arms by default so it never grades its own family's output.
+  const judgeModelAlias = arg('judge-model') ?? 'claude-opus-5-5'
   const transcriptDir = arg('transcripts')
   const seedTagArg = arg('seed-tag')
 
@@ -100,10 +101,18 @@ async function main(): Promise<void> {
   let arms: Arm[] = IMPLEMENTED_ARMS
   if (armFilter) arms = ALL_ARMS.filter((a) => armFilter.includes(a.name))
 
-  // LLM-as-judge: on by default for a real run, `--no-judge` opts out. Tool-free ClaudeCliLLMClient
-  // (no API key). A judge error / unparseable verdict resolves to `false` inside judge(), never a throw.
+  // Semantic LLM judge — mandatory. Grading is no longer mechanical, so a run without a judge would
+  // have no scores at all (there is deliberately no `--no-judge`). Tool-free ClaudeCliLLMClient (no
+  // API key). A judge error / unparseable verdict leaves that row UNJUDGED (excluded), never a failure.
+  if (process.argv.includes('--no-judge')) {
+    console.error('--no-judge was removed: grading is done by the semantic judge (eval/judge.ts); there is no mechanical fallback.')
+    process.exit(2)
+  }
+  if (canonicalModelId(judgeModelAlias) === canonicalModelId(modelAlias)) {
+    console.warn(`warning: the judge (${judgeModelAlias}) is the same model as the arms — it will grade its own family's output.`)
+  }
   const judgeClient = new ClaudeCliLLMClient({ model: judgeModelAlias })
-  const judge = process.argv.includes('--no-judge') ? undefined : new ClaudeCliJudge(judgeClient)
+  const judge = new ClaudeCliJudge(judgeClient)
 
   // --seeds=N — the S7 decision is LLM-driven, so a single pass is not evidence. claude-cli
   // has no seed parameter; "seed" here means an independent repeated run of the whole matrix.
@@ -111,7 +120,7 @@ async function main(): Promise<void> {
 
   console.log(
     `Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli` +
-      ` (model: ${modelAlias}, judge: ${judge ? judgeModelAlias : 'disabled'}` +
+      ` (model: ${modelAlias}, judge: ${judgeModelAlias}` +
       `${transcriptDir ? `, transcripts → ${transcriptDir}` : ''}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
   )
 
@@ -128,7 +137,7 @@ async function main(): Promise<void> {
       transcriptDir,
       seedTag,
       modelId: canonicalModelId(modelAlias),
-      judgeModelId: judge ? canonicalModelId(judgeModelAlias) : null,
+      judgeModelId: canonicalModelId(judgeModelAlias),
       // The claude-cli backend resolves tool calls out of process via its own MCP server, which
       // needs the workspace path up front — so build one client per task, wiring the file/shell MCP
       // tools only when the task declares them. Every client is pinned to `--model` (Plan A1).
@@ -152,7 +161,7 @@ async function main(): Promise<void> {
     const r = await runOnce(seedTag)
     // Prefer the model id the CLI actually reported; fall back to the canonical alias mapping.
     r.modelId = lastArmClient?.resolvedModelId ?? canonicalModelId(modelAlias)
-    r.judgeModelId = judge ? (judgeClient.resolvedModelId ?? canonicalModelId(judgeModelAlias)) : null
+    r.judgeModelId = judgeClient.resolvedModelId ?? canonicalModelId(judgeModelAlias)
 
     // F6 — a run whose resolved model isn't the one asked for is not the run the report claims.
     // Abort rather than publish a mislabelled number. `--allow-model-mismatch` overrides (e.g. a

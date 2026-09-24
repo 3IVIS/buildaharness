@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__multi-step-pick-oncall__seed3.json",
+ "task": "multi-step-pick-oncall",
+ "arm": "bare",
+ "seed": "3",
+ "category": "multi_step",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"Blair\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

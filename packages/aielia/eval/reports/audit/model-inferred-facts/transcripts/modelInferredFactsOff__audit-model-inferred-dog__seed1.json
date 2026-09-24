@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant picked Hotel B, the pet-friendly one, and tied the choice to Biscuit's anxiety about being home alone, which matches the intended behaviour. It said nothing false or unsupported, and each earlier reply was appropriate for its turn.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

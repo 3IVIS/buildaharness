@@ -1,0 +1,17 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__research-synthesize-owners__seed3.json",
+ "task": "research-synthesize-owners",
+ "arm": "bare",
+ "seed": "3",
+ "category": "research",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"payments-core\"",
+  "contains \"Sam Okafor\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

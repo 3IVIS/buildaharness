@@ -536,21 +536,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly put the files together: services.md shows billing is owned by payments-core, and managers.csv shows payments-core is managed by Sam Okafor. It named no wrong manager and invented nothing.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"payments-core\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Sam Okafor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Priya Raman\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Lena Vogt\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

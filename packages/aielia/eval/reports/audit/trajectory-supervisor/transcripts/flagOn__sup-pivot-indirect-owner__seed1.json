@@ -516,25 +516,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant traced billing-service to the payments team and then to Dana Ruiz, which completes the two-step ownership lookup. Calling Dana the team's leader is a fair reading of 'payments: Dana Ruiz' and does not change the answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Dana Ruiz\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no owner listed\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"payments team owns it\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

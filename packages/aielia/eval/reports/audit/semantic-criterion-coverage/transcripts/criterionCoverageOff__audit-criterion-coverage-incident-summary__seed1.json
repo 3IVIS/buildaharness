@@ -84,19 +84,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant only staged a post to the exec channel for approval, and its reply held no summary at all. It never gave the customer impact (47 minutes, about 12% of checkouts) or the root cause (the lowered connection-pool limit), so neither success criterion is met.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"pool\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "regex /47\\s*min/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"pool\"",
-      "regex /47\\s*min/i"
+      "judge"
     ]
   },
   "metrics": {

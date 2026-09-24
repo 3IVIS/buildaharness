@@ -37,21 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 'No', said it checked `logging.debug` (false), and correctly treated `features.debug` (true) as a separate feature flag, not the logging setting.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"logging\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"yes, debug logging is enabled\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"debug logging is on\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\bno\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

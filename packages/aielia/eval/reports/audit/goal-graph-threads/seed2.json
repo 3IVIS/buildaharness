@@ -3,7 +3,7 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "skippedForAsymmetry": [],
   "perArm": {
     "flagOn": {
@@ -11,6 +11,7 @@
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 1,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -40,6 +41,7 @@
       "label": "PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 1,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -87,7 +89,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "On the last turn (shipping) the assistant replied with just {\"value\": 44}, which is shipping's JSON format and matches Tuesday's 44 parcels in shipping.txt. Every earlier turn also used the right format and correct value (128, 57, the DONE suffix for vendors)."
     },
     {
       "arm": "flagOn",
@@ -110,7 +114,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "On the final turn, which started a new topic, the assistant answered in a full sentence with the correct fact from notes.txt: \"Marta Ilves chairs the Thursday meeting.\" The one-word rule was meant only for the inventory questions, and it did not carry over to this turn."
     },
     {
       "arm": "flagOn",
@@ -133,7 +139,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant read team.txt and answered all three linear questions correctly: Ines Duarte leads platform, Tomas Weiss leads data, and platform has the bigger headcount (9 vs 6). Nothing in the replies was fabricated or off-task."
     },
     {
       "arm": "flagOn",
@@ -156,7 +164,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "After the detour to hours.txt, the assistant computed the total for 3 units as 135 using the corrected price of 45, and it said explicitly that it was not using the 40 in the file. It changed no files and reported every fact accurately."
     },
     {
       "arm": "flagOn",
@@ -179,7 +189,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "After the detour, the assistant correctly went back to the codename from alpha.txt (BLUEHERON) and confirmed that gamma.txt has the same value. It also accurately pointed out gamma.txt's '(draft)' label."
     },
     {
       "arm": "flagOn",
@@ -202,7 +214,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant gave a bare number for widgets (128) and a full-sentence explanation for deploy.md, which is goal B and not covered by the format rule. Back on stock, it gave a bare number again (57). All answers match the workspace files."
     },
     {
       "arm": "flagOn",
@@ -225,7 +239,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant answered each of the four questions correctly and then gave one line per item in the order requested: Nordwind Freight, 2026-10-14, the support email, and 24 months. The email shows as [redacted-email], which looks like redaction in the transcript rather than a wrong answer."
     },
     {
       "arm": "flagOn",
@@ -248,7 +264,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The final answer gives Alder: 350, Birch: 250 and Cedar: 200 in the requested name: number format, so every out-of-order update was applied correctly. It also says truthfully that the plan files were not modified."
     },
     {
       "arm": "goalGraphOn",
@@ -271,7 +289,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "On the last turn the question was about shipping, and the assistant replied with just the JSON object {\"value\": 44}, which is the right format and the right Tuesday count from shipping.txt. Earlier turns also used the correct format for each topic: bare numbers for stock, JSON for shipping and DONE at the end of vendor answers, all with values that match the files."
     },
     {
       "arm": "goalGraphOn",
@@ -294,7 +314,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "When the user moved to the new topic, the assistant replied in a full sentence, \"Marta Ilves chairs the Thursday meeting.\", instead of carrying over the one-word limit set for the inventory questions. It also answered the earlier inventory questions correctly with single values (64, 12)."
     },
     {
       "arm": "goalGraphOn",
@@ -317,7 +339,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant answered all three linear questions correctly from team.txt: Ines Duarte leads platform, Tomas Weiss leads data, and platform has the bigger headcount (9 vs 6)."
     },
     {
       "arm": "goalGraphOn",
@@ -340,7 +364,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "After the unrelated hours.txt detour, the assistant still used the user's corrected unit price of 45 and gave a total of 135 (3 × 45), not 120. It also didn't change price.txt on its own; it offered to update the file only if asked."
     },
     {
       "arm": "goalGraphOn",
@@ -363,7 +389,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly returned to the first goal after the detour and confirmed that gamma.txt's codename BLUEHERON matches alpha.txt's. It also accurately noted the '(draft)' marker."
     },
     {
       "arm": "goalGraphOn",
@@ -386,7 +414,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "For widgets the assistant answered with only the number 128, the deploy question got a full explanatory sentence, and on returning to stock it answered with only 57, so the number-only format applied to the stock questions alone. The '[ok] (LOW)' prefixes look like harness annotations, not part of the assistant's reply."
     },
     {
       "arm": "goalGraphOn",
@@ -409,7 +439,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant answered each turn correctly (Nordwind Freight, 2026-10-14, the support email, 24 months). Its final reply gave one line per goal in the requested order. The email shows as [redacted-email] only because the transcript was redacted, not because of anything the assistant did."
     },
     {
       "arm": "goalGraphOn",
@@ -432,7 +464,10 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The final answer correctly gives Alder: 350, Birch: 250 and Cedar: 200, one per line in the requested name: number format. Both corrections are applied, and Birch stays unchanged as the user said."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

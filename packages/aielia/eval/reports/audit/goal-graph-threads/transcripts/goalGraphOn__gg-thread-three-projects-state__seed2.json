@@ -2370,21 +2370,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final answer correctly gives Alder: 350, Birch: 250 and Cedar: 200, one per line in the requested name: number format. Both corrections are applied, and Birch stays unchanged as the user said.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"350\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"250\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"200\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /alder[^\\n]*350/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

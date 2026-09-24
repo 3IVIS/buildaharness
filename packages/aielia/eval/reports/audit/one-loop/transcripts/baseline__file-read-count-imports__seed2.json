@@ -332,33 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just '4'. That is the correct count of distinct modules (os, sys, json, collections), since the duplicate 'import os' line counts only once.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"5 modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5 distinct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 distinct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 3\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b4\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

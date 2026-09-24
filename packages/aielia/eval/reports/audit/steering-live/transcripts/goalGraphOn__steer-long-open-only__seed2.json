@@ -798,14 +798,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly identified the open stations (S01 14, S03 62, S04 21, S06 55, S08 12), but it reported their total as 162. The correct sum is 164, so the final answer is wrong.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"164\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"164\""
+      "judge"
     ]
   },
   "metrics": {

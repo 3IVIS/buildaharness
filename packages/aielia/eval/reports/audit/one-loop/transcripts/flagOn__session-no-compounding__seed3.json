@@ -616,13 +616,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final reply the assistant used the real default page size of 25 from config/pagination.md and correctly answered 4 pages (100 ÷ 25), dropping the earlier assumption of 20. Its first-turn answer of 5 pages was correct for the size the user told it to assume, so nothing stale carried over.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5 pages\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

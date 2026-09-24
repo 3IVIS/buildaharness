@@ -803,17 +803,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly picked up that the user works overnight shifts, but it never gave the weekly gym schedule the user asked for. It replied only with four clarifying questions, even though the user said to tailor it using what they had already shared, and a schedule built around night shifts could have been offered with sensible defaults.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
-        "verdict": "pass"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 33997,

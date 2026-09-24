@@ -1322,21 +1322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant recommended BigQuery, the analytics warehouse, for the reporting dashboard and treated PostgreSQL (OLTP) and BigQuery as complementary stores. It raised no false contradiction flag.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /BigQuery|warehouse|analytics/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

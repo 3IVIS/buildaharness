@@ -307,25 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just the dollar amount, $220.32, which correctly applies the 15% discount (204.00) and then 8% tax. The '(LOW)' prefix is a confidence tag and does not change the answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"220.32\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"223.20\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"184.80\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"220.00\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"259.20\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

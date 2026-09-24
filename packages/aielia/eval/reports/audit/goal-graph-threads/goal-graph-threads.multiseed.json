@@ -8,7 +8,7 @@
   "verdict": "INCONCLUSIVE",
   "rationale": "No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-24T07:23:24.296Z",
   "metrics": [
     {

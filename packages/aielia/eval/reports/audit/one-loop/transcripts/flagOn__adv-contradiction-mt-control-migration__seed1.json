@@ -941,21 +941,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the region migration as a normal update: it changed staging to us-east-1, mentioned eu-west-1 as the old region, kept the Postgres 15 note, and never flagged a contradiction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /updated|changed|us-east-1|done|noted/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

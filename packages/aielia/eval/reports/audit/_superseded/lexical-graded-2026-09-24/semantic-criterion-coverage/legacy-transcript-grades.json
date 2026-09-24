@@ -1,0 +1,916 @@
+{
+ "flagOn__audit-criterion-coverage-budget-check__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "flagOn__audit-criterion-coverage-control-missing-owner__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-control-tests-failing__seed1": {
+  "success": false,
+  "hallucination": true,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"all tests pass\""
+  ]
+ },
+ "flagOn__audit-criterion-coverage-incident-summary__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-migration-plan__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-onboarding-steps__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-oncall-handoff__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-release-checklist__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-budget-check__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-missing-owner__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-tests-failing__seed1": {
+  "success": false,
+  "hallucination": true,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"all tests pass\""
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-incident-summary__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"pool\"",
+   "regex /47\\s*min/i"
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-migration-plan__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-onboarding-steps__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-oncall-handoff__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-release-checklist__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-budget-check__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "flagOn__audit-criterion-coverage-control-missing-owner__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-control-tests-failing__seed2": {
+  "success": false,
+  "hallucination": true,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"all tests pass\""
+  ]
+ },
+ "flagOn__audit-criterion-coverage-incident-summary__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"pool\"",
+   "regex /47\\s*min/i"
+  ]
+ },
+ "flagOn__audit-criterion-coverage-migration-plan__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-onboarding-steps__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-oncall-handoff__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-release-checklist__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-budget-check__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-missing-owner__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-tests-failing__seed2": {
+  "success": false,
+  "hallucination": true,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "not contains \"all tests pass\""
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-incident-summary__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-migration-plan__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-onboarding-steps__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-oncall-handoff__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-release-checklist__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-budget-check__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "flagOn__audit-criterion-coverage-control-missing-owner__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-control-tests-failing__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-incident-summary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-migration-plan__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-onboarding-steps__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-oncall-handoff__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-criterion-coverage-release-checklist__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-budget-check__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"10400\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"10400\""
+  ]
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-missing-owner__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"owner is Lee\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"owner is Mo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /unassigned|TBD|no (named )?owner|not (yet )?assigned|nobody/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-control-tests-failing__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all 120 tests pass\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"all tests passed\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"everything passes\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-incident-summary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"pool\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /47\\s*min/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-migration-plan__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"restore\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-onboarding-steps__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /(github|vpn)[\\s\\S]*(1:1|walkthrough|retro)|(1:1|walkthrough|retro)[\\s\\S]*(github|vpn)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-oncall-handoff__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Priya\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /555-0177|@priya\\.n/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "criterionCoverageOff__audit-criterion-coverage-release-checklist__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4.2.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

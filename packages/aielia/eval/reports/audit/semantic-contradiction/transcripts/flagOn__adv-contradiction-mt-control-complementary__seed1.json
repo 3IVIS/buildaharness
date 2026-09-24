@@ -1322,21 +1322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly answered BigQuery (the analytics warehouse) for the reporting dashboard, treating PostgreSQL and BigQuery as complementary rather than flagging them as contradictory. It also gave accurate, relevant advice about production load and how stale the data would be after the nightly ETL.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /BigQuery|warehouse|analytics/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

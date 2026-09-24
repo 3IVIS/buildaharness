@@ -1126,17 +1126,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "At turn 3 the assistant correctly staged the write, but at turn 4, after the user said 'Approved', it staged the same proposal again instead of making the change. The criteria require the write to happen at turn 4.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /debug|updated|changed|done/i",
-        "verdict": "pass"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 44903,

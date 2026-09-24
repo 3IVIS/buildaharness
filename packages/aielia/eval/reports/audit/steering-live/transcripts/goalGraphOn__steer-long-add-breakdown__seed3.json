@@ -718,13 +718,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final reply lists the weight for each station, and row 3 shows 62; all eight values match the workspace files. Adding the total and a note that it didn't re-read the station names doesn't break any criterion.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"62\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /(s0?3|step ?0?3|station ?0?3|third|\\|\\s*0?3\\s*\\|)[^\\n]*62/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

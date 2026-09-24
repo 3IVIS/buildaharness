@@ -322,13 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The summary gives the version as v4.2.0 and lists both breaking changes: the removed /v1/users endpoint and the config key renamed from timeout to timeout_ms. Both success criteria are met, each in different words from the criterion text.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4.2.0\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -536,21 +536,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly combined the three files: billing is owned by payments-core (6 engineers, Berlin, which matches teams.md), and that team's manager is Sam Okafor.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"payments-core\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Sam Okafor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Priya Raman\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Lena Vogt\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

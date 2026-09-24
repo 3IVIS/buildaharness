@@ -781,9 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final gym schedule is clearly built around overnight shifts. It says to skip the gym after a night shift, protect sleep and the pre-shift nap, and plan sessions around days off, so it is not a generic morning-person plan.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

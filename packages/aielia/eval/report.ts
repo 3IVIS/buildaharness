@@ -32,7 +32,7 @@ export function renderMarkdown(report: BenchmarkReport): string {
   lines.push('|---|---|---|---|---|---|---|---|---|')
   for (const a of arms) {
     lines.push(
-      `| ${a.arm} | ${a.tasksRun}${a.tasksSkipped ? ` (+${a.tasksSkipped} skipped)` : ''} | ${pct(a.taskSuccessRate)} | ${pct(a.hallucinationRate)} | ${pct(a.unauthorizedEffectRate)} | ${pct(a.recoveryRate)} | ${ms(a.meanLatencyMs)} | ${usd(a.meanCostUsd)} | ${a.totalTokens} |`,
+      `| ${a.arm} | ${a.tasksRun}${a.tasksSkipped ? ` (+${a.tasksSkipped} skipped)` : ''}${a.tasksInvalid ? ` (+${a.tasksInvalid} invalid, not scored)` : ''} | ${pct(a.taskSuccessRate)} | ${pct(a.hallucinationRate)} | ${pct(a.unauthorizedEffectRate)} | ${pct(a.recoveryRate)} | ${ms(a.meanLatencyMs)} | ${usd(a.meanCostUsd)} | ${a.totalTokens} |`,
     )
   }
   lines.push('')

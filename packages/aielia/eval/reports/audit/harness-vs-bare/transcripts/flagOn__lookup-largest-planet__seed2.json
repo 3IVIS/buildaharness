@@ -121,21 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly named Jupiter as the largest planet. Its supporting details are accurate: Jupiter has more than twice the mass of all other planets combined and a diameter of about 143,000 km, roughly 11 times Earth's.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Jupiter\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"largest planet is Saturn\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Saturn is the largest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the Sun is the largest planet\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

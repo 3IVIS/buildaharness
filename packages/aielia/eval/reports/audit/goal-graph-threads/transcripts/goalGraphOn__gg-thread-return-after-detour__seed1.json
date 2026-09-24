@@ -986,13 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the unrelated detour to beta.txt, the assistant went back to the first task and correctly said that gamma.txt's codename, BLUEHERON, matches the one from alpha.txt. It also correctly pointed out that gamma.txt labels it as a draft.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"BLUEHERON\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /match|same|identical|consistent|agree/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

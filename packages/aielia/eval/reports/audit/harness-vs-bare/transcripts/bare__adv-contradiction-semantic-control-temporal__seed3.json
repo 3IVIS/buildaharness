@@ -37,37 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the move from Free to Pro as a normal plan change. It explained that support entitlements depend on the current plan, so Pro benefits would apply if the subscription is still active, and it said plainly that it can't check the user's account. It never called the two plan statements a contradiction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not consistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"can't both be true\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /pro|priority support|yes/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -332,33 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant counted 4 error lines, listing both [ERROR] lines and both level=error lines, and correctly broke them down as 2 of each format.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only 2 error\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"just two error lines\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only the [ERROR]\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"2 error lines in total\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"total of 2 error\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b4\\b[^\\n]*error|total[^\\n]*\\b4\\b|\\b4\\b error lines/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

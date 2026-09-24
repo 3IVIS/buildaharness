@@ -8,6 +8,7 @@ import { diffReports, renderMarkdown, renderDiff } from './report.js'
 import type { Arm, ArmName, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
 import { parseTaskSpec, type TaskSpec } from './corpus/schema.js'
+import { stubJudge } from './judge-stub.js'
 
 // The runner must never build or call the LLM directly — arms do. A factory that throws on use
 // proves the runner only *passes it through*.
@@ -70,7 +71,7 @@ describe('runBenchmark', () => {
       r1: { reply: 'all done', latencyMs: 150 },
     })
 
-    const report = await runBenchmark({ tasks: TASKS, arms: [good], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [good], makeLlm: noLlm, judge: stubJudge() })
     const agg = report.perArm.flagOn
 
     expect(agg.tasksRun).toBe(3)
@@ -88,30 +89,45 @@ describe('runBenchmark', () => {
       m1: { status: 'ok', workspaceAfter: { 'a.txt': null } }, // deleted it — unauthorized
       r1: { reply: 'done' },
     })
-    const report = await runBenchmark({ tasks: TASKS, arms: [bad], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [bad], makeLlm: noLlm, judge: stubJudge() })
     expect(report.perArm.flagOn.unauthorizedEffectRate).toBeCloseTo(1 / 3)
     expect(report.perArm.flagOn.taskSuccessRate).toBeCloseTo(2 / 3)
   })
 
   it('records a skipped task (arm returned null) without counting it against success', async () => {
     const partial = scriptedArm('baseline', { c1: { reply: '42' } }) // no m1/r1 → null
-    const report = await runBenchmark({ tasks: TASKS, arms: [partial], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [partial], makeLlm: noLlm, judge: stubJudge() })
     expect(report.perArm.baseline.tasksRun).toBe(1)
     expect(report.perArm.baseline.tasksSkipped).toBe(2)
     expect(report.perArm.baseline.taskSuccessRate).toBe(1)
   })
 
-  it('survives an arm that throws — the row is an error, not a crash', async () => {
+  it('survives an arm that throws — the rows are INVALID_RUN, excluded from every rate, never scored as failures', async () => {
     const thrower: Arm = { name: 'flagOn', label: 'x', run: async () => { throw new Error('boom') } }
-    const report = await runBenchmark({ tasks: TASKS, arms: [thrower], makeLlm: noLlm })
-    expect(report.perArm.flagOn.tasksRun).toBe(3)
-    expect(report.perArm.flagOn.taskSuccessRate).toBe(0)
+    const report = await runBenchmark({ tasks: TASKS, arms: [thrower], makeLlm: noLlm, judge: stubJudge() })
+    const agg = report.perArm.flagOn
+    expect(agg.tasksRun).toBe(0)
+    expect(agg.tasksInvalid).toBe(3)
+    expect(agg.taskSuccessRate).toBe(0) // no scored rows — not "3 failures"
+    expect(report.rows.every((r) => r.verdict === 'INVALID_RUN' && r.invalid === true && r.status === 'error')).toBe(true)
+  })
+
+  it('an errored arm never drags a healthy comparison: invalid rows leave the success rate untouched', async () => {
+    const flaky = scriptedArm('flagOn', {
+      c1: { reply: 'the answer is 42' },
+      m1: { status: 'error', errorMessage: 'claude exited with code 1' },
+      r1: { status: 'error', errorMessage: 'claude exited with code 1' },
+    })
+    const report = await runBenchmark({ tasks: TASKS, arms: [flaky], makeLlm: noLlm, judge: stubJudge() })
+    expect(report.perArm.flagOn.tasksRun).toBe(1)
+    expect(report.perArm.flagOn.tasksInvalid).toBe(2)
+    expect(report.perArm.flagOn.taskSuccessRate).toBe(1)
   })
 
   it('skips an injected-failure task for the whole run when an arm cannot honour it', async () => {
     const flag = scriptedArm('flagOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
     const bare = scriptedArm('bare', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
-    const report = await runBenchmark({ tasks: TASKS, arms: [flag, bare], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [flag, bare], makeLlm: noLlm, judge: stubJudge() })
     expect(report.skippedForAsymmetry).toEqual(['r1'])
     // r1 skipped for BOTH arms — neither is stress-tested while the other runs clean.
     expect(report.perArm.flagOn.tasksRun).toBe(2)
@@ -122,7 +138,7 @@ describe('runBenchmark', () => {
   it('keeps an injected-failure task when every arm honours it', async () => {
     const flag = scriptedArm('flagOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
     const sup = scriptedArm('supervisorOn', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
-    const report = await runBenchmark({ tasks: TASKS, arms: [flag, sup], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [flag, sup], makeLlm: noLlm, judge: stubJudge() })
     expect(report.skippedForAsymmetry).toEqual([])
     expect(report.perArm.flagOn.tasksRun).toBe(3)
     expect(report.perArm.flagOn.recoveryRate).toBe(1)
@@ -153,7 +169,7 @@ describe('runBenchmark', () => {
         return { ...base, ...script[task.id] }
       },
     }
-    const report = await runBenchmark({ tasks, arms: [arm], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks, arms: [arm], makeLlm: noLlm, judge: stubJudge() })
     const m = report.perArm.baseline.answerClaimConfusion
     expect(m).not.toBeNull()
     expect(m).toEqual({
@@ -168,7 +184,7 @@ describe('runBenchmark', () => {
 
   it('leaves answerClaimConfusion null when no task produced a claim status', async () => {
     const arm = scriptedArm('baseline', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
-    const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm, judge: stubJudge() })
     expect(report.perArm.baseline.answerClaimConfusion).toBeNull()
   })
 
@@ -194,6 +210,7 @@ describe('runBenchmark', () => {
       seedTag: 2,
       modelId: 'claude-sonnet-5',
       judgeModelId: null,
+      judge: stubJudge(),
     })
 
     expect(report.modelId).toBe('claude-sonnet-5')
@@ -209,7 +226,7 @@ describe('runBenchmark', () => {
 
   it('renderMarkdown produces a stable table', async () => {
     const arm = scriptedArm('baseline', { c1: { reply: '42' }, m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } }, r1: { reply: 'done' } })
-    const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm })
+    const report = await runBenchmark({ tasks: TASKS, arms: [arm], makeLlm: noLlm, judge: stubJudge() })
     const md = renderMarkdown({ ...report, generatedAt: 'FIXED' })
     expect(md).toContain('## Run FIXED')
     expect(md).toContain('| baseline |')

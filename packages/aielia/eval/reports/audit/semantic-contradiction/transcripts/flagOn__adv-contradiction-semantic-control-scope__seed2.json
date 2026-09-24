@@ -307,37 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered BigQuery directly and backed it with sound reasoning, treating Postgres and BigQuery as complementary systems without flagging any contradiction. The caveats about when Postgres might fit are reasonable nuance, not a conflict flag.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"BigQuery\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"disagree\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

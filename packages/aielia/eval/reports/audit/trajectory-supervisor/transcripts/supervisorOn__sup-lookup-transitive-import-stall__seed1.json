@@ -302,30 +302,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply is empty apart from a status marker ('[ok] (LOW)'). It never follows the a -> b -> c imports and never names requests as the third-party package.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"requests\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"none\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no third-party\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only local modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"a.py has no external\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"requests\""
+      "judge"
     ]
   },
   "metrics": {

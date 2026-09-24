@@ -1310,21 +1310,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the user added the persistence requirement, the assistant ruled out memcached and in-process LRU, citing options.md. Its final answer recommends Redis, with Valkey offered as a drop-in alternative.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"redis\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"memcached is the\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"use memcached\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in-process\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

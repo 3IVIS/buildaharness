@@ -972,27 +972,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In its last reply, the assistant used the $500/month ceiling set in turn 1. It listed Acme ($420) and Cedar ($480) as affordable and marked Bolt ($610) as over budget. Its extra note, that any two vendors together would exceed $500, is correct arithmetic.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Acme\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"Cedar\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Bolt\"",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "not contains \"Bolt\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 47797,

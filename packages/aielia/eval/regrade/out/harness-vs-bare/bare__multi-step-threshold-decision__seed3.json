@@ -1,0 +1,17 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__multi-step-threshold-decision__seed3.json",
+ "task": "multi-step-threshold-decision",
+ "arm": "bare",
+ "seed": "3",
+ "category": "multi_step",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"0.87\"",
+  "regex /not (in )?breach|within (the )?slo|below (the )?(1%|threshold|slo)|no breach|compliant|under (the )?threshold|we are (ok|fine|good)/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

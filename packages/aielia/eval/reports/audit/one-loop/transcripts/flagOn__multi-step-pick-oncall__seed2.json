@@ -322,17 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied 'Blair', which matches the Wednesday row in oncall.md, and did not name the adjacent-row decoys Alex or Casey. The '(LOW)' prefix is a minor formatting artifact and does not change the correct answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Blair\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Alex\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Casey\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

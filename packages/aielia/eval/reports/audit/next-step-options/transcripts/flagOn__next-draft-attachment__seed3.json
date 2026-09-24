@@ -318,21 +318,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly flagged 'quesitons' but never mentioned that the draft promises an attached file, and the task says the options should point that out. No next-step options were offered at all, so the follow-up the criteria call for is missing.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"quesitons\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 6363,

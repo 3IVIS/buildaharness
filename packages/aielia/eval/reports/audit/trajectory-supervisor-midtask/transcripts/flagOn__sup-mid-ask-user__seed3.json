@@ -890,9 +890,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the user named the 'export_v2' section, the assistant correctly reported 210s rather than the v1 figure of 90s. The turn-2 stall was a generic failure message and not a clarifying question, but the pass criteria only require the correct final answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"210\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

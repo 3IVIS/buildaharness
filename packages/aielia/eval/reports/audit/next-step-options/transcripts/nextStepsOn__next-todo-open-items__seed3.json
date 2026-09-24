@@ -348,17 +348,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The reply correctly names the two completed items (CI pipeline, API schema) and lists the three open ones. Both next-step options point at open items: rate limiting and the users-table migration.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"CI\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "contains \"schema\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps names \"rate limit\"|\"migrat\"|\"onboarding\"",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

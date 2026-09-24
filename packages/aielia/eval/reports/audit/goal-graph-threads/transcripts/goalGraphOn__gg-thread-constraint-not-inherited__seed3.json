@@ -986,13 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final turn was a new topic, and the assistant answered it in a full sentence, \"Marta Ilves chairs the Thursday meeting,\" which is correct per notes.txt, rather than carrying over the single-word rule. The earlier inventory answers (64, 12) correctly followed that rule.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Marta Ilves\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /(\\w+\\s+){5,}\\w+/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -342,25 +342,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant traced billing-service to the payments team and then to Dana Ruiz, which is the correct two-hop answer from services.md and teams.md. Calling Dana 'led by' rather than simply listed is a minor wording choice and doesn't change the answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Dana Ruiz\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no owner listed\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"payments team owns it\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

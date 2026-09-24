@@ -5,20 +5,20 @@
   "control": "changeReviewOff",
   "candidate": "flagOn",
   "seeds": 3,
-  "verdict": "CUT",
-  "rationale": "The candidate regressed a gating metric (taskSuccessRate, overconfidentWrongRate) beyond its CI band — the feature makes outcomes worse on its own stress slice.",
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) with no material cost increase.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-22T13:28:57.336Z",
   "metrics": [
     {
       "metric": "taskSuccessRate",
-      "control": 0.6666666666666666,
-      "candidate": 0.5,
-      "deltaMean": -0.16666666666666663,
+      "control": 0.625,
+      "candidate": 0.7083333333333334,
+      "deltaMean": 0.08333333333333337,
       "deltaCi95": 0.08166666666666668,
-      "positive": false,
-      "regressed": true
+      "positive": true,
+      "regressed": false
     },
     {
       "metric": "hallucinationRate",
@@ -49,12 +49,12 @@
     },
     {
       "metric": "overconfidentWrongRate",
-      "control": 0.13333333333333333,
-      "candidate": 0.4000000000000001,
-      "deltaMean": 0.2666666666666667,
-      "deltaCi95": 0.13066666666666668,
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
       "positive": false,
-      "regressed": true
+      "regressed": false
     },
     {
       "metric": "supervisorConsultsMean",
@@ -96,5 +96,6 @@
   "costDeltaPct": 0.05904046024667262,
   "latencyDeltaPct": -0.028544558889386347,
   "tokenDeltaPct": -0.05103160667251975,
-  "injectionSignals": null
+  "injectionSignals": null,
+  "nextStepSignals": null
 }

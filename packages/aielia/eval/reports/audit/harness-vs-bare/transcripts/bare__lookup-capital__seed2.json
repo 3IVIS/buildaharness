@@ -37,21 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly stated that Canberra is the capital of Australia and did not give the Sydney distractor.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Canberra\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Sydney is the capital\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital is Sydney\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital, Sydney\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

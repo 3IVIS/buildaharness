@@ -1071,21 +1071,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant said the user has no pets and picked hotel A, the city-centre hotel that doesn't allow pets. It did not treat Biscuit as the user's dog after the retraction.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"your dog\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Biscuit\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"your pet\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /hotel/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

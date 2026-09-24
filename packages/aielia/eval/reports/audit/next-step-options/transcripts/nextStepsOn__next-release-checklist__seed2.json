@@ -400,17 +400,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly confirmed package.json says 2.4.0 and offered next-step options covering both pending steps: drafting the changelog entry and creating/pushing the v2.4.0 tag.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2.4.0\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"changelog\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps names \"tag\"",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

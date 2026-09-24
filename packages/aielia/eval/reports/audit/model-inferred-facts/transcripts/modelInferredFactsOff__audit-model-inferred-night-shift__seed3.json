@@ -751,17 +751,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly worked out from turn 1 that the user works overnight ward shifts. But it gave no weekly gym schedule at all and replied with a list of clarifying questions, even though the user said they had already given the relevant context. The pass criterion needs a schedule built around night-shift hours, and none was produced.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
-        "verdict": "pass"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 26748,

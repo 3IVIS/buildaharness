@@ -266,35 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty, only a '[ok] (LOW)' status with no content. It never reported CONNECT_TIMEOUT_MS=45000 and never showed that it recovered from the injected timeout stall.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"45000\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no such key\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"there is no config\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"45000\"",
-      "regex /45000|CONNECT_TIMEOUT_MS/i"
+      "judge"
     ]
   },
   "metrics": {

@@ -1,0 +1,17 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__multi-step-config-flag__seed3.json",
+ "task": "multi-step-config-flag",
+ "arm": "bare",
+ "seed": "3",
+ "category": "multi_step",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"logging\"",
+  "regex /\\bno\\b/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

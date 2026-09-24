@@ -986,9 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave a bare number for widgets (128) and a full-sentence explanation for deploy.md, which is goal B and not covered by the format rule. Back on stock, it gave a bare number again (57). All answers match the workspace files.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

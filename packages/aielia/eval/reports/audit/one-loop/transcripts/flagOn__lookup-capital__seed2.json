@@ -121,21 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 'Canberra', which is the correct capital of Australia, and did not give the Sydney distractor. The '(LOW)' confidence tag does not change that the answer is correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Canberra\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Sydney is the capital\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital is Sydney\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital, Sydney\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -1,0 +1,443 @@
+{
+  "generatedAt": "2026-09-10T02:12:15.235Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.5,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0.5,
+      "meanLatencyMs": 7808,
+      "meanCostUsd": 0.010926149999999999,
+      "totalTokens": 3131,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 4
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 4,
+        "verifiedCorrect": 0,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 4,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "failureMatchOff": {
+      "arm": "failureMatchOff",
+      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 \u2014 the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.375,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0.375,
+      "meanLatencyMs": 7049,
+      "meanCostUsd": 0.005686725,
+      "totalTokens": 2848,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 3
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 5,
+        "verifiedCorrect": 0,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 5,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-auth-denied-readme",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 3836,
+      "costUsd": 0.010428999999999999,
+      "totalTokens": 199,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"repo:read\"",
+        "regex /repo:read|auth\\.md/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-auth-rejected-env",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 12264,
+      "costUsd": 0.0225132,
+      "totalTokens": 636,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`DB_USER=svc_staging`",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-rate-limited-log",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 10202,
+      "costUsd": 0.012487,
+      "totalTokens": 499,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`MAX_QPS = 120` (under `[throttle]`, with `burst = 30`).",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-rate-throttled-notes",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4160,
+      "costUsd": 0.005041599999999999,
+      "totalTokens": 209,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"90\"",
+        "regex /90 ?seconds|90s|backoff\\.md/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-resource-absent-index",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7328,
+      "costUsd": 0.0067285999999999995,
+      "totalTokens": 378,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"512\"",
+        "regex /512|catalog\\.csv|renamed|replaced/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-resource-missing-manifest",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 9505,
+      "costUsd": 0.012099600000000002,
+      "totalTokens": 456,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The entrypoint is `dist/widget.mjs`.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-timeout-config",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 8506,
+      "costUsd": 0.011249600000000002,
+      "totalTokens": 365,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "CONNECT_TIMEOUT_MS is 45000.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-failure-match-timeout-nested",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6661,
+      "costUsd": 0.0068606,
+      "totalTokens": 389,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"8642\"",
+        "regex /8642|check\\.yaml/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-auth-denied-readme",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4848,
+      "costUsd": 0.0039478,
+      "totalTokens": 263,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"repo:read\"",
+        "regex /repo:read|auth\\.md/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-auth-rejected-env",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 10015,
+      "costUsd": 0.007999800000000001,
+      "totalTokens": 455,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`DB_USER=svc_staging`",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-rate-limited-log",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 8725,
+      "costUsd": 0.0071963999999999995,
+      "totalTokens": 373,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "MAX_QPS is 120 (under the `[throttle]` section, with `burst = 30`).",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-rate-throttled-notes",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 5648,
+      "costUsd": 0.004654,
+      "totalTokens": 333,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"90\"",
+        "regex /90 ?seconds|90s|backoff\\.md/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-resource-absent-index",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6828,
+      "costUsd": 0.0053674,
+      "totalTokens": 403,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"512\"",
+        "regex /512|catalog\\.csv|renamed|replaced/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-resource-missing-manifest",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6303,
+      "costUsd": 0.0045744,
+      "totalTokens": 323,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"dist/widget.mjs\"",
+        "regex /dist/widget\\.mjs|entrypoint/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-timeout-config",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 7903,
+      "costUsd": 0.006790000000000001,
+      "totalTokens": 334,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "CONNECT_TIMEOUT_MS is 45000.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "failureMatchOff",
+      "taskId": "audit-failure-match-timeout-nested",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6121,
+      "costUsd": 0.004964,
+      "totalTokens": 364,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"8642\"",
+        "regex /8642|check\\.yaml/i"
+      ],
+      "status": "ok",
+      "replyPreview": "",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    }
+  ]
+}

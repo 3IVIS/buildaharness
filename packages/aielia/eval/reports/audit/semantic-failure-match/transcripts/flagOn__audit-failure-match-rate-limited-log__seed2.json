@@ -266,31 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply is empty apart from a status tag ('[ok] (LOW)'). It never reports MAX_QPS=120 and shows no recovery from the rate-limited stall.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"120\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no such key\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /120|MAX_QPS/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"120\"",
-      "regex /120|MAX_QPS/i"
+      "judge"
     ]
   },
   "metrics": {

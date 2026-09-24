@@ -872,14 +872,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "On the final turn the assistant gave only a generic could-not-complete message. It never followed index.js -> lib/reexport.js -> lib/defaults.js and never reported TIMEOUT_MS = 4300.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4300\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"4300\""
+      "judge"
     ]
   },
   "metrics": {

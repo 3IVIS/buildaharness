@@ -1,0 +1,100 @@
+{
+  "feature": "semantic-criterion-coverage",
+  "title": "Semantic criterion coverage",
+  "hypothesis": "The checkSemanticCriterionCoverage LLM call recognises success criteria a reply satisfies in different words than the plan states them, removing false 'criterion not met' findings the reviewer's substring check raises, often enough to justify +1 call per unmatched criterion.",
+  "control": "criterionCoverageOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+25% $/turn, -3% latency). Neutral with real cost — it does not earn its keep.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-22T09:15:50.784Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.75,
+      "candidate": 0.75,
+      "deltaMean": 0,
+      "deltaCi95": 0.20004166232729287,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0.08333333333333333,
+      "candidate": 0.08333333333333333,
+      "deltaMean": 0,
+      "deltaCi95": 0.11549410759380278,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.22023809523809523,
+      "candidate": 0.22023809523809523,
+      "deltaMean": 0,
+      "deltaCi95": 0.1350514305325526,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 9350,
+      "candidate": 9115,
+      "deltaMean": -235,
+      "deltaCi95": 1196.8834859472888,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.007524103571428572,
+      "candidate": 0.009383963095238096,
+      "deltaMean": 0.0018598595238095237,
+      "deltaCi95": 0.004650787338262749,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 3915.3333333333335,
+      "candidate": 3819.6666666666665,
+      "deltaMean": -95.66666666666697,
+      "deltaCi95": 1248.740322440534,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.2471868583617064,
+  "latencyDeltaPct": -0.025133689839572194,
+  "tokenDeltaPct": -0.02443384982121581,
+  "injectionSignals": null
+}

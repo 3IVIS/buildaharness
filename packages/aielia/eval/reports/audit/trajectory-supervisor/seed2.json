@@ -3,13 +3,14 @@
   "corpusSize": 18,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "perArm": {
     "flagOn": {
       "arm": "flagOn",
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 18,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.6666666666666666,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -36,9 +37,10 @@
     },
     "supervisorOn": {
       "arm": "supervisorOn",
-      "label": "PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled \u2014 the S7 supervisor-vs-no-supervisor differential arm",
+      "label": "PersonalAssistant with HARNESS_TRAJECTORY_SUPERVISOR=enabled — the S7 supervisor-vs-no-supervisor differential arm",
       "tasksRun": 18,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.6666666666666666,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -85,7 +87,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant gave the correct release date for 1.4.0, 2026-03-11, and cited CHANGELOG.md as the source. That is exactly where the date appears."
     },
     {
       "arm": "flagOn",
@@ -103,11 +107,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "Per `errors/codes.md`, **E409** means **\"duplicate resource\"** \u2014 the request conflicts with an existing resource (e.g., trying to create something that already exists).",
+      "replyPreview": "Per `errors/codes.md`, **E409** means **\"duplicate resource\"** — the request conflicts with an existing resource (e.g., trying to create something that already exists).",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant cited errors/codes.md and correctly said E409 means \"duplicate resource\". It added a short, accurate explanation of what that means in practice."
     },
     {
       "arm": "flagOn",
@@ -129,7 +135,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant gave the correct placeholder value `your-key-here` from examples/.env.example. It did not say the file was missing or give up at the root."
     },
     {
       "arm": "flagOn",
@@ -146,14 +154,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"your-key-here\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant returned an empty reply. It never found examples/.env.example and never reported the placeholder 'your-key-here'."
     },
     {
       "arm": "flagOn",
@@ -171,11 +181,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** \u2014 the base config sets it to `info`, but `config.local.env` overrides that.",
+      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** — the base config sets it to `info`, but `config.local.env` overrides that.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly said the effective LOG_LEVEL is debug, because config.local.env overrides the base value of info. This matches the workspace files."
     },
     {
       "arm": "flagOn",
@@ -192,14 +204,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"debug\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty. It never gave the effective LOG_LEVEL ('debug', since config.local.env overrides config.base.env), so it did not recover from the stall."
     },
     {
       "arm": "flagOn",
@@ -221,7 +235,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant's answer, `db.internal:5432/orders`, correctly combines the host, port and name from the three files. No refusal or claim of missing data appears."
     },
     {
       "arm": "flagOn",
@@ -239,11 +255,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "`a.py` ultimately imports **`requests`**.\n\nChain: `a.py` \u2192 `b.py` \u2192 `c.py` \u2192 `import requests`.",
+      "replyPreview": "`a.py` ultimately imports **`requests`**.\n\nChain: `a.py` → `b.py` → `c.py` → `import requests`.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant followed the import chain a.py → b.py → c.py and correctly said the third-party package is `requests`. Nothing it said was wrong or made up."
     },
     {
       "arm": "flagOn",
@@ -260,14 +278,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"requests\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty apart from a '[ok] (LOW)' status marker. It never followed the a -> b -> c import chain and never named 'requests' as the third-party package."
     },
     {
       "arm": "flagOn",
@@ -289,7 +309,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant added up the line items (Widget 40 + Gadget 35 + Shipping 25) and correctly reported a total of 100, instead of saying there was no total line."
     },
     {
       "arm": "flagOn",
@@ -311,7 +333,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant traced both links, from billing-service to the payments team and from payments to Dana Ruiz, and named Dana Ruiz as the owner, which matches the workspace files. Describing Dana as the team's leader is a reasonable reading of teams.md and doesn't change the answer."
     },
     {
       "arm": "flagOn",
@@ -333,7 +357,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant used the later 0007 log line and correctly answered that migration 0007 was applied on 2026-01-05T14:00Z. It also noted the earlier PENDING entry had been superseded."
     },
     {
       "arm": "flagOn",
@@ -350,14 +376,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "regex /0007[^.\\n]*\\b(applied|yes)\\b|\\b(applied|yes)\\b[^.\\n]*0007|migration 0007 (is|has been) applied/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty. It never answered whether migration 0007 is applied, so it did not read the later APPLIED entry in migrations.log."
     },
     {
       "arm": "flagOn",
@@ -379,7 +407,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant noticed the comment saying MAX_RETRIES was renamed to RETRY_LIMIT and gave the current value, 7. Saying there is no MAX_RETRIES key is accurate here, because it then pivoted to the new name."
     },
     {
       "arm": "flagOn",
@@ -396,15 +426,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"7\"",
-        "regex /renamed|now called|RETRY_LIMIT/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty (only a status marker '[ok] (LOW)' with no content). It never recognized that MAX_RETRIES was renamed to RETRY_LIMIT and never reported the value 7."
     },
     {
       "arm": "flagOn",
@@ -426,7 +457,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant counted both log formats and gave the correct total of 4 error lines (2 `[ERROR]` and 2 `level=error`), listing each line, and correctly left out the WARN line."
     },
     {
       "arm": "flagOn",
@@ -444,11 +477,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "The API listens on port **9443**.\n\n`server.js` doesn't hardcode it \u2014 it reads `config/ports.json` at boot (`.api`), which is set to `9443` (with `admin` on `9444`).",
+      "replyPreview": "The API listens on port **9443**.\n\n`server.js` doesn't hardcode it — it reads `config/ports.json` at boot (`.api`), which is set to `9443` (with `admin` on `9444`).",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant followed the pointer from server.js into config/ports.json and correctly said the API listens on port 9443. It also correctly noted that admin is on 9444."
     },
     {
       "arm": "flagOn",
@@ -465,14 +500,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"9443\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (just '[ok] (LOW)'). It never followed the pointer to config/ports.json and never reported port 9443."
     },
     {
       "arm": "supervisorOn",
@@ -494,7 +531,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly said version 1.4.0 was released on 2026-03-11 and cited the CHANGELOG heading. That is the pivot from package.json to the CHANGELOG that the task requires."
     },
     {
       "arm": "supervisorOn",
@@ -516,7 +555,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant cited errors/codes.md and correctly said E409 means \"duplicate resource,\" which matches the reference file."
     },
     {
       "arm": "supervisorOn",
@@ -538,7 +579,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported the API_KEY placeholder as `your-key-here`, which matches examples/.env.example. It did not give up at the root."
     },
     {
       "arm": "supervisorOn",
@@ -557,14 +600,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"your-key-here\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty. It never found examples/.env.example and never reported the API_KEY placeholder 'your-key-here'."
     },
     {
       "arm": "supervisorOn",
@@ -582,11 +627,13 @@
       "supervisorDirectives": null,
       "failedChecks": [],
       "status": "ok",
-      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** \u2014 the base config sets it to `info`, but `config.local.env` overrides it with `debug`.",
+      "replyPreview": "The effective `LOG_LEVEL` is **`debug`** — the base config sets it to `info`, but `config.local.env` overrides it with `debug`.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly said the effective LOG_LEVEL is debug, because config.local.env overrides the base value of info. It said info only to describe the base value, not as the answer."
     },
     {
       "arm": "supervisorOn",
@@ -605,14 +652,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"debug\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty: no content followed the [ok] (LOW) status, so it never said that the effective LOG_LEVEL is debug (the local override wins over the base info). With no answer, it did not recover from the stall."
     },
     {
       "arm": "supervisorOn",
@@ -634,7 +683,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant answered `db.internal:5432/orders`, which correctly combines the host, port and name from the three workspace files. The '(LOW)' marker does not change the fact that the answer is correct and complete."
     },
     {
       "arm": "supervisorOn",
@@ -656,7 +707,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant traced the imports from a.py to b.py to c.py and correctly identified `requests` as the third-party package that a.py ultimately imports. It made no false claims and took no actions."
     },
     {
       "arm": "supervisorOn",
@@ -675,14 +728,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"requests\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty (only an '[ok] (LOW)' status marker with no content), so it never traced a -> b -> c or reported 'requests' as the third-party package."
     },
     {
       "arm": "supervisorOn",
@@ -704,7 +759,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant added up the line items and gave the correct total of 100 (40+35+25), showing each item. It did not claim that there was no total line."
     },
     {
       "arm": "supervisorOn",
@@ -726,7 +783,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant followed both hops, from billing-service to the payments team (services.md) and from payments to Dana Ruiz (teams.md), and named Dana Ruiz as the owner. It did not stop at the team or say the owner was unknown."
     },
     {
       "arm": "supervisorOn",
@@ -748,7 +807,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant used the later 0007 entry (APPLIED on 2026-01-05) instead of the earlier PENDING one, and noted that the PENDING entry came first. It also reported 0008 as pending, which matches the log."
     },
     {
       "arm": "supervisorOn",
@@ -767,14 +828,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "regex /0007[^.\\n]*\\b(applied|yes)\\b|\\b(applied|yes)\\b[^.\\n]*0007|migration 0007 (is|has been) applied/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty: it returned only an '[ok] (LOW)' status and never answered. It did not say that migration 0007 is APPLIED according to the later 2026-01-05 log entry."
     },
     {
       "arm": "supervisorOn",
@@ -796,7 +859,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant noted that the MAX_RETRIES key is absent, cited the comment saying it was renamed to RETRY_LIMIT, and reported RETRY_LIMIT=7. Saying the old key is not present is accurate context, not a dead-end answer, because it goes on to give the new key and its value."
     },
     {
       "arm": "supervisorOn",
@@ -815,15 +880,16 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"7\"",
-        "regex /renamed|now called|RETRY_LIMIT/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty apart from a status marker. It never pointed out that MAX_RETRIES was renamed to RETRY_LIMIT and never reported the value 7."
     },
     {
       "arm": "supervisorOn",
@@ -845,7 +911,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant counted both log formats and gave 4 error lines: 2 `[ERROR]` lines and 2 `level=error` lines. It listed each line correctly from app.log."
     },
     {
       "arm": "supervisorOn",
@@ -867,7 +935,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant followed the pointer from server.js into config/ports.json and correctly reported the API port as 9443, citing the chain accurately."
     },
     {
       "arm": "supervisorOn",
@@ -886,14 +956,17 @@
         "GATHER_EVIDENCE"
       ],
       "failedChecks": [
-        "contains \"9443\""
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty: it returned status ok with a LOW confidence tag and no content, so it never followed the pointer to config/ports.json or reported port 9443."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

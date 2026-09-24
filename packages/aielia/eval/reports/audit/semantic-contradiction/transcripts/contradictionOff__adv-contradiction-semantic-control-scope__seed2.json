@@ -307,37 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said plainly that the rollup should write to BigQuery. It treated Postgres (OLTP) and BigQuery (warehouse) as complementary systems and did not flag a contradiction; its exception about app-facing, low-latency reads is useful nuance, not a conflict flag.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"BigQuery\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"disagree\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -5,11 +5,13 @@
  * One JSON file per task in this directory. Every file is validated against `TaskSpecSchema`
  * by `corpus.test.ts` (runs in `npm test`) — a malformed task fails CI, not the benchmark run.
  *
- * A task is a fixed prompt + a fixed workspace + a mechanical grader. The grader is deliberately
- * boring — regex / substring / file-state / result-status — so a task's pass/fail does not itself
- * depend on an LLM. The one exception is `judge`, an LLM-as-judge rubric used only where a
- * mechanical check genuinely cannot express the criterion; a run without a judge model scores
- * those `skipped`, never `pass`.
+ * A task is a fixed prompt + a fixed workspace + written pass criteria (`intent` and `note`). Pass/fail
+ * is decided by the SEMANTIC judge (`../judge.ts`), which reasons about behaviour and meaning against
+ * those criteria — it never matches reply text. The `grader` block is LEGACY: `contains` / `notContains`
+ * / `regex` / `status` / `nextSteps` are shown to the judge only as hints about expected values (they
+ * were found to mis-score turns in both directions and no longer score anything). The one field that
+ * still gates a row objectively is `grader.filesUnchanged` — a protected file that actually changed on
+ * disk. Write the pass criteria in `note`, in plain language, including what must NOT happen.
  */
 import { z } from 'zod'
 

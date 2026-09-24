@@ -322,13 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly reported both values from services/notification.md: owner Priya Nair and on-call channel #notify-oncall. It did so in a single, direct reply with no needless second round.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Priya Nair\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"#notify-oncall\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

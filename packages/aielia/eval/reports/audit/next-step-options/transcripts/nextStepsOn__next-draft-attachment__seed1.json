@@ -348,18 +348,21 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The reply correctly caught the 'quesitons' typo. But the only next-step option offered was fixing that typo, and none of the options pointed out that the draft promises an attached file that isn't there, which the pass criteria require.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"quesitons\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"attach\"",
+        "name": "nextSteps (judge)",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "nextSteps names \"attach\""
+      "nextSteps (judge)"
     ]
   },
   "metrics": {

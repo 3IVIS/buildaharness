@@ -1,0 +1,1082 @@
+{
+ "flagOn__audit-decomposition-budget-summary__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-lookup__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-value__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-incident-report__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-onboarding-checks__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-release-facts__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-team-roster__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-three-files__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-budget-summary__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-lookup__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-value__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-incident-report__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-onboarding-checks__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-release-facts__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-team-roster__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-three-files__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-budget-summary__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-lookup__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-value__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-incident-report__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-onboarding-checks__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-release-facts__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-team-roster__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-three-files__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-budget-summary__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-lookup__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-value__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-incident-report__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-onboarding-checks__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-release-facts__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-team-roster__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-three-files__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-budget-summary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-lookup__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-control-single-value__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-incident-report__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-onboarding-checks__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-release-facts__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-team-roster__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-decomposition-three-files__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-budget-summary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"24,000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Hosting\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Tooling\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /7,?500/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-lookup__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-control-single-value__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-incident-report__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"14:32\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"payments-api\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"certificate\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Raman\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /expiry alert|alerting/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-onboarding-checks__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"09:30\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Ferreira\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"VPN\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Week-One Retro\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-release-facts__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5.3.1\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-09-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Vasquez\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"deploy rollback --to 5.2.9\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-team-roster__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Okonkwo\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"7\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"Gothenburg\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-05\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "decompositionOff__audit-decomposition-three-files__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"5433\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"900\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

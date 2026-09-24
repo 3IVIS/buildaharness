@@ -121,25 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly identified 418 as \"I'm a teapot\" from RFC 2324 (HTCPCP), which meets the pass criteria. However, it wrongly says RFC 7168 later reserved 418: RFC 7168 (2014) predates the 2017 pushback and extended HTCPCP to tea, while the reservation came in RFC 9110 (2022).",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"teapot\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 is not a real\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no such status code\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 means Payload Too Large\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 is Unauthorized\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

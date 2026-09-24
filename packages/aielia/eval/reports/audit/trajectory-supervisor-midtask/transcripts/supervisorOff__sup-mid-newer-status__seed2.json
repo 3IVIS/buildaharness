@@ -410,14 +410,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In the final turn the assistant gave only a generic could-not-complete message and never reported the newer on-call entry, Ines Duarte, from oncall/2026-09.txt.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Ines Duarte\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"Ines Duarte\""
+      "judge"
     ]
   },
   "metrics": {

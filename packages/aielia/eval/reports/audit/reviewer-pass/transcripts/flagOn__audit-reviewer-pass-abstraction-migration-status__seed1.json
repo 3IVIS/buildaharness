@@ -332,23 +332,10 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said plainly that the migration is complete and gave a short reason: the 2026-09-08 cutover and decommission of both tables, and the explicit 'Migration marked complete' entry. It did not copy the changelog or list the earlier intermediate steps.",
+    "invalid": false,
     "checks": [
-      {
-        "name": "not contains \"shadow-write path for users table\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"off-by-one in the backfill cursor\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"backfill batch size tuned\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\byes\\b/i",
-        "verdict": "pass"
-      },
       {
         "name": "judge",
         "verdict": "pass"

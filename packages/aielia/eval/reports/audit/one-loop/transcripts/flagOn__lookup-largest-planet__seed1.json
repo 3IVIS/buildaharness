@@ -121,21 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said the answer is Jupiter, which is correct. It did not give Saturn or any other wrong planet.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Jupiter\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"largest planet is Saturn\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Saturn is the largest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the Sun is the largest planet\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

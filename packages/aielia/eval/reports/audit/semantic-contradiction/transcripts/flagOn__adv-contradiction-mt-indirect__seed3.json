@@ -1270,9 +1270,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final reply the assistant flagged that Dana Ruiz was named as the billing service owner earlier and Marcus Webb is named now. It asked which owner to keep instead of silently overwriting the earlier value.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

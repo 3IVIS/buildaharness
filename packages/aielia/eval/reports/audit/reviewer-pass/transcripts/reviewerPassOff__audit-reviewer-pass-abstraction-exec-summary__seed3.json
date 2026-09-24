@@ -84,30 +84,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant only staged a 'send status update to manager' action (needs_approval). Its reply never showed the one-line summary itself (e.g. on track, cutover Friday), so nothing confirms it gave a short manager-level status rather than the log noise.",
+    "invalid": false,
     "checks": [
-      {
-        "name": "contains \"on track\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"worker-3 picked up\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"sqlite3.OperationalError\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Traceback (most recent call last)\"",
-        "verdict": "pass"
-      },
       {
         "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"on track\"",
       "judge"
     ]
   },

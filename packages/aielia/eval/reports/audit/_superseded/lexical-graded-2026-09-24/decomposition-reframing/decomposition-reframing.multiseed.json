@@ -1,0 +1,100 @@
+{
+  "feature": "decomposition-reframing",
+  "title": "Up-front decomposition + task reframing",
+  "hypothesis": "Decomposing a multi-part request into a task graph and reframing each task with an LLM call completes more of the requested parts than treating the request as one task, at acceptable extra cost.",
+  "control": "decompositionOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+82% $/turn, +23% latency). Neutral with real cost — it does not earn its keep.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-22T21:33:10.592Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 1,
+      "candidate": 1,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 8891,
+      "candidate": 10959.333333333334,
+      "deltaMean": 2068.333333333334,
+      "deltaCi95": 1443.0167875823358,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.006829208333333334,
+      "candidate": 0.012405800000000002,
+      "deltaMean": 0.005576591666666668,
+      "deltaCi95": 0.0036930445967577274,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 3747.3333333333335,
+      "candidate": 4533.666666666667,
+      "deltaMean": 786.3333333333335,
+      "deltaCi95": 601.8707230700701,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.8165795205642431,
+  "latencyDeltaPct": 0.2326322498406629,
+  "tokenDeltaPct": 0.2098381070983811,
+  "injectionSignals": null
+}

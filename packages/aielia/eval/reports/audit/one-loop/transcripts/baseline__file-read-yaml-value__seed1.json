@@ -332,29 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 3, which is the correct value of web.replicas in deploy.yaml; it did not give 5, the value of the sibling worker service.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"replicas: 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5 replicas\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"answer is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"web service has 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b3\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

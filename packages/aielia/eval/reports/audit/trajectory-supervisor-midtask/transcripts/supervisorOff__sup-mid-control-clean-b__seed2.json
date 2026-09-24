@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly read B=31 and C=44 from prices.txt and computed B plus C as 31 + 44 = 75, with no stall at any turn.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"75\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

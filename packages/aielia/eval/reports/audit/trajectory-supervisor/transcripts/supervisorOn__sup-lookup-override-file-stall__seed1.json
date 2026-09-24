@@ -302,30 +302,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty: it only showed an '[ok] (LOW)' status with no content, so it never stated that the effective LOG_LEVEL is debug. It did not recover from the stall and gave no answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"debug\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"effective log_level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective log level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the answer is info\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"debug\""
+      "judge"
     ]
   },
   "metrics": {

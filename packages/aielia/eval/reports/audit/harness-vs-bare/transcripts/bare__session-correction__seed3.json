@@ -26,23 +26,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "INVALID_RUN",
+    "reason": "claude exited with code 1",
+    "invalid": true,
     "checks": [
       {
         "name": "arm",
         "verdict": "fail"
-      },
-      {
-        "name": "contains \"v2\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"/v1\n\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "arm",
-      "contains \"v2\""
+      "arm"
     ]
   },
   "metrics": {

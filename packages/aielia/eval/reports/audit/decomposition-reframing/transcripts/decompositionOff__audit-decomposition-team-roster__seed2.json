@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave all four facts from the roster as separate items: Marguerite Okonkwo as lead, 7 engineers, Gothenburg as the design lead's city, and a 2026-10-05 on-call start. It added nothing that isn't in the file.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Okonkwo\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"7\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Gothenburg\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"2026-10-05\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

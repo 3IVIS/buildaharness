@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant chose the top-bound reporter's pad and explicitly tied the choice to the user being left-handed, which it had inferred in turn 1 from the ink-smudging description. Its reference to the earlier quick-dry ink and grip advice accurately reflects its turn-1 reply.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

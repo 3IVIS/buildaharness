@@ -342,17 +342,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant reported all three requested values, and each matches the workspace files: database port 5433, cache TTL 900 seconds, and queue retry limit 6.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"5433\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"900\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"6\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

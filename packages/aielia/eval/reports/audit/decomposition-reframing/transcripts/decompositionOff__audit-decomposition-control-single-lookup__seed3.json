@@ -322,9 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the team is led by Marguerite Okonkwo, which matches team/lead.md and meets the pass criterion of naming Okonkwo.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Okonkwo\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
