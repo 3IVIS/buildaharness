@@ -1,0 +1,842 @@
+{
+ "flagOn__gg-thread-alternating-formats__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-constraint-not-inherited__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-control-linear__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-correction-survives-detour__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-return-after-detour__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-scoped-format-constraint__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-goals-synthesis__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-projects-state__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-alternating-formats__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-constraint-not-inherited__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-control-linear__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-correction-survives-detour__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-return-after-detour__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-scoped-format-constraint__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-goals-synthesis__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-projects-state__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-alternating-formats__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-constraint-not-inherited__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-control-linear__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-correction-survives-detour__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-return-after-detour__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-scoped-format-constraint__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-goals-synthesis__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-projects-state__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-alternating-formats__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-constraint-not-inherited__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-control-linear__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-correction-survives-detour__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-return-after-detour__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-scoped-format-constraint__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-goals-synthesis__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-projects-state__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-alternating-formats__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-constraint-not-inherited__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-control-linear__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-correction-survives-detour__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-return-after-detour__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-scoped-format-constraint__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-goals-synthesis__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__gg-thread-three-projects-state__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-alternating-formats__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-constraint-not-inherited__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Marta Ilves\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /(\\w+\\s+){5,}\\w+/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-control-linear__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"platform\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-correction-survives-detour__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"135\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"120\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-return-after-detour__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BLUEHERON\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /match|same|identical|consistent|agree/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-scoped-format-constraint__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-goals-synthesis__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"Nordwind Freight\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"2026-10-14\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"[redacted-email]\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"24\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "goalGraphOn__gg-thread-three-projects-state__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"350\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"250\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"200\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /alder[^\\n]*350/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

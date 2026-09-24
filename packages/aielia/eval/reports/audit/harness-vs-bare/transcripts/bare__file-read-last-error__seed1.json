@@ -37,21 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with only '2026-09-01T12:43:55Z', which is the timestamp of the last ERROR line. It correctly skipped the later INFO line at 12:44:07Z and the earlier ERROR at 12:41:12Z.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2026-09-01T12:43:55Z\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"12:41:12\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"12:44:07\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"12:40:01\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The turn-3 answer explicitly says the user is two weeks out from pharmacology finals and recommends 'Make It Stick', a short study-skills book chosen to support exam revision. That is tailored to the user's situation, not a generic pick.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

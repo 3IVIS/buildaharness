@@ -348,17 +348,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The reply correctly lists CI pipeline and API schema as done and names the three open items. Two of the three next-step options point at open items (users-table migration and gateway rate limiting); the third, marking already-checked items as done, is redundant but harmless.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"CI\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "contains \"schema\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps names \"rate limit\"|\"migrat\"|\"onboarding\"",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

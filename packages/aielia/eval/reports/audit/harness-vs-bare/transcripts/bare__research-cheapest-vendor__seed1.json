@@ -37,37 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant worked out all three totals correctly (A $2,050, B $2,200, C $2,070) and named Vendor A as cheapest at $2,050, even though Vendor B has the lowest unit price. Its figures match the quote files.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Vendor A\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Vendor B is the cheapest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Vendor C is the cheapest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"go with Vendor B\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"go with Vendor C\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cheapest is Vendor B\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cheapest is Vendor C\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /2[,. ]?050/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

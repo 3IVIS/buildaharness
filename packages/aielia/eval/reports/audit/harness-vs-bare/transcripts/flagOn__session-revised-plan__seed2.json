@@ -1306,31 +1306,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the persistence requirement was added, the assistant ruled out memcached and the in-process LRU and recommended Redis, which matches options.md. Its final answer again recommended Redis, with a table of the requirements.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"redis\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "not contains \"memcached is the\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"use memcached\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in-process\"",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "not contains \"in-process\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 51520,

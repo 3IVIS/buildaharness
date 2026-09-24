@@ -302,30 +302,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty (just '[ok] (LOW)', with no content). It never traced a -> b -> c and never said the package is requests.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"requests\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"none\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no third-party\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only local modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"a.py has no external\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"requests\""
+      "judge"
     ]
   },
   "metrics": {

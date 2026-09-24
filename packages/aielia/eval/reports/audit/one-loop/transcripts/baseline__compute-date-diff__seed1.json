@@ -121,29 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just '45', which is correct: Jan 15 to Mar 1, 2026 is 16 + 28 + 1 = 45 days (2026 is not a leap year), and it followed the 'just the number' format.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"44 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"46 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"47 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 44\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 46\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b45\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -126,13 +126,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly answered 17 × 23 = 391. The conversation shows no next-step options section.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"391\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps == none",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

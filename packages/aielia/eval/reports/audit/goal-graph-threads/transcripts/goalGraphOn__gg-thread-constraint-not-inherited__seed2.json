@@ -986,13 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "When the user moved to the new topic, the assistant replied in a full sentence, \"Marta Ilves chairs the Thursday meeting.\", instead of carrying over the one-word limit set for the inventory questions. It also answered the earlier inventory questions correctly with single values (64, 12).",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Marta Ilves\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /(\\w+\\s+){5,}\\w+/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

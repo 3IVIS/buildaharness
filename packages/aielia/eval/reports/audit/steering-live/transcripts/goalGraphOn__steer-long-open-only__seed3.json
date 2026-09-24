@@ -798,9 +798,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final reply opens with a wrong bolded total of 92, but then shows the correct open-only sum (14 + 62 + 21 + 55 + 12 = 164) and says outright that 164 is right and 92 was a mistake. The reply is messy, but its final answer is correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"164\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

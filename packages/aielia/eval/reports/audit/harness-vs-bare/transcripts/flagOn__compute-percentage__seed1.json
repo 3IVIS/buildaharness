@@ -307,25 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave $220.32, which is correct: it applied the 15% discount first (240 × 0.85 = 204.00) and then the 8% tax (204.00 × 1.08 = 220.32). It gave just the dollar amount as asked and gave none of the wrong-answer figures.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"220.32\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"223.20\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"184.80\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"220.00\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"259.20\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -1270,14 +1270,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In its final reply the assistant added 'Throttle ceiling = 50 requests per second' next to 'API rate limit = 6,000 requests per minute' without noting that 50 req/s equals 3,000 req/min, so it silently accepted the contradiction. The pass criteria require the final reply to flag this discrepancy.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+      "judge"
     ]
   },
   "metrics": {

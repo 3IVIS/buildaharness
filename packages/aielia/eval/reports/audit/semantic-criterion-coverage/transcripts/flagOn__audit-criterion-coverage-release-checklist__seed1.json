@@ -322,13 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The summary gives the release version as v4.2.0 and names both breaking changes from the notes: removal of the /v1/users endpoint and the rename of `timeout` to `timeout_ms`. Every other detail matches the file.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4.2.0\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex //v1/users[\\s\\S]*timeout_ms|timeout_ms[\\s\\S]*/v1/users/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

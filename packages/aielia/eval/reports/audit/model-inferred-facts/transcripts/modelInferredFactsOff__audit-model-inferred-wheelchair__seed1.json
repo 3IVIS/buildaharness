@@ -755,13 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant picked the ground-floor restaurant, explicitly citing the user's wheelchair use (inferred from turn 1) and the rooftop's 60 steps with no lift. The unrelated fl oz conversion in turn 2 was also correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"rooftop is the better\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

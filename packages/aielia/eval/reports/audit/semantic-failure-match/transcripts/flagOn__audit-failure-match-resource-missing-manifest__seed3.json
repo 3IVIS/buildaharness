@@ -266,35 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty (only '[ok] (LOW)' with no content). It never reported the entrypoint dist/widget.mjs or showed any recovery from the stall.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"dist/widget.mjs\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no manifest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"does not exist\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /dist/widget\\.mjs|entrypoint/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"dist/widget.mjs\"",
-      "regex /dist/widget\\.mjs|entrypoint/i"
+      "judge"
     ]
   },
   "metrics": {

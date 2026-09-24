@@ -807,9 +807,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly recalled from turn 1 that Biscuit gets anxious when left home alone. It chose pet-friendly Hotel B and gave that as the reason.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

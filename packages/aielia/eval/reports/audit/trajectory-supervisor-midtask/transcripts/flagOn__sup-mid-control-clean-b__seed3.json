@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant read prices.txt correctly, gave B=31 and C=44, and correctly computed B+C=75 over the multi-step session without stalling.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"75\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

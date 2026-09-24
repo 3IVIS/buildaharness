@@ -781,9 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In turn 3 the assistant picked the mushroom wellington and tied the choice to what the user had implied in turn 1 about eating meat-free (halloumi and corn instead of sausages). It avoided both the lamb and the fish pie.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /mushroom|wellington|vegetarian/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

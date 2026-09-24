@@ -781,9 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant recommended 'Make It Stick', a real book on learning science that it explicitly tied to the user's pharmacology finals in two weeks. It explained how active recall and spaced practice apply to reviewing drug classes and fit the book around the user's limited study time, so this is not a generic pick.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

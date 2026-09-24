@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered '4', which matches the correct count of lines beginning with 'TODO' in notes.txt. The '(LOW)' confidence tag does not change the correct answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 lines\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"three\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

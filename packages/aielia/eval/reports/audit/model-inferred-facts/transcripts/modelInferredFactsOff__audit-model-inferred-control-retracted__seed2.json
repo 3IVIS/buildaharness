@@ -941,21 +941,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant said the user has no pets of their own, so it ignored pet-friendliness and picked Hotel A in the city centre. It did not treat Biscuit or any dog as the user's after the user took that back.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"your dog\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Biscuit\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"your pet\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /hotel/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

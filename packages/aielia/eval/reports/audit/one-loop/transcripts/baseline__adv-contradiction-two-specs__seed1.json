@@ -338,31 +338,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant named both values (10 MB in api-guide.md, 2 MB in ops-runbook.md), said the docs give two different numbers, and suggested reconciling them. It also gave a reasonable take on which limit applies in practice (the gateway's 2 MB). The AnswerClaim telemetry isn't visible, so I ignored it.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2 MB\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"10 MB\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /disagree|conflict|differ|inconsistent|two (different|sources)|whereas|but the|however/i",
-        "verdict": "pass"
-      },
-      {
-        "name": "answerClaim == contradicted",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "answerClaim == contradicted"
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 13891,

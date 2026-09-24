@@ -348,13 +348,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The reply gives the correct mean of about 492.8 ms (2957/6), flags run 5 (2450 ms, probable timeout) as an outlier, and gives the correct 101.4 ms average without it. Both next-step options point to the run-5 outlier, one through skew-resistant stats and one by investigating the timeout.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

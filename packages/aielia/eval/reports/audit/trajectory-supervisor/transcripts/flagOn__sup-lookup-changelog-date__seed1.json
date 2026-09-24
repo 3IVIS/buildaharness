@@ -312,30 +312,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant never checked package.json or CHANGELOG.md in the workspace. It said there was no project context and asked the user which software they meant, so it never gave the release date (2026-03-11).",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2026-03-11\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not recorded\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no date\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find a date\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"2026-03-11\""
+      "judge"
     ]
   },
   "metrics": {

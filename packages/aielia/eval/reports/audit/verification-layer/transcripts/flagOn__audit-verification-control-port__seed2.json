@@ -322,9 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly reported the cache port as 6380 from config/cache.md, along with the accurate host cache.internal.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"6380\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

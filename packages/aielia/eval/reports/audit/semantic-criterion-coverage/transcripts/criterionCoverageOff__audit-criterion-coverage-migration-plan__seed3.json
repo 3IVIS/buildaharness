@@ -322,13 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant listed all four migration steps in the right order (snapshot, apply 0042, backfill, switch reads). It also pointed out the rollback separately: if the backfill fails, restore from the step-1 snapshot. That meets both success criteria and matches the workspace file.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"restore\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /snapshot[\\s\\S]*0042[\\s\\S]*backfill[\\s\\S]*(switch|reads)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

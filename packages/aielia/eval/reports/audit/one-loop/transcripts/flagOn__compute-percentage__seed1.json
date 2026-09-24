@@ -307,25 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with only $220.32. That is the correct result of taking the 15% discount first (204.00) and then adding 8% tax (220.32), and none of the common wrong answers appear.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"220.32\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"223.20\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"184.80\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"220.00\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"259.20\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

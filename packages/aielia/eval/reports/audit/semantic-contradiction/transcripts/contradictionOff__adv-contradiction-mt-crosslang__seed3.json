@@ -937,17 +937,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In the final turn, the assistant silently used sed to change 'Frankfurt' to 'Singapur' and reported the new file contents. It never flagged that the new location conflicts with the earlier Spanish note that the production server is in Frankfurt, which the pass criteria require.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
-        "verdict": "pass"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 29560,

@@ -807,9 +807,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant picked up on the night-shift work mentioned in turn 1 and built the gym schedule around it. It recommended training before night shifts, never right after them, and keeping a buffer before daytime sleep, so this was not a generic morning schedule.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /night|shift|afternoon|evening|before (your|work)|after (your|work)|nurse|ward/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

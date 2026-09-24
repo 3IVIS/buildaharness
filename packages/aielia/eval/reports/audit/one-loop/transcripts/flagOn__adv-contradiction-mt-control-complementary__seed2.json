@@ -1322,21 +1322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said the dashboard should read from BigQuery, the analytics warehouse, and correctly treated PostgreSQL (OLTP) and BigQuery as complementary, with no false contradiction flag. It also gave accurate caveats about data freshness from the nightly ETL.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /BigQuery|warehouse|analytics/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

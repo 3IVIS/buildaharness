@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave all four facts as separate items, and each matches roster.md: lead Marguerite Okonkwo, 7 engineers, the design lead based in Gothenburg, and on-call starting 2026-10-05.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Okonkwo\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"7\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Gothenburg\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"2026-10-05\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

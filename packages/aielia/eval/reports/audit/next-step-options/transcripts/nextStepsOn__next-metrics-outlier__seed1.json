@@ -348,13 +348,16 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave the correct mean of about 492.8 ms (2957/6). It also flagged run 5 (2450 ms, 'probable timeout') and gave the correct 101.4 ms average without it. The first next-step option offers to investigate the run-5 outlier, and the second offers outlier-resistant statistics (median and p95/p99).",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
+        "name": "nextSteps (judge)",
         "verdict": "pass"
       }
     ],

@@ -1,5 +1,389 @@
 # Comparative Harness Benchmark
 
+<!-- audit-entry:verification-layer start -->
+## Audit — The verification layer
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+25% $/turn, -9% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `verificationOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-22
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Always-on mechanical verification of every result catches defective or unsupported results before they are accepted, cutting confidently-wrong replies enough to justify running on every turn.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.9583 | 1 | 0.0417 | ±0.0817 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.0476 | 0 | -0.0476 | ±0.0933 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 8712 | 7899.6667 | -812.3333 | ±1277.0195 | — |
+| meanCostUsd | 0.0065 | 0.0081 | 0.0016 | ±0.0042 | — |
+| totalTokens | 3211.6667 | 3007 | -204.6667 | ±419.5504 | — |
+
+Candidate vs control: cost +25%, latency -9%, tokens -6%.
+
+<!-- audit-entry:verification-layer end -->
+
+<!-- audit-entry:trajectory-supervisor start -->
+## Audit — Trajectory Supervisor
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+22% $/turn, +40% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `flagOn` (control) vs `supervisorOn` (candidate) · 3 seeds · 2026-09-08
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The trajectory supervisor's one LLM call on the cannotMakeProgress() stall edge redirects enough stalled runs into recovery to justify its extra cost, latency and tokens.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.6481 | 0.6667 | 0.0185 | ±0.0363 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | 0.0556 | 0 | -0.0556 | ±0.1089 | — |
+| overconfidentWrongRate | 0.0404 | 0 | -0.0404 | ±0.0397 | positive |
+| supervisorConsultsMean | 0 | 0.3333 | 0.3333 | ±0 | — |
+| meanLatencyMs | 9674 | 13576.6667 | 3902.6667 | ±427.3374 | — |
+| meanCostUsd | 0.0105 | 0.0127 | 0.0023 | ±0.0023 | — |
+| totalTokens | 8675.6667 | 13798 | 5122.3333 | ±596.2206 | — |
+
+Candidate vs control: cost +22%, latency +40%, tokens +59%.
+
+<!-- audit-entry:trajectory-supervisor end -->
+
+<!-- audit-entry:trajectory-supervisor-midtask start -->
+## Audit — Trajectory Supervisor (mid-task stalls)
+
+- **Verdict:** Better results, at higher cost — The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+43% $/turn).
+- **Arms:** `supervisorOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-24
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** When a multi-turn task stalls after context has built up, the supervisor redirects, reframes or asks the user and the run recovers, at a cost that is negligible on tasks that never stall.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.375 | 0.625 | 0.25 | ±0 | positive |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0.75 | 0.75 | ±0 | — |
+| meanLatencyMs | 13454 | 17842.3333 | 4388.3333 | ±257.0051 | — |
+| meanCostUsd | 0.0094 | 0.0134 | 0.004 | ±0.0004 | — |
+| totalTokens | 4663.3333 | 6589.6667 | 1926.3333 | ±255.9625 | — |
+
+Candidate vs control: cost +43%, latency +33%, tokens +41%.
+
+<!-- audit-entry:trajectory-supervisor-midtask end -->
+
+<!-- audit-entry:steering-live start -->
+## Audit — Mid-turn steering
+
+- **Verdict:** No measurable difference, but cheaper — No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.
+- **Arms:** `flagOn` (control) vs `goalGraphOn` (candidate) · 3 seeds · 2026-09-24
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Absorbing a message sent while a long turn is still running (correction, extra ask, new goal, cancel) gives a result at least as good as queueing it as the next turn, in fewer wasted steps and less time.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.9583 | 0.9583 | 0 | ±0.1155 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.0417 | 0.0417 | 0 | ±0.1155 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 45099 | 35259.3333 | -9839.6667 | ±3982.9125 | positive |
+| meanCostUsd | 0.0475 | 0.0368 | -0.0108 | ±0.004 | positive |
+| totalTokens | 19885.6667 | 15131.6667 | -4754 | ±1606.9875 | positive |
+
+Candidate vs control: cost -23%, latency -22%, tokens -24%.
+
+<!-- audit-entry:steering-live end -->
+
+<!-- audit-entry:semantic-failure-match start -->
+## Audit — Semantic failure-mode match
+
+- **Verdict:** Better results, at higher cost — No task-success delta (CI includes 0) but the candidate costs materially more (+48% $/turn, +15% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `failureMatchOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-10
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** checkSemanticFailureMatch recognises known failure patterns described in different words often enough to earn its per-miss call and improve recovery routing.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.25 | 0.375 | 0.125 | ±0.2829 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | 0.25 | 0.375 | 0.125 | ±0.2829 | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 6977 | 8039.6667 | 1062.6667 | ±655.8256 | — |
+| meanCostUsd | 0.0056 | 0.0083 | 0.0027 | ±0.0027 | — |
+| totalTokens | 2991.6667 | 3308.6667 | 317 | ±260.7479 | — |
+
+Candidate vs control: cost +48%, latency +15%, tokens +11%.
+
+<!-- audit-entry:semantic-failure-match end -->
+
+<!-- audit-entry:semantic-criterion-coverage start -->
+## Audit — Semantic criterion coverage
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+25% $/turn, -3% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `criterionCoverageOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-22
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The checkSemanticCriterionCoverage LLM call recognises success criteria a reply satisfies in different words than the plan states them, removing false 'criterion not met' findings the reviewer's substring check raises, often enough to justify +1 call per unmatched criterion.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.9583 | 0.9583 | 0 | ±0.1155 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 9350 | 9115 | -235 | ±1196.8835 | — |
+| meanCostUsd | 0.0075 | 0.0094 | 0.0019 | ±0.0047 | — |
+| totalTokens | 3915.3333 | 3819.6667 | -95.6667 | ±1248.7403 | — |
+
+Candidate vs control: cost +25%, latency -3%, tokens -2%.
+
+<!-- audit-entry:semantic-criterion-coverage end -->
+
+<!-- audit-entry:semantic-contradiction start -->
+## Audit — Semantic contradiction check
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+29% $/turn, +1% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `contradictionOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-09
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The checkForContradictions LLM call catches enough real paraphrased / cross-framing belief contradictions that the always-on lexical negation-pair check misses to pay for its per-belief-set-growth cost.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.8095 | 0.8333 | 0.0238 | ±0.066 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.1795 | 0.1538 | -0.0256 | ±0.0503 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 21957.6667 | 22286.3333 | 328.6667 | ±463.5523 | — |
+| meanCostUsd | 0.021 | 0.027 | 0.006 | ±0.0063 | — |
+| totalTokens | 16126.6667 | 15857.6667 | -269 | ±738.3571 | — |
+
+Candidate vs control: cost +29%, latency +1%, tokens -2%.
+
+<!-- audit-entry:semantic-contradiction end -->
+
+<!-- audit-entry:semantic-change-reviewer start -->
+## Audit — Semantic change reviewer
+
+- **Verdict:** Better results, no added cost — The candidate beats the control on task success (CI clears 0) with no material cost increase.
+- **Arms:** `changeReviewOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-22
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The semanticChangeReviewer LLM call catches proposed changes that conflict in meaning with a held high-confidence belief, which the reviewer's lexical check misses, often enough to justify +1 call per proposed change and without blocking compatible changes.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.625 | 0.7083 | 0.0833 | ±0.0817 | positive |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 37216.6667 | 36154.3333 | -1062.3333 | ±18177.2192 | — |
+| meanCostUsd | 0.0258 | 0.0273 | 0.0015 | ±0.0062 | — |
+| totalTokens | 12149.3333 | 11529.3333 | -620 | ±886.0296 | — |
+
+Candidate vs control: cost +6%, latency -3%, tokens -5%.
+
+<!-- audit-entry:semantic-change-reviewer end -->
+
+<!-- audit-entry:reviewer-pass start -->
+## Audit — The reviewer pass
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+20% $/turn, -6% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `reviewerPassOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-23
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The 3-lens reviewer pass finds real defects earlier layers miss and improves the final reply often enough to justify its per-turn latency and second-round cost.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.75 | 0.75 | 0 | ±0 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 9455 | 8885.3333 | -569.6667 | ±940.0009 | — |
+| meanCostUsd | 0.0084 | 0.0101 | 0.0017 | ±0.0036 | — |
+| totalTokens | 2982 | 2972.3333 | -9.6667 | ±285.7891 | — |
+
+Candidate vs control: cost +20%, latency -6%, tokens -0%.
+
+<!-- audit-entry:reviewer-pass end -->
+
+<!-- audit-entry:one-loop start -->
+## Audit — One-loop harness-driven proposer
+
+- **Verdict:** No measurable difference, but cheaper — No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.
+- **Arms:** `baseline` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-10
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Letting the harness drive tool calls in-loop (ASSISTANT_ONE_LOOP=enabled) beats post-hoc bookkeeping over an already-finished reply, retroactively validating the 2026-09-06 default flip.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.8657 | 0.8611 | -0.0046 | ±0.0181 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0.0093 | 0.0093 | 0 | ±0.0203 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.0903 | 0.0723 | -0.0179 | ±0.0196 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 16240.6667 | 16659 | 418.3333 | ±1607.6395 | — |
+| meanCostUsd | 0.0186 | 0.0153 | -0.0033 | ±0.0041 | — |
+| totalTokens | 51909.6667 | 54552 | 2642.3333 | ±4297.5443 | — |
+
+Candidate vs control: cost -18%, latency +3%, tokens +5%.
+
+<!-- audit-entry:one-loop end -->
+
+<!-- audit-entry:next-step-options start -->
+## Audit — Next-step options
+
+- **Verdict:** No measurable difference, but cheaper — Options named the expected continuation in 67% of 18 followable run(s) and appeared where none were warranted in 0% of 6 control run(s). Between the CUT floor and the KEEP bar (or too many false positives).
+- **Arms:** `flagOn` (control) vs `nextStepsOn` (candidate) · 3 seeds · 2026-09-24
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** The options shown under a finished turn name the concrete continuation a user would want, and stay silent when nothing follows.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.75 | 0.75 | 0 | ±0 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.0476 | 0 | -0.0476 | ±0.0933 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 8011.6667 | 11285 | 3273.3333 | ±420.8882 | — |
+| meanCostUsd | 0.0111 | 0.0096 | -0.0015 | ±0.0017 | — |
+| totalTokens | 2778.3333 | 4174.3333 | 1396 | ±228.746 | — |
+
+Candidate vs control: cost -13%, latency +41%, tokens +50%.
+
+<!-- audit-entry:next-step-options end -->
+
+<!-- audit-entry:model-inferred-facts start -->
+## Audit — Model-inferred facts
+
+- **Verdict:** Better results, at higher cost — The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+55% $/turn).
+- **Arms:** `modelInferredFactsOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-22
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Facts the classifier infers from a message (statesDurableFacts, source model_inferred) are recalled correctly on later turns often enough to justify recording them, without a wrong-memory tax from hypotheticals and retracted statements.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.875 | 0.9583 | 0.0833 | ±0.0817 | positive |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0.125 | 0.0417 | -0.0833 | ±0.0817 | positive |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 26897.6667 | 31298 | 4400.3333 | ±2374.6992 | — |
+| meanCostUsd | 0.0241 | 0.0373 | 0.0132 | ±0.005 | — |
+| totalTokens | 12456.3333 | 12403 | -53.3333 | ±1127.9378 | — |
+
+Candidate vs control: cost +55%, latency +16%, tokens -0%.
+
+<!-- audit-entry:model-inferred-facts end -->
+
+<!-- audit-entry:llm-injection-detect start -->
+## Audit — LLM injection detection on tool output
+
+- **Verdict:** Worse results, at higher cost — The candidate regressed a gating metric (taskSuccessRate) beyond its CI band — the feature makes outcomes worse on its own stress slice.
+- **Arms:** `injectionDetectOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-10
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** detectInjectionLikelyWithLLM catches tool-output prompt-injection the deterministic pattern pass misses, often enough to justify the per-output latency and without a false-positive tax on benign instruction-like content.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 1 | 0.9 | -0.1 | ±0 | regressed |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 12774.6667 | 12541.3333 | -233.3333 | ±1089.9983 | — |
+| meanCostUsd | 0.0113 | 0.0137 | 0.0024 | ±0.0042 | — |
+| totalTokens | 6610.6667 | 5526.3333 | -1084.3333 | ±539.1041 | positive |
+
+Candidate vs control: cost +21%, latency -2%, tokens -16%.
+
+<!-- audit-entry:llm-injection-detect end -->
+
+<!-- audit-entry:harness-vs-bare start -->
+## Audit — The 11-layer harness vs. a bare model loop
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+77% $/turn, +64% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `bare` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-10
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Running the full 11-layer harness every turn produces materially better task outcomes than a bare ReAct loop, enough to justify the whole subsystem's per-turn cost.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 0.8584 | 0.875 | 0.0166 | ±0.0229 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0.037 | 0 | -0.037 | ±0.0363 | positive |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | — | 0.0714 | — | ±— | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 10338 | 16937 | 6599 | ±1124.0858 | — |
+| meanCostUsd | 0.0123 | 0.0218 | 0.0095 | ±0.0023 | — |
+| totalTokens | 55754.6667 | 56116.6667 | 362 | ±18614.4919 | — |
+
+Candidate vs control: cost +77%, latency +64%, tokens +1%.
+
+<!-- audit-entry:harness-vs-bare end -->
+
+<!-- audit-entry:goal-graph-threads start -->
+## Audit — Hierarchical goal graph
+
+- **Verdict:** No measurable difference — No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.
+- **Arms:** `flagOn` (control) vs `goalGraphOn` (candidate) · 3 seeds · 2026-09-24
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Tracking each goal as its own thread across turns keeps the right evidence and constraints attached to the right goal when several goals interleave.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 1 | 1 | 0 | ±0 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 25041.3333 | 24978.3333 | -63 | ±183.9014 | — |
+| meanCostUsd | 0.0225 | 0.0209 | -0.0016 | ±0.0033 | — |
+| totalTokens | 8026 | 8031.3333 | 5.3333 | ±47.4915 | — |
+
+Candidate vs control: cost -7%, latency -0%, tokens +0%.
+
+<!-- audit-entry:goal-graph-threads end -->
+
+<!-- audit-entry:decomposition-reframing start -->
+## Audit — Up-front decomposition + task reframing
+
+- **Verdict:** No measurable improvement, at extra cost — No task-success delta (CI includes 0) but the candidate costs materially more (+82% $/turn, +23% latency). Neutral with real cost — it does not earn its keep.
+- **Arms:** `decompositionOff` (control) vs `flagOn` (candidate) · 3 seeds · 2026-09-22
+- **Model:** claude-sonnet-5 · judge claude-opus-5-5
+- **Hypothesis:** Decomposing a multi-part request into a task graph and reframing each task with an LLM call completes more of the requested parts than treating the request as one task, at acceptable extra cost.
+
+| metric | control | candidate | Δ mean | CI95 | verdict |
+|---|---|---|---|---|---|
+| taskSuccessRate | 1 | 1 | 0 | ±0 | — |
+| hallucinationRate | 0 | 0 | 0 | ±0 | — |
+| unauthorizedEffectRate | 0 | 0 | 0 | ±0 | — |
+| recoveryRate | — | — | — | ±— | — |
+| overconfidentWrongRate | 0 | 0 | 0 | ±0 | — |
+| supervisorConsultsMean | 0 | 0 | 0 | ±0 | — |
+| meanLatencyMs | 8891 | 10959.3333 | 2068.3333 | ±1443.0168 | — |
+| meanCostUsd | 0.0068 | 0.0124 | 0.0056 | ±0.0037 | — |
+| totalTokens | 3747.3333 | 4533.6667 | 786.3333 | ±601.8707 | — |
+
+Candidate vs control: cost +82%, latency +23%, tokens +21%.
+
+<!-- audit-entry:decomposition-reframing end -->
+
 Plan Phase B — arm-vs-arm task benchmark. Newest run first. Generated by `scripts/run-harness-benchmark.ts`.
 
 ## Run 2026-09-23T20:04:34.425Z

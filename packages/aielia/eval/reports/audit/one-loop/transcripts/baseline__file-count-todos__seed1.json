@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 4, the correct count: four lines in notes.txt begin with 'TODO', and the line that only mentions 'todos' was rightly left out. The reply is just the number, as the user asked.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 lines\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"three\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -322,14 +322,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave the correct average of about 492.8 ms (2957/6). It also pointed out that run 5 (2450 ms, 'probable timeout') is an outlier and gave the average without it (101.4 ms), which is what the task asks for.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

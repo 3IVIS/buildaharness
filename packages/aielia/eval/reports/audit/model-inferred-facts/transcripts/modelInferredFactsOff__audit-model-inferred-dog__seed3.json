@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant picked Hotel B, the pet-friendly one, and said why: Biscuit gets frantic when he's left alone, which the user had only implied in turn 1. It hedged with 'likely', but that doesn't change the right pick or the reasoning.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

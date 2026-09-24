@@ -322,22 +322,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The user said it was Wednesday and asked for just the name. The assistant questioned that premise, led with the decoy Casey based on its own date guess, gave Blair only as a conditional alternative and asked the user to confirm, so it never clearly answered Blair.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Blair\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Alex\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Casey\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "not contains \"Casey\""
+      "judge"
     ]
   },
   "metrics": {

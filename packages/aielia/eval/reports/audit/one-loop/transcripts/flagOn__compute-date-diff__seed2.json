@@ -121,34 +121,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant answered 44, which is off by one. From 2026-01-15 up to but not including 2026-03-01 is 17 January days (the 15th through the 31st) plus 28 February days, so 45 days.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"44 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"46 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"47 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 44\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 46\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b45\\b/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "regex /\\b45\\b/i"
+      "judge"
     ]
   },
   "metrics": {

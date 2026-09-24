@@ -322,18 +322,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the two done items are setting up the CI pipeline and writing the API schema. It also listed the three open items (rate limiting, users table migration, onboarding guide), which are the obvious next steps; no separate next-step options section was provided.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"CI\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"schema\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

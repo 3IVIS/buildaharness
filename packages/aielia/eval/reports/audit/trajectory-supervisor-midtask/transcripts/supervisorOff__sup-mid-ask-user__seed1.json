@@ -746,9 +746,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the user named the 'export_v2' section, the assistant correctly reported 210s rather than the v1 value of 90s. The generic failure in turn 2 was a stall and not a wrong answer, which the pass criteria allow.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"210\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

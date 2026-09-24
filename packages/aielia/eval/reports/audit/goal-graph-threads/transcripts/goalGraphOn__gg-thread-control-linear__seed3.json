@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said Ines Duarte leads platform (9) and Tomas Weiss leads data (6), then correctly said the platform team has the bigger headcount. Every answer matches team.txt and follows the linear conversation.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"platform\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

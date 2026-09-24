@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered '4', which is correct: four lines begin with 'TODO', and line 5 only mentions 'todos' partway through. It also followed the user's request to give just the number.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 lines\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"three\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

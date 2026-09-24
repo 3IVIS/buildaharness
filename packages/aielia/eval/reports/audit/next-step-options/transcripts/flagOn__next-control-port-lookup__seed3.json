@@ -322,14 +322,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the API port is 9443, which matches ports.txt, and mentioned the admin port as related context. It offered no next-step options, which is correct for this control task.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9443\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

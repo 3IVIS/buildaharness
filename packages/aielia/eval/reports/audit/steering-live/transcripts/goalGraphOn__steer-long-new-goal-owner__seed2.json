@@ -728,9 +728,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant switched to the new ownership question and named Priya Raman as the owner from OWNER.txt, which meets the pass criterion. Its earlier trail answer (S05, weight 7) also matches the workspace files.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Priya Raman\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

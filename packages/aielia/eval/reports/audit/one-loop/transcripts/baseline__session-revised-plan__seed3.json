@@ -1310,21 +1310,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the user added the persistence requirement, the assistant correctly used options.md to rule out memcached and in-process LRU and gave Redis as its final recommendation. One minor slip: the final reply says the earlier context was multi-instance, but the user never said that.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"redis\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"memcached is the\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"use memcached\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in-process\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

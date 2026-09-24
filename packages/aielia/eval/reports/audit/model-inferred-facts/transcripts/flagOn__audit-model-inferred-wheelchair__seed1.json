@@ -781,13 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant picked the ground-floor restaurant and gave the reason: 60 steps with no lift won't work with the user's wheelchair. That fact was only implied in turn 1.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"rooftop is the better\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant based its turn-3 recommendation on the upcoming pharmacology finals that were only implied in turn 1. It picked 'Make It Stick', a study-technique book, and explained how it ties to spaced repetition for pharmacology exam prep, so this is not a generic pick.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

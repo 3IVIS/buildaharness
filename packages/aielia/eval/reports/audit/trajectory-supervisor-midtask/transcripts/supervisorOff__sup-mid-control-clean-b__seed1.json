@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant read prices.txt and gave the right answer each turn: B=31, C=44, and B+C=75. The answers were clean, with no stall and no invented details, and it correctly noted that the file gives no currency.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"75\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

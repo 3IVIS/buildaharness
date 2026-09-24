@@ -318,23 +318,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave the total spend as 10,400 (the four line items add up to that correctly) and said plainly that spending stayed under the 12,000 limit, with 1,600 to spare. That meets both of the user's success criteria in its own words.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"10400\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "contains \"10400\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 7330,

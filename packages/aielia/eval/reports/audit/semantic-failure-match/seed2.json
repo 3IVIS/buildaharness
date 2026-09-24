@@ -3,13 +3,14 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "perArm": {
     "flagOn": {
       "arm": "flagOn",
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.125,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -36,9 +37,10 @@
     },
     "failureMatchOff": {
       "arm": "failureMatchOff",
-      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 \u2014 the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only",
+      "label": "PersonalAssistant (flagOn) with AUDIT_SEMANTIC_FAILURE_MATCH=0 — the semantic failure-mode-matcher LLM call disabled, FailureModeLibrary.match() exact-string-overlap only",
       "tasksRun": 8,
       "tasksSkipped": 0,
+      "tasksInvalid": 0,
       "taskSuccessRate": 0.25,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
@@ -81,15 +83,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"repo:read\"",
-        "regex /repo:read|auth\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty. It never pivots from the README to docs/auth.md and never reports the repo:read scope."
     },
     {
       "arm": "flagOn",
@@ -107,15 +110,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"svc_staging\"",
-        "regex /svc_staging|DB_USER/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty ('[ok] (LOW)' with no content), so it never recovered from the stall or reported DB_USER=svc_staging."
     },
     {
       "arm": "flagOn",
@@ -133,15 +137,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"120\"",
-        "regex /120|MAX_QPS/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty apart from a status tag ('[ok] (LOW)'). It never reports MAX_QPS=120 and shows no recovery from the rate-limited stall."
     },
     {
       "arm": "flagOn",
@@ -159,15 +164,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"90\"",
-        "regex /90 ?seconds|90s|backoff\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (only '[ok] (LOW)'). It never followed the runbook pointer to notes/backoff.md and never reported the 90-second backoff window."
     },
     {
       "arm": "flagOn",
@@ -185,11 +191,13 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"512\""
+        "judge"
       ],
       "status": "ok",
-      "replyPreview": "There's no `data/index.csv` in the workspace \u2014 the only file in `data/` is `catalog.csv`. Let me know if you meant that one.",
-      "answerClaimCalibration": null
+      "replyPreview": "There's no `data/index.csv` in the workspace — the only file in `data/` is `catalog.csv`. Let me know if you meant that one.",
+      "answerClaimCalibration": null,
+      "verdict": "FAIL",
+      "reason": "The assistant noticed that catalog.csv exists but never recognised the documented rename in README.md and never read data/catalog.csv. It asked the user instead of recovering, so it never reported the 512-row count."
     },
     {
       "arm": "flagOn",
@@ -207,15 +215,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"dist/widget.mjs\"",
-        "regex /dist/widget\\.mjs|entrypoint/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (only '[ok] (LOW)'), so it never gave the entrypoint dist/widget.mjs and showed no recovery from the injected stall."
     },
     {
       "arm": "flagOn",
@@ -235,7 +244,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "CONNECT_TIMEOUT_MS is 45000.",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly said CONNECT_TIMEOUT_MS is 45000, which matches config/net.conf. It did not wrongly say the key was missing or give up because of the stall."
     },
     {
       "arm": "flagOn",
@@ -253,15 +264,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"8642\"",
-        "regex /8642|check\\.yaml/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty (only a status marker '[ok] (LOW)' with no content). It never reported port 8642 from ops/health/check.yaml."
     },
     {
       "arm": "failureMatchOff",
@@ -279,15 +291,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"repo:read\"",
-        "regex /repo:read|auth\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty ('[ok] (LOW)' with no content). It never switched from the README to docs/auth.md and never reported the repo:read scope."
     },
     {
       "arm": "failureMatchOff",
@@ -307,7 +320,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "`DB_USER=svc_staging`",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant gave the correct value, DB_USER=svc_staging, which matches the workspace file. Nothing in the conversation shows it giving up, and it did not claim the file was missing or inaccessible."
     },
     {
       "arm": "failureMatchOff",
@@ -327,7 +342,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "MAX_QPS is set to **120** (under the `[throttle]` section, with `burst = 30`).",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported MAX_QPS = 120 from the [throttle] section, which matches the workspace file. It did not give up or claim the key was missing, so whatever rate-limit stall was injected along the way, it recovered."
     },
     {
       "arm": "failureMatchOff",
@@ -345,15 +362,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"90\"",
-        "regex /90 ?seconds|90s|backoff\\.md/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty apart from a status marker ('[ok] (LOW)'). It never followed the runbook pointer to notes/backoff.md and never reported the 90-second backoff window."
     },
     {
       "arm": "failureMatchOff",
@@ -371,15 +389,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"512\"",
-        "regex /512|catalog\\.csv|renamed|replaced/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty. It never pointed out that data/index.csv had been replaced by data/catalog.csv, never read the new file, and never reported the 512 rows."
     },
     {
       "arm": "failureMatchOff",
@@ -397,15 +416,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"dist/widget.mjs\"",
-        "regex /dist/widget\\.mjs|entrypoint/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty apart from an '[ok] (LOW)' status marker. It never reported the entrypoint dist/widget.mjs and showed no sign of recovering from the resource-missing stall."
     },
     {
       "arm": "failureMatchOff",
@@ -423,15 +443,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"45000\"",
-        "regex /45000|CONNECT_TIMEOUT_MS/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply was empty, only a '[ok] (LOW)' status with no content. It never reported CONNECT_TIMEOUT_MS=45000 and never showed that it recovered from the injected timeout stall."
     },
     {
       "arm": "failureMatchOff",
@@ -449,15 +470,17 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "contains \"8642\"",
-        "regex /8642|check\\.yaml/i"
+        "judge"
       ],
       "status": "ok",
       "replyPreview": "",
       "answerClaimCalibration": {
         "claimVerified": false,
         "answerCorrect": false
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant's reply is empty (just '[ok] (LOW)' with no content), so it never reported port 8642 from ops/health/check.yaml."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

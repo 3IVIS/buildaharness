@@ -807,13 +807,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant worked out from turn 1 that the user uses a wheelchair and picked the ground floor place, saying outright that 60 steps with no lift won't work with a wheelchair.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"rooftop is the better\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /ground[- ]floor|street[- ]level|step[- ]free|accessib|no steps|wheelchair|ramp|the (plain|other|second) (one|place)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

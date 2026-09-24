@@ -1228,9 +1228,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In its final reply, the assistant switched to the new ownership question and named Priya Raman as the owner, which matches the pass criteria. Before that, it correctly followed the full trail and found S05 had the lowest weight.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Priya Raman\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

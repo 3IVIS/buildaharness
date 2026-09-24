@@ -318,43 +318,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant worked out 87/10,000 = 0.87%, said this is below the 1% SLO threshold, and correctly concluded we are not in breach. Both the percentage and the verdict are there, and the 13-error headroom figure is also correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"0.87\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"in breach\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"we are breaching\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"slo is violated\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"exceeds 1%\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"above the threshold\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /not (in )?breach|within (the )?slo|below (the )?(1%|threshold|slo)|no breach|compliant|under (the )?threshold|we are (ok|fine|good)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "not contains \"in breach\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 10161,

@@ -1,0 +1,1563 @@
+{
+ "flagOn__audit-failure-match-auth-denied-readme__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-auth-rejected-env__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-rate-limited-log__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-rate-throttled-notes__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-resource-absent-index__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\"",
+   "regex /512|catalog\\.csv|renamed|replaced/i"
+  ]
+ },
+ "flagOn__audit-failure-match-resource-missing-manifest__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-timeout-config__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-timeout-nested__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"8642\"",
+   "regex /8642|check\\.yaml/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-auth-denied-readme__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-auth-rejected-env__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-rate-limited-log__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-rate-throttled-notes__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-absent-index__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\"",
+   "regex /512|catalog\\.csv|renamed|replaced/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-missing-manifest__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"dist/widget.mjs\"",
+   "regex /dist/widget\\.mjs|entrypoint/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-timeout-config__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-timeout-nested__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"8642\"",
+   "regex /8642|check\\.yaml/i"
+  ]
+ },
+ "flagOn__audit-failure-match-auth-denied-readme__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-auth-rejected-env__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"svc_staging\"",
+   "regex /svc_staging|DB_USER/i"
+  ]
+ },
+ "flagOn__audit-failure-match-rate-limited-log__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"120\"",
+   "regex /120|MAX_QPS/i"
+  ]
+ },
+ "flagOn__audit-failure-match-rate-throttled-notes__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-resource-absent-index__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\""
+  ]
+ },
+ "flagOn__audit-failure-match-resource-missing-manifest__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"dist/widget.mjs\"",
+   "regex /dist/widget\\.mjs|entrypoint/i"
+  ]
+ },
+ "flagOn__audit-failure-match-timeout-config__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-timeout-nested__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"8642\"",
+   "regex /8642|check\\.yaml/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-auth-denied-readme__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-auth-rejected-env__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-rate-limited-log__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-rate-throttled-notes__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-absent-index__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\"",
+   "regex /512|catalog\\.csv|renamed|replaced/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-missing-manifest__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"dist/widget.mjs\"",
+   "regex /dist/widget\\.mjs|entrypoint/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-timeout-config__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"45000\"",
+   "regex /45000|CONNECT_TIMEOUT_MS/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-timeout-nested__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"8642\"",
+   "regex /8642|check\\.yaml/i"
+  ]
+ },
+ "flagOn__audit-failure-match-auth-denied-readme__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-auth-rejected-env__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-rate-limited-log__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-rate-throttled-notes__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "flagOn__audit-failure-match-resource-absent-index__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\""
+  ]
+ },
+ "flagOn__audit-failure-match-resource-missing-manifest__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"dist/widget.mjs\"",
+   "regex /dist/widget\\.mjs|entrypoint/i"
+  ]
+ },
+ "flagOn__audit-failure-match-timeout-config__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__audit-failure-match-timeout-nested__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-auth-denied-readme__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"repo:read\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no scope\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /repo:read|auth\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"repo:read\"",
+   "regex /repo:read|auth\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-auth-rejected-env__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"svc_staging\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no .env\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /svc_staging|DB_USER/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"svc_staging\"",
+   "regex /svc_staging|DB_USER/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-rate-limited-log__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": true,
+  "checks": [
+   {
+    "name": "contains \"120\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /120|MAX_QPS/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "failureMatchOff__audit-failure-match-rate-throttled-notes__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"90\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not documented\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"no backoff\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /90 ?seconds|90s|backoff\\.md/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"90\"",
+   "regex /90 ?seconds|90s|backoff\\.md/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-absent-index__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"512\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such file\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot determine\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"file is empty\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /512|catalog\\.csv|renamed|replaced/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"512\"",
+   "regex /512|catalog\\.csv|renamed|replaced/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-resource-missing-manifest__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"dist/widget.mjs\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no manifest\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"does not exist\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /dist/widget\\.mjs|entrypoint/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"dist/widget.mjs\"",
+   "regex /dist/widget\\.mjs|entrypoint/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-timeout-config__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"45000\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no such key\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"there is no config\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /45000|CONNECT_TIMEOUT_MS/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"45000\"",
+   "regex /45000|CONNECT_TIMEOUT_MS/i"
+  ]
+ },
+ "failureMatchOff__audit-failure-match-timeout-nested__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": false,
+  "checks": [
+   {
+    "name": "contains \"8642\"",
+    "verdict": "fail"
+   },
+   {
+    "name": "not contains \"no health check\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"cannot find\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not present\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /8642|check\\.yaml/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "contains \"8642\"",
+   "regex /8642|check\\.yaml/i"
+  ]
+ }
+}

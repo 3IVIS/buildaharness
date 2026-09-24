@@ -338,31 +338,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant named both values (10 MB in api-guide.md, 2 MB in ops-runbook.md), explicitly said the docs disagree, and suggested reconciling them. Its note that 2 MB is the effective ceiling follows from the gateway description and doesn't hide the conflict; the AnswerClaim telemetry isn't visible in the conversation, so it was left out of the verdict.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2 MB\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"10 MB\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /disagree|conflict|differ|inconsistent|two (different|sources)|whereas|but the|however/i",
-        "verdict": "pass"
-      },
-      {
-        "name": "answerClaim == contradicted",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "answerClaim == contradicted"
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 14497,

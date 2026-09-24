@@ -2042,9 +2042,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "On the last turn the question was about shipping, and the assistant replied only with {\"value\": 44}. That matches the Tuesday figure in shipping.txt and uses the JSON format set for shipping, and every earlier turn also used the right format for its topic (bare number for stock, trailing DONE for vendors).",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

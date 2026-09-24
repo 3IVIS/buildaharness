@@ -1310,13 +1310,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the detour to hours.txt, the assistant still applied the user's correction and answered 135 (3 × 45) rather than 120. It also correctly reported the opening time of 08:30 and left price.txt unchanged.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"135\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"120\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

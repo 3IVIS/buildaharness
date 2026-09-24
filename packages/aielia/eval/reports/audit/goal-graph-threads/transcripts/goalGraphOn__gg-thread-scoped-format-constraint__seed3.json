@@ -986,9 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with only '128' and later only '57' for the stock questions, both matching stock.txt, so the bare-number constraint applied to that thread. For the unrelated deploy question it gave a normal full sentence that accurately summarised deploy.md; the '[ok] (LOW)' prefixes look like harness status markers rather than reply text.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

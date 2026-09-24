@@ -8,15 +8,15 @@
   "verdict": "CUT",
   "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+25% $/turn, -9% latency). Neutral with real cost — it does not earn its keep.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-22T23:52:25.456Z",
   "metrics": [
     {
       "metric": "taskSuccessRate",
       "control": 0.9583333333333334,
-      "candidate": 0.9583333333333334,
-      "deltaMean": 0,
-      "deltaCi95": 0.11549410759380278,
+      "candidate": 1,
+      "deltaMean": 0.04166666666666663,
+      "deltaCi95": 0.08166666666666668,
       "positive": false,
       "regressed": false
     },
@@ -49,9 +49,9 @@
     },
     {
       "metric": "overconfidentWrongRate",
-      "control": 0,
-      "candidate": 0.047619047619047616,
-      "deltaMean": 0.047619047619047616,
+      "control": 0.047619047619047616,
+      "candidate": 0,
+      "deltaMean": -0.047619047619047616,
       "deltaCi95": 0.09333333333333334,
       "positive": false,
       "regressed": false
@@ -96,5 +96,6 @@
   "costDeltaPct": 0.24704624094004263,
   "latencyDeltaPct": -0.09324303642485457,
   "tokenDeltaPct": -0.06372599896211724,
-  "injectionSignals": null
+  "injectionSignals": null,
+  "nextStepSignals": null
 }

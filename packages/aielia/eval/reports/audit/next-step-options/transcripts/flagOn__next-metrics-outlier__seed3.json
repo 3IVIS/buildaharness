@@ -136,14 +136,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly computed the average of all 6 runs as 492.8 ms (2957/6). It also pointed out that run 5 (2450 ms) is flagged in the file as a probable timeout, and gave the average without it as 101.4 ms, both correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

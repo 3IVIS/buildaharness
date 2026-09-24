@@ -1071,21 +1071,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant went by the user's correction: it said the user has no pets and picked Hotel A in the city centre, without treating Biscuit as the user's dog. The earlier reply that assumed Biscuit was the user's came before the correction and was fixed right away in turn 2.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"your dog\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Biscuit\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"your pet\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /hotel/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

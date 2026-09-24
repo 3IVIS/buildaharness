@@ -307,17 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "47*89 = 4183, plus 12 gives 4195. The assistant replied with exactly 4195, as the user asked.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4195\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"4183\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"4207\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

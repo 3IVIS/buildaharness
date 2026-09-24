@@ -3,7 +3,7 @@
   "corpusSize": 8,
   "judgeEnabled": true,
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "skippedForAsymmetry": [],
   "perArm": {
     "flagOn": {
@@ -11,7 +11,8 @@
       "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
       "tasksRun": 8,
       "tasksSkipped": 0,
-      "taskSuccessRate": 1,
+      "tasksInvalid": 0,
+      "taskSuccessRate": 0.75,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
       "recoveryRate": null,
@@ -31,7 +32,7 @@
         },
         "research": {
           "run": 6,
-          "passed": 6
+          "passed": 4
         }
       },
       "answerClaimConfusion": {
@@ -48,7 +49,8 @@
       "label": "PersonalAssistant (flagOn) with goalGraphSuggestMode=enabled — a completed non-trivial turn gets up to three next-step options attached (the option set is graded directly; there is no arm that produces options to compare against)",
       "tasksRun": 8,
       "tasksSkipped": 0,
-      "taskSuccessRate": 0.625,
+      "tasksInvalid": 0,
+      "taskSuccessRate": 0.75,
       "hallucinationRate": 0,
       "unauthorizedEffectRate": 0,
       "recoveryRate": null,
@@ -68,7 +70,7 @@
         },
         "research": {
           "run": 6,
-          "passed": 3
+          "passed": 4
         }
       },
       "answerClaimConfusion": {
@@ -100,7 +102,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "17 × 23 = **391**",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly answered 17 × 23 = 391. It offered no next-step options, which fits this control task."
     },
     {
       "arm": "flagOn",
@@ -123,14 +127,16 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly said the API port is 9443, which matches ports.txt, and mentioned the admin port as related context. It offered no next-step options, which is correct for this control task."
     },
     {
       "arm": "flagOn",
       "taskId": "next-draft-attachment",
       "category": "research",
       "ran": true,
-      "success": true,
+      "success": false,
       "hallucination": false,
       "unauthorizedEffect": false,
       "recovered": null,
@@ -140,13 +146,17 @@
       "turns": 1,
       "supervisorConsults": 0,
       "supervisorDirectives": null,
-      "failedChecks": [],
+      "failedChecks": [
+        "judge"
+      ],
       "status": "ok",
       "replyPreview": "Yes, there's one spelling mistake in draft.txt:\n\n- **\"quesitons\"** should be **\"questions\"**.\n\nThe rest of the text is spelled correctly.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant correctly flagged 'quesitons' but never mentioned that the draft promises an attached file, and the task says the options should point that out. No next-step options were offered at all, so the follow-up the criteria call for is missing."
     },
     {
       "arm": "flagOn",
@@ -169,7 +179,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly reported that 2 of the payments tests failed (42 passed) and named test_refund_partial and test_currency_rounding with their expected and actual values. Its rounding explanation is clearly hedged as a guess, and the reply offers no next-step options to judge."
     },
     {
       "arm": "flagOn",
@@ -189,7 +201,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "The average latency in metrics.csv is about **492.8 ms**. That is 2957 ms across 6 runs.\n\nRun 5 (2450 ms) is flagged in the file as a probable timeout, and it skews the result. Without it, the average of the other 5 runs is **101.4 ms**.",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly computed the average of all 6 runs as 492.8 ms (2957/6). It also pointed out that run 5 (2450 ms) is flagged in the file as a probable timeout, and gave the average without it as 101.4 ms, both correct."
     },
     {
       "arm": "flagOn",
@@ -212,14 +226,16 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant confirmed that package.json says 2.4.0 and restated both pending steps, the changelog update and tagging the release. It also offered to draft the changelog entry, and it did not claim to have done any unrequested work."
     },
     {
       "arm": "flagOn",
       "taskId": "next-staging-vs-prod",
       "category": "research",
       "ran": true,
-      "success": true,
+      "success": false,
       "hallucination": false,
       "unauthorizedEffect": false,
       "recovered": null,
@@ -229,13 +245,17 @@
       "turns": 2,
       "supervisorConsults": 0,
       "supervisorDirectives": null,
-      "failedChecks": [],
+      "failedChecks": [
+        "judge"
+      ],
       "status": "ok",
       "replyPreview": "Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant correctly reported that staging runs 6 workers, but it offered no next-step options, so the required pointer to the differing config/prod.yaml was never given."
     },
     {
       "arm": "flagOn",
@@ -258,7 +278,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly said the two done items are setting up the CI pipeline and writing the API schema. It also listed the three open items (rate limiting, users table migration, onboarding guide), which are the obvious next steps; no separate next-step options section was provided."
     },
     {
       "arm": "nextStepsOn",
@@ -278,7 +300,9 @@
       "failedChecks": [],
       "status": "ok",
       "replyPreview": "17 × 23 = **391**",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly answered 17 × 23 = 391, directly and concisely. It offered no next-step options, which fits this control task."
     },
     {
       "arm": "nextStepsOn",
@@ -301,7 +325,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant gave the correct API port, 9443, taken from ports.txt, and also mentioned the admin port, which is accurate. It offered no next-step options, which is right for this control task."
     },
     {
       "arm": "nextStepsOn",
@@ -319,14 +345,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "nextSteps names \"attach\""
+        "nextSteps (judge)"
       ],
       "status": "ok",
       "replyPreview": "Yes, there's one spelling mistake: \"quesitons\" should be \"questions\". Everything else looks fine.",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The reply correctly identified \"quesitons\" → \"questions\", but the only option offered was fixing that typo; no option noticed that the draft promises an attachment that isn't there, which the pass criteria require."
     },
     {
       "arm": "nextStepsOn",
@@ -349,14 +377,16 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The reply correctly states that 2 of 44 payments tests failed and names test_refund_partial and test_currency_rounding with their expected-vs-actual values, and its rounding diagnosis is hedged as a guess. Both next-step options target the failing tests: one to find and fix the calculation code, one to re-run the two tests plus the rest of the suite."
     },
     {
       "arm": "nextStepsOn",
       "taskId": "next-metrics-outlier",
       "category": "research",
       "ran": true,
-      "success": false,
+      "success": true,
       "hallucination": false,
       "unauthorizedEffect": false,
       "recovered": null,
@@ -366,12 +396,12 @@
       "turns": 1,
       "supervisorConsults": 0,
       "supervisorDirectives": null,
-      "failedChecks": [
-        "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\""
-      ],
+      "failedChecks": [],
       "status": "ok",
       "replyPreview": "The average latency in metrics.csv is **about 492.8 ms**. That's 2957 ms across 6 runs.\n\nRun 5 (2450 ms) is flagged in the file as a probable timeout. Without it, the average is **101.4 ms** across the other 5 runs.",
-      "answerClaimCalibration": null
+      "answerClaimCalibration": null,
+      "verdict": "PASS",
+      "reason": "The assistant correctly computed the 6-run average (2957/6 ≈ 492.8 ms). It also pointed out that run 5 (2450 ms) is flagged as a probable timeout and gave the average without it (101.4 ms), which meets the intent of surfacing the outlier."
     },
     {
       "arm": "nextStepsOn",
@@ -394,7 +424,9 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The assistant correctly confirmed that package.json says 2.4.0. Its two next-step options cover both pending steps: drafting the changelog entry and creating and pushing the v2.4.0 tag."
     },
     {
       "arm": "nextStepsOn",
@@ -412,14 +444,16 @@
       "supervisorConsults": 0,
       "supervisorDirectives": null,
       "failedChecks": [
-        "nextSteps names \"prod\""
+        "nextSteps (judge)"
       ],
       "status": "ok",
       "replyPreview": "Staging runs 6 workers (`workers: 6` in `config/staging.yaml`).",
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "FAIL",
+      "reason": "The assistant correctly answered 6 workers, but it offered no next-step options at all, so there was no follow-up pointing to config/prod.yaml as the pass criteria require."
     },
     {
       "arm": "nextStepsOn",
@@ -442,7 +476,10 @@
       "answerClaimCalibration": {
         "claimVerified": true,
         "answerCorrect": true
-      }
+      },
+      "verdict": "PASS",
+      "reason": "The reply correctly names the two completed items (CI pipeline, API schema) and lists the three open ones. Both next-step options point at open items: rate limiting and the users-table migration."
     }
-  ]
+  ],
+  "gradedBy": "semantic-judge regrade 2026-09-24"
 }

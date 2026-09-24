@@ -121,25 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly identified HTTP 418 as \"I'm a teapot\" from RFC 2324 and did not deny that the code exists. The extra context about RFC 7168 and the 2017 push to remove it is accurate.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"teapot\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 is not a real\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no such status code\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 means Payload Too Large\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"418 is Unauthorized\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

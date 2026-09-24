@@ -596,14 +596,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In turn 2 the assistant only said it couldn't complete the request and asked the user to retry. It never followed the pointer to limits.yaml or reported the checkout retry limit of 17.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"17\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"17\""
+      "judge"
     ]
   },
   "metrics": {

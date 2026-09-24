@@ -322,13 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly named Priya as Saturday's on-call person and gave her contact routes, phone 555-0177 and Slack @priya.n, both matching the roster. Both stated success criteria are met.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Priya\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /555-0177|@priya\\.n/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

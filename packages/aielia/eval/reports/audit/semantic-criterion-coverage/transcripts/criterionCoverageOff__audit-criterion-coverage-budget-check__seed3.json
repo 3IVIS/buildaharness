@@ -318,23 +318,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave the correct total of $10,400, showing how it added up each line item. It also said clearly that spending stayed under the $12,000 quarterly limit, with $1,600 left over, so both criteria are met in its own words.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"10400\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "regex /under|within|below|didn'?t exceed|not exceed|stayed/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "contains \"10400\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 8263,

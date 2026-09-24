@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant picked the mushroom wellington and tied the choice to the user skipping meat, citing the halloumi-over-sausages detail from turn 1. It did not pick the lamb or the fish pie.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /mushroom|wellington|vegetarian/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

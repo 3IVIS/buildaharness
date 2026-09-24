@@ -872,14 +872,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "On the third turn the assistant gave only a generic could-not-complete message and never found the licence identifier MPL-2.0 in pkg/meta/legal/licence.txt. The stalled turn did not recover.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"MPL-2.0\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"MPL-2.0\""
+      "judge"
     ]
   },
   "metrics": {

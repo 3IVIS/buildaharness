@@ -986,9 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered the stock questions with bare numbers (128, then 57, both matching stock.txt). It answered the unrelated deploy question in a full, accurate sentence, so the format constraint stayed scoped to the stock thread.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

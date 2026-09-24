@@ -1310,13 +1310,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the unrelated hours.txt detour, the assistant still used the corrected unit price of 45. It gave the total for 3 units as 135 and did not fall back to the file's price of 40, which would have given 120.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"135\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"120\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

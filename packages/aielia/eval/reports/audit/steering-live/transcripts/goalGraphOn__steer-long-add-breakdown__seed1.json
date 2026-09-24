@@ -968,13 +968,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The final reply lists the weight of all eight stations, including S03 at 62, and the values match the workspace files. Including the total again is harmless.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"62\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /s03[^\\n]*62/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

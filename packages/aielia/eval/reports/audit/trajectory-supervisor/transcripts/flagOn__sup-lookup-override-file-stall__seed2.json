@@ -266,30 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty. It never gave the effective LOG_LEVEL ('debug', since config.local.env overrides config.base.env), so it did not recover from the stall.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"debug\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"effective log_level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective log level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the answer is info\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"debug\""
+      "judge"
     ]
   },
   "metrics": {

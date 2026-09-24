@@ -332,33 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 4, which is correct: main.py imports os, sys, json and collections, and the second 'import os' is a duplicate. It replied with just the number, as the user asked.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"5 modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5 distinct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 distinct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 3\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b4\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

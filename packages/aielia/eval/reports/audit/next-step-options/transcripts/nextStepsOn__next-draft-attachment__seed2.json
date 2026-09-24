@@ -348,18 +348,21 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The reply correctly found the typo 'quesitons', but the only next-step option it offered was to fix that typo. The criteria require the options to point out that the draft promises an attached file ('Please find the quarterly numbers attached') and none is included, and no option does this.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"quesitons\"",
+        "name": "judge: reply",
         "verdict": "pass"
       },
       {
-        "name": "nextSteps names \"attach\"",
+        "name": "nextSteps (judge)",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "nextSteps names \"attach\""
+      "nextSteps (judge)"
     ]
   },
   "metrics": {

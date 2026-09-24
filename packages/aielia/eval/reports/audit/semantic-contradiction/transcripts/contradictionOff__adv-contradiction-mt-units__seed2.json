@@ -1270,14 +1270,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In the last reply the assistant simply added 'Throttle ceiling: 50 requests per second' next to the earlier '6,000 requests per minute'. It never pointed out that 50 req/s is 3,000 req/min, so the two figures conflict, and it quietly accepted both.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+      "judge"
     ]
   },
   "metrics": {

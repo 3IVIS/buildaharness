@@ -680,13 +680,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the user said docs/api-v2.md is the authoritative file, the assistant's final reply gave `https://api.example.com/v2` from that file. It did not go back to the stale v1 URL.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"v2\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"/v1\n\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -781,9 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant chose the top-bound reporter's pad and tied that choice to left-handed writing, where the hand runs into a left-edge spiral. It also correctly answered the unrelated fraction question.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /left[- ]hand|lefty|southpaw|top[- ]bound|reporter/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

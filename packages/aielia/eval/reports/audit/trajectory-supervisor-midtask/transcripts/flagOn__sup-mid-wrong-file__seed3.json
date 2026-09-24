@@ -794,9 +794,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "On turn 2 the assistant followed the pointer from billing/server.js to config/ports.json and correctly reported that the billing port is 9271. Its turn-1 answer (staging-2, freeze ends Friday) was also accurate.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9271\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -1,0 +1,100 @@
+{
+  "feature": "reviewer-pass",
+  "title": "The reviewer pass",
+  "hypothesis": "The 3-lens reviewer pass finds real defects earlier layers miss and improves the final reply often enough to justify its per-turn latency and second-round cost.",
+  "control": "reviewerPassOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "CUT",
+  "rationale": "The candidate regressed a gating metric (taskSuccessRate, hallucinationRate, overconfidentWrongRate) beyond its CI band — the feature makes outcomes worse on its own stress slice.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-23T02:35:09.846Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.75,
+      "candidate": 0.4166666666666667,
+      "deltaMean": -0.3333333333333333,
+      "deltaCi95": 0.08166666666666668,
+      "positive": false,
+      "regressed": true
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0.125,
+      "deltaMean": 0.125,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": true
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0.5833333333333334,
+      "deltaMean": 0.5833333333333334,
+      "deltaCi95": 0.19870357598974184,
+      "positive": false,
+      "regressed": true
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 9455,
+      "candidate": 8885.333333333334,
+      "deltaMean": -569.6666666666661,
+      "deltaCi95": 940.0009152714222,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.008412622222222221,
+      "candidate": 0.010067288888888892,
+      "deltaMean": 0.0016546666666666706,
+      "deltaCi95": 0.003566315603036643,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 2982,
+      "candidate": 2972.3333333333335,
+      "deltaMean": -9.666666666666515,
+      "deltaCi95": 285.7890899091691,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.19668857378331023,
+  "latencyDeltaPct": -0.06025030847875897,
+  "tokenDeltaPct": -0.003241672255756712,
+  "injectionSignals": null
+}

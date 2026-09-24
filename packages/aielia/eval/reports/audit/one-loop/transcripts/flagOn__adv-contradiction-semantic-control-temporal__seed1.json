@@ -307,37 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the move from Free to Pro as a normal upgrade and did not call it a contradiction. It answered the question: Pro normally includes priority support, so the user should have it if the upgrade is still active. It also said honestly that it can't look up the account.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not consistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"can't both be true\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /pro|priority support|yes/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

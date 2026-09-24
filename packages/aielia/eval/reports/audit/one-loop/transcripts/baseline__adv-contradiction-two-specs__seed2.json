@@ -338,31 +338,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant said the docs give two different figures, attributed 10 MB to api-guide.md and 2 MB to ops-runbook.md, and did not silently pick one. It gave a reasonable layered interpretation (the gateway limit caps the effective size) while keeping both values visible; the AnswerClaim telemetry part is not observable and was ignored.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"2 MB\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"10 MB\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /disagree|conflict|differ|inconsistent|two (different|sources)|whereas|but the|however/i",
-        "verdict": "pass"
-      },
-      {
-        "name": "answerClaim == contradicted",
-        "verdict": "fail"
       }
     ],
-    "failedChecks": [
-      "answerClaim == contradicted"
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 14146,

@@ -302,34 +302,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty: it returned status ok with a LOW confidence tag and no content, so it never followed the pointer to config/ports.json or reported port 9443.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9443\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"8080\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3000\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"port is not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot determine\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"don't know\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"9443\""
+      "judge"
     ]
   },
   "metrics": {

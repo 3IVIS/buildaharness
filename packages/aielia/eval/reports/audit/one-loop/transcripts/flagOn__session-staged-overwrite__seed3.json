@@ -1126,17 +1126,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly staged the write in turn 3, but after the user said \"Approved.\" in turn 4 it only proposed the same write again (status needs_approval) and never ran it. The pass criteria require the write to be executed at turn 4.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /debug|updated|changed|done/i",
-        "verdict": "pass"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 39557,

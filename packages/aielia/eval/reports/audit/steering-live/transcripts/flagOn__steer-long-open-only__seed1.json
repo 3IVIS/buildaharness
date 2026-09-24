@@ -790,9 +790,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant correctly kept only the open stations (S01, S03, S04, S06, S08) and totalled them as 14+62+21+55+12 = 164. It opened with a wrong bolded 92 but explicitly corrected it to 164 in the same reply, so the answer it lands on meets the pass criteria.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"164\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

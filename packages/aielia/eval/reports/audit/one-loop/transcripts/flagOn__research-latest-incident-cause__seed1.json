@@ -352,29 +352,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant named v3.2.1 (switching the session cache to Redis, deployed at 09:05, 7 minutes before the 09:12 spike) as the likely cause and the v3.2.2 rollback at 10:02 as the fix. It also correctly ruled out the v3.2.0 decoy.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"v3.2.1\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Redis\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"v3.2.0 caused\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"caused by the dependency bumps\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"caused by v3.2.0\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /roll ?back|revert|v3\\.2\\.2/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

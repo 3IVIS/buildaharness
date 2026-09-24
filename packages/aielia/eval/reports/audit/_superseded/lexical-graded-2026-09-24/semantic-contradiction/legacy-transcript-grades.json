@@ -1,0 +1,1592 @@
+{
+ "flagOn__adv-contradiction-mt-control-complementary__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-control-migration__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-crosslang__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-indirect__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-scale__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-units__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "flagOn__adv-contradiction-semantic-control-scope__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-control-temporal__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-crosslang__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-currency__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-indirect__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-paraphrase__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-timezone__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-units__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-complementary__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-migration__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-crosslang__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-indirect__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-scale__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-units__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "contradictionOff__adv-contradiction-semantic-control-scope__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-control-temporal__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-crosslang__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-currency__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-indirect__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-paraphrase__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-timezone__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-units__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i"
+  ]
+ },
+ "flagOn__adv-contradiction-mt-control-complementary__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-control-migration__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-crosslang__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-indirect__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-scale__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-units__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "flagOn__adv-contradiction-semantic-control-scope__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-control-temporal__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-crosslang__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-currency__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-indirect__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-paraphrase__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-timezone__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-units__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-complementary__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-migration__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-crosslang__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i"
+  ]
+ },
+ "contradictionOff__adv-contradiction-mt-indirect__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-scale__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-units__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "contradictionOff__adv-contradiction-semantic-control-scope__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-control-temporal__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-crosslang__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-currency__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-indirect__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-paraphrase__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-timezone__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-units__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-control-complementary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-control-migration__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-crosslang__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-indirect__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-scale__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-mt-units__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "flagOn__adv-contradiction-semantic-control-scope__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-control-temporal__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-crosslang__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-currency__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-indirect__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-paraphrase__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-timezone__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__adv-contradiction-semantic-units__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-complementary__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /BigQuery|warehouse|analytics/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-control-migration__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /updated|changed|us-east-1|done|noted/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-crosslang__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Frankfurt|Singapur|Singapore/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-indirect__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|Dana|two (different )?(owners|people)/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-scale__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)|twelve|eight|12|8/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-mt-units__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradict|inconsist|does ?n[o']t match|differ|earlier|previously|before you|you (said|mentioned|noted|told|stated)/i"
+  ]
+ },
+ "contradictionOff__adv-contradiction-semantic-control-scope__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"BigQuery\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"disagree\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"inconsistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-control-temporal__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "not contains \"contradict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"conflict\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"which is correct\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"earlier you said\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"not consistent\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"doesn't match\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "not contains \"can't both be true\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "regex /pro|priority support|yes/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-crosslang__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|Frankfurt|which (is correct|location|one)|earlier|you (said|told|mentioned)|doesn'?t match|don'?t match|not the same|two (different )?(locations|cities)|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-currency__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "regex /conflict|contradic|exceed|over (the )?budget|more than|which (is correct|figure)|earlier|you (said|told)|8,?000 euros|not within|doesn'?t match|clarif|confirm|can'?t approve/i"
+  ]
+ },
+ "contradictionOff__adv-contradiction-semantic-indirect__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|manager|nobody in between|doesn'?t match|don'?t (line up|match)|clarif|confirm|both/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-paraphrase__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right)|earlier|you (said|told|mentioned)|vegetarian|doesn'?t match|don'?t match|not the same|clarif|sure\\??|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-timezone__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|time)|earlier|you (said|told|mentioned)|UTC|pacific|8 hours|eight hours|different (time|timezone)|doesn'?t match|don'?t match|clarif|confirm/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "contradictionOff__adv-contradiction-semantic-units__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "regex /conflict|contradic|which (is correct|one is right|should i use|figure)|earlier you (said|told)|doesn'?t match|don'?t match|inconsistent|two different|not the same|discrepan|clarif|6000|6,000/i",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

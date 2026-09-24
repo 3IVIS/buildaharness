@@ -332,25 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the effective LOG_LEVEL is debug because config.local.env overrides the base value of info. The answer is short, accurate and matches the task's intent.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"debug\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective log_level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective log level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the answer is info\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

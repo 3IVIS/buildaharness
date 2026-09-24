@@ -266,31 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty: status ok, LOW confidence, and no content. It never reported port 8642 or showed that it got past the stall to read ops/health/check.yaml.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"8642\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no health check\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /8642|check\\.yaml/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"8642\"",
-      "regex /8642|check\\.yaml/i"
+      "judge"
     ]
   },
   "metrics": {

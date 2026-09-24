@@ -2042,9 +2042,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "On the last turn (shipping) the assistant replied with just {\"value\": 44}, which is shipping's JSON format and matches Tuesday's 44 parcels in shipping.txt. Every earlier turn also used the right format and correct value (128, 57, the DONE suffix for vendors).",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

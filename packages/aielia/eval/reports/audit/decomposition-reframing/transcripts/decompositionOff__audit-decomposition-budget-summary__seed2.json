@@ -322,21 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant got all four answers right: a total of 24,000, Hosting as the biggest line, Tooling as the line under 5,000, and a difference of 7,500 (12,000 − 4,500). The '$' signs it added are a harmless formatting choice.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"24,000\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Hosting\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Tooling\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /7,?500/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -37,29 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered 45, which is correct: 16 days left in January (Jan 15–31) plus 28 in February, since 2026 is not a leap year, makes 45. It also replied with just the number, as asked.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"44 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"46 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"47 days\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 44\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"is 46\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b45\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

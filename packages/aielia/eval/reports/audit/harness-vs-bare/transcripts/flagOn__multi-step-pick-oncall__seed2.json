@@ -322,17 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just 'Blair', which correctly matches the Wednesday row in oncall.md. It did not name either adjacent-row decoy, Alex or Casey.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Blair\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Alex\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Casey\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

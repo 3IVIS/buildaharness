@@ -2042,9 +2042,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "On the final shipping turn, the assistant answered with exactly {\"value\": 44}, which is the correct Tuesday count from shipping.txt in the JSON format set for shipping questions. It also kept the right format for each topic on the earlier turns.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

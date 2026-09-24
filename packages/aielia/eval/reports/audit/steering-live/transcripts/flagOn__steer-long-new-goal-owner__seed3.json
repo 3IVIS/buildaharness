@@ -1168,9 +1168,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final reply the assistant switched to the new ownership question and said the owner is Priya Raman, which is what the pass criteria require. OWNER.txt isn't in the workspace listing, so the extra 'platform team' detail can't be checked, but the expected owner matches.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Priya Raman\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

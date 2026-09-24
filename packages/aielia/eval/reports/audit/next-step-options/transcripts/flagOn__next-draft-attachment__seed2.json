@@ -318,21 +318,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly flagged 'quesitons' as a misspelling of 'questions', but it offered no next-step options and never pointed out that the draft promises an attachment that isn't there. The pass criteria require the options to catch that missing attachment.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"quesitons\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 6272,

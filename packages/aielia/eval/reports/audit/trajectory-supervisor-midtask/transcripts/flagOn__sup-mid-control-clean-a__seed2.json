@@ -790,9 +790,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly reported the default region ap-south-9 and the log level warn from config/app.yaml. In the final turn it restated the default region in one word, as asked.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"ap-south-9\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

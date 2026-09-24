@@ -307,37 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the Free-to-Pro change as a normal upgrade and answered that Pro-tier priority support would normally be included if the subscription is still active. It never flagged a contradiction, and its caveat about not being able to see account data is reasonable, not a false conflict.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"which is correct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"earlier you said\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not consistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"doesn't match\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"can't both be true\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /pro|priority support|yes/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

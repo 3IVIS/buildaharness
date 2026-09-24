@@ -131,21 +131,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant treated the migration as a legitimate change, cleanly updated the staging region to us-east-1 while keeping PostgreSQL 15, and raised no contradiction flag. The added date '2026-09-10' can't be verified from the conversation, but it plausibly reflects the assistant's session date for 'this morning' and doesn't affect the core behaviour.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"contradict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"conflict\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"inconsistent\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /updated|changed|us-east-1|done|noted/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

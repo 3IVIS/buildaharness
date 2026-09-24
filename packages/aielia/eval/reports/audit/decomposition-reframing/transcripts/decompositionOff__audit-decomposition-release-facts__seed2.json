@@ -322,25 +322,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave all five items correctly: version 5.3.1, date 2026-09-14, 2 breaking changes (both listed), release manager Ingrid Vasquez, and the rollback command `deploy rollback --to 5.2.9`. Every fact matches release/notes.md, and nothing was added or left out.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"5.3.1\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"2026-09-14\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"Vasquez\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"deploy rollback --to 5.2.9\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /\\b(2|two)\\b[\\s\\S]*breaking|breaking[\\s\\S]*\\b(2|two)\\b/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

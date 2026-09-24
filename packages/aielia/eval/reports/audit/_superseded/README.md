@@ -34,3 +34,19 @@ proposer saw only the last request and the first 1,500 characters of its reply, 
 taken or the goal graph, so the staging-vs-prod session (where the last question was a closed one) got empty options.
 Superseded by the re-run where both proposers get that wider context. Seed reports and the multiseed summary only;
 model `claude-sonnet-5`.
+
+## lexical-graded-2026-09-24 (2026-09-24)
+
+The pre-re-grade seed and multiseed reports for every audit feature, plus each transcript's old
+`grade` block (`legacy-transcript-grades.json`). They were scored by the mechanical checks
+(`contains` / `notContains` / `regex` on reply text), which an audit of the saved conversations found
+mis-scored turns in both directions — negation-blind, phrasing-brittle, blind to staged-vs-executed
+state — and which counted an errored arm as a failed task (38 of 72 bare-arm runs in `harness-vs-bare`
+seed 3 were `claude exited with code 1`). **Do not draw conclusions from these numbers.**
+
+The live `seed*.json`, `*.multiseed.json` and transcript `grade` blocks were replaced by a semantic
+re-grade (`eval/regrade/`, judge `claude-opus-5-5`, no text matching): 1,644 runs, 38 excluded as
+`INVALID_RUN`, 157 scored rows changed pass/fail. Judge self-agreement on a 270-row re-judge (every
+flipped row + 120 random) was 97% (262/270; 109/109 on non-flipped rows); the 8 disagreements were
+adjudicated by a third judgement (majority). The raw per-row verdicts and reasons are in
+`eval/regrade/out/`.

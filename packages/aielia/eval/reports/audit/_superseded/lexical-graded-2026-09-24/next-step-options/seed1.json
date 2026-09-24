@@ -1,0 +1,452 @@
+{
+  "generatedAt": "2026-09-24T11:02:08.234Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 7731,
+      "meanCostUsd": 0.01263365,
+      "totalTokens": 2567,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "compute": {
+          "run": 1,
+          "passed": 1
+        },
+        "lookup": {
+          "run": 1,
+          "passed": 1
+        },
+        "research": {
+          "run": 6,
+          "passed": 6
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 7,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "nextStepsOn": {
+      "arm": "nextStepsOn",
+      "label": "PersonalAssistant (flagOn) with goalGraphSuggestMode=enabled — a completed non-trivial turn gets up to three next-step options attached (the option set is graded directly; there is no arm that produces options to compare against)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.75,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 10982,
+      "meanCostUsd": 0.009934650000000001,
+      "totalTokens": 4174,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "compute": {
+          "run": 1,
+          "passed": 1
+        },
+        "lookup": {
+          "run": 1,
+          "passed": 1
+        },
+        "research": {
+          "run": 6,
+          "passed": 4
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 7,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "next-control-arithmetic",
+      "category": "compute",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 4786,
+      "costUsd": 0.022690000000000002,
+      "totalTokens": 153,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "17 × 23 = **391**",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-control-port-lookup",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6173,
+      "costUsd": 0.007936200000000001,
+      "totalTokens": 237,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The API listens on port **9443**. According to `ports.txt`, the admin port is 9444.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-draft-attachment",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6136,
+      "costUsd": 0.0067464000000000005,
+      "totalTokens": 266,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes, there's one spelling mistake in draft.txt:\n\n- **\"quesitons\"** should be **\"questions\"**.\n\nThe rest of the text looks fine.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-failing-tests",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6747,
+      "costUsd": 0.0073504,
+      "totalTokens": 312,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**2 tests failed** in the payments suite (42 passed).\n\n1. `test_refund_partial`: expected 12.50 but got 12.00 (AssertionError).\n2. `test_currency_rounding`: expected 0.05 but got 0.04.\n\nBoth look like rounding or precision problems in the payment calculations.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-metrics-outlier",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7171,
+      "costUsd": 0.0093694,
+      "totalTokens": 368,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The average latency across all 6 runs is **about 492.8 ms** (2957 ms total).\n\nRun 5 is an outlier at 2450 ms, and its note says \"probable timeout\". Without it, the average of the other 5 runs is **101.4 ms**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-release-checklist",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11151,
+      "costUsd": 0.0156268,
+      "totalTokens": 368,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Confirmed: `package.json` has `\"version\": \"2.4.0\"`.\n\nNext you have the changelog update and the release tag. I can draft the changelog entry if you'd like. Tell me where the file is or what changed in this release.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-staging-vs-prod",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 13287,
+      "costUsd": 0.02275,
+      "totalTokens": 582,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "next-todo-open-items",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6393,
+      "costUsd": 0.0086,
+      "totalTokens": 281,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Two items in TODO.md are done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree items are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-control-arithmetic",
+      "category": "compute",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 4920,
+      "costUsd": 0.0025576,
+      "totalTokens": 153,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "17 × 23 = **391**",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-control-port-lookup",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8206,
+      "costUsd": 0.008111400000000001,
+      "totalTokens": 238,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The API listens on port **9443**. The admin port is 9444.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-draft-attachment",
+      "category": "research",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9131,
+      "costUsd": 0.007348600000000001,
+      "totalTokens": 365,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "nextSteps names \"attach\""
+      ],
+      "status": "ok",
+      "replyPreview": "Yes, there is one spelling mistake: \"quesitons\" should be \"questions\". The rest of the draft looks fine.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-failing-tests",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11076,
+      "costUsd": 0.010101800000000001,
+      "totalTokens": 598,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "**2 tests failed** in the payments suite (42 passed).\n\n1. `test_refund_partial`: expected 12.50, got 12.00.\n2. `test_currency_rounding`: expected 0.05, got 0.04.\n\nBoth look like rounding problems. The first result is off by 0.50 and the second by 0.01. The cause may be the rounding mode, for example truncating or banker's rounding where round-half-up is expected.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-metrics-outlier",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 13845,
+      "costUsd": 0.012554200000000001,
+      "totalTokens": 870,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The average latency in metrics.csv is **about 492.8 ms** (2957 ms across 6 runs).\n\nRun 5 is an outlier at 2450 ms, and its note says \"probable timeout\". Without it, the average is **101.4 ms** across 5 runs.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-release-checklist",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11352,
+      "costUsd": 0.010473800000000002,
+      "totalTokens": 629,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Confirmed: `package.json` has `\"version\": \"2.4.0\"`.\n\nThe changelog update and the release tag are still to do. I can draft the changelog entry if you'd like. Tagging needs git, and the working directory here (/tmp) isn't a git repository. You'll have to run that step in your actual repo, for example `git tag v2.4.0`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-staging-vs-prod",
+      "category": "research",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18371,
+      "costUsd": 0.018808000000000002,
+      "totalTokens": 752,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "nextSteps names \"prod\""
+      ],
+      "status": "ok",
+      "replyPreview": "Staging runs 6 workers, according to `workers: 6` in `config/staging.yaml`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "nextStepsOn",
+      "taskId": "next-todo-open-items",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10956,
+      "costUsd": 0.0095218,
+      "totalTokens": 569,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Two items in TODO.md are done:\n\n- Set up the CI pipeline\n- Write the API schema\n\nThe other three are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

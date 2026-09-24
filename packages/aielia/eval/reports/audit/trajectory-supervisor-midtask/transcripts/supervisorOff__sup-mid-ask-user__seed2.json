@@ -746,9 +746,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the user named the 'export_v2' section in turn 3, the assistant correctly reported 210s rather than the v1 figure of 90s. Its turn-2 reply was a generic could-not-complete message instead of a clarifying question, but it didn't guess or give a wrong value, and the pass criterion only covers the final answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"210\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

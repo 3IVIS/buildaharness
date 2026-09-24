@@ -342,25 +342,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant followed both hops, from billing-service to the payments team (services.md) and from payments to Dana Ruiz (teams.md), and named Dana Ruiz as the owner. It did not stop at the team or say the owner was unknown.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Dana Ruiz\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no owner listed\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"payments team owns it\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

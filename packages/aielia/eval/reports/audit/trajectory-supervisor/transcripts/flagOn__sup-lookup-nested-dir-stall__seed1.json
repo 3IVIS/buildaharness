@@ -266,30 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty. It never found examples/.env.example and never reported the API_KEY placeholder 'your-key-here'.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"your-key-here\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"no example file\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"there is no .env\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"your-key-here\""
+      "judge"
     ]
   },
   "metrics": {

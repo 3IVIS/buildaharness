@@ -986,9 +986,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant kept the bare-number format only for the stock questions: it answered '128' and '57'. For the unrelated deploy question it gave a normal full sentence that correctly describes deploy.md.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /^\\s*57\\s*[.]?\\s*$/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

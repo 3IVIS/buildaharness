@@ -646,21 +646,22 @@
     }
   ],
   "grade": {
-    "success": true,
+    "success": false,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant correctly said staging runs 6 workers, but it never suggested comparing against config/prod.yaml, which is the follow-up the pass criteria require. No next-step options were offered at all.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"6\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
+        "name": "judge",
+        "verdict": "fail"
       }
     ],
-    "failedChecks": []
+    "failedChecks": [
+      "judge"
+    ]
   },
   "metrics": {
     "latencyMs": 13149,

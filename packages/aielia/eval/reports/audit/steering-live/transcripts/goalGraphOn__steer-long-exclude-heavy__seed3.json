@@ -718,9 +718,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "After the correction, the assistant correctly left out S03 (62) and S06 (55). Its headline said 82, but it caught the arithmetic slip in the same reply and gave 81 as the correct total. That was the final answer and it is correct, but the reply contradicts itself on the way there.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"81\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

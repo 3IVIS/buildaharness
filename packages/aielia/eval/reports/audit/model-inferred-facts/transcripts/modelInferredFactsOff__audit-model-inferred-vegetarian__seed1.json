@@ -755,9 +755,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant picked the mushroom wellington and explained that the user is vegetarian, inferred from the halloumi-and-corn barbecue comment in turn 1. It did not choose the lamb or the fish pie.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /mushroom|wellington|vegetarian/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

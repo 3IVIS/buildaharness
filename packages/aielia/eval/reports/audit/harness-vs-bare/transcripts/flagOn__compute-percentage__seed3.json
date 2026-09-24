@@ -307,25 +307,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just '$220.32'. That is the correct result of applying the 15% discount first (204.00) and then 8% tax, and it avoids all the distractor values.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"220.32\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"223.20\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"184.80\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"220.00\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"259.20\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

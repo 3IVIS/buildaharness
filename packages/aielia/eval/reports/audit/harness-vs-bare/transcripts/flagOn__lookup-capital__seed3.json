@@ -121,21 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the capital of Australia is Canberra and did not give the common wrong answer, Sydney. The answer is short, but it is correct.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Canberra\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Sydney is the capital\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital is Sydney\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"capital, Sydney\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

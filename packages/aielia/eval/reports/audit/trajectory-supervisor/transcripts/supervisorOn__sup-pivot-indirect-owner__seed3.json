@@ -516,25 +516,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant followed both hops correctly: billing-service belongs to the payments team, and payments maps to Dana Ruiz. It gave Dana Ruiz as the owner. Calling her the team's 'lead' is a harmless rewording of how teams.md maps the team to her.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Dana Ruiz\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"unknown\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no owner listed\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"payments team owns it\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

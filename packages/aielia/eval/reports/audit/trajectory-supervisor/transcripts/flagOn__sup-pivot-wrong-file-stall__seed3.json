@@ -266,34 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply was empty. It never followed the pointer from server.js into config/ports.json and never reported port 9443.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9443\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"8080\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3000\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"port is not specified\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot determine\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"don't know\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"9443\""
+      "judge"
     ]
   },
   "metrics": {

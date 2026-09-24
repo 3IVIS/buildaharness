@@ -1672,21 +1672,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered each of the four questions correctly and then gave one line per item in the order requested: Nordwind Freight, 2026-10-14, the support email, and 24 months. The email shows as [redacted-email], which looks like redaction in the transcript rather than a wrong answer.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Nordwind Freight\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"2026-10-14\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"[redacted-email]\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"24\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

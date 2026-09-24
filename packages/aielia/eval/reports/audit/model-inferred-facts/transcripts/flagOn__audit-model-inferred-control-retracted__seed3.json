@@ -1041,31 +1041,20 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant stated the user has no pets, noted that Biscuit is the sister's dog, and recommended Hotel A, the city-centre option. It mentioned Biscuit only to explain why he isn't the user's dog.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"your dog\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Biscuit\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"your pet\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /hotel/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "not contains \"Biscuit\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 55669,

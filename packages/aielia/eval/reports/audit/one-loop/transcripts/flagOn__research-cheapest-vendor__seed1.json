@@ -352,37 +352,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant named Vendor A as cheapest with a total of $2,050 and correctly computed B at $2,200 and C at $2,070 from the quote files. It showed that the lowest unit price (Vendor B) does not give the lowest total.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Vendor A\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Vendor B is the cheapest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"Vendor C is the cheapest\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"go with Vendor B\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"go with Vendor C\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cheapest is Vendor B\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cheapest is Vendor C\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /2[,. ]?050/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

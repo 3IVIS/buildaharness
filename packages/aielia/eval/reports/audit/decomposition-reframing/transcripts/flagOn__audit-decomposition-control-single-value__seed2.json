@@ -136,9 +136,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly said the database port in config/db.md is 5433, which matches the workspace file.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"5433\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

@@ -37,25 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with just '$220.32', which is correct: 240 × 0.85 = 204.00, and 204.00 × 1.08 = 220.32. It avoided every distractor, including 223.20, 184.80 and 259.20.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"220.32\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"223.20\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"184.80\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"220.00\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"259.20\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

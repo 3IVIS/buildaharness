@@ -37,21 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered '4', which matches the four lines in notes.txt that begin with 'TODO'. It correctly left out the line that only mentions 'todos' mid-sentence, and it followed the requested just-the-number format.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3 lines\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"three\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

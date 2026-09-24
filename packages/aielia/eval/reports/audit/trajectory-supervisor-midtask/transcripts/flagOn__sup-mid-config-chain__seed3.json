@@ -730,14 +730,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "In turn 2 the assistant gave only a generic could-not-complete message and never reported the checkout retry limit of 17 from limits.yaml, so the stalled turn did not recover.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"17\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"17\""
+      "judge"
     ]
   },
   "metrics": {

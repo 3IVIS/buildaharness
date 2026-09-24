@@ -890,9 +890,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "Once the user named 'export_v2', the assistant gave 210s, which is correct, and it did not use the v1 value of 90s. On turn 2 it gave a generic failure message instead of a clarifying question, but the pass criteria only concern the final answer after the user supplies the section name.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"210\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

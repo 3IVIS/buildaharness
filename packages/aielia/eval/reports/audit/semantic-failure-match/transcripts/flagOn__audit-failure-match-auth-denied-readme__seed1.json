@@ -266,31 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply is empty (only a status marker and '(LOW)'), so it never moves from the README to docs/auth.md and never reports the repo:read scope.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"repo:read\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "not contains \"cannot find\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"not documented\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no scope\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /repo:read|auth\\.md/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"repo:read\"",
-      "regex /repo:read|auth\\.md/i"
+      "judge"
     ]
   },
   "metrics": {

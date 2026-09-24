@@ -596,14 +596,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "On turn 2 the assistant gave only a generic could-not-complete message. It never followed the pointer in billing/server.js to config/ports.json, so it never gave the billing port, 9271.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"9271\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"9271\""
+      "judge"
     ]
   },
   "metrics": {

@@ -781,9 +781,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In the final turn the assistant picked Hotel B, the pet-friendly one, and gave Biscuit's separation anxiety from turn 1 as the reason. That is exactly what the pass criteria ask for.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /hotel B|pet[- ]friendly|dog|Biscuit|bring (him|your)/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

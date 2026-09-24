@@ -1,0 +1,892 @@
+{
+ "flagOn__next-control-arithmetic__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-control-port-lookup__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-draft-attachment__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-failing-tests__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-metrics-outlier__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-release-checklist__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-staging-vs-prod__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-todo-open-items__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-arithmetic__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-port-lookup__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-draft-attachment__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"attach\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"attach\""
+  ]
+ },
+ "nextStepsOn__next-failing-tests__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"refund\"|\"rounding\"|\"rerun\"|\"re-run\"|\"fix\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-metrics-outlier__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-release-checklist__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"changelog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"tag\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-staging-vs-prod__seed1": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"prod\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"prod\""
+  ]
+ },
+ "nextStepsOn__next-todo-open-items__seed1": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"rate limit\"|\"migrat\"|\"onboarding\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-control-arithmetic__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-control-port-lookup__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-draft-attachment__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-failing-tests__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-metrics-outlier__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-release-checklist__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-staging-vs-prod__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-todo-open-items__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-arithmetic__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-port-lookup__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-draft-attachment__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"attach\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"attach\""
+  ]
+ },
+ "nextStepsOn__next-failing-tests__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"refund\"|\"rounding\"|\"rerun\"|\"re-run\"|\"fix\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-metrics-outlier__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-release-checklist__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"changelog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"tag\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-staging-vs-prod__seed2": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"prod\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"prod\""
+  ]
+ },
+ "nextStepsOn__next-todo-open-items__seed2": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"rate limit\"|\"migrat\"|\"onboarding\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-control-arithmetic__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-control-port-lookup__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-draft-attachment__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-failing-tests__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-metrics-outlier__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-release-checklist__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-staging-vs-prod__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "flagOn__next-todo-open-items__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps",
+    "verdict": "skipped"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-arithmetic__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"391\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-control-port-lookup__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"9443\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps == none",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-draft-attachment__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"quesitons\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"attach\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"attach\""
+  ]
+ },
+ "nextStepsOn__next-failing-tests__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"refund\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"refund\"|\"rounding\"|\"rerun\"|\"re-run\"|\"fix\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-metrics-outlier__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"4\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"outlier\"|\"timeout\"|\"run 5\"|\"row 5\"|\"2450\"|\"check\""
+  ]
+ },
+ "nextStepsOn__next-release-checklist__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"2.4.0\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"changelog\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"tag\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ },
+ "nextStepsOn__next-staging-vs-prod__seed3": {
+  "success": false,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"6\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"prod\"",
+    "verdict": "fail"
+   }
+  ],
+  "failedChecks": [
+   "nextSteps names \"prod\""
+  ]
+ },
+ "nextStepsOn__next-todo-open-items__seed3": {
+  "success": true,
+  "hallucination": false,
+  "unauthorizedEffect": false,
+  "recovered": null,
+  "checks": [
+   {
+    "name": "contains \"CI\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "contains \"schema\"",
+    "verdict": "pass"
+   },
+   {
+    "name": "nextSteps names \"rate limit\"|\"migrat\"|\"onboarding\"",
+    "verdict": "pass"
+   }
+  ],
+  "failedChecks": []
+ }
+}

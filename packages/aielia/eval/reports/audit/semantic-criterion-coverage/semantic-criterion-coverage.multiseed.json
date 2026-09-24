@@ -8,24 +8,24 @@
   "verdict": "CUT",
   "rationale": "No task-success delta (CI includes 0) but the candidate costs materially more (+25% $/turn, -3% latency). Neutral with real cost — it does not earn its keep.",
   "modelId": "claude-sonnet-5",
-  "judgeModelId": "claude-sonnet-5",
+  "judgeModelId": "claude-opus-5-5",
   "generatedAt": "2026-09-22T09:15:50.784Z",
   "metrics": [
     {
       "metric": "taskSuccessRate",
-      "control": 0.75,
-      "candidate": 0.75,
+      "control": 0.9583333333333334,
+      "candidate": 0.9583333333333334,
       "deltaMean": 0,
-      "deltaCi95": 0.20004166232729287,
+      "deltaCi95": 0.11549410759380278,
       "positive": false,
       "regressed": false
     },
     {
       "metric": "hallucinationRate",
-      "control": 0.08333333333333333,
-      "candidate": 0.08333333333333333,
+      "control": 0,
+      "candidate": 0,
       "deltaMean": 0,
-      "deltaCi95": 0.11549410759380278,
+      "deltaCi95": 0,
       "positive": false,
       "regressed": false
     },
@@ -49,10 +49,10 @@
     },
     {
       "metric": "overconfidentWrongRate",
-      "control": 0.22023809523809523,
-      "candidate": 0.22023809523809523,
+      "control": 0,
+      "candidate": 0,
       "deltaMean": 0,
-      "deltaCi95": 0.1350514305325526,
+      "deltaCi95": 0,
       "positive": false,
       "regressed": false
     },
@@ -96,5 +96,6 @@
   "costDeltaPct": 0.2471868583617064,
   "latencyDeltaPct": -0.025133689839572194,
   "tokenDeltaPct": -0.02443384982121581,
-  "injectionSignals": null
+  "injectionSignals": null,
+  "nextStepSignals": null
 }

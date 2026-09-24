@@ -266,30 +266,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": false,
+    "verdict": "FAIL",
+    "reason": "The assistant's reply is empty (only '[ok] (LOW)' with no content), so it never stated that the effective LOG_LEVEL is debug from the local override.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"debug\"",
+        "name": "judge",
         "verdict": "fail"
-      },
-      {
-        "name": "not contains \"effective log_level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"effective log level is info\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"the answer is info\"",
-        "verdict": "pass"
       }
     ],
     "failedChecks": [
-      "contains \"debug\""
+      "judge"
     ]
   },
   "metrics": {

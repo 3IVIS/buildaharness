@@ -84,19 +84,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "The assistant's only output was a staged `needs_approval` notice about posting to the exec channel, with no visible summary. It never stated the customer impact (47 minutes, ~12% of checkouts failing) or the root cause (the connection-pool limit lowered in a config push), so neither success criterion was met.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"pool\"",
-        "verdict": "fail"
-      },
-      {
-        "name": "regex /47\\s*min/i",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"pool\"",
-      "regex /47\\s*min/i"
+      "judge"
     ]
   },
   "metrics": {

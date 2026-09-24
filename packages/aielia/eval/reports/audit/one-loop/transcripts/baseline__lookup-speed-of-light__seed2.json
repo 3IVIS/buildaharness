@@ -121,25 +121,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant gave the exact value of 299,792,458 m/s and also mentioned the standard approximation of 3.00 × 10⁸ m/s. Both match the pass criteria, and it correctly said the value is exact by definition.",
+    "invalid": false,
     "checks": [
       {
-        "name": "not contains \"299,792,459\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"299,000,000 m/s\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"2,998,000 m/s\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"3,000 m/s\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /299[,. ]?792[,. ]?458|3\\s*(×|x|\\*)\\s*10\\s*\\^?\\s*8|300[,. ]?000[,. ]?000/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

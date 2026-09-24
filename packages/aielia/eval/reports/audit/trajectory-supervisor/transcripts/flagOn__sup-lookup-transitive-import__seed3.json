@@ -352,25 +352,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant traced the import chain a -> b -> c and correctly named `requests` as the third-party package. The explanation matches the workspace files.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"requests\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"none\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no third-party\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"only local modules\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"a.py has no external\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

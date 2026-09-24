@@ -410,14 +410,17 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "FAIL",
+    "reason": "On the final turn the assistant only gave a generic could-not-complete message. It never reported the newer September entry, Ines Duarte, so the required behaviour is missing.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"Ines Duarte\"",
+        "name": "judge",
         "verdict": "fail"
       }
     ],
     "failedChecks": [
-      "contains \"Ines Duarte\""
+      "judge"
     ]
   },
   "metrics": {

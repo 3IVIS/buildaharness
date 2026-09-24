@@ -352,29 +352,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant answered with `db.internal:5432/orders`, which combines the values from db.host, db.port and db.name exactly. The 'LOW' confidence label does not change that the answer is correct and complete.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"db.internal\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"5432\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "contains \"orders\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"incomplete\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"cannot construct\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"missing the\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

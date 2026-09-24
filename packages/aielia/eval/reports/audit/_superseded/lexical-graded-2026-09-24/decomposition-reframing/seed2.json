@@ -1,0 +1,445 @@
+{
+  "generatedAt": "2026-09-22T20:58:04.567Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 10485,
+      "meanCostUsd": 0.0143718,
+      "totalTokens": 4298,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 2,
+          "passed": 2
+        },
+        "file_read": {
+          "run": 5,
+          "passed": 5
+        },
+        "research": {
+          "run": 1,
+          "passed": 1
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 7,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "decompositionOff": {
+      "arm": "decompositionOff",
+      "label": "PersonalAssistant (flagOn) with AUDIT_DECOMPOSITION=0 \u2014 every turn takes the single-task path: no up-front task graph from the classifier, no reframeTaskDescriptionWithLLM call",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 9668,
+      "meanCostUsd": 0.00686725,
+      "totalTokens": 3865,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 2,
+          "passed": 2
+        },
+        "file_read": {
+          "run": 5,
+          "passed": 5
+        },
+        "research": {
+          "run": 1,
+          "passed": 1
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 6,
+        "verifiedCorrect": 6,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-budget-summary",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9761,
+      "costUsd": 0.0267178,
+      "totalTokens": 362,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the Q3 budget summary:\n\n- **Total spend:** $24,000 (12,000 + 4,500 + 7,500)\n- **Biggest line item:** Hosting ($12,000)\n- **Under $5,000:** Tooling ($4,500)\n- **Biggest vs. smallest:** Hosting ($12,000) is $7,500 larger than Tooling ($4,500)",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-control-single-lookup",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6024,
+      "costUsd": 0.007933200000000001,
+      "totalTokens": 230,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The team is led by **Marguerite Okonkwo**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-control-single-value",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6288,
+      "costUsd": 0.008086,
+      "totalTokens": 245,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The database port in `config/db.md` is **5433**.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-incident-report",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 13783,
+      "costUsd": 0.0136716,
+      "totalTokens": 750,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "## Incident Summary \u2014 2026-09-09\n\n- **Start time:** 14:32 UTC\n- **Affected service:** payments-api\n- **Root cause:** Expired TLS certificate on the internal gateway\n- **Resolved by:** Priya Raman\n- **Follow-up action:** Add certificate expiry alerting\n\nLet me know if you'd like this written to a file or expanded with more detail.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-onboarding-checks",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7209,
+      "costUsd": 0.0104022,
+      "totalTokens": 359,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what I found:\n\n- **Day 1 start time:** 09:30\n- **Day 1 buddy:** Callum Ferreira\n- **Day 2 system setup:** VPN client\n- **Day 2 review meeting:** Week-One Retro",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-release-facts",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6974,
+      "costUsd": 0.0101076,
+      "totalTokens": 378,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the info from `release/notes.md`:\n\n1. **Version number:** 5.3.1\n2. **Release date:** 2026-09-14\n3. **Number of breaking changes:** 2 (removed the legacy `/v1/export` endpoint; renamed config key `retries` to `max_retries`)\n4. **Release manager:** Ingrid Vasquez\n5. **Rollback command:** `deploy rollback --to 5.2.9`",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-team-roster",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12793,
+      "costUsd": 0.0132286,
+      "totalTokens": 695,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what's in team/roster.md:\n\n1. **Team lead:** Marguerite Okonkwo\n2. **Number of engineers:** 7\n3. **Design lead's city:** Tobias Lindqvist works from Gothenburg\n4. **On-call rotation start date:** 2026-10-05",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "audit-decomposition-three-files",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21044,
+      "costUsd": 0.024827400000000003,
+      "totalTokens": 1279,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here are the three values:\n\n- **Database port:** 5433\n- **Cache TTL:** 900 seconds\n- **Queue retry limit:** 6",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-budget-summary",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7106,
+      "costUsd": 0.0053544000000000005,
+      "totalTokens": 370,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's the Q3 budget summary:\n\n- **Total spend across all three lines:** $24,000 (12,000 + 4,500 + 7,500)\n- **Biggest line item:** Hosting ($12,000)\n- **Line under $5,000:** Tooling ($4,500)\n- **Biggest vs. smallest difference:** Hosting ($12,000) is $7,500 larger than Tooling ($4,500)",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-control-single-lookup",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7302,
+      "costUsd": 0.0039104000000000005,
+      "totalTokens": 229,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The team is led by **Marguerite Okonkwo**.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-control-single-value",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6328,
+      "costUsd": 0.004642800000000001,
+      "totalTokens": 250,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The database port in `config/db.md` is **5433** (host: `db.internal`).",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-incident-report",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 15481,
+      "costUsd": 0.0121696,
+      "totalTokens": 958,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "## Incident Summary \u2014 2026-09-09\n\n1. **Start time:** 14:32 UTC\n2. **Affected service:** payments-api\n3. **Root cause:** Expired TLS certificate on the internal gateway\n4. **Resolved by:** Priya Raman\n5. **Follow-up action:** Add certificate expiry alerting",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-onboarding-checks",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11516,
+      "costUsd": 0.0082798,
+      "totalTokens": 659,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what the onboarding docs say:\n\n- **Day 1 start time:** 09:30\n- **Day 1 buddy:** Callum Ferreira\n- **Day 2 system setup:** VPN client\n- **Day 2 review meeting:** Week-One Retro",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-release-facts",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9922,
+      "costUsd": 0.0064236,
+      "totalTokens": 387,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what's in release/notes.md:\n\n1. **Version number:** 5.3.1\n2. **Release date:** 2026-09-14\n3. **Number of breaking changes:** 2 (removed the legacy `/v1/export` endpoint; renamed config key `retries` to `max_retries`)\n4. **Release manager:** Ingrid Vasquez\n5. **Rollback command:** `deploy rollback --to 5.2.9`",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-team-roster",
+      "category": "file_read",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12708,
+      "costUsd": 0.0085726,
+      "totalTokens": 623,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here's what team/roster.md says:\n\n1. **Team lead:** Marguerite Okonkwo\n2. **Number of engineers:** 7\n3. **Design lead's city:** Gothenburg (Tobias Lindqvist)\n4. **On-call rotation start date:** 2026-10-05",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "decompositionOff",
+      "taskId": "audit-decomposition-three-files",
+      "category": "research",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6983,
+      "costUsd": 0.005584800000000001,
+      "totalTokens": 389,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here are the values from the config files:\n\n- **Database port:** 5433\n- **Cache TTL:** 900 seconds\n- **Queue retry limit:** 6",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

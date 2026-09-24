@@ -37,17 +37,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant replied with exactly 4195, which is correct (47*89 = 4183, plus 12 = 4195), and it kept to the user's 'just the number' format.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"4195\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"4183\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"4207\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

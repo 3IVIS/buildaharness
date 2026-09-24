@@ -807,9 +807,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "In turn 3 the assistant recommended 'Make It Stick', a book on study technique, and tied it directly to the pharmacology finals two weeks away and the unreviewed notes. That is a tailored pick, not a generic one, and the book and its authors are real.",
+    "invalid": false,
     "checks": [
       {
-        "name": "regex /pharmac|exam|finals|revision|study|textbook|student/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

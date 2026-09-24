@@ -976,9 +976,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant read prices.txt correctly, reported B=31 and C=44, and gave B+C = 31 + 44 = 75 across the turns without stalling. Every value matches the workspace file, and the currency caveats are accurate.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"75\"",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

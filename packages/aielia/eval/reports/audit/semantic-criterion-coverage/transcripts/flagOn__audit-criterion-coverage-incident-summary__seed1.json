@@ -342,13 +342,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The summary states the customer impact (~12% of checkout requests failed for 47 minutes) and the root cause (a config push lowered the connection-pool limit, which was exhausted under peak load). Both facts match the incident file.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"pool\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /47\\s*min/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],

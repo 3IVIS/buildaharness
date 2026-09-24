@@ -322,18 +322,13 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant correctly identified the two completed items (CI pipeline, API schema) and also listed the three open items (rate limiting, users-table migration, onboarding guide), which covers the natural continuation. No next-step options section was shown, so only the reply is judged.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"CI\"",
+        "name": "judge",
         "verdict": "pass"
-      },
-      {
-        "name": "contains \"schema\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "nextSteps",
-        "verdict": "skipped"
       }
     ],
     "failedChecks": []

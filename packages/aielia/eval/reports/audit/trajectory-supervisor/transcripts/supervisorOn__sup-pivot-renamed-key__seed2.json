@@ -332,41 +332,12 @@
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
+    "verdict": "PASS",
+    "reason": "The assistant noted that the MAX_RETRIES key is absent, cited the comment saying it was renamed to RETRY_LIMIT, and reported RETRY_LIMIT=7. Saying the old key is not present is accurate context, not a dead-end answer, because it goes on to give the new key and its value.",
+    "invalid": false,
     "checks": [
       {
-        "name": "contains \"7\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"MAX_RETRIES=\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"value is 3\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"value is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"MAX_RETRIES is 3\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"MAX_RETRIES is 5\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"no such key\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "not contains \"key is not present\"",
-        "verdict": "pass"
-      },
-      {
-        "name": "regex /renamed|now called|RETRY_LIMIT/i",
+        "name": "judge",
         "verdict": "pass"
       }
     ],
