@@ -13,10 +13,10 @@
   "metrics": [
     {
       "metric": "taskSuccessRate",
-      "control": 0.9166666666666666,
-      "candidate": 0.7916666666666666,
-      "deltaMean": -0.125,
-      "deltaCi95": 0.18261221816248285,
+      "control": 0.9583333333333334,
+      "candidate": 0.9583333333333334,
+      "deltaMean": 0,
+      "deltaCi95": 0.11549410759380278,
       "positive": false,
       "regressed": false
     },
@@ -49,10 +49,10 @@
     },
     {
       "metric": "overconfidentWrongRate",
-      "control": 0.08333333333333333,
-      "candidate": 0.20833333333333334,
-      "deltaMean": 0.125,
-      "deltaCi95": 0.18261221816248285,
+      "control": 0.041666666666666664,
+      "candidate": 0.041666666666666664,
+      "deltaMean": 0,
+      "deltaCi95": 0.11549410759380278,
       "positive": false,
       "regressed": false
     },

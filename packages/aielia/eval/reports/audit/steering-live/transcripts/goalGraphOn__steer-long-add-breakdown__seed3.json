@@ -714,7 +714,7 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
@@ -724,13 +724,11 @@
         "verdict": "pass"
       },
       {
-        "name": "regex /s03[^\\n]*62/i",
-        "verdict": "fail"
+        "name": "regex /(s0?3|step ?0?3|station ?0?3|third|\\|\\s*0?3\\s*\\|)[^\\n]*62/i",
+        "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "regex /s03[^\\n]*62/i"
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 23025,

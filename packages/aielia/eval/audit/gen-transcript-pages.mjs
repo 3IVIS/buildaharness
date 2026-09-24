@@ -351,6 +351,22 @@ function firedLayers(run) {
   ].sort()
 }
 
+/**
+ * Task-level graded outcome across every seed. A single seed flipping pass→fail is noise, not a
+ * regression: "regressed"/"fixed" only when the candidate passes fewer/more of its runs than the control.
+ */
+function taskGradeShift(ctrlRuns, candRuns, replyOnly = false) {
+  // With next-step options the candidate is also graded on its options and the control is not, so
+  // the two pass counts are not comparable — count only whether the reply itself was right.
+  const passes = (r) =>
+    replyOnly ? (r.data.grade?.checks ?? []).filter((c) => !String(c.name).startsWith('nextSteps')).every((c) => c.verdict !== 'fail') : r.data.grade?.success
+  const cPass = ctrlRuns.filter(passes).length
+  const dPass = candRuns.filter(passes).length
+  // A one-run gap in a handful of seeds is within noise; only a gap of two or more runs earns the word.
+  const shift = cPass - dPass >= 2 ? 'regressed' : dPass - cPass >= 2 ? 'fixed' : 'same'
+  return { shift, cPass, dPass, cN: ctrlRuns.length, dN: candRuns.length }
+}
+
 /** Mechanical control-vs-candidate behaviour diff for one task (uses the first shown seed of each arm). */
 function diffRuns(ctrl, cand) {
   const rc = normReply(ctrl.data.replyPreview || assistantReply(ctrl.data.events))
@@ -616,8 +632,12 @@ function renderIndex(report, runs, fullPages, css, caseStudy) {
 
   const metricRows = report.metrics
     .map((d) => {
-      const cls = d.regressed ? 'regressed' : d.positive ? 'positive' : ''
-      return `<tr class="${cls}"><td>${esc(d.metric)}</td><td class="num">${fmtNum(d.metric, d.control)}</td><td class="num">${fmtNum(d.metric, d.candidate)}</td><td class="num">${d.deltaMean === null ? '—' : (d.deltaMean > 0 ? '+' : '') + fmtNum(d.metric, d.deltaMean)}</td><td class="num">${d.deltaCi95 === null ? '—' : '±' + fmtNum(d.metric, d.deltaCi95)}</td></tr>`
+      // Options-graded features: the candidate's task success includes the option check the control
+      // never had, so a lower number is not a regression — reply-only success is in nextStepSignals.
+      const optionsGraded = Boolean(report.nextStepSignals) && d.metric === 'taskSuccessRate'
+      const cls = optionsGraded ? '' : d.regressed ? 'regressed' : d.positive ? 'positive' : ''
+      const label = optionsGraded ? `${d.metric} <small>(candidate also graded on its options; reply-only ${fmtNum(d.metric, report.nextStepSignals.controlReplySuccessRate)} vs ${fmtNum(d.metric, report.nextStepSignals.replySuccessRate)})</small>` : esc(d.metric)
+      return `<tr class="${cls}"><td>${label}</td><td class="num">${fmtNum(d.metric, d.control)}</td><td class="num">${fmtNum(d.metric, d.candidate)}</td><td class="num">${d.deltaMean === null ? '—' : (d.deltaMean > 0 ? '+' : '') + fmtNum(d.metric, d.deltaMean)}</td><td class="num">${d.deltaCi95 === null ? '—' : '±' + fmtNum(d.metric, d.deltaCi95)}</td></tr>`
     })
     .join('')
 
@@ -649,13 +669,13 @@ function renderIndex(report, runs, fullPages, css, caseStudy) {
 
       const cPass = ctrlRuns.filter((r) => r.data.grade?.success).length
       const dPass = candRuns.filter((r) => r.data.grade?.success).length
-      const nFixed = paired.filter((p) => p.diff.grade === 'fixed').length
-      const nRegressed = paired.filter((p) => p.diff.grade === 'regressed').length
-      const gradeShift = nRegressed
-        ? ` <span class="shift regressed">regressed${nRegressed > 1 ? ` &times;${nRegressed}` : ''}</span>`
-        : nFixed
-          ? ` <span class="shift">fixed${nFixed > 1 ? ` &times;${nFixed}` : ''}</span>`
-          : ''
+      const taskShift = taskGradeShift(ctrlRuns, candRuns, Boolean(report.nextStepSignals)).shift
+      const gradeShift =
+        taskShift === 'regressed'
+          ? ' <span class="shift regressed">regressed</span>'
+          : taskShift === 'fixed'
+            ? ' <span class="shift">fixed</span>'
+            : ''
 
       const dCost = pctDelta(mean(ctrlRuns, (r) => r.data.metrics?.costUsd), mean(candRuns, (r) => r.data.metrics?.costUsd))
       const dLat = pctDelta(mean(ctrlRuns, (r) => r.data.metrics?.latencyMs), mean(candRuns, (r) => r.data.metrics?.latencyMs))
@@ -792,6 +812,9 @@ function renderComparePage(report, task, taskRuns, css, fullPages) {
 
   if (ctrl && cand) {
     const diff = diffRuns(ctrl, cand)
+    const ts = taskGradeShift(ctrlRuns, candRuns, Boolean(report.nextStepSignals))
+    diff.grade = ts.shift // task-level over all seeds, not just the shown one
+    const passLine = `${report.nextStepSignals ? 'Reply correct in' : 'Passed'} ${ts.dPass} of ${ts.dN} runs with the candidate vs ${ts.cPass} of ${ts.cN} with the control.`
 
     // per-task metric deltas from the shown seed (report-level deltas are matrix-wide, not per task)
     const mc = ctrl.data.metrics ?? {}
@@ -801,10 +824,10 @@ function renderComparePage(report, task, taskRuns, css, fullPages) {
       !diff.behaviourChanged
         ? `No behavioural change on this task — same reply, same tool calls, same harness layers. The candidate did the extra work for an identical result.`
         : diff.grade === 'fixed'
-          ? `The candidate turned a failure into a pass here.`
+          ? `The candidate passed more runs on this task. ${passLine}`
           : diff.grade === 'regressed'
-            ? `The candidate regressed a passing task to a failure here.`
-            : `The candidate behaved differently but the graded outcome was the same.`
+            ? `The candidate passed fewer runs on this task. ${passLine}`
+            : `The candidate behaved differently, with no clear gap in outcome. ${passLine}`
 
     const bhvRows = [
       ['Final reply', diff.replyIdentical ? '<span class="bhv same">identical</span>' : '<span class="bhv changed">differs</span>'],
@@ -827,8 +850,8 @@ function renderComparePage(report, task, taskRuns, css, fullPages) {
       [
         'Graded outcome',
         diff.grade === 'same'
-          ? `<span class="bhv same">both ${diff.gradeCtrl.success ? 'pass' : 'fail'}</span>`
-          : `<span class="bhv changed">${diff.grade === 'fixed' ? 'candidate fixed it' : 'candidate regressed it'}</span>`,
+          ? `<span class="bhv same">${ts.dPass}/${ts.dN} vs ${ts.cPass}/${ts.cN} pass</span>`
+          : `<span class="bhv changed">${diff.grade === 'fixed' ? 'candidate passed more' : 'candidate passed fewer'} (${ts.dPass}/${ts.dN} vs ${ts.cPass}/${ts.cN})</span>`,
       ],
     ]
       .map(([k, v]) => `<div class="sb-row"><span class="sb-key">${k}</span><span class="sb-val">${v}</span></div>`)

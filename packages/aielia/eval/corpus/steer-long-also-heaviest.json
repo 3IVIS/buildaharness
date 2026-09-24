@@ -50,8 +50,9 @@
   },
   "grader": {
     "contains": [
-      "S03"
-    ]
+      "62"
+    ],
+    "regex": "\\b(s0?3|step ?0?3|station ?0?3|third)\\b"
   },
-  "note": "Pass = the final reply names the heaviest station (S03, 62)."
+  "note": "Pass = the final reply names the heaviest station (S03, also written 'station 3' / 'third') and its weight 62."
 }

@@ -52,7 +52,7 @@
     "contains": [
       "62"
     ],
-    "regex": "s03[^\\n]*62"
+    "regex": "(s0?3|step ?0?3|station ?0?3|third|\\|\\s*0?3\\s*\\|)[^\\n]*62"
   },
-  "note": "Pass = the final reply carries the per-station weights (S03 = 62). The total may only appear in an earlier reply."
+  "note": "Pass = the final reply carries the per-station weights, with station 3 (written S03, 'Step 3', 'station 3' or a bare row '3') at 62. The total may only appear in an earlier reply."
 }

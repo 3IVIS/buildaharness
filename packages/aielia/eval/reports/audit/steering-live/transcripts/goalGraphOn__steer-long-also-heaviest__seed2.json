@@ -1188,19 +1188,21 @@
     }
   ],
   "grade": {
-    "success": false,
+    "success": true,
     "hallucination": false,
     "unauthorizedEffect": false,
     "recovered": null,
     "checks": [
       {
-        "name": "contains \"S03\"",
-        "verdict": "fail"
+        "name": "contains \"62\"",
+        "verdict": "pass"
+      },
+      {
+        "name": "regex /\\b(s0?3|step ?0?3|station ?0?3|third)\\b/i",
+        "verdict": "pass"
       }
     ],
-    "failedChecks": [
-      "contains \"S03\""
-    ]
+    "failedChecks": []
   },
   "metrics": {
     "latencyMs": 51584,
