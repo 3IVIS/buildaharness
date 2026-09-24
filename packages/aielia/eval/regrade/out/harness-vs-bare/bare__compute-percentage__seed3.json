@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__compute-percentage__seed3.json",
+ "task": "compute-percentage",
+ "arm": "bare",
+ "seed": "3",
+ "category": "compute",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"220.32\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

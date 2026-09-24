@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__file-count-todos__seed3.json",
+ "task": "file-count-todos",
+ "arm": "bare",
+ "seed": "3",
+ "category": "file_read",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"4\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

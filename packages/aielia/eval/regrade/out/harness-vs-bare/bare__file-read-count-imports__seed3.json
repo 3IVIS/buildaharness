@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__file-read-count-imports__seed3.json",
+ "task": "file-read-count-imports",
+ "arm": "bare",
+ "seed": "3",
+ "category": "file_read",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "regex /\\b4\\b/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

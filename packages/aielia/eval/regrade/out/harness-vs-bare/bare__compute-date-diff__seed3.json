@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__compute-date-diff__seed3.json",
+ "task": "compute-date-diff",
+ "arm": "bare",
+ "seed": "3",
+ "category": "compute",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "regex /\\b45\\b/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

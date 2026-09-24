@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__file-read-last-error__seed3.json",
+ "task": "file-read-last-error",
+ "arm": "bare",
+ "seed": "3",
+ "category": "file_read",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"2026-09-01T12:43:55Z\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

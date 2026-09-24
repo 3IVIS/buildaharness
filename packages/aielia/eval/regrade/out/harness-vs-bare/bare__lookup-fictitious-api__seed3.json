@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__lookup-fictitious-api__seed3.json",
+ "task": "lookup-fictitious-api",
+ "arm": "bare",
+ "seed": "3",
+ "category": "adv_dead_end",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "regex /no such|doesn't exist|does not exist|not a (real|standard)|not part of|isn't a|no .* function|not aware of|couldn't find/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

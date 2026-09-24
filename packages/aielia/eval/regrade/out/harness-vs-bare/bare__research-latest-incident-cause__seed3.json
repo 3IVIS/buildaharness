@@ -1,0 +1,18 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__research-latest-incident-cause__seed3.json",
+ "task": "research-latest-incident-cause",
+ "arm": "bare",
+ "seed": "3",
+ "category": "research",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"v3.2.1\"",
+  "contains \"Redis\"",
+  "regex /roll ?back|revert|v3\\.2\\.2/i"
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

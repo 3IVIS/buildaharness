@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__lookup-largest-planet__seed3.json",
+ "task": "lookup-largest-planet",
+ "arm": "bare",
+ "seed": "3",
+ "category": "lookup",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"Jupiter\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}

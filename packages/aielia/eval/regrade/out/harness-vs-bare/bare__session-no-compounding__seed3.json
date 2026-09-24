@@ -1,0 +1,16 @@
+{
+ "feature": "harness-vs-bare",
+ "transcript": "bare__session-no-compounding__seed3.json",
+ "task": "session-no-compounding",
+ "arm": "bare",
+ "seed": "3",
+ "category": "multi_step",
+ "oldSuccess": false,
+ "oldFailedChecks": [
+  "arm",
+  "contains \"4\""
+ ],
+ "verdict": "INVALID_RUN",
+ "reason": "arm errored (infrastructure), not a task result",
+ "judgeModel": "claude-opus-5-5"
+}
