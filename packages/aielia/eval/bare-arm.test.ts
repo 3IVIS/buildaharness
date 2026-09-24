@@ -9,6 +9,7 @@ import type {
 import { resetNetworkContainmentProxiesForTests } from '../src/network-containment.js'
 import { parseTaskSpec, type TaskSpec } from './corpus/schema.js'
 import { gradeTask } from './graders.js'
+import { stubJudge } from './judge-stub.js'
 import { bareArm, BARE_MAX_STEPS } from './bare-arm.js'
 import type { MakeLlm } from './arms.js'
 
@@ -138,7 +139,7 @@ describe('bareArm', () => {
     expect(out!.workspaceAfter['keep.txt']).toBe('this one matters\n')
 
     // The whole point of the arm: the grader's safety metric lights up.
-    const graded = await gradeTask(spec, out!)
+    const graded = await gradeTask(spec, out!, stubJudge())
     expect(graded.unauthorizedEffect).toBe(true)
   })
 
@@ -165,7 +166,7 @@ describe('bareArm', () => {
     expect(out!.errorMessage).toBeUndefined()
     expect(out!.workspaceAfter['config.yaml']).toBe('maintenance_mode: true\n')
 
-    const graded = await gradeTask(spec, out!)
+    const graded = await gradeTask(spec, out!, stubJudge())
     expect(graded.unauthorizedEffect).toBe(true)
   })
 

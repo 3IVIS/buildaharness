@@ -31,6 +31,12 @@ export interface BenchmarkRow {
   /** The supervisor directive action(s) this turn, in order — for triaging the S7 delta. */
   supervisorDirectives: string[] | null
   failedChecks: string[]
+  /** The semantic judge's verdict for this row. `INVALID_RUN` (arm errored), `INVALID_TASK` and `UNJUDGED` rows are excluded from every rate. */
+  verdict?: GradedTask['verdict']
+  /** The judge's reason (or why the row is invalid). */
+  reason?: string
+  /** True for `INVALID_RUN` / `INVALID_TASK` / `UNJUDGED` — infrastructure or task defect, not a task outcome. */
+  invalid?: boolean
   /** `ArmTurnOutput.status` for a row that ran; `undefined` for a skipped row. Lets the audit
    * driver (the audit driver) tell a rate-limited run (`status === 'error'` with a
    * rate-limit `errorMessage`) apart from a genuine hard failure. */
@@ -75,6 +81,8 @@ export interface ArmAggregate {
   label: string
   tasksRun: number
   tasksSkipped: number
+  /** Rows that ran but were not scored: the arm errored (`INVALID_RUN`), the task was defective, or the judge could not answer. */
+  tasksInvalid?: number
   taskSuccessRate: number
   hallucinationRate: number
   unauthorizedEffectRate: number
@@ -159,6 +167,9 @@ function writeTranscriptFile(
       hallucination: graded.hallucination,
       unauthorizedEffect: graded.unauthorizedEffect,
       recovered: graded.recovered,
+      verdict: graded.verdict,
+      reason: graded.reason,
+      invalid: graded.invalid,
       checks: graded.checks.map((c) => ({ name: c.name, verdict: c.verdict })),
       failedChecks: row.failedChecks,
     },
@@ -222,6 +233,9 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
     supervisorConsults: out.supervisorConsults ?? null,
     supervisorDirectives: out.supervisorDirectives ?? null,
     failedChecks: graded.checks.filter((c) => c.verdict === 'fail').map((c) => c.name),
+    verdict: graded.verdict,
+    reason: graded.reason,
+    ...(graded.invalid ? { invalid: true } : {}),
     status: out.status,
     ...(out.errorMessage !== undefined ? { errorMessage: out.errorMessage } : {}),
     replyPreview: out.reply.slice(0, 500),
@@ -229,8 +243,10 @@ function toRow(arm: Arm, task: TaskSpec, out: ArmTurnOutput | null, graded: Grad
   }
 }
 
-function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
-  const ran = rows.filter((r) => r.ran)
+export function aggregate(arm: Pick<Arm, 'name' | 'label'>, rows: BenchmarkRow[]): ArmAggregate {
+  // Invalid rows (errored arm / defective task / judge could not answer) are not task outcomes:
+  // excluded from every rate and counted separately so an infrastructure failure can never read as a regression.
+  const ran = rows.filter((r) => r.ran && !r.invalid)
   const injected = ran.filter((r) => r.recovered !== null)
   const withLatency = ran.filter((r) => r.latencyMs !== null)
   const withCost = ran.filter((r) => r.costUsd !== null)
@@ -262,7 +278,8 @@ function aggregate(arm: Arm, rows: BenchmarkRow[]): ArmAggregate {
     arm: arm.name,
     label: arm.label,
     tasksRun: ran.length,
-    tasksSkipped: rows.length - ran.length,
+    tasksSkipped: rows.filter((r) => !r.ran).length,
+    tasksInvalid: rows.filter((r) => r.ran && r.invalid).length,
     taskSuccessRate: rate(ran.filter((r) => r.success).length, ran.length),
     hallucinationRate: rate(ran.filter((r) => r.hallucination).length, ran.length),
     unauthorizedEffectRate: rate(ran.filter((r) => r.unauthorizedEffect).length, ran.length),
@@ -347,6 +364,15 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
       opts.onProgress?.({ arm: arm.name, taskId: task.id, success: row.success, skipped: !row.ran })
     }
     perArm[arm.name] = aggregate(arm, armRows)
+    const invalid = armRows.filter((r) => r.ran && r.invalid)
+    if (invalid.length > 0) {
+      const byKind = invalid.reduce<Record<string, number>>((m, r) => ((m[r.verdict ?? 'INVALID'] = (m[r.verdict ?? 'INVALID'] ?? 0) + 1), m), {})
+      console.warn(
+        `runner: arm "${arm.name}" — ${invalid.length}/${armRows.length} row(s) NOT scored ${JSON.stringify(byKind)}; ` +
+          `excluded from every rate.` +
+          (invalid.length / armRows.length > 0.1 ? ' >10% invalid — this is an infrastructure failure, re-run those rows before reading any result.' : ''),
+      )
+    }
   }
 
   return {

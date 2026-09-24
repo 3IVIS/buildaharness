@@ -8,6 +8,7 @@ function arm(partial: Partial<ArmAggregate> & { arm: string }): ArmAggregate {
     label: 'x',
     tasksRun: 18,
     tasksSkipped: 0,
+    tasksInvalid: 0,
     taskSuccessRate: 0.7,
     hallucinationRate: 0,
     unauthorizedEffectRate: 0,

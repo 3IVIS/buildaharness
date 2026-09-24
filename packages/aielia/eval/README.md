@@ -6,8 +6,9 @@
 
 ## What this is
 
-A fixed task corpus + a mechanical grader + a multi-arm runner. Each **task** is a prompt, a
-workspace, and a boring grader (substring / regex / file-state / result-status). Each **arm** is a
+A fixed task corpus + a semantic judge + a multi-arm runner. Each **task** is a prompt, a
+workspace, and written pass criteria (`intent` + `note`) that an LLM judge applies to the whole
+conversation. Each **arm** is a
 different way of answering the task; the arm is the independent variable, everything else is held
 fixed.
 
@@ -18,7 +19,10 @@ eval/
     index.ts         loadCorpus() — reads every *.json here
     *.json           one task per file (id == filename stem)
   fixtures.ts        in-memory FsBackend + per-task tool contexts
-  graders.ts         gradeTask() — deterministic, LLM-free (except an optional judge rubric)
+  graders.ts         gradeTask() — semantic verdict from the judge + objective file-state; errored arms are INVALID_RUN
+  judge.ts           ClaudeCliJudge — the semantic judge (+ the judge system prompt, transcript condenser)
+  judge-stub.ts      test double for JudgeModel (machinery tests only — never a grader)
+  regrade/           offline re-grade of saved transcripts (regrade.py) + its outputs — provenance of the 2026-09 re-grade
   arms.ts            the arms (baseline + flagOn + bare implemented; langgraph declared)
   bare-arm.ts        the `bare` arm — a no-harness, no-staging ReAct loop
   runner.ts          runBenchmark() — arms × tasks → graded rows → per-arm aggregates
@@ -33,11 +37,11 @@ Per arm, over the tasks it actually ran:
 
 | Metric | Meaning | Better | Gating (Rule 6) |
 |---|---|---|---|
-| `taskSuccessRate` | mechanical grader passed | higher | **yes** |
-| `hallucinationRate` | a `hallucinationProbe` task's `notContains` tripped | lower | **yes** |
-| `unauthorizedEffectRate` | a mutation ran instead of staging, or a protected file changed | lower | **yes** |
+| `taskSuccessRate` | the semantic judge passed the turn (rows that errored or could not be judged are excluded, not failed — see `tasksInvalid`) | higher | **yes** |
+| `hallucinationRate` | on a `hallucinationProbe` task, the judge saw fabricated facts or a false claim of completion | lower | **yes** |
+| `unauthorizedEffectRate` | a mutation ran instead of staging, a protected file changed on disk, or the judge saw a followed injection / unrequested action | lower | **yes** |
 | `recoveryRate` | of the `injectedFailure` tasks, how many still passed | higher | **yes** |
-| `answerClaimConfusion.overconfidentWrongRate` | of the AnswerClaim-producing tasks with a mechanical ground truth, how many had the claim say `verified` while the answer was actually wrong | lower | **yes** |
+| `answerClaimConfusion.overconfidentWrongRate` | of the AnswerClaim-producing tasks, judged against the judge's verdict on the answer, how many had the claim say `verified` while the answer was actually wrong | lower | **yes** |
 | `meanLatencyMs`, `meanCostUsd` | cost of the run | lower | reported, **not** gating |
 
 A phase that regresses a gating metric without a written accepted-reason override does not ship.
@@ -57,7 +61,7 @@ cd packages/aielia
 npx tsx scripts/run-harness-benchmark.ts
 npx tsx scripts/run-harness-benchmark.ts --tasks=compute-multiply,mutation-delete-file
 npx tsx scripts/run-harness-benchmark.ts --arms=baseline
-npx tsx scripts/run-harness-benchmark.ts --no-judge                            # skip the LLM-as-judge pass (on by default)
+npx tsx scripts/run-harness-benchmark.ts --judge-model=claude-opus-5-5           # the judge (default claude-opus-5-5); there is no --no-judge
 npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<baseline>.json   # Rule 6: exit 1 on regression
 ```
 
@@ -105,16 +109,26 @@ Writes `docs/harness_comparative_benchmark.md` (human table, newest run first) a
    `eval/reports/*.json` + `docs/harness_comparative_benchmark.md` (retention 30). Sibling job
    `eval-harness-benchmark-langgraph` does the same for the Python `langgraph` arm on the
    `OPENAI_API_KEY` path.
-5. ~~**The judge model**~~ — **done** (`eval/judge.ts`): `ClaudeCliJudge`, a tool-free
-   `ClaudeCliLLMClient`-backed `JudgeModel`. `judge(rubric, prompt, reply)` makes one deterministic
-   YES/NO classification call (`buildJudgePrompt` + a strict-judge system prompt) and parses it with
-   `parseYesNo` — an unparseable, ambiguous, empty, or errored response returns `false` (a judge
-   that can't decide does not pass the task), never throws. `scripts/run-harness-benchmark.ts`
-   passes one into `runBenchmark` **on by default** for a real run; `--no-judge` opts out. The
-   machinery `*.test.ts` stay judge-less, so their `judge` checks still score `skipped`.
+5. ~~**The judge model**~~ — **replaced 2026-09-24** (`eval/judge.ts`). The original mechanical grading
+   (`contains` / `notContains` / `regex` / `status` on reply text, plus a YES/NO judge on 4 of 222
+   tasks) was audited against the saved transcripts and found to mis-score turns in both directions:
+   negation-blind (`Do not run FLUSHALL` failed `notContains "run flushall"`; a refusal that names the
+   injected persona failed `notContains "Cleanup Bot"` and read as a hallucination), phrasing-brittle
+   (`doesn't list` vs `doesn't mention`), blind to state (a delete that was only *staged* passed
+   `deleted|removed|done`), and it scored an errored arm as a failed task (38 of 72 bare-arm runs in one
+   audit seed). Now `ClaudeCliJudge` gives one semantic verdict per run by reasoning about behaviour and
+   meaning against the task's `intent` + `note`, the workspace, observed run facts (final status, files
+   changed on disk) and the full per-turn conversation. The legacy `grader` fields are shown as hints only.
+   A judge call that errors or cannot be parsed returns `null` — the row is `UNJUDGED` and excluded, never
+   a failure. An errored arm is `INVALID_RUN`; a defective task is `INVALID_TASK`; both are excluded from
+   every rate and counted in `tasksInvalid` (the runner warns loudly above 10%). The judge defaults to
+   `claude-opus-5-5` so it does not grade its own family's output; there is no `--no-judge` and no
+   mechanical fallback. Machinery tests inject `judge-stub.ts`. The prior audit numbers were re-graded
+   offline with the same prompt (`regrade/`); the lexically-graded originals are archived under
+   `reports/audit/_superseded/`.
 6. ~~**AnswerClaim calibration**~~ — **done**: `gradeTask` emits `answerClaimCalibration` for every
-   task that produced an `answerClaimStatus` **and** carried a mechanical ground-truth check (any
-   non-skipped check that isn't the LLM `judge` or the `answerClaim ==` check itself). `runner.ts`
+   task that produced an `answerClaimStatus` **and** (the judge's verdict on the
+   answer is the ground truth for "was it right"). `runner.ts`
    rolls these into `ArmAggregate.answerClaimConfusion` — a 2×2 of claim-says-`verified` ×
    answer-actually-correct — and `report.ts` renders it per arm. The dangerous quadrant,
    `overconfidentWrongRate` (claim said `verified`, answer was wrong), **is a Rule 6 gating signal**:
@@ -131,11 +145,11 @@ against exactly this set — anything outside it needs a schema + runner change,
 
 | Shape | How to write it | Notes |
 |---|---|---|
-| **Single-turn** | `prompt` only; `followups` defaults to `[]` | Grader scores the reply + final workspace. |
-| **Multi-turn** | `followups: [{ prompt, addWorkspace?, injectedFailure?, injectedFailureCount? }, ...]` | Each followup goes to the *same* `PersonalAssistant` session (same memory + history) once the previous turn resolves. The grader scores the **last** turn's reply and the final workspace; cost / latency / tokens sum across turns. Per-turn boundaries are recorded for transcripts. |
+| **Single-turn** | `prompt` only; `followups` defaults to `[]` | The judge scores the reply against the pass criteria; `filesUnchanged` checks the final workspace. |
+| **Multi-turn** | `followups: [{ prompt, addWorkspace?, injectedFailure?, injectedFailureCount? }, ...]` | Each followup goes to the *same* `PersonalAssistant` session (same memory + history) once the previous turn resolves. The judge sees the whole conversation and weights the **last** turn, per the pass criteria; `filesUnchanged` checks the final workspace; cost / latency / tokens sum across turns. Per-turn boundaries are recorded for transcripts. |
 | **Fixture workspace** | `workspace: [{ path, content }]`, plus `followups[].addWorkspace` to add files mid-session | In-memory `FsBackend` (`fixtures.ts`); enable tools with `tools: { file, web, shell }`. `grader.filesUnchanged` checks byte-identical files afterwards. |
 | **Injected failure** | `injectedFailure` (+ `injectedFailureCount`), per task or per followup | `first_tool_call_throws` (proxy backend only) or `persistent_tool_failure` (one-loop proposer; trips `cannotMakeProgress()`). |
-| **Mechanical grader** | `grader`: `contains`, `notContains`, `regex`, `status` (`ok`/`needs_approval`/`escalated`), `filesUnchanged`, `answerClaimStatus`, optional `judge: { rubric }` | All present checks must pass; at least one required. `hallucinationProbe` / `unauthorizedEffectProbe` opt a task into those corpus-wide metrics. |
+| **Pass criteria** | `intent` + `note` (plain-language: what a good response does and what must NOT happen); `grader` is legacy — its fields are hints shown to the judge and never score, except `filesUnchanged` (objective on-disk check) | The semantic judge decides pass/fail. `hallucinationProbe` / `unauthorizedEffectProbe` opt a task into those corpus-wide metrics. |
 
 **Not supported — pre-seeded memory.** There is no `memory` / `seedFacts` field: every task starts
 with a fresh `InMemoryAdapter` (`arms.ts`, namespaced per task id), so nothing carries over from
@@ -143,10 +157,9 @@ with a fresh `InMemoryAdapter` (`arms.ts`, namespaced per task id), so nothing c
 establish it in turn 1 (or an early followup) as part of the task, and the slice's
 `corpusNote` should say so. Cross-session persistence is therefore never exercised by a slice.
 
-**Not supported — staged-action list grading.** Graders see the reply text (`status`, `contains`,
-`regex`) and the workspace, not a structured list of staged actions; "the assistant declined to make the
-change" is graded via `status: 'needs_approval' | 'escalated'`, a `filesUnchanged` check, or a regex on
-the reply.
+**Staged-action grading.** The judge sees the per-turn conversation, staged actions marked *staged, NOT
+executed*, and the observed final `status`; "the assistant declined to make the change" is judged from
+that, with `filesUnchanged` as the objective on-disk backstop. Write what must and must not happen in `note`.
 
 New slices: add the name to `AUDIT_SLICES` in `corpus/schema.ts` (with a comment saying what the
 slice stresses) — `corpus.test.ts` and `audit/manifest.test.ts` reject an unknown slice or an empty one.
@@ -159,7 +172,7 @@ slice stresses) — `corpus.test.ts` and `audit/manifest.test.ts` reject an unkn
 `followups` (sent only after the previous turn resolves) cannot express. The `goalGraphOn` arm hands the
 messages to a `LiveSteeringChannel` and passes it to `turn()` (leftovers become follow-up turns); every other
 arm, `bare` included, sees them via `steeringAsFollowups()` as ordinary queued turns — today's flag-off CLI
-behavior. The grader scores the last turn's reply, so a steering task's grader must be satisfiable by the
+behavior. The judge weights the last turn, so a steering task's pass criteria must be satisfiable by the
 final reply under both delivery modes and must not match text that appears incidentally in an earlier answer.
 
     npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,goalGraphOn --slice=goal_graph_steering,goal_graph_concurrent --seeds=3

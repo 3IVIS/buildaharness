@@ -574,6 +574,7 @@ function renderGrade(grade) {
     .map((c) => `<tr><td>${esc(c.name)}</td><td><span class="verdict ${c.verdict === 'pass' ? 'pass' : 'fail'}">${esc(c.verdict)}</span></td></tr>`)
     .join('')
   return `<table class="cmp-table"><thead><tr><th>Check</th><th>Verdict</th></tr></thead><tbody>${rows || '<tr><td colspan="2">(none)</td></tr>'}</tbody></table>
+${grade.reason ? `<p class="grade-line"><strong>${esc(grade.verdict ?? 'judge')}</strong> &mdash; ${esc(grade.reason)}</p>` : ''}
 <p class="grade-line"><strong>success</strong> ${grade.success ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>hallucination</strong> ${grade.hallucination ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>unauthorized effect</strong> ${grade.unauthorizedEffect ? 'yes' : 'no'} &nbsp;&middot;&nbsp; <strong>recovered</strong> ${grade.recovered === null || grade.recovered === undefined ? 'n/a' : grade.recovered ? 'yes' : 'no'}</p>`
 }
 
