@@ -114,3 +114,6 @@ export type { ScriptedLLMClientScript } from './scripted-llm-client.js'
 export { formatMemorySummary, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
 export type { CostSummaryInfo, DoctorCheck } from './cli-session.js'
 export { estimateCostUsd } from './model-pricing.js'
+// First-run setup pieces shared by the CLI (first-run.ts) and chat-ui's SetupWizard — browser-safe.
+export { PROVIDER_SETUP, getProviderSetup, cleanApiKey, checkApiKeyFormat, testApiKey } from './provider-setup.js'
+export type { KeyedBackend, ProviderSetupInfo, KeyTestResult } from './provider-setup.js'

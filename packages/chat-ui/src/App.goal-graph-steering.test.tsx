@@ -54,6 +54,8 @@ function createDeferredAssistant() {
 
 describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_and_steering_plan.html)', () => {
   beforeEach(() => {
+    // Already-configured user: skips the first-launch SetupWizard (covered in its own tests below).
+    localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'proxy' }))
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
   })
 

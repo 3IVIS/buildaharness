@@ -13,6 +13,7 @@
  */
 
 import type { AssistantConfig, ConfigStore } from './config.js'
+import { PROVIDER_SETUP, checkApiKeyFormat, cleanApiKey, type KeyTestResult, type KeyedBackend } from './provider-setup.js'
 
 export interface FirstRunDeps {
   configStore: ConfigStore
@@ -28,7 +29,12 @@ export interface FirstRunDeps {
   detectClaudeCli: () => Promise<boolean>
   /** Where to print prompts/status (defaults to process.stdout in cli.ts). */
   log: (line: string) => void
+  /** Live-checks a key against the provider. Optional so unit tests can skip the network; cli.ts passes the real testApiKey. */
+  testKey?: (backend: KeyedBackend, key: string) => Promise<KeyTestResult>
 }
+
+/** How many times the user may re-paste a rejected key before we stop nagging and let them out. */
+const MAX_KEY_ATTEMPTS = 3
 
 /** Any of these present means the user has already configured a backend — don't re-prompt. */
 function alreadyConfigured(deps: FirstRunDeps): boolean {
@@ -41,62 +47,107 @@ function alreadyConfigured(deps: FirstRunDeps): boolean {
   return false
 }
 
-const PROVIDER_CHOICES: Record<string, { backend: AssistantConfig['llmBackend']; label: string }> = {
-  '1': { backend: 'anthropic', label: 'Anthropic (Claude) — needs an sk-ant-… key' },
-  '2': { backend: 'openai', label: 'OpenAI — needs an sk-… key' },
-  '3': { backend: 'openrouter', label: 'OpenRouter — needs an sk-or-… key' },
-}
-
 /**
  * Runs the first-run pass if needed. Returns the persisted config to use from
  * here on — unchanged when setup was skipped or the user bailed out, or a fresh
  * object reflecting what was just written.
  */
 export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial<AssistantConfig>> {
-  const { configStore, persisted, isInteractive, ask, detectClaudeCli, log } = deps
+  const { configStore, persisted, isInteractive, ask, detectClaudeCli, log, testKey } = deps
 
   if (alreadyConfigured(deps)) return persisted
   if (!isInteractive) return persisted
 
   log('')
-  log("Welcome to Aielia — this looks like your first run. Let's pick how to reach a model.")
-  log('(You can change any of this later with /config, or skip with Ctrl+C.)')
+  log('Welcome to Aielia! 👋  Let’s get you set up — it takes about a minute.')
+  log('')
+  log('Aielia needs an AI model to think with. Pick where that comes from below.')
+  log('(You can change this any time with /config, or press Ctrl+C to skip.)')
   log('')
 
   const patch: Partial<AssistantConfig> = {}
 
   if (await detectClaudeCli()) {
-    const useClaude = await ask(
-      'Found an authenticated `claude` CLI on your PATH. Use it? No API key needed. (Y/n) ',
-    )
+    log('✓ Claude is already running on this computer (Claude Code is installed and signed in).')
+    log('  That means you can start right now — no API key, no extra account, nothing to paste.')
+    log('')
+    const useClaude = await ask('Use your Claude login? (Y/n — Enter means yes) ')
     if (useClaude === '' || useClaude.toLowerCase().startsWith('y')) {
       patch.llmBackend = 'claude-cli'
       await configStore.save(patch)
       log('')
-      log('✓ Using the claude-cli backend. Try "what time zone is Tokyo in?", then')
+      log('✓ All set — using your Claude login. Try "what time zone is Tokyo in?", then')
       log('  "send an email to my boss saying I quit" to see the approval gate.')
       log('')
       return { ...persisted, ...patch }
     }
+    log('')
+  } else {
+    log('Tip: if you already use Claude Code, install it and sign in (run `claude` once), then')
+    log('start Aielia again — you can use it with no API key. Otherwise, pick a provider below.')
+    log('')
   }
 
-  log('Pick a provider to use with your own API key:')
-  for (const [key, { label }] of Object.entries(PROVIDER_CHOICES)) log(`  ${key}) ${label}`)
-  const choice = (await ask('Provider [1-3, or Enter to skip]: ')).trim()
-  const picked = PROVIDER_CHOICES[choice]
+  log('Which AI provider do you have (or want to use)?')
+  log('')
+  PROVIDER_SETUP.forEach((p, i) => {
+    log(`  ${i + 1}) ${p.name}`)
+    log(`     ${p.blurb}`)
+  })
+  log('')
+  const choice = (await ask(`Type 1-${PROVIDER_SETUP.length} and press Enter (or just Enter to skip): `)).trim()
+  const picked = PROVIDER_SETUP[Number(choice) - 1]
   if (!picked) {
     log('')
-    log('Skipped. The assistant will start on the "proxy" backend (needs @buildaharness/proxy')
-    log('on :8787). Run /config set llmBackend <anthropic|openai|openrouter> and')
-    log('/config set apiKey <key> when you are ready, or set ASSISTANT_LLM_BACKEND + ASSISTANT_API_KEY.')
+    log('Skipped. Until you set a provider, Aielia will try the "proxy" backend (needs')
+    log('@buildaharness/proxy running on :8787). To set one up later, run:')
+    log('  /config set llmBackend <anthropic|openai|openrouter>')
+    log('  /config set apiKey <your key>')
     log('')
     return persisted
   }
 
-  const key = (await ask(`Paste your ${picked.backend} API key: `)).trim()
+  log('')
+  log(`To connect ${picked.name}, you need an “API key” — a password-like code that lets Aielia use your account.`)
+  log('Here’s how to get one:')
+  log('')
+  picked.steps.forEach((step, i) => log(`  ${i + 1}. ${step}`))
+  if (picked.safety) {
+    log('')
+    log(`  ${picked.safety.title}:`)
+    picked.safety.steps.forEach((step, i) => log(`     ${i + 1}. ${step}`))
+    log(`     (${picked.safety.urlLabel})`)
+  }
+  log('')
+  log(`The key starts with "${picked.keyPrefix}". Paste it below when you have it.`)
+  log('')
+
+  let key = ''
+  for (let attempt = 1; attempt <= MAX_KEY_ATTEMPTS; attempt++) {
+    const candidate = cleanApiKey(await ask('Paste your API key (or just Enter to skip): '))
+    if (candidate === '') break
+    const formatProblem = checkApiKeyFormat(picked.backend, candidate)
+    if (formatProblem) {
+      log(`  ✗ ${formatProblem}`)
+      continue
+    }
+    if (testKey) {
+      log('  Checking your key…')
+      const result = await testKey(picked.backend, candidate)
+      if (result.status === 'invalid') {
+        log(`  ✗ ${result.message}`)
+        continue
+      }
+      if (result.status === 'unverified') log(`  ! ${result.message}`)
+    }
+    key = candidate
+    break
+  }
+
   if (!key) {
     log('')
-    log('No key entered — skipping. Set it later with /config set apiKey <key>.')
+    log('No working key entered, so nothing was saved. Run Aielia again to retry, or use')
+    log('/config set llmBackend ' + picked.backend + '  then  /config set apiKey <key>')
     log('')
     return persisted
   }
@@ -105,8 +156,9 @@ export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial
   patch.apiKey = key
   await configStore.save(patch)
   log('')
-  log(`✓ Saved. Using ${picked.backend}. The key is stored in plain text in your config file`)
-  log('  (~/.buildaharness/personal-assistant/config.json) — the same trust boundary as a .env.')
+  log(`✓ You’re all set — using ${picked.name}. Say hello!`)
+  log('  Your key is saved on this computer in ~/.buildaharness/personal-assistant/config.json')
+  log('  (plain text, like a .env file) — don’t share that file.')
   log('')
   return { ...persisted, ...patch }
 }

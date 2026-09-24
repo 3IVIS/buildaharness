@@ -122,6 +122,8 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    // Already-configured user: skips the first-launch SetupWizard (covered in its own tests below).
+    localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'proxy' }))
     // Opening Settings now runs a health check (checkProxyReachable) that hits a real
     // network URL — stub fetch so tests never depend on (or wait on) an actual network call.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
@@ -289,6 +291,25 @@ describe('App', () => {
     })
   })
 
+  it('shows the first-launch setup wizard when nothing is configured, and saves the choice', async () => {
+    localStorage.clear()
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(await screen.findByText('Welcome to Aielia 👋')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Message the assistant…')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /OpenRouter/ }))
+    await user.click(screen.getByRole('button', { name: /Back/ }))
+    await user.click(screen.getByRole('button', { name: 'Set up later' }))
+    expect(await screen.findByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+  })
+
+  it('skips the setup wizard when a backend is already persisted', async () => {
+    render(<App />)
+    expect(await screen.findByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+    expect(screen.queryByText('Welcome to Aielia 👋')).toBeNull()
+  })
+
   it('Cancel from Settings returns to chat without persisting anything', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -297,7 +318,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
-    expect(localStorage.getItem('buildaharness.personal-assistant.config')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('buildaharness.personal-assistant.config') ?? '{}')).toEqual({ llmBackend: 'proxy' })
   })
 
   it('"New chat" clears the conversation from the screen', async () => {

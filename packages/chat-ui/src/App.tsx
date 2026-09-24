@@ -53,6 +53,7 @@ import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
 import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
+import { SetupWizard } from './components/SetupWizard'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
 import { NextStepChips } from './components/NextStepChips'
@@ -203,6 +204,17 @@ async function createWebTools(config: AssistantConfig, isDesktop: boolean): Prom
   const dns = isDesktop ? (await import('./tauri-dns-resolver')).tauriDnsResolver : undefined
   const search = (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
   return { search, fetchImpl, dns }
+}
+
+/** True when the user has never chosen how to reach a model — nothing persisted and nothing pinned by a build-time var. */
+function isFirstRun(persisted: Partial<AssistantConfig>, overriddenKeys: ReadonlySet<keyof AssistantConfig>): boolean {
+  if (persisted.llmBackend !== undefined || persisted.apiKey !== undefined || persisted.authToken !== undefined) return false
+  return !(['llmBackend', 'apiKey', 'authToken', 'proxyUrl'] as const).some((k) => overriddenKeys.has(k))
+}
+
+/** Desktop only: whether an authenticated `claude` CLI is available (see lib.rs check_claude_available). */
+async function detectClaudeLogin(): Promise<boolean> {
+  return invoke<boolean>('check_claude_available')
 }
 
 /** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
@@ -363,6 +375,9 @@ export function App(): React.JSX.Element {
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
   const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals'>('chat')
+  // First-launch setup wizard: true once the config load finds nothing configured (no persisted
+  // backend/key and nothing pinned by a build-time var, so hosted/self-hosted builds skip it).
+  const [needsSetup, setNeedsSetup] = useState(false)
   // Optimistic default so Settings is usable immediately — refreshed to the real persisted
   // value once createConfigStore().load() resolves, a moment later (see the mount effect).
   const initialResolved = resolveConfig({}, envOverrides)
@@ -557,6 +572,7 @@ export function App(): React.JSX.Element {
       setConfig(resolved.config)
       setOverriddenKeys(resolved.overriddenKeys)
       if (store instanceof TauriConfigStore) setApiKeyMigrationNotice(store.consumeMigrationNotice())
+      setNeedsSetup(isFirstRun(persisted, resolved.overriddenKeys))
       const assistant = await buildAssistant(resolved.config)
       if (!cancelled) assistantRef.current = assistant
     })()
@@ -572,6 +588,7 @@ export function App(): React.JSX.Element {
     setConfig(resolved.config)
     setOverriddenKeys(resolved.overriddenKeys)
     assistantRef.current = await buildAssistant(resolved.config)
+    setNeedsSetup(false)
     setView('chat')
   }
 
@@ -883,6 +900,17 @@ export function App(): React.JSX.Element {
   function handlePlanDecline(entryId: string, pendingMessage: string, planApprovalId: string): void {
     setEntries((prev) => prev.map((e) => (e.id === entryId && e.kind === 'plan_approval' ? { ...e, resolution: 'declined' } : e)))
     void runTurn(pendingMessage, false, undefined, undefined, undefined, planApprovalId, 'decline')
+  }
+
+  if (needsSetup) {
+    return (
+      <SetupWizard
+        isDesktop={isTauri()}
+        detectClaude={isTauri() ? detectClaudeLogin : undefined}
+        onComplete={handleSaveSettings}
+        onSkip={() => setNeedsSetup(false)}
+      />
+    )
   }
 
   if (view === 'search') {
