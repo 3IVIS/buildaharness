@@ -1,0 +1,34 @@
+{
+  "id": "sup-mid-newer-status",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "A late stall where the obvious answer is stale and a newer file overrides it.",
+  "prompt": "What is the on-call engineer listed in oncall/2026-08.txt?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Who is on call right now? The August file may be out of date; look for anything newer in oncall/.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 1
+    }
+  ],
+  "workspace": [
+    {
+      "path": "oncall/2026-08.txt",
+      "content": "On-call: Tomas Weiss\n"
+    },
+    {
+      "path": "oncall/2026-09.txt",
+      "content": "On-call: Ines Duarte\nUpdated: 2026-09-18\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Ines Duarte"
+    ]
+  },
+  "note": "Pass = reports the newer entry (Ines Duarte)."
+}

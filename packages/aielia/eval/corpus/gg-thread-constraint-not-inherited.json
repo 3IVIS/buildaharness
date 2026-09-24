@@ -1,0 +1,35 @@
+{
+  "id": "gg-thread-constraint-not-inherited",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "A constraint given for a different goal must not leak: the last turn is a new goal and wants a normal sentence.",
+  "prompt": "For the inventory questions, reply in a single word or number, nothing else. Read inventory.txt and tell me how many crates are on hand.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "And how many pallets?"
+    },
+    {
+      "prompt": "New topic: read notes.txt and answer in a full sentence: who chairs the Thursday meeting?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "inventory.txt",
+      "content": "crates: 64\npallets: 12\n"
+    },
+    {
+      "path": "notes.txt",
+      "content": "The Thursday meeting is chaired by Marta Ilves.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "Marta Ilves"
+    ],
+    "regex": "(\\w+\\s+){5,}\\w+"
+  }
+}

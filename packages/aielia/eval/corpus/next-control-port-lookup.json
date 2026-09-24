@@ -1,0 +1,27 @@
+{
+  "id": "next-control-port-lookup",
+  "category": "lookup",
+  "slice": "next_steps_nothing_to_suggest",
+  "intent": "Control: a closed one-fact lookup; nothing concrete follows, so no options should be offered.",
+  "prompt": "What port does the API listen on? It is in ports.txt.",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "ports.txt",
+      "content": "api: 9443\nadmin: 9444\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "9443"
+    ],
+    "nextSteps": {
+      "none": true
+    }
+  },
+  "note": "False-positive control: options here are noise."
+}

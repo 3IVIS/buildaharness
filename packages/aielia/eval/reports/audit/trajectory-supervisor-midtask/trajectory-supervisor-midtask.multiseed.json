@@ -1,0 +1,101 @@
+{
+  "feature": "trajectory-supervisor-midtask",
+  "title": "Trajectory Supervisor (mid-task stalls)",
+  "hypothesis": "When a multi-turn task stalls after context has built up, the supervisor redirects, reframes or asks the user and the run recovers, at a cost that is negligible on tasks that never stall.",
+  "control": "supervisorOff",
+  "candidate": "flagOn",
+  "seeds": 3,
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+43% $/turn).",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-24T07:15:23.249Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.375,
+      "candidate": 0.625,
+      "deltaMean": 0.25,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0.75,
+      "deltaMean": 0.75,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 13454,
+      "candidate": 17842.333333333332,
+      "deltaMean": 4388.333333333332,
+      "deltaCi95": 257.0050908272268,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.009357916666666667,
+      "candidate": 0.0133854,
+      "deltaMean": 0.004027483333333333,
+      "deltaCi95": 0.00043590638713999553,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 4663.333333333333,
+      "candidate": 6589.666666666667,
+      "deltaMean": 1926.333333333334,
+      "deltaCi95": 255.96245940024534,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.43038247473173336,
+  "latencyDeltaPct": 0.3261731331450373,
+  "tokenDeltaPct": 0.4130807719799859,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

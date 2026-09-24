@@ -1,0 +1,440 @@
+{
+  "generatedAt": "2026-09-24T07:48:41.756Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1.0,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 45304,
+      "meanCostUsd": 0.0476214,
+      "totalTokens": 19845,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0.0
+      }
+    },
+    "goalGraphOn": {
+      "arm": "goalGraphOn",
+      "label": "PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.875,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 33315,
+      "meanCostUsd": 0.03549995,
+      "totalTokens": 14457,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 7
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 1,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0.125
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-add-breakdown",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 23124,
+      "costUsd": 0.023743200000000002,
+      "totalTokens": 1180,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here are the weights by station, in trail order:\n\n| Station | Weight |\n|---|---|\n| 1 | 14 |\n| 2 | 9 |\n| 3 | 62 |\n| 4 | 21 |\n| 5 | 7 |\n| 6 | 55 |\n| 7 | 18 |\n| 8 | 12 |\n\nThe total is **198**.\n\nI only have the weights from my earlier answer, not the file names. If you want each weight matched to its file, I can re-read the trail.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-also-heaviest",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 51912,
+      "costUsd": 0.05044100000000001,
+      "totalTokens": 2653,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The heaviest station is **S03** (step 3), with a weight of 62. The next heaviest is step 6 at 55.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-cancel-station",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 40429,
+      "costUsd": 0.0419338,
+      "totalTokens": 2331,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The station code in `trail/step01.txt` is **S01**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-cancel-summaries",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 60176,
+      "costUsd": 0.0656686,
+      "totalTokens": 3958,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The title line of trail/step01.txt says: `Harbour trail survey`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-exclude-heavy",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 50190,
+      "costUsd": 0.050623,
+      "totalTokens": 2648,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "With S03 (62) and S06 (55) left out, the total is **81**.\n\n| Station | Weight |\n|---|---|\n| S01 | 14 |\n| S02 | 9 |\n| S04 | 21 |\n| S05 | 7 |\n| S07 | 18 |\n| S08 | 12 |",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-new-goal-oncall",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 23071,
+      "costUsd": 0.022612800000000002,
+      "totalTokens": 1073,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The on-call primary phone number in oncall.txt is **555-0142**. The file also lists a secondary number, 555-0177.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-new-goal-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 51139,
+      "costUsd": 0.05342160000000001,
+      "totalTokens": 2658,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "OWNER.txt says the system owner is Priya Raman, on the platform team.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-open-only",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 62394,
+      "costUsd": 0.0725272,
+      "totalTokens": 3344,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Counting only open stations, the total is **164**.\n\n| Station | Weight |\n|---|---|\n| S01 | 14 |\n| S03 | 62 |\n| S04 | 21 |\n| S06 | 55 |\n| S08 | 12 |\n\nI left out the closed stations: S02 (9), S05 (7) and S07 (18).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-add-breakdown",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 23052,
+      "costUsd": 0.02255,
+      "totalTokens": 1191,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here is the weight of each station:\n\n| Station | Weight |\n|---|---|\n| Step 1 | 14 |\n| Step 2 | 9 |\n| Step 3 | 62 |\n| Step 4 | 21 |\n| Step 5 | 7 |\n| Step 6 | 55 |\n| Step 7 | 18 |\n| Step 8 | 12 |\n| **Total** | **198** |",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-also-heaviest",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 51584,
+      "costUsd": 0.056082,
+      "totalTokens": 2699,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The heaviest station is the third one, with a weight of **62**. The next heaviest is station 6 at 55.\n\nI'm going by the order of the stations in the chain. I don't have the file names for them in front of me.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-cancel-station",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 44016,
+      "costUsd": 0.0457288,
+      "totalTokens": 2608,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The station code in trail/step01.txt is **S01**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-cancel-summaries",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 45339,
+      "costUsd": 0.048477,
+      "totalTokens": 2836,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The title line of trail/step01.txt is \"Harbour trail survey\".",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-exclude-heavy",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21712,
+      "costUsd": 0.022827400000000005,
+      "totalTokens": 1054,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Leaving out the outliers, S03 (62) and S06 (55), the new total is **81**.\n\nThat's 14 + 9 + 21 + 7 + 18 + 12 = 81.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-new-goal-oncall",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22986,
+      "costUsd": 0.022813600000000003,
+      "totalTokens": 1095,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The primary on-call phone number in oncall.txt is **555-0142**. The file also lists a secondary number, **555-0177**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-new-goal-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22937,
+      "costUsd": 0.022860200000000004,
+      "totalTokens": 1101,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "OWNER.txt says the system owner is Priya Raman, on the platform team.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-open-only",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 34891,
+      "costUsd": 0.04266059999999999,
+      "totalTokens": 1873,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"164\""
+      ],
+      "status": "ok",
+      "replyPreview": "The open stations' Weight values total **162**.\n\n| Station | Weight | Status |\n|---|---|---|\n| S01 | 14 | open |\n| S03 | 62 | open |\n| S04 | 21 | open |\n| S06 | 55 | open |\n| S08 | 12 | open |\n\nI left out S02 (9), S05 (7) and S07 (18) because they're closed.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    }
+  ]
+}

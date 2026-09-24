@@ -1,0 +1,32 @@
+{
+  "id": "gg-thread-scoped-format-constraint",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "A format constraint set for goal A must apply to A only: B gets a normal answer, A a bare number again.",
+  "prompt": "For the stock questions, reply with just the number and no other words. Read stock.txt and tell me how many widgets are in stock.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Unrelated: read deploy.md and explain in a full sentence what the deploy script does."
+    },
+    {
+      "prompt": "Back to stock: how many gadgets are in stock?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "stock.txt",
+      "content": "widgets: 128\ngadgets: 57\n"
+    },
+    {
+      "path": "deploy.md",
+      "content": "deploy.sh builds the image, pushes it to the registry and restarts the service.\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "^\\s*57\\s*[.]?\\s*$"
+  }
+}

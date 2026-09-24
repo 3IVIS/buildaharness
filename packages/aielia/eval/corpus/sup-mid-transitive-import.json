@@ -1,0 +1,45 @@
+{
+  "id": "sup-mid-transitive-import",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "A late stall while chasing a transitive import across three files.",
+  "prompt": "What version does package.json declare?",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Which module does index.js import first?"
+    },
+    {
+      "prompt": "Trace where the exported constant TIMEOUT_MS is finally defined and give me its value.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 3
+    }
+  ],
+  "workspace": [
+    {
+      "path": "package.json",
+      "content": "{ \"name\": \"svc\", \"version\": \"4.12.0\", \"main\": \"index.js\" }\n"
+    },
+    {
+      "path": "index.js",
+      "content": "const { TIMEOUT_MS } = require('./lib/reexport');\nmodule.exports = { TIMEOUT_MS };\n"
+    },
+    {
+      "path": "lib/reexport.js",
+      "content": "module.exports = require('./defaults');\n"
+    },
+    {
+      "path": "lib/defaults.js",
+      "content": "exports.TIMEOUT_MS = 4300;\nexports.RETRIES = 2;\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "4300"
+    ]
+  },
+  "note": "Pass = follows index.js -> lib/reexport.js -> lib/defaults.js and reports 4300."
+}

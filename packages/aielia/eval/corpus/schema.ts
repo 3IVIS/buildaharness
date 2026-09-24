@@ -43,6 +43,10 @@ export const SUPERVISOR_SLICES = [
   // ASK_USER; turn 2 the user supplies the missing detail. Measures whether ASK_USER turns a
   // dead turn into a recoverable one — the supervisor's value that a single turn can't show.
   'supervisor_conversation',
+  // Multi-step, multi-turn work (several productive turns first) where a stall hits *late*, after
+  // context has built up — plus clean multi-step controls that must not trigger any intervention.
+  // The shape the single-turn slices cannot show: a supervisor that redirects a stalled run mid-task.
+  'supervisor_midtask',
 ] as const
 
 export type SupervisorSlice = (typeof SUPERVISOR_SLICES)[number]
@@ -166,13 +170,35 @@ export const GOAL_GRAPH_SLICES = [
   // Two or more goals in flight at once: the steering messages open new goals, and the graded
   // (final) reply must answer the right goal without leaking another goal's content.
   'goal_graph_concurrent',
+  // Long-running multi-tool tasks (6+ file reads/writes) where the user sends a correction, a new
+  // ask or a cancel *while the turn is running*. The live-steering channel is graded on whether the
+  // final result honours the message (vs. finishing the stale task first, then handling it).
+  'steering_longrun',
+  // Multi-turn sessions that interleave two or more goals, drop one, then come back with an
+  // elliptical reference ("the second one", "back to the first thing"). No mid-turn messages —
+  // this isolates the goal graph's cross-turn thread tracking from live steering.
+  'goal_graph_threads',
 ] as const
 
 export type GoalGraphSlice = (typeof GOAL_GRAPH_SLICES)[number]
 
+/**
+ * Next-step-options slices. `proposeTurnNextSteps` attaches up to three options under a completed
+ * turn's reply. Graded on the options themselves (see `GraderSchema.nextSteps`): does one of them
+ * name the obvious continuation, and does a turn with nothing to follow up on produce none.
+ */
+export const NEXT_STEP_SLICES = [
+  // Sessions whose last turn completes real work with an obvious, workspace-visible continuation.
+  'next_steps_followable',
+  // Controls: the conversation is finished / the request was closed — options would be noise.
+  'next_steps_nothing_to_suggest',
+] as const
+
+export type NextStepSlice = (typeof NEXT_STEP_SLICES)[number]
+
 /** Every valid `slice` value — the supervisor S7 slices, the feature-value-audit slices, the ask-question slices, and the goal-graph slices. */
-export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES] as const
-export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice | GoalGraphSlice
+export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES, ...NEXT_STEP_SLICES] as const
+export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice | GoalGraphSlice | NextStepSlice
 
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({
@@ -228,6 +254,19 @@ const GraderSchema = z
     /** Expected `answerClaim.verification_status`, when the turn produced an AnswerClaim. */
     answerClaimStatus: z
       .enum(['verified', 'unverified_attempted', 'contradicted', 'no_evidence'])
+      .optional(),
+    /**
+     * Checks on the turn-end next-step options attached to the *last* turn's result (arm
+     * `nextStepsOn`). `anyOf` is a list of keyword groups: for every group, at least one option's
+     * description must contain at least one keyword of that group (case-insensitive) — i.e. the
+     * options name each expected continuation. `none: true` requires zero options.
+     */
+    nextSteps: z
+      .object({
+        anyOf: z.array(z.array(z.string().min(1)).min(1)).optional(),
+        none: z.boolean().optional(),
+      })
+      .refine((n) => n.anyOf !== undefined || n.none !== undefined, { message: 'nextSteps needs anyOf or none' })
       .optional(),
     /** LLM-as-judge rubric — scored only when the run has a judge model; otherwise `skipped`. */
     judge: z.object({ rubric: z.string().min(1) }).optional(),

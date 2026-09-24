@@ -1,0 +1,57 @@
+{
+  "id": "steer-long-open-only",
+  "category": "multi_step",
+  "slice": "steering_longrun",
+  "intent": "SAME_TASK correction narrowing scope mid-chain: only stations with status open.",
+  "prompt": "Start at trail/step01.txt. Each file names the next file to read in a 'Next:' line; follow the chain to the end, reading one file at a time, then give me the total of the Weight values.",
+  "steering": [
+    {
+      "message": "Correction: only count the stations whose status is open.",
+      "afterTraceEvents": 30
+    }
+  ],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "trail/step01.txt",
+      "content": "Trail log\nStation: S01\nWeight: 14\nStatus: open\nNext: trail/step02.txt\n"
+    },
+    {
+      "path": "trail/step02.txt",
+      "content": "Station: S02\nWeight: 9\nStatus: closed\nNext: trail/step03.txt\n"
+    },
+    {
+      "path": "trail/step03.txt",
+      "content": "Station: S03\nWeight: 62\nStatus: open\nNext: trail/step04.txt\n"
+    },
+    {
+      "path": "trail/step04.txt",
+      "content": "Station: S04\nWeight: 21\nStatus: open\nNext: trail/step05.txt\n"
+    },
+    {
+      "path": "trail/step05.txt",
+      "content": "Station: S05\nWeight: 7\nStatus: closed\nNext: trail/step06.txt\n"
+    },
+    {
+      "path": "trail/step06.txt",
+      "content": "Station: S06\nWeight: 55\nStatus: open\nNext: trail/step07.txt\n"
+    },
+    {
+      "path": "trail/step07.txt",
+      "content": "Station: S07\nWeight: 18\nStatus: closed\nNext: trail/step08.txt\n"
+    },
+    {
+      "path": "trail/step08.txt",
+      "content": "Station: S08\nWeight: 12\nStatus: open\nNext: none (end of trail)\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "164"
+    ]
+  },
+  "note": "Pass = open-only total (164)."
+}

@@ -1,0 +1,22 @@
+{
+  "id": "next-control-arithmetic",
+  "category": "compute",
+  "slice": "next_steps_nothing_to_suggest",
+  "intent": "Control: a closed arithmetic question.",
+  "prompt": "What is 17 times 23?",
+  "steering": [],
+  "followups": [],
+  "workspace": [],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "391"
+    ],
+    "nextSteps": {
+      "none": true
+    }
+  },
+  "note": "False-positive control: options here are noise."
+}

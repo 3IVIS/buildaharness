@@ -1,0 +1,31 @@
+{
+  "id": "sup-mid-control-clean-b",
+  "category": "multi_step",
+  "slice": "supervisor_midtask",
+  "intent": "Control: a clean multi-step read-and-compute session with no stall.",
+  "prompt": "Read prices.txt and tell me the price of item B.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "What is the price of item C?"
+    },
+    {
+      "prompt": "What is B plus C?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "prices.txt",
+      "content": "A: 12\nB: 31\nC: 44\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "75"
+    ]
+  },
+  "note": "Control: no stall; success parity and no supervisor consults expected."
+}

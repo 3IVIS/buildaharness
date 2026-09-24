@@ -1,0 +1,438 @@
+{
+  "generatedAt": "2026-09-24T07:16:43.661Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 20499,
+      "meanCostUsd": 0.028508699999999998,
+      "totalTokens": 12476,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 1,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "goalGraphOn": {
+      "arm": "goalGraphOn",
+      "label": "PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 21085,
+      "meanCostUsd": 0.02650475,
+      "totalTokens": 10896,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 7,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 1,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-add-breakdown",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18342,
+      "costUsd": 0.0267724,
+      "totalTokens": 1459,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here are the per-day error counts:\n\n| Day | Date | Errors |\n|---|---|---|\n| 01 | Sep 1 | 4 |\n| 02 | Sep 2 | 9 |\n| 03 | Sep 3 | 2 |\n| 04 | Sep 4 | 15 |\n| 05 | Sep 5 | 7 |\n| 06 | Sep 6 | 3 |\n| 07 | Sep 7 | 11 |\n| 08 | Sep 8 | 6 |\n\n- **Sep 1–7 (the week):** 51 errors\n- **All eight logs:** 57 errors\n- **Sep 2–8:** 53 errors\n\nSep 4 had the most errors, with 15.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-also-max",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 14300,
+      "costUsd": 0.018198600000000002,
+      "totalTokens": 999,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Gateway restarted the most, with 12 restarts. Billing was next with 8.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-cancel-newest",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 37527,
+      "costUsd": 0.061679399999999995,
+      "totalTokens": 3676,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`changes/c8.txt` has the latest date, 2026-08-26 (item 8).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-cancel-summaries",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17601,
+      "costUsd": 0.0227182,
+      "totalTokens": 1433,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The title of reports/q3.txt is \"Capacity review\".",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-exclude-region",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17052,
+      "costUsd": 0.0239158,
+      "totalTokens": 1238,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Without Islands, total revenue across the remaining seven regions is **479 k$** (518 − 39).\n\n| Region | Revenue (k$) |\n|---|---|\n| Central | 90 |\n| North | 84 |\n| East | 73 |\n| Inland | 66 |\n| South | 61 |\n| West | 58 |\n| Coastal | 47 |",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-new-goal-oncall",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 24587,
+      "costUsd": 0.030270200000000004,
+      "totalTokens": 1224,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The on-call phone number in oncall.txt is **555-0142**, which is listed as the primary. The secondary number is 555-0177.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-new-goal-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18875,
+      "costUsd": 0.0262126,
+      "totalTokens": 1296,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The system owner is Priya Raman, on the platform team, according to OWNER.txt.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "steer-long-paid-only",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 15705,
+      "costUsd": 0.0183024,
+      "totalTokens": 1151,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Counting only paid invoices, the total is **$555**.\n\nThat's acme $120, cobalt $240, delta $60, fjord $90 and harbor $45.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-add-breakdown",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 19952,
+      "costUsd": 0.0258822,
+      "totalTokens": 1400,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Here are the per-day error counts. They're the same ones from the table above:\n\n| Day | Date | Errors |\n|---|---|---|\n| day01 | 09-01 | 4 |\n| day02 | 09-02 | 9 |\n| day03 | 09-03 | 2 |\n| day04 | 09-04 | 15 |\n| day05 | 09-05 | 7 |\n| day06 | 09-06 | 3 |\n| day07 | 09-07 | 11 |\n| day08 | 09-08 | 6 |\n\n- **Week total (day01–day07):** 51\n- **All 8 files:** 57",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-also-max",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16794,
+      "costUsd": 0.0188874,
+      "totalTokens": 1050,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Gateway restarted the most, with 12 restarts. Billing was next with 8.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-cancel-newest",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 20580,
+      "costUsd": 0.0286726,
+      "totalTokens": 1609,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "`changes/c8.txt` has the latest date, 2026-08-26.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-cancel-summaries",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21704,
+      "costUsd": 0.024820399999999996,
+      "totalTokens": 1649,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The title of reports/q3.txt is **\"Capacity review\"**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-exclude-region",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18928,
+      "costUsd": 0.024158600000000002,
+      "totalTokens": 1258,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Excluding Islands, total revenue is **479 k$** (518 − 39).\n\n| Region | Revenue (k$) |\n|---|---|\n| Central | 90 |\n| Coastal | 47 |\n| East | 73 |\n| Inland | 66 |\n| North | 84 |\n| South | 61 |\n| West | 58 |",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-new-goal-oncall",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 29164,
+      "costUsd": 0.034871200000000005,
+      "totalTokens": 1322,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The on-call phone number in oncall.txt is **555-0142** (primary). The secondary number is 555-0177.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-new-goal-owner",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22809,
+      "costUsd": 0.029803000000000003,
+      "totalTokens": 1322,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "OWNER.txt says the system is owned by Priya Raman on the platform team.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "steer-long-paid-only",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18751,
+      "costUsd": 0.024942600000000002,
+      "totalTokens": 1286,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total for paid invoices only is **$555**.\n\n| Client | Amount |\n|---|---|\n| acme | $120 |\n| cobalt | $240 |\n| delta | $60 |\n| fjord | $90 |\n| harbor | $45 |\n\nThis comes from the figures I already read, so I didn't re-read the files.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

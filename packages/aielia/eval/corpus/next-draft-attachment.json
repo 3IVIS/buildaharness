@@ -1,0 +1,31 @@
+{
+  "id": "next-draft-attachment",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "A proofreading answer where the draft mentions an attachment that isn't there.",
+  "prompt": "Read draft.txt and tell me whether it has any spelling mistakes.",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "draft.txt",
+      "content": "Hi Dana,\n\nPlease find the quarterly numbers attached. Let me know if you have any quesitons.\n\nBest,\nRoy\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "quesitons"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "attach"
+        ]
+      ]
+    }
+  },
+  "note": "Options should notice the promised attachment is missing."
+}

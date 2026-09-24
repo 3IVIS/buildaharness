@@ -1,0 +1,45 @@
+{
+  "id": "gg-thread-alternating-formats",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "Three goals each with its own output format, alternated over eight turns; the last turn must use the right goal's format.",
+  "prompt": "For the stock questions, reply with just the number and nothing else. Read stock.txt and tell me how many widgets are in stock.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "New topic: for the shipping questions, answer as a JSON object like {\"value\": ...} and nothing else. Read shipping.txt and tell me how many parcels went out on Monday."
+    },
+    {
+      "prompt": "One more topic: for the vendor questions, end every answer with the word DONE. Read vendors.txt and tell me who supplies the screws."
+    },
+    {
+      "prompt": "Stock again: how many gadgets are in stock?"
+    },
+    {
+      "prompt": "Vendors again: who supplies the bolts?"
+    },
+    {
+      "prompt": "Shipping again: how many parcels went out on Tuesday?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "stock.txt",
+      "content": "widgets: 128\ngadgets: 57\n"
+    },
+    {
+      "path": "shipping.txt",
+      "content": "Monday: 31 parcels\nTuesday: 44 parcels\n"
+    },
+    {
+      "path": "vendors.txt",
+      "content": "screws: Hallmark Fasteners\nbolts: Brightline Metals\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "regex": "^\\s*[{]\\s*\"value\"\\s*:\\s*44\\s*[}]\\s*$"
+  }
+}

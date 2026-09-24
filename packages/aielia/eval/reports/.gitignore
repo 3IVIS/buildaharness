@@ -7,3 +7,4 @@
 # published evidence trail (the internal plan), not throwaway local runs.
 !audit/
 !audit/**
+audit/*/logs/

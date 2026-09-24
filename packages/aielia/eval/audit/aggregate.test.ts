@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { auditVerdict, injectionAuditSignals, buildMultiSeedReport, observationLabel } from './aggregate.js'
+import { auditVerdict, injectionAuditSignals, nextStepAuditSignals, nextStepVerdict, buildMultiSeedReport, observationLabel } from './aggregate.js'
 import type { BenchmarkReport, ArmAggregate, BenchmarkRow } from '../runner.js'
 import type { TaskCategory } from '../corpus/schema.js'
 
@@ -146,6 +146,42 @@ describe('injectionAuditSignals (Phase A5)', () => {
     )
     expect(inj.injectionSignals).not.toBeNull()
     expect(inj.injectionSignals?.candidate).toBe('flagOn')
+  })
+})
+
+describe('nextStepAuditSignals / nextStepVerdict', () => {
+  const hit = (taskId: string, ok: boolean) => row({ arm: 'nextStepsOn', taskId, failedChecks: ok ? [] : ['nextSteps names "prod"'] })
+  const fp = (taskId: string, ok: boolean) => row({ arm: 'nextStepsOn', taskId, failedChecks: ok ? [] : ['nextSteps == none'] })
+
+  it('computes hit rate on followable tasks and false-positive rate on controls, ignoring other arms', () => {
+    const rows = [hit('next-a', true), hit('next-b', true), hit('next-c', false), fp('next-control-x', true), fp('next-control-y', false), row({ arm: 'flagOn', taskId: 'next-a', failedChecks: [] })]
+    const s = nextStepAuditSignals([reportWithRows(rows)], 'nextStepsOn', 'flagOn')
+    expect(s.followableRuns).toBe(3)
+    expect(s.hitRate).toBeCloseTo(2 / 3)
+    expect(s.controlRuns).toBe(2)
+    expect(s.falsePositiveRate).toBe(0.5)
+    // reply-side success ignores the nextSteps checks: every candidate row here failed only nextSteps checks
+    expect(s.replySuccessRate).toBe(1)
+    expect(s.controlReplySuccessRate).toBe(1)
+  })
+
+  it('applies the fixed thresholds: KEEP / INCONCLUSIVE / CUT / regression', () => {
+    const sig = (hitRate: number | null, falsePositiveRate: number | null, replySuccessRate: number | null = 1) => ({
+      candidate: 'nextStepsOn',
+      hitRate,
+      followableRuns: 10,
+      falsePositiveRate,
+      controlRuns: 4,
+      replySuccessRate,
+      controlReplySuccessRate: 1,
+    })
+    expect(nextStepVerdict(sig(0.8, 0.25)).verdict).toBe('KEEP')
+    expect(nextStepVerdict(sig(0.8, 0.5)).verdict).toBe('INCONCLUSIVE')
+    expect(nextStepVerdict(sig(0.5, 0)).verdict).toBe('INCONCLUSIVE')
+    expect(nextStepVerdict(sig(0.3, 0)).verdict).toBe('CUT')
+    expect(nextStepVerdict(sig(0.9, 0, 0.9)).verdict).toBe('CUT') // reply correctness regressed by 10 points
+    expect(nextStepVerdict(sig(0.9, 0, 0.97)).verdict).toBe('KEEP') // 3-point dip is within tolerance
+    expect(nextStepVerdict(sig(null, null)).verdict).toBe('INCONCLUSIVE')
   })
 })
 

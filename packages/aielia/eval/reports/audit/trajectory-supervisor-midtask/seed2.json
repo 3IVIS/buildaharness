@@ -1,0 +1,466 @@
+{
+  "generatedAt": "2026-09-24T07:15:19.076Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.625,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 17670,
+      "meanCostUsd": 0.013036200000000003,
+      "totalTokens": 6577,
+      "supervisorConsultsTotal": 6,
+      "supervisorConsultsMean": 0.75,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 5
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 5,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 3,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "supervisorOff": {
+      "arm": "supervisorOff",
+      "label": "PersonalAssistant (flagOn) with HARNESS_TRAJECTORY_SUPERVISOR=0 — the Trajectory Supervisor disabled (the pre-2026-09-23 aielia default)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 0.375,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 13347,
+      "meanCostUsd": 0.009191425000000001,
+      "totalTokens": 4535,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 3
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 3,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 5,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-ask-user",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 19431,
+      "costUsd": 0.013148,
+      "totalTokens": 912,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The `export_v2` timeout in `config/timeouts.yaml` is **210s**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-config-chain",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12874,
+      "costUsd": 0.008491,
+      "totalTokens": 616,
+      "turns": 2,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"17\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Now find the retry limit the checkout worker uses. The worker file points to another file for it.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-control-clean-a",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16433,
+      "costUsd": 0.011751399999999999,
+      "totalTokens": 679,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "ap-south-9",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-control-clean-b",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 19673,
+      "costUsd": 0.0197718,
+      "totalTokens": 955,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "B plus C is 31 + 44 = **75**, with no currency listed in the file.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-nested-lookup",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 20294,
+      "costUsd": 0.014164600000000001,
+      "totalTokens": 946,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "contains \"MPL-2.0\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Now look up the licence identifier. It is not in the README; check the packaging metadata somewhere under pkg/.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-newer-status",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18263,
+      "costUsd": 0.013082400000000001,
+      "totalTokens": 894,
+      "turns": 2,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "According to `oncall/2026-09.txt`, the on-call engineer is **Ines Duarte**. The file was last updated 2026-09-18. It's the newest file in `oncall/`, and today is 2026-09-24. The August file, which listed Tomas Weiss, is out of date.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-transitive-import",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17849,
+      "costUsd": 0.011758600000000001,
+      "totalTokens": 777,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "REDIRECT_STRATEGY"
+      ],
+      "failedChecks": [
+        "contains \"4300\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Trace where the exported constant TIMEOUT_MS is finally defined and give me its value.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "sup-mid-wrong-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16539,
+      "costUsd": 0.012121800000000002,
+      "totalTokens": 798,
+      "turns": 2,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The billing API listens on port **9271**. `billing/server.js` doesn't hardcode it. It reads the `billing` value from `config/ports.json`.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-ask-user",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 14953,
+      "costUsd": 0.010286400000000001,
+      "totalTokens": 650,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The `export_v2` timeout in `config/timeouts.yaml` is **210s**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-config-chain",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9326,
+      "costUsd": 0.005976800000000001,
+      "totalTokens": 389,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"17\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Now find the retry limit the checkout worker uses. The worker file points to another file for it.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-control-clean-a",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16845,
+      "costUsd": 0.011617399999999998,
+      "totalTokens": 668,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "ap-south-9",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-control-clean-b",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17884,
+      "costUsd": 0.0123512,
+      "totalTokens": 742,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "B plus C is 31 + 44 = **75**.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-nested-lookup",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 15232,
+      "costUsd": 0.0111108,
+      "totalTokens": 660,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"MPL-2.0\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Now look up the licence identifier. It is not in the README; check the packaging metadata somewhere under pkg/.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-newer-status",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8848,
+      "costUsd": 0.0061530000000000005,
+      "totalTokens": 406,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"Ines Duarte\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Who is on call right now? The August file may be out of date; look for anything newer in oncall/.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-transitive-import",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 14985,
+      "costUsd": 0.010074000000000001,
+      "totalTokens": 633,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"4300\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (Trace where the exported constant TIMEOUT_MS is finally defined and give me its value.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "sup-mid-wrong-file",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8702,
+      "costUsd": 0.0059618,
+      "totalTokens": 387,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "contains \"9271\""
+      ],
+      "status": "ok",
+      "replyPreview": "I couldn't complete this — I kept running into a problem (What port does the billing API listen on? Start with billing/server.js.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "feature": "goal-graph-threads",
+  "title": "Hierarchical goal graph",
+  "hypothesis": "Tracking each goal as its own thread across turns keeps the right evidence and constraints attached to the right goal when several goals interleave.",
+  "control": "flagOn",
+  "candidate": "goalGraphOn",
+  "seeds": 3,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-24T07:23:24.296Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 1,
+      "candidate": 1,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 25041.333333333332,
+      "candidate": 24978.333333333332,
+      "deltaMean": -63,
+      "deltaCi95": 183.9014383364693,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.022490683333333334,
+      "candidate": 0.020884408333333337,
+      "deltaMean": -0.0016062749999999973,
+      "deltaCi95": 0.003341082766919262,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 8026,
+      "candidate": 8031.333333333333,
+      "deltaMean": 5.33333333333303,
+      "deltaCi95": 47.49153655594273,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": -0.07141957299355794,
+  "latencyDeltaPct": -0.002515840477077898,
+  "tokenDeltaPct": 0.0006645070188553489,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

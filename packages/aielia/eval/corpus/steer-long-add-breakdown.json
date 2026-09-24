@@ -1,0 +1,58 @@
+{
+  "id": "steer-long-add-breakdown",
+  "category": "multi_step",
+  "slice": "steering_longrun",
+  "intent": "SAME_TASK refinement mid-chain: also list every station's weight.",
+  "prompt": "Start at trail/step01.txt. Each file names the next file to read in a 'Next:' line; follow the chain to the end, reading one file at a time, then give me the total of the Weight values.",
+  "steering": [
+    {
+      "message": "Also list the weight of every station, not just the total.",
+      "afterTraceEvents": 30
+    }
+  ],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "trail/step01.txt",
+      "content": "Trail log\nStation: S01\nWeight: 14\nNext: trail/step02.txt\n"
+    },
+    {
+      "path": "trail/step02.txt",
+      "content": "Station: S02\nWeight: 9\nNext: trail/step03.txt\n"
+    },
+    {
+      "path": "trail/step03.txt",
+      "content": "Station: S03\nWeight: 62\nNext: trail/step04.txt\n"
+    },
+    {
+      "path": "trail/step04.txt",
+      "content": "Station: S04\nWeight: 21\nNext: trail/step05.txt\n"
+    },
+    {
+      "path": "trail/step05.txt",
+      "content": "Station: S05\nWeight: 7\nNext: trail/step06.txt\n"
+    },
+    {
+      "path": "trail/step06.txt",
+      "content": "Station: S06\nWeight: 55\nNext: trail/step07.txt\n"
+    },
+    {
+      "path": "trail/step07.txt",
+      "content": "Station: S07\nWeight: 18\nNext: trail/step08.txt\n"
+    },
+    {
+      "path": "trail/step08.txt",
+      "content": "Station: S08\nWeight: 12\nNext: none (end of trail)\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "62"
+    ],
+    "regex": "(s0?3|step ?0?3|station ?0?3|third|\\|\\s*0?3\\s*\\|)[^\\n]*62"
+  },
+  "note": "Pass = the final reply carries the per-station weights, with station 3 (written S03, 'Step 3', 'station 3' or a bare row '3') at 62. The total may only appear in an earlier reply."
+}

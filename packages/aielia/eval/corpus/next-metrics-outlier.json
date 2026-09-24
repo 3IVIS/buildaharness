@@ -1,0 +1,36 @@
+{
+  "id": "next-metrics-outlier",
+  "category": "research",
+  "slice": "next_steps_followable",
+  "intent": "An average over a file that contains one flagged outlier row.",
+  "prompt": "What is the average latency in metrics.csv?",
+  "steering": [],
+  "followups": [],
+  "workspace": [
+    {
+      "path": "metrics.csv",
+      "content": "run,latency_ms,note\n1,102,\n2,98,\n3,110,\n4,96,\n5,2450,CHECK: probable timeout\n6,101,\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "4"
+    ],
+    "nextSteps": {
+      "anyOf": [
+        [
+          "outlier",
+          "timeout",
+          "run 5",
+          "row 5",
+          "2450",
+          "check"
+        ]
+      ]
+    }
+  },
+  "note": "Options should surface the flagged run-5 outlier."
+}

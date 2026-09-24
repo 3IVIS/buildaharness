@@ -1,0 +1,438 @@
+{
+  "generatedAt": "2026-09-24T07:23:14.319Z",
+  "corpusSize": 8,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 25044,
+      "meanCostUsd": 0.025884675,
+      "totalTokens": 8011,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    },
+    "goalGraphOn": {
+      "arm": "goalGraphOn",
+      "label": "PersonalAssistant (flagOn) with goalGraphMode=enabled — a message sent while a turn runs is absorbed live (LiveSteeringChannel + scope×urgency classifier) instead of queued as the next turn",
+      "tasksRun": 8,
+      "tasksSkipped": 0,
+      "taskSuccessRate": 1,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": null,
+      "meanLatencyMs": 25147,
+      "meanCostUsd": 0.021201675,
+      "totalTokens": 7997,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 8,
+          "passed": 8
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 8,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 0,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 0,
+        "overconfidentWrongRate": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-alternating-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 36682,
+      "costUsd": 0.056269400000000004,
+      "totalTokens": 1510,
+      "turns": 6,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "{\"value\": 44}",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-constraint-not-inherited",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17294,
+      "costUsd": 0.012614000000000002,
+      "totalTokens": 704,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Marta Ilves chairs the Thursday meeting.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-control-linear",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16983,
+      "costUsd": 0.0170988,
+      "totalTokens": 689,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The platform team has the bigger headcount. It has 9 people, and the data team has 6.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-correction-survives-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 23703,
+      "costUsd": 0.021431,
+      "totalTokens": 936,
+      "turns": 4,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total for 3 units is 135 (3 × 45).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-return-after-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17580,
+      "costUsd": 0.0120922,
+      "totalTokens": 715,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes, gamma.txt matches. It lists the codename as **BLUEHERON**, the same as alpha.txt. It's labeled \"draft\" there, though.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-scoped-format-constraint",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18005,
+      "costUsd": 0.011986,
+      "totalTokens": 700,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "57",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-three-goals-synthesis",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 28251,
+      "costUsd": 0.0190096,
+      "totalTokens": 1131,
+      "turns": 5,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "- **Vendor:** Nordwind Freight\n- **Shipping date:** 2026-10-14\n- **Support email:** help@nordwind.example\n- **Contract term:** 24 months",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "gg-thread-three-projects-state",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 41856,
+      "costUsd": 0.0565764,
+      "totalTokens": 1626,
+      "turns": 7,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Alder: 350\nBirch: 250\nCedar: 200",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-alternating-formats",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 36807,
+      "costUsd": 0.027630599999999998,
+      "totalTokens": 1527,
+      "turns": 6,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "{\"value\": 44}",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-constraint-not-inherited",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17873,
+      "costUsd": 0.012658,
+      "totalTokens": 708,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Marta Ilves chairs the Thursday meeting.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-control-linear",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17106,
+      "costUsd": 0.0119956,
+      "totalTokens": 696,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The platform team has the bigger headcount: 9, against 6 for the data team.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-correction-survives-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22087,
+      "costUsd": 0.0233282,
+      "totalTokens": 872,
+      "turns": 4,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "The total for 3 units is 135 (3 × 45).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-return-after-detour",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17703,
+      "costUsd": 0.0121622,
+      "totalTokens": 722,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Yes, gamma.txt has the same codename, **BLUEHERON**, as alpha.txt. It's labeled \"draft\" in gamma.txt.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-scoped-format-constraint",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18188,
+      "costUsd": 0.012706,
+      "totalTokens": 707,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "57",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-three-goals-synthesis",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 28661,
+      "costUsd": 0.028697599999999997,
+      "totalTokens": 1149,
+      "turns": 5,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "- **Vendor:** Nordwind Freight\n- **Shipping date:** October 14, 2026 (2026-10-14)\n- **Support email:** help@nordwind.example\n- **Contract term:** 24 months",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "goalGraphOn",
+      "taskId": "gg-thread-three-projects-state",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 42752,
+      "costUsd": 0.0404352,
+      "totalTokens": 1616,
+      "turns": 7,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "status": "ok",
+      "replyPreview": "Alder: 350\nBirch: 250\nCedar: 200",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { loadCorpus } from './corpus/index.js'
-import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES, ASK_QUESTION_SLICES, GOAL_GRAPH_SLICES } from './corpus/schema.js'
+import { TASK_CATEGORIES, SUPERVISOR_SLICES, AUDIT_SLICES, ASK_QUESTION_SLICES, GOAL_GRAPH_SLICES, NEXT_STEP_SLICES } from './corpus/schema.js'
 
 describe('benchmark corpus', () => {
   const tasks = loadCorpus()
@@ -73,7 +73,7 @@ describe('benchmark corpus', () => {
   })
 
   it('feature-value-audit / ask-question slices — every sliced task carries a known tag', () => {
-    const knownSlices: readonly string[] = [...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES]
+    const knownSlices: readonly string[] = [...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES, ...NEXT_STEP_SLICES]
     for (const t of tasks) {
       if (!t.slice || (SUPERVISOR_SLICES as readonly string[]).includes(t.slice)) continue
       expect(knownSlices, `${t.id}: slice "${t.slice}" is not a known AUDIT_SLICES/ASK_QUESTION_SLICES/GOAL_GRAPH_SLICES value`).toContain(t.slice)
@@ -94,7 +94,7 @@ describe('benchmark corpus', () => {
   })
 
   it('goal-graph slices (Phase 8) — every task carries steering + file tools; steering slice covers every scope×urgency branch', () => {
-    const inSlices = tasks.filter((t) => t.slice === 'goal_graph_steering' || t.slice === 'goal_graph_concurrent')
+    const inSlices = tasks.filter((t) => t.slice === 'goal_graph_steering' || t.slice === 'goal_graph_concurrent' || t.slice === 'steering_longrun')
     for (const t of inSlices) {
       expect(t.steering.length, `${t.id} must declare at least one mid-turn steering message`).toBeGreaterThanOrEqual(1)
       expect(t.tools.file, `${t.id} must declare file tools`).toBe(true)
@@ -113,6 +113,47 @@ describe('benchmark corpus', () => {
     for (const t of tasks.filter((t) => t.slice === 'goal_graph_concurrent')) {
       expect(t.steering.length + t.followups.length, `${t.id} needs >= 2 extra user messages`).toBeGreaterThanOrEqual(1)
     }
+  })
+
+  it('steering_longrun / goal_graph_threads / supervisor_midtask / next_steps_* slices — sized, multi-step, shaped right', () => {
+    const by = (slice: string) => tasks.filter((t) => t.slice === slice)
+    // steering_longrun: every task has a mid-turn message, a workspace with enough files that the
+    // turn spans several iterations (a steering message only lands live if the turn is still running).
+    const steer = by('steering_longrun')
+    expect(steer.length).toBeGreaterThanOrEqual(8)
+    for (const t of steer) {
+      expect(t.steering.length, `${t.id}: needs a steering message`).toBeGreaterThanOrEqual(1)
+      expect(t.workspace.length, `${t.id}: needs >= 6 files so the turn outlasts the steering message`).toBeGreaterThanOrEqual(6)
+    }
+    // goal_graph_threads: multi-turn, no mid-turn steering (isolates thread tracking from live steering).
+    const threads = by('goal_graph_threads')
+    expect(threads.length).toBeGreaterThanOrEqual(8)
+    for (const t of threads) {
+      expect(t.followups.length, `${t.id}: needs >= 2 follow-up turns`).toBeGreaterThanOrEqual(2)
+      expect(t.steering.length, `${t.id}: must not use mid-turn steering`).toBe(0)
+    }
+    // supervisor_midtask: multi-turn; >= 6 stall tasks whose stall is on a later turn, >= 2 clean controls.
+    const mid = by('supervisor_midtask')
+    expect(mid.length).toBeGreaterThanOrEqual(8)
+    const stalls = mid.filter((t) => !t.id.includes('-control-'))
+    expect(stalls.length).toBeGreaterThanOrEqual(6)
+    for (const t of stalls) {
+      expect(t.followups.some((f) => f.injectedFailure === 'persistent_tool_failure'), `${t.id}: the stall must be injected on a later turn`).toBe(true)
+      expect(t.injectedFailure, `${t.id}: turn 1 must be clean`).toBeUndefined()
+    }
+    for (const t of mid.filter((t) => t.id.includes('-control-'))) {
+      expect(t.followups.length, `${t.id}: control needs multiple turns`).toBeGreaterThanOrEqual(2)
+      expect(t.injectedFailure ?? t.followups.find((f) => f.injectedFailure)).toBeUndefined()
+    }
+    // next steps: >= 6 followable tasks each naming what the options should cover, >= 2 nothing-to-suggest controls.
+    const followable = by('next_steps_followable')
+    expect(followable.length).toBeGreaterThanOrEqual(6)
+    for (const t of followable) expect(t.grader.nextSteps?.anyOf?.length, `${t.id}: needs nextSteps.anyOf`).toBeGreaterThanOrEqual(1)
+    const nothing = by('next_steps_nothing_to_suggest')
+    expect(nothing.length).toBeGreaterThanOrEqual(2)
+    for (const t of nothing) expect(t.grader.nextSteps?.none, `${t.id}: needs nextSteps.none`).toBe(true)
+    // every next-steps task also carries a reply-side check so the control arm (no options) has a real success signal
+    for (const t of [...followable, ...nothing]) expect(t.grader.contains?.length ?? 0, `${t.id}: needs a reply-side contains check`).toBeGreaterThanOrEqual(1)
   })
 
   it('audit_contradiction_semantic slice (A4) — >= 6 stress tasks + >= 2 control tasks, graders shaped right', () => {

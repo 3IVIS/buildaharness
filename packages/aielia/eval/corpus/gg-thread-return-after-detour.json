@@ -1,0 +1,39 @@
+{
+  "id": "gg-thread-return-after-detour",
+  "category": "multi_step",
+  "slice": "goal_graph_threads",
+  "intent": "Goal A, one unrelated detour, then an explicit return to A that needs A's earlier evidence.",
+  "prompt": "Read alpha.txt and tell me the project codename.",
+  "steering": [],
+  "followups": [
+    {
+      "prompt": "Unrelated: read beta.txt and tell me the release date."
+    },
+    {
+      "prompt": "Back to the first thing. Does the codename in gamma.txt match the one you found in the first file?"
+    }
+  ],
+  "workspace": [
+    {
+      "path": "alpha.txt",
+      "content": "Project codename: BLUEHERON\n"
+    },
+    {
+      "path": "beta.txt",
+      "content": "Release date: 2026-11-04\n"
+    },
+    {
+      "path": "gamma.txt",
+      "content": "Codename (draft): BLUEHERON\n"
+    }
+  ],
+  "tools": {
+    "file": true
+  },
+  "grader": {
+    "contains": [
+      "BLUEHERON"
+    ],
+    "regex": "match|same|identical|consistent|agree"
+  }
+}
