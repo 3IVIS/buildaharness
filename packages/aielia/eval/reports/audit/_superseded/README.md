@@ -26,3 +26,11 @@ First draft of the mid-turn steering corpus: eight tasks that read eight *indepe
 batched all the reads into one step, so nothing was still running when the steering message arrived (one live
 absorption in 24 runs, INCONCLUSIVE). Superseded by the pointer-chain corpus (each file names the next). Seed
 reports and the multiseed summary only; the transcripts were not kept. Model: `claude-sonnet-5`.
+
+## next-step-options-turn-only (2026-09-24)
+
+First run of the next-step options: 61% hit rate (11 of 18), 0 of 6 false positives, +76% cost per turn. The turn-end
+proposer saw only the last request and the first 1,500 characters of its reply, not the earlier conversation, the steps
+taken or the goal graph, so the staging-vs-prod session (where the last question was a closed one) got empty options.
+Superseded by the re-run where both proposers get that wider context. Seed reports and the multiseed summary only;
+model `claude-sonnet-5`.

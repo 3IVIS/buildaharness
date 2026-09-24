@@ -170,3 +170,49 @@ describe('proposeTurnNextSteps — options shown after a full turn', () => {
     expect(await proposeTurnNextSteps(turn, new StructuredOnlyLLMClient('not json'), 'enabled')).toEqual([])
   })
 })
+
+describe('the bigger picture reaches both proposers', () => {
+  const bigPicture = {
+    conversation: [{ role: 'user' as const, content: 'Read config/staging.yaml' }],
+    stepsThisTurn: ['read_file config/staging.yaml'],
+    goals: [{ goal: 'compare staging with prod', status: 'READY', focus: false, tasks: [] }],
+  }
+
+  function capture(llm: StructuredOnlyLLMClient): string[] {
+    const seen: string[] = []
+    const orig = llm.callChatStructured.bind(llm)
+    llm.callChatStructured = async (m, t, o) => {
+      seen.push(String(m[m.length - 1].content))
+      return orig(m, t, o)
+    }
+    return seen
+  }
+
+  it('turn-level call sends earlier conversation, steps taken and the goal graph', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ suggestions: [] }))
+    const seen = capture(llm)
+    await proposeTurnNextSteps({ userMessage: 'How many workers?', reply: '6' }, llm, 'enabled', undefined, undefined, bigPicture)
+    expect(seen[0]).toContain('earlierConversation')
+    expect(seen[0]).toContain('Read config/staging.yaml')
+    expect(seen[0]).toContain('stepsTaken')
+    expect(seen[0]).toContain('goalGraph')
+    expect(seen[0]).toContain('compare staging with prod')
+  })
+
+  it('thread-level call sends the same context', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ suggestions: [] }))
+    const seen = capture(llm)
+    await proposeNextSteps(makeThread(), llm, 'enabled', undefined, undefined, bigPicture)
+    expect(seen[0]).toContain('earlierConversation')
+    expect(seen[0]).toContain('goalGraph')
+  })
+
+  it('sends none of those keys when there is no extra context', async () => {
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ suggestions: [] }))
+    const seen = capture(llm)
+    await proposeTurnNextSteps({ userMessage: 'q', reply: 'a' }, llm, 'enabled')
+    expect(seen[0]).not.toContain('earlierConversation')
+    expect(seen[0]).not.toContain('goalGraph')
+    expect(seen[0]).not.toContain('stepsTaken')
+  })
+})

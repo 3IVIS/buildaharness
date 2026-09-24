@@ -6,22 +6,7 @@
   "prompt": "Read draft.txt and tell me whether it has any spelling mistakes.",
   "events": [
     {
-      "t": 1790234670936,
-      "kind": "trace",
-      "detail": {
-        "kind": "turn_start",
-        "sessionId": "eval-next-draft-attachment",
-        "message": "Read draft.txt and tell me whether it has any spelling mistakes."
-      }
-    },
-    {
-      "t": 1790234670936,
-      "kind": "debug",
-      "tool": "user_message",
-      "result": "Read draft.txt and tell me whether it has any spelling mistakes."
-    },
-    {
-      "t": 1790234670937,
+      "t": 1790247589386,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -36,90 +21,33 @@
       ]
     },
     {
-      "t": 1790234673812,
+      "t": 1790247589386,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_start",
+        "sessionId": "eval-next-draft-attachment",
+        "message": "Read draft.txt and tell me whether it has any spelling mistakes."
+      }
+    },
+    {
+      "t": 1790247589386,
+      "kind": "debug",
+      "tool": "user_message",
+      "result": "Read draft.txt and tell me whether it has any spelling mistakes."
+    },
+    {
+      "t": 1790247592204,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Reading a local file and reporting spelling mistakes is a read-only informational task with no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
+      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Reading a local file and checking it for spelling mistakes is a read-only informational task with no side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
       "usage": {
         "inputTokens": 2,
-        "outputTokens": 150,
-        "costUsd": 0.0020158
+        "outputTokens": 151,
+        "costUsd": 0.0020258000000000003
       }
     },
     {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "risk_classified",
-        "riskLevel": "LOW",
-        "requiresApproval": false
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "proposer_selected",
-        "proposerKind": "flat-oneloop"
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "triviality_classified",
-        "isTrivial": false
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "execution_mode_classified",
-        "mode": "TOOL"
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "plan_classified",
-        "isCandidate": false,
-        "matchedTemplate": null
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "contradiction",
-        "fired": false,
-        "reason": "fewer than 2 beliefs — nothing to compare"
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "hypothesis",
-        "fired": false,
-        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
-      }
-    },
-    {
-      "t": 1790234673812,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "diagnostics",
-        "fired": true,
-        "reason": "Health: nominal"
-      }
-    },
-    {
-      "t": 1790234673813,
+      "t": 1790247592204,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -134,116 +62,49 @@
       ]
     },
     {
-      "t": 1790234673813,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "control_state",
-        "fired": false,
-        "reason": "NORMAL"
+        "kind": "risk_classified",
+        "riskLevel": "LOW",
+        "requiresApproval": false
       }
     },
     {
-      "t": 1790234673813,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "execution",
-        "fired": true,
-        "reason": "module_type=business_logic"
+        "kind": "proposer_selected",
+        "proposerKind": "flat-oneloop"
       }
     },
     {
-      "t": 1790234673813,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
-        "kind": "harness_node",
-        "node": "action_gate",
-        "stepsUsed": 1
+        "kind": "triviality_classified",
+        "isTrivial": false
       }
     },
     {
-      "t": 1790234675511,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
-        "kind": "tool_policy_decision",
-        "tool": "read_file",
-        "decision": "ALLOW",
-        "reason": "harness control state permits (execution_mode=NORMAL)"
+        "kind": "execution_mode_classified",
+        "mode": "TOOL"
       }
     },
     {
-      "t": 1790234677075,
-      "kind": "llm_response",
-      "dir": "res",
-      "reply": "Yes, there's one spelling mistake: \"quesitons\" should be \"questions\". The rest of the text looks fine.",
-      "usage": {
-        "inputTokens": 4,
-        "outputTokens": 99,
-        "costUsd": 0.0021354
-      }
-    },
-    {
-      "t": 1790234677075,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
-        "kind": "layer_activity",
-        "layer": "planning",
-        "fired": false,
-        "reason": "one eligible task — serial execution"
+        "kind": "plan_classified",
+        "isCandidate": false,
+        "matchedTemplate": null
       }
     },
     {
-      "t": 1790234677075,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "evidence_reasoning",
-        "fired": false,
-        "reason": "single low-stakes observation is sufficient"
-      }
-    },
-    {
-      "t": 1790234677075,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "world_model",
-        "fired": false,
-        "reason": "single LOW-risk task, no durable fact stated — observation only"
-      }
-    },
-    {
-      "t": 1790234677075,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "verification",
-        "fired": true,
-        "reason": "all applicable layers passed"
-      }
-    },
-    {
-      "t": 1790234677075,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "recovery",
-        "fired": false,
-        "reason": "task completed — nothing to recover from"
-      }
-    },
-    {
-      "t": 1790234677075,
-      "kind": "trace",
-      "detail": {
-        "kind": "harness_node",
-        "node": "update_task_state",
-        "stepsUsed": 1
-      }
-    },
-    {
-      "t": 1790234677075,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -253,7 +114,7 @@
       }
     },
     {
-      "t": 1790234677075,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -263,7 +124,7 @@
       }
     },
     {
-      "t": 1790234677075,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -273,7 +134,7 @@
       }
     },
     {
-      "t": 1790234677075,
+      "t": 1790247592204,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -283,7 +144,146 @@
       }
     },
     {
-      "t": 1790234677076,
+      "t": 1790247592204,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "execution",
+        "fired": true,
+        "reason": "module_type=business_logic"
+      }
+    },
+    {
+      "t": 1790247592204,
+      "kind": "trace",
+      "detail": {
+        "kind": "harness_node",
+        "node": "action_gate",
+        "stepsUsed": 1
+      }
+    },
+    {
+      "t": 1790247593761,
+      "kind": "trace",
+      "detail": {
+        "kind": "tool_policy_decision",
+        "tool": "read_file",
+        "decision": "ALLOW",
+        "reason": "harness control state permits (execution_mode=NORMAL)"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "llm_response",
+      "dir": "res",
+      "reply": "Yes, there's one spelling mistake in draft.txt:\n\n- **\"quesitons\"** should be **\"questions\"**.\n\nThe rest of the text is spelled correctly.",
+      "usage": {
+        "inputTokens": 4,
+        "outputTokens": 116,
+        "costUsd": 0.0047906
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "planning",
+        "fired": false,
+        "reason": "one eligible task — serial execution"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "evidence_reasoning",
+        "fired": false,
+        "reason": "single low-stakes observation is sufficient"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "world_model",
+        "fired": false,
+        "reason": "single LOW-risk task, no durable fact stated — observation only"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "verification",
+        "fired": true,
+        "reason": "all applicable layers passed"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "recovery",
+        "fired": false,
+        "reason": "task completed — nothing to recover from"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "harness_node",
+        "node": "update_task_state",
+        "stepsUsed": 1
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "contradiction",
+        "fired": false,
+        "reason": "fewer than 2 beliefs — nothing to compare"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "hypothesis",
+        "fired": false,
+        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "diagnostics",
+        "fired": true,
+        "reason": "Health: nominal"
+      }
+    },
+    {
+      "t": 1790247595748,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "control_state",
+        "fired": false,
+        "reason": "NORMAL"
+      }
+    },
+    {
+      "t": 1790247595748,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -293,7 +293,7 @@
       }
     },
     {
-      "t": 1790234677076,
+      "t": 1790247595748,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -302,7 +302,7 @@
       }
     },
     {
-      "t": 1790234677076,
+      "t": 1790247595749,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -311,10 +311,10 @@
       }
     },
     {
-      "t": 1790234677076,
+      "t": 1790247595749,
       "kind": "debug",
       "tool": "assistant_reply",
-      "result": "[ok] (LOW) Yes, there's one spelling mistake: \"quesitons\" should be \"questions\". The rest of the text looks fine."
+      "result": "[ok] (LOW) Yes, there's one spelling mistake in draft.txt:\n\n- **\"quesitons\"** should be **\"questions\"**.\n\nThe rest of the text is spelled correctly."
     }
   ],
   "grade": {
@@ -335,10 +335,10 @@
     "failedChecks": []
   },
   "metrics": {
-    "latencyMs": 6140,
-    "costUsd": 0.0041512,
-    "totalTokens": 255,
+    "latencyMs": 6363,
+    "costUsd": 0.0068164,
+    "totalTokens": 273,
     "supervisorConsults": 0
   },
-  "replyPreview": "Yes, there's one spelling mistake: \"quesitons\" should be \"questions\". The rest of the text looks fine."
+  "replyPreview": "Yes, there's one spelling mistake in draft.txt:\n\n- **\"quesitons\"** should be **\"questions\"**.\n\nThe rest of the text is spelled correctly."
 }

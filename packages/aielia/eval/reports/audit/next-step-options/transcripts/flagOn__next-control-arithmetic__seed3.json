@@ -6,7 +6,7 @@
   "prompt": "What is 17 times 23?",
   "events": [
     {
-      "t": 1790234660253,
+      "t": 1790247578512,
       "kind": "trace",
       "detail": {
         "kind": "turn_start",
@@ -15,13 +15,13 @@
       }
     },
     {
-      "t": 1790234660253,
+      "t": 1790247578512,
       "kind": "debug",
       "tool": "user_message",
       "result": "What is 17 times 23?"
     },
     {
-      "t": 1790234660255,
+      "t": 1790247578513,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -36,18 +36,18 @@
       ]
     },
     {
-      "t": 1790234662954,
+      "t": 1790247581175,
       "kind": "llm_response",
       "dir": "res",
       "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"A simple arithmetic question with no real-world side effects.\",\"isTrivial\":true,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
       "usage": {
         "inputTokens": 2,
         "outputTokens": 137,
-        "costUsd": 0.0018828
+        "costUsd": 0.01155
       }
     },
     {
-      "t": 1790234662954,
+      "t": 1790247581175,
       "kind": "trace",
       "detail": {
         "kind": "risk_classified",
@@ -56,7 +56,7 @@
       }
     },
     {
-      "t": 1790234662955,
+      "t": 1790247581176,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -71,18 +71,18 @@
       ]
     },
     {
-      "t": 1790234665096,
+      "t": 1790247583362,
       "kind": "llm_response",
       "dir": "res",
       "reply": "17 × 23 = **391**",
       "usage": {
         "inputTokens": 2,
         "outputTokens": 12,
-        "costUsd": 0.0006748
+        "costUsd": 0.01114
       }
     },
     {
-      "t": 1790234665096,
+      "t": 1790247583362,
       "kind": "trace",
       "detail": {
         "kind": "proposer_selected",
@@ -90,7 +90,7 @@
       }
     },
     {
-      "t": 1790234665096,
+      "t": 1790247583362,
       "kind": "trace",
       "detail": {
         "kind": "triviality_classified",
@@ -98,7 +98,7 @@
       }
     },
     {
-      "t": 1790234665096,
+      "t": 1790247583362,
       "kind": "trace",
       "detail": {
         "kind": "execution_mode_classified",
@@ -106,7 +106,7 @@
       }
     },
     {
-      "t": 1790234665098,
+      "t": 1790247583364,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -115,7 +115,7 @@
       }
     },
     {
-      "t": 1790234665098,
+      "t": 1790247583364,
       "kind": "debug",
       "tool": "assistant_reply",
       "result": "[ok] (LOW) 17 × 23 = **391**"
@@ -139,8 +139,8 @@
     "failedChecks": []
   },
   "metrics": {
-    "latencyMs": 4845,
-    "costUsd": 0.0025576,
+    "latencyMs": 4852,
+    "costUsd": 0.022690000000000002,
     "totalTokens": 153,
     "supervisorConsults": 0
   },

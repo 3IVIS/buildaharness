@@ -53,6 +53,7 @@ import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
 import { proposeNextSteps, proposeTurnNextSteps } from './next-step-proposer.js'
+import { buildNextStepContext, type NextStepContext } from './next-step-context.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
 import { resolveTurnGoalThread } from './goal-thread-identity.js'
@@ -446,7 +447,10 @@ export class PersonalAssistant {
     this.responseService = new ResponseService(
       this.memoryService, this.session, this.planService, this.onTrace, this.memory,
       goalGraphSuggestMode === 'enabled'
-        ? async (thread, onUsage) => (await proposeNextSteps(thread, this.llmClient, goalGraphSuggestMode, this.model, onUsage)).map(({ goalThreadId: _goalThreadId, ...suggestion }) => suggestion)
+        ? async (thread, onUsage, sessionId) => {
+            const bigPicture = await this.nextStepContext(sessionId, { focusThreadId: thread.id })
+            return (await proposeNextSteps(thread, this.llmClient, goalGraphSuggestMode, this.model, onUsage, bigPicture)).map(({ goalThreadId: _goalThreadId, ...suggestion }) => suggestion)
+          }
         : undefined,
     )
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
@@ -475,6 +479,32 @@ export class PersonalAssistant {
     const checkpointStore = options.checkpointStore ?? new IndexedDBAdapter({ namespace: 'personal-assistant-checkpoints' })
 
     return new PersonalAssistant({ ...options, memory, experienceStore, checkpointStore })
+  }
+
+  /**
+   * The bigger picture both next-step proposers get (see next-step-context.ts): earlier
+   * conversation, the steps taken this turn, and every goal thread the session tracks. Best-effort —
+   * any read failure just yields no extra context, never a failed turn. At turn end the focus
+   * thread is the one the graph currently marks active; for a thread that just finished it is that
+   * thread.
+   */
+  private async nextStepContext(
+    sessionId: string,
+    opts: { focusThreadId?: string; currentUserMessage?: string; sources?: AssistantSource[] },
+  ): Promise<NextStepContext> {
+    try {
+      const transcript = await this.session.getTranscript(sessionId)
+      const goalGraph = (await loadGoalGraphRecord(this.memory, sessionId, this.session.undoWorkspace())) ?? undefined
+      return buildNextStepContext({
+        transcript,
+        currentExchange: opts.currentUserMessage === undefined ? undefined : { userMessage: opts.currentUserMessage },
+        goalGraph,
+        focusThreadId: opts.focusThreadId ?? goalGraph?.activeThreadId ?? undefined,
+        sources: opts.sources,
+      })
+    } catch {
+      return {}
+    }
   }
 
   /**
@@ -516,7 +546,8 @@ export class PersonalAssistant {
       // this turn's usage/spend like every other call the turn made.
       if (result.status === 'ok' && !result.harnessSkipped && result.reply && this.goalGraphSuggestMode === 'enabled') {
         const extra: TokenUsage[] = []
-        const nextSteps = await proposeTurnNextSteps({ userMessage, reply: result.reply }, this.llmClient, this.goalGraphSuggestMode, this.model, (u) => extra.push(u))
+        const bigPicture = await this.nextStepContext(sessionId, { currentUserMessage: userMessage, sources: result.sources })
+        const nextSteps = await proposeTurnNextSteps({ userMessage, reply: result.reply }, this.llmClient, this.goalGraphSuggestMode, this.model, (u) => extra.push(u), bigPicture)
         if (nextSteps.length > 0) result.nextSteps = nextSteps
         for (const u of extra) {
           result.usage = {

@@ -6,7 +6,22 @@
   "prompt": "Read TODO.md and tell me which items are already done.",
   "events": [
     {
-      "t": 1790234802032,
+      "t": 1790247724242,
+      "kind": "trace",
+      "detail": {
+        "kind": "turn_start",
+        "sessionId": "eval-next-todo-open-items",
+        "message": "Read TODO.md and tell me which items are already done."
+      }
+    },
+    {
+      "t": 1790247724242,
+      "kind": "debug",
+      "tool": "user_message",
+      "result": "Read TODO.md and tell me which items are already done."
+    },
+    {
+      "t": 1790247724243,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -21,33 +36,18 @@
       ]
     },
     {
-      "t": 1790234802032,
-      "kind": "trace",
-      "detail": {
-        "kind": "turn_start",
-        "sessionId": "eval-next-todo-open-items",
-        "message": "Read TODO.md and tell me which items are already done."
-      }
-    },
-    {
-      "t": 1790234802032,
-      "kind": "debug",
-      "tool": "user_message",
-      "result": "Read TODO.md and tell me which items are already done."
-    },
-    {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Reading a local file and summarizing which items are done has no real-world side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
+      "reply": "{\"riskLevel\":\"LOW\",\"riskReason\":\"Reading a local file and reporting which items are done has no real-world side effects.\",\"isTrivial\":false,\"decomposedTasks\":[],\"isReminderRequest\":false,\"isBulkReminderRequest\":false,\"isAbandonRequest\":false,\"matchedPlanTemplate\":null,\"needsMultiStepPlan\":false,\"statesDurableFacts\":[]}",
       "usage": {
         "inputTokens": 2,
-        "outputTokens": 143,
-        "costUsd": 0.0019444000000000002
+        "outputTokens": 142,
+        "costUsd": 0.0019344000000000002
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "risk_classified",
@@ -56,7 +56,7 @@
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "proposer_selected",
@@ -64,7 +64,7 @@
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "triviality_classified",
@@ -72,7 +72,7 @@
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "execution_mode_classified",
@@ -80,7 +80,7 @@
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "plan_classified",
@@ -89,7 +89,7 @@
       }
     },
     {
-      "t": 1790234804589,
+      "t": 1790247727000,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -99,7 +99,17 @@
       }
     },
     {
-      "t": 1790234804590,
+      "t": 1790247727000,
+      "kind": "trace",
+      "detail": {
+        "kind": "layer_activity",
+        "layer": "hypothesis",
+        "fired": false,
+        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
+      }
+    },
+    {
+      "t": 1790247727001,
       "kind": "llm_request",
       "dir": "req",
       "messages": [
@@ -114,17 +124,7 @@
       ]
     },
     {
-      "t": 1790234804590,
-      "kind": "trace",
-      "detail": {
-        "kind": "layer_activity",
-        "layer": "hypothesis",
-        "fired": false,
-        "reason": "single clear LOW-risk task — no competing explanation worth surfacing"
-      }
-    },
-    {
-      "t": 1790234804590,
+      "t": 1790247727001,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -134,7 +134,7 @@
       }
     },
     {
-      "t": 1790234804590,
+      "t": 1790247727001,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -144,7 +144,7 @@
       }
     },
     {
-      "t": 1790234804590,
+      "t": 1790247727001,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -154,7 +154,7 @@
       }
     },
     {
-      "t": 1790234804590,
+      "t": 1790247727001,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -163,7 +163,7 @@
       }
     },
     {
-      "t": 1790234806308,
+      "t": 1790247728559,
       "kind": "trace",
       "detail": {
         "kind": "tool_policy_decision",
@@ -173,33 +173,18 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "Two items are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.",
+      "reply": "Two items in TODO.md are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.",
       "usage": {
         "inputTokens": 4,
-        "outputTokens": 130,
-        "costUsd": 0.002448
+        "outputTokens": 136,
+        "costUsd": 0.0025080000000000002
       }
     },
     {
-      "t": 1790234808074,
-      "kind": "llm_request",
-      "dir": "req",
-      "messages": [
-        {
-          "role": "system",
-          "content": "A goal the user was working on with a personal assistant has just completed. Given the goal's stated success criteria, rationale, and its finished tasks, propose 0-3 concrete, actionable next steps a reasonable person would plausibly want to do next as a direct continuation of this specific completed work — not generic advice applicable to any project. Return an empty list if nothing concrete and specific follows from this particular goal. For each suggestion, judge `confidence` against an observable criterion, not a vague guess: `high` if the next step was explicitly mentioned or clearly implied as follow-up work by the user or the goal's own success criteria/rationale (e.g. tests were named as pending, a stated multi-part request's remaining part); `medium` if it is a reasonable, common-practice extension of the completed work but was never stated or implied by the user (e.g. suggesting tests when none were mentioned at all); `low` if it is speculative or only loosely tied to the specific completed work (e.g. generic \"consider refactoring\" advice). `rationale` states in one sentence why this step follows from the completed goal. Respond with JSON only: {\"suggestions\": [{\"description\": string, \"confidence\": \"high\"|\"medium\"|\"low\", \"rationale\": string}]}"
-        },
-        {
-          "role": "user",
-          "content": "{\"successCriteria\":\"Read TODO.md and tell me which items are already done.\",\"rationale\":\"Two items are marked done:\\n\\n- Set up CI pipeline\\n- Write the API schema\\n\\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.\",\"tasks\":[]}"
-        }
-      ]
-    },
-    {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -209,7 +194,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -219,7 +204,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -229,7 +214,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -239,7 +224,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -249,7 +234,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -258,7 +243,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -268,7 +253,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -278,7 +263,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -288,7 +273,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -298,7 +283,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "layer_activity",
@@ -308,7 +293,7 @@
       }
     },
     {
-      "t": 1790234808074,
+      "t": 1790247730613,
       "kind": "trace",
       "detail": {
         "kind": "harness_node",
@@ -317,18 +302,33 @@
       }
     },
     {
-      "t": 1790234811224,
+      "t": 1790247730614,
+      "kind": "llm_request",
+      "dir": "req",
+      "messages": [
+        {
+          "role": "system",
+          "content": "A goal the user was working on with a personal assistant has just completed. Given the goal's stated success criteria, rationale, and its finished tasks, propose 0-3 concrete, actionable next steps a reasonable person would plausibly want to do next as a direct continuation of this specific completed work — not generic advice applicable to any project. Return an empty list if nothing concrete and specific follows from this particular goal. The input may also carry the bigger picture: `earlierConversation` (what was discussed before), `stepsTaken` (files read or searches made) and `goalGraph` (every goal the session tracks, with task statuses; the entry marked `focus` is the one just finished). Use it: prefer a next step that follows from something raised earlier or from a goal that is still open, and do not propose work that an earlier turn or a finished goal already covers. For each suggestion, judge `confidence` against an observable criterion, not a vague guess: `high` if the next step was explicitly mentioned or clearly implied as follow-up work by the user or the goal's own success criteria/rationale (e.g. tests were named as pending, a stated multi-part request's remaining part); `medium` if it is a reasonable, common-practice extension of the completed work but was never stated or implied by the user (e.g. suggesting tests when none were mentioned at all); `low` if it is speculative or only loosely tied to the specific completed work (e.g. generic \"consider refactoring\" advice). `rationale` states in one sentence why this step follows from the completed goal. Respond with JSON only: {\"suggestions\": [{\"description\": string, \"confidence\": \"high\"|\"medium\"|\"low\", \"rationale\": string}]}"
+        },
+        {
+          "role": "user",
+          "content": "{\"successCriteria\":\"Read TODO.md and tell me which items are already done.\",\"rationale\":\"Two items in TODO.md are marked done:\\n\\n- Set up CI pipeline\\n- Write the API schema\\n\\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide.\",\"tasks\":[]}"
+        }
+      ]
+    },
+    {
+      "t": 1790247734210,
       "kind": "llm_response",
       "dir": "res",
-      "reply": "{\"suggestions\": [{\"description\": \"Start on one of the three open TODO.md items, such as adding rate limiting to the gateway, migrating the users table to the new schema, or writing the onboarding guide. The users table migration is a natural first choice, since the API schema it depends on is already written.\", \"confidence\": \"medium\", \"rationale\": \"The review found three items still open, so working through them is the natural continuation, though the user never asked for it.\"}]}",
+      "reply": "{\"suggestions\":[{\"description\":\"Start on one of the three open TODO.md items, such as adding rate limiting to the gateway, and break it into concrete tasks.\",\"confidence\":\"medium\",\"rationale\":\"The read-through showed three items still open (rate limiting, users table migration, onboarding guide), so picking one to start is the natural continuation.\"},{\"description\":\"Migrate the users table to the new schema, using the completed API schema as the reference for the target structure.\",\"confidence\":\"low\",\"rationale\":\"The API schema item is done and the users table migration is still open, so the finished schema may unblock it.\"}]}",
       "usage": {
         "inputTokens": 2,
-        "outputTokens": 142,
-        "costUsd": 0.005244
+        "outputTokens": 194,
+        "costUsd": 0.004185400000000001
       }
     },
     {
-      "t": 1790234811224,
+      "t": 1790247734210,
       "kind": "trace",
       "detail": {
         "kind": "turn_end",
@@ -337,10 +337,10 @@
       }
     },
     {
-      "t": 1790234811224,
+      "t": 1790247734210,
       "kind": "debug",
       "tool": "assistant_reply",
-      "result": "[ok] (LOW) Two items are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide."
+      "result": "[ok] (LOW) Two items in TODO.md are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide."
     }
   ],
   "grade": {
@@ -365,10 +365,10 @@
     "failedChecks": []
   },
   "metrics": {
-    "latencyMs": 9193,
-    "costUsd": 0.0096364,
-    "totalTokens": 423,
+    "latencyMs": 9968,
+    "costUsd": 0.008627800000000001,
+    "totalTokens": 480,
     "supervisorConsults": 0
   },
-  "replyPreview": "Two items are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide."
+  "replyPreview": "Two items in TODO.md are marked done:\n\n- Set up CI pipeline\n- Write the API schema\n\nThree are still open: add rate limiting to the gateway, migrate the users table to the new schema, and write the onboarding guide."
 }

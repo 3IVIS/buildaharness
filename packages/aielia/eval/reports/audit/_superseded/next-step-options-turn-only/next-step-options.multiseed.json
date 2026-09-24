@@ -9,7 +9,7 @@
   "rationale": "Options named the expected continuation in 61% of 18 followable run(s) and appeared where none were warranted in 0% of 6 control run(s). Between the CUT floor and the KEEP bar (or too many false positives).",
   "modelId": "claude-sonnet-5",
   "judgeModelId": "claude-sonnet-5",
-  "generatedAt": "2026-09-24T11:02:16.288Z",
+  "generatedAt": "2026-09-24T07:27:02.012Z",
   "metrics": [
     {
       "metric": "taskSuccessRate",
@@ -67,35 +67,35 @@
     },
     {
       "metric": "meanLatencyMs",
-      "control": 8011.666666666667,
-      "candidate": 11285,
-      "deltaMean": 3273.333333333333,
-      "deltaCi95": 420.8881646127758,
+      "control": 7904.666666666667,
+      "candidate": 10884.333333333334,
+      "deltaMean": 2979.666666666667,
+      "deltaCi95": 1295.4684048979693,
       "positive": false,
       "regressed": false
     },
     {
       "metric": "meanCostUsd",
-      "control": 0.011056808333333333,
-      "candidate": 0.009603741666666667,
-      "deltaMean": -0.0014530666666666657,
-      "deltaCi95": 0.0017447251279809723,
+      "control": 0.005677191666666667,
+      "candidate": 0.009975450000000002,
+      "deltaMean": 0.004298258333333335,
+      "deltaCi95": 0.001446119245445701,
       "positive": false,
       "regressed": false
     },
     {
       "metric": "totalTokens",
-      "control": 2778.3333333333335,
-      "candidate": 4174.333333333333,
-      "deltaMean": 1395.9999999999995,
-      "deltaCi95": 228.74598624286776,
+      "control": 2800,
+      "candidate": 4066.6666666666665,
+      "deltaMean": 1266.6666666666665,
+      "deltaCi95": 389.00335719773824,
       "positive": false,
       "regressed": false
     }
   ],
-  "costDeltaPct": -0.13141827395940803,
-  "latencyDeltaPct": 0.40857083420012474,
-  "tokenDeltaPct": 0.5024595080983801,
+  "costDeltaPct": 0.7571099560668937,
+  "latencyDeltaPct": 0.3769503247027073,
+  "tokenDeltaPct": 0.45238095238095233,
   "injectionSignals": null,
   "nextStepSignals": {
     "candidate": "nextStepsOn",
