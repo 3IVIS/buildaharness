@@ -292,7 +292,11 @@
       "inputs": "constraints, output text",
       "batch": 5,
       "patterns": "harness/src/lexical/patterns/negation.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Runs inside the LLM-free harness output-validation node, which has a Python twin (output_contract.py) held to byte-parity by conformance tests. A semantic negated-constraint check needs a new LLM call per output validation (AL-7) and would make a deterministic validation gate model-judged and non-reproducible; the harness library has no LLM client in this node. Dropping the check would weaken a safety property.",
+      "deferredCost": "+1 LLM call per output validation with a negated constraint, plus Python-twin and conformance changes",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "required-field-constraint",
@@ -301,7 +305,11 @@
       "decides": "parses 'required:' constraints out of free-text into output-contract fields",
       "inputs": "constraint text",
       "batch": 5,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Parses a flow-designer-authored 'required: <field>' DSL convention, not conversational input (the file's own comment records this as accepted as-is); it is a structured syntax, so a semantic replacement adds cost and nondeterminism for no accuracy gain. Has a Python twin.",
+      "deferredCost": "+1 LLM call per constraint update for no expected accuracy gain, plus twin impact",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "source-similarity",
@@ -310,7 +318,11 @@
       "decides": "token-overlap similarity deciding whether two sources are duplicates",
       "inputs": "source texts",
       "batch": 5,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Jaccard token overlap is a numeric similarity metric with a configurable threshold, not a language-keyword match; embedding or LLM similarity would need a new call per source pair and would break the Python-twin (multi_source_reducer.py) parity. Cross-lingual weakness is real but a semantic version needs an embedding dependency the reducer does not have.",
+      "deferredCost": "+1 LLM call (or embedding lookup) per source pair, plus twin and conformance changes",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "fact-near-duplicate",
@@ -319,7 +331,11 @@
       "decides": "substring near-duplicate test between a lexical and an LLM-extracted fact",
       "inputs": "fact texts",
       "batch": 5,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Deliberately narrow case-insensitive substring containment so a distinct fact is never dropped; the safe failure is keeping a duplicate. A semantic dedupe needs +1 call per new model-inferred fact against existing facts, and a wrong merge silently loses user memory, which is worse than the legacy failure mode.",
+      "deferredCost": "+1 LLM call per (lexical, LLM-extracted) fact pair on turns that produce both",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "system-error-symptom",
