@@ -133,6 +133,12 @@
       "finalized": true,
       "spendUsd": 0.599186,
       "blocked": false
+    },
+    "probe-injection": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.215258,
+      "blocked": false
     }
   }
 }
