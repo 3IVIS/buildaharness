@@ -248,9 +248,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 3,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: household, work-status and sensory-limits families (4 stress each) plus 6 calm controls (hypothetical, retracted, about someone else). Fact implied turn 1, needed turn 3. Raw transcript stays in context for both arms, so headroom is the open question the probe answers. Not yet run."
+      "corpusNote": "18 tasks: household, work-status and sensory-limits families (4 stress each) plus 6 calm controls (hypothetical, retracted, about someone else). Fact implied turn 1, needed turn 3. Raw transcript stays in context for both arms, so headroom is the open question the probe answers. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-verification",

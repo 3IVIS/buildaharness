@@ -94,7 +94,7 @@
     },
     "probe-model-inferred-facts": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 1.031817,
       "blocked": false
     }
