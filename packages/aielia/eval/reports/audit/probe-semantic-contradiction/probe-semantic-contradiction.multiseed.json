@@ -1,0 +1,112 @@
+{
+  "feature": "probe-semantic-contradiction",
+  "title": "Probe: semantic contradiction + belief trail",
+  "hypothesis": "PROBE (AL1c, not a verdict run): certify the semantic_contradiction corpus — the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+  "control": "contradictionOff",
+  "candidate": "flagOn",
+  "seeds": 1,
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+46% $/turn).",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-25T09:40:01.247Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.8181818181818182,
+      "candidate": 0.8636363636363636,
+      "deltaMean": 0.045454545454545414,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.09523809523809523,
+      "candidate": 0.047619047619047616,
+      "deltaMean": -0.047619047619047616,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 25680,
+      "candidate": 26239,
+      "deltaMean": 559,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.023613445454545454,
+      "candidate": 0.03441699090909091,
+      "deltaMean": 0.010803545454545455,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 25991,
+      "candidate": 25688,
+      "deltaMean": -303,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.45751669214650054,
+  "latencyDeltaPct": 0.02176791277258567,
+  "tokenDeltaPct": -0.011657881574391135,
+  "targetMetric": {
+    "name": "task success (proxy for the spec's target metric)",
+    "proxy": true,
+    "control": 0.8181818181818182,
+    "candidate": 0.8636363636363636,
+    "deltaMean": 0.045454545454545414,
+    "deltaCi95": 0,
+    "higherIsBetter": true
+  },
+  "controlHeadroom": 0.18181818181818177,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

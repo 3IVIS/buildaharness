@@ -214,9 +214,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "22 tasks: paraphrase, unit-currency, temporal-crosslang and belief-trail families (4 stress each) plus 6 calm controls (legitimate change over time). 1 seed, both arms, transcripts + judge; estimated spend from ~22 multi-turn tasks x 2 arms. Not yet run; AL1f certifies it from the probe report."
+      "corpusNote": "22 tasks: paraphrase, unit-currency, temporal-crosslang and belief-trail families (4 stress each) plus 6 calm controls (legitimate change over time). 1 seed, both arms, transcripts + judge; estimated spend from ~22 multi-turn tasks x 2 arms. Not yet run; AL1f certifies it from the probe report.",
+      "verdict": "KEEP"
     },
     {
       "id": "probe-change-review",

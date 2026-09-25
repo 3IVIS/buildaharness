@@ -82,7 +82,7 @@
     },
     "probe-semantic-contradiction": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 1.27667,
       "blocked": false
     }
