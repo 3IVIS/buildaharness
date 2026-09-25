@@ -1,0 +1,33 @@
+{
+  "id": "probe-decomposition-calm-colour",
+  "category": "file_read",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "calm-control",
+  "family": "single-deliverable",
+  "intent": "Control — one deliverable; decomposition is pure overhead and must not add ceremony.",
+  "prompt": "What is the brand colour in a/c.md?",
+  "workspace": [
+    {
+      "path": "a/c.md",
+      "content": "Brand colour: orange\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "orange"
+    ],
+    "notContains": [
+      "step 1",
+      "sub-task",
+      "subtask",
+      "plan:"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a direct one-line answer with no plan/sub-task scaffolding. Fail = decomposition ceremony on a single lookup. [AL1d probe: decomposition calm control.]"
+}

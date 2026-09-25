@@ -74,4 +74,8 @@ export const AUDIT_SLICE_MECHANISM: Record<string, MechanismId> = {
   probe_belief_trail: 'semantic_contradiction',
   probe_change_review: 'change_review',
   probe_model_inferred_facts: 'model_inferred_facts',
+  probe_verification: 'verification',
+  probe_reviewer: 'reviewer_adversarial_lens',
+  probe_criterion_coverage: 'criterion_coverage',
+  probe_decomposition: 'decomposition_reframe',
 }

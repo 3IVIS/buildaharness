@@ -1,0 +1,30 @@
+{
+  "id": "probe-decomposition-added-midway-audit",
+  "category": "multi_step",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "stress",
+  "family": "added-mid-conversation",
+  "intent": "A deliverable is added mid-conversation; the final status ask needs both tracked.",
+  "prompt": "For the audit I must collect the access logs.",
+  "followups": [
+    {
+      "prompt": "What is a good way to keep a checklist tidy?"
+    },
+    {
+      "prompt": "Also add the change-approval records to the list."
+    },
+    {
+      "prompt": "What am I collecting for the audit?"
+    }
+  ],
+  "grader": {
+    "regex": "(access logs)[\\s\\S]*(change-approval|approval records)|(change-approval|approval records)[\\s\\S]*(access logs)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the final reply carries both the original and the mid-added deliverable. Fail = drops one. [AL1d probe: decomposition / added mid-conversation.]"
+}

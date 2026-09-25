@@ -1,0 +1,35 @@
+{
+  "id": "probe-criterion-coverage-calm-city-and-year",
+  "category": "multi_step",
+  "slice": "probe_criterion_coverage",
+  "mechanism": "criterion_coverage",
+  "role": "calm-control",
+  "family": "fully-met",
+  "intent": "Control — trivially met criteria; criterion coverage must not report a miss.",
+  "prompt": "Read a/w.md. Done when: the year and the city are stated.",
+  "workspace": [
+    {
+      "path": "a/w.md",
+      "content": "Founded: 1999\nCity: Turin\n"
+    }
+  ],
+  "grader": {
+    "regex": "1999|Turin",
+    "contains": [
+      "1999",
+      "Turin"
+    ],
+    "notContains": [
+      "not met",
+      "unmet",
+      "criterion was not",
+      "cannot confirm"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states the requested values with no spurious unmet-criterion claim. Fail = false miss on a met criterion. [AL1d probe: criterion_coverage calm control.]"
+}

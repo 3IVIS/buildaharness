@@ -141,6 +141,11 @@ export const AUDIT_SLICES = [
   'probe_belief_trail',
   'probe_change_review',
   'probe_model_inferred_facts',
+  // AL1d probe slices: verification, reviewer pass, criterion coverage, decomposition/reframe.
+  'probe_verification',
+  'probe_reviewer',
+  'probe_criterion_coverage',
+  'probe_decomposition',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

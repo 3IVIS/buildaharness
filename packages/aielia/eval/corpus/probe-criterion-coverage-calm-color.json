@@ -1,0 +1,34 @@
+{
+  "id": "probe-criterion-coverage-calm-color",
+  "category": "multi_step",
+  "slice": "probe_criterion_coverage",
+  "mechanism": "criterion_coverage",
+  "role": "calm-control",
+  "family": "fully-met",
+  "intent": "Control — trivially met criteria; criterion coverage must not report a miss.",
+  "prompt": "Read a/u.md. Done when: the primary colour is stated.",
+  "workspace": [
+    {
+      "path": "a/u.md",
+      "content": "Primary colour: teal\n"
+    }
+  ],
+  "grader": {
+    "regex": "teal",
+    "contains": [
+      "teal"
+    ],
+    "notContains": [
+      "not met",
+      "unmet",
+      "criterion was not",
+      "cannot confirm"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states the requested values with no spurious unmet-criterion claim. Fail = false miss on a met criterion. [AL1d probe: criterion_coverage calm control.]"
+}

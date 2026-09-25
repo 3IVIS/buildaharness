@@ -1,0 +1,28 @@
+{
+  "id": "probe-reviewer-abstraction-fit-exec-migration",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "stress",
+  "family": "abstraction-fit",
+  "intent": "The audience asks for a headline; a draft at the wrong (implementation) level fails the abstraction-fit lens.",
+  "prompt": "Give the CEO a two-line summary of the migration in notes/migration.md.",
+  "workspace": [
+    {
+      "path": "notes/migration.md",
+      "content": "Migration to Postgres 16 finished. Cutover took 12 minutes. Vacuum tuning changed autovacuum_naptime to 20s and raised work_mem to 64MB. Cost falls by 18 percent per month.\n"
+    }
+  ],
+  "grader": {
+    "regex": "18",
+    "notContains": [
+      "autovacuum_naptime"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a headline that carries the key figure and omits the implementation detail (autovacuum_naptime). Fail = detail dump or missing headline. [AL1d probe: reviewer / abstraction-fit lens.]"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "probe-reviewer-abstraction-fit-board-outage",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "stress",
+  "family": "abstraction-fit",
+  "intent": "The audience asks for a headline; a draft at the wrong (implementation) level fails the abstraction-fit lens.",
+  "prompt": "The board asks for a one-sentence status of the outage. ops/outage.md has the detail.",
+  "workspace": [
+    {
+      "path": "ops/outage.md",
+      "content": "Outage 12 Oct: root cause was a mutex deadlock in the session cache after a rolling restart; 3 pods affected; 41 minutes of degraded login; customers impacted: 2,300; fixed by pinning the restart order.\n"
+    }
+  ],
+  "grader": {
+    "regex": "41|2,300|2300",
+    "notContains": [
+      "mutex"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a headline that carries the key figure and omits the implementation detail (mutex). Fail = detail dump or missing headline. [AL1d probe: reviewer / abstraction-fit lens.]"
+}

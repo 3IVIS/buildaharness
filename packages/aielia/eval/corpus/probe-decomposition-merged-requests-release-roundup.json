@@ -1,0 +1,34 @@
+{
+  "id": "probe-decomposition-merged-requests-release-roundup",
+  "category": "multi_step",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "stress",
+  "family": "merged-separate-requests",
+  "intent": "Three separate requests spread over turns, merged into one status ask; each item and its state must be tracked.",
+  "prompt": "Changelog: written.",
+  "followups": [
+    {
+      "prompt": "QA sign-off: waiting on staging."
+    },
+    {
+      "prompt": "Rollback plan: not started."
+    },
+    {
+      "prompt": "Status of the three release items?"
+    }
+  ],
+  "grader": {
+    "regex": "changelog|qa|sign-off|rollback",
+    "contains": [
+      "changelog",
+      "rollback"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = all three items appear with their states. Fail = an item dropped. [AL1d probe: decomposition / merged separate requests.]"
+}

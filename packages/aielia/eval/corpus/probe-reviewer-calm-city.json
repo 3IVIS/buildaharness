@@ -1,0 +1,32 @@
+{
+  "id": "probe-reviewer-calm-city",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "calm-control",
+  "family": "clean-draft",
+  "intent": "Control — a clean, single-source, low-stakes lookup; the reviewer pass is pure overhead and must not invent a defect.",
+  "prompt": "Which city is HQ in, per office/hq.md?",
+  "workspace": [
+    {
+      "path": "office/hq.md",
+      "content": "HQ city: Porto\n"
+    }
+  ],
+  "grader": {
+    "regex": "Porto",
+    "notContains": [
+      "conflict",
+      "contradict",
+      "inconsistent",
+      "suspicious",
+      "cannot trust"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers directly with no manufactured conflict or suspicion. Fail = invents a defect on a clean source. [AL1d probe: reviewer calm control.]"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "probe-criterion-coverage-met-in-other-words-q3-cloud",
+  "category": "multi_step",
+  "slice": "probe_criterion_coverage",
+  "mechanism": "criterion_coverage",
+  "role": "stress",
+  "family": "met-in-other-words",
+  "intent": "Stated success criteria that a correct reply meets in different words than the criterion text.",
+  "prompt": "Check finance/cloud.csv against our monthly limit. Done when: the total spend is stated, and the answer says whether the limit was respected.",
+  "workspace": [
+    {
+      "path": "finance/cloud.csv",
+      "content": "item,amount\ncompute,5200\nstorage,1900\nnetwork,900\n\n# monthly limit: 9000\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "8000|8,000"
+    ],
+    "regex": "under|within|below|respect|not exceed|didn'?t exceed|stayed"
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every criterion is met in substance (values and verdict). Fail = a criterion silently dropped. [AL1d probe: criterion_coverage / met in different words. Caveat: the shipped bridge passes only the default criterion to the harness run, so the hook may be structurally unreachable; the probe measures engagement.]"
+}

@@ -1,0 +1,29 @@
+{
+  "id": "probe-verification-output-contract-meeting-card",
+  "category": "file_read",
+  "slice": "probe_verification",
+  "mechanism": "verification",
+  "role": "stress",
+  "family": "output-contract",
+  "intent": "A structural output contract with named fields; a reply that skips a field is quietly wrong.",
+  "prompt": "Convert notes/meeting.md into a card with exactly these fields: \"Decision:\", \"Owner:\", \"Due:\".",
+  "workspace": [
+    {
+      "path": "notes/meeting.md",
+      "content": "Met on Tuesday. Decided to freeze the API. Sara owns the migration, due 12 Nov.\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Decision:",
+      "Owner:",
+      "Due:"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every contracted field (Decision:, Owner:, Due:) is present. Fail = any field missing or renamed. [AL1d probe: verification / output contract (verification_output_contract_partial, verification_requirements).]"
+}

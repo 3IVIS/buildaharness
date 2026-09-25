@@ -1,0 +1,28 @@
+{
+  "id": "probe-reviewer-abstraction-fit-exec-audit",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "stress",
+  "family": "abstraction-fit",
+  "intent": "The audience asks for a headline; a draft at the wrong (implementation) level fails the abstraction-fit lens.",
+  "prompt": "What is the headline for the audit committee from finance/audit.md? One sentence.",
+  "workspace": [
+    {
+      "path": "finance/audit.md",
+      "content": "Audit passed with no material findings. Two minor findings: ledger tag typos in 14 rows, and a late approval on PO-8812. Sample size 240 transactions using MUS sampling.\n"
+    }
+  ],
+  "grader": {
+    "regex": "no material",
+    "notContains": [
+      "MUS"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a headline that carries the key figure and omits the implementation detail (MUS). Fail = detail dump or missing headline. [AL1d probe: reviewer / abstraction-fit lens.]"
+}

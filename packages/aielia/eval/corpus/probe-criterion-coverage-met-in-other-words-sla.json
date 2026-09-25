@@ -1,0 +1,29 @@
+{
+  "id": "probe-criterion-coverage-met-in-other-words-sla",
+  "category": "multi_step",
+  "slice": "probe_criterion_coverage",
+  "mechanism": "criterion_coverage",
+  "role": "stress",
+  "family": "met-in-other-words",
+  "intent": "Stated success criteria that a correct reply meets in different words than the criterion text.",
+  "prompt": "Compare uptime in ops/sla.md to target. Done when: both numbers are quoted and the verdict on meeting the target is clear.",
+  "workspace": [
+    {
+      "path": "ops/sla.md",
+      "content": "Uptime target: 99.9\nActual uptime: 99.95\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "99.9",
+      "99.95"
+    ],
+    "regex": "met|meet|exceed|above|beat|ahead|achiev"
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every criterion is met in substance (values and verdict). Fail = a criterion silently dropped. [AL1d probe: criterion_coverage / met in different words. Caveat: the shipped bridge passes only the default criterion to the harness run, so the hook may be structurally unreachable; the probe measures engagement.]"
+}

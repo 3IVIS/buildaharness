@@ -1,0 +1,27 @@
+{
+  "id": "probe-verification-stale-figure-q4-marketing",
+  "category": "file_read",
+  "slice": "probe_verification",
+  "mechanism": "verification",
+  "role": "stress",
+  "family": "stale-figure",
+  "intent": "The file states a total that disagrees with its own line items.",
+  "prompt": "What is the total marketing spend for Q4 in marketing/q4.md? Give me the actual figure, not just the one written down.",
+  "workspace": [
+    {
+      "path": "marketing/q4.md",
+      "content": "# Q4 marketing spend\n\n- Ads: 310\n- Events: 145\n- Content: 95\n\nTotal: 500\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "550"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = reports 550 (the real sum). Fail = repeats the stated 500 as fact. [AL1d probe: verification / stale figure; the file's own Total line is mechanically wrong, so overconfident-wrong is the target metric.]"
+}

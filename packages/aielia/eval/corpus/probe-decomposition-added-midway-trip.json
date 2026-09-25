@@ -1,0 +1,30 @@
+{
+  "id": "probe-decomposition-added-midway-trip",
+  "category": "multi_step",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "stress",
+  "family": "added-mid-conversation",
+  "intent": "A deliverable is added mid-conversation; the final status ask needs both tracked.",
+  "prompt": "Note that I fly out on 9 June.",
+  "followups": [
+    {
+      "prompt": "What is a good way to keep a checklist tidy?"
+    },
+    {
+      "prompt": "Also I need the hotel budget: 600 per night."
+    },
+    {
+      "prompt": "Now list back everything I told you about the trip."
+    }
+  ],
+  "grader": {
+    "regex": "(9 June|June 9)[\\s\\S]*(600)|(600)[\\s\\S]*(9 June|June 9)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the final reply carries both the original and the mid-added deliverable. Fail = drops one. [AL1d probe: decomposition / added mid-conversation.]"
+}

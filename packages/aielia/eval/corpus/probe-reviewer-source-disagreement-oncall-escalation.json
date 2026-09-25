@@ -1,0 +1,29 @@
+{
+  "id": "probe-reviewer-source-disagreement-oncall-escalation",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "stress",
+  "family": "source-disagreement",
+  "intent": "Two workspace sources disagree; a draft that picks one silently is a defect only a consistency review catches.",
+  "prompt": "Who does a Sev1 page first? See both escalation files.",
+  "workspace": [
+    {
+      "path": "ops/escalate-a.md",
+      "content": "Sev1 pages the engineering director first.\n"
+    },
+    {
+      "path": "ops/escalate-b.md",
+      "content": "Sev1 pages the on-call engineer first, never the director.\n"
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|disagree|differ|mismatch|does ?n[o']t (match|add up)|discrepan|off by|actually|correct(ed|ion)|recalculat|should be|not (match|consistent)|two (different )?(policies|sources|files|values|versions)|both (files|documents|sources)"
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the reply surfaces that the two sources disagree. Fail = presents one as the answer. [AL1d probe: reviewer / consistency lens.]"
+}

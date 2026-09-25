@@ -1,0 +1,28 @@
+{
+  "id": "probe-reviewer-abstraction-fit-exec-hiring",
+  "category": "adv_contradiction",
+  "slice": "probe_reviewer",
+  "mechanism": "reviewer_adversarial_lens",
+  "role": "stress",
+  "family": "abstraction-fit",
+  "intent": "The audience asks for a headline; a draft at the wrong (implementation) level fails the abstraction-fit lens.",
+  "prompt": "Summarise for the exec team in one sentence: hr/hiring.md.",
+  "workspace": [
+    {
+      "path": "hr/hiring.md",
+      "content": "Hiring: 9 offers out, 6 accepted, 2 pending, 1 declined. Onboarding checklist v3 uses the new laptop image 24.04 with the encrypted-home template.\n"
+    }
+  ],
+  "grader": {
+    "regex": "6",
+    "notContains": [
+      "encrypted-home"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a headline that carries the key figure and omits the implementation detail (encrypted-home). Fail = detail dump or missing headline. [AL1d probe: reviewer / abstraction-fit lens.]"
+}

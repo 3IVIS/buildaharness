@@ -329,6 +329,70 @@
       "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "18 tasks: household, work-status and sensory-limits families (4 stress each) plus 6 calm controls (hypothetical, retracted, about someone else). Fact implied turn 1, needed turn 3. Raw transcript stays in context for both arms, so headroom is the open question the probe answers. Not yet run."
+    },
+    {
+      "id": "probe-verification",
+      "title": "Probe: verification layer",
+      "hypothesis": "PROBE (AL1d, not a verdict run): certify the verification corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "verificationOff",
+        "flagOn"
+      ],
+      "slice": "probe_verification",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: stale-figure, output-contract and source-defect families (4 stress each; the output-contract family also covers the requirements and output_contract_partial sub-layers) plus 6 correct-result calm controls. Target metric is overconfident-wrong. Most of the nine sub-layers are honestly SKIPPED today, so headroom is the open question. Not yet run."
+    },
+    {
+      "id": "probe-reviewer-pass",
+      "title": "Probe: reviewer pass (consistency, adversarial, abstraction fit)",
+      "hypothesis": "PROBE (AL1d, not a verdict run): certify the reviewer_adversarial_lens corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "reviewerPassOff",
+        "flagOn"
+      ],
+      "slice": "probe_reviewer",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: source-disagreement, abstraction-fit and embedded-instruction families (4 stress each) plus 6 clean-draft calm controls. Not yet run."
+    },
+    {
+      "id": "probe-criterion-coverage",
+      "title": "Probe: criterion coverage",
+      "hypothesis": "PROBE (AL1d, not a verdict run): certify the criterion_coverage corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "criterionCoverageOff",
+        "flagOn"
+      ],
+      "slice": "probe_criterion_coverage",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 3,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: met-in-other-words, genuinely-unmet and partly-met families (4 stress each) plus 6 fully-met calm controls. Caveat: the shipped bridge passes only the default criterion to the harness run, so the hook may be structurally unreachable; the probe reports engagement either way. Not yet run."
+    },
+    {
+      "id": "probe-decomposition",
+      "title": "Probe: decomposition / reframe",
+      "hypothesis": "PROBE (AL1d, not a verdict run): certify the decomposition_reframe corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "decompositionOff",
+        "flagOn"
+      ],
+      "slice": "probe_decomposition",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: enumerated-in-one-prompt (single turn), added-mid-conversation and merged-separate-requests (multi-turn) families (4 stress each) plus 6 single-deliverable calm controls. Not yet run."
     }
   ]
 }

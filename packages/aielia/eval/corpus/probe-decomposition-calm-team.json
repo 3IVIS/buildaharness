@@ -1,0 +1,33 @@
+{
+  "id": "probe-decomposition-calm-team",
+  "category": "file_read",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "calm-control",
+  "family": "single-deliverable",
+  "intent": "Control — one deliverable; decomposition is pure overhead and must not add ceremony.",
+  "prompt": "What team is named in a/t.md?",
+  "workspace": [
+    {
+      "path": "a/t.md",
+      "content": "Team: Growth\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Growth"
+    ],
+    "notContains": [
+      "step 1",
+      "sub-task",
+      "subtask",
+      "plan:"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = a direct one-line answer with no plan/sub-task scaffolding. Fail = decomposition ceremony on a single lookup. [AL1d probe: decomposition calm control.]"
+}

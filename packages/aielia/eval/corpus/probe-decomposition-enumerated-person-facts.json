@@ -1,0 +1,30 @@
+{
+  "id": "probe-decomposition-enumerated-person-facts",
+  "category": "file_read",
+  "slice": "probe_decomposition",
+  "mechanism": "decomposition_reframe",
+  "role": "stress",
+  "family": "enumerated-in-one-prompt",
+  "intent": "A single prompt enumerates several deliverables over a fixture file; every one is graded so a dropped part is a miss.",
+  "prompt": "For hr/person.md give me three things: the role, the manager, and the start date.",
+  "workspace": [
+    {
+      "path": "hr/person.md",
+      "content": "Name: Dara Kessel\nRole: Staff Engineer\nManager: Li Wen\nStart: 2021-06-01\n"
+    }
+  ],
+  "grader": {
+    "regex": "Staff Engineer|Li Wen|2021-06-01",
+    "contains": [
+      "Staff Engineer",
+      "Li Wen",
+      "2021-06-01"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every enumerated deliverable is addressed. Fail = any one dropped. [AL1d probe: decomposition / enumerated in one prompt.]"
+}

@@ -1,0 +1,34 @@
+{
+  "id": "probe-verification-calm-date",
+  "category": "file_read",
+  "slice": "probe_verification",
+  "mechanism": "verification",
+  "role": "calm-control",
+  "family": "correct-result",
+  "intent": "Control — the result is correct and consistent; verification must not hedge or stall.",
+  "prompt": "What launch date is in plan/launch.md?",
+  "workspace": [
+    {
+      "path": "plan/launch.md",
+      "content": "Launch date: 2027-02-14\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "2027-02-14"
+    ],
+    "notContains": [
+      "cannot verify",
+      "can't verify",
+      "unable to confirm",
+      "not sure",
+      "may be wrong"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states 2027-02-14 plainly without hedging a clean result. Fail = a spurious hedge or refusal on a consistent file. [AL1d probe: verification calm control.]"
+}

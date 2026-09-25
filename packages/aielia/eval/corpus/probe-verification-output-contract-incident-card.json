@@ -1,0 +1,29 @@
+{
+  "id": "probe-verification-output-contract-incident-card",
+  "category": "file_read",
+  "slice": "probe_verification",
+  "mechanism": "verification",
+  "role": "stress",
+  "family": "output-contract",
+  "intent": "A structural output contract with named fields; a reply that skips a field is quietly wrong.",
+  "prompt": "Turn ops/incident.md into an incident card with exactly these fields: \"Impact:\", \"Cause:\", \"Fix:\".",
+  "workspace": [
+    {
+      "path": "ops/incident.md",
+      "content": "Incident 88: the payments queue stalled for 40 minutes; cause was a full disk; fixed by rotating logs.\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Impact:",
+      "Cause:",
+      "Fix:"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every contracted field (Impact:, Cause:, Fix:) is present. Fail = any field missing or renamed. [AL1d probe: verification / output contract (verification_output_contract_partial, verification_requirements).]"
+}

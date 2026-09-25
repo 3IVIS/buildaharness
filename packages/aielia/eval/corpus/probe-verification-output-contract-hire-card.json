@@ -1,0 +1,30 @@
+{
+  "id": "probe-verification-output-contract-hire-card",
+  "category": "file_read",
+  "slice": "probe_verification",
+  "mechanism": "verification",
+  "role": "stress",
+  "family": "output-contract",
+  "intent": "A structural output contract with named fields; a reply that skips a field is quietly wrong.",
+  "prompt": "Give me a candidate card from hr/candidate.md with exactly these fields: \"Name:\", \"Experience:\", \"Start:\", \"Ask:\".",
+  "workspace": [
+    {
+      "path": "hr/candidate.md",
+      "content": "Candidate Ines Vidal, 6 years backend experience, available from 3 March, wants 95k.\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Name:",
+      "Experience:",
+      "Start:",
+      "Ask:"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = every contracted field (Name:, Experience:, Start:, Ask:) is present. Fail = any field missing or renamed. [AL1d probe: verification / output contract (verification_output_contract_partial, verification_requirements).]"
+}
