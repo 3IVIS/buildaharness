@@ -299,9 +299,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 3,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: met-in-other-words, genuinely-unmet and partly-met families (4 stress each) plus 6 fully-met calm controls. Caveat: the shipped bridge passes only the default criterion to the harness run, so the hook may be structurally unreachable; the probe reports engagement either way. Not yet run."
+      "corpusNote": "18 tasks: met-in-other-words, genuinely-unmet and partly-met families (4 stress each) plus 6 fully-met calm controls. Caveat: the shipped bridge passes only the default criterion to the harness run, so the hook may be structurally unreachable; the probe reports engagement either way. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-decomposition",

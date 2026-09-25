@@ -112,7 +112,7 @@
     },
     "probe-criterion-coverage": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.259367,
       "blocked": false
     }
