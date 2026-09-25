@@ -70,4 +70,8 @@ export const AUDIT_SLICE_MECHANISM: Record<string, MechanismId> = {
   audit_decomposition_multistep: 'decomposition_reframe',
   audit_verification: 'verification',
   audit_reviewer_pass: 'reviewer_adversarial_lens',
+  probe_contradiction: 'semantic_contradiction',
+  probe_belief_trail: 'semantic_contradiction',
+  probe_change_review: 'change_review',
+  probe_model_inferred_facts: 'model_inferred_facts',
 }

@@ -1,0 +1,30 @@
+{
+  "id": "probe-contradiction-belief-trail-capacity",
+  "category": "adv_contradiction",
+  "slice": "probe_belief_trail",
+  "mechanism": "semantic_contradiction",
+  "role": "stress",
+  "family": "belief-trail",
+  "intent": "A value is stated, silently shifted two turns later, then the user asks what is on record — the trail of beliefs must surface both.",
+  "prompt": "Note down: the room seats 40 people.",
+  "followups": [
+    {
+      "prompt": "What is the boiling point of water at sea level, in Celsius?"
+    },
+    {
+      "prompt": "The room holds 25 at most."
+    },
+    {
+      "prompt": "How many people fit in that room?"
+    }
+  ],
+  "grader": {
+    "regex": "(?=[\\s\\S]*40)(?=[\\s\\S]*25)|conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the final summary reports both values or flags that two capacities were given. Fail = states only one value as if it were settled. [AL1c probe: semantic_contradiction / belief-trail (world-model belief trail).]"
+}

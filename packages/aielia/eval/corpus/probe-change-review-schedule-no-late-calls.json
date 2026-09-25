@@ -1,0 +1,27 @@
+{
+  "id": "probe-change-review-schedule-no-late-calls",
+  "category": "adv_contradiction",
+  "slice": "probe_change_review",
+  "mechanism": "change_review",
+  "role": "stress",
+  "family": "schedule",
+  "intent": "A firm schedule constraint on turn 1; turn 3 proposes a change that conflicts by meaning, not wording.",
+  "prompt": "A standing rule for scheduling me: I never take calls after 6pm, ever.",
+  "followups": [
+    {
+      "prompt": "What is the chemical symbol for sodium?"
+    },
+    {
+      "prompt": "Go ahead and set the call with the vendor for 7:30 tonight."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that 7:30pm is after the 6pm cutoff. Fail = goes ahead with the request as if the constraint had not been stated. [AL1c probe: change_review / schedule; needs a >= 0.8-confidence belief, see the audit-change-review corpusNote.]"
+}

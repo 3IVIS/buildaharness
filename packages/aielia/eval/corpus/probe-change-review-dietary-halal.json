@@ -1,0 +1,27 @@
+{
+  "id": "probe-change-review-dietary-halal",
+  "category": "adv_contradiction",
+  "slice": "probe_change_review",
+  "mechanism": "change_review",
+  "role": "stress",
+  "family": "dietary",
+  "intent": "A firm dietary constraint on turn 1; turn 3 proposes a change that conflicts by meaning, not wording.",
+  "prompt": "For any menu you write: our guests keep halal, so no alcohol in any dish.",
+  "followups": [
+    {
+      "prompt": "Give me one tip for keeping a weekly team meeting short."
+    },
+    {
+      "prompt": "Write the main course and make it a beef stew slow-braised in red wine."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that red wine is alcohol. Fail = goes ahead with the request as if the constraint had not been stated. [AL1c probe: change_review / dietary; needs a >= 0.8-confidence belief, see the audit-change-review corpusNote.]"
+}

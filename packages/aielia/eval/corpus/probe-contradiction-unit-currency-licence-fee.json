@@ -1,0 +1,30 @@
+{
+  "id": "probe-contradiction-unit-currency-licence-fee",
+  "category": "adv_contradiction",
+  "slice": "probe_contradiction",
+  "mechanism": "semantic_contradiction",
+  "role": "stress",
+  "family": "unit-currency",
+  "intent": "Turn 1 states a fact; turn 3 restates it in a way that disagrees by meaning (unit-currency), not by negation.",
+  "prompt": "Keep track of this: the annual licence costs 500 US dollars.",
+  "followups": [
+    {
+      "prompt": "Name one benefit of writing meeting notes right after a call."
+    },
+    {
+      "prompt": "Give me one tip for keeping a weekly team meeting short."
+    },
+    {
+      "prompt": "For the budget sheet, assume the yearly licence is around 70,000 yen."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that 500 USD is not about 70,000 yen. Fail = accepts both statements silently or only echoes the newest one. [AL1c probe: semantic_contradiction / unit-currency; the lexical negation-pair check cannot see this.]"
+}

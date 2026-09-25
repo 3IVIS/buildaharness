@@ -1,0 +1,37 @@
+{
+  "id": "probe-contradiction-calm-complementary",
+  "category": "adv_contradiction",
+  "slice": "probe_contradiction",
+  "mechanism": "semantic_contradiction",
+  "role": "calm-control",
+  "family": "legitimate-change",
+  "intent": "Control — a change over time or complementary detail; semantic_contradiction must stay quiet.",
+  "prompt": "Remember: the shop opens at 9am on weekdays.",
+  "followups": [
+    {
+      "prompt": "What is the chemical symbol for sodium?"
+    },
+    {
+      "prompt": "The same shop opens at 10am on Saturdays."
+    },
+    {
+      "prompt": "When does the shop open on a Saturday?"
+    }
+  ],
+  "grader": {
+    "regex": "10",
+    "notContains": [
+      "contradicts",
+      "conflicts with",
+      "inconsistent with",
+      "goes against",
+      "violates"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers the question with the right current value and raises no contradiction. Fail = flags a false contradiction (false-positive tax) between statements that are compatible or sequential. [AL1c probe: semantic_contradiction calm control.]"
+}

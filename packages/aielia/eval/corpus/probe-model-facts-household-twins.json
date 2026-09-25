@@ -1,0 +1,27 @@
+{
+  "id": "probe-model-facts-household-twins",
+  "category": "lookup",
+  "slice": "probe_model_inferred_facts",
+  "mechanism": "model_inferred_facts",
+  "role": "stress",
+  "family": "household",
+  "intent": "Turn 1 only implies a household fact in wording the lexical pass misses; turn 3's choice turns on it.",
+  "prompt": "The twins finally fell asleep, that is the first quiet hour I have had all day.",
+  "followups": [
+    {
+      "prompt": "How many days are there in a leap year?"
+    },
+    {
+      "prompt": "We are picking a restaurant: Restaurant A has no high chairs and tiny tables, Restaurant B has high chairs and a play corner. Tailor the pick to my situation, which I already told you about, and choose one."
+    }
+  ],
+  "grader": {
+    "regex": "Restaurant B|high chairs?|twins|play corner"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = picks the option that fits the implied situation (small children) or names it. Fail = picks the other option with no reference to the implied fact. [AL1c probe: model_inferred_facts / household; the raw transcript is still in context, so a null differential is ambiguous — see the model-inferred-facts corpusNote.]"
+}

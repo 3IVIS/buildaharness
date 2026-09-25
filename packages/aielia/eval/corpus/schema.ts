@@ -134,6 +134,13 @@ export const AUDIT_SLICES = [
   // manifest corpusNote). Plus single-deliverable controls (recall alone should suffice here;
   // decomposition/goal-tracking is pure overhead).
   'audit_decomposition_multistep',
+  // AL1c probe slices (plans/adaptive_layer_selection_plan.html): per-layer stress + calm-control
+  // tasks authored against docs/layer_mechanisms.md, queued as probe cells (1 seed) in
+  // audit/manifest.json — instruments to certify the corpus (engagement/headroom), not verdict runs.
+  'probe_contradiction',
+  'probe_belief_trail',
+  'probe_change_review',
+  'probe_model_inferred_facts',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]

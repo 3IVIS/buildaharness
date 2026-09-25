@@ -1,0 +1,30 @@
+{
+  "id": "probe-model-facts-calm-retracted-knee",
+  "category": "lookup",
+  "slice": "probe_model_inferred_facts",
+  "mechanism": "model_inferred_facts",
+  "role": "calm-control",
+  "family": "not-a-fact",
+  "intent": "Control — the \"implied fact\" is hypothetical, retracted or about someone else; it must not be remembered as the user's own.",
+  "prompt": "My knee has been terrible on stairs lately.",
+  "followups": [
+    {
+      "prompt": "Suggest a name for a small internal newsletter."
+    },
+    {
+      "prompt": "Which flat: Flat A is a bright third-floor walk-up, Flat B is a dark ground-floor flat."
+    }
+  ],
+  "grader": {
+    "regex": "Flat A|bright|third",
+    "notContains": [
+      "your knee"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = picks the option that fits the user's real situation and does not assume the hypothetical, retracted or third-party fact. Fail = wrong-memory tax: treats it as a durable fact about the user. [AL1c probe: model_inferred_facts calm control.]"
+}

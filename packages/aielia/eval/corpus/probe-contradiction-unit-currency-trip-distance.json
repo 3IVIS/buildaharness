@@ -1,0 +1,30 @@
+{
+  "id": "probe-contradiction-unit-currency-trip-distance",
+  "category": "adv_contradiction",
+  "slice": "probe_contradiction",
+  "mechanism": "semantic_contradiction",
+  "role": "stress",
+  "family": "unit-currency",
+  "intent": "Turn 1 states a fact; turn 3 restates it in a way that disagrees by meaning (unit-currency), not by negation.",
+  "prompt": "Note this down: the drive to the depot is 100 kilometres.",
+  "followups": [
+    {
+      "prompt": "What does the acronym HTTP stand for?"
+    },
+    {
+      "prompt": "How many days are there in a leap year?"
+    },
+    {
+      "prompt": "Add that it is roughly 100 miles door to door."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that 100 km is about 62 miles, not 100 miles. Fail = accepts both statements silently or only echoes the newest one. [AL1c probe: semantic_contradiction / unit-currency; the lexical negation-pair check cannot see this.]"
+}

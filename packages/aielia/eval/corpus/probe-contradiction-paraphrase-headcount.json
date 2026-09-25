@@ -1,0 +1,30 @@
+{
+  "id": "probe-contradiction-paraphrase-headcount",
+  "category": "adv_contradiction",
+  "slice": "probe_contradiction",
+  "mechanism": "semantic_contradiction",
+  "role": "stress",
+  "family": "paraphrase",
+  "intent": "Turn 1 states a fact; turn 3 restates it in a way that disagrees by meaning (paraphrase), not by negation.",
+  "prompt": "Please keep track of these for me. First: our engineering team has twelve people.",
+  "followups": [
+    {
+      "prompt": "How many days are there in a leap year?"
+    },
+    {
+      "prompt": "Suggest a name for a small internal newsletter."
+    },
+    {
+      "prompt": "One more: the engineering headcount is fifteen."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that twelve vs fifteen engineers is a discrepancy. Fail = accepts both statements silently or only echoes the newest one. [AL1c probe: semantic_contradiction / paraphrase; the lexical negation-pair check cannot see this.]"
+}

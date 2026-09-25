@@ -1,0 +1,30 @@
+{
+  "id": "probe-contradiction-temporal-crosslang-client-city",
+  "category": "adv_contradiction",
+  "slice": "probe_contradiction",
+  "mechanism": "semantic_contradiction",
+  "role": "stress",
+  "family": "temporal-crosslang",
+  "intent": "Turn 1 states a fact; turn 3 restates it in a way that disagrees by meaning (temporal-crosslang), not by negation.",
+  "prompt": "Keep a note: our biggest client is based in Berlin.",
+  "followups": [
+    {
+      "prompt": "Give me one tip for keeping a weekly team meeting short."
+    },
+    {
+      "prompt": "How many minutes are there in a day?"
+    },
+    {
+      "prompt": "Ojo: el cliente principal tiene su sede en Madrid."
+    }
+  ],
+  "grader": {
+    "regex": "conflict|contradict|inconsist|does ?n[o']t (match|line up|add up)|differ|at odds|earlier (you|mentioned)|previously|before you|you (said|mentioned|noted|told me|stated)|go(es)? against|violat|not (allowed|permitted)|check(ing)? (with|first)|are you sure|sure you want|before (i|we) (go|proceed|book|schedule|draft|order)"
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply flags that Berlin and Madrid disagree. Fail = accepts both statements silently or only echoes the newest one. [AL1c probe: semantic_contradiction / temporal-crosslang; the lexical negation-pair check cannot see this.]"
+}

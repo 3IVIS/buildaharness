@@ -1,0 +1,34 @@
+{
+  "id": "probe-change-review-calm-dairy-free",
+  "category": "adv_contradiction",
+  "slice": "probe_change_review",
+  "mechanism": "change_review",
+  "role": "calm-control",
+  "family": "compatible-change",
+  "intent": "Control — the proposed change is compatible with the stated constraint; change_review must stay quiet.",
+  "prompt": "For every meal you plan: one guest is severely lactose intolerant, so nothing can contain dairy.",
+  "followups": [
+    {
+      "prompt": "Suggest a name for a small internal newsletter."
+    },
+    {
+      "prompt": "Plan the main course, and make it a coconut-milk vegetable curry with rice."
+    }
+  ],
+  "grader": {
+    "regex": "curry|coconut|rice",
+    "notContains": [
+      "contradicts",
+      "conflicts with",
+      "inconsistent with",
+      "goes against",
+      "violates"
+    ]
+  },
+  "tools": {
+    "file": false,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = handles the request (a financial or booking action may be correctly staged for approval) and never cites the earlier constraint as a conflict. Fail = false conflict flag on a compatible change. [AL1c probe: change_review calm control.]"
+}

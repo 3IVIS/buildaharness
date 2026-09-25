@@ -281,6 +281,54 @@
       "status": "queued",
       "corpusAdequacy": "acceptable",
       "corpusNote": "Seven interleaved-goal sessions (return after a detour, three similar projects updated out of order over eight turns, scoped and alternating format constraints, a constraint that must not leak into a new topic, a correction that survives a detour, three-goal synthesis) plus a linear control. No mid-turn messages, so this isolates thread tracking from steering. Both arms keep the raw conversation history, so plain recall is not expected to separate them."
+    },
+    {
+      "id": "probe-semantic-contradiction",
+      "title": "Probe: semantic contradiction + belief trail",
+      "hypothesis": "PROBE (AL1c, not a verdict run): certify the semantic_contradiction corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "contradictionOff",
+        "flagOn"
+      ],
+      "slice": "probe_contradiction,probe_belief_trail",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "22 tasks: paraphrase, unit-currency, temporal-crosslang and belief-trail families (4 stress each) plus 6 calm controls (legitimate change over time). 1 seed, both arms, transcripts + judge; estimated spend from ~22 multi-turn tasks x 2 arms. Not yet run; AL1f certifies it from the probe report."
+    },
+    {
+      "id": "probe-change-review",
+      "title": "Probe: semantic change reviewer",
+      "hypothesis": "PROBE (AL1c, not a verdict run): certify the change_review corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "changeReviewOff",
+        "flagOn"
+      ],
+      "slice": "probe_change_review",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 3,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: dietary, schedule and policy-budget families (4 stress each) plus 6 compatible-change calm controls. Constraint on turn 1, conflicting change on turn 3; natural-language domains so looksLikeCodingFact does not skip the hook. Small-purchase style controls accept a correctly staged action. Not yet run."
+    },
+    {
+      "id": "probe-model-inferred-facts",
+      "title": "Probe: model-inferred facts",
+      "hypothesis": "PROBE (AL1c, not a verdict run): certify the model_inferred_facts corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "modelInferredFactsOff",
+        "flagOn"
+      ],
+      "slice": "probe_model_inferred_facts",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 3,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: household, work-status and sensory-limits families (4 stress each) plus 6 calm controls (hypothetical, retracted, about someone else). Fact implied turn 1, needed turn 3. Raw transcript stays in context for both arms, so headroom is the open question the probe answers. Not yet run."
     }
   ]
 }
