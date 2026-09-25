@@ -153,9 +153,9 @@
       "blocked": false
     },
     "ablation-contradiction": {
-      "seedsDone": 4,
+      "seedsDone": 5,
       "finalized": false,
-      "spendUsd": 4.894171,
+      "spendUsd": 6.245883,
       "blocked": false
     }
   }
