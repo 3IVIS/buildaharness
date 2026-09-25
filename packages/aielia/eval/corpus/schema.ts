@@ -14,6 +14,7 @@
  * disk. Write the pass criteria in `note`, in plain language, including what must NOT happen.
  */
 import { z } from 'zod'
+import { MECHANISM_IDS } from './mechanisms.js'
 
 export const TASK_CATEGORIES = [
   'lookup', // single fact, model knowledge or one tool call
@@ -328,7 +329,18 @@ export const TaskSpecSchema = z.object({
   slice: z.enum(BENCHMARK_SLICES).optional(),
   /** Free-text note for the report. */
   note: z.string().optional(),
+  /**
+   * AL1a: which layer this task is built to exercise (see `mechanisms.ts` / `docs/layer_mechanisms.md`).
+   * A slice-tagged audit task resolves to its slice's mechanism when this is absent. Tasks that
+   * declare it are held to the per-layer rules in `mechanism-rules.ts`.
+   */
+  mechanism: z.enum(MECHANISM_IDS).optional(),
+  /** `stress`: built so the layer's mechanism separates the arms. `calm-control`: the named layer must stay quiet. */
+  role: z.enum(['stress', 'calm-control']).optional(),
+  /** Scenario family within the layer's failure-mode taxonomy (kebab-case); >= 3 families per layer. */
+  family: z.string().regex(/^[a-z0-9-]+$/).optional(),
 })
+  .refine((t) => (t.role === undefined) === (t.mechanism === undefined), { message: 'mechanism and role must be declared together' })
 
 export type TaskSpec = z.infer<typeof TaskSpecSchema>
 export type WorkspaceFile = z.infer<typeof WorkspaceFileSchema>
