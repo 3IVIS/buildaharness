@@ -18,6 +18,7 @@ import type { ILLMClient } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from '../src/assistant.js'
 import type { AskMode } from '../src/ask-mode-flag.js'
+import type { LayerPolicyMode } from '@buildaharness/harness'
 import { steeringAsFollowups, type TaskSpec } from './corpus/schema.js'
 import { LiveSteeringChannel } from '../src/live-steering-channel.js'
 import type { ArmTurnOutput } from './graders.js'
@@ -46,6 +47,7 @@ export type ArmName =
   | 'askModeOn'
   | 'goalGraphOn'
   | 'nextStepsOn'
+  | 'adaptivePolicy'
 
 /** Builds the LLM client for one task, given its real workspace directory. */
 export type MakeLlm = (opts: { workspaceRoot: string; task: TaskSpec }) => ILLMClient
@@ -75,6 +77,7 @@ const ONE_LOOP_ARMS: readonly ArmName[] = [
   'askModeOn',
   'goalGraphOn',
   'nextStepsOn',
+  'adaptivePolicy',
 ]
 
 /**
@@ -130,6 +133,8 @@ interface RunArmOpts {
    * `PersonalAssistant` itself defaults it to 'disabled' (the CLI/desktop default it on).
    */
   suggest?: boolean
+  /** AL10 — `layerPolicyMode` on the constructor (the `adaptivePolicy` arm runs `adaptive`; every other arm is `static`). */
+  layerPolicyMode?: LayerPolicyMode
 }
 
 async function runAssistant(
@@ -154,7 +159,7 @@ async function runAssistant(
     process.env[key] = overrides[key]
   }
   try {
-    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode, opts.goalGraph, opts.suggest)
+    return await runAssistantInner(task, makeLlm, oneLoopMode, opts.askMode, opts.goalGraph, opts.suggest, opts.layerPolicyMode)
   } finally {
     for (const key of Object.keys(overrides)) {
       if (prior[key] === undefined) delete process.env[key]
@@ -170,6 +175,7 @@ async function runAssistantInner(
   askMode?: AskMode,
   goalGraph = false,
   suggest = false,
+  layerPolicyMode?: LayerPolicyMode,
 ): Promise<ArmTurnOutput | null> {
   // Any arm that can't absorb a mid-turn message live gets it as the next queued turn instead.
   if (!goalGraph) task = steeringAsFollowups(task)
@@ -227,6 +233,7 @@ async function runAssistantInner(
     oneLoopMode,
     askMode,
     goalGraphSuggestMode: suggest ? 'enabled' : 'disabled',
+    layerPolicyMode,
     onTrace: (e) => {
       sideEvents.push({ t: Date.now(), kind: 'trace', detail: e })
       if (inFirstTurn) {
@@ -536,6 +543,14 @@ export const nextStepsOnArm: Arm = {
   run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { suggest: true }),
 }
 
+export const adaptivePolicyArm: Arm = {
+  name: 'adaptivePolicy',
+  label:
+    'PersonalAssistant (flagOn) with layerPolicyMode=adaptive — the AL10 v1 trigger rules skip/escalate each escalation layer per turn; compare against `flagOn` (always-on control) and `bare` (floor)',
+  // Same one-loop config as `flagOn`; the only difference is `layerPolicyMode: 'adaptive'`.
+  run: (task, makeLlm) => runAssistant(task, makeLlm, 'enabled', { layerPolicyMode: 'adaptive' }),
+}
+
 export const langgraphArm: Arm = {
   name: 'langgraph',
   label: 'Equivalent FlowSpec compiled to LangGraph (not implemented — separate Python runner)',
@@ -562,6 +577,7 @@ export const IMPLEMENTED_ARMS: Arm[] = [
   askModeOnArm,
   goalGraphOnArm,
   nextStepsOnArm,
+  adaptivePolicyArm,
 ]
 export const ALL_ARMS: Arm[] = [
   baselineArm,
@@ -581,5 +597,6 @@ export const ALL_ARMS: Arm[] = [
   askModeOnArm,
   goalGraphOnArm,
   nextStepsOnArm,
+  adaptivePolicyArm,
   langgraphArm,
 ]

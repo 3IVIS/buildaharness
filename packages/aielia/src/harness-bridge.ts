@@ -262,7 +262,7 @@ export class HarnessBridge {
 
     // AL8a: one policy per turn; the semantic escalation hooks below are gated through it.
     const escalationSignals = { ...complexitySignal, isTrivial: classification.isTrivial }
-    const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, escalationSignals, complexitySignal.runState, {}, turnPolicyBudget(escalationSignals))
+    const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, escalationSignals, complexitySignal.runState, undefined, turnPolicyBudget(escalationSignals))
     // AL9b: this turn's pushback tells us whether the PREVIOUS turn needed correcting.
     if (this.lastOutcomeRunId !== undefined) {
       recordLayerTelemetry(this.experienceStore, buildFeedbackRow(this.lastOutcomeRunId, classification.pushbackOnPriorTurn === true), `layer_outcome_feedback:${this.lastOutcomeRunId}`)
@@ -373,7 +373,7 @@ export class HarnessBridge {
               this.layerPolicyMode,
               { ...complexitySignal, isTrivial: classification.isTrivial },
               complexitySignal.runState ? { ...complexitySignal.runState, consecutiveFailures: failures } : undefined,
-              {},
+              undefined,
               turnPolicyBudget(escalationSignals),
             ))
           : undefined,

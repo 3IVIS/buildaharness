@@ -457,6 +457,21 @@
       "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "18 tasks: single-weak-source (fixture page), zero-observations (missing file) and conflicting-observations (two fixture pages) families, 4 stress each, plus 6 ample-evidence calm controls. Target metric is overconfident-wrong. Tool-reliability escalation has no dedicated arm, so the verification-off arm is the comparator. Not yet run."
+    },
+    {
+      "id": "adaptive-vs-alwayson-smoke",
+      "title": "Adaptive layer policy v1 vs always-on (AL10 smoke cell)",
+      "hypothesis": "layerPolicyMode=adaptive with the AL10 v1 trigger rules keeps task success non-inferior to the always-on flagOn control while skipping escalation layers on calm turns (fewer LLM calls). Rules encode hypothesised, not yet certified, regimes. AL11a registers the full per-slice matrix; this is a single-slice smoke cell.",
+      "arms": [
+        "flagOn",
+        "adaptivePolicy"
+      ],
+      "slice": "probe_criterion_coverage",
+      "seeds": 1,
+      "maxSpendUsd": 3,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "Reuses the AL1 criterion-coverage probe slice (stress tasks plus calm controls) only to exercise the adaptivePolicy arm end to end; not a verdict run."
     }
   ]
 }

@@ -12,6 +12,7 @@
 import {
   resolveModedLayerPolicy,
   computeTurnCallBudget,
+  ADAPTIVE_RULES_V1,
   toPolicyBudget,
   staticLayerPolicy,
   type EscalationLayer,
@@ -69,7 +70,8 @@ export function resolveEscalationPlan(
   mode: LayerPolicyMode,
   signals: TurnSignals,
   state: RunState | undefined,
-  rules: PolicyRules = {},
+  // AL10: `shadow` records what `adaptive` would decide, so both use the v1 rules; static never reads them.
+  rules: PolicyRules = mode === 'static' ? {} : ADAPTIVE_RULES_V1,
   budget: PolicyBudget = { remainingCalls: null },
 ): EscalationPlan {
   try {
