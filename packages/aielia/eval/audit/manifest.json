@@ -231,9 +231,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 3,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: dietary, schedule and policy-budget families (4 stress each) plus 6 compatible-change calm controls. Constraint on turn 1, conflicting change on turn 3; natural-language domains so looksLikeCodingFact does not skip the hook. Small-purchase style controls accept a correctly staged action. Not yet run."
+      "corpusNote": "18 tasks: dietary, schedule and policy-budget families (4 stress each) plus 6 compatible-change calm controls. Constraint on turn 1, conflicting change on turn 3; natural-language domains so looksLikeCodingFact does not skip the hook. Small-purchase style controls accept a correctly staged action. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-model-inferred-facts",

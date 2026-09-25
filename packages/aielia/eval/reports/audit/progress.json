@@ -88,7 +88,7 @@
     },
     "probe-change-review": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.874862,
       "blocked": false
     }
