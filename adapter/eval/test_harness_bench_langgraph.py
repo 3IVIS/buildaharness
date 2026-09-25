@@ -251,7 +251,7 @@ def test_report_shape_matches_ts_reports():
     ]
     report = build_report(rows, corpus_size=2)
 
-    assert set(report) == {"generatedAt", "corpusSize", "judgeEnabled", "perArm", "rows"}
+    assert set(report) == {"generatedAt", "corpusSize", "judgeEnabled", "graded", "perArm", "rows"}
     assert report["corpusSize"] == 2
     assert report["judgeEnabled"] is False
     agg = report["perArm"]["langgraph"]
@@ -271,12 +271,25 @@ def test_report_shape_matches_ts_reports():
     ):
         assert key in agg, f"missing aggregate key: {key}"
     assert agg["tasksRun"] == 2
-    assert agg["taskSuccessRate"] == 0.5
-    assert agg["recoveryRate"] is None  # no injected-failure task in this mini-run
-    assert agg["byCategory"]["compute"] == {"run": 1, "passed": 1}
+    assert agg["byCategory"]["compute"] == {"run": 1}
     row = report["rows"][0]
     for key in ("arm", "taskId", "category", "ran", "success", "failedChecks", "replyPreview"):
         assert key in row
+
+
+def test_langgraph_arm_is_reported_ungraded():
+    """AL0a: the retired mechanical grader must not yield a reported score for this arm."""
+    task = _task(id="a", category="compute", grader=Grader(contains=["4"]))
+    row = build_row(task, _out("4"), grade_task(task, _out("4")))
+    assert row["verdict"] == "UNGRADED"
+    for key in ("success", "hallucination", "unauthorizedEffect", "recovered"):
+        assert row[key] is None
+    report = build_report([row], corpus_size=1)
+    assert report["graded"] is False
+    agg = report["perArm"]["langgraph"]
+    assert agg["graded"] is False
+    for key in ("taskSuccessRate", "hallucinationRate", "unauthorizedEffectRate", "recoveryRate"):
+        assert agg[key] is None
 
 
 # ── End-to-end (real LLM only) ──────────────────────────────────────────────

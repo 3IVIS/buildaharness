@@ -386,3 +386,45 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
     rows,
   }
 }
+
+// ── AL-6 evidence hygiene ───────────────────────────────────────────────────
+
+/** AL-6: a run whose arm has more than this share of INVALID_RUN/UNJUDGED rows is re-run, not read. */
+export const INVALID_ROW_LIMIT = 0.05
+
+export interface InvalidRateViolation {
+  arm: string
+  invalid: number
+  rows: number
+}
+
+/** Arms of `report` whose invalid-row share (`tasksInvalid / rows` among rows that ran) exceeds `limit`. */
+export function invalidRateViolations(report: BenchmarkReport, limit: number = INVALID_ROW_LIMIT): InvalidRateViolation[] {
+  const out: InvalidRateViolation[] = []
+  for (const agg of Object.values(report.perArm)) {
+    const rows = report.rows.filter((r) => r.arm === agg.arm && r.ran).length
+    const invalid = agg.tasksInvalid ?? 0
+    if (rows > 0 && invalid / rows > limit) out.push({ arm: agg.arm, invalid, rows })
+  }
+  return out
+}
+
+/** The AL-6 refusal message for a set of violations. */
+export function invalidRateMessage(violations: InvalidRateViolation[], limit: number = INVALID_ROW_LIMIT): string {
+  return (
+    `AL-6: ${violations.map((v) => `arm "${v.arm}" ${v.invalid}/${v.rows} invalid`).join('; ')} — over the ${limit * 100}% limit. ` +
+    `Re-run those rows before reading any result.`
+  )
+}
+
+/**
+ * The transcript directory a benchmark run writes to. `--transcripts=<dir>` wins; otherwise a
+ * directory next to the report (`--out=<x>.json` → `<x>.transcripts`, else
+ * `<reportsDir>/<stamp>.transcripts`). Returns `undefined` when `--transcripts=` was given empty —
+ * an explicit attempt to opt out, which the script refuses (exit 2).
+ */
+export function resolveTranscriptDir(opts: { transcripts?: string; out?: string; reportsDir: string; stamp: string }): string | undefined {
+  if (opts.transcripts !== undefined) return opts.transcripts.trim() === '' ? undefined : opts.transcripts
+  if (opts.out) return opts.out.replace(/\.json$/i, '') + '.transcripts'
+  return `${opts.reportsDir}/${opts.stamp}.transcripts`
+}

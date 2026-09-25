@@ -270,7 +270,7 @@ def run_benchmark(task_ids: tuple[str, ...] | None = None, model_name: str | Non
         out = run_task(task, resolved_model)
         graded = grade_task(task, out)
         rows.append(build_row(task, out, graded))
-        verdict = "ERROR" if out.status == "error" else ("PASS" if graded.success else "FAIL")
+        verdict = "ERROR" if out.status == "error" else "UNGRADED"
         print(f"  {verdict:5s}  langgraph · {task.id}", flush=True)
     return build_report(rows, corpus_size=len(tasks))
 
@@ -302,9 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     agg = report["perArm"]["langgraph"]
     print(
         f"\nlanggraph: {agg['tasksRun']} run, "
-        f"taskSuccessRate={agg['taskSuccessRate']:.3f}, "
-        f"hallucinationRate={agg['hallucinationRate']:.3f}, "
-        f"recoveryRate={agg['recoveryRate']}"
+        "UNGRADED (the mechanical grader is retired — no success/hallucination/recovery rates are reported)"
     )
     print(f"machine report → {out_path}")
     return 0

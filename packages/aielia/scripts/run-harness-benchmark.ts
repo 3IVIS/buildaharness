@@ -22,7 +22,7 @@
  *   npx tsx scripts/run-harness-benchmark.ts --gate=eval/reports/<before>.json   # Rule 6: exit 1 on regression
  *   npx tsx scripts/run-harness-benchmark.ts --gate=... --gate-arm=supervisorOn  # gate a different arm (default flagOn)
  *   npx tsx scripts/run-harness-benchmark.ts --model=sonnet --judge-model=claude-opus-5-5 # Plan A1: pin the model (default sonnet) and the judge (default claude-opus-5-5), recorded as report.modelId / report.judgeModelId
- *   npx tsx scripts/run-harness-benchmark.ts --transcripts=<dir> --seed-tag=1    # Plan A1: write <arm>__<task>__seed<n>.json full-conversation captures
+ *   npx tsx scripts/run-harness-benchmark.ts --transcripts=<dir> --seed-tag=1    # Plan A1 / AL-6: transcripts are ALWAYS written (default: <report>.transcripts/); write <arm>__<task>__seed<n>.json full-conversation captures
  *   npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot --seeds=3
  *   npx tsx scripts/run-harness-benchmark.ts ... --no-md --out=<path.json>   # parallel-safe: skip the shared docs/*.md prepend, write the report to <path.json> (scripts/run-audit-parallel.mjs uses this)
  *       # S7 Rule 6: N independent repeats of the whole matrix (claude-cli has no seed param),
@@ -43,7 +43,7 @@ import { fileURLToPath } from 'node:url'
 import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
 import { loadCorpus } from '../eval/corpus/index.js'
 import { IMPLEMENTED_ARMS, ALL_ARMS, type Arm } from '../eval/arms.js'
-import { runBenchmark, type BenchmarkReport } from '../eval/runner.js'
+import { runBenchmark, resolveTranscriptDir, invalidRateViolations, invalidRateMessage, type BenchmarkReport } from '../eval/runner.js'
 import { renderMarkdown, diffReports, renderDiff, aggregateSeeds, diffSeeds, renderSeedDiff } from '../eval/report.js'
 import { ClaudeCliJudge } from '../eval/judge.js'
 
@@ -75,7 +75,17 @@ async function main(): Promise<void> {
   const modelAlias = arg('model') ?? 'sonnet'
   // The judge is a different, stronger model than the arms by default so it never grades its own family's output.
   const judgeModelAlias = arg('judge-model') ?? 'claude-opus-5-5'
-  const transcriptDir = arg('transcripts')
+  // AL-6 — a run's record is mandatory: transcripts are always written, by default next to the report.
+  const transcriptDir = resolveTranscriptDir({
+    transcripts: arg('transcripts'),
+    out: arg('out'),
+    reportsDir: REPORTS_DIR,
+    stamp: new Date().toISOString().replace(/[:.]/g, '-'),
+  })
+  if (transcriptDir === undefined) {
+    console.error('--transcripts= was empty: a benchmark run must save full-conversation transcripts (AL-6). Pass a directory or omit the flag for the default.')
+    process.exit(2)
+  }
   const seedTagArg = arg('seed-tag')
 
   if (sliceFilter && excludeSliceFilter) {
@@ -121,7 +131,7 @@ async function main(): Promise<void> {
   console.log(
     `Running ${arms.map((a) => a.name).join(', ')} over ${tasks.length} task(s) via claude-cli` +
       ` (model: ${modelAlias}, judge: ${judgeModelAlias}` +
-      `${transcriptDir ? `, transcripts → ${transcriptDir}` : ''}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
+      `, transcripts → ${transcriptDir}${seeds > 1 ? `, seeds: ${seeds}` : ''})...\n`,
   )
 
   mkdirSync(REPORTS_DIR, { recursive: true })
@@ -218,6 +228,13 @@ async function main(): Promise<void> {
   console.log(`\n${section}\n`)
   console.log(`machine report → ${jsonPath}`)
   if (!skipMd) console.log(`human report   → ${REPORT_MD}`)
+
+  // ── AL-6: an arm with >5% invalid rows is re-run, not read ───────────────────
+  const invalidViolations = seedReports.flatMap((r) => invalidRateViolations(r))
+  if (invalidViolations.length > 0) {
+    console.error(invalidRateMessage(invalidViolations))
+    process.exit(2)
+  }
 
   // ── Rule 6 gate ───────────────────────────────────────────────────────────
   if (gatePath) {

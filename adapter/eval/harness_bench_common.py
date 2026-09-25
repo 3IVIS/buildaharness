@@ -20,6 +20,12 @@ What is deliberately NOT ported: ``answerClaimStatus`` grading (the LangGraph ar
 produces no ``AnswerClaim``, so that check always scores ``skipped``, exactly as
 ``graders.ts`` does when ``out.answerClaimStatus === undefined``), the AnswerClaim
 confusion matrix, and the LLM judge.
+
+**Ungraded (AL0a).** The TS benchmark grades with a semantic LLM judge; the mechanical
+``grade_task`` above is the retired lexical grader and must not produce a reported score.
+:func:`build_row` / :func:`build_report` therefore mark this arm ``UNGRADED``: ``success``,
+``hallucination``, ``unauthorizedEffect``, ``recovered`` and every rate are ``None`` and the
+report carries ``graded: False``. ``grade_task`` remains only as tested parity code.
 """
 
 from __future__ import annotations
@@ -327,10 +333,12 @@ def build_row(task: TaskSpec, out: ArmTurnOutput, graded: GradedTask) -> dict[st
         "taskId": task.id,
         "category": task.category,
         "ran": True,
-        "success": graded.success,
-        "hallucination": graded.hallucination,
-        "unauthorizedEffect": graded.unauthorized_effect,
-        "recovered": graded.recovered,
+        # AL0a: the mechanical grade is retired — this arm is reported ungraded, never scored.
+        "verdict": "UNGRADED",
+        "success": None,
+        "hallucination": None,
+        "unauthorizedEffect": None,
+        "recovered": None,
         "latencyMs": round(out.latency_ms),
         "costUsd": out.cost_usd,
         "totalTokens": total_tokens,
@@ -344,28 +352,24 @@ def build_report(rows: list[dict[str, Any]], corpus_size: int) -> dict[str, Any]
     ``generatedAt`` / ``corpusSize`` / ``judgeEnabled`` / ``perArm`` / ``rows``.
     Only the ``langgraph`` arm is present."""
     ran = [r for r in rows if r["ran"]]
-    injected = [r for r in ran if r["recovered"] is not None]
     with_latency = [r for r in ran if r["latencyMs"] is not None]
     with_cost = [r for r in ran if r["costUsd"] is not None]
 
     by_category: dict[str, dict[str, int]] = {}
     for r in ran:
-        s = by_category.setdefault(r["category"], {"run": 0, "passed": 0})
+        s = by_category.setdefault(r["category"], {"run": 0})
         s["run"] += 1
-        if r["success"]:
-            s["passed"] += 1
 
     aggregate = {
         "arm": _ARM_NAME,
         "label": ARM_LABEL,
         "tasksRun": len(ran),
         "tasksSkipped": len(rows) - len(ran),
-        "taskSuccessRate": _rate(sum(1 for r in ran if r["success"]), len(ran)),
-        "hallucinationRate": _rate(sum(1 for r in ran if r["hallucination"]), len(ran)),
-        "unauthorizedEffectRate": _rate(sum(1 for r in ran if r["unauthorizedEffect"]), len(ran)),
-        "recoveryRate": (
-            None if not injected else _rate(sum(1 for r in injected if r["recovered"] is True), len(injected))
-        ),
+        "graded": False,
+        "taskSuccessRate": None,
+        "hallucinationRate": None,
+        "unauthorizedEffectRate": None,
+        "recoveryRate": None,
         "meanLatencyMs": (
             None if not with_latency else round(sum(r["latencyMs"] for r in with_latency) / len(with_latency))
         ),
@@ -378,6 +382,7 @@ def build_report(rows: list[dict[str, Any]], corpus_size: int) -> dict[str, Any]
         "generatedAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "corpusSize": corpus_size,
         "judgeEnabled": False,
+        "graded": False,
         "perArm": {_ARM_NAME: aggregate},
         "rows": rows,
     }
