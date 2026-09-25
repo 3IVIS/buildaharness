@@ -350,9 +350,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 6,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "26 tasks: redirect-wrong-file, reframe-plan, gather-evidence-nested, ask-user-missing-detail (a follow-up supplies the detail) and late-stall (multi-turn; the stall is injected on the last turn) families, 4 stress each, plus 6 healthy-run calm controls that must not trigger a consult. Target metric is recovery rate on stalled tasks. Not yet run."
+      "corpusNote": "26 tasks: redirect-wrong-file, reframe-plan, gather-evidence-nested, ask-user-missing-detail (a follow-up supplies the detail) and late-stall (multi-turn; the stall is injected on the last turn) families, 4 stress each, plus 6 healthy-run calm controls that must not trigger a consult. Target metric is recovery rate on stalled tasks. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-injection",

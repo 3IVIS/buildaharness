@@ -130,7 +130,7 @@
     },
     "probe-supervisor": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.599186,
       "blocked": false
     }

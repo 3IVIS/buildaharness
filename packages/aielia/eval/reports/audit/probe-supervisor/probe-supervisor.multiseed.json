@@ -1,0 +1,112 @@
+{
+  "feature": "probe-supervisor",
+  "title": "Probe: trajectory supervisor",
+  "hypothesis": "PROBE (AL1e, not a verdict run): certify the trajectory supervisor corpus — the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+  "control": "supervisorOff",
+  "candidate": "flagOn",
+  "seeds": 1,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No significant task-success delta at 1 seed(s) — underpowered. Expand the corpus or seeds and re-run before deciding.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-25T13:39:02.149Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.4230769230769231,
+      "candidate": 0.4230769230769231,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 0.08333333333333333,
+      "candidate": 0.08333333333333333,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.08695652173913043,
+      "candidate": 0.08695652173913043,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0.6538461538461539,
+      "deltaMean": 0.6538461538461539,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 9236,
+      "candidate": 11884,
+      "deltaMean": 2648,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.007887346153846155,
+      "candidate": 0.015158261538461539,
+      "deltaMean": 0.007270915384615384,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 12956,
+      "candidate": 16547,
+      "deltaMean": 3591,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.9218456046930086,
+  "latencyDeltaPct": 0.2867042009527934,
+  "tokenDeltaPct": 0.2771688792837295,
+  "targetMetric": {
+    "name": "recovery rate on stalled tasks",
+    "proxy": false,
+    "control": 0.08333333333333333,
+    "candidate": 0.08333333333333333,
+    "deltaMean": 0,
+    "deltaCi95": 0,
+    "higherIsBetter": true
+  },
+  "controlHeadroom": 0.5769230769230769,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}
