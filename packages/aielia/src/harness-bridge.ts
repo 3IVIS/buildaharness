@@ -44,7 +44,7 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
-import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -211,7 +211,8 @@ export class HarnessBridge {
     }
 
     // AL8a: one policy per turn; the semantic escalation hooks below are gated through it.
-    const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, { ...complexitySignal, isTrivial: classification.isTrivial }, complexitySignal.runState)
+    const escalationSignals = { ...complexitySignal, isTrivial: classification.isTrivial }
+    const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, escalationSignals, complexitySignal.runState, {}, turnPolicyBudget(escalationSignals))
 
     // Pace a durable plan one MEDIUM/HIGH-risk step at a time across turns instead of running
     // its whole unblocked frontier in a single turn — shouldPause below reads
@@ -318,6 +319,8 @@ export class HarnessBridge {
               this.layerPolicyMode,
               { ...complexitySignal, isTrivial: classification.isTrivial },
               complexitySignal.runState ? { ...complexitySignal.runState, consecutiveFailures: failures } : undefined,
+              {},
+              turnPolicyBudget(escalationSignals),
             ))
           : undefined,
         // Forward every layer's fired/skipped report onto the same onTrace channel

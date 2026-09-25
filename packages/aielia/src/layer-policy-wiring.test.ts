@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PolicyRules, RunState, TurnSignals } from '@buildaharness/harness'
-import { resolveEscalationPlan, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
 import { buildTurnFacts } from './memory-service.js'
 
 const routineSignals: TurnSignals = {
@@ -138,5 +138,28 @@ describe('AL8b decomposition reframe + injection + rendering', () => {
       { layer: 'contradiction', reason: 'conflict [full: belief_conflict]' },
       { layer: 'verification', reason: 'ok' },
     ])
+  })
+})
+
+describe('AL9a: per-turn call budget through resolveEscalationPlan', () => {
+  const signals = { riskLevel: 'LOW' as const, taskCount: 1, hasDurablePlan: false, consequentialTools: new Set(['write_file']) }
+  const state = { consecutiveFailures: 0, turnDepth: 0, cumulativeSpend: 0, sessionBudget: null, diagnosticsTrend: 'unknown' as const, verificationTrend: 'unknown' as const, toolReliability: {}, untrustedContentInContext: true }
+
+  it('static mode ignores the budget (byte-identical policy)', () => {
+    const withBudget = resolveEscalationPlan('static', signals, state, {}, turnPolicyBudget(signals))
+    const without = resolveEscalationPlan('static', signals, state)
+    expect(withBudget.policy).toEqual(without.policy)
+  })
+
+  it('adaptive mode degrades the lowest-priority escalations on a LOW-risk turn, with a budget_exhausted trigger', () => {
+    const plan = resolveEscalationPlan('adaptive', signals, state, {}, turnPolicyBudget(signals))
+    expect(plan.policy.decomposition_reframe.trigger).toBe('budget_exhausted')
+    expect(plan.policy.injection_detection.decision).toBe('full')
+  })
+
+  it('shadow records the degraded policy without executing it', () => {
+    const plan = resolveEscalationPlan('shadow', signals, state, {}, turnPolicyBudget(signals))
+    expect(plan.policy.decomposition_reframe.trigger).toBe('static')
+    expect(plan.shadow?.policy.decomposition_reframe.trigger).toBe('budget_exhausted')
   })
 })

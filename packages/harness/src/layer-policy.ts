@@ -79,9 +79,47 @@ export interface LayerDecision {
   reason: string
 }
 
-/** Per-turn LLM-call budget view (AL9a owns the real accounting); null = unlimited. */
+/**
+ * Per-turn LLM-call budget view; null (or Infinity) = unlimited. `priority` is the order in which
+ * escalations draw on it (AL9a); unlisted escalations follow in `DEFAULT_LAYER_PRIORITY` order.
+ */
 export interface PolicyBudget {
   remainingCalls: number | null
+  priority?: readonly EscalationLayer[]
+}
+
+/**
+ * Deterministic default draw order (AL2a's measured priority list is still empty, so this is the
+ * fallback): the security layer first so its clamped `full` is always accounted for, then the
+ * layers that guard correctness of the answer, then the more speculative ones.
+ */
+export const DEFAULT_LAYER_PRIORITY: readonly EscalationLayer[] = [
+  'injection_detection', 'semantic_contradiction', 'criterion_coverage', 'reviewer_adversarial',
+  'change_review', 'failure_match', 'model_inferred_facts', 'decomposition_reframe',
+]
+
+/** LLM calls a layer draws when it runs at `full`. `cheap`/`off` draw nothing. */
+export const LAYER_CALL_COST: Readonly<Record<EscalationLayer, number>> = {
+  semantic_contradiction: 1,
+  failure_match: 1,
+  criterion_coverage: 1,
+  change_review: 1,
+  injection_detection: 1,
+  decomposition_reframe: 1,
+  model_inferred_facts: 1,
+  reviewer_adversarial: 1,
+}
+
+/** `priority` first (deduplicated, unknown names ignored), then the remaining layers in default order. */
+export function orderedPriority(priority?: readonly EscalationLayer[]): EscalationLayer[] {
+  const seen = new Set<EscalationLayer>()
+  const out: EscalationLayer[] = []
+  for (const l of [...(priority ?? []), ...DEFAULT_LAYER_PRIORITY]) {
+    if (!(ESCALATION_LAYERS as readonly string[]).includes(l) || seen.has(l)) continue
+    seen.add(l)
+    out.push(l)
+  }
+  return out
 }
 
 export interface PolicyContext {
@@ -118,14 +156,19 @@ function isDecision(v: unknown): v is Decision {
   return v === 'off' || v === 'cheap' || v === 'full'
 }
 
-function budgetExhausted(b: PolicyBudget): boolean {
-  return b.remainingCalls !== null && b.remainingCalls <= 0
+function limitedCalls(b: PolicyBudget): number | null {
+  const n = b.remainingCalls
+  return n === null || typeof n !== 'number' || Number.isNaN(n) || n === Infinity ? null : Math.max(0, n)
 }
 
 /**
- * Resolves every layer's decision. With no `rules` the result is the static policy, except that an
- * exhausted call budget degrades escalations to their cheap form (AL-4: the only sanctioned
- * degradation, and it is named in the trigger). Never throws; any failure returns static.
+ * Resolves every layer's decision. With no `rules` and no call limit the result is the static
+ * policy. AL9a: a finite call budget is spent by escalations in priority order (`budget.priority`,
+ * then `DEFAULT_LAYER_PRIORITY`); a layer that would run at `full` but cannot afford its
+ * `LAYER_CALL_COST` degrades to its cheap form with trigger `budget_exhausted` (AL-4: the only
+ * sanctioned degradation, named in the trace). Floor layers are never touched. The injection
+ * security clamp is applied after degradation and still draws on the budget. Never throws; any
+ * failure returns static.
  */
 export function resolveLayerPolicy(
   signals: TurnSignals,
@@ -136,23 +179,34 @@ export function resolveLayerPolicy(
   try {
     const ctx: PolicyContext = { signals, state, budget }
     const out = staticLayerPolicy()
-    const exhausted = budgetExhausted(budget)
+    const proposedByLayer = new Map<EscalationLayer, LayerDecision | null>()
     for (const layer of ESCALATION_LAYERS) {
-      let next: LayerDecision | null = null
       const rule = rules[layer]
       const proposed = rule ? rule(ctx) : null
       if (proposed) {
         if (!isDecision(proposed.decision) || typeof proposed.trigger !== 'string') return staticLayerPolicy()
-        next = { decision: proposed.decision, trigger: proposed.trigger, reason: proposed.reason ?? proposed.trigger }
+        proposedByLayer.set(layer, { decision: proposed.decision, trigger: proposed.trigger, reason: proposed.reason ?? proposed.trigger })
+      } else {
+        proposedByLayer.set(layer, null)
       }
-      if (exhausted && (next === null || next.decision === 'full')) {
+    }
+    let remaining = limitedCalls(budget)
+    for (const layer of orderedPriority(budget.priority)) {
+      let next = proposedByLayer.get(layer) ?? null
+      const wantsFull = next === null || next.decision === 'full'
+      const cost = LAYER_CALL_COST[layer]
+      if (remaining !== null && wantsFull && remaining < cost) {
         next = { decision: 'cheap', trigger: 'budget_exhausted', reason: 'per-turn LLM-call budget exhausted' }
       }
-      if (!next) continue
+      if (!next) {
+        if (remaining !== null) remaining = Math.max(0, remaining - cost)
+        continue
+      }
       if (next.decision === 'cheap' && !HAS_CHEAP_FORM[layer]) next = { ...next, decision: 'off' }
       if (next.decision !== 'full' && layer === 'injection_detection' && !injectionSkipProvenSafe(ctx)) {
         next = { decision: 'full', trigger: 'security_floor', reason: 'AL-1: injection detection needs a non-linguistic proof to skip' }
       }
+      if (remaining !== null && next.decision === 'full') remaining = Math.max(0, remaining - cost)
       out[layer] = next
     }
     return out

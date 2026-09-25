@@ -11,11 +11,14 @@
  */
 import {
   resolveModedLayerPolicy,
+  computeTurnCallBudget,
+  toPolicyBudget,
   staticLayerPolicy,
   type EscalationLayer,
   type LayerDecision,
   type LayerPolicy,
   type LayerPolicyMode,
+  type PolicyBudget,
   type PolicyRules,
   type RunState,
   type TurnSignals,
@@ -52,15 +55,25 @@ export interface EscalationPlan {
   shadow?: { policy: LayerPolicy; tier: TurnTier }
 }
 
+/** AL9a: the per-turn LLM-call budget view for a turn's signals (risk- and posture-scaled). Static mode ignores it. */
+export function turnPolicyBudget(signals: TurnSignals): PolicyBudget {
+  try {
+    return toPolicyBudget(computeTurnCallBudget({ riskLevel: signals.riskLevel, userPosture: signals.userPosture }))
+  } catch {
+    return { remainingCalls: null }
+  }
+}
+
 /** Resolves the executed policy for a turn. Never throws; any failure ⇒ today's static behaviour. */
 export function resolveEscalationPlan(
   mode: LayerPolicyMode,
   signals: TurnSignals,
   state: RunState | undefined,
   rules: PolicyRules = {},
+  budget: PolicyBudget = { remainingCalls: null },
 ): EscalationPlan {
   try {
-    const moded = resolveModedLayerPolicy(mode, signals, state, { remainingCalls: null }, rules)
+    const moded = resolveModedLayerPolicy(mode, signals, state, budget, rules)
     let policy = moded.executed
     if (mode === 'adaptive' && moded.executedTier === 'T1') {
       // T1 LITE: escalations off, floor layers untouched. Restrict-only (AL-1).
