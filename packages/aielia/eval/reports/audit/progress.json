@@ -121,6 +121,12 @@
       "finalized": true,
       "spendUsd": 0.747884,
       "blocked": false
+    },
+    "probe-failure-match": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.289143,
+      "blocked": false
     }
   }
 }
