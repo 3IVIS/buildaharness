@@ -265,9 +265,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: stale-figure, output-contract and source-defect families (4 stress each; the output-contract family also covers the requirements and output_contract_partial sub-layers) plus 6 correct-result calm controls. Target metric is overconfident-wrong. Most of the nine sub-layers are honestly SKIPPED today, so headroom is the open question. Not yet run."
+      "corpusNote": "18 tasks: stale-figure, output-contract and source-defect families (4 stress each; the output-contract family also covers the requirements and output_contract_partial sub-layers) plus 6 correct-result calm controls. Target metric is overconfident-wrong. Most of the nine sub-layers are honestly SKIPPED today, so headroom is the open question. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-reviewer-pass",
