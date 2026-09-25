@@ -50,6 +50,11 @@ function response(overrides: Record<string, unknown> = {}): string {
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
+    needsGrounding: false,
+    ambiguity: 'none',
+    userPosture: 'informational',
+    pushbackOnPriorTurn: false,
+    statesConstraint: false,
     ...overrides,
   })
 }
@@ -72,6 +77,11 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       matchedPlanTemplate: null,
       needsMultiStepPlan: false,
       statesDurableFacts: [],
+      needsGrounding: false,
+      ambiguity: 'none',
+      userPosture: 'informational',
+      pushbackOnPriorTurn: false,
+      statesConstraint: false,
     })
     expect(llm.calls).toBe(1)
   })
@@ -350,6 +360,30 @@ describe('classifyTurnIntent — context gating', () => {
   })
 })
 
+describe('classifyTurnIntent — AL5a turn signals', () => {
+  it('parses the five signal fields from the single classifier call', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({ needsGrounding: true, ambiguity: 'high', userPosture: 'corrective', pushbackOnPriorTurn: true, statesConstraint: true }),
+    )
+
+    const result = await classifyTurnIntent('No, that is wrong. Only use metric units from now on.', llm, NO_PLAN)
+
+    expect(result).toMatchObject({ needsGrounding: true, ambiguity: 'high', userPosture: 'corrective', pushbackOnPriorTurn: true, statesConstraint: true })
+    expect(llm.calls).toBe(1)
+  })
+
+  it('degrades missing or out-of-enum signals to their fail-safe values without discarding the classification', async () => {
+    const base = JSON.parse(response()) as Record<string, unknown>
+    for (const k of ['needsGrounding', 'ambiguity', 'userPosture', 'pushbackOnPriorTurn', 'statesConstraint']) delete base[k]
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ ...base, ambiguity: 'extreme' }))
+
+    const result = await classifyTurnIntent('What timezone is Tokyo in?', llm, NO_PLAN)
+
+    expect(result.riskLevel).toBe('LOW')
+    expect(result).toMatchObject({ needsGrounding: true, ambiguity: 'unknown', userPosture: 'unknown', pushbackOnPriorTurn: false, statesConstraint: false })
+  })
+})
+
 describe('classifyTurnIntent — fail-safe fallback', () => {
   const FAIL_SAFE = {
     riskLevel: 'UNKNOWN',
@@ -363,6 +397,11 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
+    needsGrounding: true,
+    ambiguity: 'unknown',
+    userPosture: 'unknown',
+    pushbackOnPriorTurn: false,
+    statesConstraint: false,
   }
 
   it('falls back on malformed JSON instead of throwing, folding the JSON.parse error into riskReason (same classifyError path as a genuine LLM-call throw, since JSON.parse throwing inside parseTurnIntent is likewise a real caught error, not a semantic-validation null-return)', async () => {

@@ -63,7 +63,7 @@ function makeBackend(seed: Record<string, string> = { 'note.txt': 'hello from a 
   }
 }
 
-const TURN_INTENT_MARKER = 'eight independent judgments'
+const TURN_INTENT_MARKER = ' independent judgments'
 
 /** Stable purpose label from the request's own system prompt, so counts survive unrelated edits to reply text. */
 function purposeOf(kind: string, messages: ChatMessage[]): string {

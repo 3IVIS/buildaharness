@@ -58,6 +58,7 @@ import { CHECKPOINT_SCHEMA_VERSION, assertCheckpointSchemaCurrent } from './harn
 import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData, PendingProposalData } from './harness-checkpoint.js'
 import type { FailureModeEntry } from './state/failure-diagnostics.js'
 import { normalise, DimensionType } from './normalise.js'
+import type { TurnSignals } from './turn-signals.js'
 
 export const BUDGET_WARNING_FLOOR = 0.5
 
@@ -134,8 +135,8 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * ...", not whichever carried-over fact happens to be first in the array.
    */
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
-  /** See TurnComplexitySignal — absent means every Phase 2 gate reads its own conservative default. */
-  complexitySignal?: TurnComplexitySignal
+  /** See TurnComplexitySignal — absent means every Phase 2 gate reads its own conservative default. A `TurnSignals` (AL5a) is a compatible superset. */
+  complexitySignal?: TurnSignals
   /** Fired or skipped, every one of the 11 harness layers reports itself here each iteration — see LayerActivityEvent. */
   onLayerActivity?: (event: LayerActivityEvent) => void
   /**
@@ -333,7 +334,7 @@ interface LoopContext {
   updateChannel: UpdateChannel
   toolExecutors: Record<string, (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>>
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
-  complexitySignal?: TurnComplexitySignal
+  complexitySignal?: TurnSignals
   onLayerActivity?: (event: LayerActivityEvent) => void
   onVerification?: (result: VerificationResult) => void
   skipVerification?: boolean
@@ -1101,9 +1102,13 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // Phase 2, layer 2: escalate past the always-on baseline above — register a real
       // tool_reliability_envelope for consequential tools, or when estimate_voi flagged this
       // turn as evidence-poor — instead of every turn paying for it regardless of stakes.
-      const evidenceShouldEscalate = (sig?.consequentialTools.size ?? 0) > 0 || shouldGatherEvidence
+      // AL5a: `consequentialTools` is now effect-class-derived (write/execute); the tools this turn
+      // actually exercised keep driving this gate, exactly as before — `exercisedTools` falls back to
+      // `consequentialTools` for a caller that predates AL5a.
+      const gateTools = sig?.exercisedTools ?? sig?.consequentialTools
+      const evidenceShouldEscalate = (gateTools?.size ?? 0) > 0 || shouldGatherEvidence
       if (evidenceShouldEscalate) {
-        for (const tool of sig?.consequentialTools ?? []) {
+        for (const tool of gateTools ?? []) {
           if (!ctx.evidenceStore.tool_reliability_envelopes[tool]) {
             ctx.evidenceStore.tool_reliability_envelopes[tool] = {
               tool,
@@ -1112,7 +1117,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             }
           }
         }
-        reportLayer(ctx, 'evidence_reasoning', true, `Cross-checking with ${Math.max(1, sig?.consequentialTools.size ?? 0)} source(s) before answering.`)
+        reportLayer(ctx, 'evidence_reasoning', true, `Cross-checking with ${Math.max(1, gateTools?.size ?? 0)} source(s) before answering.`)
       } else {
         reportLayer(ctx, 'evidence_reasoning', false, 'single low-stakes observation is sufficient')
       }

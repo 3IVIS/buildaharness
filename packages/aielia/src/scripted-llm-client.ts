@@ -40,7 +40,7 @@ export interface ScriptedLLMClientScript {
 }
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */
-const TURN_INTENT_MARKER = 'eight independent judgments'
+const TURN_INTENT_MARKER = ' independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))

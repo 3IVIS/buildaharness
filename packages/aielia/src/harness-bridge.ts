@@ -7,7 +7,9 @@ import {
   type ExperienceStore,
   type Task,
   type CheckpointStore,
-  type TurnComplexitySignal,
+  type TurnSignals,
+  deriveConsequentialTools,
+  computeRunState,
   type LayerActivityEvent,
   type HarnessCheckpoint,
   type FailureModeEntry,
@@ -32,6 +34,7 @@ import { checkSemanticReviewConflict, semanticChangeReviewEnabled } from './revi
 import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, semanticCriterionCoverageEnabled, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { toTaskRiskLevel } from './task-mapping.js'
+import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
 import { RESUME_ATTEMPT_CAP, resumeAttemptsKey, type AssistantSession } from './assistant-session.js'
 import type { PlanRecord } from './plan-store.js'
@@ -180,15 +183,26 @@ export class HarnessBridge {
     const runId = `turn:${sessionId}`
 
     // One shared per-turn signal instead of each harness layer inventing its own gating
-    // heuristic. write_file/run_shell_command never reach this point today — a pending approval
-    // for either always returns needs_approval/is auto-applied before the harness run starts —
-    // so consequentialTools only ever holds the read-only tool kinds actually exercised via
-    // `sources`, included for the day a harness-driven mutation path exists.
-    const complexitySignal: TurnComplexitySignal = {
+    // heuristic. AL5a: `consequentialTools` is derived from each tool's effect class (write /
+    // execute — see TOOL_EFFECT_CLASS), not from `sources`, which only ever held the read-only
+    // tools actually exercised (write_file/run_shell_command never reach a harness run — a pending
+    // approval always returns needs_approval/is auto-applied first) and so made "consequential" a
+    // misnomer. What was exercised still drives the evidence-escalation gate, via `exercisedTools`.
+    const complexitySignal: TurnSignals = {
       riskLevel: toTaskRiskLevel(classification.riskLevel),
       taskCount: initialTasks.length,
       hasDurablePlan: activePlan !== null,
-      consequentialTools: new Set(sources?.map(s => s.tool) ?? []),
+      consequentialTools: deriveConsequentialTools(Object.keys(TOOL_EFFECT_CLASS), TOOL_EFFECT_CLASS),
+      exercisedTools: new Set(sources?.map(s => s.tool) ?? []),
+      needsGrounding: classification.needsGrounding,
+      ambiguity: classification.ambiguity,
+      userPosture: classification.userPosture,
+      pushbackOnPriorTurn: classification.pushbackOnPriorTurn,
+      statesConstraint: classification.statesConstraint,
+      runState: computeRunState({
+        outcomes: initialTasks.filter(t => t.status === 'COMPLETE' || t.status === 'FAILED').map(t => t.status === 'FAILED'),
+        untrustedContentInContext: (sources?.length ?? 0) > 0,
+      }),
     }
 
     // Pace a durable plan one MEDIUM/HIGH-risk step at a time across turns instead of running

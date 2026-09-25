@@ -65,7 +65,7 @@ class DraftingOnlyLLMClient implements ILLMClient {
   }
 }
 
-const TURN_INTENT_MARKER = 'eight independent judgments'
+const TURN_INTENT_MARKER = ' independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))

@@ -18,7 +18,7 @@ import { decompositionEnabled } from './turn-interpreter.js'
 // ILLMClient below recognize that call and answer it separately from whatever else the fake is
 // scripted to simulate (a tool loop, a decomposition call, ...), instead of it silently consuming
 // a slot meant for something else.
-const TURN_INTENT_MARKER = 'eight independent judgments'
+const TURN_INTENT_MARKER = ' independent judgments'
 
 function isTurnIntentRequest(messages: ChatMessage[]): boolean {
   return messages.some((m) => m.role === 'system' && m.content.includes(TURN_INTENT_MARKER))

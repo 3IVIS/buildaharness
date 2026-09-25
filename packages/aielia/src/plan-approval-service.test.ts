@@ -4,7 +4,7 @@ import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from './assistant.js'
 import { loadPlanRecord } from './plan-store.js'
 
-const TURN_INTENT_MARKER = 'eight independent judgments'
+const TURN_INTENT_MARKER = ' independent judgments'
 const DRAFTING_MARKER = 'drafting a multi-step plan'
 const VERIFY_MARKER = 'reviewing a drafted plan'
 

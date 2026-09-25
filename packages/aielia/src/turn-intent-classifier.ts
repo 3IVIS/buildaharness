@@ -28,6 +28,13 @@ export interface StatedFact {
   category: FactCategory
 }
 
+/** AL5a user-input signals. 'unknown' is only ever produced by failSafeClassification, never by the model (same convention as RiskLevel's 'UNKNOWN'). */
+export type TurnAmbiguityLevel = 'none' | 'some' | 'high' | 'unknown'
+export type TurnPosture = 'informational' | 'directive' | 'exploratory' | 'corrective' | 'unknown'
+
+const AMBIGUITY_VALUES = ['none', 'some', 'high'] as const
+const POSTURE_VALUES = ['informational', 'directive', 'exploratory', 'corrective'] as const
+
 export interface TurnIntentContext {
   /** Whether an active durable plan exists for this session — gates whether the abandon
    *  judgment means anything and whether plan-template matching should even be attempted
@@ -84,6 +91,21 @@ export interface TurnIntentClassification {
    * failSafeClassification.
    */
   statesDurableFacts: StatedFact[]
+  /**
+   * AL5a (adaptive layer selection plan) — user-input signals for the layer policy, riding this
+   * same single call (AL-7). All optional so a hand-built classification (tests, fixtures) needs
+   * no change; nothing reads them yet, so ignoring them is behaviour-neutral (AL-2).
+   * `needsGrounding`: the answer depends on facts that should be checked against a source or tool
+   * rather than recalled. `ambiguity`: how under-specified the request is. `userPosture`: what the
+   * user is doing (asking, directing, exploring, correcting). `pushbackOnPriorTurn`: the user
+   * disputes or corrects the assistant's previous reply. `statesConstraint`: the message sets a
+   * rule/limit that should govern later turns ("never...", "only...", "from now on...").
+   */
+  needsGrounding?: boolean
+  ambiguity?: TurnAmbiguityLevel
+  userPosture?: TurnPosture
+  pushbackOnPriorTurn?: boolean
+  statesConstraint?: boolean
 }
 
 const FAIL_SAFE_REASON = 'Risk could not be determined — classification failed or returned an unusable result.'
@@ -127,6 +149,14 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
+    // AL5a: the careful side of each signal — a classifier failure means we don't know, so a
+    // grounding need is assumed and ambiguity/posture are 'unknown'. pushback/constraint stay
+    // false: asserting either would fabricate a correction or a rule the user never gave.
+    needsGrounding: true,
+    ambiguity: 'unknown',
+    userPosture: 'unknown',
+    pushbackOnPriorTurn: false,
+    statesConstraint: false,
   }
 }
 
@@ -169,6 +199,11 @@ const TURN_INTENT_SCHEMA = {
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
     needsMultiStepPlan: { type: 'boolean' },
     statesDurableFacts: STATES_DURABLE_FACTS_SCHEMA,
+    needsGrounding: { type: 'boolean' },
+    ambiguity: { type: 'string', enum: [...AMBIGUITY_VALUES] },
+    userPosture: { type: 'string', enum: [...POSTURE_VALUES] },
+    pushbackOnPriorTurn: { type: 'boolean' },
+    statesConstraint: { type: 'boolean' },
   },
   required: [
     'riskLevel',
@@ -181,6 +216,11 @@ const TURN_INTENT_SCHEMA = {
     'matchedPlanTemplate',
     'needsMultiStepPlan',
     'statesDurableFacts',
+    'needsGrounding',
+    'ambiguity',
+    'userPosture',
+    'pushbackOnPriorTurn',
+    'statesConstraint',
   ],
 }
 
@@ -196,7 +236,7 @@ const TURN_INTENT_SCHEMA = {
  * English-only by construction; this prompt is explicitly instructed not to assume English.
  */
 const TURN_INTENT_SYSTEM_PROMPT =
-  "Classify the user's message across eight independent judgments, for a personal-assistant that " +
+  "Classify the user's message across thirteen independent judgments, for a personal-assistant that " +
   'can send messages, delete files, spend money, publish content, manage subscriptions/bookings, ' +
   'create reminders, and run durable multi-step plans on the user\'s behalf. The message may be in ' +
   'any language — judge the actual meaning, never assume English.\n\n' +
@@ -259,13 +299,27 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'anything answerable or actionable in one step, even if that step takes multiple tool calls ' +
   'internally (e.g. reading three files to answer a question is still one step). Always false if ' +
   'matchedPlanTemplate is non-null, and always false if told a plan is already active.\n\n' +
+  '9. needsGrounding: true if a correct answer depends on facts that should be verified against a ' +
+  'file, the web, or another tool rather than recalled from memory (current events, the contents of ' +
+  'a specific file, prices, versions). False for opinion, creative, or self-contained reasoning.\n\n' +
+  '10. ambiguity: none, some, or high — how under-specified the request is. `high` when a ' +
+  'reasonable assistant could not tell what is being asked for without a clarifying question.\n\n' +
+  '11. userPosture: informational (asking to learn something), directive (telling the assistant to ' +
+  'do something), exploratory (thinking aloud, brainstorming, comparing options), or corrective ' +
+  '(disputing or fixing something the assistant just said or did).\n\n' +
+  '12. pushbackOnPriorTurn: true if the message disagrees with, corrects, or expresses ' +
+  "dissatisfaction with the assistant's previous reply. False if there is no prior reply.\n\n" +
+  '13. statesConstraint: true if the message sets a rule, limit, or standing requirement that should ' +
+  'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
-  '"location"|"occupation"|"relationships"|"project"|"other"}]}'
+  '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
+  '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
+  '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -278,6 +332,11 @@ interface RawTurnIntent {
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
   statesDurableFacts?: unknown
+  needsGrounding?: unknown
+  ambiguity?: unknown
+  userPosture?: unknown
+  pushbackOnPriorTurn?: unknown
+  statesConstraint?: unknown
 }
 
 const FACT_CATEGORY_VALUES = new Set(FACT_CATEGORIES)
@@ -354,6 +413,14 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
 
   const statesDurableFacts = Array.isArray(parsed.statesDurableFacts) ? parsed.statesDurableFacts.filter(isStatedFact) : []
 
+  // AL5a: a missing or malformed signal degrades to its fail-safe value rather than discarding an
+  // otherwise valid classification — these fields are additive and nothing gates on them yet.
+  const needsGrounding = typeof parsed.needsGrounding === 'boolean' ? parsed.needsGrounding : true
+  const ambiguity = (AMBIGUITY_VALUES as readonly unknown[]).includes(parsed.ambiguity) ? (parsed.ambiguity as TurnAmbiguityLevel) : 'unknown'
+  const userPosture = (POSTURE_VALUES as readonly unknown[]).includes(parsed.userPosture) ? (parsed.userPosture as TurnPosture) : 'unknown'
+  const pushbackOnPriorTurn = parsed.pushbackOnPriorTurn === true
+  const statesConstraint = parsed.statesConstraint === true
+
   return {
     riskLevel: parsed.riskLevel,
     riskReason,
@@ -366,6 +433,11 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     matchedPlanTemplate,
     needsMultiStepPlan,
     statesDurableFacts,
+    needsGrounding,
+    ambiguity,
+    userPosture,
+    pushbackOnPriorTurn,
+    statesConstraint,
   }
 }
 
