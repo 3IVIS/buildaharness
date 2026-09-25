@@ -472,6 +472,262 @@
       "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "Reuses the AL1 criterion-coverage probe slice (stress tasks plus calm controls) only to exercise the adaptivePolicy arm end to end; not a verdict run."
+    },
+    {
+      "id": "ablation-contradiction",
+      "title": "Ablation (AL11a): contradiction on its regime slice",
+      "hypothesis": "ABLATION (AL11a): contradiction changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "contradictionOff",
+        "flagOn"
+      ],
+      "slice": "probe_contradiction,probe_belief_trail",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_contradiction,probe_belief_trail (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-change-review",
+      "title": "Ablation (AL11a): change review on its regime slice",
+      "hypothesis": "ABLATION (AL11a): change review changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "changeReviewOff",
+        "flagOn"
+      ],
+      "slice": "probe_change_review",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 22,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_change_review (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-model-inferred-facts",
+      "title": "Ablation (AL11a): model inferred facts on its regime slice",
+      "hypothesis": "ABLATION (AL11a): model inferred facts changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "modelInferredFactsOff",
+        "flagOn"
+      ],
+      "slice": "probe_model_inferred_facts",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 22,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_model_inferred_facts (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-verification",
+      "title": "Ablation (AL11a): verification on its regime slice",
+      "hypothesis": "ABLATION (AL11a): verification changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "verificationOff",
+        "flagOn"
+      ],
+      "slice": "probe_verification",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_verification (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-reviewer-pass",
+      "title": "Ablation (AL11a): reviewer pass on its regime slice",
+      "hypothesis": "ABLATION (AL11a): reviewer pass changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "reviewerPassOff",
+        "flagOn"
+      ],
+      "slice": "probe_reviewer",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_reviewer (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-criterion-coverage",
+      "title": "Ablation (AL11a): criterion coverage on its regime slice",
+      "hypothesis": "ABLATION (AL11a): criterion coverage changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "criterionCoverageOff",
+        "flagOn"
+      ],
+      "slice": "probe_criterion_coverage",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 22,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_criterion_coverage (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-decomposition",
+      "title": "Ablation (AL11a): decomposition on its regime slice",
+      "hypothesis": "ABLATION (AL11a): decomposition changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "decompositionOff",
+        "flagOn"
+      ],
+      "slice": "probe_decomposition",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_decomposition (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-failure-match",
+      "title": "Ablation (AL11a): failure match on its regime slice",
+      "hypothesis": "ABLATION (AL11a): failure match changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "failureMatchOff",
+        "flagOn"
+      ],
+      "slice": "probe_failure_match",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_failure_match (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-supervisor",
+      "title": "Ablation (AL11a): supervisor on its regime slice",
+      "hypothesis": "ABLATION (AL11a): supervisor changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "supervisorOff",
+        "flagOn"
+      ],
+      "slice": "probe_supervisor",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 45,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_supervisor (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-injection",
+      "title": "Ablation (AL11a): injection on its regime slice",
+      "hypothesis": "ABLATION (AL11a): injection changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "injectionDetectOff",
+        "flagOn"
+      ],
+      "slice": "probe_injection",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 38,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_injection (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-evidence",
+      "title": "Ablation (AL11a): evidence on its regime slice",
+      "hypothesis": "ABLATION (AL11a): evidence changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+      "arms": [
+        "verificationOff",
+        "flagOn"
+      ],
+      "slice": "probe_evidence",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 30,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_evidence (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+    },
+    {
+      "id": "ablation-supervisor-stall",
+      "title": "Ablation (AL11a): supervisor re-measure on the rebuilt stall slices",
+      "hypothesis": "F7 re-measure: the trajectory supervisor's advantage on stalled work (previously graded lexically, no transcripts) reproduces with a semantic judge, transcripts and 5 seeds on a freshly rebuilt harness dist.",
+      "arms": [
+        "supervisorOff",
+        "flagOn"
+      ],
+      "slice": "supervisor_lookup,supervisor_pivot,supervisor_conversation,supervisor_midtask",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 40,
+      "status": "queued",
+      "corpusAdequacy": "acceptable",
+      "corpusNote": "Existing stall slices (single-turn pivot/lookup, ASK_USER conversation, mid-task stall). Rebuild packages/harness/dist before running and record the commit in the report header."
+    },
+    {
+      "id": "adaptive-vs-alwayson-probes",
+      "title": "Adaptive policy vs always-on (all AL1 probe slices)",
+      "hypothesis": "layerPolicyMode=adaptive (AL10 v1 rules) is measured against flagOn: the D2 bar vs always-on: success non-inferior (lower CI >= -3pt) and cost >= 25% lower, with no per-category regression (notably ambiguity and injection). Rules encode hypothesised regimes; AL11b applies the bar.",
+      "arms": [
+        "flagOn",
+        "adaptivePolicy"
+      ],
+      "slice": "probe_belief_trail,probe_change_review,probe_contradiction,probe_criterion_coverage,probe_decomposition,probe_evidence,probe_failure_match,probe_injection,probe_model_inferred_facts,probe_reviewer,probe_supervisor,probe_verification",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 60,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "All AL1c-AL1e probe slices (stress plus calm controls); 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored."
+    },
+    {
+      "id": "adaptive-vs-alwayson-full",
+      "title": "Adaptive policy vs always-on (full corpus)",
+      "hypothesis": "layerPolicyMode=adaptive (AL10 v1 rules) is measured against flagOn: the D2 bar vs always-on: success non-inferior (lower CI >= -3pt) and cost >= 25% lower, with no per-category regression (notably ambiguity and injection). Rules encode hypothesised regimes; AL11b applies the bar.",
+      "arms": [
+        "flagOn",
+        "adaptivePolicy"
+      ],
+      "slice": null,
+      "seeds": 5,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 60,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "Full corpus, so per-category regressions hidden in an average are visible; 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored."
+    },
+    {
+      "id": "adaptive-vs-bare-probes",
+      "title": "Adaptive policy vs bare (all AL1 probe slices)",
+      "hypothesis": "layerPolicyMode=adaptive (AL10 v1 rules) is measured against bare: how much of the harness's benefit over the bare floor adaptive retains (bare is the floor, flagOn the ceiling), with no per-category regression (notably ambiguity and injection). Rules encode hypothesised regimes; AL11b applies the bar.",
+      "arms": [
+        "bare",
+        "adaptivePolicy"
+      ],
+      "slice": "probe_belief_trail,probe_change_review,probe_contradiction,probe_criterion_coverage,probe_decomposition,probe_evidence,probe_failure_match,probe_injection,probe_model_inferred_facts,probe_reviewer,probe_supervisor,probe_verification",
+      "seeds": 5,
+      "fullPages": "all",
+      "maxSpendUsd": 60,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "All AL1c-AL1e probe slices (stress plus calm controls); 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored."
+    },
+    {
+      "id": "adaptive-vs-bare-full",
+      "title": "Adaptive policy vs bare (full corpus)",
+      "hypothesis": "layerPolicyMode=adaptive (AL10 v1 rules) is measured against bare: how much of the harness's benefit over the bare floor adaptive retains (bare is the floor, flagOn the ceiling), with no per-category regression (notably ambiguity and injection). Rules encode hypothesised regimes; AL11b applies the bar.",
+      "arms": [
+        "bare",
+        "adaptivePolicy"
+      ],
+      "slice": null,
+      "seeds": 5,
+      "fullPages": "adv,injected",
+      "maxSpendUsd": 60,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "Full corpus, so per-category regressions hidden in an average are visible; 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored."
     }
   ]
 }
