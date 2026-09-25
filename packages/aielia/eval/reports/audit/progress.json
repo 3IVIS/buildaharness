@@ -160,7 +160,7 @@
     },
     "ablation-change-review": {
       "seedsDone": 5,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 3.750113,
       "blocked": false
     }

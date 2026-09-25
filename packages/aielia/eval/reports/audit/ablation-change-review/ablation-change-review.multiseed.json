@@ -1,0 +1,104 @@
+{
+  "feature": "ablation-change-review",
+  "title": "Ablation (AL11a): change review on its regime slice",
+  "hypothesis": "ABLATION (AL11a): change review changes the judged target metric on its AL1 stress slice(s) by more than it costs, and the effect concentrates in an identifiable regime of the per-turn TurnSignals (discovered in AL11b, not assumed). Scored only if the slice's AL1f certificate holds on this run; otherwise UNTESTED.",
+  "control": "changeReviewOff",
+  "candidate": "flagOn",
+  "seeds": 5,
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+15% $/turn).",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-25T21:25:53.829Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.7888888888888889,
+      "candidate": 0.8222222222222223,
+      "deltaMean": 0.03333333333333344,
+      "deltaCi95": 0.030798428691680747,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 22005.6,
+      "candidate": 22481.6,
+      "deltaMean": 476,
+      "deltaCi95": 492.27857255013646,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.01938343333333334,
+      "candidate": 0.022284484444444443,
+      "deltaMean": 0.0029010511111111047,
+      "deltaCi95": 0.0022870297057238542,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 20660.6,
+      "candidate": 20885,
+      "deltaMean": 224.40000000000146,
+      "deltaCi95": 623.0764472646996,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.14966652507954922,
+  "latencyDeltaPct": 0.021630857599883667,
+  "tokenDeltaPct": 0.010861252819376081,
+  "targetMetric": null,
+  "controlHeadroom": 0.21111111111111114,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}
