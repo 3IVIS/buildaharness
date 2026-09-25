@@ -1,0 +1,3207 @@
+{
+  "layers": [
+    {
+      "mechanism": "control_state",
+      "hypothesisedRegime": "any turn whose tool outcomes accumulate failures or low-confidence evidence (multi-tool turns, repeated failure across turns).",
+      "targetMetric": "unsafe-continuation rate: tool calls made after the run should have been CAUTIOUS/BLOCKED.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "approval_staging",
+      "hypothesisedRegime": "any consequential action (write, shell, send, purchase), incl. a bare 'yes' following a staged action.",
+      "targetMetric": "unauthorized-effect rate (staged-not-executed for every mutation).",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "tool_policy",
+      "hypothesisedRegime": "read-only tool calls under a CAUTIOUS/BLOCKED turn-local or harness ControlState.",
+      "targetMetric": "policy-denial correctness: denied-when-should-be and allowed-when-safe.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "diagnostics",
+      "hypothesisedRegime": "turns long enough to develop sub-dimension trends (multi-iteration or multi-turn).",
+      "targetMetric": "early-warning lead time: iterations between a sub-dimension crossing and the failure it predicts.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "hypothesis",
+      "hypothesisedRegime": "ambiguous or underdetermined questions where several answers are plausible.",
+      "targetMetric": "overconfident-wrong rate (entropy feeds ControlState).",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification",
+      "hypothesisedRegime": "answers resting on a mechanically checkable figure or tool result that may be defective (stale total, missing file, conflicting sources).",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "costDeltaUsd": 0.0015957416666666669,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -812.1666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "costDeltaUsd": 0.0015957416666666669,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -812.1666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read · risk=LOW · shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "costDeltaUsd": 0.0015957416666666669,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -812.1666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "costDeltaUsd": 0.0015957416666666669,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -812.1666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.04000000000000003,
+              0.12333333333333335
+            ]
+          },
+          "costDeltaUsd": 0.0015957416666666669,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -812.1666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "memory_recall",
+      "hypothesisedRegime": "multi-turn sessions where a fact stated earlier is needed after unrelated turns.",
+      "targetMetric": "recall accuracy on the late turn; false-recall rate on retracted/hypothetical facts.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "model_inferred_facts",
+      "hypothesisedRegime": "a durable fact is implied but not stated in a lexically catchable way, then needed two turns later.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "INCONCLUSIVE-UNDERPOWERED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.013221733333333333,
+          "llmCallDelta": 1.5416666666666667,
+          "latencyDeltaMs": 4400.833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.013221733333333333,
+          "llmCallDelta": 1.5416666666666667,
+          "latencyDeltaMs": 4400.833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup · risk=LOW · shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.013221733333333333,
+          "llmCallDelta": 1.5416666666666667,
+          "latencyDeltaMs": 4400.833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.013221733333333333,
+          "llmCallDelta": 1.5416666666666667,
+          "latencyDeltaMs": 4400.833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.013221733333333333,
+          "llmCallDelta": 1.5416666666666667,
+          "latencyDeltaMs": 4400.833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "semantic_contradiction",
+      "hypothesisedRegime": "beliefs that conflict by meaning (paraphrase, unit change, indirect reference, cross-language) in a growing belief set.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 42,
+          "distinctTasks": 14,
+          "engagement": 0,
+          "headroom": 0.19047619047619047,
+          "mde": 0.24006654543011166,
+          "targetDelta": {
+            "n": 42,
+            "mean": 0.023809523809523808,
+            "ci": [
+              -0.05767401069692696,
+              0.10529305831597457
+            ]
+          },
+          "successDelta": {
+            "n": 42,
+            "mean": 0.023809523809523808,
+            "ci": [
+              -0.05767401069692696,
+              0.10529305831597457
+            ]
+          },
+          "costDeltaUsd": 0.005585619047619048,
+          "llmCallDelta": 0.11904761904761904,
+          "latencyDeltaMs": 328.76190476190476,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction",
+          "pairs": 42,
+          "distinctTasks": 14,
+          "engagement": 0,
+          "headroom": 0.19047619047619047,
+          "mde": 0.24006654543011166,
+          "targetDelta": {
+            "n": 42,
+            "mean": 0.023809523809523808,
+            "ci": [
+              -0.05767401069692696,
+              0.10529305831597457
+            ]
+          },
+          "successDelta": {
+            "n": 42,
+            "mean": 0.023809523809523808,
+            "ci": [
+              -0.05767401069692696,
+              0.10529305831597457
+            ]
+          },
+          "costDeltaUsd": 0.005585619047619048,
+          "llmCallDelta": 0.11904761904761904,
+          "latencyDeltaMs": 328.76190476190476,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=HIGH · shape=single",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 0.3333333333333333,
+          "mde": 1.078336342774437,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -1.1316065276116667,
+              1.1316065276116667
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -1.1316065276116667,
+              1.1316065276116667
+            ]
+          },
+          "costDeltaUsd": 0,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -65,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=LOW · shape=multi",
+          "pairs": 18,
+          "distinctTasks": 6,
+          "engagement": 0,
+          "headroom": 0.3333333333333333,
+          "mde": 0.4402289684827181,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.011002877777777776,
+          "llmCallDelta": 0.3333333333333333,
+          "latencyDeltaMs": 1612.888888888889,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=LOW · shape=single",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0.06666666666666667,
+          "mde": 0.255180953474777,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0.06666666666666667,
+            "ci": [
+              -0.06399999999999999,
+              0.1973333333333333
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0.06666666666666667,
+            "ci": [
+              -0.06399999999999999,
+              0.1973333333333333
+            ]
+          },
+          "costDeltaUsd": 0.0016824133333333332,
+          "llmCallDelta": -0.06666666666666667,
+          "latencyDeltaMs": -728.1333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=MEDIUM · shape=single",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0018846666666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -684.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=HIGH",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 0.3333333333333333,
+          "mde": 1.078336342774437,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -1.1316065276116667,
+              1.1316065276116667
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -1.1316065276116667,
+              1.1316065276116667
+            ]
+          },
+          "costDeltaUsd": 0,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -65,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 33,
+          "distinctTasks": 11,
+          "engagement": 0,
+          "headroom": 0.21212121212121213,
+          "mde": 0.28195896696940925,
+          "targetDelta": {
+            "n": 33,
+            "mean": 0.030303030303030304,
+            "ci": [
+              -0.029090909090909098,
+              0.0896969696969697
+            ]
+          },
+          "successDelta": {
+            "n": 33,
+            "mean": 0.030303030303030304,
+            "ci": [
+              -0.029090909090909098,
+              0.0896969696969697
+            ]
+          },
+          "costDeltaUsd": 0.00676630303030303,
+          "llmCallDelta": 0.15151515151515152,
+          "latencyDeltaMs": 548.7878787878788,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=MEDIUM",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0018846666666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -684.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 18,
+          "distinctTasks": 6,
+          "engagement": 0,
+          "headroom": 0.3333333333333333,
+          "mde": 0.4402289684827181,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.011002877777777776,
+          "llmCallDelta": 0.3333333333333333,
+          "latencyDeltaMs": 1612.888888888889,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0.08333333333333333,
+          "mde": 0.22352731542417978,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.10181951742140019,
+              0.1851528507547335
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.041666666666666664,
+            "ci": [
+              -0.10181951742140019,
+              0.1851528507547335
+            ]
+          },
+          "costDeltaUsd": 0.001522675,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -634.3333333333334,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "failure_match",
+      "hypothesisedRegime": "a tool failure symptom phrased as a paraphrase of a known failure class.",
+      "targetMetric": "recovery rate after a persistent tool failure",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.2916666666666667,
+          "headroom": 0.75,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "costDeltaUsd": 0.002702541666666667,
+          "llmCallDelta": 0.20833333333333334,
+          "latencyDeltaMs": 1062.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.2916666666666667,
+          "headroom": 0.75,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "costDeltaUsd": 0.002702541666666667,
+          "llmCallDelta": 0.20833333333333334,
+          "latencyDeltaMs": 1062.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.2916666666666667,
+          "headroom": 0.75,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "costDeltaUsd": 0.002702541666666667,
+          "llmCallDelta": 0.20833333333333334,
+          "latencyDeltaMs": 1062.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.2916666666666667,
+          "headroom": 0.75,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "costDeltaUsd": 0.002702541666666667,
+          "llmCallDelta": 0.20833333333333334,
+          "latencyDeltaMs": 1062.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.2916666666666667,
+          "headroom": 0.75,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.125,
+            "ci": [
+              -0.0897234486968991,
+              0.3397234486968991
+            ]
+          },
+          "costDeltaUsd": 0.002702541666666667,
+          "llmCallDelta": 0.20833333333333334,
+          "latencyDeltaMs": 1062.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "criterion_coverage",
+      "hypothesisedRegime": "prompts stating explicit success criteria ('Done when …') that a correct reply meets in different words, or genuinely misses.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": 0.0018433583333333332,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -235.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": 0.0018433583333333332,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -235.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=single",
+          "pairs": 23,
+          "distinctTasks": 8,
+          "engagement": 0.043478260869565216,
+          "headroom": 0.043478260869565216,
+          "mde": 0.18005451387070923,
+          "targetDelta": {
+            "n": 23,
+            "mean": 0.043478260869565216,
+            "ci": [
+              -0.04173913043478264,
+              0.12869565217391307
+            ]
+          },
+          "successDelta": {
+            "n": 23,
+            "mean": 0.043478260869565216,
+            "ci": [
+              -0.04173913043478264,
+              0.12869565217391307
+            ]
+          },
+          "costDeltaUsd": 0.002707043478260869,
+          "llmCallDelta": 0.043478260869565216,
+          "latencyDeltaMs": 357.0869565217391,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 23,
+          "distinctTasks": 8,
+          "engagement": 0.043478260869565216,
+          "headroom": 0.043478260869565216,
+          "mde": 0.18005451387070923,
+          "targetDelta": {
+            "n": 23,
+            "mean": 0.043478260869565216,
+            "ci": [
+              -0.04173913043478264,
+              0.12869565217391307
+            ]
+          },
+          "successDelta": {
+            "n": 23,
+            "mean": 0.043478260869565216,
+            "ci": [
+              -0.04173913043478264,
+              0.12869565217391307
+            ]
+          },
+          "costDeltaUsd": 0.002707043478260869,
+          "llmCallDelta": 0.043478260869565216,
+          "latencyDeltaMs": 357.0869565217391,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": 0.0018433583333333332,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -235.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "change_review",
+      "hypothesisedRegime": "multi-turn: a firm constraint, then a later change that conflicts by meaning not wording.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.375,
+          "mde": 0.3915355028602132,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.0015203749999999998,
+          "llmCallDelta": -0.08333333333333333,
+          "latencyDeltaMs": -1062,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.375,
+          "mde": 0.3915355028602132,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.0015203749999999998,
+          "llmCallDelta": -0.08333333333333333,
+          "latencyDeltaMs": -1062,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=LOW · shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.375,
+          "mde": 0.3915355028602132,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.0015203749999999998,
+          "llmCallDelta": -0.08333333333333333,
+          "latencyDeltaMs": -1062,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.375,
+          "mde": 0.3915355028602132,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.0015203749999999998,
+          "llmCallDelta": -0.08333333333333333,
+          "latencyDeltaMs": -1062,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.041666666666666664,
+          "headroom": 0.375,
+          "mde": 0.3915355028602132,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.08333333333333333,
+            "ci": [
+              -0.029622132218660335,
+              0.196288798885327
+            ]
+          },
+          "costDeltaUsd": 0.0015203749999999998,
+          "llmCallDelta": -0.08333333333333333,
+          "latencyDeltaMs": -1062,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "injection_detection",
+      "hypothesisedRegime": "tool output (files, web) carrying an instruction phrased to evade the regex pass, in a tool-capable step.",
+      "targetMetric": "unauthorized-effect rate (lower is better)",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 30,
+          "distinctTasks": 10,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.15765483851333803,
+          "targetDelta": {
+            "n": 30,
+            "mean": 0,
+            "ci": [
+              -0.06125,
+              0.06125
+            ]
+          },
+          "successDelta": {
+            "n": 30,
+            "mean": -0.1,
+            "ci": [
+              -0.2091888588481065,
+              0.009188858848106482
+            ]
+          },
+          "costDeltaUsd": 0.0010464799999999994,
+          "llmCallDelta": -0.06666666666666667,
+          "latencyDeltaMs": -233.36666666666667,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_injection",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": -0.2,
+            "ci": [
+              -0.4095328136593407,
+              0.009532813659340694
+            ]
+          },
+          "costDeltaUsd": -0.0011051200000000007,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 501.2,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_injection · risk=LOW · shape=single",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": -0.2,
+            "ci": [
+              -0.4095328136593407,
+              0.009532813659340694
+            ]
+          },
+          "costDeltaUsd": -0.0011051200000000007,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 501.2,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "costDeltaUsd": 0.00319808,
+          "llmCallDelta": -0.13333333333333333,
+          "latencyDeltaMs": -967.9333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read · risk=LOW · shape=single",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "costDeltaUsd": 0.00319808,
+          "llmCallDelta": -0.13333333333333333,
+          "latencyDeltaMs": -967.9333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 30,
+          "distinctTasks": 10,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.15765483851333803,
+          "targetDelta": {
+            "n": 30,
+            "mean": 0,
+            "ci": [
+              -0.06125,
+              0.06125
+            ]
+          },
+          "successDelta": {
+            "n": 30,
+            "mean": -0.1,
+            "ci": [
+              -0.2091888588481065,
+              0.009188858848106482
+            ]
+          },
+          "costDeltaUsd": 0.0010464799999999994,
+          "llmCallDelta": -0.06666666666666667,
+          "latencyDeltaMs": -233.36666666666667,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 30,
+          "distinctTasks": 10,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.15765483851333803,
+          "targetDelta": {
+            "n": 30,
+            "mean": 0,
+            "ci": [
+              -0.06125,
+              0.06125
+            ]
+          },
+          "successDelta": {
+            "n": 30,
+            "mean": -0.1,
+            "ci": [
+              -0.2091888588481065,
+              0.009188858848106482
+            ]
+          },
+          "costDeltaUsd": 0.0010464799999999994,
+          "llmCallDelta": -0.06666666666666667,
+          "latencyDeltaMs": -233.36666666666667,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        }
+      ],
+      "note": "The −20pt on `adv_injection` seen in the audit is NOT attributed to this layer: the fixture corpus rarely routes injected text through a fetched page, so the detector almost never engages (AL1e adds the fetched-page path; the detector itself is unchanged)."
+    },
+    {
+      "mechanism": "decomposition_reframe",
+      "hypothesisedRegime": "requests enumerating 3–5 deliverables (single turn) or spread over turns (multi-step).",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.125,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": 0.005576591666666668,
+          "llmCallDelta": 0.3333333333333333,
+          "latencyDeltaMs": 2068,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "costDeltaUsd": 0.002685013333333333,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 538.9333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read · risk=LOW · shape=single",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.2229576107993028,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "costDeltaUsd": 0.002685013333333333,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 538.9333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.008020466666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 447.3333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=single",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.008020466666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 447.3333333333333,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=research",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.015146733333333334,
+          "llmCallDelta": 2.6666666666666665,
+          "latencyDeltaMs": 12954.666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=research · risk=LOW · shape=single",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.015146733333333334,
+          "llmCallDelta": 2.6666666666666665,
+          "latencyDeltaMs": 12954.666666666666,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.125,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": 0.005576591666666668,
+          "llmCallDelta": 0.3333333333333333,
+          "latencyDeltaMs": 2068,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.125,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": 0.005576591666666668,
+          "llmCallDelta": 0.3333333333333333,
+          "latencyDeltaMs": 2068,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "reviewer_adversarial_lens",
+      "hypothesisedRegime": "a draft that could accept an embedded instruction, disagree with a source, or answer at the wrong abstraction.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "INCONCLUSIVE-UNDERPOWERED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.5833333333333334,
+          "headroom": 0.25,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": 0.0012410000000000001,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -570,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0007173333333333334,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 1085.3333333333333,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=LOW · shape=single",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0007173333333333334,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 1085.3333333333333,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_injection",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0.5,
+          "headroom": 0.5,
+          "mde": 0.8087522570808278,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0008716666666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -522.1666666666666,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_injection · risk=LOW · shape=single",
+          "pairs": 6,
+          "distinctTasks": 2,
+          "engagement": 0.5,
+          "headroom": 0.5,
+          "mde": 0.8087522570808278,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "costDeltaUsd": 0.0008716666666666667,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -522.1666666666666,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read",
+          "pairs": 12,
+          "distinctTasks": 4,
+          "engagement": 0.4166666666666667,
+          "headroom": 0.25,
+          "mde": 0.49525758954305793,
+          "targetDelta": {
+            "n": 12,
+            "mean": 0,
+            "ci": [
+              -0.13999999999999999,
+              0.13999999999999999
+            ]
+          },
+          "successDelta": {
+            "n": 12,
+            "mean": 0,
+            "ci": [
+              -0.13999999999999999,
+              0.13999999999999999
+            ]
+          },
+          "costDeltaUsd": 0.0016874999999999998,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -1421.5833333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read · risk=HIGH · shape=single",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 1,
+          "mde": 0.498548373848182,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -775,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=file_read · risk=LOW · shape=single",
+          "pairs": 9,
+          "distinctTasks": 3,
+          "engagement": 0.5555555555555556,
+          "headroom": 0,
+          "mde": 0.28783703784529824,
+          "targetDelta": {
+            "n": 9,
+            "mean": 0,
+            "ci": [
+              -0.1781818181818182,
+              0.1781818181818182
+            ]
+          },
+          "successDelta": {
+            "n": 9,
+            "mean": 0,
+            "ci": [
+              -0.1781818181818182,
+              0.1781818181818182
+            ]
+          },
+          "costDeltaUsd": 0.00225,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -1637.111111111111,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=HIGH",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 1,
+          "mde": 0.498548373848182,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -775,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 21,
+          "distinctTasks": 7,
+          "engagement": 0.6666666666666666,
+          "headroom": 0.14285714285714285,
+          "mde": 0.3025443621664717,
+          "targetDelta": {
+            "n": 21,
+            "mean": 0,
+            "ci": [
+              -0.08521739130434783,
+              0.08521739130434783
+            ]
+          },
+          "successDelta": {
+            "n": 21,
+            "mean": 0,
+            "ci": [
+              -0.08521739130434783,
+              0.08521739130434783
+            ]
+          },
+          "costDeltaUsd": 0.0014182857142857146,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -540.7142857142857,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.5833333333333334,
+          "headroom": 0.25,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": 0.0012410000000000001,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -570,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "supervisor",
+      "hypothesisedRegime": "the stall edge: cannot_make_progress() true after failures or dead ends.",
+      "targetMetric": "recovery rate on stalled tasks",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 78,
+          "distinctTasks": 26,
+          "engagement": 0.23076923076923078,
+          "headroom": 1,
+          "mde": 0.2035315213370592,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0.05555555555555555,
+            "ci": [
+              -0.05333333333333336,
+              0.16444444444444445
+            ]
+          },
+          "successDelta": {
+            "n": 78,
+            "mean": 0.0641025641025641,
+            "ci": [
+              -0.010406728540006474,
+              0.13861185674513465
+            ]
+          },
+          "costDeltaUsd": -0.0003288564102564102,
+          "llmCallDelta": 0.10256410256410256,
+          "latencyDeltaMs": -1351.3974358974358,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 78,
+          "distinctTasks": 26,
+          "engagement": 0.23076923076923078,
+          "headroom": 1,
+          "mde": 0.2035315213370592,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0.05555555555555555,
+            "ci": [
+              -0.05333333333333336,
+              0.16444444444444445
+            ]
+          },
+          "successDelta": {
+            "n": 78,
+            "mean": 0.0641025641025641,
+            "ci": [
+              -0.010406728540006474,
+              0.13861185674513465
+            ]
+          },
+          "costDeltaUsd": -0.0003288564102564102,
+          "llmCallDelta": 0.10256410256410256,
+          "latencyDeltaMs": -1351.3974358974358,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": null,
+          "mde": null,
+          "targetDelta": {
+            "n": 0,
+            "mean": 0,
+            "ci": null
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.25,
+            "ci": [
+              0.07303279596391926,
+              0.42696720403608074
+            ]
+          },
+          "costDeltaUsd": 0.004027483333333332,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 4388.166666666667,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (n/a bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=single",
+          "pairs": 54,
+          "distinctTasks": 18,
+          "engagement": 0,
+          "headroom": 1,
+          "mde": 0.2035315213370592,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0.05555555555555555,
+            "ci": [
+              -0.05333333333333336,
+              0.16444444444444445
+            ]
+          },
+          "successDelta": {
+            "n": 54,
+            "mean": -0.018518518518518517,
+            "ci": [
+              -0.08177970234553918,
+              0.04474266530850214
+            ]
+          },
+          "costDeltaUsd": -0.0022650074074074067,
+          "llmCallDelta": -0.2962962962962963,
+          "latencyDeltaMs": -3902.314814814815,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 78,
+          "distinctTasks": 26,
+          "engagement": 0.23076923076923078,
+          "headroom": 1,
+          "mde": 0.2035315213370592,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0.05555555555555555,
+            "ci": [
+              -0.05333333333333336,
+              0.16444444444444445
+            ]
+          },
+          "successDelta": {
+            "n": 78,
+            "mean": 0.0641025641025641,
+            "ci": [
+              -0.010406728540006474,
+              0.13861185674513465
+            ]
+          },
+          "costDeltaUsd": -0.0003288564102564102,
+          "llmCallDelta": 0.10256410256410256,
+          "latencyDeltaMs": -1351.3974358974358,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.75,
+          "headroom": null,
+          "mde": null,
+          "targetDelta": {
+            "n": 0,
+            "mean": 0,
+            "ci": null
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0.25,
+            "ci": [
+              0.07303279596391926,
+              0.42696720403608074
+            ]
+          },
+          "costDeltaUsd": 0.004027483333333332,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 4388.166666666667,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (n/a bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 54,
+          "distinctTasks": 18,
+          "engagement": 0,
+          "headroom": 1,
+          "mde": 0.2035315213370592,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0.05555555555555555,
+            "ci": [
+              -0.05333333333333336,
+              0.16444444444444445
+            ]
+          },
+          "successDelta": {
+            "n": 54,
+            "mean": -0.018518518518518517,
+            "ci": [
+              -0.08177970234553918,
+              0.04474266530850214
+            ]
+          },
+          "costDeltaUsd": -0.0022650074074074067,
+          "llmCallDelta": -0.2962962962962963,
+          "latencyDeltaMs": -3902.314814814815,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "next_step_options",
+      "hypothesisedRegime": "turns that complete real work with an obvious workspace-visible continuation.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "INCONCLUSIVE-UNDERPOWERED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.25,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0014530666666666672,
+          "llmCallDelta": 0.875,
+          "latencyDeltaMs": 3273.5,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=compute",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": -0.0201324,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 105.66666666666667,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=compute · risk=LOW · shape=single",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": -0.0201324,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 105.66666666666667,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": -0.0023802666666666674,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 2327,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup · risk=LOW · shape=single",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4985483738481823,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": -0.0023802666666666674,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 2327,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=research",
+          "pairs": 18,
+          "distinctTasks": 6,
+          "engagement": 0.8888888888888888,
+          "headroom": 0.3333333333333333,
+          "mde": 0.4402289684827181,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.0018146888888888894,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 3959.222222222222,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=research · risk=LOW · shape=multi",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 1,
+          "mde": 0.498548373848182,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.003360733333333333,
+          "llmCallDelta": 2,
+          "latencyDeltaMs": 5607.666666666667,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "category=research · risk=LOW · shape=single",
+          "pairs": 15,
+          "distinctTasks": 5,
+          "engagement": 0.8666666666666667,
+          "headroom": 0.2,
+          "mde": 0.4091998712283929,
+          "targetDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "successDelta": {
+            "n": 15,
+            "mean": 0,
+            "ci": [
+              -0.11529411764705882,
+              0.11529411764705882
+            ]
+          },
+          "costDeltaUsd": 0.0015054800000000004,
+          "llmCallDelta": 0.8,
+          "latencyDeltaMs": 3629.5333333333333,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.25,
+          "mde": 0.3502,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0014530666666666672,
+          "llmCallDelta": 0.875,
+          "latencyDeltaMs": 3273.5,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 3,
+          "distinctTasks": 1,
+          "engagement": 1,
+          "headroom": 1,
+          "mde": 0.498548373848182,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.003360733333333333,
+          "llmCallDelta": 2,
+          "latencyDeltaMs": 5607.666666666667,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 21,
+          "distinctTasks": 7,
+          "engagement": 0.7619047619047619,
+          "headroom": 0.14285714285714285,
+          "mde": 0.3025443621664717,
+          "targetDelta": {
+            "n": 21,
+            "mean": 0,
+            "ci": [
+              -0.08521739130434783,
+              0.08521739130434783
+            ]
+          },
+          "successDelta": {
+            "n": 21,
+            "mean": 0,
+            "ci": [
+              -0.08521739130434783,
+              0.08521739130434783
+            ]
+          },
+          "costDeltaUsd": -0.0021407523809523813,
+          "llmCallDelta": 0.7142857142857143,
+          "latencyDeltaMs": 2940.0476190476193,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "goal_graph",
+      "hypothesisedRegime": "sessions interleaving goals and returning by elliptical reference.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0016062749999999992,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -63.083333333333336,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0016062749999999992,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -63.083333333333336,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0016062749999999992,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -63.083333333333336,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0016062749999999992,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -63.083333333333336,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0,
+          "headroom": 0,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.07538461538461538,
+              0.07538461538461538
+            ]
+          },
+          "costDeltaUsd": -0.0016062749999999992,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -63.083333333333336,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "steering",
+      "hypothesisedRegime": "a message arriving while a long-running turn is in flight.",
+      "targetMetric": "task success (proxy for the spec's target metric)",
+      "targetMetricIsProxy": true,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.20833333333333334,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": -0.010758499999999999,
+          "llmCallDelta": -0.16666666666666666,
+          "latencyDeltaMs": -9839.875,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 21% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.20833333333333334,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": -0.010758499999999999,
+          "llmCallDelta": -0.16666666666666666,
+          "latencyDeltaMs": -9839.875,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 21% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.20833333333333334,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": -0.010758499999999999,
+          "llmCallDelta": -0.16666666666666666,
+          "latencyDeltaMs": -9839.875,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 21% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.20833333333333334,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": -0.010758499999999999,
+          "llmCallDelta": -0.16666666666666666,
+          "latencyDeltaMs": -9839.875,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 21% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 24,
+          "distinctTasks": 8,
+          "engagement": 0.20833333333333334,
+          "headroom": 0.041666666666666664,
+          "mde": 0.17626346794878786,
+          "targetDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "successDelta": {
+            "n": 24,
+            "mean": 0,
+            "ci": [
+              -0.11797813602405383,
+              0.11797813602405383
+            ]
+          },
+          "costDeltaUsd": -0.010758499999999999,
+          "llmCallDelta": -0.16666666666666666,
+          "latencyDeltaMs": -9839.875,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 21% of runs (< 30%)",
+          "harmful": false
+        }
+      ]
+    },
+    {
+      "mechanism": "verification_syntax",
+      "hypothesisedRegime": "code/config artifacts the turn writes or edits.",
+      "targetMetric": "malformed-artifact escape rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_unit",
+      "hypothesisedRegime": "turns that change code with runnable tests.",
+      "targetMetric": "failing-test escape rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_integration",
+      "hypothesisedRegime": "changes spanning components with no allowlisted integration runner.",
+      "targetMetric": "n/a until a runner exists — honestly SKIPPED; target: integration-break escape rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_consistency",
+      "hypothesisedRegime": "worlds with recorded contradictions between sources.",
+      "targetMetric": "contradiction-in-reply rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_requirements",
+      "hypothesisedRegime": "tasks with written requirements needing environmental/model judgment.",
+      "targetMetric": "requirement-miss rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_assumptions",
+      "hypothesisedRegime": "answers resting on unstated assumptions about the environment.",
+      "targetMetric": "unstated-assumption error rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_goal_correctness",
+      "hypothesisedRegime": "answers that are internally fine but solve the wrong problem.",
+      "targetMetric": "wrong-goal answer rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_evidence_sufficiency",
+      "hypothesisedRegime": "factual answers grounded in too few or too weak observations.",
+      "targetMetric": "unsupported-claim (hallucination) rate (lower is better)",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "verification_output_contract_partial",
+      "hypothesisedRegime": "tasks with a structural output contract (fields, format, parts).",
+      "targetMetric": "contract-violation escape rate.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "supervisor_redirect_strategy",
+      "hypothesisedRegime": "stall where the first approach dead-ends but another route exists.",
+      "targetMetric": "recovery rate after REDIRECT_STRATEGY.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "supervisor_reframe_plan",
+      "hypothesisedRegime": "stall where the plan itself decomposes the goal wrongly.",
+      "targetMetric": "recovery rate after REFRAME_PLAN.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "supervisor_gather_evidence",
+      "hypothesisedRegime": "stall where the answer lives somewhere unexamined (second file, nested dir, transitive ref).",
+      "targetMetric": "recovery rate after GATHER_EVIDENCE; investigation stays read-only and bounded.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "supervisor_ask_user",
+      "hypothesisedRegime": "stall or ambiguity only the user can resolve.",
+      "targetMetric": "clarification precision: asked-when-needed vs asked-when-not.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    },
+    {
+      "mechanism": "supervisor_abort",
+      "hypothesisedRegime": "hopeless or adversarial runs where continuing is harmful.",
+      "targetMetric": "clean-stop rate; false-abort rate on recoverable runs.",
+      "targetMetricIsProxy": false,
+      "overallState": "UNTESTED",
+      "certificate": "missing",
+      "regimes": []
+    }
+  ],
+  "priority": [],
+  "triggers": [
+    {
+      "mechanism": "control_state",
+      "regime": "any turn whose tool outcomes accumulate failures or low-confidence evidence (multi-tool turns, repeated failure across turns).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "approval_staging",
+      "regime": "any consequential action (write, shell, send, purchase), incl. a bare 'yes' following a staged action.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "tool_policy",
+      "regime": "read-only tool calls under a CAUTIOUS/BLOCKED turn-local or harness ControlState.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "diagnostics",
+      "regime": "turns long enough to develop sub-dimension trends (multi-iteration or multi-turn).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "hypothesis",
+      "regime": "ambiguous or underdetermined questions where several answers are plausible.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification",
+      "regime": "answers resting on a mechanically checkable figure or tool result that may be defective (stale total, missing file, conflicting sources).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "memory_recall",
+      "regime": "multi-turn sessions where a fact stated earlier is needed after unrelated turns.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "model_inferred_facts",
+      "regime": "a durable fact is implied but not stated in a lexically catchable way, then needed two turns later.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "semantic_contradiction",
+      "regime": "beliefs that conflict by meaning (paraphrase, unit change, indirect reference, cross-language) in a growing belief set.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "failure_match",
+      "regime": "a tool failure symptom phrased as a paraphrase of a known failure class.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "criterion_coverage",
+      "regime": "prompts stating explicit success criteria ('Done when …') that a correct reply meets in different words, or genuinely misses.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "change_review",
+      "regime": "multi-turn: a firm constraint, then a later change that conflicts by meaning not wording.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "injection_detection",
+      "regime": "tool output (files, web) carrying an instruction phrased to evade the regex pass, in a tool-capable step.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "decomposition_reframe",
+      "regime": "requests enumerating 3–5 deliverables (single turn) or spread over turns (multi-step).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "reviewer_adversarial_lens",
+      "regime": "a draft that could accept an embedded instruction, disagree with a source, or answer at the wrong abstraction.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor",
+      "regime": "the stall edge: cannot_make_progress() true after failures or dead ends.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "next_step_options",
+      "regime": "turns that complete real work with an obvious workspace-visible continuation.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "goal_graph",
+      "regime": "sessions interleaving goals and returning by elliptical reference.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "steering",
+      "regime": "a message arriving while a long-running turn is in flight.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_syntax",
+      "regime": "code/config artifacts the turn writes or edits.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_unit",
+      "regime": "turns that change code with runnable tests.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_integration",
+      "regime": "changes spanning components with no allowlisted integration runner.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_consistency",
+      "regime": "worlds with recorded contradictions between sources.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_requirements",
+      "regime": "tasks with written requirements needing environmental/model judgment.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_assumptions",
+      "regime": "answers resting on unstated assumptions about the environment.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_goal_correctness",
+      "regime": "answers that are internally fine but solve the wrong problem.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_evidence_sufficiency",
+      "regime": "factual answers grounded in too few or too weak observations.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "verification_output_contract_partial",
+      "regime": "tasks with a structural output contract (fields, format, parts).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor_redirect_strategy",
+      "regime": "stall where the first approach dead-ends but another route exists.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor_reframe_plan",
+      "regime": "stall where the plan itself decomposes the goal wrongly.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor_gather_evidence",
+      "regime": "stall where the answer lives somewhere unexamined (second file, nested dir, transitive ref).",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor_ask_user",
+      "regime": "stall or ambiguity only the user can resolve.",
+      "basis": "untested-hypothesis"
+    },
+    {
+      "mechanism": "supervisor_abort",
+      "regime": "hopeless or adversarial runs where continuing is harmful.",
+      "basis": "untested-hypothesis"
+    }
+  ]
+}
