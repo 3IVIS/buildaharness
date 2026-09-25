@@ -203,6 +203,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
     // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
     planMode: config.planMode,
+    ambiguityGuardMode: config.ambiguityGuardMode,
   })
 }
 

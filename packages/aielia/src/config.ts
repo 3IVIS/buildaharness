@@ -8,6 +8,7 @@
 
 import type { OneLoopMode } from './one-loop-flag.js'
 import type { AskMode } from './ask-mode-flag.js'
+import type { AmbiguityGuardMode } from './ambiguity-guard-flag.js'
 import type { PlanRolloutMode } from './plan-mode-flag.js'
 import type { TuiMode } from './tui-mode-flag.js'
 import type { UpdateCheckMode } from './update-check-flag.js'
@@ -136,6 +137,8 @@ export interface AssistantConfig {
    * out of DEFAULT_CONFIG so an unset value stays undefined.
    */
   planMode?: PlanRolloutMode
+  /** AL3a — ask a clarifying question before staging an under-specified consequential request. See ambiguity-guard-flag.ts. Undefined = 'disabled'. */
+  ambiguityGuardMode?: AmbiguityGuardMode
   /**
    * Phase 4 of the internal plan — the rollout flag for the
    * Ink-driven pinned-bottom-input interactive shell (tui-app.ts's runTuiApp()). Undefined (the
@@ -216,6 +219,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'oneLoopMode',
   'askMode',
   'planMode',
+  'ambiguityGuardMode',
   'tuiMode',
   'updateCheck',
   'activeProject',

@@ -1,5 +1,7 @@
 import type { Task } from '@buildaharness/harness'
-import type { ILLMClient, TokenUsage, ReminderStore } from '@buildaharness/runtime'
+import type { ILLMClient, TokenUsage, ReminderStore, ChatMessage } from '@buildaharness/runtime'
+import { checkRequestAmbiguity } from './ambiguity-guard.js'
+import type { AmbiguityGuardMode } from './ambiguity-guard-flag.js'
 import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
 import { evaluateTurnPolicy, evaluateAbandonPolicy } from './turn-policy.js'
 import { looksLikeCodingFact } from './contradiction-checker.js'
@@ -44,6 +46,8 @@ export type TurnInterpretation =
       planUpdatedTrace: { templateName: string | null; completionPct: number }
     }
   | { kind: 'needs_approval'; classification: TurnIntentClassification; result: AssistantTurnResult }
+  /** AL3a — the request doesn't determine the action; `result` is the clarifying question, returned before anything is staged. */
+  | { kind: 'needs_question'; classification: TurnIntentClassification; result: AssistantTurnResult }
   | { kind: 'proceed'; classification: TurnIntentClassification; planForCancelCheck: PlanRecord | null }
 
 export interface ResolvedTasks {
@@ -59,6 +63,7 @@ export class TurnInterpreter {
     private readonly model: () => string | undefined,
     private readonly planService: PlanService,
     private readonly reminderStore: ReminderStore,
+    private readonly ambiguityGuardMode: AmbiguityGuardMode = 'disabled',
   ) {}
 
   async interpretIntent(params: {
@@ -68,8 +73,10 @@ export class TurnInterpreter {
     approved: boolean
     dangerouslySkipPermissions: boolean
     onUsage: (usage: TokenUsage) => void
+    /** Recent transcript, used only by the AL3a ambiguity guard so an answer to an earlier question isn't re-asked. */
+    recentTranscript?: ChatMessage[]
   }): Promise<TurnInterpretation> {
-    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage } = params
+    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage, recentTranscript } = params
 
     // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
     // internal bookkeeping — it never touches anything outside this session's own plan state,
@@ -141,6 +148,28 @@ export class TurnInterpreter {
     // this would silently create a reminder before the user ever sees the prompt.
     if (!toolLoopWillRun && classification.riskLevel === 'MEDIUM' && classification.isReminderRequest && turnPolicy.decision === 'ALLOW') {
       await this.reminderStore.create(userMessage, null)
+    }
+
+    // AL3a — ask before staging. Only consequential turns (message-level approval gate, or a
+    // MEDIUM/HIGH turn that will run write/shell tools) pay for the scope check; UNKNOWN means the
+    // classifier itself failed, so the check would likely fail too — leave that on the approval gate.
+    // `approved` is an explicit user go-ahead on an already-shown action: never re-question it.
+    if (
+      this.ambiguityGuardMode === 'enabled' &&
+      !approved &&
+      !dangerouslySkipPermissions &&
+      classification.riskLevel !== 'UNKNOWN' &&
+      (turnPolicy.decision === 'REQUIRE_APPROVAL' ||
+        (toolLoopWillRun && (classification.riskLevel === 'MEDIUM' || classification.riskLevel === 'HIGH')))
+    ) {
+      const check = await checkRequestAmbiguity(userMessage, this.llmClient, recentTranscript ?? [], this.model(), onUsage)
+      if (check.ambiguous) {
+        return {
+          kind: 'needs_question',
+          classification,
+          result: { status: 'ok', reply: check.question, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true },
+        }
+      }
     }
 
     if (turnPolicy.decision === 'REQUIRE_APPROVAL' && !approved && !dangerouslySkipPermissions) {

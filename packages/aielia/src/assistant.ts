@@ -47,6 +47,7 @@ import { HarnessBridge } from './harness-bridge.js'
 import { wrapProposerWithInjectedFailure } from './benchmark-injected-failure.js'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { DEFAULT_ASK_MODE, type AskMode } from './ask-mode-flag.js'
+import { DEFAULT_AMBIGUITY_GUARD_MODE, type AmbiguityGuardMode } from './ambiguity-guard-flag.js'
 import { DEFAULT_PLAN_MODE, type PlanRolloutMode } from './plan-mode-flag.js'
 import { AskClarificationService } from './ask-clarification-service.js'
 import { ResponseService } from './response-service.js'
@@ -313,6 +314,13 @@ export interface PersonalAssistantOptions {
    * resolvePlanMode(process.env)/normalizePlanMode(import.meta.env...) and pass the result here.
    */
   planMode?: PlanRolloutMode
+  /**
+   * AL3a — see ambiguity-guard-flag.ts. Absent/'disabled' (the default): routing is byte-identical to
+   * before. 'enabled': a consequential turn whose request doesn't determine the action gets a
+   * clarifying question instead of a staged guess. PersonalAssistant never reads process.env; the
+   * surface entry point resolves ASSISTANT_AMBIGUITY_GUARD / `/config set ambiguityGuardMode`.
+   */
+  ambiguityGuardMode?: AmbiguityGuardMode
 }
 
 /**
@@ -437,7 +445,7 @@ export class PersonalAssistant {
       this.onTrace,
       this.onDebugLog,
     )
-    this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore)
+    this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore, options.ambiguityGuardMode ?? DEFAULT_AMBIGUITY_GUARD_MODE)
     this.harnessBridge = new HarnessBridge(
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
       this.planService, this.session, this.onTrace, this.oneLoopMode,
@@ -887,6 +895,7 @@ export class PersonalAssistant {
       approved: options.approved ?? false,
       dangerouslySkipPermissions: this.dangerouslySkipPermissions,
       onUsage: accumulateUsage,
+      recentTranscript: transcript,
     })
 
     if (interpretation.kind === 'bypass') {
@@ -898,6 +907,15 @@ export class PersonalAssistant {
     }
 
     this.onTrace?.({ kind: 'risk_classified', riskLevel: interpretation.classification.riskLevel, requiresApproval: interpretation.classification.requiresApproval })
+
+    if (interpretation.kind === 'needs_question') {
+      // AL3a — the question is an ordinary assistant reply: record it so the user's answer next turn
+      // is read against it. Nothing was staged, so there is no pending action to resolve.
+      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: interpretation.result.reply ?? '' })
+      classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: false })
+      return interpretation.result
+    }
 
     if (interpretation.kind === 'needs_approval') {
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })

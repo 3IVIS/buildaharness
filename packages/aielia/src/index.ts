@@ -85,6 +85,8 @@ export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from 
 export type { OneLoopMode } from './one-loop-flag.js'
 export { resolveAskMode, normalizeAskMode, DEFAULT_ASK_MODE } from './ask-mode-flag.js'
 export type { AskMode } from './ask-mode-flag.js'
+export { resolveAmbiguityGuardMode, normalizeAmbiguityGuardMode, DEFAULT_AMBIGUITY_GUARD_MODE } from './ambiguity-guard-flag.js'
+export type { AmbiguityGuardMode } from './ambiguity-guard-flag.js'
 export { resolvePlanMode, normalizePlanMode, DEFAULT_PLAN_MODE } from './plan-mode-flag.js'
 export type { PlanRolloutMode } from './plan-mode-flag.js'
 export { resolveGoalGraphMode, normalizeGoalGraphMode, isGoalGraphEnabled, DEFAULT_GOAL_GRAPH_MODE } from './goal-graph-flag.js'
