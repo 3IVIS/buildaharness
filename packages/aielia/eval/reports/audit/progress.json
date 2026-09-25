@@ -73,6 +73,12 @@
       "finalized": true,
       "spendUsd": 0.332638,
       "blocked": false
+    },
+    "decomposition-multistep": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.516348,
+      "blocked": false
     }
   }
 }
