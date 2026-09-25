@@ -78,4 +78,8 @@ export const AUDIT_SLICE_MECHANISM: Record<string, MechanismId> = {
   probe_reviewer: 'reviewer_adversarial_lens',
   probe_criterion_coverage: 'criterion_coverage',
   probe_decomposition: 'decomposition_reframe',
+  probe_failure_match: 'failure_match',
+  probe_supervisor: 'supervisor',
+  probe_injection: 'injection_detection',
+  probe_evidence: 'verification_evidence_sufficiency',
 }

@@ -1,0 +1,32 @@
+{
+  "id": "probe-supervisor-two-files",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "calm-control",
+  "family": "healthy-run",
+  "intent": "Control \u2014 a healthy multi-step run; the supervisor must not fire.",
+  "prompt": "What is the owner in a/owner.md and the region in a/region.md?",
+  "workspace": [
+    {
+      "path": "a/owner.md",
+      "content": "Owner: Ines.\n"
+    },
+    {
+      "path": "a/region.md",
+      "content": "Region: ap-south.\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Ines",
+      "ap-south"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = correct answer with no stall, no supervisor consult and no clarifying detour. Fail = a supervisor consult or redirect on a run that never stalled. [AL1e probe: supervisor / calm control.]"
+}

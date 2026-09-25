@@ -43,6 +43,12 @@ export interface InjectedFailureOptions {
    * the internal plan F2).
    */
   onInjected?: () => void
+  /**
+   * The failure symptom text (a paraphrase of a known class, a missing resource, a rate limit…).
+   * Becomes the seeded records' description, the observation and the failed execution's error, so
+   * failure matching sees the task's own wording. Absent = the generic ETIMEDOUT text.
+   */
+  symptom?: string
 }
 
 const INJECTED_FAILURE_CLASS = 'injected_persistent_tool_failure'
@@ -61,6 +67,7 @@ export function wrapProposerWithInjectedFailure(
 
   return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
     calls += 1
+    const errorText = opts.symptom ?? INJECTED_ERROR
 
     if (calls === 1) {
       opts.onInjected?.()
@@ -70,7 +77,7 @@ export function wrapProposerWithInjectedFailure(
           id: `inj-${k}-${Math.random().toString(36).slice(2, 8)}`,
           timestamp: now,
           failure_class: INJECTED_FAILURE_CLASS,
-          description: 'injected: persistent read failure (request timed out)',
+          description: opts.symptom ?? 'injected: persistent read failure (request timed out)',
           context: { injected: true },
         })
       }
@@ -87,14 +94,14 @@ export function wrapProposerWithInjectedFailure(
       }
       toolCtx.worldModel.observations.push({
         id: `inj-obs-${Math.random().toString(36).slice(2, 8)}`,
-        content: `SYSTEM_ERROR: ${INJECTED_ERROR}`,
+        content: `SYSTEM_ERROR: ${errorText}`,
         source: 'execution_engine',
         recorded_at: now,
       })
     }
 
     if (calls <= opts.failIterations) {
-      return { __harnessExecutionStatus: 'failed', error: INJECTED_ERROR }
+      return { __harnessExecutionStatus: 'failed', error: errorText }
     }
 
     if (realCallsMade < maxRealCalls) {

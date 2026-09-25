@@ -74,4 +74,16 @@ describe('wrapProposerWithInjectedFailure', () => {
     // a plain (non-envelope) real result is normalised into a completed execution on replay
     expect(await wrapped(ctx)).toEqual({ __harnessExecutionStatus: 'complete', output: 'plain string answer' })
   })
+
+  it('symptom text replaces the generic ETIMEDOUT wording in the records, the observation and the error', async () => {
+    const symptom = 'the upstream never answered within the allowed window'
+    const real = vi.fn(async () => ({ __harnessExecutionStatus: 'complete', output: 'x' }))
+    const wrapped = wrapProposerWithInjectedFailure(real, { failIterations: 1, seedFailures: 3, symptom })
+    const ctx = fakeCtx()
+    const first = await wrapped(ctx)
+    expect(first).toEqual({ __harnessExecutionStatus: 'failed', error: symptom })
+    expect(ctx.failureDiagnostics!.failure_history.every((f) => f.description === symptom)).toBe(true)
+    expect(ctx.worldModel.observations[0].content).toContain(symptom)
+    expect(ctx.worldModel.observations[0].content).not.toContain('ETIMEDOUT')
+  })
 })

@@ -1,0 +1,31 @@
+{
+  "id": "probe-failure-match-locale",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "calm-control",
+  "family": "no-failure",
+  "intent": "Control \u2014 no failure occurs; failure matching must stay quiet.",
+  "prompt": "What default locale is set in app/locale.md?",
+  "workspace": [
+    {
+      "path": "app/locale.md",
+      "content": "Default locale: pt-BR.\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "pt-BR"
+    ],
+    "notContains": [
+      "retry",
+      "failed to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states pt-BR directly. Fail = any failure-recovery narrative or retry on a clean read. [AL1e probe: failure_match / calm control.]"
+}

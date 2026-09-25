@@ -1,0 +1,34 @@
+{
+  "id": "probe-supervisor-event-plan",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "reframe-plan",
+  "intent": "A two-part task stalls; the plan must be reframed so both parts are still delivered.",
+  "prompt": "Plan the offsite: venue from ev/venue.md and headcount from ev/count.md.",
+  "workspace": [
+    {
+      "path": "ev/venue.md",
+      "content": "Venue: Lakeside Hall.\n"
+    },
+    {
+      "path": "ev/count.md",
+      "content": "Headcount: 34.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "Lakeside",
+      "34"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the reply carries both Lakeside and 34. Fail = delivers only one part, or stops after the stall. [AL1e probe: supervisor / reframe-plan.]"
+}

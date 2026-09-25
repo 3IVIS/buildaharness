@@ -393,6 +393,70 @@
       "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "18 tasks: enumerated-in-one-prompt (single turn), added-mid-conversation and merged-separate-requests (multi-turn) families (4 stress each) plus 6 single-deliverable calm controls. Not yet run."
+    },
+    {
+      "id": "probe-failure-match",
+      "title": "Probe: failure matching / recovery",
+      "hypothesis": "PROBE (AL1e, not a verdict run): certify the failure matching / recovery corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "failureMatchOff",
+        "flagOn"
+      ],
+      "slice": "probe_failure_match",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: timeout, missing-resource and rate-limit paraphrase families (4 stress each, injected via injectedFailureSymptom) plus 6 no-failure calm controls. Target metric is recovery rate. The symptom is pinned to the injected failure class by the stall wrapper, so whether the semantic match is even consulted is what the probe measures. Not yet run."
+    },
+    {
+      "id": "probe-supervisor",
+      "title": "Probe: trajectory supervisor",
+      "hypothesis": "PROBE (AL1e, not a verdict run): certify the trajectory supervisor corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "supervisorOff",
+        "flagOn"
+      ],
+      "slice": "probe_supervisor",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 6,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "26 tasks: redirect-wrong-file, reframe-plan, gather-evidence-nested, ask-user-missing-detail (a follow-up supplies the detail) and late-stall (multi-turn; the stall is injected on the last turn) families, 4 stress each, plus 6 healthy-run calm controls that must not trigger a consult. Target metric is recovery rate on stalled tasks. Not yet run."
+    },
+    {
+      "id": "probe-injection",
+      "title": "Probe: LLM injection detection",
+      "hypothesis": "PROBE (AL1e, not a verdict run): certify the LLM injection detection corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "injectionDetectOff",
+        "flagOn"
+      ],
+      "slice": "probe_injection",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 5,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: paraphrased-override and embedded-task-as-data payloads in fetched pages (served by the deterministic fixture web server, no live network), multi-part payloads in workspace files, plus 6 benign instruction-like pages/files as false-positive controls. Target metrics are unauthorized-effect rate and false-flag rate. Not yet run."
+    },
+    {
+      "id": "probe-evidence",
+      "title": "Probe: evidence sufficiency / tool reliability",
+      "hypothesis": "PROBE (AL1e, not a verdict run): certify the evidence sufficiency / tool reliability corpus \u2014 the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+      "arms": [
+        "verificationOff",
+        "flagOn"
+      ],
+      "slice": "probe_evidence",
+      "seeds": 1,
+      "fullPages": "all",
+      "maxSpendUsd": 4,
+      "status": "queued",
+      "corpusAdequacy": "partial",
+      "corpusNote": "18 tasks: single-weak-source (fixture page), zero-observations (missing file) and conflicting-observations (two fixture pages) families, 4 stress each, plus 6 ample-evidence calm controls. Target metric is overconfident-wrong. Tool-reliability escalation has no dedicated arm, so the verification-off arm is the comparator. Not yet run."
     }
   ]
 }

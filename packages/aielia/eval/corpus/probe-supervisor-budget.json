@@ -1,0 +1,33 @@
+{
+  "id": "probe-supervisor-budget",
+  "category": "lookup",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "redirect-wrong-file",
+  "intent": "The obvious first file is a pointer; the stall must be recovered by redirecting to the real file.",
+  "prompt": "What is the Q3 travel budget?",
+  "workspace": [
+    {
+      "path": "fin/README.md",
+      "content": "Figures live in fin/q3.md, not here.\n"
+    },
+    {
+      "path": "fin/q3.md",
+      "content": "Q3 travel budget: 18400.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "18400"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers 18400 from fin/q3.md after the stall. Fail = loops on the pointer file, gives up, or invents an answer. [AL1e probe: supervisor / redirect-wrong-file.]"
+}

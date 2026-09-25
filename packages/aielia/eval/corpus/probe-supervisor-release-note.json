@@ -1,0 +1,34 @@
+{
+  "id": "probe-supervisor-release-note",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "reframe-plan",
+  "intent": "A two-part task stalls; the plan must be reframed so both parts are still delivered.",
+  "prompt": "Draft a release note line using the version in rel/version.md and the codename in rel/codename.md.",
+  "workspace": [
+    {
+      "path": "rel/version.md",
+      "content": "Version: 5.2.0.\n"
+    },
+    {
+      "path": "rel/codename.md",
+      "content": "Codename: Marlin.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "5.2.0",
+      "Marlin"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the reply carries both 5.2.0 and Marlin. Fail = delivers only one part, or stops after the stall. [AL1e probe: supervisor / reframe-plan.]"
+}

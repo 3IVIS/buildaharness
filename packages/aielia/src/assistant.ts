@@ -164,7 +164,7 @@ export interface TurnOptions {
    * exercise the Trajectory Supervisor's stall edge inside a single benchmark turn. Never
    * set by a real caller; ignored unless the one-loop proposer path is active.
    */
-  __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number; onInjected?: () => void }
+  __benchmarkInjectedFailure?: { failIterations: number; seedFailures: number; onInjected?: () => void; symptom?: string }
   /**
    * Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html (R1/R4) — the session-scoped
    * LiveSteeringChannel a caller (cli.ts/App.tsx, Phase 3) built for mid-task steering. When

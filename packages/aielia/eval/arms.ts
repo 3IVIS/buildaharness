@@ -138,7 +138,7 @@ async function runAssistant(
   oneLoopMode: 'enabled' | 'disabled',
   opts: RunArmOpts = {},
 ): Promise<ArmTurnOutput | null> {
-  if (task.tools.web) return null // web arm not wired — see eval/README.md
+  if (task.tools.web && task.webPages.length === 0) return null // a live-network web task is never run; fixture pages (`webPages`) wire the deterministic web arm
 
   // Feature flags are gated on env vars, read in both twins (the trajectory supervisor —
   // the internal plan — and the Batch B audit arms —
@@ -223,6 +223,7 @@ async function runAssistantInner(
     checkpointStore: new InMemoryAdapter({ scope: 'thread', namespace: `eval-ckpt-${task.id}` }),
     fileTools: ctx.fileTools,
     shellTools: ctx.shellTools,
+    webTools: ctx.webTools,
     oneLoopMode,
     askMode,
     goalGraphSuggestMode: suggest ? 'enabled' : 'disabled',
@@ -251,6 +252,7 @@ async function runAssistantInner(
   const injectedFor = (
     inj: TaskSpec['injectedFailure'],
     count: number | undefined,
+    symptom?: string,
   ): Parameters<typeof assistant.turn>[1] => {
     const o: Parameters<typeof assistant.turn>[1] = { sessionId }
     if (steeringChannel) o.steeringChannel = steeringChannel
@@ -258,6 +260,7 @@ async function runAssistantInner(
       o.__benchmarkInjectedFailure = {
         failIterations: count ?? 1,
         seedFailures: 3,
+        symptom,
         onInjected: () => {
           persistentFailureFired = true
         },
@@ -268,7 +271,7 @@ async function runAssistantInner(
 
   // Turn 1 = the task prompt; then each followup, sent to the same session.
   const turns = [
-    { prompt: task.prompt, addWorkspace: [], injectedFailure: task.injectedFailure, injectedFailureCount: task.injectedFailureCount },
+    { prompt: task.prompt, addWorkspace: [], injectedFailure: task.injectedFailure, injectedFailureCount: task.injectedFailureCount, injectedFailureSymptom: task.injectedFailureSymptom },
     ...task.followups,
   ]
   const usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 }
@@ -285,7 +288,7 @@ async function runAssistantInner(
       }
       inFirstTurn = i === 0
       try {
-        result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount))
+        result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount, t.injectedFailureSymptom))
       } finally {
         inFirstTurn = false
       }
@@ -299,7 +302,7 @@ async function runAssistantInner(
         // anything just released becomes an ordinary follow-up turn, in arrival order.
         // Spliced in right after this turn — where the CLI's post-turn drain runs them — not at the
         // end, so they precede any declared followup the user only sends afterwards.
-        const drained = steeringChannel.poll().map((ev) => ({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined }))
+        const drained = steeringChannel.poll().map((ev) => ({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined, injectedFailureSymptom: undefined }))
         turns.splice(i + 1, 0, ...drained)
       }
       if (result.usage) {

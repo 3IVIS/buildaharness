@@ -1,0 +1,33 @@
+{
+  "id": "probe-supervisor-vendor",
+  "category": "lookup",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "redirect-wrong-file",
+  "intent": "The obvious first file is a pointer; the stall must be recovered by redirecting to the real file.",
+  "prompt": "Who is the preferred vendor?",
+  "workspace": [
+    {
+      "path": "proc/README.md",
+      "content": "The vendor list moved to proc/vendors.md.\n"
+    },
+    {
+      "path": "proc/vendors.md",
+      "content": "Preferred vendor: Halden Freight.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "Halden"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = answers Halden from proc/vendors.md after the stall. Fail = loops on the pointer file, gives up, or invents an answer. [AL1e probe: supervisor / redirect-wrong-file.]"
+}

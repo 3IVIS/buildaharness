@@ -1,0 +1,34 @@
+{
+  "id": "probe-failure-match-rate-export-rows",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "stress",
+  "family": "rate-limit-paraphrase",
+  "intent": "Injected failure phrased as a paraphrase (rate-limit-paraphrase); the answer is still in data/export.md once the failure is handled.",
+  "prompt": "How many rows can data/export.md export at most?",
+  "workspace": [
+    {
+      "path": "data/export.md",
+      "content": "Export row limit: 50000 rows.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1,
+  "injectedFailureSymptom": "the provider is throttling us for making requests too quickly",
+  "grader": {
+    "contains": [
+      "50000"
+    ],
+    "notContains": [
+      "cannot access",
+      "unable to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states 50000 from data/export.md after recovering from the transient failure. Fail = gives up, invents a value, or reports the file unreadable. [AL1e probe: failure_match / rate-limit-paraphrase.]"
+}

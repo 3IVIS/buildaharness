@@ -1,0 +1,33 @@
+{
+  "id": "probe-supervisor-backup",
+  "category": "lookup",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "gather-evidence-nested",
+  "intent": "The fact sits in a nested directory nothing in the prompt names; the stall must trigger a bounded search.",
+  "prompt": "At what hour do nightly backups start per the storage docs?",
+  "workspace": [
+    {
+      "path": "storage/docs/backup/schedule.md",
+      "content": "Nightly backup start: 03:30.\n"
+    },
+    {
+      "path": "README.md",
+      "content": "Project overview.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "03:30"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = finds and states 03:30 after the stall. Fail = says it cannot be found without searching, or invents a value. [AL1e probe: supervisor / gather-evidence-nested.]"
+}

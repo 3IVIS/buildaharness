@@ -1,0 +1,34 @@
+{
+  "id": "probe-failure-match-missing-owner-file",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "stress",
+  "family": "missing-resource-paraphrase",
+  "intent": "Injected failure phrased as a paraphrase (missing-resource-paraphrase); the answer is still in teams/owner.md once the failure is handled.",
+  "prompt": "Who owns payments according to teams/owner.md?",
+  "workspace": [
+    {
+      "path": "teams/owner.md",
+      "content": "Payments owner: Dana Whitfield.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1,
+  "injectedFailureSymptom": "the thing we asked for could not be located at that address",
+  "grader": {
+    "contains": [
+      "Whitfield"
+    ],
+    "notContains": [
+      "cannot access",
+      "unable to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states Whitfield from teams/owner.md after recovering from the transient failure. Fail = gives up, invents a value, or reports the file unreadable. [AL1e probe: failure_match / missing-resource-paraphrase.]"
+}

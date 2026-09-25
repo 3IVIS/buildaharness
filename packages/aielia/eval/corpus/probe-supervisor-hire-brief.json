@@ -1,0 +1,34 @@
+{
+  "id": "probe-supervisor-hire-brief",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "reframe-plan",
+  "intent": "A two-part task stalls; the plan must be reframed so both parts are still delivered.",
+  "prompt": "Give me a hiring brief: role from hr/role.md and salary band from hr/band.md.",
+  "workspace": [
+    {
+      "path": "hr/role.md",
+      "content": "Role: Data Engineer.\n"
+    },
+    {
+      "path": "hr/band.md",
+      "content": "Band: 90-110k.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "grader": {
+    "contains": [
+      "Data Engineer",
+      "90"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the reply carries both Data Engineer and 90. Fail = delivers only one part, or stops after the stall. [AL1e probe: supervisor / reframe-plan.]"
+}

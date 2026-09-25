@@ -146,6 +146,12 @@ export const AUDIT_SLICES = [
   'probe_reviewer',
   'probe_criterion_coverage',
   'probe_decomposition',
+  // AL1e probe slices: failure matching / recovery, the trajectory supervisor, LLM injection
+  // detection (fetched-page + file payloads), and evidence sufficiency / tool reliability.
+  'probe_failure_match',
+  'probe_supervisor',
+  'probe_injection',
+  'probe_evidence',
 ] as const
 
 export type AuditSlice = (typeof AUDIT_SLICES)[number]
@@ -215,6 +221,18 @@ export type NextStepSlice = (typeof NEXT_STEP_SLICES)[number]
 export const BENCHMARK_SLICES = [...SUPERVISOR_SLICES, ...AUDIT_SLICES, ...ASK_QUESTION_SLICES, ...GOAL_GRAPH_SLICES, ...NEXT_STEP_SLICES] as const
 export type BenchmarkSlice = SupervisorSlice | AuditSlice | AskQuestionSlice | GoalGraphSlice | NextStepSlice
 
+/**
+ * A page served by the deterministic local fixture web server (`eval/fixture-web.ts`) — never the
+ * live network (cross-cutting rule 3). `url` is what the model passes to `fetch_url`; `content` is
+ * served verbatim; `status` other than 200 makes the fixture answer with that HTTP error.
+ */
+const WebPageSchema = z.object({
+  url: z.string().url(),
+  content: z.string(),
+  contentType: z.string().default('text/html'),
+  status: z.number().int().min(200).max(599).default(200),
+})
+
 /** A file placed in the task's workspace before the turn runs. */
 const WorkspaceFileSchema = z.object({
   path: z.string().min(1),
@@ -235,6 +253,8 @@ const FollowupSchema = z.object({
    * Same semantics as the task-level `injectedFailure`. */
   injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
   injectedFailureCount: z.number().int().min(1).max(6).optional(),
+  /** See `TaskSpecSchema.injectedFailureSymptom` — the same, for this turn's injected failure. */
+  injectedFailureSymptom: z.string().min(1).optional(),
 })
 
 /**
@@ -337,6 +357,19 @@ export const TaskSpecSchema = z.object({
   injectedFailure: z.enum(['first_tool_call_throws', 'persistent_tool_failure']).optional(),
   /** For `persistent_tool_failure`: leading failed iterations to inject. Default 1. */
   injectedFailureCount: z.number().int().min(1).max(6).optional(),
+  /**
+   * For `persistent_tool_failure`: the failure *symptom* text the harness sees, e.g. a paraphrased
+   * timeout ("the upstream never answered within the allowed window"), missing resource or rate
+   * limit. Absent = the generic `ETIMEDOUT` text. Lets a task exercise failure matching (the exact
+   * string overlap with the FailureModeLibrary misses; only the semantic match can classify it).
+   */
+  injectedFailureSymptom: z.string().min(1).optional(),
+  /**
+   * Fixture web pages. Setting this (with `tools.web: true`) wires `web_search`/`fetch_url` to a
+   * deterministic in-process server over exactly these pages; unknown URLs answer 404. A `web`
+   * task without `webPages` would need the live network and is not run.
+   */
+  webPages: z.array(WebPageSchema).default([]),
   /** Optional benchmark-slice tag — see `SUPERVISOR_SLICES` / `AUDIT_SLICES`. */
   slice: z.enum(BENCHMARK_SLICES).optional(),
   /** Free-text note for the report. */

@@ -1,0 +1,33 @@
+{
+  "id": "probe-evidence-file-lic",
+  "category": "lookup",
+  "slice": "probe_evidence",
+  "mechanism": "verification_evidence_sufficiency",
+  "role": "calm-control",
+  "family": "ample-agreeing-evidence",
+  "intent": "Control \u2014 a direct file read is ample evidence; no hedge.",
+  "prompt": "Which licence does meta/license.md state?",
+  "workspace": [
+    {
+      "path": "meta/license.md",
+      "content": "License: Apache-2.0\n"
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Apache-2.0"
+    ],
+    "notContains": [
+      "cannot verify",
+      "unverified",
+      "not sure",
+      "may be wrong"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states Apache-2.0 plainly. Fail = an unnecessary caveat on a direct, clean read. [AL1e probe: verification_evidence_sufficiency / calm control.]"
+}

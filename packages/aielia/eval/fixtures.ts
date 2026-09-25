@@ -14,6 +14,8 @@ import { createNodeFsBackend } from '../src/node-fs-backend.js'
 import type { FileToolsContext } from '../src/file-tools.js'
 import type { ShellToolsContext } from '../src/shell-tools.js'
 import type { TaskSpec } from './corpus/schema.js'
+import type { WebToolsContext } from '../src/web-tools.js'
+import { makeFixtureWeb } from './fixture-web.js'
 
 export interface Workspace {
   /** Absolute path to the temp directory. */
@@ -58,6 +60,8 @@ export function makeWorkspace(task: TaskSpec): Workspace {
 export interface TaskToolContexts {
   fileTools?: FileToolsContext
   shellTools?: ShellToolsContext
+  /** Present for a `web` task that declares `webPages` — the deterministic fixture server, never the live network. */
+  webTools?: WebToolsContext
 }
 
 export function buildToolContexts(task: TaskSpec, ws: Workspace, backend: FsBackend): TaskToolContexts {
@@ -73,7 +77,8 @@ export function buildToolContexts(task: TaskSpec, ws: Workspace, backend: FsBack
         },
       }
     : undefined
-  return { fileTools, shellTools }
+  const webTools = task.tools.web && task.webPages.length > 0 ? makeFixtureWeb(task.webPages).ctx : undefined
+  return { fileTools, shellTools, webTools }
 }
 
 /**

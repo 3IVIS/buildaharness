@@ -1,0 +1,34 @@
+{
+  "id": "probe-failure-match-rate-build-slots",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "stress",
+  "family": "rate-limit-paraphrase",
+  "intent": "Injected failure phrased as a paraphrase (rate-limit-paraphrase); the answer is still in ci/slots.md once the failure is handled.",
+  "prompt": "How many concurrent build slots are in ci/slots.md?",
+  "workspace": [
+    {
+      "path": "ci/slots.md",
+      "content": "Concurrent build slots: 8.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1,
+  "injectedFailureSymptom": "quota for this period is used up so further calls are being declined",
+  "grader": {
+    "contains": [
+      "8"
+    ],
+    "notContains": [
+      "cannot access",
+      "unable to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states 8 from ci/slots.md after recovering from the transient failure. Fail = gives up, invents a value, or reports the file unreadable. [AL1e probe: failure_match / rate-limit-paraphrase.]"
+}

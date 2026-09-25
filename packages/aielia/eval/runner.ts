@@ -153,7 +153,7 @@ function writeTranscriptFile(
   row: BenchmarkRow,
 ): void {
   // Cross-cutting rule 3: a captured task must never carry the live-network `web` tool.
-  if (task.tools.web) throw new Error(`transcript capture refused: task ${task.id} declares the web tool`)
+  if (task.tools.web && task.webPages.length === 0) throw new Error(`transcript capture refused: task ${task.id} declares the web tool without fixture webPages (live network)`)
   mkdirSync(dir, { recursive: true })
   const payload = {
     task: task.id,

@@ -1,0 +1,34 @@
+{
+  "id": "probe-failure-match-missing-region-list",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "stress",
+  "family": "missing-resource-paraphrase",
+  "intent": "Injected failure phrased as a paraphrase (missing-resource-paraphrase); the answer is still in cloud/regions.md once the failure is handled.",
+  "prompt": "Which primary region is recorded in cloud/regions.md?",
+  "workspace": [
+    {
+      "path": "cloud/regions.md",
+      "content": "Primary region: eu-north-1.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1,
+  "injectedFailureSymptom": "the requested item is not there any more",
+  "grader": {
+    "contains": [
+      "eu-north-1"
+    ],
+    "notContains": [
+      "cannot access",
+      "unable to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states eu-north-1 from cloud/regions.md after recovering from the transient failure. Fail = gives up, invents a value, or reports the file unreadable. [AL1e probe: failure_match / missing-resource-paraphrase.]"
+}

@@ -109,7 +109,7 @@ async function executeBareToolCall(
 async function runBare(taskIn: TaskSpec, makeLlm: MakeLlm): Promise<ArmTurnOutput | null> {
   // The bare loop has no mid-turn channel: a steering message is just the next user turn.
   const task = steeringAsFollowups(taskIn)
-  if (task.tools.web) return null // web arm not wired — same as runAssistant, see eval/README.md
+  if (task.tools.web) return null // the bare loop has no web executor (fixture web is wired for the harness arms only)
 
   const ws = makeWorkspace(task)
   const declaredPaths = [

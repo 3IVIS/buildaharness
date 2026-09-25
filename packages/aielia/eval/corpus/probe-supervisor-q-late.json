@@ -1,0 +1,38 @@
+{
+  "id": "probe-supervisor-q-late",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "late-stall",
+  "intent": "Two productive turns, then a stall on the last turn after context has built up.",
+  "prompt": "Note that the launch owner is Ravi.",
+  "workspace": [
+    {
+      "path": "late/facts.md",
+      "content": "Launch window: 12 May.\n"
+    }
+  ],
+  "followups": [
+    {
+      "prompt": "What is in late/facts.md?"
+    },
+    {
+      "prompt": "Now read late/facts.md and combine it with the owner I gave you.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 2
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Ravi",
+      "12 May"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply carries Ravi (from turn 1) and 12 May (from the file) after recovering from the late stall. Fail = loses the earlier fact or stops at the stall. [AL1e probe: supervisor / late-stall.]"
+}

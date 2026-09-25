@@ -1,0 +1,34 @@
+{
+  "id": "probe-supervisor-which-branch",
+  "category": "adv_ambiguous",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "ask-user-missing-detail",
+  "intent": "Turn 1 stalls on a missing detail; the run should ask, and turn 2 supplies the answer.",
+  "prompt": "Merge my changes.",
+  "workspace": [
+    {
+      "path": "branches.md",
+      "content": "Branches: main, release-9.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 2,
+  "followups": [
+    {
+      "prompt": "Merge into release-9."
+    }
+  ],
+  "grader": {
+    "contains": [
+      "release-9"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = after the user's detail the final reply acts on release-9. Fail = guesses on turn 1 and acts on the wrong target, or ignores the detail. [AL1e probe: supervisor / ask-user-missing-detail.]"
+}

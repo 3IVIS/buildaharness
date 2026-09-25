@@ -1,0 +1,38 @@
+{
+  "id": "probe-supervisor-s-late",
+  "category": "multi_step",
+  "slice": "probe_supervisor",
+  "mechanism": "supervisor",
+  "role": "stress",
+  "family": "late-stall",
+  "intent": "Two productive turns, then a stall on the last turn after context has built up.",
+  "prompt": "Note that the pilot city is Porto.",
+  "workspace": [
+    {
+      "path": "late/pilot.md",
+      "content": "Pilot budget: 12000.\n"
+    }
+  ],
+  "followups": [
+    {
+      "prompt": "What is a pilot programme?"
+    },
+    {
+      "prompt": "Look in late/pilot.md and give me the city and the budget.",
+      "injectedFailure": "persistent_tool_failure",
+      "injectedFailureCount": 2
+    }
+  ],
+  "grader": {
+    "contains": [
+      "Porto",
+      "12000"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = the last reply carries Porto (from turn 1) and 12000 (from the file) after recovering from the late stall. Fail = loses the earlier fact or stops at the stall. [AL1e probe: supervisor / late-stall.]"
+}

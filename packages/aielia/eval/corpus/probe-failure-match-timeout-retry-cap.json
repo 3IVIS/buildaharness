@@ -1,0 +1,34 @@
+{
+  "id": "probe-failure-match-timeout-retry-cap",
+  "category": "lookup",
+  "slice": "probe_failure_match",
+  "mechanism": "failure_match",
+  "role": "stress",
+  "family": "timeout-paraphrase",
+  "intent": "Injected failure phrased as a paraphrase (timeout-paraphrase); the answer is still in svc/retry.md once the failure is handled.",
+  "prompt": "How many retry attempts does svc/retry.md allow at most?",
+  "workspace": [
+    {
+      "path": "svc/retry.md",
+      "content": "Maximum retry attempts: 6.\n"
+    }
+  ],
+  "injectedFailure": "persistent_tool_failure",
+  "injectedFailureCount": 1,
+  "injectedFailureSymptom": "the remote end stopped responding mid-request",
+  "grader": {
+    "contains": [
+      "6"
+    ],
+    "notContains": [
+      "cannot access",
+      "unable to read"
+    ]
+  },
+  "tools": {
+    "file": true,
+    "web": false,
+    "shell": false
+  },
+  "note": "Pass = states 6 from svc/retry.md after recovering from the transient failure. Fail = gives up, invents a value, or reports the file unreadable. [AL1e probe: failure_match / timeout-paraphrase.]"
+}
