@@ -1,0 +1,455 @@
+{
+  "version": 1,
+  "generated": "2026-09-25",
+  "adr": "docs/adr/007-lexical-decisions.md",
+  "classes": {
+    "A": "non-linguistic mechanical check — keep (D5)",
+    "B": "linguistic judgment — replace (AL6a–AL6e, one batch each)",
+    "C": "dead/duplicated — delete"
+  },
+  "sites": [
+    {
+      "id": "fact-admission",
+      "file": "packages/aielia/src/fact-extraction.ts",
+      "line": 422,
+      "decides": "whether a user turn states a durable fact and which clauses are admitted to memory (FACT_MARKERS, health/dietary markers, QUESTION_SHAPE)",
+      "inputs": "user message",
+      "batch": 1,
+      "patterns": "aielia/src/lexical/patterns/fact-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "fact-tier",
+      "file": "packages/aielia/src/fact-extraction.ts",
+      "line": 176,
+      "decides": "identity vs preference tier of an extracted fact (IDENTITY_TIER_PATTERN, PREFERENCE_TIER_PATTERN)",
+      "inputs": "fact text",
+      "batch": 1,
+      "class": "B"
+    },
+    {
+      "id": "coding-fact-shape",
+      "file": "packages/aielia/src/contradiction-checker.ts",
+      "line": 138,
+      "decides": "whether a statement is coding-fact-shaped, which gates the always-on contradiction check and fact admission",
+      "inputs": "user statement",
+      "batch": 1,
+      "patterns": "aielia/src/lexical/patterns/coding-fact-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "negation-opposition",
+      "file": "packages/harness/src/nodes/detect-contradictions.ts",
+      "line": 34,
+      "decides": "whether two beliefs oppose each other (negation pairs, polarity words, stopwords)",
+      "inputs": "belief statements",
+      "batch": 1,
+      "patterns": "harness/src/lexical/patterns/negation.json",
+      "class": "B"
+    },
+    {
+      "id": "line-level-abstraction",
+      "file": "packages/harness/src/nodes/detect-contradictions.ts",
+      "line": 190,
+      "decides": "abstraction-level contradiction: statement-level keyword match (LINE_LEVEL_KEYWORDS)",
+      "inputs": "belief statements",
+      "batch": 1,
+      "patterns": "harness/src/lexical/patterns/granularity-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "granularity-count",
+      "file": "packages/harness/src/nodes/update-diagnostics.ts",
+      "line": 28,
+      "decides": "statement- vs function-level granularity counts feeding abstraction diagnostics",
+      "inputs": "belief statements",
+      "batch": 1,
+      "patterns": "harness/src/lexical/patterns/granularity-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "tool-dead-end",
+      "file": "packages/aielia/src/tool-yield-classifier.ts",
+      "line": 31,
+      "decides": "whether a web_search/fetch_url result is a dead end (DEAD_END_MARKERS), feeding tool reliability and recovery",
+      "inputs": "tool result text",
+      "batch": 2,
+      "class": "B"
+    },
+    {
+      "id": "injection-tagging",
+      "file": "packages/aielia/src/trust-tagging.ts",
+      "line": 31,
+      "decides": "whether untrusted content is flagged as a prompt-injection attempt",
+      "inputs": "tool/web content",
+      "batch": 2,
+      "patterns": "aielia/src/lexical/patterns/injection-patterns.json",
+      "class": "B"
+    },
+    {
+      "id": "injection-tagging-mcp",
+      "file": "packages/aielia/src/file-tools-mcp-server.mjs",
+      "line": 339,
+      "decides": "mirror of injection-tagging inside the claude-cli MCP subprocess (reads the same JSON)",
+      "inputs": "tool/web content",
+      "batch": 2,
+      "patterns": "aielia/src/lexical/patterns/injection-patterns.json",
+      "class": "B"
+    },
+    {
+      "id": "failure-symptom-match",
+      "file": "packages/harness/src/state/failure-diagnostics.ts",
+      "line": 53,
+      "decides": "substring overlap between observed symptoms and curated failure-mode symptom phrases, selecting a recovery strategy",
+      "inputs": "symptom strings",
+      "batch": 2,
+      "class": "B"
+    },
+    {
+      "id": "review-negation",
+      "file": "packages/harness/src/nodes/review-proposed-change.ts",
+      "line": 67,
+      "decides": "whether a proposed change negates a world-model statement (NEGATION_TRIGGERS), failing the reviewer consistency lens",
+      "inputs": "change description, statements",
+      "batch": 2,
+      "patterns": "harness/src/lexical/patterns/negation.json",
+      "class": "B"
+    },
+    {
+      "id": "risk-classification",
+      "file": "packages/aielia/src/risk-classifier.ts",
+      "line": 476,
+      "decides": "message risk level, reminder intent and approval requirement (clause-scoped risk patterns, past-tense/third-party exclusions)",
+      "inputs": "user message",
+      "batch": 3,
+      "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
+      "class": "B"
+    },
+    {
+      "id": "task-cancel",
+      "file": "packages/aielia/src/plan-store.ts",
+      "line": 381,
+      "decides": "whether a message asks to cancel a specific plan task",
+      "inputs": "user message, plan tasks",
+      "batch": 3,
+      "patterns": "aielia/src/lexical/patterns/task-cancel-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "plan-mode-cancel",
+      "file": "packages/aielia/src/plan-drafting-service.ts",
+      "line": 35,
+      "decides": "whether a message cancels plan drafting",
+      "inputs": "user message",
+      "batch": 3,
+      "patterns": "aielia/src/lexical/patterns/plan-mode-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "plan-template-match",
+      "file": "packages/aielia/src/plan-templates/index.ts",
+      "line": 64,
+      "decides": "keyword scoring that picks a plan template",
+      "inputs": "plan description",
+      "batch": 3,
+      "patterns": "aielia/src/lexical/patterns/template-keywords.json",
+      "class": "B"
+    },
+    {
+      "id": "preference-signal",
+      "file": "packages/harness/src/primitives/preference-extractor.ts",
+      "line": 50,
+      "decides": "whether feedback text carries a preference signal",
+      "inputs": "feedback text",
+      "batch": 3,
+      "class": "B"
+    },
+    {
+      "id": "batch-list-shape",
+      "file": "packages/aielia/src/batch-list-detector.ts",
+      "line": 54,
+      "decides": "whether a message is a batch list of items to research (connector-word filtering)",
+      "inputs": "user message",
+      "batch": 4,
+      "patterns": "aielia/src/lexical/patterns/batch-list-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "decomposition-need",
+      "file": "packages/aielia/src/decomposition-classifier.ts",
+      "line": 136,
+      "decides": "whether a request needs decomposition: sequencing markers, enumerated-list shape, fact-then-reminder shape",
+      "inputs": "user message",
+      "batch": 4,
+      "patterns": "aielia/src/lexical/patterns/enumeration-markers.json",
+      "class": "B"
+    },
+    {
+      "id": "reminder-vs-fact",
+      "file": "packages/aielia/src/reminder-tools.ts",
+      "line": 73,
+      "decides": "whether a create_reminder call is really a durable fact rather than a reminder request",
+      "inputs": "tool args, source user message",
+      "batch": 4,
+      "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
+      "class": "B"
+    },
+    {
+      "id": "reminder-vs-fact-mcp",
+      "file": "packages/aielia/src/file-tools-mcp-server.mjs",
+      "line": 953,
+      "decides": "mirror of reminder-vs-fact inside the claude-cli MCP subprocess",
+      "inputs": "tool args, CURRENT_USER_MESSAGE",
+      "batch": 4,
+      "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
+      "class": "B"
+    },
+    {
+      "id": "constraint-negation",
+      "file": "packages/harness/src/nodes/output-validation.ts",
+      "line": 87,
+      "decides": "whether an output violates a negated constraint (NEGATION_KEYWORDS)",
+      "inputs": "constraints, output text",
+      "batch": 5,
+      "patterns": "harness/src/lexical/patterns/negation.json",
+      "class": "B"
+    },
+    {
+      "id": "required-field-constraint",
+      "file": "packages/harness/src/state/output-contract.ts",
+      "line": 65,
+      "decides": "parses 'required:' constraints out of free-text into output-contract fields",
+      "inputs": "constraint text",
+      "batch": 5,
+      "class": "B"
+    },
+    {
+      "id": "source-similarity",
+      "file": "packages/harness/src/primitives/multi-source-reducer.ts",
+      "line": 26,
+      "decides": "token-overlap similarity deciding whether two sources are duplicates",
+      "inputs": "source texts",
+      "batch": 5,
+      "class": "B"
+    },
+    {
+      "id": "fact-near-duplicate",
+      "file": "packages/aielia/src/memory-service.ts",
+      "line": 113,
+      "decides": "substring near-duplicate test between a lexical and an LLM-extracted fact",
+      "inputs": "fact texts",
+      "batch": 5,
+      "class": "B"
+    },
+    {
+      "id": "system-error-symptom",
+      "file": "packages/harness/src/nodes/execute.ts",
+      "line": 158,
+      "decides": "maps raw error text to a symptom phrase",
+      "inputs": null,
+      "batch": null,
+      "rationale": "errno names/HTTP codes/exit codes, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "unparsed-tool-call",
+      "file": "packages/aielia/src/agent-loop.ts",
+      "line": 200,
+      "decides": "detects raw tool-call markup leaked into model output",
+      "inputs": null,
+      "batch": null,
+      "rationale": "model wire-format tokens",
+      "class": "A"
+    },
+    {
+      "id": "raw-belief-id",
+      "file": "packages/aielia/src/assistant-session.ts",
+      "line": 140,
+      "decides": "detects internal belief ids in a notice",
+      "inputs": null,
+      "batch": null,
+      "rationale": "machine-generated id format",
+      "class": "A"
+    },
+    {
+      "id": "task-completion-trail",
+      "file": "packages/aielia/src/contradiction-checker.ts",
+      "line": 150,
+      "decides": "skips system-generated 'Completed: ' trail statements",
+      "inputs": null,
+      "batch": null,
+      "rationale": "prefix the harness itself writes",
+      "class": "A"
+    },
+    {
+      "id": "ip-literal-host",
+      "file": "packages/aielia/src/web-fetch-core.ts",
+      "line": 55,
+      "decides": "IPv4/IPv6 literal host check for SSRF policy",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL syntax",
+      "class": "A"
+    },
+    {
+      "id": "ip-literal-host-mcp",
+      "file": "packages/aielia/src/file-tools-mcp-server.mjs",
+      "line": 366,
+      "decides": "mirror of ip-literal-host",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL syntax",
+      "class": "A"
+    },
+    {
+      "id": "connect-request-line",
+      "file": "packages/aielia/src/network-containment.ts",
+      "line": 60,
+      "decides": "detects an HTTP CONNECT request line",
+      "inputs": null,
+      "batch": null,
+      "rationale": "protocol syntax",
+      "class": "A"
+    },
+    {
+      "id": "api-key-whitespace",
+      "file": "packages/aielia/src/provider-setup.ts",
+      "line": 104,
+      "decides": "rejects API keys containing whitespace",
+      "inputs": null,
+      "batch": null,
+      "rationale": "input format",
+      "class": "A"
+    },
+    {
+      "id": "action-glob",
+      "file": "packages/aielia/src/action-snapshot.ts",
+      "line": 204,
+      "decides": "compiles a tool-name glob to a RegExp",
+      "inputs": null,
+      "batch": null,
+      "rationale": "glob syntax on tool names",
+      "class": "A"
+    },
+    {
+      "id": "shell-parent-traversal",
+      "file": "packages/aielia/src/shell-tools.ts",
+      "line": 36,
+      "decides": "detects '..' path traversal in a command",
+      "inputs": null,
+      "batch": null,
+      "rationale": "shell path syntax; security boundary",
+      "class": "A"
+    },
+    {
+      "id": "shell-network-command",
+      "file": "packages/aielia/src/shell-tools.ts",
+      "line": 52,
+      "decides": "detects curl/wget/URL in a command",
+      "inputs": null,
+      "batch": null,
+      "rationale": "shell command syntax; security boundary",
+      "class": "A"
+    },
+    {
+      "id": "absolute-path",
+      "file": "packages/aielia/src/file-tools.ts",
+      "line": 69,
+      "decides": "absolute-path detection",
+      "inputs": null,
+      "batch": null,
+      "rationale": "path syntax",
+      "class": "A"
+    },
+    {
+      "id": "email-format",
+      "file": "packages/aielia/src/email.ts",
+      "line": 52,
+      "decides": "email address format check",
+      "inputs": null,
+      "batch": null,
+      "rationale": "input format",
+      "class": "A"
+    },
+    {
+      "id": "email-format-mcp",
+      "file": "packages/aielia/src/file-tools-mcp-server.mjs",
+      "line": 716,
+      "decides": "mirror of email-format",
+      "inputs": null,
+      "batch": null,
+      "rationale": "input format",
+      "class": "A"
+    },
+    {
+      "id": "cli-numeric-pick",
+      "file": "packages/aielia/src/cli.ts",
+      "line": 1386,
+      "decides": "digit-only input picks a numbered option (also :1561 next-step picks)",
+      "inputs": null,
+      "batch": null,
+      "rationale": "UI selection syntax",
+      "class": "A"
+    },
+    {
+      "id": "json-extraction",
+      "file": "packages/aielia/src/ambiguity-guard.ts",
+      "line": 46,
+      "decides": "extracts a JSON object from an LLM reply (also taxonomy-classifier.ts:109)",
+      "inputs": null,
+      "batch": null,
+      "rationale": "output wire format",
+      "class": "A"
+    },
+    {
+      "id": "cjk-script",
+      "file": "packages/harness/src/lexical/script-utils.ts",
+      "line": 28,
+      "decides": "CJK character test used to pick tokenisation",
+      "inputs": null,
+      "batch": null,
+      "rationale": "Unicode script",
+      "class": "A"
+    },
+    {
+      "id": "expr-tokenizer",
+      "file": "packages/runtime/src/expr.ts",
+      "line": 20,
+      "decides": "FlowSpec expression tokenizer",
+      "inputs": null,
+      "batch": null,
+      "rationale": "formal grammar, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "retrieval-tokenizer",
+      "file": "packages/runtime/src/memory/scoring.ts",
+      "line": 22,
+      "decides": "tokenizer for memory retrieval scoring (ranking, not a branch)",
+      "inputs": null,
+      "batch": null,
+      "rationale": "scoring only",
+      "class": "A"
+    },
+    {
+      "id": "tui-plan-prefix",
+      "file": "packages/aielia/src/tui-app.tsx",
+      "line": 97,
+      "decides": "strips the plan-line display prefix",
+      "inputs": null,
+      "batch": null,
+      "rationale": "UI string the app itself emits",
+      "class": "A"
+    },
+    {
+      "id": "env-flag-parse",
+      "file": "packages/aielia/src/failure-mode-matcher.ts",
+      "line": 29,
+      "decides": "parses '0/false/off/no/disabled' env flag (same in turn-interpreter.ts:29, review-checker.ts:26, memory-service.ts:132)",
+      "inputs": null,
+      "batch": null,
+      "rationale": "config values",
+      "class": "A"
+    }
+  ]
+}
