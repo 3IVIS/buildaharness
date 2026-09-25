@@ -316,9 +316,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: enumerated-in-one-prompt (single turn), added-mid-conversation and merged-separate-requests (multi-turn) families (4 stress each) plus 6 single-deliverable calm controls. Not yet run."
+      "corpusNote": "18 tasks: enumerated-in-one-prompt (single turn), added-mid-conversation and merged-separate-requests (multi-turn) families (4 stress each) plus 6 single-deliverable calm controls. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-failure-match",

@@ -118,7 +118,7 @@
     },
     "probe-decomposition": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.747884,
       "blocked": false
     }
