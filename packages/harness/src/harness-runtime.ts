@@ -59,6 +59,7 @@ import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData, P
 import type { FailureModeEntry } from './state/failure-diagnostics.js'
 import { normalise, DimensionType } from './normalise.js'
 import type { TurnSignals } from './turn-signals.js'
+import type { Decision as LayerDecisionValue } from './layer-policy.js'
 
 export const BUDGET_WARNING_FLOOR = 0.5
 
@@ -102,6 +103,11 @@ export interface LayerActivityEvent {
     | 'verification' | 'recovery' | 'reviewer_pass'
   fired: boolean
   reason: string
+  /** AL7a (additive; older consumers unaffected): the layer policy's decision, its trigger, and what the layer cost this iteration. */
+  decision?: LayerDecisionValue
+  trigger?: string
+  llmCalls?: number
+  tokens?: number
 }
 
 export interface HarnessRunOptions extends HarnessInitOptions {
