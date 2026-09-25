@@ -97,6 +97,12 @@
       "finalized": true,
       "spendUsd": 1.031817,
       "blocked": false
+    },
+    "probe-verification": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.281765,
+      "blocked": false
     }
   }
 }
