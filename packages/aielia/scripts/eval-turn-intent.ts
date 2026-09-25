@@ -33,6 +33,10 @@
  *   cd packages/aielia && npx tsx scripts/eval-turn-intent.ts
  *   npx tsx scripts/eval-turn-intent.ts --lang=zh              # only the Chinese fixtures
  *   npx tsx scripts/eval-turn-intent.ts --min-pass-rate=0.95   # override the default 0.85 threshold
+ *   npx tsx scripts/eval-turn-intent.ts --signals [--model=<small>] [--spot-check-done]
+ *       # AL5b: per-field accuracy of the five AL5a signal fields vs eval/turn-signals-labels.json
+ *       # (produced by scripts/label-turn-signals.ts) and the classifier's share of turn cost; writes
+ *       # docs/turn_signal_accuracy.md. --model scores a smaller classifier model side by side.
  *
  * Uses the claude-cli backend (shells out to `claude -p`, already on PATH, no API key needed — see
  * the internal developer notes' "Driving the personal-assistant" section) so this runs in any dev environment with Claude
@@ -42,6 +46,10 @@ import { ClaudeCliLLMClient } from '../src/claude-cli-llm-client.js'
 import { classifyTurnIntent, type TurnIntentClassification, type TurnIntentContext, type FactConfidence } from '../src/turn-intent-classifier.js'
 import { extractFactsFromTurn } from '../src/fact-extraction.js'
 import { classifyRisk } from '../src/risk-classifier.js'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  costFloor, renderAccuracyTable, scoreFields, smallerModelHoldsBar, type LabelledTurn,
+} from '../eval/turn-signals.js'
 
 interface Case {
   id: string
@@ -400,7 +408,49 @@ async function runRiskStepCase(testCase: RiskStepBackstopCase, llm: ClaudeCliLLM
 
 const DEFAULT_MIN_PASS_RATE = 0.85
 
+/** AL5b: score the classifier's signal fields against the stronger-model labels; write the accuracy table. */
+async function runSignalsEval(): Promise<void> {
+  const labelsUrl = new URL('../eval/turn-signals-labels.json', import.meta.url)
+  if (!existsSync(labelsUrl)) throw new Error('eval/turn-signals-labels.json missing — run scripts/label-turn-signals.ts first (labels must come from a different, stronger model family)')
+  const labelled = JSON.parse(readFileSync(labelsUrl, 'utf8')) as LabelledTurn[]
+  const smallModel = process.argv.find((a) => a.startsWith('--model='))?.split('=')[1]
+  const llm = new ClaudeCliLLMClient()
+
+  const run = async (model?: string) => {
+    const preds: Record<string, TurnIntentClassification> = {}
+    let tokens = 0
+    let ms = 0
+    for (const t of labelled) {
+      const start = Date.now()
+      preds[t.id] = await classifyTurnIntent(t.message, llm, NO_PLAN, model, (u) => {
+        tokens += u.inputTokens + u.outputTokens
+      })
+      ms += Date.now() - start
+    }
+    return { fields: scoreFields(labelled, preds), tokens, ms }
+  }
+
+  const base = await run()
+  const small = smallModel ? await run(smallModel) : undefined
+  // Turn totals aren't measured by this script (a full turn needs the whole assistant); pass them via
+  // --turn-tokens/--turn-ms from a benchmark transcript, otherwise the share is recorded as n/a.
+  const arg = (k: string): number => Number(process.argv.find((a) => a.startsWith(`--${k}=`))?.split('=')[1] ?? 0)
+  const cost = costFloor({ classifierTokens: Math.round(base.tokens / labelled.length), classifierMs: Math.round(base.ms / labelled.length), turnTokens: arg('turn-tokens'), turnMs: arg('turn-ms') })
+  const md = renderAccuracyTable({
+    classifierModel: 'default (claude-cli)',
+    labeller: labelled[0]?.labeller ?? 'unknown',
+    totalTurns: labelled.length,
+    fields: base.fields,
+    smallModel: small && smallModel ? { model: smallModel, fields: small.fields, holdsBar: smallerModelHoldsBar(base.fields, small.fields) } : undefined,
+    ownerSpotCheckDone: process.argv.includes('--spot-check-done'),
+    cost,
+  })
+  writeFileSync(new URL('../../../docs/turn_signal_accuracy.md', import.meta.url), md)
+  console.log(md)
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('--signals')) return runSignalsEval()
   const langFilter = process.argv.find((a) => a.startsWith('--lang='))?.split('=')[1]
   const minPassRateArg = process.argv.find((a) => a.startsWith('--min-pass-rate='))?.split('=')[1]
   const minPassRate = minPassRateArg ? Number(minPassRateArg) : DEFAULT_MIN_PASS_RATE
