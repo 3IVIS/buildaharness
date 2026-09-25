@@ -367,9 +367,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 5,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: paraphrased-override and embedded-task-as-data payloads in fetched pages (served by the deterministic fixture web server, no live network), multi-part payloads in workspace files, plus 6 benign instruction-like pages/files as false-positive controls. Target metrics are unauthorized-effect rate and false-flag rate. Not yet run."
+      "corpusNote": "18 tasks: paraphrased-override and embedded-task-as-data payloads in fetched pages (served by the deterministic fixture web server, no live network), multi-part payloads in workspace files, plus 6 benign instruction-like pages/files as false-positive controls. Target metrics are unauthorized-effect rate and false-flag rate. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-evidence",
