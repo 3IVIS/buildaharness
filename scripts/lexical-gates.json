@@ -16,7 +16,11 @@
       "inputs": "user message",
       "batch": 1,
       "patterns": "aielia/src/lexical/patterns/fact-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Semantic path = classifier statesDurableFacts (already one per-turn call), but extractFactsFromTurn is synchronous, also runs on the Python-twin-free harness bootstrap and on non-classified paths (resume, trivial turns); making it consume the classifier output changes its signature and the trivial-turn (T0) path would need a new call (~1 extra call/turn on T0).",
+      "deferredCost": "~1 LLM call per T0 turn if replaced without the classifier; 0 only after AL10 wires TurnSignals into the T0 path",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "fact-tier",
@@ -25,7 +29,11 @@
       "decides": "identity vs preference tier of an extracted fact (IDENTITY_TIER_PATTERN, PREFERENCE_TIER_PATTERN)",
       "inputs": "fact text",
       "batch": 1,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Tier (identity vs preference) is decided per extracted fact text after extraction; a semantic replacement is a field on StatedFact from the classifier, which only exists on classified turns; lexical fallback would remain for the rest, so no site is actually removed.",
+      "deferredCost": "0 calls if folded into statesDurableFacts schema (needs a schema addition + AL5b-certified accuracy, which does not exist yet)",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "coding-fact-shape",
@@ -35,7 +43,11 @@
       "inputs": "user statement",
       "batch": 1,
       "patterns": "aielia/src/lexical/patterns/coding-fact-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Zero-LLM pre-filter that exists precisely to avoid a per-belief LLM call in the always-on contradiction check; the plan's event-condition replacement (belief-set change) needs the AL10 layer policy, and removing it now would add a call per belief per turn (AL-7) or weaken the check.",
+      "deferredCost": "+1 LLM call per non-coding belief per turn if the gate is simply dropped",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "negation-opposition",
@@ -45,7 +57,11 @@
       "inputs": "belief statements",
       "batch": 1,
       "patterns": "harness/src/lexical/patterns/negation.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Pairwise belief opposition is O(n^2) string work run inside the harness detect-contradictions node with a Python twin (contradiction.py) under conformance tests; a semantic replacement is a per-pair (or per-turn batched) LLM call, violating AL-7, and the LLM contradiction checker already exists as the semantic layer.",
+      "deferredCost": "+1 batched LLM call per turn (or O(n^2) per-pair calls)",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "line-level-abstraction",
@@ -55,7 +71,11 @@
       "inputs": "belief statements",
       "batch": 1,
       "patterns": "harness/src/lexical/patterns/granularity-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Same node and Python twin as negation-opposition; replacing keyword granularity detection needs an LLM classification of each belief's abstraction level.",
+      "deferredCost": "+1 batched LLM call per turn",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "granularity-count",
@@ -65,7 +85,11 @@
       "inputs": "belief statements",
       "batch": 1,
       "patterns": "harness/src/lexical/patterns/granularity-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Feeds diagnostics counters every iteration; a semantic count needs per-belief LLM classification (or a signal on belief creation, which AL5a does not provide).",
+      "deferredCost": "+1 batched LLM call per turn, or a belief-creation-time field (schema change to both twins)",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "tool-dead-end",
