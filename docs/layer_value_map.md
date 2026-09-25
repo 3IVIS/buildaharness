@@ -93,15 +93,15 @@ For the adaptive policy (AL10). `untested-hypothesis` rows carry the mechanism s
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** answers resting on a mechanically checkable figure or tool result that may be defective (stale total, missing file, conflicting sources).
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 24 | 8 | 75% | 4% | 17.6pt | +4.2pt [-4.0, 12.3] | +4.2pt [-4.0, 12.3] | $0.0016 | +0.00 | control has no headroom (4% bad outcomes, need ≥ 10%) |
-| category=file_read | UNTESTED | 24 | 8 | 75% | 4% | 17.6pt | +4.2pt [-4.0, 12.3] | +4.2pt [-4.0, 12.3] | $0.0016 | +0.00 | control has no headroom (4% bad outcomes, need ≥ 10%) |
-| category=file_read · risk=LOW · shape=single | UNTESTED | 24 | 8 | 75% | 4% | 17.6pt | +4.2pt [-4.0, 12.3] | +4.2pt [-4.0, 12.3] | $0.0016 | +0.00 | control has no headroom (4% bad outcomes, need ≥ 10%) |
-| risk=LOW | UNTESTED | 24 | 8 | 75% | 4% | 17.6pt | +4.2pt [-4.0, 12.3] | +4.2pt [-4.0, 12.3] | $0.0016 | +0.00 | control has no headroom (4% bad outcomes, need ≥ 10%) |
-| shape=single | UNTESTED | 24 | 8 | 75% | 4% | 17.6pt | +4.2pt [-4.0, 12.3] | +4.2pt [-4.0, 12.3] | $0.0016 | +0.00 | control has no headroom (4% bad outcomes, need ≥ 10%) |
+| * | UNTESTED | 42 | 26 | 81% | 2% | 13.3pt | +2.4pt [-2.3, 7.0] | +2.4pt [-2.3, 7.0] | $0.0029 | +0.00 | control has no headroom (2% bad outcomes, need ≥ 10%) |
+| category=file_read | UNTESTED | 42 | 26 | 81% | 2% | 13.3pt | +2.4pt [-2.3, 7.0] | +2.4pt [-2.3, 7.0] | $0.0029 | +0.00 | control has no headroom (2% bad outcomes, need ≥ 10%) |
+| category=file_read · risk=LOW · shape=single | UNTESTED | 42 | 26 | 81% | 2% | 13.3pt | +2.4pt [-2.3, 7.0] | +2.4pt [-2.3, 7.0] | $0.0029 | +0.00 | control has no headroom (2% bad outcomes, need ≥ 10%) |
+| risk=LOW | UNTESTED | 42 | 26 | 81% | 2% | 13.3pt | +2.4pt [-2.3, 7.0] | +2.4pt [-2.3, 7.0] | $0.0029 | +0.00 | control has no headroom (2% bad outcomes, need ≥ 10%) |
+| shape=single | UNTESTED | 42 | 26 | 81% | 2% | 13.3pt | +2.4pt [-2.3, 7.0] | +2.4pt [-2.3, 7.0] | $0.0029 | +0.00 | control has no headroom (2% bad outcomes, need ≥ 10%) |
 
 ## memory_recall
 
@@ -113,38 +113,38 @@ For the adaptive policy (AL10). `untested-hypothesis` rows carry the mechanism s
 
 ## model_inferred_facts
 
-- **Overall state:** INCONCLUSIVE-UNDERPOWERED
+- **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** a durable fact is implied but not stated in a lexically catchable way, then needed two turns later.
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 79% | 13% | 26.7pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0132 | +1.54 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| category=lookup | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 79% | 13% | 26.7pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0132 | +1.54 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| category=lookup · risk=LOW · shape=multi | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 79% | 13% | 26.7pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0132 | +1.54 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| risk=LOW | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 79% | 13% | 26.7pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0132 | +1.54 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| shape=multi | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 79% | 13% | 26.7pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0132 | +1.54 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
+| * | UNTESTED | 42 | 26 | 86% | 7% | 15.7pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0118 | +1.45 | control has no headroom (7% bad outcomes, need ≥ 10%) |
+| category=lookup | UNTESTED | 42 | 26 | 86% | 7% | 15.7pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0118 | +1.45 | control has no headroom (7% bad outcomes, need ≥ 10%) |
+| category=lookup · risk=LOW · shape=multi | UNTESTED | 42 | 26 | 86% | 7% | 15.7pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0118 | +1.45 | control has no headroom (7% bad outcomes, need ≥ 10%) |
+| risk=LOW | UNTESTED | 42 | 26 | 86% | 7% | 15.7pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0118 | +1.45 | control has no headroom (7% bad outcomes, need ≥ 10%) |
+| shape=multi | UNTESTED | 42 | 26 | 86% | 7% | 15.7pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0118 | +1.45 | control has no headroom (7% bad outcomes, need ≥ 10%) |
 
 ## semantic_contradiction
 
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** beliefs that conflict by meaning (paraphrase, unit change, indirect reference, cross-language) in a growing belief set.
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 42 | 14 | 0% | 19% | 24.0pt | +2.4pt [-5.8, 10.5] | +2.4pt [-5.8, 10.5] | $0.0056 | +0.12 | mechanism engaged on only 0% of runs (< 30%) |
-| category=adv_contradiction | UNTESTED | 42 | 14 | 0% | 19% | 24.0pt | +2.4pt [-5.8, 10.5] | +2.4pt [-5.8, 10.5] | $0.0056 | +0.12 | mechanism engaged on only 0% of runs (< 30%) |
+| * | UNTESTED | 64 | 36 | 5% | 19% | 19.3pt | +3.1pt [-3.0, 9.3] | +3.1pt [-3.0, 9.3] | $0.0074 | +0.19 | mechanism engaged on only 5% of runs (< 30%) |
+| category=adv_contradiction | UNTESTED | 64 | 36 | 5% | 19% | 19.3pt | +3.1pt [-3.0, 9.3] | +3.1pt [-3.0, 9.3] | $0.0074 | +0.19 | mechanism engaged on only 5% of runs (< 30%) |
 | category=adv_contradiction · risk=HIGH · shape=single | UNTESTED | 3 | 1 | 0% | 33% | 107.8pt | +0.0pt [-113.2, 113.2] | +0.0pt [-113.2, 113.2] | $0.0000 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| category=adv_contradiction · risk=LOW · shape=multi | UNTESTED | 18 | 6 | 0% | 33% | 44.0pt | +0.0pt [-9.8, 9.8] | +0.0pt [-9.8, 9.8] | $0.0110 | +0.33 | mechanism engaged on only 0% of runs (< 30%) |
+| category=adv_contradiction · risk=LOW · shape=multi | UNTESTED | 40 | 28 | 8% | 25% | 27.1pt | +2.5pt [-2.4, 7.4] | +2.5pt [-2.4, 7.4] | $0.0109 | +0.33 | mechanism engaged on only 8% of runs (< 30%) |
 | category=adv_contradiction · risk=LOW · shape=single | UNTESTED | 15 | 5 | 0% | 7% | 25.5pt | +6.7pt [-6.4, 19.7] | +6.7pt [-6.4, 19.7] | $0.0017 | -0.07 | mechanism engaged on only 0% of runs (< 30%) |
 | category=adv_contradiction · risk=MEDIUM · shape=single | UNTESTED | 6 | 2 | 0% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0019 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
 | risk=HIGH | UNTESTED | 3 | 1 | 0% | 33% | 107.8pt | +0.0pt [-113.2, 113.2] | +0.0pt [-113.2, 113.2] | $0.0000 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| risk=LOW | UNTESTED | 33 | 11 | 0% | 21% | 28.2pt | +3.0pt [-2.9, 9.0] | +3.0pt [-2.9, 9.0] | $0.0068 | +0.15 | mechanism engaged on only 0% of runs (< 30%) |
+| risk=LOW | UNTESTED | 55 | 33 | 5% | 20% | 21.4pt | +3.6pt [-1.4, 8.6] | +3.6pt [-1.4, 8.6] | $0.0084 | +0.22 | mechanism engaged on only 5% of runs (< 30%) |
 | risk=MEDIUM | UNTESTED | 6 | 2 | 0% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0019 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| shape=multi | UNTESTED | 18 | 6 | 0% | 33% | 44.0pt | +0.0pt [-9.8, 9.8] | +0.0pt [-9.8, 9.8] | $0.0110 | +0.33 | mechanism engaged on only 0% of runs (< 30%) |
+| shape=multi | UNTESTED | 40 | 28 | 8% | 25% | 27.1pt | +2.5pt [-2.4, 7.4] | +2.5pt [-2.4, 7.4] | $0.0109 | +0.33 | mechanism engaged on only 8% of runs (< 30%) |
 | shape=single | UNTESTED | 24 | 8 | 0% | 8% | 22.4pt | +4.2pt [-10.2, 18.5] | +4.2pt [-10.2, 18.5] | $0.0015 | -0.04 | mechanism engaged on only 0% of runs (< 30%) |
 
 ## failure_match
@@ -152,120 +152,129 @@ For the adaptive policy (AL10). `untested-hypothesis` rows carry the mechanism s
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** a tool failure symptom phrased as a paraphrase of a known failure class.
 - **Target metric:** recovery rate after a persistent tool failure
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 24 | 8 | 29% | 75% | 35.0pt | +12.5pt [-9.0, 34.0] | +12.5pt [-9.0, 34.0] | $0.0027 | +0.21 | mechanism engaged on only 29% of runs (< 30%) |
+| * | UNTESTED | 42 | 26 | 19% | 60% | 35.4pt | +10.0pt [-7.2, 27.2] | +7.1pt [-5.2, 19.4] | $0.0037 | +0.14 | mechanism engaged on only 19% of runs (< 30%) |
+| category=lookup | UNTESTED | 18 | 18 | 6% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-9.8, 9.8] | $0.0051 | +0.06 | mechanism engaged on only 6% of runs (< 30%) |
+| category=lookup · risk=LOW · shape=single | UNTESTED | 18 | 18 | 6% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-9.8, 9.8] | $0.0051 | +0.06 | mechanism engaged on only 6% of runs (< 30%) |
 | category=multi_step | UNTESTED | 24 | 8 | 29% | 75% | 35.0pt | +12.5pt [-9.0, 34.0] | +12.5pt [-9.0, 34.0] | $0.0027 | +0.21 | mechanism engaged on only 29% of runs (< 30%) |
 | category=multi_step · risk=LOW · shape=single | UNTESTED | 24 | 8 | 29% | 75% | 35.0pt | +12.5pt [-9.0, 34.0] | +12.5pt [-9.0, 34.0] | $0.0027 | +0.21 | mechanism engaged on only 29% of runs (< 30%) |
-| risk=LOW | UNTESTED | 24 | 8 | 29% | 75% | 35.0pt | +12.5pt [-9.0, 34.0] | +12.5pt [-9.0, 34.0] | $0.0027 | +0.21 | mechanism engaged on only 29% of runs (< 30%) |
-| shape=single | UNTESTED | 24 | 8 | 29% | 75% | 35.0pt | +12.5pt [-9.0, 34.0] | +12.5pt [-9.0, 34.0] | $0.0027 | +0.21 | mechanism engaged on only 29% of runs (< 30%) |
+| risk=LOW | UNTESTED | 42 | 26 | 19% | 60% | 35.4pt | +10.0pt [-7.2, 27.2] | +7.1pt [-5.2, 19.4] | $0.0037 | +0.14 | mechanism engaged on only 19% of runs (< 30%) |
+| shape=single | UNTESTED | 42 | 26 | 19% | 60% | 35.4pt | +10.0pt [-7.2, 27.2] | +7.1pt [-5.2, 19.4] | $0.0037 | +0.14 | mechanism engaged on only 19% of runs (< 30%) |
 
 ## criterion_coverage
 
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** prompts stating explicit success criteria ('Done when …') that a correct reply meets in different words, or genuinely misses.
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 24 | 8 | 4% | 4% | 17.6pt | +0.0pt [-11.8, 11.8] | +0.0pt [-11.8, 11.8] | $0.0018 | +0.00 | mechanism engaged on only 4% of runs (< 30%) |
-| category=multi_step | UNTESTED | 24 | 8 | 4% | 4% | 17.6pt | +0.0pt [-11.8, 11.8] | +0.0pt [-11.8, 11.8] | $0.0018 | +0.00 | mechanism engaged on only 4% of runs (< 30%) |
-| category=multi_step · risk=LOW · shape=single | UNTESTED | 23 | 8 | 4% | 4% | 18.0pt | +4.3pt [-4.2, 12.9] | +4.3pt [-4.2, 12.9] | $0.0027 | +0.04 | mechanism engaged on only 4% of runs (< 30%) |
-| risk=LOW | UNTESTED | 23 | 8 | 4% | 4% | 18.0pt | +4.3pt [-4.2, 12.9] | +4.3pt [-4.2, 12.9] | $0.0027 | +0.04 | mechanism engaged on only 4% of runs (< 30%) |
-| shape=single | UNTESTED | 24 | 8 | 4% | 4% | 17.6pt | +0.0pt [-11.8, 11.8] | +0.0pt [-11.8, 11.8] | $0.0018 | +0.00 | mechanism engaged on only 4% of runs (< 30%) |
+| * | UNTESTED | 42 | 26 | 2% | 2% | 13.3pt | +0.0pt [-6.7, 6.7] | +0.0pt [-6.7, 6.7] | $0.0028 | +0.00 | mechanism engaged on only 2% of runs (< 30%) |
+| category=multi_step | UNTESTED | 42 | 26 | 2% | 2% | 13.3pt | +0.0pt [-6.7, 6.7] | +0.0pt [-6.7, 6.7] | $0.0028 | +0.00 | mechanism engaged on only 2% of runs (< 30%) |
+| category=multi_step · risk=LOW · shape=single | UNTESTED | 41 | 26 | 2% | 2% | 13.5pt | +2.4pt [-2.3, 7.2] | +2.4pt [-2.3, 7.2] | $0.0033 | +0.02 | mechanism engaged on only 2% of runs (< 30%) |
+| risk=LOW | UNTESTED | 41 | 26 | 2% | 2% | 13.5pt | +2.4pt [-2.3, 7.2] | +2.4pt [-2.3, 7.2] | $0.0033 | +0.02 | mechanism engaged on only 2% of runs (< 30%) |
+| shape=single | UNTESTED | 42 | 26 | 2% | 2% | 13.3pt | +0.0pt [-6.7, 6.7] | +0.0pt [-6.7, 6.7] | $0.0028 | +0.00 | mechanism engaged on only 2% of runs (< 30%) |
 
 ## change_review
 
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** multi-turn: a firm constraint, then a later change that conflicts by meaning not wording.
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 24 | 8 | 4% | 38% | 39.2pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0015 | -0.08 | mechanism engaged on only 4% of runs (< 30%) |
-| category=adv_contradiction | UNTESTED | 24 | 8 | 4% | 38% | 39.2pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0015 | -0.08 | mechanism engaged on only 4% of runs (< 30%) |
-| category=adv_contradiction · risk=LOW · shape=multi | UNTESTED | 24 | 8 | 4% | 38% | 39.2pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0015 | -0.08 | mechanism engaged on only 4% of runs (< 30%) |
-| risk=LOW | UNTESTED | 24 | 8 | 4% | 38% | 39.2pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0015 | -0.08 | mechanism engaged on only 4% of runs (< 30%) |
-| shape=multi | UNTESTED | 24 | 8 | 4% | 38% | 39.2pt | +8.3pt [-3.0, 19.6] | +8.3pt [-3.0, 19.6] | $0.0015 | -0.08 | mechanism engaged on only 4% of runs (< 30%) |
+| * | UNTESTED | 42 | 26 | 2% | 29% | 27.6pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0040 | -0.12 | mechanism engaged on only 2% of runs (< 30%) |
+| category=adv_contradiction | UNTESTED | 42 | 26 | 2% | 29% | 27.6pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0040 | -0.12 | mechanism engaged on only 2% of runs (< 30%) |
+| category=adv_contradiction · risk=LOW · shape=multi | UNTESTED | 42 | 26 | 2% | 29% | 27.6pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0040 | -0.12 | mechanism engaged on only 2% of runs (< 30%) |
+| risk=LOW | UNTESTED | 42 | 26 | 2% | 29% | 27.6pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0040 | -0.12 | mechanism engaged on only 2% of runs (< 30%) |
+| shape=multi | UNTESTED | 42 | 26 | 2% | 29% | 27.6pt | +4.8pt [-1.8, 11.3] | +4.8pt [-1.8, 11.3] | $0.0040 | -0.12 | mechanism engaged on only 2% of runs (< 30%) |
 
 ## injection_detection
 
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** tool output (files, web) carrying an instruction phrased to evade the regex pass, in a tool-capable step.
 - **Target metric:** unauthorized-effect rate (lower is better)
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 - **Note:** The −20pt on `adv_injection` seen in the audit is NOT attributed to this layer: the fixture corpus rarely routes injected text through a fetched page, so the detector almost never engages (AL1e adds the fetched-page path; the detector itself is unchanged).
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 30 | 10 | 0% | 0% | 15.8pt | +0.0pt [-6.1, 6.1] | -10.0pt [-20.9, 0.9] | $0.0010 | -0.07 | mechanism engaged on only 0% of runs (< 30%) |
-| category=adv_injection | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | -20.0pt [-41.0, 1.0] | $-0.0011 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| category=adv_injection · risk=LOW · shape=single | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | -20.0pt [-41.0, 1.0] | $-0.0011 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| * | UNTESTED | 48 | 28 | 0% | 0% | 12.5pt | +0.0pt [-3.9, 3.9] | -6.3pt [-13.2, 0.7] | $0.0021 | -0.04 | mechanism engaged on only 0% of runs (< 30%) |
+| category=adv_injection | UNTESTED | 33 | 23 | 0% | 0% | 15.0pt | +0.0pt [-5.6, 5.6] | -9.1pt [-19.1, 0.9] | $0.0017 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| category=adv_injection · risk=LOW · shape=single | UNTESTED | 33 | 23 | 0% | 0% | 15.0pt | +0.0pt [-5.6, 5.6] | -9.1pt [-19.1, 0.9] | $0.0017 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
 | category=file_read | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | +0.0pt [-11.5, 11.5] | $0.0032 | -0.13 | mechanism engaged on only 0% of runs (< 30%) |
 | category=file_read · risk=LOW · shape=single | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | +0.0pt [-11.5, 11.5] | $0.0032 | -0.13 | mechanism engaged on only 0% of runs (< 30%) |
-| risk=LOW | UNTESTED | 30 | 10 | 0% | 0% | 15.8pt | +0.0pt [-6.1, 6.1] | -10.0pt [-20.9, 0.9] | $0.0010 | -0.07 | mechanism engaged on only 0% of runs (< 30%) |
-| shape=single | UNTESTED | 30 | 10 | 0% | 0% | 15.8pt | +0.0pt [-6.1, 6.1] | -10.0pt [-20.9, 0.9] | $0.0010 | -0.07 | mechanism engaged on only 0% of runs (< 30%) |
+| risk=LOW | UNTESTED | 48 | 28 | 0% | 0% | 12.5pt | +0.0pt [-3.9, 3.9] | -6.3pt [-13.2, 0.7] | $0.0021 | -0.04 | mechanism engaged on only 0% of runs (< 30%) |
+| shape=single | UNTESTED | 48 | 28 | 0% | 0% | 12.5pt | +0.0pt [-3.9, 3.9] | -6.3pt [-13.2, 0.7] | $0.0021 | -0.04 | mechanism engaged on only 0% of runs (< 30%) |
 
 ## decomposition_reframe
 
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** requests enumerating 3–5 deliverables (single turn) or spread over turns (multi-step).
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 24 | 8 | 13% | 0% | 17.6pt | +0.0pt [-7.5, 7.5] | +0.0pt [-7.5, 7.5] | $0.0056 | +0.33 | mechanism engaged on only 13% of runs (< 30%) |
-| category=file_read | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | +0.0pt [-11.5, 11.5] | $0.0027 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| category=file_read · risk=LOW · shape=single | UNTESTED | 15 | 5 | 0% | 0% | 22.3pt | +0.0pt [-11.5, 11.5] | +0.0pt [-11.5, 11.5] | $0.0027 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| category=multi_step | UNTESTED | 6 | 2 | 0% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0080 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| * | UNTESTED | 50 | 34 | 16% | 0% | 12.2pt | +0.0pt [-3.8, 3.8] | +0.0pt [-3.8, 3.8] | $0.0087 | +0.38 | mechanism engaged on only 16% of runs (< 30%) |
+| category=file_read | UNTESTED | 25 | 15 | 0% | 0% | 17.3pt | +0.0pt [-7.3, 7.3] | +0.0pt [-7.3, 7.3] | $0.0032 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| category=file_read · risk=LOW · shape=single | UNTESTED | 25 | 15 | 0% | 0% | 17.3pt | +0.0pt [-7.3, 7.3] | +0.0pt [-7.3, 7.3] | $0.0032 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| category=multi_step | UNTESTED | 22 | 18 | 23% | 0% | 18.4pt | +0.0pt [-8.2, 8.2] | +0.0pt [-8.2, 8.2] | $0.0141 | +0.50 | mechanism engaged on only 23% of runs (< 30%) |
+| category=multi_step · risk=LOW · shape=multi | UNTESTED | 16 | 16 | 31% | 0% | 21.6pt | +0.0pt [-10.9, 10.9] | +0.0pt [-10.9, 10.9] | $0.0164 | +0.69 | control has no headroom (0% bad outcomes, need ≥ 10%) |
 | category=multi_step · risk=LOW · shape=single | UNTESTED | 6 | 2 | 0% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0080 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
 | category=research | UNTESTED | 3 | 1 | 100% | 0% | 49.9pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0151 | +2.67 | control has no headroom (0% bad outcomes, need ≥ 10%) |
 | category=research · risk=LOW · shape=single | UNTESTED | 3 | 1 | 100% | 0% | 49.9pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0151 | +2.67 | control has no headroom (0% bad outcomes, need ≥ 10%) |
-| risk=LOW | UNTESTED | 24 | 8 | 13% | 0% | 17.6pt | +0.0pt [-7.5, 7.5] | +0.0pt [-7.5, 7.5] | $0.0056 | +0.33 | mechanism engaged on only 13% of runs (< 30%) |
-| shape=single | UNTESTED | 24 | 8 | 13% | 0% | 17.6pt | +0.0pt [-7.5, 7.5] | +0.0pt [-7.5, 7.5] | $0.0056 | +0.33 | mechanism engaged on only 13% of runs (< 30%) |
+| risk=LOW | UNTESTED | 50 | 34 | 16% | 0% | 12.2pt | +0.0pt [-3.8, 3.8] | +0.0pt [-3.8, 3.8] | $0.0087 | +0.38 | mechanism engaged on only 16% of runs (< 30%) |
+| shape=multi | UNTESTED | 16 | 16 | 31% | 0% | 21.6pt | +0.0pt [-10.9, 10.9] | +0.0pt [-10.9, 10.9] | $0.0164 | +0.69 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| shape=single | UNTESTED | 34 | 18 | 9% | 0% | 14.8pt | +0.0pt [-5.4, 5.4] | +0.0pt [-5.4, 5.4] | $0.0051 | +0.24 | mechanism engaged on only 9% of runs (< 30%) |
 
 ## reviewer_adversarial_lens
 
 - **Overall state:** INCONCLUSIVE-UNDERPOWERED
 - **Hypothesised regime (mechanism spec):** a draft that could accept an embedded instruction, disagree with a source, or answer at the wrong abstraction.
 - **Target metric:** task success (proxy for the spec's target metric) — measured here via task success as a proxy
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 58% | 25% | 35.0pt | +0.0pt [-7.5, 7.5] | +0.0pt [-7.5, 7.5] | $0.0012 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| category=adv_contradiction | UNTESTED | 6 | 2 | 100% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0007 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
-| category=adv_contradiction · risk=LOW · shape=single | UNTESTED | 6 | 2 | 100% | 0% | 35.3pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0007 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
-| category=adv_injection | INCONCLUSIVE-UNDERPOWERED | 6 | 2 | 50% | 50% | 80.9pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0009 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| category=adv_injection · risk=LOW · shape=single | INCONCLUSIVE-UNDERPOWERED | 6 | 2 | 50% | 50% | 80.9pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0009 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| category=file_read | INCONCLUSIVE-UNDERPOWERED | 12 | 4 | 42% | 25% | 49.5pt | +0.0pt [-14.0, 14.0] | +0.0pt [-14.0, 14.0] | $0.0017 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
+| * | INCONCLUSIVE-UNDERPOWERED | 42 | 26 | 64% | 21% | 25.1pt | +0.0pt [-6.7, 6.7] | +0.0pt [-6.7, 6.7] | $0.0024 | +0.00 | the layer's adequacy certificate failed its thresholds |
+| category=adv_contradiction | INCONCLUSIVE-UNDERPOWERED | 24 | 20 | 79% | 13% | 26.7pt | +0.0pt [-11.8, 11.8] | +0.0pt [-11.8, 11.8] | $0.0032 | +0.00 | the layer's adequacy certificate failed its thresholds |
+| category=adv_contradiction · risk=LOW · shape=single | UNTESTED | 23 | 19 | 83% | 9% | 23.3pt | +0.0pt [-12.3, 12.3] | +0.0pt [-12.3, 12.3] | $0.0033 | +0.00 | control has no headroom (9% bad outcomes, need ≥ 10%) |
+| category=adv_injection | INCONCLUSIVE-UNDERPOWERED | 6 | 2 | 50% | 50% | 80.9pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0009 | +0.00 | the layer's adequacy certificate failed its thresholds |
+| category=adv_injection · risk=LOW · shape=single | INCONCLUSIVE-UNDERPOWERED | 6 | 2 | 50% | 50% | 80.9pt | +0.0pt [-24.5, 24.5] | +0.0pt [-24.5, 24.5] | $0.0009 | +0.00 | the layer's adequacy certificate failed its thresholds |
+| category=file_read | INCONCLUSIVE-UNDERPOWERED | 12 | 4 | 42% | 25% | 49.5pt | +0.0pt [-14.0, 14.0] | +0.0pt [-14.0, 14.0] | $0.0017 | +0.00 | the layer's adequacy certificate failed its thresholds |
 | category=file_read · risk=HIGH · shape=single | UNTESTED | 3 | 1 | 0% | 100% | 49.9pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0000 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
 | category=file_read · risk=LOW · shape=single | UNTESTED | 9 | 3 | 56% | 0% | 28.8pt | +0.0pt [-17.8, 17.8] | +0.0pt [-17.8, 17.8] | $0.0022 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
-| risk=HIGH | UNTESTED | 3 | 1 | 0% | 100% | 49.9pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0000 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
-| risk=LOW | INCONCLUSIVE-UNDERPOWERED | 21 | 7 | 67% | 14% | 30.3pt | +0.0pt [-8.5, 8.5] | +0.0pt [-8.5, 8.5] | $0.0014 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
-| shape=single | INCONCLUSIVE-UNDERPOWERED | 24 | 8 | 58% | 25% | 35.0pt | +0.0pt [-7.5, 7.5] | +0.0pt [-7.5, 7.5] | $0.0012 | +0.00 | engaged with headroom, but no AL1f adequacy certificate for this layer yet |
+| risk=HIGH | UNTESTED | 4 | 2 | 0% | 100% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-32.7, 32.7] | $0.0000 | +0.00 | mechanism engaged on only 0% of runs (< 30%) |
+| risk=LOW | INCONCLUSIVE-UNDERPOWERED | 38 | 24 | 71% | 13% | 21.7pt | +0.0pt [-7.4, 7.4] | +0.0pt [-7.4, 7.4] | $0.0027 | +0.00 | the layer's adequacy certificate failed its thresholds |
+| shape=single | INCONCLUSIVE-UNDERPOWERED | 42 | 26 | 64% | 21% | 25.1pt | +0.0pt [-6.7, 6.7] | +0.0pt [-6.7, 6.7] | $0.0024 | +0.00 | the layer's adequacy certificate failed its thresholds |
 
 ## supervisor
 
-- **Overall state:** UNTESTED
+- **Overall state:** INCONCLUSIVE-UNDERPOWERED
 - **Hypothesised regime (mechanism spec):** the stall edge: cannot_make_progress() true after failures or dead ends.
 - **Target metric:** recovery rate on stalled tasks
-- **Adequacy certificate:** missing
+- **Adequacy certificate:** failed
 
 | Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| * | UNTESTED | 78 | 26 | 23% | 100% | 20.4pt | +5.6pt [-5.3, 16.4] | +6.4pt [-1.0, 13.9] | $-0.0003 | +0.10 | mechanism engaged on only 23% of runs (< 30%) |
-| category=multi_step | UNTESTED | 78 | 26 | 23% | 100% | 20.4pt | +5.6pt [-5.3, 16.4] | +6.4pt [-1.0, 13.9] | $-0.0003 | +0.10 | mechanism engaged on only 23% of runs (< 30%) |
-| category=multi_step · risk=LOW · shape=multi | UNTESTED | 24 | 8 | 75% | n/a | n/a | n/a | +25.0pt [7.3, 42.7] | $0.0040 | +1.00 | control has no headroom (n/a bad outcomes, need ≥ 10%) |
-| category=multi_step · risk=LOW · shape=single | UNTESTED | 54 | 18 | 0% | 100% | 20.4pt | +5.6pt [-5.3, 16.4] | -1.9pt [-8.2, 4.5] | $-0.0023 | -0.30 | mechanism engaged on only 0% of runs (< 30%) |
-| risk=LOW | UNTESTED | 78 | 26 | 23% | 100% | 20.4pt | +5.6pt [-5.3, 16.4] | +6.4pt [-1.0, 13.9] | $-0.0003 | +0.10 | mechanism engaged on only 23% of runs (< 30%) |
-| shape=multi | UNTESTED | 24 | 8 | 75% | n/a | n/a | n/a | +25.0pt [7.3, 42.7] | $0.0040 | +1.00 | control has no headroom (n/a bad outcomes, need ≥ 10%) |
-| shape=single | UNTESTED | 54 | 18 | 0% | 100% | 20.4pt | +5.6pt [-5.3, 16.4] | -1.9pt [-8.2, 4.5] | $-0.0023 | -0.30 | mechanism engaged on only 0% of runs (< 30%) |
+| * | INCONCLUSIVE-UNDERPOWERED | 104 | 52 | 33% | 97% | 16.0pt | +3.4pt [-3.3, 10.2] | +4.8pt [-1.4, 11.0] | $0.0016 | +0.23 | the layer's adequacy certificate failed its thresholds |
+| category=adv_ambiguous | INCONCLUSIVE-UNDERPOWERED | 4 | 4 | 75% | 67% | 107.8pt | +0.0pt [-39.2, 39.2] | +0.0pt [-32.7, 32.7] | $0.0064 | +0.75 | the layer's adequacy certificate failed its thresholds |
+| category=adv_ambiguous · risk=MEDIUM · shape=multi | INCONCLUSIVE-UNDERPOWERED | 3 | 3 | 100% | 67% | 107.8pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0074 | +1.00 | the layer's adequacy certificate failed its thresholds |
+| category=lookup | INCONCLUSIVE-UNDERPOWERED | 8 | 8 | 63% | 100% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-37.0, 37.0] | $0.0056 | +0.63 | the layer's adequacy certificate failed its thresholds |
+| category=lookup · risk=LOW · shape=single | INCONCLUSIVE-UNDERPOWERED | 8 | 8 | 63% | 100% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-37.0, 37.0] | $0.0056 | +0.63 | the layer's adequacy certificate failed its thresholds |
+| category=multi_step | UNTESTED | 92 | 40 | 28% | 100% | 18.4pt | +4.5pt [-4.4, 13.5] | +5.4pt [-0.9, 11.8] | $0.0010 | +0.17 | mechanism engaged on only 28% of runs (< 30%) |
+| category=multi_step · risk=LOW · shape=multi | UNTESTED | 28 | 12 | 79% | n/a | n/a | n/a | +21.4pt [6.0, 36.9] | $0.0058 | +1.00 | control has no headroom (n/a bad outcomes, need ≥ 10%) |
+| category=multi_step · risk=LOW · shape=single | UNTESTED | 64 | 28 | 6% | 100% | 18.4pt | +4.5pt [-4.4, 13.5] | -1.6pt [-6.9, 3.8] | $-0.0011 | -0.19 | mechanism engaged on only 6% of runs (< 30%) |
+| risk=LOW | INCONCLUSIVE-UNDERPOWERED | 100 | 48 | 31% | 100% | 16.9pt | +3.8pt [-3.7, 11.4] | +5.0pt [-1.5, 11.5] | $0.0014 | +0.21 | the layer's adequacy certificate failed its thresholds |
+| risk=MEDIUM | INCONCLUSIVE-UNDERPOWERED | 3 | 3 | 100% | 67% | 107.8pt | +0.0pt [-39.2, 39.2] | +0.0pt [-39.2, 39.2] | $0.0074 | +1.00 | the layer's adequacy certificate failed its thresholds |
+| shape=multi | INCONCLUSIVE-UNDERPOWERED | 32 | 16 | 78% | 67% | 107.8pt | +0.0pt [-39.2, 39.2] | +18.8pt [5.0, 32.5] | $0.0059 | +0.97 | the layer's adequacy certificate failed its thresholds |
+| shape=single | UNTESTED | 72 | 36 | 13% | 100% | 16.9pt | +3.8pt [-3.7, 11.4] | -1.4pt [-7.5, 4.7] | $-0.0003 | -0.10 | mechanism engaged on only 13% of runs (< 30%) |
 
 ## next_step_options
 
@@ -379,8 +388,19 @@ For the adaptive policy (AL10). `untested-hypothesis` rows carry the mechanism s
 - **Overall state:** UNTESTED
 - **Hypothesised regime (mechanism spec):** factual answers grounded in too few or too weak observations.
 - **Target metric:** unsupported-claim (hallucination) rate (lower is better)
-- **Adequacy certificate:** missing
-- **Measured regimes:** none — no arm-pair transcripts exist for this layer; its only regime is the hypothesised one above, state `UNTESTED`.
+- **Adequacy certificate:** failed
+
+| Regime | State | Pairs | Tasks | Engagement | Headroom | MDE | Target Δ | Success Δ | Cost Δ/pair | LLM calls Δ | Why |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| * | UNTESTED | 18 | 18 | 83% | 0% | 20.4pt | +0.0pt [-9.8, 9.8] | +0.0pt [-9.8, 9.8] | $0.0026 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=adv_contradiction | UNTESTED | 4 | 4 | 100% | 0% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-32.7, 32.7] | $0.0017 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=adv_contradiction · risk=LOW · shape=single | UNTESTED | 4 | 4 | 100% | 0% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-32.7, 32.7] | $0.0017 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=adv_dead_end | UNTESTED | 4 | 4 | 50% | 0% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-32.7, 32.7] | $0.0048 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=adv_dead_end · risk=LOW · shape=single | UNTESTED | 4 | 4 | 50% | 0% | 43.2pt | +0.0pt [-32.7, 32.7] | +0.0pt [-32.7, 32.7] | $0.0048 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=research | UNTESTED | 8 | 8 | 100% | 0% | 30.5pt | +0.0pt [-19.6, 19.6] | +0.0pt [-19.6, 19.6] | $0.0017 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| category=research · risk=LOW · shape=single | UNTESTED | 8 | 8 | 100% | 0% | 30.5pt | +0.0pt [-19.6, 19.6] | +0.0pt [-19.6, 19.6] | $0.0017 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| risk=LOW | UNTESTED | 18 | 18 | 83% | 0% | 20.4pt | +0.0pt [-9.8, 9.8] | +0.0pt [-9.8, 9.8] | $0.0026 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
+| shape=single | UNTESTED | 18 | 18 | 83% | 0% | 20.4pt | +0.0pt [-9.8, 9.8] | +0.0pt [-9.8, 9.8] | $0.0026 | +0.00 | control has no headroom (0% bad outcomes, need ≥ 10%) |
 
 ## verification_output_contract_partial
 

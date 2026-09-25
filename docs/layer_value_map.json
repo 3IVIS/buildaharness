@@ -51,156 +51,156 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8095238095238095,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
-          "costDeltaUsd": 0.0015957416666666669,
+          "costDeltaUsd": 0.002932214285714286,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -812.1666666666666,
+          "latencyDeltaMs": -493.2142857142857,
           "state": "UNTESTED",
-          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (2% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "category=file_read",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8095238095238095,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
-          "costDeltaUsd": 0.0015957416666666669,
+          "costDeltaUsd": 0.002932214285714286,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -812.1666666666666,
+          "latencyDeltaMs": -493.2142857142857,
           "state": "UNTESTED",
-          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (2% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "category=file_read · risk=LOW · shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8095238095238095,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
-          "costDeltaUsd": 0.0015957416666666669,
+          "costDeltaUsd": 0.002932214285714286,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -812.1666666666666,
+          "latencyDeltaMs": -493.2142857142857,
           "state": "UNTESTED",
-          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (2% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8095238095238095,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
-          "costDeltaUsd": 0.0015957416666666669,
+          "costDeltaUsd": 0.002932214285714286,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -812.1666666666666,
+          "latencyDeltaMs": -493.2142857142857,
           "state": "UNTESTED",
-          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (2% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8095238095238095,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.041666666666666664,
+            "n": 42,
+            "mean": 0.023809523809523808,
             "ci": [
-              -0.04000000000000003,
-              0.12333333333333335
+              -0.022857142857142847,
+              0.07047619047619047
             ]
           },
-          "costDeltaUsd": 0.0015957416666666669,
+          "costDeltaUsd": 0.002932214285714286,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -812.1666666666666,
+          "latencyDeltaMs": -493.2142857142857,
           "state": "UNTESTED",
-          "reason": "control has no headroom (4% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (2% bad outcomes, need ≥ 10%)",
           "harmful": false
         }
       ]
@@ -219,157 +219,157 @@
       "hypothesisedRegime": "a durable fact is implied but not stated in a lexically catchable way, then needed two turns later.",
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
-      "overallState": "INCONCLUSIVE-UNDERPOWERED",
-      "certificate": "missing",
+      "overallState": "UNTESTED",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.7916666666666666,
-          "headroom": 0.125,
-          "mde": 0.26746966806225586,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8571428571428571,
+          "headroom": 0.07142857142857142,
+          "mde": 0.157449078013028,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
-          "costDeltaUsd": 0.013221733333333333,
-          "llmCallDelta": 1.5416666666666667,
-          "latencyDeltaMs": 4400.833333333333,
-          "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "costDeltaUsd": 0.011848014285714284,
+          "llmCallDelta": 1.4523809523809523,
+          "latencyDeltaMs": 3644.6428571428573,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (7% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "category=lookup",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.7916666666666666,
-          "headroom": 0.125,
-          "mde": 0.26746966806225586,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8571428571428571,
+          "headroom": 0.07142857142857142,
+          "mde": 0.157449078013028,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
-          "costDeltaUsd": 0.013221733333333333,
-          "llmCallDelta": 1.5416666666666667,
-          "latencyDeltaMs": 4400.833333333333,
-          "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "costDeltaUsd": 0.011848014285714284,
+          "llmCallDelta": 1.4523809523809523,
+          "latencyDeltaMs": 3644.6428571428573,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (7% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "category=lookup · risk=LOW · shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.7916666666666666,
-          "headroom": 0.125,
-          "mde": 0.26746966806225586,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8571428571428571,
+          "headroom": 0.07142857142857142,
+          "mde": 0.157449078013028,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
-          "costDeltaUsd": 0.013221733333333333,
-          "llmCallDelta": 1.5416666666666667,
-          "latencyDeltaMs": 4400.833333333333,
-          "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "costDeltaUsd": 0.011848014285714284,
+          "llmCallDelta": 1.4523809523809523,
+          "latencyDeltaMs": 3644.6428571428573,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (7% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.7916666666666666,
-          "headroom": 0.125,
-          "mde": 0.26746966806225586,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8571428571428571,
+          "headroom": 0.07142857142857142,
+          "mde": 0.157449078013028,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
-          "costDeltaUsd": 0.013221733333333333,
-          "llmCallDelta": 1.5416666666666667,
-          "latencyDeltaMs": 4400.833333333333,
-          "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "costDeltaUsd": 0.011848014285714284,
+          "llmCallDelta": 1.4523809523809523,
+          "latencyDeltaMs": 3644.6428571428573,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (7% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.7916666666666666,
-          "headroom": 0.125,
-          "mde": 0.26746966806225586,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.8571428571428571,
+          "headroom": 0.07142857142857142,
+          "mde": 0.157449078013028,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.017567779986112975,
+              0.11280587522420821
             ]
           },
-          "costDeltaUsd": 0.013221733333333333,
-          "llmCallDelta": 1.5416666666666667,
-          "latencyDeltaMs": 4400.833333333333,
-          "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "costDeltaUsd": 0.011848014285714284,
+          "llmCallDelta": 1.4523809523809523,
+          "latencyDeltaMs": 3644.6428571428573,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (7% bad outcomes, need ≥ 10%)",
           "harmful": false
         }
       ]
@@ -380,66 +380,66 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 42,
-          "distinctTasks": 14,
-          "engagement": 0,
-          "headroom": 0.19047619047619047,
-          "mde": 0.24006654543011166,
+          "pairs": 64,
+          "distinctTasks": 36,
+          "engagement": 0.046875,
+          "headroom": 0.1875,
+          "mde": 0.19330516596175076,
           "targetDelta": {
-            "n": 42,
-            "mean": 0.023809523809523808,
+            "n": 64,
+            "mean": 0.03125,
             "ci": [
-              -0.05767401069692696,
-              0.10529305831597457
+              -0.03,
+              0.0925
             ]
           },
           "successDelta": {
-            "n": 42,
-            "mean": 0.023809523809523808,
+            "n": 64,
+            "mean": 0.03125,
             "ci": [
-              -0.05767401069692696,
-              0.10529305831597457
+              -0.03,
+              0.0925
             ]
           },
-          "costDeltaUsd": 0.005585619047619048,
-          "llmCallDelta": 0.11904761904761904,
-          "latencyDeltaMs": 328.76190476190476,
+          "costDeltaUsd": 0.007379281250000001,
+          "llmCallDelta": 0.1875,
+          "latencyDeltaMs": 408.046875,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 5% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=adv_contradiction",
-          "pairs": 42,
-          "distinctTasks": 14,
-          "engagement": 0,
-          "headroom": 0.19047619047619047,
-          "mde": 0.24006654543011166,
+          "pairs": 64,
+          "distinctTasks": 36,
+          "engagement": 0.046875,
+          "headroom": 0.1875,
+          "mde": 0.19330516596175076,
           "targetDelta": {
-            "n": 42,
-            "mean": 0.023809523809523808,
+            "n": 64,
+            "mean": 0.03125,
             "ci": [
-              -0.05767401069692696,
-              0.10529305831597457
+              -0.03,
+              0.0925
             ]
           },
           "successDelta": {
-            "n": 42,
-            "mean": 0.023809523809523808,
+            "n": 64,
+            "mean": 0.03125,
             "ci": [
-              -0.05767401069692696,
-              0.10529305831597457
+              -0.03,
+              0.0925
             ]
           },
-          "costDeltaUsd": 0.005585619047619048,
-          "llmCallDelta": 0.11904761904761904,
-          "latencyDeltaMs": 328.76190476190476,
+          "costDeltaUsd": 0.007379281250000001,
+          "llmCallDelta": 0.1875,
+          "latencyDeltaMs": 408.046875,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 5% of runs (< 30%)",
           "harmful": false
         },
         {
@@ -474,32 +474,32 @@
         },
         {
           "regime": "category=adv_contradiction · risk=LOW · shape=multi",
-          "pairs": 18,
-          "distinctTasks": 6,
-          "engagement": 0,
-          "headroom": 0.3333333333333333,
-          "mde": 0.4402289684827181,
+          "pairs": 40,
+          "distinctTasks": 28,
+          "engagement": 0.075,
+          "headroom": 0.25,
+          "mde": 0.2712637535683675,
           "targetDelta": {
-            "n": 18,
-            "mean": 0,
+            "n": 40,
+            "mean": 0.025,
             "ci": [
-              -0.098,
-              0.098
+              -0.023999999999999994,
+              0.074
             ]
           },
           "successDelta": {
-            "n": 18,
-            "mean": 0,
+            "n": 40,
+            "mean": 0.025,
             "ci": [
-              -0.098,
-              0.098
+              -0.023999999999999994,
+              0.074
             ]
           },
-          "costDeltaUsd": 0.011002877777777776,
-          "llmCallDelta": 0.3333333333333333,
-          "latencyDeltaMs": 1612.888888888889,
+          "costDeltaUsd": 0.010893245000000001,
+          "llmCallDelta": 0.325,
+          "latencyDeltaMs": 1033.475,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 8% of runs (< 30%)",
           "harmful": false
         },
         {
@@ -594,32 +594,32 @@
         },
         {
           "regime": "risk=LOW",
-          "pairs": 33,
-          "distinctTasks": 11,
-          "engagement": 0,
-          "headroom": 0.21212121212121213,
-          "mde": 0.28195896696940925,
+          "pairs": 55,
+          "distinctTasks": 33,
+          "engagement": 0.05454545454545454,
+          "headroom": 0.2,
+          "mde": 0.21369766320243608,
           "targetDelta": {
-            "n": 33,
-            "mean": 0.030303030303030304,
+            "n": 55,
+            "mean": 0.03636363636363636,
             "ci": [
-              -0.029090909090909098,
-              0.0896969696969697
+              -0.013564968923879296,
+              0.08629224165115201
             ]
           },
           "successDelta": {
-            "n": 33,
-            "mean": 0.030303030303030304,
+            "n": 55,
+            "mean": 0.03636363636363636,
             "ci": [
-              -0.029090909090909098,
-              0.0896969696969697
+              -0.013564968923879296,
+              0.08629224165115201
             ]
           },
-          "costDeltaUsd": 0.00676630303030303,
-          "llmCallDelta": 0.15151515151515152,
-          "latencyDeltaMs": 548.7878787878788,
+          "costDeltaUsd": 0.008381200000000002,
+          "llmCallDelta": 0.21818181818181817,
+          "latencyDeltaMs": 553.0363636363636,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 5% of runs (< 30%)",
           "harmful": false
         },
         {
@@ -654,32 +654,32 @@
         },
         {
           "regime": "shape=multi",
-          "pairs": 18,
-          "distinctTasks": 6,
-          "engagement": 0,
-          "headroom": 0.3333333333333333,
-          "mde": 0.4402289684827181,
+          "pairs": 40,
+          "distinctTasks": 28,
+          "engagement": 0.075,
+          "headroom": 0.25,
+          "mde": 0.2712637535683675,
           "targetDelta": {
-            "n": 18,
-            "mean": 0,
+            "n": 40,
+            "mean": 0.025,
             "ci": [
-              -0.098,
-              0.098
+              -0.023999999999999994,
+              0.074
             ]
           },
           "successDelta": {
-            "n": 18,
-            "mean": 0,
+            "n": 40,
+            "mean": 0.025,
             "ci": [
-              -0.098,
-              0.098
+              -0.023999999999999994,
+              0.074
             ]
           },
-          "costDeltaUsd": 0.011002877777777776,
-          "llmCallDelta": 0.3333333333333333,
-          "latencyDeltaMs": 1612.888888888889,
+          "costDeltaUsd": 0.010893245000000001,
+          "llmCallDelta": 0.325,
+          "latencyDeltaMs": 1033.475,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 8% of runs (< 30%)",
           "harmful": false
         },
         {
@@ -720,36 +720,96 @@
       "targetMetric": "recovery rate after a persistent tool failure",
       "targetMetricIsProxy": false,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.2916666666666667,
-          "headroom": 0.75,
-          "mde": 0.3502,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.19047619047619047,
+          "headroom": 0.6,
+          "mde": 0.35437748370910926,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 30,
+            "mean": 0.1,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.07200213845235734,
+              0.2720021384523573
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 42,
+            "mean": 0.07142857142857142,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.05160886751630343,
+              0.1944660103734463
             ]
           },
-          "costDeltaUsd": 0.002702541666666667,
-          "llmCallDelta": 0.20833333333333334,
-          "latencyDeltaMs": 1062.5,
+          "costDeltaUsd": 0.0037374571428571432,
+          "llmCallDelta": 0.14285714285714285,
+          "latencyDeltaMs": 694.7857142857143,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "reason": "mechanism engaged on only 19% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup",
+          "pairs": 18,
+          "distinctTasks": 18,
+          "engagement": 0.05555555555555555,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.005117344444444444,
+          "llmCallDelta": 0.05555555555555555,
+          "latencyDeltaMs": 204.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 6% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup · risk=LOW · shape=single",
+          "pairs": 18,
+          "distinctTasks": 18,
+          "engagement": 0.05555555555555555,
+          "headroom": 0,
+          "mde": 0.3525269358975757,
+          "targetDelta": {
+            "n": 6,
+            "mean": 0,
+            "ci": [
+              -0.245,
+              0.245
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.005117344444444444,
+          "llmCallDelta": 0.05555555555555555,
+          "latencyDeltaMs": 204.5,
+          "state": "UNTESTED",
+          "reason": "mechanism engaged on only 6% of runs (< 30%)",
           "harmful": false
         },
         {
@@ -814,62 +874,62 @@
         },
         {
           "regime": "risk=LOW",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.2916666666666667,
-          "headroom": 0.75,
-          "mde": 0.3502,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.19047619047619047,
+          "headroom": 0.6,
+          "mde": 0.35437748370910926,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 30,
+            "mean": 0.1,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.07200213845235734,
+              0.2720021384523573
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 42,
+            "mean": 0.07142857142857142,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.05160886751630343,
+              0.1944660103734463
             ]
           },
-          "costDeltaUsd": 0.002702541666666667,
-          "llmCallDelta": 0.20833333333333334,
-          "latencyDeltaMs": 1062.5,
+          "costDeltaUsd": 0.0037374571428571432,
+          "llmCallDelta": 0.14285714285714285,
+          "latencyDeltaMs": 694.7857142857143,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "reason": "mechanism engaged on only 19% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.2916666666666667,
-          "headroom": 0.75,
-          "mde": 0.3502,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.19047619047619047,
+          "headroom": 0.6,
+          "mde": 0.35437748370910926,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 30,
+            "mean": 0.1,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.07200213845235734,
+              0.2720021384523573
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.125,
+            "n": 42,
+            "mean": 0.07142857142857142,
             "ci": [
-              -0.0897234486968991,
-              0.3397234486968991
+              -0.05160886751630343,
+              0.1944660103734463
             ]
           },
-          "costDeltaUsd": 0.002702541666666667,
-          "llmCallDelta": 0.20833333333333334,
-          "latencyDeltaMs": 1062.5,
+          "costDeltaUsd": 0.0037374571428571432,
+          "llmCallDelta": 0.14285714285714285,
+          "latencyDeltaMs": 694.7857142857143,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 29% of runs (< 30%)",
+          "reason": "mechanism engaged on only 19% of runs (< 30%)",
           "harmful": false
         }
       ]
@@ -880,156 +940,156 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
-          "costDeltaUsd": 0.0018433583333333332,
+          "costDeltaUsd": 0.0028176619047619042,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -235.5,
+          "latencyDeltaMs": -152,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=multi_step",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
-          "costDeltaUsd": 0.0018433583333333332,
+          "costDeltaUsd": 0.0028176619047619042,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -235.5,
+          "latencyDeltaMs": -152,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=multi_step · risk=LOW · shape=single",
-          "pairs": 23,
-          "distinctTasks": 8,
-          "engagement": 0.043478260869565216,
-          "headroom": 0.043478260869565216,
-          "mde": 0.18005451387070923,
+          "pairs": 41,
+          "distinctTasks": 26,
+          "engagement": 0.024390243902439025,
+          "headroom": 0.024390243902439025,
+          "mde": 0.1348577790335199,
           "targetDelta": {
-            "n": 23,
-            "mean": 0.043478260869565216,
+            "n": 41,
+            "mean": 0.024390243902439025,
             "ci": [
-              -0.04173913043478264,
-              0.12869565217391307
+              -0.023414634146341422,
+              0.07219512195121947
             ]
           },
           "successDelta": {
-            "n": 23,
-            "mean": 0.043478260869565216,
+            "n": 41,
+            "mean": 0.024390243902439025,
             "ci": [
-              -0.04173913043478264,
-              0.12869565217391307
+              -0.023414634146341422,
+              0.07219512195121947
             ]
           },
-          "costDeltaUsd": 0.002707043478260869,
-          "llmCallDelta": 0.043478260869565216,
-          "latencyDeltaMs": 357.0869565217391,
+          "costDeltaUsd": 0.0033259317073170724,
+          "llmCallDelta": 0.024390243902439025,
+          "latencyDeltaMs": 182.46341463414635,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 23,
-          "distinctTasks": 8,
-          "engagement": 0.043478260869565216,
-          "headroom": 0.043478260869565216,
-          "mde": 0.18005451387070923,
+          "pairs": 41,
+          "distinctTasks": 26,
+          "engagement": 0.024390243902439025,
+          "headroom": 0.024390243902439025,
+          "mde": 0.1348577790335199,
           "targetDelta": {
-            "n": 23,
-            "mean": 0.043478260869565216,
+            "n": 41,
+            "mean": 0.024390243902439025,
             "ci": [
-              -0.04173913043478264,
-              0.12869565217391307
+              -0.023414634146341422,
+              0.07219512195121947
             ]
           },
           "successDelta": {
-            "n": 23,
-            "mean": 0.043478260869565216,
+            "n": 41,
+            "mean": 0.024390243902439025,
             "ci": [
-              -0.04173913043478264,
-              0.12869565217391307
+              -0.023414634146341422,
+              0.07219512195121947
             ]
           },
-          "costDeltaUsd": 0.002707043478260869,
-          "llmCallDelta": 0.043478260869565216,
-          "latencyDeltaMs": 357.0869565217391,
+          "costDeltaUsd": 0.0033259317073170724,
+          "llmCallDelta": 0.024390243902439025,
+          "latencyDeltaMs": 182.46341463414635,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.041666666666666664,
-          "mde": 0.17626346794878786,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.023809523809523808,
+          "mde": 0.13324265754808481,
           "targetDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.11797813602405383,
-              0.11797813602405383
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
-          "costDeltaUsd": 0.0018433583333333332,
+          "costDeltaUsd": 0.0028176619047619042,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -235.5,
+          "latencyDeltaMs": -152,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         }
       ]
@@ -1040,156 +1100,156 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.375,
-          "mde": 0.3915355028602132,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.2857142857142857,
+          "mde": 0.27618395300764853,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
-          "costDeltaUsd": 0.0015203749999999998,
-          "llmCallDelta": -0.08333333333333333,
-          "latencyDeltaMs": -1062,
+          "costDeltaUsd": 0.0040471571428571445,
+          "llmCallDelta": -0.11904761904761904,
+          "latencyDeltaMs": -627.5952380952381,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=adv_contradiction",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.375,
-          "mde": 0.3915355028602132,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.2857142857142857,
+          "mde": 0.27618395300764853,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
-          "costDeltaUsd": 0.0015203749999999998,
-          "llmCallDelta": -0.08333333333333333,
-          "latencyDeltaMs": -1062,
+          "costDeltaUsd": 0.0040471571428571445,
+          "llmCallDelta": -0.11904761904761904,
+          "latencyDeltaMs": -627.5952380952381,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=adv_contradiction · risk=LOW · shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.375,
-          "mde": 0.3915355028602132,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.2857142857142857,
+          "mde": 0.27618395300764853,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
-          "costDeltaUsd": 0.0015203749999999998,
-          "llmCallDelta": -0.08333333333333333,
-          "latencyDeltaMs": -1062,
+          "costDeltaUsd": 0.0040471571428571445,
+          "llmCallDelta": -0.11904761904761904,
+          "latencyDeltaMs": -627.5952380952381,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.375,
-          "mde": 0.3915355028602132,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.2857142857142857,
+          "mde": 0.27618395300764853,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
-          "costDeltaUsd": 0.0015203749999999998,
-          "llmCallDelta": -0.08333333333333333,
-          "latencyDeltaMs": -1062,
+          "costDeltaUsd": 0.0040471571428571445,
+          "llmCallDelta": -0.11904761904761904,
+          "latencyDeltaMs": -627.5952380952381,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.041666666666666664,
-          "headroom": 0.375,
-          "mde": 0.3915355028602132,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.023809523809523808,
+          "headroom": 0.2857142857142857,
+          "mde": 0.27618395300764853,
           "targetDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.08333333333333333,
+            "n": 42,
+            "mean": 0.047619047619047616,
             "ci": [
-              -0.029622132218660335,
-              0.196288798885327
+              -0.01756777998611296,
+              0.1128058752242082
             ]
           },
-          "costDeltaUsd": 0.0015203749999999998,
-          "llmCallDelta": -0.08333333333333333,
-          "latencyDeltaMs": -1062,
+          "costDeltaUsd": 0.0040471571428571445,
+          "llmCallDelta": -0.11904761904761904,
+          "latencyDeltaMs": -627.5952380952381,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 4% of runs (< 30%)",
+          "reason": "mechanism engaged on only 2% of runs (< 30%)",
           "harmful": false
         }
       ]
@@ -1200,94 +1260,94 @@
       "targetMetric": "unauthorized-effect rate (lower is better)",
       "targetMetricIsProxy": false,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 30,
-          "distinctTasks": 10,
+          "pairs": 48,
+          "distinctTasks": 28,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.15765483851333803,
+          "mde": 0.12463709346204557,
           "targetDelta": {
-            "n": 30,
+            "n": 48,
             "mean": 0,
             "ci": [
-              -0.06125,
-              0.06125
+              -0.0392,
+              0.0392
             ]
           },
           "successDelta": {
-            "n": 30,
-            "mean": -0.1,
+            "n": 48,
+            "mean": -0.0625,
             "ci": [
-              -0.2091888588481065,
-              0.009188858848106482
+              -0.13170425365108895,
+              0.00670425365108894
             ]
           },
-          "costDeltaUsd": 0.0010464799999999994,
-          "llmCallDelta": -0.06666666666666667,
-          "latencyDeltaMs": -233.36666666666667,
+          "costDeltaUsd": 0.0021398791666666665,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -75.52083333333333,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=adv_injection",
-          "pairs": 15,
-          "distinctTasks": 5,
+          "pairs": 33,
+          "distinctTasks": 23,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.2229576107993028,
+          "mde": 0.150317990536023,
           "targetDelta": {
-            "n": 15,
+            "n": 33,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.055999999999999994,
+              0.055999999999999994
             ]
           },
           "successDelta": {
-            "n": 15,
-            "mean": -0.2,
+            "n": 33,
+            "mean": -0.09090909090909091,
             "ci": [
-              -0.4095328136593407,
-              0.009532813659340694
+              -0.19051575536135434,
+              0.008697573543172521
             ]
           },
-          "costDeltaUsd": -0.0011051200000000007,
+          "costDeltaUsd": 0.0016588787878787875,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 501.2,
+          "latencyDeltaMs": 330.1212121212121,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=adv_injection · risk=LOW · shape=single",
-          "pairs": 15,
-          "distinctTasks": 5,
+          "pairs": 33,
+          "distinctTasks": 23,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.2229576107993028,
+          "mde": 0.150317990536023,
           "targetDelta": {
-            "n": 15,
+            "n": 33,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.055999999999999994,
+              0.055999999999999994
             ]
           },
           "successDelta": {
-            "n": 15,
-            "mean": -0.2,
+            "n": 33,
+            "mean": -0.09090909090909091,
             "ci": [
-              -0.4095328136593407,
-              0.009532813659340694
+              -0.19051575536135434,
+              0.008697573543172521
             ]
           },
-          "costDeltaUsd": -0.0011051200000000007,
+          "costDeltaUsd": 0.0016588787878787875,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 501.2,
+          "latencyDeltaMs": 330.1212121212121,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
@@ -1354,60 +1414,60 @@
         },
         {
           "regime": "risk=LOW",
-          "pairs": 30,
-          "distinctTasks": 10,
+          "pairs": 48,
+          "distinctTasks": 28,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.15765483851333803,
+          "mde": 0.12463709346204557,
           "targetDelta": {
-            "n": 30,
+            "n": 48,
             "mean": 0,
             "ci": [
-              -0.06125,
-              0.06125
+              -0.0392,
+              0.0392
             ]
           },
           "successDelta": {
-            "n": 30,
-            "mean": -0.1,
+            "n": 48,
+            "mean": -0.0625,
             "ci": [
-              -0.2091888588481065,
-              0.009188858848106482
+              -0.13170425365108895,
+              0.00670425365108894
             ]
           },
-          "costDeltaUsd": 0.0010464799999999994,
-          "llmCallDelta": -0.06666666666666667,
-          "latencyDeltaMs": -233.36666666666667,
+          "costDeltaUsd": 0.0021398791666666665,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -75.52083333333333,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 30,
-          "distinctTasks": 10,
+          "pairs": 48,
+          "distinctTasks": 28,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.15765483851333803,
+          "mde": 0.12463709346204557,
           "targetDelta": {
-            "n": 30,
+            "n": 48,
             "mean": 0,
             "ci": [
-              -0.06125,
-              0.06125
+              -0.0392,
+              0.0392
             ]
           },
           "successDelta": {
-            "n": 30,
-            "mean": -0.1,
+            "n": 48,
+            "mean": -0.0625,
             "ci": [
-              -0.2091888588481065,
-              0.009188858848106482
+              -0.13170425365108895,
+              0.00670425365108894
             ]
           },
-          "costDeltaUsd": 0.0010464799999999994,
-          "llmCallDelta": -0.06666666666666667,
-          "latencyDeltaMs": -233.36666666666667,
+          "costDeltaUsd": 0.0021398791666666665,
+          "llmCallDelta": -0.041666666666666664,
+          "latencyDeltaMs": -75.52083333333333,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
@@ -1421,126 +1481,156 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "UNTESTED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.125,
+          "pairs": 50,
+          "distinctTasks": 34,
+          "engagement": 0.16,
           "headroom": 0,
-          "mde": 0.17626346794878786,
+          "mde": 0.12211891280223557,
           "targetDelta": {
-            "n": 24,
+            "n": 50,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.03769230769230769,
+              0.03769230769230769
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 50,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.03769230769230769,
+              0.03769230769230769
             ]
           },
-          "costDeltaUsd": 0.005576591666666668,
-          "llmCallDelta": 0.3333333333333333,
-          "latencyDeltaMs": 2068,
+          "costDeltaUsd": 0.008738939999999999,
+          "llmCallDelta": 0.38,
+          "latencyDeltaMs": 1788.78,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "reason": "mechanism engaged on only 16% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=file_read",
-          "pairs": 15,
-          "distinctTasks": 5,
+          "pairs": 25,
+          "distinctTasks": 15,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.2229576107993028,
+          "mde": 0.17270222270717892,
           "targetDelta": {
-            "n": 15,
+            "n": 25,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.07259259259259258,
+              0.07259259259259258
             ]
           },
           "successDelta": {
-            "n": 15,
+            "n": 25,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.07259259259259258,
+              0.07259259259259258
             ]
           },
-          "costDeltaUsd": 0.002685013333333333,
+          "costDeltaUsd": 0.003225359999999999,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 538.9333333333333,
+          "latencyDeltaMs": 307.52,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=file_read · risk=LOW · shape=single",
-          "pairs": 15,
-          "distinctTasks": 5,
+          "pairs": 25,
+          "distinctTasks": 15,
           "engagement": 0,
           "headroom": 0,
-          "mde": 0.2229576107993028,
+          "mde": 0.17270222270717892,
           "targetDelta": {
-            "n": 15,
+            "n": 25,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.07259259259259258,
+              0.07259259259259258
             ]
           },
           "successDelta": {
-            "n": 15,
+            "n": 25,
             "mean": 0,
             "ci": [
-              -0.11529411764705882,
-              0.11529411764705882
+              -0.07259259259259258,
+              0.07259259259259258
             ]
           },
-          "costDeltaUsd": 0.002685013333333333,
+          "costDeltaUsd": 0.003225359999999999,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 538.9333333333333,
+          "latencyDeltaMs": 307.52,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=multi_step",
-          "pairs": 6,
-          "distinctTasks": 2,
-          "engagement": 0,
+          "pairs": 22,
+          "distinctTasks": 18,
+          "engagement": 0.22727272727272727,
           "headroom": 0,
-          "mde": 0.3525269358975757,
+          "mde": 0.18410118798688357,
           "targetDelta": {
-            "n": 6,
+            "n": 22,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.08166666666666667,
+              0.08166666666666667
             ]
           },
           "successDelta": {
-            "n": 6,
+            "n": 22,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.08166666666666667,
+              0.08166666666666667
             ]
           },
-          "costDeltaUsd": 0.008020466666666667,
-          "llmCallDelta": 0,
-          "latencyDeltaMs": 447.3333333333333,
+          "costDeltaUsd": 0.014130581818181815,
+          "llmCallDelta": 0.5,
+          "latencyDeltaMs": 1949.409090909091,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=multi_step · risk=LOW · shape=multi",
+          "pairs": 16,
+          "distinctTasks": 16,
+          "engagement": 0.3125,
+          "headroom": 0,
+          "mde": 0.21587777838397365,
+          "targetDelta": {
+            "n": 16,
+            "mean": 0,
+            "ci": [
+              -0.10888888888888888,
+              0.10888888888888888
+            ]
+          },
+          "successDelta": {
+            "n": 16,
+            "mean": 0,
+            "ci": [
+              -0.10888888888888888,
+              0.10888888888888888
+            ]
+          },
+          "costDeltaUsd": 0.016421875000000002,
+          "llmCallDelta": 0.6875,
+          "latencyDeltaMs": 2512.6875,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
@@ -1635,62 +1725,92 @@
         },
         {
           "regime": "risk=LOW",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.125,
+          "pairs": 50,
+          "distinctTasks": 34,
+          "engagement": 0.16,
           "headroom": 0,
-          "mde": 0.17626346794878786,
+          "mde": 0.12211891280223557,
           "targetDelta": {
-            "n": 24,
+            "n": 50,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.03769230769230769,
+              0.03769230769230769
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 50,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.03769230769230769,
+              0.03769230769230769
             ]
           },
-          "costDeltaUsd": 0.005576591666666668,
-          "llmCallDelta": 0.3333333333333333,
-          "latencyDeltaMs": 2068,
+          "costDeltaUsd": 0.008738939999999999,
+          "llmCallDelta": 0.38,
+          "latencyDeltaMs": 1788.78,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "reason": "mechanism engaged on only 16% of runs (< 30%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=multi",
+          "pairs": 16,
+          "distinctTasks": 16,
+          "engagement": 0.3125,
+          "headroom": 0,
+          "mde": 0.21587777838397365,
+          "targetDelta": {
+            "n": 16,
+            "mean": 0,
+            "ci": [
+              -0.10888888888888888,
+              0.10888888888888888
+            ]
+          },
+          "successDelta": {
+            "n": 16,
+            "mean": 0,
+            "ci": [
+              -0.10888888888888888,
+              0.10888888888888888
+            ]
+          },
+          "costDeltaUsd": 0.016421875000000002,
+          "llmCallDelta": 0.6875,
+          "latencyDeltaMs": 2512.6875,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.125,
+          "pairs": 34,
+          "distinctTasks": 18,
+          "engagement": 0.08823529411764706,
           "headroom": 0,
-          "mde": 0.17626346794878786,
+          "mde": 0.14809093422623823,
           "targetDelta": {
-            "n": 24,
+            "n": 34,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.05444444444444444,
+              0.05444444444444444
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 34,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.05444444444444444,
+              0.05444444444444444
             ]
           },
-          "costDeltaUsd": 0.005576591666666668,
-          "llmCallDelta": 0.3333333333333333,
-          "latencyDeltaMs": 2068,
+          "costDeltaUsd": 0.005123441176470588,
+          "llmCallDelta": 0.23529411764705882,
+          "latencyDeltaMs": 1448.1176470588234,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 13% of runs (< 30%)",
+          "reason": "mechanism engaged on only 9% of runs (< 30%)",
           "harmful": false
         }
       ]
@@ -1701,96 +1821,96 @@
       "targetMetric": "task success (proxy for the spec's target metric)",
       "targetMetricIsProxy": true,
       "overallState": "INCONCLUSIVE-UNDERPOWERED",
-      "certificate": "missing",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.5833333333333334,
-          "headroom": 0.25,
-          "mde": 0.3502,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.6428571428571429,
+          "headroom": 0.21428571428571427,
+          "mde": 0.2508565329358956,
           "targetDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
-          "costDeltaUsd": 0.0012410000000000001,
+          "costDeltaUsd": 0.0024389190476190475,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -570,
+          "latencyDeltaMs": -344.3333333333333,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "category=adv_contradiction",
-          "pairs": 6,
-          "distinctTasks": 2,
-          "engagement": 1,
-          "headroom": 0,
-          "mde": 0.3525269358975757,
+          "pairs": 24,
+          "distinctTasks": 20,
+          "engagement": 0.7916666666666666,
+          "headroom": 0.125,
+          "mde": 0.26746966806225586,
           "targetDelta": {
-            "n": 6,
+            "n": 24,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.11797813602405383,
+              0.11797813602405383
             ]
           },
           "successDelta": {
-            "n": 6,
+            "n": 24,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.11797813602405383,
+              0.11797813602405383
             ]
           },
-          "costDeltaUsd": 0.0007173333333333334,
+          "costDeltaUsd": 0.003206441666666666,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 1085.3333333333333,
-          "state": "UNTESTED",
-          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "latencyDeltaMs": 238.75,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "category=adv_contradiction · risk=LOW · shape=single",
-          "pairs": 6,
-          "distinctTasks": 2,
-          "engagement": 1,
-          "headroom": 0,
-          "mde": 0.3525269358975757,
+          "pairs": 23,
+          "distinctTasks": 19,
+          "engagement": 0.8260869565217391,
+          "headroom": 0.08695652173913043,
+          "mde": 0.23278447769339083,
           "targetDelta": {
-            "n": 6,
+            "n": 23,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.12322414423853859,
+              0.12322414423853859
             ]
           },
           "successDelta": {
-            "n": 6,
+            "n": 23,
             "mean": 0,
             "ci": [
-              -0.245,
-              0.245
+              -0.12322414423853859,
+              0.12322414423853859
             ]
           },
-          "costDeltaUsd": 0.0007173333333333334,
+          "costDeltaUsd": 0.0033458521739130427,
           "llmCallDelta": 0,
-          "latencyDeltaMs": 1085.3333333333333,
+          "latencyDeltaMs": 241.2608695652174,
           "state": "UNTESTED",
-          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "reason": "control has no headroom (9% bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
@@ -1820,7 +1940,7 @@
           "llmCallDelta": 0,
           "latencyDeltaMs": -522.1666666666666,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
@@ -1850,7 +1970,7 @@
           "llmCallDelta": 0,
           "latencyDeltaMs": -522.1666666666666,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
@@ -1880,7 +2000,7 @@
           "llmCallDelta": 0,
           "latencyDeltaMs": -1421.5833333333333,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
@@ -1945,92 +2065,92 @@
         },
         {
           "regime": "risk=HIGH",
-          "pairs": 3,
-          "distinctTasks": 1,
+          "pairs": 4,
+          "distinctTasks": 2,
           "engagement": 0,
           "headroom": 1,
-          "mde": 0.498548373848182,
+          "mde": 0.43175555676794714,
           "targetDelta": {
-            "n": 3,
+            "n": 4,
             "mean": 0,
             "ci": [
-              -0.392,
-              0.392
+              -0.32666666666666666,
+              0.32666666666666666
             ]
           },
           "successDelta": {
-            "n": 3,
+            "n": 4,
             "mean": 0,
             "ci": [
-              -0.392,
-              0.392
+              -0.32666666666666666,
+              0.32666666666666666
             ]
           },
           "costDeltaUsd": 0,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -775,
+          "latencyDeltaMs": -536,
           "state": "UNTESTED",
           "reason": "mechanism engaged on only 0% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 21,
-          "distinctTasks": 7,
-          "engagement": 0.6666666666666666,
-          "headroom": 0.14285714285714285,
-          "mde": 0.3025443621664717,
+          "pairs": 38,
+          "distinctTasks": 24,
+          "engagement": 0.7105263157894737,
+          "headroom": 0.13157894736842105,
+          "mde": 0.21726396637097528,
           "targetDelta": {
-            "n": 21,
+            "n": 38,
             "mean": 0,
             "ci": [
-              -0.08521739130434783,
-              0.08521739130434783
+              -0.073922800067662,
+              0.073922800067662
             ]
           },
           "successDelta": {
-            "n": 21,
+            "n": 38,
             "mean": 0,
             "ci": [
-              -0.08521739130434783,
-              0.08521739130434783
+              -0.073922800067662,
+              0.073922800067662
             ]
           },
-          "costDeltaUsd": 0.0014182857142857146,
+          "costDeltaUsd": 0.002695647368421052,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -540.7142857142857,
+          "latencyDeltaMs": -324.1578947368421,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.5833333333333334,
-          "headroom": 0.25,
-          "mde": 0.3502,
+          "pairs": 42,
+          "distinctTasks": 26,
+          "engagement": 0.6428571428571429,
+          "headroom": 0.21428571428571427,
+          "mde": 0.2508565329358956,
           "targetDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
           "successDelta": {
-            "n": 24,
+            "n": 42,
             "mean": 0,
             "ci": [
-              -0.07538461538461538,
-              0.07538461538461538
+              -0.06679662130591771,
+              0.06679662130591771
             ]
           },
-          "costDeltaUsd": 0.0012410000000000001,
+          "costDeltaUsd": 0.0024389190476190475,
           "llmCallDelta": 0,
-          "latencyDeltaMs": -570,
+          "latencyDeltaMs": -344.3333333333333,
           "state": "INCONCLUSIVE-UNDERPOWERED",
-          "reason": "engaged with headroom, but no AL1f adequacy certificate for this layer yet",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         }
       ]
@@ -2040,74 +2160,194 @@
       "hypothesisedRegime": "the stall edge: cannot_make_progress() true after failures or dead ends.",
       "targetMetric": "recovery rate on stalled tasks",
       "targetMetricIsProxy": false,
-      "overallState": "UNTESTED",
-      "certificate": "missing",
+      "overallState": "INCONCLUSIVE-UNDERPOWERED",
+      "certificate": "failed",
       "regimes": [
         {
           "regime": "*",
-          "pairs": 78,
-          "distinctTasks": 26,
-          "engagement": 0.23076923076923078,
-          "headroom": 1,
-          "mde": 0.2035315213370592,
+          "pairs": 104,
+          "distinctTasks": 52,
+          "engagement": 0.3269230769230769,
+          "headroom": 0.9655172413793104,
+          "mde": 0.1603499882476905,
           "targetDelta": {
-            "n": 18,
-            "mean": 0.05555555555555555,
+            "n": 29,
+            "mean": 0.034482758620689655,
             "ci": [
-              -0.05333333333333336,
-              0.16444444444444445
+              -0.033103448275862105,
+              0.10206896551724141
             ]
           },
           "successDelta": {
-            "n": 78,
-            "mean": 0.0641025641025641,
+            "n": 104,
+            "mean": 0.04807692307692308,
             "ci": [
-              -0.010406728540006474,
-              0.13861185674513465
+              -0.014041319874026056,
+              0.11019516602787222
             ]
           },
-          "costDeltaUsd": -0.0003288564102564102,
-          "llmCallDelta": 0.10256410256410256,
-          "latencyDeltaMs": -1351.3974358974358,
-          "state": "UNTESTED",
-          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "costDeltaUsd": 0.0015710865384615388,
+          "llmCallDelta": 0.23076923076923078,
+          "latencyDeltaMs": -351.52884615384613,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_ambiguous",
+          "pairs": 4,
+          "distinctTasks": 4,
+          "engagement": 0.75,
+          "headroom": 0.6666666666666666,
+          "mde": 1.078336342774437,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "costDeltaUsd": 0.0063947,
+          "llmCallDelta": 0.75,
+          "latencyDeltaMs": 3621.75,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_ambiguous · risk=MEDIUM · shape=multi",
+          "pairs": 3,
+          "distinctTasks": 3,
+          "engagement": 1,
+          "headroom": 0.6666666666666666,
+          "mde": 1.078336342774437,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.007378933333333333,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 4762,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup",
+          "pairs": 8,
+          "distinctTasks": 8,
+          "engagement": 0.625,
+          "headroom": 1,
+          "mde": 0.43175555676794714,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.37040518354904267,
+              0.37040518354904267
+            ]
+          },
+          "costDeltaUsd": 0.0055750999999999995,
+          "llmCallDelta": 0.625,
+          "latencyDeltaMs": 2597,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
+          "harmful": false
+        },
+        {
+          "regime": "category=lookup · risk=LOW · shape=single",
+          "pairs": 8,
+          "distinctTasks": 8,
+          "engagement": 0.625,
+          "headroom": 1,
+          "mde": 0.43175555676794714,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.37040518354904267,
+              0.37040518354904267
+            ]
+          },
+          "costDeltaUsd": 0.0055750999999999995,
+          "llmCallDelta": 0.625,
+          "latencyDeltaMs": 2597,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "category=multi_step",
-          "pairs": 78,
-          "distinctTasks": 26,
-          "engagement": 0.23076923076923078,
+          "pairs": 92,
+          "distinctTasks": 40,
+          "engagement": 0.2826086956521739,
           "headroom": 1,
-          "mde": 0.2035315213370592,
+          "mde": 0.1841011879868835,
           "targetDelta": {
-            "n": 18,
-            "mean": 0.05555555555555555,
+            "n": 22,
+            "mean": 0.045454545454545456,
             "ci": [
-              -0.05333333333333336,
-              0.16444444444444445
+              -0.04363636363636368,
+              0.13454545454545458
             ]
           },
           "successDelta": {
-            "n": 78,
-            "mean": 0.0641025641025641,
+            "n": 92,
+            "mean": 0.05434782608695652,
             "ci": [
-              -0.010406728540006474,
-              0.13861185674513465
+              -0.008937834905921725,
+              0.11763348707983476
             ]
           },
-          "costDeltaUsd": -0.0003288564102564102,
-          "llmCallDelta": 0.10256410256410256,
-          "latencyDeltaMs": -1351.3974358974358,
+          "costDeltaUsd": 0.0010131891304347828,
+          "llmCallDelta": 0.17391304347826086,
+          "latencyDeltaMs": -780.6739130434783,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "reason": "mechanism engaged on only 28% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "category=multi_step · risk=LOW · shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
+          "pairs": 28,
+          "distinctTasks": 12,
+          "engagement": 0.7857142857142857,
           "headroom": null,
           "mde": null,
           "targetDelta": {
@@ -2116,135 +2356,168 @@
             "ci": null
           },
           "successDelta": {
-            "n": 24,
-            "mean": 0.25,
+            "n": 28,
+            "mean": 0.21428571428571427,
             "ci": [
-              0.07303279596391926,
-              0.42696720403608074
+              0.0595098907357956,
+              0.36906153783563295
             ]
           },
-          "costDeltaUsd": 0.004027483333333332,
+          "costDeltaUsd": 0.005810892857142856,
           "llmCallDelta": 1,
-          "latencyDeltaMs": 4388.166666666667,
+          "latencyDeltaMs": 4372.75,
           "state": "UNTESTED",
           "reason": "control has no headroom (n/a bad outcomes, need ≥ 10%)",
           "harmful": false
         },
         {
           "regime": "category=multi_step · risk=LOW · shape=single",
-          "pairs": 54,
-          "distinctTasks": 18,
-          "engagement": 0,
+          "pairs": 64,
+          "distinctTasks": 28,
+          "engagement": 0.0625,
           "headroom": 1,
-          "mde": 0.2035315213370592,
+          "mde": 0.1841011879868835,
           "targetDelta": {
-            "n": 18,
-            "mean": 0.05555555555555555,
+            "n": 22,
+            "mean": 0.045454545454545456,
             "ci": [
-              -0.05333333333333336,
-              0.16444444444444445
+              -0.04363636363636368,
+              0.13454545454545458
             ]
           },
           "successDelta": {
-            "n": 54,
-            "mean": -0.018518518518518517,
+            "n": 64,
+            "mean": -0.015625,
             "ci": [
-              -0.08177970234553918,
-              0.04474266530850214
+              -0.0689489737881148,
+              0.037698973788114806
             ]
           },
-          "costDeltaUsd": -0.0022650074074074067,
-          "llmCallDelta": -0.2962962962962963,
-          "latencyDeltaMs": -3902.314814814815,
+          "costDeltaUsd": -0.0010858062499999994,
+          "llmCallDelta": -0.1875,
+          "latencyDeltaMs": -3035.296875,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 6% of runs (< 30%)",
           "harmful": false
         },
         {
           "regime": "risk=LOW",
-          "pairs": 78,
-          "distinctTasks": 26,
-          "engagement": 0.23076923076923078,
+          "pairs": 100,
+          "distinctTasks": 48,
+          "engagement": 0.31,
           "headroom": 1,
-          "mde": 0.2035315213370592,
+          "mde": 0.1693484622355292,
           "targetDelta": {
-            "n": 18,
-            "mean": 0.05555555555555555,
+            "n": 26,
+            "mean": 0.038461538461538464,
             "ci": [
-              -0.05333333333333336,
-              0.16444444444444445
+              -0.036923076923076864,
+              0.11384615384615379
             ]
           },
           "successDelta": {
-            "n": 78,
-            "mean": 0.0641025641025641,
+            "n": 100,
+            "mean": 0.05,
             "ci": [
-              -0.010406728540006474,
-              0.13861185674513465
+              -0.014586642143978493,
+              0.1145866421439785
             ]
           },
-          "costDeltaUsd": -0.0003288564102564102,
-          "llmCallDelta": 0.10256410256410256,
-          "latencyDeltaMs": -1351.3974358974358,
-          "state": "UNTESTED",
-          "reason": "mechanism engaged on only 23% of runs (< 30%)",
+          "costDeltaUsd": 0.0013781420000000002,
+          "llmCallDelta": 0.21,
+          "latencyDeltaMs": -510.46,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
+          "harmful": false
+        },
+        {
+          "regime": "risk=MEDIUM",
+          "pairs": 3,
+          "distinctTasks": 3,
+          "engagement": 1,
+          "headroom": 0.6666666666666666,
+          "mde": 1.078336342774437,
+          "targetDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "successDelta": {
+            "n": 3,
+            "mean": 0,
+            "ci": [
+              -0.392,
+              0.392
+            ]
+          },
+          "costDeltaUsd": 0.007378933333333333,
+          "llmCallDelta": 1,
+          "latencyDeltaMs": 4762,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "shape=multi",
-          "pairs": 24,
-          "distinctTasks": 8,
-          "engagement": 0.75,
-          "headroom": null,
-          "mde": null,
+          "pairs": 32,
+          "distinctTasks": 16,
+          "engagement": 0.78125,
+          "headroom": 0.6666666666666666,
+          "mde": 1.078336342774437,
           "targetDelta": {
-            "n": 0,
+            "n": 3,
             "mean": 0,
-            "ci": null
-          },
-          "successDelta": {
-            "n": 24,
-            "mean": 0.25,
             "ci": [
-              0.07303279596391926,
-              0.42696720403608074
+              -0.392,
+              0.392
             ]
           },
-          "costDeltaUsd": 0.004027483333333332,
-          "llmCallDelta": 1,
-          "latencyDeltaMs": 4388.166666666667,
-          "state": "UNTESTED",
-          "reason": "control has no headroom (n/a bad outcomes, need ≥ 10%)",
+          "successDelta": {
+            "n": 32,
+            "mean": 0.1875,
+            "ci": [
+              0.05009974292177877,
+              0.32490025707822123
+            ]
+          },
+          "costDeltaUsd": 0.005883868749999999,
+          "llmCallDelta": 0.96875,
+          "latencyDeltaMs": 4278.875,
+          "state": "INCONCLUSIVE-UNDERPOWERED",
+          "reason": "the layer's adequacy certificate failed its thresholds",
           "harmful": false
         },
         {
           "regime": "shape=single",
-          "pairs": 54,
-          "distinctTasks": 18,
-          "engagement": 0,
+          "pairs": 72,
+          "distinctTasks": 36,
+          "engagement": 0.125,
           "headroom": 1,
-          "mde": 0.2035315213370592,
+          "mde": 0.1693484622355292,
           "targetDelta": {
-            "n": 18,
-            "mean": 0.05555555555555555,
+            "n": 26,
+            "mean": 0.038461538461538464,
             "ci": [
-              -0.05333333333333336,
-              0.16444444444444445
+              -0.036923076923076864,
+              0.11384615384615379
             ]
           },
           "successDelta": {
-            "n": 54,
-            "mean": -0.018518518518518517,
+            "n": 72,
+            "mean": -0.013888888888888888,
             "ci": [
-              -0.08177970234553918,
-              0.04474266530850214
+              -0.07510160141315414,
+              0.04732382363537637
             ]
           },
-          "costDeltaUsd": -0.0022650074074074067,
-          "llmCallDelta": -0.2962962962962963,
-          "latencyDeltaMs": -3902.314814814815,
+          "costDeltaUsd": -0.0003457055555555553,
+          "llmCallDelta": -0.09722222222222222,
+          "latencyDeltaMs": -2409.4861111111113,
           "state": "UNTESTED",
-          "reason": "mechanism engaged on only 0% of runs (< 30%)",
+          "reason": "mechanism engaged on only 13% of runs (< 30%)",
           "harmful": false
         }
       ]
@@ -2978,8 +3251,279 @@
       "targetMetric": "unsupported-claim (hallucination) rate (lower is better)",
       "targetMetricIsProxy": false,
       "overallState": "UNTESTED",
-      "certificate": "missing",
-      "regimes": []
+      "certificate": "failed",
+      "regimes": [
+        {
+          "regime": "*",
+          "pairs": 18,
+          "distinctTasks": 18,
+          "engagement": 0.8333333333333334,
+          "headroom": 0,
+          "mde": 0.2035315213370593,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.0026190999999999996,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -7.333333333333333,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction",
+          "pairs": 4,
+          "distinctTasks": 4,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4317555567679473,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "costDeltaUsd": 0.00167295,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -44.25,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_contradiction · risk=LOW · shape=single",
+          "pairs": 4,
+          "distinctTasks": 4,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.4317555567679473,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "costDeltaUsd": 0.00167295,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -44.25,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_dead_end",
+          "pairs": 4,
+          "distinctTasks": 4,
+          "engagement": 0.5,
+          "headroom": 0,
+          "mde": 0.4317555567679473,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "costDeltaUsd": 0.004841599999999999,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -58.75,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=adv_dead_end · risk=LOW · shape=single",
+          "pairs": 4,
+          "distinctTasks": 4,
+          "engagement": 0.5,
+          "headroom": 0,
+          "mde": 0.4317555567679473,
+          "targetDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "successDelta": {
+            "n": 4,
+            "mean": 0,
+            "ci": [
+              -0.32666666666666666,
+              0.32666666666666666
+            ]
+          },
+          "costDeltaUsd": 0.004841599999999999,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -58.75,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=research",
+          "pairs": 8,
+          "distinctTasks": 8,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.3052972820055889,
+          "targetDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.196,
+              0.196
+            ]
+          },
+          "successDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.196,
+              0.196
+            ]
+          },
+          "costDeltaUsd": 0.0016512500000000002,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 9.625,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "category=research · risk=LOW · shape=single",
+          "pairs": 8,
+          "distinctTasks": 8,
+          "engagement": 1,
+          "headroom": 0,
+          "mde": 0.3052972820055889,
+          "targetDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.196,
+              0.196
+            ]
+          },
+          "successDelta": {
+            "n": 8,
+            "mean": 0,
+            "ci": [
+              -0.196,
+              0.196
+            ]
+          },
+          "costDeltaUsd": 0.0016512500000000002,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": 9.625,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "risk=LOW",
+          "pairs": 18,
+          "distinctTasks": 18,
+          "engagement": 0.8333333333333334,
+          "headroom": 0,
+          "mde": 0.2035315213370593,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.0026190999999999996,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -7.333333333333333,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        },
+        {
+          "regime": "shape=single",
+          "pairs": 18,
+          "distinctTasks": 18,
+          "engagement": 0.8333333333333334,
+          "headroom": 0,
+          "mde": 0.2035315213370593,
+          "targetDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "successDelta": {
+            "n": 18,
+            "mean": 0,
+            "ci": [
+              -0.098,
+              0.098
+            ]
+          },
+          "costDeltaUsd": 0.0026190999999999996,
+          "llmCallDelta": 0,
+          "latencyDeltaMs": -7.333333333333333,
+          "state": "UNTESTED",
+          "reason": "control has no headroom (0% bad outcomes, need ≥ 10%)",
+          "harmful": false
+        }
+      ]
     },
     {
       "mechanism": "verification_output_contract_partial",
